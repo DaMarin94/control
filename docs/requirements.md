@@ -45,8 +45,10 @@ Control es una app web personal para registrar gastos e ingresos diarios. El obj
 | D1 | Pantalla principal al abrir la app | Decidido |
 | D2 | Muestra resumen del mes actual | Decidido |
 | D3 | Botón / acceso rápido para cargar un nuevo movimiento | Decidido |
-| D4 | Contenido exacto del resumen (qué números, qué gráfico) | **Abierto** |
-| D5 | ¿Navegación entre meses desde el dashboard? | **Abierto** |
+| D4 | Muestra información del mes corriente (movimientos + totales) | Decidido |
+| D5 | Acceso rápido para agregar un movimiento del día / del mes corriente | Decidido |
+| D6 | Layout visual exacto del dashboard | **Abierto — diseño pendiente** |
+| D7 | ¿Navegación entre meses desde el dashboard? | **Abierto** |
 
 ---
 
@@ -85,7 +87,8 @@ Un movimiento que se repite automáticamente todos los meses: sueldo, alquiler, 
 | F4 | Dura indefinidamente hasta que el usuario lo elimina | Decidido |
 | F5 | Al editar (monto, categoría, descripción): aplica a todos los meses futuros | Decidido |
 | F6 | Al editar o eliminar: los meses pasados no se tocan | Decidido |
-| F7 | Al eliminar: deja de aparecer — ¿desde el mes actual o el siguiente? | **Abierto** |
+| F7 | Al eliminar: deja de aparecer **desde el mes siguiente** por defecto | Decidido |
+| F8 | Opción al eliminar: checkbox "eliminar desde este mes también" | Decidido |
 | F8 | Edición de un mes pasado específico de un fijo | Fuera de v1 |
 
 **Reglas:**
@@ -122,10 +125,10 @@ Las categorías clasifican los movimientos. Aplican tanto a gastos como a ingres
 |---|---|---|
 | CA1 | Crear categoría (nombre) | Decidido |
 | CA2 | Editar nombre de categoría | Decidido |
-| CA3 | Eliminar categoría | Decidido |
+| CA3 | Eliminación lógica (soft delete — `deletedAt`). La categoría desaparece de la UI pero los datos históricos no se tocan | Decidido |
 | CA4 | Categorías default al crear cuenta | Decidido |
-| CA5 | No se puede eliminar una categoría con movimientos asociados — o sí, con reasignación | **Abierto** |
-| CA6 | Categorías separadas para gastos vs. ingresos, o compartidas | **Abierto** |
+| CA5 | Scope de la categoría: `AMBOS \| GASTO \| INGRESO` (default: AMBOS) | Decidido |
+| CA6 | Agrupación padre/hijo de categorías | Fuera de v1 |
 
 **Categorías default al crear cuenta:**
 - Consumibles
@@ -215,9 +218,14 @@ Las categorías clasifican los movimientos. Aplican tanto a gastos como a ingres
 ### Eliminar un movimiento fijo
 
 ```
-1. Usuario elimina el fijo
-2. [ABIERTO] ¿Desaparece desde el mes actual o desde el próximo?
-3. Meses anteriores: sin cambios
+1. Usuario toca "eliminar" en un fijo
+2. App muestra confirmación con checkbox:
+   ☐ "Eliminar también desde este mes"
+   (por defecto desmarcado — solo elimina desde el mes siguiente)
+3. Usuario confirma
+4. Si checkbox desmarcado: el fijo sigue apareciendo en el mes actual, desaparece desde el próximo
+5. Si checkbox marcado: desaparece desde el mes actual
+6. Meses anteriores al actual: sin cambios en ambos casos
 ```
 
 ---
@@ -244,10 +252,10 @@ Estas features están explícitamente excluidas de v1. Si alguien las "agrega" s
 
 | # | Decisión | Prioridad para definir |
 |---|---|---|
-| DA1 | Contenido exacto del dashboard (qué números, qué gráfico) | Alta — bloquea diseño de la home |
-| DA2 | ¿Cuándo para un fijo al eliminarlo: mes actual o siguiente? | Alta — afecta UX y modelo |
-| DA3 | ¿Se puede eliminar una categoría con movimientos? ¿O requiere reasignación? | Media |
-| DA4 | ¿Categorías compartidas entre gastos e ingresos, o separadas? | Media |
+| ~~DA1~~ | ~~Contenido exacto del dashboard~~ | ~~Cerrado~~ |
+| ~~DA2~~ | ~~¿Cuándo para un fijo al eliminarlo?~~ | ~~Cerrado~~ |
+| ~~DA3~~ | ~~Eliminación de categoría con movimientos~~ | ~~Cerrado — soft delete~~ |
+| ~~DA4~~ | ~~Categorías compartidas vs. separadas~~ | ~~Cerrado — scope AMBOS/GASTO/INGRESO~~ |
 | DA5 | ¿Navegación entre meses desde el dashboard? | Media |
 | DA6 | ¿Filtro por categoría dentro de la vista del mes? | Media |
 | DA7 | ¿Cancelación parcial de cuotas? | Baja — fuera de v1 |
