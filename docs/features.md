@@ -5,40 +5,66 @@
 
 ---
 
-## Cargar gasto
+## Auth
 
-**Qué hace:** El usuario registra un gasto indicando monto, categoría, descripción opcional y fecha.
+**Qué hace:** El usuario inicia sesión para acceder a sus datos. Sin login, la app no muestra nada.
 
 **Cómo funciona:**
-- Formulario rápido accesible desde cualquier pantalla (botón fijo o página de entrada)
-- Campos: monto (numérico, obligatorio), categoría (selector, obligatorio), descripción (texto, opcional), fecha (default: hoy)
-- Al guardar, el gasto aparece inmediatamente en las vistas de lista
+- Página de login como punto de entrada
+- Proveedor: pendiente de decisión (ver decisiones abiertas)
+- Sesión persistente — no pedir login en cada visita
 
 **Estado:** Planeado
 
 ---
 
-## Ver gastos del mes
+## Cargar movimiento (gasto o ingreso)
 
-**Qué hace:** Muestra todos los gastos del mes actual (o el mes seleccionado) con el total acumulado.
+**Qué hace:** El usuario registra un movimiento de dinero: puede ser un egreso (gasto) o un ingreso.
 
 **Cómo funciona:**
-- Lista cronológica de gastos del mes, con navegación a mes anterior/siguiente
-- Total del mes visible de forma prominente
-- Posible desglose por semana o día
+- Formulario rápido accesible desde cualquier pantalla
+- Campos: tipo (gasto / ingreso), monto (numérico, obligatorio), categoría (selector, obligatorio), descripción (texto, opcional), fecha (default: hoy)
+- Al guardar, el movimiento aparece inmediatamente en las vistas de lista
 
 **Estado:** Planeado
 
 ---
 
-## Ver gastos por categoría
+## Ver movimientos del mes
 
-**Qué hace:** Muestra cuánto se gastó en cada categoría en un período dado (mes/año).
+**Qué hace:** Muestra todos los movimientos del mes actual (o el mes seleccionado) con totales de gastos, ingresos y balance.
+
+**Cómo funciona:**
+- Lista cronológica de movimientos del mes, con navegación a mes anterior/siguiente
+- Balance del mes (ingresos − gastos) visible de forma prominente
+- Subtotales separados de gastos e ingresos
+
+**Estado:** Planeado
+
+---
+
+## Ver movimientos por categoría
+
+**Qué hace:** Muestra cuánto se gastó (o ingresó) en cada categoría en un período dado.
 
 **Cómo funciona:**
 - Vista agrupada por categoría con subtotales
-- Categorías iniciales: Consumibles, Tarjeta de crédito, Gastos fijos, Servicios
 - Filtrable por mes o año
+- Solo muestra categorías que tienen al menos un movimiento en el período
+
+**Estado:** Planeado
+
+---
+
+## Gestión de categorías
+
+**Qué hace:** El usuario puede crear, renombrar y eliminar sus categorías.
+
+**Cómo funciona:**
+- CRUD completo de categorías (nombre, tipo opcional: gasto/ingreso/ambos — TBD)
+- Categorías default al crear la cuenta: Consumibles, Tarjeta de crédito, Gastos fijos, Servicios
+- No se puede eliminar una categoría que tenga movimientos asociados (o pide reasignar primero — TBD)
 
 **Estado:** Planeado
 
@@ -54,7 +80,7 @@ _(Sin features ocultas por ahora)_
 
 | Feature | Estado | Notas |
 |---------|--------|-------|
-| Ver gastos del año | Planeado | Vista anual con totales por mes |
-| Registro de ingresos | Planeado | El brief menciona "ganancias" — pendiente de decisión |
-| Auth / multi-usuario | Planeado | Sin fecha |
+| Vista anual | Planeado | Totales por mes en el año |
+| Selección de moneda | Planeado | 100% switcheable — no tocar en v1 |
+| Tarjeta de crédito (flujo específico) | Abierto | Demasiado complejo para v1 |
 | Importación desde extracto | Idea | Sin decisión |

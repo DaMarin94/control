@@ -9,7 +9,8 @@
 | Backend | NestJS + TypeScript |
 | ORM | Prisma |
 | Base de datos | PostgreSQL |
-| APIs externas | Ninguna (v1) |
+| Auth | Auth.js (NextAuth v5) + Google OAuth |
+| APIs externas | Google OAuth (solo para auth) |
 | Deploy frontend | Vercel (pendiente) |
 | Deploy backend | Render (pendiente) |
 
@@ -45,19 +46,30 @@ control/
 ```
 Browser
   └── Next.js App (App Router)
+        ├── Auth.js — Google OAuth flow + sesión JWT
         ├── UI (componentes React)
-        ├── Estado (hooks + React Query / fetch)
-        └── HTTP (→ NEXT_PUBLIC_API_URL)
+        ├── Estado (hooks + fetch)
+        └── HTTP con Authorization: Bearer <jwt> (→ NEXT_PUBLIC_API_URL)
               │
               ▼
         NestJS API (:3001)
-          └── ExpensesModule / CategoriesModule
+          ├── JwtAuthGuard — verifica JWT con AUTH_SECRET
+          └── ExpensesModule / CategoriesModule / UsersModule
                 └── PrismaService
                       └── PostgreSQL
 ```
 
+## Patrón de auth
+
+1. El usuario hace login en Next.js vía Google OAuth (Auth.js maneja el redirect y callback).
+2. Auth.js crea una sesión JWT firmada con `AUTH_SECRET`.
+3. El frontend adjunta el JWT en `Authorization: Bearer <token>` en cada llamada a NestJS.
+4. NestJS tiene un `JwtAuthGuard` global que verifica la firma y extrae el `userId`.
+5. Todos los recursos (movimientos, categorías) están scoped al `userId` del token — un usuario nunca ve datos de otro.
+
 ## Decisiones estructurales
 
-- **Backend separado (NestJS) en vez de API Routes de Next.js.** Motivo: mantener la puerta abierta para mobile u otros clientes en el futuro sin reescribir la API.
+- **Backend separado (NestJS) en vez de API Routes de Next.js.** Motivo: mantener la puerta abierta para mobile u otros clientes sin reescribir la API.
 - **PostgreSQL + Prisma.** Los datos son del usuario y deben persistir de forma confiable. Prisma da migrations y type-safety en el ORM.
-- **Sin APIs externas en v1.** Todos los datos los ingresa el usuario manualmente. No hay integración bancaria.
+- **JWT compartido entre Next.js y NestJS.** Ambos usan el mismo `AUTH_SECRET`. Simple, sin servidor de auth externo.
+- **Sin integración bancaria en v1.** Todos los datos los ingresa el usuario manualmente.

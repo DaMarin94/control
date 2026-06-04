@@ -62,9 +62,12 @@ _(Sección a completar a medida que se rechacen ideas concretas)_
 
 | Feature | Estado |
 |---|---|
+| Auth (login / logout) | Planeado |
 | Cargar gasto | Planeado |
-| Ver gastos del mes | Planeado |
-| Ver gastos por categoría | Planeado |
+| Cargar ingreso | Planeado |
+| Ver movimientos del mes | Planeado |
+| Ver movimientos por categoría | Planeado |
+| Gestión de categorías (CRUD) | Planeado |
 
 ---
 
@@ -72,11 +75,8 @@ _(Sección a completar a medida que se rechacen ideas concretas)_
 
 > Lista viva. Cada item es una conversación pendiente. Cuando se cierra, se documenta arriba.
 
-- **¿Auth en v1?** ¿Hay login o la app arranca directamente sin usuario? Si hay auth, ¿qué proveedor?
-- **¿Ingresos o solo gastos?** El brief menciona "ganancias" — ¿se registran también o es solo egresos?
-- **¿Moneda fija o configurable?** ¿La app asume una moneda (ARS?) o permite elegir?
-- **¿Qué categorías son fijas vs. personalizables?** El brief menciona consumibles, tarjeta, gastos fijos, servicios — ¿el usuario puede agregar las suyas?
-- **¿Cómo se maneja la tarjeta de crédito?** ¿Se registra el gasto en el momento o al vencimiento del resumen?
+- **¿Cómo se maneja la tarjeta de crédito?** ¿Se registra el gasto en el momento o al vencimiento del resumen? Decisión pendiente — es complejo.
+- **¿Cómo se maneja la tarjeta de crédito?** ¿Se registra el gasto en el momento o al vencimiento del resumen? Decisión pendiente — es complejo.
 
 ---
 
@@ -84,4 +84,10 @@ _(Sección a completar a medida que se rechacen ideas concretas)_
 
 > Registro cronológico de decisiones de producto cerradas, con fecha y motivo.
 
-<!-- Formato: **YYYY-MM-DD — Título.** Descripción. Motivo: razón. -->
+**2026-06-03 — Auth en v1 con Google OAuth.** La app requiere login desde el inicio vía Google. Auth.js (NextAuth v5) en Next.js maneja el flujo OAuth; NestJS valida el JWT en cada request. Motivo: uso personal, sin fricción de contraseñas, fácil de mantener.
+
+**2026-06-03 — Gastos e ingresos.** La app registra ambos movimientos (egresos e ingresos). Motivo: el objetivo es previsibilidad completa del flujo de dinero.
+
+**2026-06-03 — Moneda: no tocar en v1.** La app no implementa selección de moneda ahora. En el futuro será 100% switcheable. Motivo: scope acotado para v1; no hardcodear símbolos en la UI de forma que sea difícil de cambiar después.
+
+**2026-06-03 — Categorías personalizables.** El usuario puede crear, editar y eliminar sus propias categorías. Hay categorías default al iniciar (Consumibles, Tarjeta de crédito, Gastos fijos, Servicios). Motivo: cada persona tiene una estructura de gastos distinta.
