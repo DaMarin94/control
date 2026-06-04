@@ -1,70 +1,46 @@
 # Backend
 
+## Stack
+
+- **NestJS + TypeScript + PostgreSQL + Prisma**
+- Puerto: `3001`
+- JwtAuthGuard global — valida token y extrae `userId` para scopear todos los recursos
+
+## Módulos
+
+| Módulo | Ruta base | Descripción |
+|--------|-----------|-------------|
+| `movements` | `GET /movements` | Lista unificada del mes (transacciones + recurrentes + cuotas) |
+| `transactions` | `/transactions` | Movimientos únicos (CRUD) |
+| `recurring` | `/recurring` | Movimientos fijos (crear, editar, eliminar) |
+| `installments` | `/installments` | Grupos de cuotas (crear, eliminar) |
+| `categories` | `/categories` | Categorías (CRUD + soft delete) |
+| `users` | — | Creación de cuenta + categorías por defecto |
+| `auth` | — | JwtAuthGuard, extracción de userId del token |
+| `prisma` | — | PrismaService |
+
 ## Endpoints
 
-<!-- Documentar todos los endpoints con su descripción, params, y comportamiento. -->
-<!-- Formato sugerido:
+Ver contratos completos de request/response (DTOs, shapes) en `docs/data-model.md`.
 
-### `GET /[recurso]`
-Descripción de qué hace.
-- **Params opcionales:** `?param=` — para qué sirve
-- **Respuesta:** `[{ campo, tipo }]`
+### `GET /movements?month=YYYY-MM`
+Devuelve todos los movimientos del mes: transacciones únicas, recurrentes activos y cuotas que caen en el mes. Los recurrentes y cuotas se calculan on-the-fly — no hay filas generadas por instancia mensual.
 
-### `POST /[recurso]/:id`
-Descripción.
--->
+### `POST /transactions` · `PATCH /transactions/:id` · `DELETE /transactions/:id`
+CRUD de movimientos únicos. El monto siempre en centavos (entero > 0).
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| `GET` | `/health` | Healthcheck |
-| | | |
+### `POST /recurring` · `PATCH /recurring/:id` · `DELETE /recurring/:id`
+Gestión de movimientos fijos. El DELETE acepta `{ deleteFromCurrentMonth: boolean }` para controlar desde cuándo deja de aparecer el fijo.
 
-## Pipeline de datos
+### `POST /installments` · `DELETE /installments/:id`
+Gestión de grupos de cuotas. El DELETE elimina el grupo completo (todas las cuotas, pasadas y futuras).
 
-```
-fetch([API externa])
-  → filter([condición de validez])
-  → map([normalización])
-  → filter([condición de negocio])
-  → sort([criterio])
-```
+### `GET /categories` · `POST /categories` · `PATCH /categories/:id` · `DELETE /categories/:id`
+CRUD de categorías. El DELETE es soft delete (`deletedAt`). El GET excluye categorías eliminadas por defecto; acepta `?includeDeleted=true` para incluirlas.
 
-## Cachés
+## Reglas de negocio implementadas
 
-| Cache | TTL | Descripción |
-|-------|-----|-------------|
-| `[nombre]` | [duración] | [qué cachea] |
-
-<!-- Notas sobre la implementación del caché:
-- In-flight deduplication: si dos requests llegan al mismo tiempo,
-  solo se hace una llamada a la API externa.
--->
-
-## Reglas de negocio y filtros
-
-<!-- Documentar las reglas no obvias de filtrado, ordenamiento y procesamiento. -->
+<!-- Documentar reglas no obvias a medida que se implementen. -->
 <!-- Ejemplo:
-### Filtro de [entidad]
-Una entidad pasa el filtro si cumple alguna de estas condiciones:
-- [condición A]
-- [condición B]
-- [caso especial — por qué se incluye aunque parezca que no debería]
-
-### Tiebreaker de [campo duplicado]
-Cuando dos o más entidades comparten [campo], el orden es:
-1. [criterio 1] descendente
-2. [criterio 2] descendente
-3. [criterio 3 opcional]
--->
-
-## APIs externas
-
-| API | URL | Uso |
-|-----|-----|-----|
-| [Nombre] | [URL estable] | [Para qué se usa] |
-
-<!-- Documentar cualquier decisión sobre cómo consumir cada API externa:
-- URL preferida (round-robin vs endpoint específico)
-- Rate limits o consideraciones de uso
-- Campos importantes del response
+- El endpoint GET /movements filtra recurrentes donde startMonth <= mes consultado y (deletedFrom es null o deletedFrom > mes consultado)
 -->

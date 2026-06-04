@@ -1,86 +1,38 @@
 # Features
 
-> Descripción funcional de cada feature: qué hace, cómo funciona, y su estado actual.
-> Para detalle técnico de implementación ver `frontend.md`, `backend.md`, o `mobile.md`.
+> Estado de implementación de cada feature.
+> Para la descripción funcional completa y criterios de aceptación ver `docs/requirements.md`.
 
 ---
 
-## Auth
+## Estado general
 
-**Qué hace:** El usuario inicia sesión para acceder a sus datos. Sin login, la app no muestra nada.
-
-**Cómo funciona:**
-- Página de login como punto de entrada
-- Proveedor: pendiente de decisión (ver decisiones abiertas)
-- Sesión persistente — no pedir login en cada visita
-
-**Estado:** Planeado
-
----
-
-## Cargar movimiento (gasto o ingreso)
-
-**Qué hace:** El usuario registra un movimiento de dinero: puede ser un egreso (gasto) o un ingreso.
-
-**Cómo funciona:**
-- Formulario rápido accesible desde cualquier pantalla
-- Campos: tipo (gasto / ingreso), monto (numérico, obligatorio), categoría (selector, obligatorio), descripción (texto, opcional), fecha (default: hoy)
-- Al guardar, el movimiento aparece inmediatamente en las vistas de lista
-
-**Estado:** Planeado
+| Feature | ID req. | Estado |
+|---------|---------|--------|
+| Auth — Google OAuth, sesión persistente | RF-AUTH-001..004 | Pendiente |
+| Dashboard — resumen del mes + últimos movimientos | RF-DASH-001..005 | Pendiente |
+| Formulario de carga (tabs único/fijo/cuotas) | RF-CM-001 | Pendiente |
+| Movimiento único — crear, editar, eliminar | RF-MU-001..003 | Pendiente |
+| Movimiento fijo — crear, visualizar, editar, eliminar | RF-MF-001..004 | Pendiente |
+| Movimiento en cuotas — crear, eliminar | RF-MC-001..002 | Pendiente |
+| Categorías — defaults + CRUD + soft delete | RF-CAT-001..004 | Pendiente |
+| Vista del mes — lista + totales + navegación | RF-VM-001..004 | Pendiente |
 
 ---
 
-## Ver movimientos del mes
+## Notas de implementación
 
-**Qué hace:** Muestra todos los movimientos del mes actual (o el mes seleccionado) con totales de gastos, ingresos y balance.
-
-**Cómo funciona:**
-- Lista cronológica de movimientos del mes, con navegación a mes anterior/siguiente
-- Balance del mes (ingresos − gastos) visible de forma prominente
-- Subtotales separados de gastos e ingresos
-
-**Estado:** Planeado
+<!-- Documentar decisiones técnicas, workarounds o comportamientos no obvios -->
+<!-- a medida que cada feature se implementa.                                 -->
 
 ---
 
-## Ver movimientos por categoría
+## Roadmap post v1
 
-**Qué hace:** Muestra cuánto se gastó (o ingresó) en cada categoría en un período dado.
-
-**Cómo funciona:**
-- Vista agrupada por categoría con subtotales
-- Filtrable por mes o año
-- Solo muestra categorías que tienen al menos un movimiento en el período
-
-**Estado:** Planeado
-
----
-
-## Gestión de categorías
-
-**Qué hace:** El usuario puede crear, renombrar y eliminar sus categorías.
-
-**Cómo funciona:**
-- CRUD completo de categorías (nombre, tipo opcional: gasto/ingreso/ambos — TBD)
-- Categorías default al crear la cuenta: Consumibles, Tarjeta de crédito, Gastos fijos, Servicios
-- No se puede eliminar una categoría que tenga movimientos asociados (o pide reasignar primero — TBD)
-
-**Estado:** Planeado
-
----
-
-## Features ocultas / deshabilitadas
-
-_(Sin features ocultas por ahora)_
-
----
-
-## Roadmap / Features planeadas (post v1)
-
-| Feature | Estado | Notas |
-|---------|--------|-------|
-| Vista anual | Planeado | Totales por mes en el año |
-| Selección de moneda | Planeado | 100% switcheable — no tocar en v1 |
-| Tarjeta de crédito (flujo específico) | Abierto | Demasiado complejo para v1 |
-| Importación desde extracto | Idea | Sin decisión |
+| Feature | Notas |
+|---------|-------|
+| Gráficos (torta, barras, línea) | Requiere definición de UX |
+| Vista de historial anual | — |
+| Tarjetas con fecha de corte | Requiere flujo propio |
+| Multi-moneda | Diseñado para venir después |
+| Importación desde extracto bancario | Sin decisión |
