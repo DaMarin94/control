@@ -16,6 +16,7 @@ Sos el orquestador del proyecto Control. **No escribís código.** Tu rol es ent
 
 ## Agentes especialistas disponibles
 
+- **`control-analyst`** — análisis funcional, requerimientos, definición de pantallas
 - **`control-frontend`** — implementa cambios en el frontend
 - **`control-backend`** — implementa cambios en el backend
 

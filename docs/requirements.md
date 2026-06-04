@@ -112,6 +112,7 @@ No hay roles, administradores ni usuarios invitados. Un usuario accede exclusiva
 - [ ] Si es la primera vez que el usuario ingresa, el sistema crea su registro automáticamente.
 - [ ] Si el usuario ya existe, el sistema actualiza nombre e imagen si cambiaron.
 - [ ] Al crear la cuenta por primera vez, el sistema genera las categorías por defecto (ver RF-CAT-001).
+- [ ] Un usuario ya autenticado que navega a `/login` es redirigido automáticamente al dashboard, sin volver a mostrar la pantalla de login.
 
 ---
 
@@ -227,22 +228,6 @@ No hay roles, administradores ni usuarios invitados. Un usuario accede exclusiva
 
 ---
 
-#### RF-DASH-004 — Últimos movimientos del mes
-
-| Campo | Detalle |
-|---|---|
-| **Descripción** | El dashboard muestra los últimos movimientos registrados en el mes actual. |
-| **Actor** | Usuario autenticado |
-| **Prioridad** | Media |
-| **Precondiciones** | El usuario tiene sesión activa. |
-
-**Criterios de aceptación:**
-- [ ] Se muestran los últimos 5 movimientos del mes (ordenados por fecha, más reciente primero).
-- [ ] Cada ítem muestra: tipo (gasto/ingreso), monto y categoría.
-- [ ] Si no hay movimientos, el área se muestra vacía sin error.
-
----
-
 #### RF-DASH-005 — Acceso a la vista del mes completa
 
 | Campo | Detalle |
@@ -273,10 +258,10 @@ Un movimiento único es un gasto o ingreso que ocurrió una sola vez en una fech
 | **Descripción** | La carga de un movimiento se realiza mediante un formulario con tabs, uno por tipo. El contenido cambia según el tab activo. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Alta |
-| **Precondiciones** | El usuario activó la acción "nuevo movimiento" (desde el dashboard u otra pantalla). |
+| **Precondiciones** | El usuario activó la acción "nuevo movimiento" (desde el botón "Nuevo movimiento" del sidebar o desde el dashboard). |
 
 **Flujo principal:**
-1. El sistema presenta un formulario (modal o pantalla) con tres tabs: **Único**, **Fijo**, **Cuotas**.
+1. El sistema presenta el formulario como un **modal** con tres tabs: **Único**, **Fijo**, **Cuotas**.
 2. El tab **Único** está activo por defecto.
 3. El usuario selecciona el tab que corresponde al tipo de movimiento a cargar.
 4. El formulario muestra los campos del tipo seleccionado.
@@ -285,8 +270,10 @@ Un movimiento único es un gasto o ingreso que ocurrió una sola vez en una fech
 **Criterios de aceptación:**
 - [ ] El formulario presenta exactamente tres tabs: Único, Fijo, Cuotas.
 - [ ] El tab Único está activo por defecto al abrir el formulario.
+- [ ] Dentro del tab Único, el tipo **Gasto** está seleccionado por defecto.
 - [ ] Cambiar de tab limpia el formulario — no se conservan datos del tab anterior.
-- [ ] El formulario es accesible desde el dashboard y desde la vista del mes.
+- [ ] El formulario es accesible desde el botón "Nuevo movimiento" del sidebar (presente en cualquier pantalla autenticada) y desde el dashboard.
+- [ ] En modo edición, el formulario abre directamente en el tipo del movimiento editado y no muestra los tabs de selección de tipo.
 - [ ] El usuario puede cancelar y cerrar el formulario desde cualquier tab sin guardar nada.
 
 ---
@@ -308,18 +295,21 @@ Un movimiento único es un gasto o ingreso que ocurrió una sola vez en una fech
 5. El usuario confirma o modifica la fecha (default: hoy).
 6. El usuario ingresa una descripción (opcional).
 7. El usuario confirma.
-8. El sistema guarda el movimiento y lo muestra en la vista del mes correspondiente.
+8. El sistema guarda el movimiento, cierra el formulario y muestra un toast de confirmación con la acción "Ir a ver". El toast permite navegar a la vista del mes correspondiente a la fecha del movimiento. Si el usuario no interactúa con el toast, este desaparece y el usuario permanece en la pantalla en la que estaba.
 
 **Flujos alternativos:**
 - *A1 — Monto inválido (cero, negativo, no numérico):* el sistema muestra error de validación y no guarda.
 - *A2 — Sin categoría seleccionada:* el sistema muestra error de validación y no guarda.
 - *A3 — El usuario cancela:* no se guarda nada y se vuelve a la pantalla anterior.
+- *A4 — El usuario hace clic en "Ir a ver" del toast:* el sistema navega a la vista del mes correspondiente a la fecha del movimiento guardado.
 
 **Criterios de aceptación:**
 - [ ] Tipo, monto y categoría son obligatorios. Descripción es opcional.
 - [ ] La fecha tiene como valor por defecto el día actual y es editable.
 - [ ] No se puede guardar un movimiento con monto igual a cero o negativo.
-- [ ] El movimiento aparece inmediatamente en la vista del mes correspondiente a su fecha.
+- [ ] Al guardar, el formulario se cierra y aparece un toast de confirmación.
+- [ ] El toast incluye una acción "Ir a ver" que navega a la vista del mes correspondiente a la fecha del movimiento.
+- [ ] Si el usuario no interactúa con el toast, este desaparece automáticamente y el usuario permanece en la pantalla actual.
 - [ ] El monto se almacena en centavos (entero).
 - [ ] Las categorías con soft delete no aparecen en el selector.
 
@@ -398,12 +388,18 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 4. El usuario selecciona una categoría (obligatorio).
 5. El usuario ingresa una descripción (opcional).
 6. El usuario confirma.
-7. El sistema crea el movimiento fijo con `startMonth` igual al mes actual.
+7. El sistema crea el movimiento fijo con `startMonth` igual al mes actual, cierra el formulario y muestra un toast de confirmación con la acción "Ir a ver". El toast permite navegar a la vista del mes en el que el fijo comienza a aparecer (mes actual). Si el usuario no interactúa con el toast, este desaparece y el usuario permanece en la pantalla en la que estaba.
+
+**Flujos alternativos:**
+- *A1 — El usuario hace clic en "Ir a ver" del toast:* el sistema navega a la vista del mes en el que el fijo comienza a aparecer (mes actual).
 
 **Criterios de aceptación:**
 - [ ] Un movimiento fijo creado en junio aparece en junio, julio, agosto, y todos los meses siguientes.
 - [ ] El movimiento fijo no tiene fecha de día — aparece como ítem mensual sin día específico.
 - [ ] Las validaciones de monto (> 0) aplican igual que en RF-MU-001.
+- [ ] Al guardar, el formulario se cierra y aparece un toast de confirmación.
+- [ ] El toast incluye una acción "Ir a ver" que navega a la vista del mes en el que el fijo comienza a aparecer (mes actual).
+- [ ] Si el usuario no interactúa con el toast, este desaparece automáticamente y el usuario permanece en la pantalla actual.
 - [ ] Las categorías con soft delete no aparecen en el selector.
 
 ---
@@ -506,11 +502,12 @@ Una compra o cobro dividido en N pagos mensuales iguales. El usuario ingresa el 
 6. El usuario selecciona una categoría (obligatorio).
 7. El usuario ingresa una descripción (opcional).
 8. El usuario confirma.
-9. El sistema crea el grupo de cuotas y genera una cuota por mes durante N meses.
+9. El sistema crea el grupo de cuotas, genera una cuota por mes durante N meses, cierra el formulario y muestra un toast de confirmación con la acción "Ir a ver". El toast permite navegar a la vista del mes de inicio de las cuotas. Si el usuario no interactúa con el toast, este desaparece y el usuario permanece en la pantalla en la que estaba.
 
 **Flujos alternativos:**
 - *A1 — Monto inválido:* el sistema muestra error de validación y no guarda.
 - *A2 — Cantidad de cuotas = 0 o negativa:* el sistema muestra error de validación y no guarda.
+- *A3 — El usuario hace clic en "Ir a ver" del toast:* el sistema navega a la vista del mes de inicio de las cuotas.
 
 **Criterios de aceptación:**
 - [ ] El campo monto corresponde al monto de cada cuota, no al total.
@@ -519,6 +516,9 @@ Una compra o cobro dividido en N pagos mensuales iguales. El usuario ingresa el 
 - [ ] Aparece exactamente una cuota por mes durante exactamente N meses consecutivos.
 - [ ] Todas las cuotas tienen el mismo monto (no hay cuotas variables).
 - [ ] Cada cuota en la lista muestra el número de cuota y el total (ej: "3/12").
+- [ ] Al guardar, el formulario se cierra y aparece un toast de confirmación.
+- [ ] El toast incluye una acción "Ir a ver" que navega a la vista del mes de inicio de las cuotas.
+- [ ] Si el usuario no interactúa con el toast, este desaparece automáticamente y el usuario permanece en la pantalla actual.
 
 ---
 
@@ -545,6 +545,37 @@ Una compra o cobro dividido en N pagos mensuales iguales. El usuario ingresa el 
 
 **Notas:**
 - La cancelación parcial de cuotas (eliminar solo las cuotas restantes) está fuera de scope en v1.
+
+---
+
+#### RF-MC-003 — Editar grupo de cuotas
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El usuario puede editar el grupo de cuotas completo: monto por cuota, cantidad de cuotas, mes de inicio, categoría y descripción. La edición aplica a todas las instancias del grupo. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El grupo de cuotas existe y pertenece al usuario autenticado. |
+
+**Flujo principal:**
+1. El usuario selecciona la opción editar sobre una cuota en la lista del mes.
+2. El sistema presenta el formulario de edición del grupo con los datos actuales.
+3. El usuario modifica uno o más campos: monto por cuota, cantidad de cuotas, mes de inicio, categoría o descripción.
+4. El usuario confirma.
+5. El sistema actualiza el grupo de cuotas completo y regenera las instancias mensuales según los nuevos valores.
+
+**Flujos alternativos:**
+- *A1 — Monto inválido (cero, negativo, no numérico):* el sistema muestra error de validación y no guarda.
+- *A2 — Cantidad de cuotas = 0 o negativa:* el sistema muestra error de validación y no guarda.
+- *A3 — El usuario cancela:* el grupo de cuotas no se modifica.
+
+**Criterios de aceptación:**
+- [ ] Los campos editables son: monto por cuota, cantidad de cuotas, mes de inicio, categoría y descripción.
+- [ ] La edición aplica al grupo completo, no a una cuota individual.
+- [ ] El monto por cuota debe ser mayor a cero (misma validación que RF-MC-001).
+- [ ] La cantidad de cuotas debe ser un entero mayor a cero (misma validación que RF-MC-001).
+- [ ] Al cambiar la cantidad de cuotas o el mes de inicio, el sistema recalcula en qué meses aparecen las cuotas.
+- [ ] Solo se pueden editar grupos propios.
 
 ---
 
@@ -595,6 +626,7 @@ Las categorías clasifican los movimientos. Son personalizables por usuario y ti
 - [ ] No pueden existir dos categorías activas con el mismo nombre para el mismo usuario.
 - [ ] El scope puede ser: AMBOS, GASTO, INGRESO. Default: AMBOS.
 - [ ] La categoría creada está disponible inmediatamente en los selectores de movimientos.
+- [ ] La gestión de categorías (crear, editar, eliminar y listar) vive en una pantalla separada y dedicada, accesible desde el link "Categorías" del sidebar (RF-NAV-001). No es un modal ni una sección embebida en otra pantalla.
 
 ---
 
@@ -661,6 +693,8 @@ La vista del mes muestra todos los movimientos del mes seleccionado (únicos, fi
 - [ ] Se listan los fijos donde `startMonth <= mesActivo` y (`deletedFrom` es null o `deletedFrom > mesActivo`).
 - [ ] Se listan las cuotas donde `startMonth <= mesActivo < startMonth + totalInstallments meses`.
 - [ ] Cada ítem muestra: tipo (gasto/ingreso), monto, categoría, descripción (si la tiene) y su origen (único / fijo / cuota X/N).
+- [ ] La lista está agrupada por tipo en tres secciones separadas y rotuladas, en este orden: **Únicos**, **Fijos**, **Cuotas**. Dentro de la sección Únicos, los movimientos se ordenan por fecha descendente (más reciente primero). Las secciones Fijos y Cuotas no tienen día específico, por lo que su ordenamiento interno no se rige por fecha.
+- [ ] Una sección sin movimientos en el mes no se muestra (no aparece su rótulo vacío).
 - [ ] Si no hay movimientos en el mes, la lista se muestra vacía sin mostrar error.
 
 ---
@@ -694,7 +728,7 @@ La vista del mes muestra todos los movimientos del mes seleccionado (únicos, fi
 
 **Criterios de aceptación:**
 - [ ] Cada ítem de la lista tiene acceso a las acciones editar y eliminar.
-- [ ] Al seleccionar editar, se abre el formulario correspondiente (RF-MU-002 o RF-MF-003 según el tipo).
+- [ ] Al seleccionar editar, se abre el formulario correspondiente (RF-MU-002, RF-MF-003 o RF-MC-003 según el tipo).
 - [ ] Al seleccionar eliminar, se ejecuta el flujo correspondiente (RF-MU-003, RF-MF-004 o RF-MC-002 según el tipo).
 
 ---
@@ -713,6 +747,47 @@ La vista del mes muestra todos los movimientos del mes seleccionado (únicos, fi
 - [ ] Existen controles para avanzar al mes siguiente y retroceder al mes anterior.
 - [ ] La lista y los totales se actualizan para reflejar el mes seleccionado.
 - [ ] Se muestra el nombre del mes y el año del mes activo.
+
+---
+
+### 3.8 Módulo: Navegación
+
+La navegación global de la app se resuelve con un **sidebar lateral** persistente, presente en todas las pantallas autenticadas. Centraliza el acceso a las secciones principales, la acción primaria de carga y el menú de usuario.
+
+---
+
+#### RF-NAV-001 — Sidebar de navegación global
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | La app presenta un sidebar lateral persistente que está visible en todas las pantallas autenticadas. Contiene la navegación entre secciones, la acción primaria de nuevo movimiento y el menú de usuario con el cierre de sesión. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Alta |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Contenido:**
+
+- **Logo / nombre "Control"** (parte superior): actúa como enlace al dashboard.
+- **Links de navegación:**
+  - **Dashboard** — lleva al dashboard (RF-DASH-001).
+  - **Vista del mes** — lleva a la vista del mes (RF-VM-001), abierta en el mes actual.
+  - **Categorías** — lleva a la gestión de categorías (módulo 3.6).
+- **Botón "Nuevo movimiento"** (acción primaria): abre el formulario de carga de movimiento (RF-CM-001).
+- **Menú de usuario** (parte inferior): representado por el avatar del usuario. Al activarlo, despliega la opción **"Cerrar sesión"** (RF-AUTH-004).
+
+**Criterios de aceptación:**
+- [ ] El sidebar está presente en todas las pantallas accesibles con sesión activa.
+- [ ] El sidebar no se muestra en la pantalla de login ni en otras pantallas no autenticadas.
+- [ ] El logo/nombre "Control" lleva al dashboard.
+- [ ] Los links Dashboard, Vista del mes y Categorías navegan a sus respectivas pantallas.
+- [ ] El link "Vista del mes" abre la vista en el mes actual.
+- [ ] El botón "Nuevo movimiento" abre el formulario de carga (RF-CM-001) desde cualquier pantalla, cumpliendo el límite de 2 interacciones (RNF-003).
+- [ ] El sidebar indica visualmente cuál es la sección activa.
+- [ ] El menú de usuario se ubica en la parte inferior del sidebar y muestra el avatar del usuario.
+- [ ] La opción "Cerrar sesión" vive dentro del menú de usuario y dispara el flujo de RF-AUTH-004.
+
+**Notas:**
+- Este RF cubre la decisión sobre RF-AUTH-004 (cierre de sesión disponible "desde cualquier pantalla"): el punto de acceso al cierre de sesión es el menú de usuario del sidebar.
 
 ---
 
@@ -744,6 +819,7 @@ La vista del mes muestra todos los movimientos del mes seleccionado (únicos, fi
 | RNF-005 | Performance | La vista del mes debe cargar y mostrar los movimientos en menos de 2 segundos en conexión normal. |
 | RNF-006 | Compatibilidad | La aplicación debe funcionar correctamente en las últimas dos versiones de Chrome, Firefox y Safari. |
 | RNF-007 | Disponibilidad | La aplicación es web-first. No hay requerimiento de funcionamiento offline en v1. |
+| RNF-008 | Resiliencia | Resiliencia de formularios — ante un error del backend al guardar, el formulario permanece abierto, conserva los datos ingresados y permite reintentar sin perder información. |
 
 ---
 
@@ -763,6 +839,8 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 | Multi-usuario (roles, workspaces) | Sin fecha |
 | Importación desde extracto bancario | Sin decisión |
 | Filtro por categoría en vista del mes | Sin decisión para v1 |
+| Vista consolidada de movimientos fijos activos | Out of scope v1; candidato para v2 como pantalla propia en el sidebar |
+| Lista de últimos movimientos en el dashboard (ex RF-DASH-004) | Dashboard simplificado a resumen financiero + acceso a carga |
 
 ---
 
@@ -798,3 +876,23 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 **2026-06-03 — Moneda: no tocar en v1.** No se implementa selección de moneda. En el futuro será 100% switcheable. Motivo: scope acotado para v1; no hardcodear símbolos en la UI de forma difícil de cambiar después.
 
 **2026-06-03 — Categorías personalizables.** El usuario puede crear, editar y eliminar sus propias categorías. Hay categorías por defecto al crear la cuenta. Motivo: cada persona tiene una estructura de gastos distinta.
+
+**2026-06-03 — Navegación global con sidebar lateral (opción B).** La navegación entre secciones se resuelve con un sidebar lateral persistente en todas las pantallas autenticadas (RF-NAV-001). Contiene el logo/nombre "Control" (enlace al dashboard), los links Dashboard / Vista del mes / Categorías, el botón primario "Nuevo movimiento" y el menú de usuario con "Cerrar sesión" en la parte inferior. Motivo: el usuario prefiere el sidebar desde el inicio y anticipa el crecimiento de secciones, donde un layout lateral escala mejor que una barra superior.
+
+**2026-06-03 — Gestión de categorías en pantalla separada (opción A).** La gestión de categorías (crear, editar, eliminar y listar) se resuelve en una pantalla dedicada accesible desde el link "Categorías" del sidebar (RF-CAT-002, RF-NAV-001), en lugar de un modal o una sección embebida. Motivo: el usuario prefiere una pantalla propia que ofrece más espacio para listar y administrar categorías, y es coherente con el sidebar como punto de acceso a las secciones principales.
+
+**2026-06-03 — Confirmación post-guardado con toast y acción "Ir a ver" (Gap 5).** Al guardar un movimiento (único, fijo o cuotas), el formulario se cierra y aparece un toast de confirmación que incluye la acción "Ir a ver". Esa acción navega a la vista del mes del movimiento guardado (el mes de la fecha en únicos, el mes de inicio en fijos y cuotas). Si el usuario no interactúa con el toast, este desaparece automáticamente y el usuario permanece en la pantalla en la que estaba. Impacta RF-MU-001, RF-MF-001 y RF-MC-001. Motivo: el usuario eligió una variante combinada que confirma el guardado sin interrumpir el flujo, pero ofreciendo un atajo opcional para verificar el movimiento recién cargado en su mes.
+
+**2026-06-03 — Vista consolidada de movimientos fijos activos: fuera de alcance v1 (opción A).** No se incluye en v1 una vista que liste todos los movimientos fijos activos de forma consolidada. Los fijos siguen visibles dentro de cada mes en la vista del mes (RF-MF-002). Queda anotada la opción C como idea para v2: una pantalla propia "Fijos" con su link en el sidebar, dedicada a administrar las plantillas recurrentes (ver sección 6, "Fuera de alcance"). Motivo: el usuario prefiere acotar el scope de v1; la consolidación de fijos no es bloqueante y se evalúa más adelante como pantalla independiente.
+
+**2026-06-03 — Dashboard sin lista de movimientos (opción C).** El dashboard se simplifica a un resumen financiero del mes actual (gastos, ingresos, balance) más el acceso a la carga de movimientos y el enlace a la vista del mes. Se elimina el ex RF-DASH-004 (lista de últimos movimientos), que pasa a "Fuera de alcance" (sección 6). Motivo: la lista detallada vive en la vista del mes; el dashboard queda enfocado en el panorama financiero y en disparar la acción primaria, evitando duplicar la lista.
+
+**2026-06-03 — Formulario de carga como modal con defaults Único + Gasto.** El formulario de carga de movimiento se presenta como un modal (no pantalla propia, no ruta). Al abrirlo para crear, el tab **Único** y el tipo **Gasto** están seleccionados por defecto. Impacta RF-CM-001. Motivo: el caso más frecuente es cargar un gasto único; los defaults reducen los pasos para el flujo más común.
+
+**2026-06-03 — Modo edición del formulario sin tabs.** En modo edición, el modal de carga abre directamente en el tipo del movimiento editado y oculta los tabs de selección de tipo (no se puede cambiar el tipo de un movimiento ya creado vía edición). Impacta RF-CM-001. Motivo: el tipo de un movimiento es estructural; cambiarlo equivale a crear otro, por lo que la edición se acota a los campos del tipo existente.
+
+**2026-06-03 — Edición de cuotas en v1 (RF-MC-003).** Se incluye en v1 la edición del grupo de cuotas completo: monto por cuota, cantidad de cuotas, mes de inicio, categoría y descripción, con las mismas validaciones de monto y cantidad que la creación. La edición aplica al grupo entero. Motivo: corregir errores de carga (monto o cantidad equivocados) es una necesidad real y no justifica forzar al usuario a eliminar y recrear el grupo.
+
+**2026-06-03 — Pantalla de categorías: lista dedicada con creación/edición en modal.** Se confirma la pantalla dedicada de categorías (opción A, ya registrada). La creación y edición dentro de esa pantalla se resuelven con un modal (opción B): el botón "Nueva categoría" abre un modal vacío y la acción editar abre el mismo modal pre-cargado. Motivo: la pantalla dedicada da espacio para listar y administrar, y el modal mantiene la creación/edición ligera sin cambiar de contexto.
+
+**2026-06-03 — Redirección de usuario autenticado en /login.** Un usuario con sesión activa que navega a `/login` es redirigido automáticamente al dashboard. Impacta RF-AUTH-001. Motivo: evitar que un usuario logueado vea la pantalla de login, que no tiene utilidad en ese estado.
