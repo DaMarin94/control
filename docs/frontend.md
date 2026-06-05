@@ -7,12 +7,9 @@
 - Next.js 15 (App Router) + Tailwind CSS v4
 - TypeScript strict
 
-## Módulo compartido
+## Tipos
 
-Tipos y helpers puros compartidos entre el frontend web y futuras plataformas (mobile).
-
-- Sin DOM, sin React, sin framework — TypeScript puro
-- Si algo lo necesitan dos o más plataformas, va en el módulo compartido
+El frontend define sus propios tipos, que reflejan el contrato de la API del backend (ver formato de respuesta en `docs/technical.md`). No hay paquete de tipos compartido con el backend.
 
 ## Componentes, hooks y rutas
 

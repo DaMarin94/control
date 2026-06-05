@@ -19,4 +19,3 @@ El workflow de este proyecto está manejado por agentes en `.claude/agents/`:
 - **Control es un diario de gastos, no un sistema contable.** No agregar flujos de conciliación, libros mayores, ni múltiples monedas sin discutir antes.
 - **Backend separado (NestJS).** No mover la lógica de datos a API Routes de Next.js — el backend independiente mantiene la puerta abierta para mobile.
 - **Sin APIs externas en v1.** Todo se ingresa manualmente. No agregar integraciones bancarias sin decisión explícita.
-- **Módulo compartido de tipos:** solo tipos y helpers puros. Sin DOM, sin framework, sin side effects.

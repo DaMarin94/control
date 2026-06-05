@@ -22,7 +22,7 @@ Cubre exclusivamente la plataforma **web** de Control en su versión 1.0. La pla
 | Movimiento | Registro de una transacción económica: gasto o ingreso |
 | Gasto (`EXPENSE`) | Egreso de dinero |
 | Ingreso (`INCOME`) | Entrada de dinero |
-| Movimiento único | Movimiento que ocurrió una sola vez en una fecha específica |
+| Movimiento único | Movimiento que ocurrió una sola vez en un instante específico (fecha y hora) |
 | Movimiento fijo | Plantilla recurrente que genera un ítem en cada mes mientras esté activa |
 | Cuota | Instancia mensual de una compra dividida en N pagos iguales |
 | Grupo de cuotas | Registro padre que define el monto, cantidad y mes de inicio de las cuotas |
@@ -71,7 +71,7 @@ No hay roles, administradores ni usuarios invitados. Un usuario accede exclusiva
 
 - Los montos se almacenan en **centavos** (entero sin decimales) para evitar errores de punto flotante.
 - Todos los recursos están **aislados por usuario**: el backend filtra siempre por el `userId` del JWT activo.
-- La `date` de un movimiento único es la fecha elegida por el usuario, no el timestamp de creación.
+- El instante de un movimiento único (`occurredAt`) es el momento elegido por el usuario (con default "ahora"), no el timestamp de creación del registro (`createdAt`).
 - No se implementa `currency` en v1, pero el modelo lo permite agregar sin romper datos existentes.
 
 ---
@@ -282,7 +282,7 @@ Un movimiento único es un gasto o ingreso que ocurrió una sola vez en una fech
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El usuario registra un movimiento único con tipo (gasto/ingreso), monto, categoría, fecha y descripción opcional. |
+| **Descripción** | El usuario registra un movimiento único con tipo (gasto/ingreso), monto, categoría, fecha y hora, y descripción opcional. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Alta |
 | **Precondiciones** | El usuario tiene sesión activa. Existe al menos una categoría disponible. |
@@ -292,7 +292,7 @@ Un movimiento único es un gasto o ingreso que ocurrió una sola vez en una fech
 2. El usuario selecciona: **Gasto** o **Ingreso**.
 3. El usuario ingresa el monto (obligatorio).
 4. El usuario selecciona una categoría (obligatorio).
-5. El usuario confirma o modifica la fecha (default: hoy).
+5. El usuario confirma o modifica la fecha y la hora (default: el momento actual de creación).
 6. El usuario ingresa una descripción (opcional).
 7. El usuario confirma.
 8. El sistema guarda el movimiento, cierra el formulario y muestra un toast de confirmación con la acción "Ir a ver". El toast permite navegar a la vista del mes correspondiente a la fecha del movimiento. Si el usuario no interactúa con el toast, este desaparece y el usuario permanece en la pantalla en la que estaba.
@@ -305,7 +305,7 @@ Un movimiento único es un gasto o ingreso que ocurrió una sola vez en una fech
 
 **Criterios de aceptación:**
 - [ ] Tipo, monto y categoría son obligatorios. Descripción es opcional.
-- [ ] La fecha tiene como valor por defecto el día actual y es editable.
+- [ ] La fecha y la hora tienen como valor por defecto el momento actual de creación y ambas son editables.
 - [ ] No se puede guardar un movimiento con monto igual a cero o negativo.
 - [ ] Al guardar, el formulario se cierra y aparece un toast de confirmación.
 - [ ] El toast incluye una acción "Ir a ver" que navega a la vista del mes correspondiente a la fecha del movimiento.
@@ -332,7 +332,7 @@ Un movimiento único es un gasto o ingreso que ocurrió una sola vez en una fech
 5. El sistema actualiza el movimiento.
 
 **Criterios de aceptación:**
-- [ ] Todos los campos son editables: tipo, monto, categoría, fecha, descripción.
+- [ ] Todos los campos son editables: tipo, monto, categoría, fecha, hora, descripción.
 - [ ] Las validaciones de RF-MU-001 aplican en la edición.
 - [ ] Si se cambia la fecha a otro mes, el movimiento deja de aparecer en el mes original y aparece en el nuevo mes.
 - [ ] Solo se pueden editar movimientos propios.
@@ -693,7 +693,7 @@ La vista del mes muestra todos los movimientos del mes seleccionado (únicos, fi
 - [ ] Se listan los fijos donde `startMonth <= mesActivo` y (`deletedFrom` es null o `deletedFrom > mesActivo`).
 - [ ] Se listan las cuotas donde `startMonth <= mesActivo < startMonth + totalInstallments meses`.
 - [ ] Cada ítem muestra: tipo (gasto/ingreso), monto, categoría, descripción (si la tiene) y su origen (único / fijo / cuota X/N).
-- [ ] La lista está agrupada por tipo en tres secciones separadas y rotuladas, en este orden: **Únicos**, **Fijos**, **Cuotas**. Dentro de la sección Únicos, los movimientos se ordenan por fecha descendente (más reciente primero). Las secciones Fijos y Cuotas no tienen día específico, por lo que su ordenamiento interno no se rige por fecha.
+- [ ] La lista está agrupada por tipo en tres secciones separadas y rotuladas, en este orden: **Únicos**, **Fijos**, **Cuotas**. Dentro de la sección Únicos, los movimientos se ordenan por instante (fecha y hora) descendente (más reciente primero). Las secciones Fijos y Cuotas no tienen día ni hora específicos, por lo que su ordenamiento interno no se rige por instante.
 - [ ] Una sección sin movimientos en el mes no se muestra (no aparece su rótulo vacío).
 - [ ] Si no hay movimientos en el mes, la lista se muestra vacía sin mostrar error.
 
@@ -798,13 +798,14 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 | RN-001 | El monto de todo movimiento es un entero positivo mayor a cero. El tipo (`EXPENSE` / `INCOME`) define el signo semántico. Nunca se almacenan montos negativos ni cero. |
 | RN-002 | Los montos se almacenan en centavos (entero). No se usan números de punto flotante para representar dinero. |
 | RN-003 | Todos los recursos (movimientos, categorías) están aislados por `userId`. El backend filtra siempre por el usuario del JWT. Un usuario nunca puede ver ni modificar datos de otro. |
-| RN-004 | La `date` de una transacción única es la fecha elegida por el usuario, no el `createdAt`. |
+| RN-004 | El instante de un movimiento único (`occurredAt`) es el momento elegido por el usuario, con default "ahora". Define a qué momento/mes pertenece el movimiento. No se confunde con `createdAt` (timestamp de sistema de cuándo se creó el registro): el usuario puede elegir un instante distinto al de creación. |
 | RN-005 | Editar o eliminar un movimiento fijo no modifica los datos de meses ya pasados. El historial es inmutable. |
 | RN-006 | Los movimientos fijos y los grupos de cuotas no generan filas individuales por mes. Se calculan on-the-fly al consultar un período. |
 | RN-007 | Una categoría eliminada (soft delete) no aparece en selectores de nuevos movimientos, pero los movimientos históricos conservan la referencia a ella. |
 | RN-008 | No pueden coexistir dos categorías activas con el mismo nombre para el mismo usuario. |
 | RN-009 | En v1 no hay campo de moneda. El sistema opera sobre una moneda implícita. El diseño permite agregar `currency` en el futuro sin romper datos existentes. |
 | RN-010 | El selector de categorías se filtra según el tipo del movimiento en curso: para `EXPENSE` se muestran categorías con scope `EXPENSE` o `BOTH`; para `INCOME` se muestran categorías con scope `INCOME` o `BOTH`. |
+| RN-011 | El movimiento único representa un instante (fecha y hora). Se almacena como timestamp en UTC junto con la zona horaria original del registro (nombre IANA). Se muestra siempre en esa zona horaria original, sin importar dónde se encuentre el usuario después. El mes al que pertenece el movimiento se determina en la zona del propio registro, de forma estable. Los movimientos fijos y las cuotas no aplican esta regla: operan a nivel mes, sin día ni hora. Ver `docs/technical.md` (sección "Fechas y zonas horarias") para el detalle técnico. |
 
 ---
 
@@ -858,7 +859,7 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 | Mes activo | Mes actualmente visualizado en la vista del mes. Por defecto, el mes corriente. |
 | Movimiento | Registro de una transacción económica. Puede ser único, fijo o una cuota. |
 | Movimiento fijo | Plantilla recurrente mensual activa hasta que el usuario la elimina. Sin día específico dentro del mes. |
-| Movimiento único | Movimiento que ocurrió en una fecha específica, una sola vez. |
+| Movimiento único | Movimiento que ocurrió en un instante específico (fecha y hora), una sola vez. Se almacena en UTC junto con su zona horaria original; ver RN-011. |
 | Scope de categoría | Indica a qué tipo de movimiento aplica la categoría: `BOTH`, `EXPENSE`, o `INCOME`. |
 | Soft delete | Eliminación lógica: el registro se marca con `deletedAt` pero no se borra físicamente. |
 | `startMonth` | Primer día del mes a partir del cual un movimiento fijo o grupo de cuotas comienza a aparecer. |
@@ -896,3 +897,5 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 **2026-06-03 — Pantalla de categorías: lista dedicada con creación/edición en modal.** Se confirma la pantalla dedicada de categorías (opción A, ya registrada). La creación y edición dentro de esa pantalla se resuelven con un modal (opción B): el botón "Nueva categoría" abre un modal vacío y la acción editar abre el mismo modal pre-cargado. Motivo: la pantalla dedicada da espacio para listar y administrar, y el modal mantiene la creación/edición ligera sin cambiar de contexto.
 
 **2026-06-03 — Redirección de usuario autenticado en /login.** Un usuario con sesión activa que navega a `/login` es redirigido automáticamente al dashboard. Impacta RF-AUTH-001. Motivo: evitar que un usuario logueado vea la pantalla de login, que no tiene utilidad en ese estado.
+
+**2026-06-04 — Movimiento único con fecha y hora, almacenamiento UTC + zona original.** El movimiento único pasa a capturar fecha **y hora** (antes solo fecha). Al crear, la fecha y la hora tienen como default el momento de creación ("ahora") y ambas son editables. Cada movimiento se almacena como instante en UTC junto con la zona horaria original del registro (nombre IANA, ej. `America/Argentina/Buenos_Aires`), y se muestra siempre en esa zona original aunque el usuario viaje. El mes al que pertenece se calcula en la zona del registro, de forma estable. El Usuario incorpora un campo `timezone` (su zona "de casa"/default), usado para determinar "hoy"/"mes actual" al crear movimientos y en el dashboard. Los movimientos fijos y las cuotas no cambian: siguen a nivel mes, sin día ni hora. Impacta RF-MU-001, RF-MU-002, RF-VM-001 y RN-011. La mecánica técnica completa vive en `docs/technical.md` (sección "Fechas y zonas horarias"). Motivo: registrar el instante real del gasto y conservar la hora local del lugar donde ocurrió hace la información más precisa y estable frente a viajes o cambios de zona.

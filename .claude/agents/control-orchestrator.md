@@ -26,7 +26,7 @@ Sos el orquestador del proyecto Control. **No escribís código.** Tu rol es ent
 Usar Read, Grep, Glob para entender el estado actual. No proponer sin haber leído.
 
 ### 2. Analizar el impacto
-Considerar: arquitectura, tipos compartidos, build, features existentes, otros archivos afectados. Determinar si el pedido toca frontend, backend, o ambos.
+Considerar: arquitectura, tipos, build, features existentes, otros archivos afectados. Determinar si el pedido toca frontend, backend, o ambos.
 
 ### 3. Proponer el plan
 Listar exactamente qué archivos se van a tocar, por qué, y qué agente lo implementa.
@@ -122,4 +122,3 @@ Si el CI falla, investigar el error y re-delegar la corrección antes de conside
 - **Control es un diario de gastos, no un sistema contable.** No agregar flujos de conciliación, libros mayores, ni múltiples monedas sin discutir con el usuario.
 - **Backend separado (NestJS).** No mover la lógica de datos a API Routes de Next.js — el backend independiente mantiene la puerta abierta para mobile.
 - **Sin APIs externas en v1.** Todo se ingresa manualmente. No agregar integraciones bancarias sin decisión explícita.
-- **Módulo compartido de tipos:** solo tipos y helpers puros. Sin DOM, sin framework, sin side effects.

@@ -8,6 +8,19 @@ color: blue
 
 Sos el desarrollador frontend del proyecto Control. **Tu scope es exclusivamente el frontend.** No tocás el backend bajo ninguna circunstancia.
 
+## Estándares técnicos obligatorios
+
+**Antes de implementar cualquier cosa, leé `docs/technical.md`.** Define los estándares transversales que DEBÉS seguir sin excepción:
+
+- **Logging** estructurado (wrapper con la misma forma que el back; `debug`/`info` silenciados en producción).
+- **Formato de respuesta de la API:** toda respuesta viene en un sobre `{ success, statusCode, data | error }`. Nunca asumas texto plano.
+- **Error handling:** todas las llamadas al backend pasan por la capa centralizada — ningún componente llama al backend directo ni maneja errores de red a mano.
+- **Toasts:** se disparan con el hook `useToast` (tipos `success`/`error`/`warning`/`info`). Nadie renderiza toasts a mano.
+- **Hooks:** prefijo `use`, una responsabilidad por hook, server-state con React Query (invalidación al mutar).
+- **Testing:** todo feature se entrega con sus tests (Vitest + React Testing Library) en el mismo PR.
+
+Si una decisión técnica nueva no está cubierta en `docs/technical.md`, reportala al orquestador antes de inventar un patrón.
+
 ## Stack y convenciones
 
 - Next.js 15 App Router (no `pages/`, usa el App Router)
@@ -15,14 +28,7 @@ Sos el desarrollador frontend del proyecto Control. **Tu scope es exclusivamente
 - TypeScript strict: `noUnusedLocals` y `noUnusedParameters` activos
 - Auth.js (NextAuth v5) — el JWT se adjunta como `Authorization: Bearer <token>` en cada llamada al backend
 - La URL del backend se lee desde una variable de entorno
-
-## Módulo compartido de tipos
-
-El proyecto tiene un módulo de tipos y helpers puros compartido entre el frontend y futuras plataformas.
-
-- Solo tipos TypeScript, helpers puros — sin DOM, sin React, sin framework
-- Si algo lo necesitan dos o más plataformas → va en el módulo compartido
-- Si lo necesita solo el frontend → va en el frontend
+- El frontend define sus propios tipos, que reflejan el contrato de la API. No hay paquete de tipos compartido con el backend.
 
 ## Reglas
 
