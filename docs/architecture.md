@@ -12,7 +12,7 @@
 | Backend | NestJS + TypeScript |
 | ORM | Prisma |
 | Base de datos | PostgreSQL |
-| Auth | Auth.js (NextAuth v5) + Google OAuth |
+| Auth | Auth.js (NextAuth v5) — Google OAuth + email/contraseña |
 
 ## Estructura del repositorio
 
@@ -30,4 +30,4 @@ Cada app tiene su propio `package.json` y se gestiona con **pnpm** de forma aisl
 
 - **Backend separado (NestJS), no API Routes de Next.js.** Mantiene la puerta abierta para mobile u otros clientes sin reescribir la API.
 - **Front y back independientes, sin código compartido.** Cada app es autónoma y define sus propios tipos. El contrato entre ambas es la API HTTP (ver formato de respuesta en `docs/technical.md`). No hay paquete de tipos compartido.
-- **Auth con JWT compartido.** Auth.js maneja el flujo OAuth en el frontend; el backend valida el mismo token en cada request.
+- **Autenticación con JWT firmado.** Auth.js maneja el login (Google OAuth y email/contraseña) en el frontend. El token de sesión de Auth.js está encriptado y es propio de Auth.js; el backend **no** lo valida directamente. En su lugar, Auth.js firma un JWT corto (HS256, secret compartido) que el frontend adjunta como `Bearer` en cada request, y que el backend valida para extraer el `userId`. El detalle completo está en `docs/technical.md` (sección Autenticación).

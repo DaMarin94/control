@@ -50,19 +50,19 @@ El sistema se compone de:
 
 - **Frontend:** Next.js 15 + Tailwind CSS v4 (puerto 3000)
 - **Backend:** NestJS + TypeScript + PostgreSQL + Prisma (puerto 3001)
-- **Auth:** Auth.js (NextAuth v5) con Google OAuth
+- **Auth:** Auth.js (NextAuth v5) con dos métodos que coexisten: Google OAuth y email + contraseña
 
 ### 2.2 Usuarios del sistema
 
 | Actor | Descripción |
 |---|---|
-| Usuario autenticado | Persona que inició sesión con su cuenta de Google. Es el único actor del sistema en v1. |
+| Usuario autenticado | Persona que inició sesión, sea con su cuenta de Google o con email + contraseña. Es el único actor del sistema en v1. |
 
 No hay roles, administradores ni usuarios invitados. Un usuario accede exclusivamente a sus propios datos.
 
 ### 2.3 Supuestos y dependencias
 
-- El usuario dispone de una cuenta de Google activa.
+- El usuario dispone de una cuenta de Google activa, o bien se registra con email + contraseña.
 - La app opera sobre una moneda implícita (sin selector de moneda en v1).
 - El usuario registra sus movimientos manualmente — no hay integración bancaria.
 - Los movimientos fijos y cuotas se calculan on-the-fly al consultar un mes; no se generan filas individuales por instancia mensual.
@@ -81,6 +81,10 @@ No hay roles, administradores ni usuarios invitados. Un usuario accede exclusiva
 ---
 
 ### 3.1 Módulo: Autenticación
+
+En v1 coexisten **dos métodos de autenticación**: Google OAuth (RF-AUTH-001) y email + contraseña (login en RF-AUTH-005, registro en RF-AUTH-006). La protección de rutas (RF-AUTH-002), la sesión persistente (RF-AUTH-003) y el cierre de sesión (RF-AUTH-004) son **agnósticos del método**: una vez que el usuario tiene sesión activa, se comportan igual sin importar cómo inició sesión.
+
+La recuperación de contraseña ("olvidé mi contraseña"), la verificación de email y el account linking (una misma cuenta accesible por Google y por email/contraseña) están **fuera de alcance en v1** (ver sección 6).
 
 ---
 
@@ -170,6 +174,75 @@ No hay roles, administradores ni usuarios invitados. Un usuario accede exclusiva
 - [ ] La opción de cerrar sesión está disponible desde cualquier pantalla.
 - [ ] Tras cerrar sesión, las rutas protegidas redirigen a login.
 - [ ] El token queda invalidado — no se puede reutilizar.
+
+---
+
+#### RF-AUTH-005 — Inicio de sesión con email y contraseña
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El sistema permite iniciar sesión con email y contraseña. El backend verifica la contraseña contra el hash almacenado. |
+| **Actor** | Usuario no autenticado |
+| **Prioridad** | Alta |
+| **Precondiciones** | El usuario no tiene sesión activa. Existe una cuenta registrada con ese email y contraseña (ver RF-AUTH-006). |
+
+**Flujo principal:**
+1. El usuario accede a la pantalla de login.
+2. El usuario ingresa su email y su contraseña.
+3. El usuario confirma ("Iniciar sesión").
+4. El sistema envía las credenciales al backend.
+5. El backend busca el usuario por email y verifica la contraseña contra el hash almacenado.
+6. Las credenciales son válidas: el sistema crea una sesión y redirige al dashboard.
+
+**Flujos alternativos:**
+- *A1 — Credenciales inválidas (email inexistente o contraseña incorrecta):* el sistema muestra un mensaje de error genérico que **no revela** si falló el email o la contraseña, y permite reintentar.
+- *A2 — Campos incompletos o email con formato inválido:* el sistema muestra error de validación y no envía la request.
+- *A3 — Error del backend:* el sistema informa el error y permite reintentar sin perder el email ingresado.
+
+**Criterios de aceptación:**
+- [ ] El login con credenciales válidas redirige al dashboard con sesión activa.
+- [ ] Ante credenciales inválidas, el mensaje de error es genérico y no distingue entre email inexistente y contraseña incorrecta.
+- [ ] La verificación de la contraseña contra el hash ocurre en el backend; el frontend nunca compara contraseñas.
+- [ ] La contraseña nunca se almacena ni se transmite en texto plano fuera del envío de la credencial al backend para su verificación.
+- [ ] Un usuario ya autenticado que navega a `/login` es redirigido al dashboard (igual que RF-AUTH-001).
+
+---
+
+#### RF-AUTH-006 — Registro con email y contraseña
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El sistema permite crear una cuenta nueva con email y contraseña. El backend hashea la contraseña, crea el usuario y genera las categorías por defecto. |
+| **Actor** | Usuario no autenticado |
+| **Prioridad** | Alta |
+| **Precondiciones** | El usuario no tiene sesión activa. No existe una cuenta previa con ese email. |
+
+**Flujo principal:**
+1. El usuario accede a la pantalla de registro.
+2. El usuario ingresa su email y una contraseña (y la confirmación de contraseña).
+3. El usuario confirma ("Registrarme").
+4. El sistema valida el formato del email y la longitud mínima de la contraseña (mínimo 8 caracteres).
+5. El sistema envía los datos al backend.
+6. El backend verifica que el email no esté en uso, hashea la contraseña (bcrypt/argon2) y crea el registro del usuario.
+7. El backend genera las categorías por defecto de la cuenta nueva (ver RF-CAT-001).
+8. El sistema crea una sesión y redirige al dashboard con el usuario ya logueado.
+
+**Flujos alternativos:**
+- *A1 — Email ya registrado:* el sistema muestra un error indicando que el email ya está en uso y no crea la cuenta.
+- *A2 — Email con formato inválido:* el sistema muestra error de validación y no envía la request.
+- *A3 — Contraseña menor a 8 caracteres:* el sistema muestra error de validación y no crea la cuenta (no envía la request).
+- *A4 — Contraseña y confirmación no coinciden:* el sistema muestra error de validación y no envía la request.
+- *A5 — Error del backend:* el sistema informa el error y permite reintentar sin perder el email ingresado.
+
+**Criterios de aceptación:**
+- [ ] El email y la contraseña son obligatorios; el email debe tener formato válido.
+- [ ] La contraseña debe tener un mínimo de 8 caracteres. No se exige complejidad obligatoria (mayúscula, número ni símbolo) por ahora.
+- [ ] Una contraseña de menos de 8 caracteres produce error de validación y no registra la cuenta.
+- [ ] Si se incluye confirmación de contraseña, debe coincidir con la contraseña para poder registrarse.
+- [ ] Si el email ya está registrado, el sistema no crea la cuenta e informa el error.
+- [ ] El backend almacena la contraseña siempre hasheada (bcrypt/argon2), nunca en texto plano (RN-012).
+- [ ] Al crear la cuenta, el backend genera las categorías por defecto (RF-CAT-001), igual que en el alta por Google.
+- [ ] Tras un registro exitoso, el usuario queda logueado y es redirigido al dashboard sin pasar por el login.
 
 ---
 
@@ -589,13 +662,13 @@ Las categorías clasifican los movimientos. Son personalizables por usuario y ti
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | Al registrarse por primera vez, el sistema crea automáticamente un conjunto de categorías por defecto. |
+| **Descripción** | Al crear la cuenta por primera vez —por cualquiera de los dos métodos: Google OAuth (RF-AUTH-001) o registro con email + contraseña (RF-AUTH-006)— el sistema crea automáticamente un conjunto de categorías por defecto. |
 | **Actor** | Sistema |
 | **Prioridad** | Alta |
-| **Precondiciones** | El usuario inicia sesión por primera vez (cuenta nueva). |
+| **Precondiciones** | Se crea una cuenta nueva (primer ingreso por Google o registro con email + contraseña). |
 
 **Criterios de aceptación:**
-- [ ] Al crear la cuenta, el sistema genera las siguientes categorías con `scope: BOTH`:
+- [ ] Al crear la cuenta por cualquiera de los dos métodos, el sistema genera las siguientes categorías con `scope: BOTH`:
   - Consumibles
   - Tarjeta de crédito
   - Gastos fijos
@@ -805,6 +878,7 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 | RN-008 | No pueden coexistir dos categorías activas con el mismo nombre para el mismo usuario. |
 | RN-009 | En v1 no hay campo de moneda. El sistema opera sobre una moneda implícita. El diseño permite agregar `currency` en el futuro sin romper datos existentes. |
 | RN-010 | El selector de categorías se filtra según el tipo del movimiento en curso: para `EXPENSE` se muestran categorías con scope `EXPENSE` o `BOTH`; para `INCOME` se muestran categorías con scope `INCOME` o `BOTH`. |
+| RN-012 | Las contraseñas de las cuentas con email + contraseña se almacenan siempre **hasheadas** (bcrypt/argon2), nunca en texto plano. El hash y la verificación ocurren en el backend; el frontend nunca almacena ni compara contraseñas. Las cuentas creadas solo con Google pueden no tener contraseña. |
 | RN-011 | El movimiento único representa un instante (fecha y hora). Se almacena como timestamp en UTC junto con la zona horaria original del registro (nombre IANA). Se muestra siempre en esa zona horaria original, sin importar dónde se encuentre el usuario después. El mes al que pertenece el movimiento se determina en la zona del propio registro, de forma estable. Los movimientos fijos y las cuotas no aplican esta regla: operan a nivel mes, sin día ni hora. Ver `docs/technical.md` (sección "Fechas y zonas horarias") para el detalle técnico. |
 
 ---
@@ -842,6 +916,9 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 | Filtro por categoría en vista del mes | Sin decisión para v1 |
 | Vista consolidada de movimientos fijos activos | Out of scope v1; candidato para v2 como pantalla propia en el sidebar |
 | Lista de últimos movimientos en el dashboard (ex RF-DASH-004) | Dashboard simplificado a resumen financiero + acceso a carga |
+| Recuperación de contraseña ("olvidé mi contraseña") | Requiere infraestructura de correo; diferida a post-v1 |
+| Verificación de email | Requiere infraestructura de correo; diferida a post-v1 |
+| Account linking (misma cuenta por Google y email/contraseña) | Pendiente sin resolver en v1; el caso de mismo email por ambos métodos no se resuelve |
 
 ---
 
@@ -897,5 +974,9 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 **2026-06-03 — Pantalla de categorías: lista dedicada con creación/edición en modal.** Se confirma la pantalla dedicada de categorías (opción A, ya registrada). La creación y edición dentro de esa pantalla se resuelven con un modal (opción B): el botón "Nueva categoría" abre un modal vacío y la acción editar abre el mismo modal pre-cargado. Motivo: la pantalla dedicada da espacio para listar y administrar, y el modal mantiene la creación/edición ligera sin cambiar de contexto.
 
 **2026-06-03 — Redirección de usuario autenticado en /login.** Un usuario con sesión activa que navega a `/login` es redirigido automáticamente al dashboard. Impacta RF-AUTH-001. Motivo: evitar que un usuario logueado vea la pantalla de login, que no tiene utilidad en ese estado.
+
+**2026-06-04 — Dos métodos de autenticación: Google OAuth + email/contraseña.** Se amplía la autenticación de Control. Hasta ahora era solo Google OAuth (alta automática); ahora coexisten **dos métodos**: Google OAuth (RF-AUTH-001) y email + contraseña, con login (RF-AUTH-005) y un flujo de **registro** propio (RF-AUTH-006) que antes no existía. El backend es dueño de la DB: hashea la contraseña (bcrypt/argon2), crea el usuario y genera las categorías por defecto (RF-CAT-001) sin importar el método de alta. Las contraseñas se almacenan siempre hasheadas, nunca en texto plano (RN-012); la verificación ocurre en el backend. La protección de rutas (RF-AUTH-002), la sesión persistente (RF-AUTH-003) y el cierre de sesión (RF-AUTH-004) quedan explícitamente agnósticos del método. **Diferido a post-v1:** recuperación de contraseña y verificación de email (ambas requieren infraestructura de correo). **Pendiente sin resolver en v1:** account linking (misma cuenta accesible por Google y por email/contraseña con el mismo email). La política de contraseña se define en la entrada complementaria de esta misma fecha. Impacta el módulo 3.1, RF-CAT-001, sección 4 (RN-012), sección 6 y las pantallas de login y registro (`docs/screens.md`). Motivo: ofrecer una alternativa de acceso sin depender exclusivamente de Google, sin sumar todavía la infraestructura de correo que requieren la recuperación y la verificación.
+
+**2026-06-04 — Política de contraseña para el registro (RF-AUTH-006).** La contraseña del registro con email + contraseña debe tener un **mínimo de 8 caracteres**, **sin requisitos de complejidad obligatoria** (no se exige mayúscula, número ni símbolo) por el momento. Una contraseña de menos de 8 caracteres produce error de validación y no crea la cuenta. Esto cierra el pendiente de "requisitos mínimos de la contraseña" anotado en la entrada de auth de esta misma fecha. La política es **revisable a futuro** (podría endurecerse con reglas de complejidad). Impacta RF-AUTH-006 y la pantalla de Registro (`docs/screens.md`). Motivo: el usuario optó por una barrera mínima razonable que no fricciona el alta, dejando la puerta abierta a reforzarla más adelante.
 
 **2026-06-04 — Movimiento único con fecha y hora, almacenamiento UTC + zona original.** El movimiento único pasa a capturar fecha **y hora** (antes solo fecha). Al crear, la fecha y la hora tienen como default el momento de creación ("ahora") y ambas son editables. Cada movimiento se almacena como instante en UTC junto con la zona horaria original del registro (nombre IANA, ej. `America/Argentina/Buenos_Aires`), y se muestra siempre en esa zona original aunque el usuario viaje. El mes al que pertenece se calcula en la zona del registro, de forma estable. El Usuario incorpora un campo `timezone` (su zona "de casa"/default), usado para determinar "hoy"/"mes actual" al crear movimientos y en el dashboard. Los movimientos fijos y las cuotas no cambian: siguen a nivel mes, sin día ni hora. Impacta RF-MU-001, RF-MU-002, RF-VM-001 y RN-011. La mecánica técnica completa vive en `docs/technical.md` (sección "Fechas y zonas horarias"). Motivo: registrar el instante real del gasto y conservar la hora local del lugar donde ocurrió hace la información más precisa y estable frente a viajes o cambios de zona.

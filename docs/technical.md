@@ -235,3 +235,82 @@ Las reglas de validación se escriben en cada lado por separado (back y front so
 
 - **Backend:** `DATABASE_URL`, secret para validar el JWT, `PORT`.
 - **Frontend:** URL del backend, `AUTH_SECRET`, credenciales de Google OAuth.
+
+---
+
+## Autenticación
+
+Dos métodos de login que conviven (Google OAuth + email/contraseña), resueltos con **Auth.js (NextAuth v5)** en el frontend. El backend es dueño de los usuarios y las credenciales.
+
+### Métodos (frontend, Auth.js con dos providers)
+
+- **Google OAuth** — provider de Google.
+- **Email + contraseña** — provider de credenciales.
+
+### Endpoints del backend (dueño de usuarios y credenciales)
+
+- `POST /auth/register` — email + contraseña → el backend hashea la contraseña, crea el usuario y genera las categorías por defecto (RF-CAT-001), devuelve el `userId`.
+- `POST /auth/login` — email + contraseña → el backend verifica el hash y devuelve el `userId`. Lo llama el provider de credenciales de Auth.js.
+- `POST /auth/google` — el frontend (en el callback de Auth.js) pasa el `id_token` de Google; el backend lo **verifica contra Google**, crea-o-trae el usuario + categorías por defecto, devuelve el `userId`.
+
+### Hashing de contraseñas
+
+- Las contraseñas se hashean con **argon2id** en el backend. Nunca se almacenan en texto plano (RN-012).
+- El hash y la verificación ocurren siempre del lado del backend.
+
+### Emisión y validación del JWT (común a ambos métodos)
+
+Ocurre **después** de autenticar, sin importar el método:
+
+1. **El token de sesión de Auth.js está encriptado (JWE)** y es específico de Auth.js — el backend NO lo valida directamente.
+2. Auth.js, en su callback, **firma un JWT propio para el backend**: algoritmo **HS256** con un **secret compartido** entre front y back, con claims `sub=userId` y `exp` (vida corta). Se guarda en la sesión.
+3. El frontend adjunta ese JWT como `Authorization: Bearer <token>` en cada llamada al backend.
+4. El **`JwtAuthGuard` global** del backend verifica la firma y los claims con el secret compartido, extrae el `userId` y scopea todos los recursos (RN-003).
+5. **Refresh:** el JWT de backend se re-emite desde la sesión viva de Auth.js. No hay maquinaria de refresh tokens aparte; la sesión de Auth.js es la fuente de verdad.
+
+### Fuera de v1
+
+Recuperación de contraseña, verificación de email y account linking (mismo email por Google y por credenciales) quedan diferidos — ver `docs/requirements.md`, sección 6.
+
+---
+
+## Linting y formato
+
+- **ESLint + Prettier** en ambas apps (cada una con su config; NestJS y Next.js ya traen ESLint, se suma Prettier para formato).
+- **Sin pre-commit hooks** por ahora (no husky/lint-staged).
+- **Sin CI** por ahora.
+
+---
+
+## Formato de presentación (moneda y fechas)
+
+Todo el formateo vive en **un único lugar** (`lib/` del frontend), para que cambiar locale o símbolo después sea trivial (consistente con "moneda implícita", RN-009).
+
+### Moneda
+
+- Helper central con `Intl.NumberFormat`: toma los centavos, divide por 100 y formatea.
+- **Locale por defecto `es-AR`:** separador de miles con punto, decimales con coma (`1.500,00`).
+- **Símbolo `$`** (estilo peso), centralizado y cambiable en un solo lugar.
+- **Siempre 2 decimales** (`$1.500,00`).
+- El locale y el símbolo son configurables desde ese único punto.
+
+### Fechas
+
+- Helper central con `Intl.DateTimeFormat`, locale por defecto `es-AR`.
+- Los movimientos únicos se muestran en la **zona horaria original del registro** (ver Fechas y zonas horarias).
+- Formatos: fecha `dd/mm/aaaa`, hora 24h, encabezado de mes como nombre + año ("Junio 2026").
+
+---
+
+## Estado de cliente
+
+- **Server-state:** React Query (ver Convenciones de hooks).
+- **Estado de UI:** context de React o estado local del componente.
+- **Sin Redux/Zustand** salvo necesidad real comprobada.
+
+---
+
+## Paginación
+
+- En v1 los datasets están acotados (movimientos por mes, categorías son pocas) → **sin paginación**.
+- Si algún listado crece en el futuro, se evalúa en ese momento.

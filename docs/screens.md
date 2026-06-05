@@ -9,55 +9,101 @@
 ## Índice
 
 1. [Login (`/login`)](#1-login-login)
-2. [Dashboard (`/`)](#2-dashboard-)
-3. [Vista del mes (`/mes`)](#3-vista-del-mes-mes)
-4. [Formulario de carga de movimiento (modal)](#4-formulario-de-carga-de-movimiento-modal)
-5. [Gestión de categorías (`/categorias`)](#5-gestión-de-categorías-categorias)
+2. [Registro (`/registro`)](#2-registro-registro)
+3. [Dashboard (`/`)](#3-dashboard-)
+4. [Vista del mes (`/mes`)](#4-vista-del-mes-mes)
+5. [Formulario de carga de movimiento (modal)](#5-formulario-de-carga-de-movimiento-modal)
+6. [Gestión de categorías (`/categorias`)](#6-gestión-de-categorías-categorias)
 
 ---
 
 ## Convenciones
 
-- El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Categorías) y **no** se muestra en el Login. Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo.
-- El **formulario de carga** (pantalla 4) es un modal sin ruta propia. Se invoca desde el sidebar y desde el dashboard, y se superpone a la pantalla actual.
+- El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Categorías) y **no** se muestra en las pantallas no autenticadas (Login, Registro). Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo.
+- El **formulario de carga** (pantalla 5) es un modal sin ruta propia. Se invoca desde el sidebar y desde el dashboard, y se superpone a la pantalla actual.
 
 ---
 
 ## 1. Login (`/login`)
 
-**RF relacionados:** RF-AUTH-001, RF-AUTH-002
+**RF relacionados:** RF-AUTH-001, RF-AUTH-002, RF-AUTH-005
 
 ### Propósito
 
-Punto de entrada de la aplicación para usuarios sin sesión. Permite iniciar sesión con Google. Es la única pantalla accesible sin autenticación.
+Punto de entrada de la aplicación para usuarios sin sesión. Permite iniciar sesión por cualquiera de los dos métodos: email + contraseña, o Google. Da acceso a la pantalla de registro para quienes no tienen cuenta. Junto con Registro, es una de las pantallas accesibles sin autenticación.
 
 ### Contenido
 
 - Logo / nombre "Control".
-- Botón "Iniciar sesión con Google".
+- **Formulario de email + contraseña:** campo email, campo contraseña y botón "Iniciar sesión" (RF-AUTH-005).
+- **Botón "Iniciar sesión con Google"** (RF-AUTH-001).
+- **Enlace a la pantalla de registro** ("Crear cuenta" o equivalente) hacia `/registro`.
 
-No muestra frase de propósito ni texto descriptivo adicional. No muestra el sidebar.
+No muestra el sidebar.
 
 ### Acciones disponibles
 
+- **Iniciar sesión con email y contraseña** — valida los campos y envía las credenciales al backend para verificación (RF-AUTH-005).
 - **Iniciar sesión con Google** — dispara el flujo OAuth de Google (RF-AUTH-001).
+- **Ir a registro** — navega a `/registro` (RF-AUTH-006).
 
 ### Navegación
 
-- **Llega desde:** acceso directo a `/login`; o redirección automática cuando un usuario sin sesión intenta entrar a una ruta protegida (RF-AUTH-002).
-- **Lleva a:** Dashboard (`/`) tras autenticarse con éxito. Si el flujo OAuth se originó por intentar acceder a una ruta protegida, lleva a la ruta original solicitada.
+- **Llega desde:** acceso directo a `/login`; redirección automática cuando un usuario sin sesión intenta entrar a una ruta protegida (RF-AUTH-002); enlace "Volver al login" desde la pantalla de registro.
+- **Lleva a:** Dashboard (`/`) tras autenticarse con éxito por cualquiera de los dos métodos. Si el ingreso se originó por intentar acceder a una ruta protegida, lleva a la ruta original solicitada. Pantalla de registro (`/registro`) vía el enlace de creación de cuenta.
 - **Redirección de usuario ya autenticado:** si un usuario con sesión activa navega a `/login`, el sistema lo redirige automáticamente al Dashboard sin mostrar esta pantalla.
 
 ### Estados
 
-- **Inicial:** logo + botón de Google.
-- **Cargando / en proceso OAuth:** el sistema está redirigiendo o procesando la respuesta de Google.
-- **Cancelado por el usuario (A1):** vuelve a mostrar la pantalla de login.
-- **Error en el flujo OAuth (A2):** se muestra un mensaje de error y se permite reintentar.
+- **Inicial:** logo, formulario de email + contraseña, botón de Google y enlace a registro.
+- **Validación con error (email/contraseña):** email con formato inválido o campos incompletos — se muestra el error y no se envía la request (RF-AUTH-005, A2).
+- **Credenciales inválidas (A1):** se muestra un mensaje de error **genérico** que no revela si falló el email o la contraseña; permite reintentar conservando el email ingresado.
+- **Cargando / en proceso:** el sistema está verificando las credenciales contra el backend, o redirigiendo/procesando la respuesta de Google.
+- **Cancelado por el usuario en Google (RF-AUTH-001 A1):** vuelve a mostrar la pantalla de login.
+- **Error en el flujo OAuth (RF-AUTH-001 A2):** se muestra un mensaje de error y se permite reintentar.
+- **Error del backend en login con credenciales (RF-AUTH-005 A3):** se informa el error y se permite reintentar sin perder el email ingresado.
 
 ---
 
-## 2. Dashboard (`/`)
+## 2. Registro (`/registro`)
+
+**RF relacionados:** RF-AUTH-006, RF-AUTH-002, RF-CAT-001
+
+### Propósito
+
+Pantalla de alta de cuenta con email + contraseña para usuarios sin sesión. Crea una cuenta nueva y, tras el registro exitoso, deja al usuario logueado en el dashboard. Junto con Login, es una de las pantallas accesibles sin autenticación.
+
+### Contenido
+
+- Logo / nombre "Control".
+- **Formulario de registro:** campo email, campo contraseña y campo de confirmación de contraseña.
+- **Botón "Registrarme"** (o equivalente).
+- **Enlace de vuelta al login** ("Ya tengo cuenta" o equivalente) hacia `/login`.
+
+No muestra el sidebar.
+
+### Acciones disponibles
+
+- **Registrarme** — valida los campos (email válido, contraseña de mínimo 8 caracteres, confirmación coincidente) y envía los datos al backend, que crea el usuario con la contraseña hasheada y genera las categorías por defecto (RF-AUTH-006, RF-CAT-001).
+- **Volver al login** — navega a `/login`.
+
+### Navegación
+
+- **Llega desde:** enlace de creación de cuenta desde la pantalla de login; acceso directo a `/registro`.
+- **Lleva a:** Dashboard (`/`) tras un registro exitoso, con el usuario ya logueado y sin pasar por el login. Login (`/login`) vía el enlace de vuelta.
+- **Redirección de usuario ya autenticado:** un usuario con sesión activa que navega a `/registro` es redirigido al Dashboard (mismo criterio que `/login`).
+
+### Estados
+
+- **Inicial:** formulario de registro vacío.
+- **Validación con error:** email con formato inválido, campos incompletos, contraseña de menos de 8 caracteres, o confirmación que no coincide — se muestra el error y no se envía la request (RF-AUTH-006, A2/A3/A4).
+- **Email duplicado (A1):** el backend rechaza el alta porque el email ya está registrado; se muestra el error indicando que el email ya está en uso y no se crea la cuenta.
+- **Registrando:** el sistema está creando la cuenta en el backend.
+- **Error del backend (A5):** se informa el error y se permite reintentar sin perder el email ingresado.
+
+---
+
+## 3. Dashboard (`/`)
 
 **RF relacionados:** RF-DASH-001, RF-DASH-002, RF-DASH-003, RF-DASH-005
 
@@ -80,7 +126,7 @@ No muestra lista de movimientos (decisión 2026-06-03, ex RF-DASH-004 fuera de a
 
 ### Acciones disponibles
 
-- **Nuevo movimiento** — abre el modal de carga (pantalla 4). El acceso primario es el botón "Nuevo movimiento" del sidebar (RF-NAV-001); el dashboard también ofrece este acceso de carga.
+- **Nuevo movimiento** — abre el modal de carga (pantalla 5). El acceso primario es el botón "Nuevo movimiento" del sidebar (RF-NAV-001); el dashboard también ofrece este acceso de carga.
 - **Ver todos** — navega a la vista del mes, abierta en el mes actual.
 - Acciones globales del sidebar (navegación entre secciones, menú de usuario, cerrar sesión).
 
@@ -98,7 +144,7 @@ No muestra lista de movimientos (decisión 2026-06-03, ex RF-DASH-004 fuera de a
 
 ---
 
-## 3. Vista del mes (`/mes`)
+## 4. Vista del mes (`/mes`)
 
 **RF relacionados:** RF-VM-001, RF-VM-002, RF-VM-003, RF-VM-004
 
@@ -140,7 +186,7 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 
 ---
 
-## 4. Formulario de carga de movimiento (modal)
+## 5. Formulario de carga de movimiento (modal)
 
 **RF relacionados:** RF-CM-001, RF-MU-001, RF-MU-002, RF-MF-001, RF-MF-003, RF-MC-001, RF-MC-003; RNF-008
 
@@ -192,7 +238,7 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 
 ---
 
-## 5. Gestión de categorías (`/categorias`)
+## 6. Gestión de categorías (`/categorias`)
 
 **RF relacionados:** RF-CAT-001, RF-CAT-002, RF-CAT-003, RF-CAT-004
 
