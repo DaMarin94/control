@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Control — Hi-Fi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="control.css" />
+</head>
+<body data-theme="light" data-density="equilibrado" data-geo="medio">
+
+<!-- ===== icon sprite ===== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-dash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></symbol>
+    <symbol id="i-month" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/><circle cx="8" cy="13.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="13.5" r="1" fill="currentColor" stroke="none"/><circle cx="16" cy="13.5" r="1" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-tags" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12.5l8-8a2 2 0 0 1 1.4-.6H19a1.5 1.5 0 0 1 1.5 1.5v5.6a2 2 0 0 1-.6 1.4l-8 8a1.6 1.6 0 0 1-2.3 0L3.5 14.8a1.6 1.6 0 0 1 0-2.3Z"/><circle cx="15.5" cy="8.5" r="1.4"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V6M6 11l6-6 6 6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v13M6 13l6 6 6-6"/></symbol>
+    <symbol id="i-chevL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></symbol>
+    <symbol id="i-chevR" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></symbol>
+    <symbol id="i-chevD" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10a2 2 0 0 0-3-3L5 17v3Z"/><path d="M13.5 7.5l3 3"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3Z"/><path d="M9 12l2 2 4-4"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9.5 16.5H2.5L12 3Z"/><path d="M12 10v4M12 17h.01"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9a6 6 0 0 1 10-3l3 3M20 15a6 6 0 0 1-10 3l-3-3"/><path d="M17 3v6h-6M7 21v-6h6"/></symbol>
+  </defs>
+</svg>
+
+<!-- ===== prototype bar ===== -->
+<div class="proto">
+  <div class="pbrand"><span class="dotmark"></span> Control <span class="tag">· hi-fi flow</span></div>
+  <div class="pscreens" id="pscreens">
+    <button data-s="login">Login</button>
+    <button class="on" data-s="dash">Dashboard</button>
+    <button data-s="mes">Vista del mes</button>
+    <button data-s="cat">Categorías</button>
+  </div>
+  <div class="spacer"></div>
+  <div class="pctl">
+    <div class="pswatches" id="pswatches" title="Paleta de acento">
+      <div class="sw on" data-h="264" style="background:oklch(0.55 0.17 264)"></div>
+      <div class="sw" data-h="250" style="background:oklch(0.55 0.17 250)"></div>
+      <div class="sw" data-h="295" style="background:oklch(0.55 0.17 295)"></div>
+      <div class="sw" data-h="205" style="background:oklch(0.55 0.13 205)"></div>
+    </div>
+    <div class="pseg" id="ptheme">
+      <button class="on" data-t="light">Claro</button>
+      <button data-t="dark">Oscuro</button>
+    </div>
+  </div>
+</div>
+
+<div class="stage">
+
+  <!-- ============================================================ LOGIN -->
+  <section class="screen" data-screen="login" data-screen-label="Login">
+    <div class="login">
+      <div class="brandside">
+        <div class="grid-bg"></div>
+        <div class="glow"></div>
+        <div class="blogo"><span class="gem">C</span><b>Control</b></div>
+        <div class="bhero">
+          <h2>Tus finanzas del mes, sin sorpresas.</h2>
+          <p>Registrá gastos e ingresos, separá lo único de lo fijo y las cuotas, y mirá tu balance real de un vistazo.</p>
+        </div>
+        <div class="bstat" style="color:oklch(1 0 0 / 0.7);font-size:13px;align-items:center;gap:9px;">
+          <svg width="15" height="15"><use href="#i-shield"/></svg> Privado · solo vos ves tus números.
+        </div>
+      </div>
+      <div class="accessside">
+        <div class="accesscard">
+          <span class="welcome">Bienvenido</span>
+          <h3>Ingresá a Control</h3>
+          <p class="sub">Usá tu cuenta de Google. Sin contraseñas que recordar.</p>
+          <button class="gbtn" id="loginBtn"><span class="gmark">G</span> Continuar con Google</button>
+          <p class="fine">Al continuar aceptás los <a href="#">Términos</a> y la <a href="#">Política de privacidad</a>.</p>
+          <div class="ssl"><svg><use href="#i-lock"/></svg> Conexión segura · cifrada de extremo a extremo</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ DASHBOARD -->
+  <section class="screen on" data-screen="dash" data-screen-label="Dashboard">
+    <div class="app">
+      <aside class="side" data-nav="dash"></aside>
+      <main class="content">
+        <div class="phead">
+          <div>
+            <div class="eyebrow">Tu mes</div>
+            <h1>Junio <span class="mo">2026</span></h1>
+          </div>
+          <button class="btn lg open-mov"><svg><use href="#i-plus"/></svg> Nuevo movimiento</button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);">
+          <div class="card stat gasto">
+            <div class="k"><span class="ki"><svg><use href="#i-down"/></svg></span> Gastos</div>
+            <div class="v mono">$ 219.400<span class="cents">,00</span></div>
+            <div class="meta"><span class="mono">8</span> movimientos · <span class="mono">2</span> fijos</div>
+          </div>
+          <div class="card stat ingreso">
+            <div class="k"><span class="ki"><svg><use href="#i-up"/></svg></span> Ingresos</div>
+            <div class="v mono pos">$ 365.000<span class="cents">,00</span></div>
+            <div class="meta"><span class="mono">2</span> movimientos · sueldo + freelance</div>
+          </div>
+        </div>
+
+        <div class="balance" style="margin-top:var(--gap);">
+          <div class="k">Balance de junio</div>
+          <div class="v mono">+ $ 145.600<span class="cents">,00</span></div>
+          <div class="ratio"><i class="inc" style="width:62.5%"></i><i class="exp" style="width:37.5%"></i></div>
+          <div class="rlbl"><span>Ingresos <b>$ 365.000</b></span><span>Gastos <b>$ 219.400</b></span></div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:28px;padding:0 2px;">
+          <span style="font-size:14px;color:var(--muted);">8 gastos y 2 ingresos registrados este mes</span>
+          <span class="link goto" data-go="mes">Ver todos los movimientos <svg width="15" height="15"><use href="#i-arrow"/></svg></span>
+        </div>
+      </main>
+    </div>
+  </section>
+
+  <!-- ============================================================ VISTA DEL MES -->
+  <section class="screen" data-screen="mes" data-screen-label="Vista del mes">
+    <div class="app">
+      <aside class="side" data-nav="mes"></aside>
+      <main class="content">
+        <div class="phead">
+          <div class="stepper">
+            <button id="moPrev"><svg width="18" height="18"><use href="#i-chevL"/></svg></button>
+            <div class="lab">Junio 2026<small>Mes en curso</small></div>
+            <button id="moNext"><svg width="18" height="18"><use href="#i-chevR"/></svg></button>
+          </div>
+          <button class="btn open-mov"><svg><use href="#i-plus"/></svg> Nuevo movimiento</button>
+        </div>
+
+        <!-- totals -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1.1fr;gap:var(--gap);margin-bottom:6px;">
+          <div class="card stat gasto" style="padding:16px 18px;gap:6px;">
+            <div class="k" style="font-size:11.5px;">Gastos</div>
+            <div class="v mono" style="font-size:23px;">$ 219.400</div>
+          </div>
+          <div class="card stat ingreso" style="padding:16px 18px;gap:6px;">
+            <div class="k" style="font-size:11.5px;">Ingresos</div>
+            <div class="v mono pos" style="font-size:23px;">$ 365.000</div>
+          </div>
+          <div class="balance" style="padding:16px 18px;">
+            <div class="k">Balance</div>
+            <div class="v mono" style="font-size:28px;margin:6px 0 0;">+ $ 145.600</div>
+          </div>
+        </div>
+
+        <!-- ÚNICOS -->
+        <div class="group">
+          <div class="ghead"><span class="gt">Únicos</span><span class="gc">4</span><span class="hr"></span><span class="gsum mono">−$ 6.800</span></div>
+          <div class="list">
+            <div class="mov is-gasto"><span class="mi"><svg><use href="#i-down"/></svg></span><div class="mt"><b>Supermercado</b><span>Supermercado<span class="sep"></span>gasto</span></div><span class="when">02 Jun</span><span class="amt mono">−$ 24.300</span></div>
+            <div class="mov is-gasto"><span class="mi"><svg><use href="#i-down"/></svg></span><div class="mt"><b>Carga de nafta</b><span>Transporte<span class="sep"></span>gasto</span></div><span class="when">05 Jun</span><span class="amt mono">−$ 12.500</span></div>
+            <div class="mov is-ingreso"><span class="mi"><svg><use href="#i-up"/></svg></span><div class="mt"><b>Proyecto freelance</b><span>Freelance<span class="sep"></span>ingreso</span></div><span class="when">10 Jun</span><span class="amt mono inc">+$ 45.000</span></div>
+            <div class="mov is-gasto"><span class="mi"><svg><use href="#i-down"/></svg></span><div class="mt"><b>Regalo de cumpleaños</b><span>Varios<span class="sep"></span>gasto</span></div><span class="when">14 Jun</span><span class="amt mono">−$ 15.000</span></div>
+          </div>
+        </div>
+
+        <!-- FIJOS -->
+        <div class="group">
+          <div class="ghead"><span class="gt">Fijos</span><span class="gc">4</span><span class="hr"></span><span class="gsum mono">+$ 166.500</span></div>
+          <div class="list">
+            <div class="mov is-ingreso"><span class="mi"><svg><use href="#i-up"/></svg></span><div class="mt"><b>Sueldo</b><span>Sueldo<span class="sep"></span>ingreso<span class="sep"></span><svg width="12" height="12" style="opacity:.6"><use href="#i-repeat"/></svg> mensual</span></div><span class="when">01 Jun</span><span class="amt mono inc">+$ 320.000</span></div>
+            <div class="mov is-gasto"><span class="mi"><svg><use href="#i-down"/></svg></span><div class="mt"><b>Alquiler</b><span>Alquiler<span class="sep"></span>gasto<span class="sep"></span><svg width="12" height="12" style="opacity:.6"><use href="#i-repeat"/></svg> mensual</span></div><span class="when">01 Jun</span><span class="amt mono">−$ 120.000</span></div>
+            <div class="mov is-gasto"><span class="mi"><svg><use href="#i-down"/></svg></span><div class="mt"><b>Internet</b><span>Servicios<span class="sep"></span>gasto<span class="sep"></span><svg width="12" height="12" style="opacity:.6"><use href="#i-repeat"/></svg> mensual</span></div><span class="when">08 Jun</span><span class="amt mono">−$ 18.500</span></div>
+            <div class="mov is-gasto"><span class="mi"><svg><use href="#i-down"/></svg></span><div class="mt"><b>Gimnasio</b><span>Ocio<span class="sep"></span>gasto<span class="sep"></span><svg width="12" height="12" style="opacity:.6"><use href="#i-repeat"/></svg> mensual</span></div><span class="when">08 Jun</span><span class="amt mono">−$ 15.000</span></div>
+          </div>
+        </div>
+
+        <!-- CUOTAS -->
+        <div class="group">
+          <div class="ghead"><span class="gt">Cuotas</span><span class="gc">2</span><span class="hr"></span><span class="gsum mono">−$ 24.100</span></div>
+          <div class="list">
+            <div class="mov is-gasto"><span class="mi"><svg><use href="#i-down"/></svg></span><div class="mt"><b>Notebook</b><span>Tecnología<span class="sep"></span>gasto</span></div><span class="when">06 Jun<div class="cuota-tag">cuota 3/12</div></span><span class="amt mono">−$ 9.900</span></div>
+            <div class="mov is-gasto"><span class="mi"><svg><use href="#i-down"/></svg></span><div class="mt"><b>Heladera</b><span>Hogar<span class="sep"></span>gasto</span></div><span class="when">06 Jun<div class="cuota-tag">cuota 5/18</div></span><span class="amt mono">−$ 14.200</span></div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </section>
+
+  <!-- ============================================================ CATEGORÍAS -->
+  <section class="screen" data-screen="cat" data-screen-label="Categorías">
+    <div class="app">
+      <aside class="side" data-nav="cat"></aside>
+      <main class="content">
+        <div class="phead">
+          <div>
+            <div class="eyebrow">Configuración</div>
+            <h1>Categorías</h1>
+          </div>
+          <button class="btn open-cat"><svg><use href="#i-plus"/></svg> Nueva categoría</button>
+        </div>
+        <p style="margin:-14px 0 22px;color:var(--muted);font-size:14.5px;max-width:560px;">8 categorías activas. El <b style="color:var(--ink-2)">alcance</b> define en qué tipo de movimiento aparece cada una al cargar.</p>
+
+        <div class="cat-list" id="catList">
+          <div class="catrow"><span class="sw" style="background:oklch(0.6 0.15 27)"></span><span class="cn">Supermercado</span><span class="cu">12 movimientos</span><span class="scope gasto">Gasto</span><span class="acts"><button class="iconbtn"><svg><use href="#i-edit"/></svg></button><button class="iconbtn danger"><svg><use href="#i-trash"/></svg></button></span></div>
+          <div class="catrow"><span class="sw" style="background:oklch(0.6 0.14 158)"></span><span class="cn">Sueldo</span><span class="cu">1 movimiento</span><span class="scope ingreso">Ingreso</span><span class="acts"><button class="iconbtn"><svg><use href="#i-edit"/></svg></button><button class="iconbtn danger"><svg><use href="#i-trash"/></svg></button></span></div>
+          <div class="catrow"><span class="sw" style="background:oklch(0.55 0.16 27)"></span><span class="cn">Alquiler</span><span class="cu">1 movimiento</span><span class="scope gasto">Gasto</span><span class="acts"><button class="iconbtn"><svg><use href="#i-edit"/></svg></button><button class="iconbtn danger"><svg><use href="#i-trash"/></svg></button></span></div>
+          <div class="catrow"><span class="sw" style="background:oklch(0.6 0.13 250)"></span><span class="cn">Transporte</span><span class="cu">6 movimientos</span><span class="scope gasto">Gasto</span><span class="acts"><button class="iconbtn"><svg><use href="#i-edit"/></svg></button><button class="iconbtn danger"><svg><use href="#i-trash"/></svg></button></span></div>
+          <div class="catrow"><span class="sw" style="background:oklch(0.62 0.14 158)"></span><span class="cn">Freelance</span><span class="cu">3 movimientos</span><span class="scope ingreso">Ingreso</span><span class="acts"><button class="iconbtn"><svg><use href="#i-edit"/></svg></button><button class="iconbtn danger"><svg><use href="#i-trash"/></svg></button></span></div>
+          <div class="catrow"><span class="sw" style="background:oklch(0.6 0.14 295)"></span><span class="cn">Varios</span><span class="cu">9 movimientos</span><span class="scope ambos">Ambos</span><span class="acts"><button class="iconbtn"><svg><use href="#i-edit"/></svg></button><button class="iconbtn danger"><svg><use href="#i-trash"/></svg></button></span></div>
+          <div class="catrow"><span class="sw" style="background:oklch(0.62 0.14 50)"></span><span class="cn">Servicios</span><span class="cu">4 movimientos</span><span class="scope gasto">Gasto</span><span class="acts"><button class="iconbtn"><svg><use href="#i-edit"/></svg></button><button class="iconbtn danger"><svg><use href="#i-trash"/></svg></button></span></div>
+          <div class="catrow"><span class="sw" style="background:oklch(0.58 0.15 330)"></span><span class="cn">Ocio</span><span class="cu">5 movimientos</span><span class="scope gasto">Gasto</span><span class="acts"><button class="iconbtn"><svg><use href="#i-edit"/></svg></button><button class="iconbtn danger"><svg><use href="#i-trash"/></svg></button></span></div>
+        </div>
+      </main>
+    </div>
+  </section>
+
+</div>
+
+<!-- ============================================================ MODAL: MOVIMIENTO -->
+<div class="scrim" id="movScrim">
+  <div class="dialog" role="dialog" aria-modal="true">
+    <div class="dhead">
+      <h3 id="movTitle">Nuevo movimiento</h3>
+      <button class="iconbtn close-mov"><svg><use href="#i-x"/></svg></button>
+    </div>
+    <div class="dbody">
+      <div class="dtabs" id="movTabs">
+        <button class="on" data-t="unico">Único</button>
+        <button data-t="fijo">Fijo</button>
+        <button data-t="cuotas">Cuotas</button>
+      </div>
+      <div class="gi" id="movGI">
+        <button class="on-gasto" data-g="gasto"><svg><use href="#i-down"/></svg> Gasto</button>
+        <button data-g="ingreso"><svg><use href="#i-up"/></svg> Ingreso</button>
+      </div>
+
+      <div class="fields">
+        <!-- amount (always) -->
+        <div class="f" id="fAmount">
+          <label id="amountLbl">Monto</label>
+          <div class="input amount"><span class="pre">$</span><input type="text" inputmode="decimal" placeholder="0,00" /></div>
+        </div>
+        <!-- cuotas-only -->
+        <div class="row2" id="fCuotas" style="display:none;">
+          <div class="f"><label>Cantidad de cuotas</label><div class="input"><input type="text" inputmode="numeric" placeholder="12" /></div></div>
+          <div class="f"><label>Mes de inicio</label><div class="input select"><span>Junio 2026</span><svg><use href="#i-chevD"/></svg></div></div>
+        </div>
+        <!-- category (always) -->
+        <div class="f">
+          <label>Categoría</label>
+          <div class="input select"><span class="ph">Elegir categoría</span><svg><use href="#i-chevD"/></svg></div>
+        </div>
+        <!-- date (único only) -->
+        <div class="f" id="fDate">
+          <label>Fecha</label>
+          <div class="input select"><span>04 Jun 2026</span><svg><use href="#i-cal"/></svg></div>
+        </div>
+        <!-- recurring note (fijo) -->
+        <div class="field-note" id="fNote" style="display:none;"><svg><use href="#i-repeat"/></svg> Se registra automáticamente cada mes hasta que lo des de baja.</div>
+        <!-- description (always) -->
+        <div class="f">
+          <label>Descripción <span class="opt">· opcional</span></label>
+          <div class="input"><input type="text" placeholder="Una nota para acordarte…" /></div>
+        </div>
+      </div>
+    </div>
+    <div class="dfoot">
+      <span style="font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px;"><svg width="14" height="14" style="color:var(--accent-ink)"><use href="#i-info"/></svg> Se guarda en junio 2026</span>
+      <div style="display:flex;gap:10px;">
+        <button class="btn ghost sm close-mov">Cancelar</button>
+        <button class="btn sm" id="movSave"><svg><use href="#i-check"/></svg> Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ MODAL: CATEGORÍA -->
+<div class="scrim" id="catScrim">
+  <div class="dialog" role="dialog" aria-modal="true" style="max-width:380px;">
+    <div class="dhead">
+      <h3>Nueva categoría</h3>
+      <button class="iconbtn close-cat"><svg><use href="#i-x"/></svg></button>
+    </div>
+    <div class="dbody">
+      <div class="fields">
+        <div class="f"><label>Nombre</label><div class="input"><input type="text" placeholder="Ej. Salud" /></div></div>
+        <div class="f">
+          <label>Alcance</label>
+          <div class="scopepick" id="scopePick">
+            <button class="on" data-sc="ambos">Ambos</button>
+            <button data-sc="gasto">Gasto</button>
+            <button data-sc="ingreso">Ingreso</button>
+          </div>
+          <div class="field-note"><svg><use href="#i-info"/></svg> Define en qué movimientos aparece al cargar.</div>
+        </div>
+      </div>
+    </div>
+    <div class="dfoot">
+      <span></span>
+      <div style="display:flex;gap:10px;">
+        <button class="btn ghost sm close-cat">Cancelar</button>
+        <button class="btn sm" id="catSave"><svg><use href="#i-check"/></svg> Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- toasts -->
+<div class="toasts" id="toasts"></div>
+
+<!-- ===== tweaks panel ===== -->
+<div id="twk">
+  <div class="twk-hd" id="twkHd"><b>Tweaks</b><button class="twk-x" id="twkClose">✕</button></div>
+  <div class="twk-body">
+    <div class="twk-sec">
+      <label>Densidad</label>
+      <div class="twk-radio" data-key="density">
+        <button data-v="compacto">Compacto</button>
+        <button data-v="equilibrado">Medio</button>
+        <button data-v="amplio">Amplio</button>
+      </div>
+    </div>
+    <div class="twk-sec">
+      <label>Geometría</label>
+      <div class="twk-radio" data-key="geo">
+        <button data-v="definido">Definido</button>
+        <button data-v="medio">Medio</button>
+        <button data-v="suave">Suave</button>
+      </div>
+    </div>
+    <div class="twk-sec">
+      <label>Acento</label>
+      <div class="twk-radio" data-key="hue">
+        <button data-v="264">Índigo</button>
+        <button data-v="250">Azul</button>
+        <button data-v="295">Violeta</button>
+        <button data-v="205">Teal</button>
+      </div>
+    </div>
+    <div class="twk-hint">Tema claro/oscuro y acento también están en la barra superior.</div>
+  </div>
+</div>
+
+<!-- speaker-notes placeholder removed -->
+<script src="app.js"></script>
+</body>
+</html>

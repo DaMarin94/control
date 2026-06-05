@@ -654,7 +654,7 @@ Una compra o cobro dividido en N pagos mensuales iguales. El usuario ingresa el 
 
 ### 3.6 Módulo: Categorías
 
-Las categorías clasifican los movimientos. Son personalizables por usuario y tienen un scope que define a qué tipo de movimiento aplican.
+Las categorías clasifican los movimientos. Son personalizables por usuario y tienen un scope que define a qué tipo de movimiento aplican, y un color asignado automáticamente desde un pool fijo (no editable en v1).
 
 ---
 
@@ -698,6 +698,7 @@ Las categorías clasifican los movimientos. Son personalizables por usuario y ti
 - [ ] El nombre es obligatorio y no puede estar vacío.
 - [ ] No pueden existir dos categorías activas con el mismo nombre para el mismo usuario.
 - [ ] El scope puede ser: AMBOS, GASTO, INGRESO. Default: AMBOS.
+- [ ] El sistema asigna automáticamente un color a la categoría desde el pool fijo (RF-CAT-005); el usuario no lo elige.
 - [ ] La categoría creada está disponible inmediatamente en los selectores de movimientos.
 - [ ] La gestión de categorías (crear, editar, eliminar y listar) vive en una pantalla separada y dedicada, accesible desde el link "Categorías" del sidebar (RF-NAV-001). No es un modal ni una sección embebida en otra pantalla.
 
@@ -714,6 +715,7 @@ Las categorías clasifican los movimientos. Son personalizables por usuario y ti
 
 **Criterios de aceptación:**
 - [ ] El nombre y el scope son editables.
+- [ ] El color de la categoría no es editable en v1 (RF-CAT-005).
 - [ ] No puede quedar con el mismo nombre que otra categoría activa del mismo usuario.
 - [ ] Los movimientos ya cargados con esa categoría reflejan automáticamente el nuevo nombre.
 
@@ -743,6 +745,39 @@ Las categorías clasifican los movimientos. Son personalizables por usuario y ti
 - [ ] Los movimientos históricos que tenían esa categoría siguen mostrando su nombre.
 - [ ] La eliminación es lógica — los datos no se borran de la base de datos.
 - [ ] El sistema solicita confirmación antes de eliminar.
+
+---
+
+#### RF-CAT-005 — Color de categoría
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Cada categoría tiene un color asignado automáticamente desde un pool fijo de colores predefinidos. El color identifica visualmente a la categoría en la UI. En v1 el usuario no elige ni edita el color. |
+| **Actor** | Sistema |
+| **Prioridad** | Baja |
+| **Precondiciones** | Se crea una categoría (por defecto, manual, o por cualquiera de los métodos de alta de cuenta). |
+
+**Criterios de aceptación:**
+- [ ] El sistema asigna un color a cada categoría al crearla, tomado de un pool fijo de colores predefinidos.
+- [ ] La asignación aplica tanto a las categorías por defecto (RF-CAT-001) como a las creadas manualmente (RF-CAT-002).
+- [ ] El usuario no puede elegir ni modificar el color en v1 (ni al crear ni al editar la categoría).
+- [ ] El color es solo de presentación: no afecta el cálculo de montos, el scope ni ninguna regla de negocio.
+
+---
+
+#### RF-CAT-006 — Contador de movimientos por categoría
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | En la pantalla de gestión de categorías, cada categoría muestra la cantidad de movimientos asociados a ella. Es un dato derivado de solo lectura. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Baja |
+| **Precondiciones** | El usuario tiene sesión activa y accede a la pantalla de categorías. |
+
+**Criterios de aceptación:**
+- [ ] Cada categoría de la lista muestra un contador "N movimientos" con la cantidad de movimientos asociados.
+- [ ] El contador es de solo lectura — el usuario no puede editarlo.
+- [ ] El contador refleja el estado vigente de los movimientos del usuario; una categoría sin movimientos asociados muestra cero.
 
 ---
 
@@ -879,6 +914,7 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 | RN-009 | En v1 no hay campo de moneda. El sistema opera sobre una moneda implícita. El diseño permite agregar `currency` en el futuro sin romper datos existentes. |
 | RN-010 | El selector de categorías se filtra según el tipo del movimiento en curso: para `EXPENSE` se muestran categorías con scope `EXPENSE` o `BOTH`; para `INCOME` se muestran categorías con scope `INCOME` o `BOTH`. |
 | RN-012 | Las contraseñas de las cuentas con email + contraseña se almacenan siempre **hasheadas** (bcrypt/argon2), nunca en texto plano. El hash y la verificación ocurren en el backend; el frontend nunca almacena ni compara contraseñas. Las cuentas creadas solo con Google pueden no tener contraseña. |
+| RN-013 | Cada categoría tiene un color asignado automáticamente desde un pool fijo de colores predefinidos. El color es de presentación únicamente; en v1 el usuario no lo elige ni lo edita. |
 | RN-011 | El movimiento único representa un instante (fecha y hora). Se almacena como timestamp en UTC junto con la zona horaria original del registro (nombre IANA). Se muestra siempre en esa zona horaria original, sin importar dónde se encuentre el usuario después. El mes al que pertenece el movimiento se determina en la zona del propio registro, de forma estable. Los movimientos fijos y las cuotas no aplican esta regla: operan a nivel mes, sin día ni hora. Ver `docs/technical.md` (sección "Fechas y zonas horarias") para el detalle técnico. |
 
 ---
@@ -978,5 +1014,9 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 **2026-06-04 — Dos métodos de autenticación: Google OAuth + email/contraseña.** Se amplía la autenticación de Control. Hasta ahora era solo Google OAuth (alta automática); ahora coexisten **dos métodos**: Google OAuth (RF-AUTH-001) y email + contraseña, con login (RF-AUTH-005) y un flujo de **registro** propio (RF-AUTH-006) que antes no existía. El backend es dueño de la DB: hashea la contraseña (bcrypt/argon2), crea el usuario y genera las categorías por defecto (RF-CAT-001) sin importar el método de alta. Las contraseñas se almacenan siempre hasheadas, nunca en texto plano (RN-012); la verificación ocurre en el backend. La protección de rutas (RF-AUTH-002), la sesión persistente (RF-AUTH-003) y el cierre de sesión (RF-AUTH-004) quedan explícitamente agnósticos del método. **Diferido a post-v1:** recuperación de contraseña y verificación de email (ambas requieren infraestructura de correo). **Pendiente sin resolver en v1:** account linking (misma cuenta accesible por Google y por email/contraseña con el mismo email). La política de contraseña se define en la entrada complementaria de esta misma fecha. Impacta el módulo 3.1, RF-CAT-001, sección 4 (RN-012), sección 6 y las pantallas de login y registro (`docs/screens.md`). Motivo: ofrecer una alternativa de acceso sin depender exclusivamente de Google, sin sumar todavía la infraestructura de correo que requieren la recuperación y la verificación.
 
 **2026-06-04 — Política de contraseña para el registro (RF-AUTH-006).** La contraseña del registro con email + contraseña debe tener un **mínimo de 8 caracteres**, **sin requisitos de complejidad obligatoria** (no se exige mayúscula, número ni símbolo) por el momento. Una contraseña de menos de 8 caracteres produce error de validación y no crea la cuenta. Esto cierra el pendiente de "requisitos mínimos de la contraseña" anotado en la entrada de auth de esta misma fecha. La política es **revisable a futuro** (podría endurecerse con reglas de complejidad). Impacta RF-AUTH-006 y la pantalla de Registro (`docs/screens.md`). Motivo: el usuario optó por una barrera mínima razonable que no fricciona el alta, dejando la puerta abierta a reforzarla más adelante.
+
+**2026-06-04 — Color de categoría desde pool fijo, no editable en v1.** Cada categoría incorpora un color asignado automáticamente desde un **pool fijo de colores predefinidos**. El sistema lo asigna al crear la categoría (tanto las por defecto de RF-CAT-001 como las creadas manualmente en RF-CAT-002); el usuario **no** elige ni edita el color en v1, ni al crear ni al editar. El color es solo de presentación —identifica visualmente la categoría en la UI— y no afecta montos, scope ni reglas de negocio. Se refleja en la pantalla de Categorías (`docs/screens.md`, pantalla 6) como indicador visual de cada ítem. Impacta el módulo 3.6 (nuevo RF-CAT-005, criterio agregado en RF-CAT-002 y RF-CAT-003), la sección 4 (RN-013) y `docs/data-model.md` (entidad Categoría). Motivo: dar identidad visual a las categorías sin sumar fricción de elección de color en v1; la edición de color queda como posible mejora futura.
+
+**2026-06-04 — Contador de movimientos por categoría en la pantalla de Categorías.** La pantalla de gestión de categorías (`docs/screens.md`, pantalla 6) muestra en cada ítem un contador **"N movimientos"** con la cantidad de movimientos asociados a esa categoría. Es un dato **derivado de solo lectura**: el usuario no lo edita. Una categoría sin movimientos muestra cero. Impacta el módulo 3.6 (nuevo RF-CAT-006) y la pantalla 6. Motivo: dar contexto al usuario sobre el uso real de cada categoría antes de editarla o eliminarla, sin agregar acciones nuevas.
 
 **2026-06-04 — Movimiento único con fecha y hora, almacenamiento UTC + zona original.** El movimiento único pasa a capturar fecha **y hora** (antes solo fecha). Al crear, la fecha y la hora tienen como default el momento de creación ("ahora") y ambas son editables. Cada movimiento se almacena como instante en UTC junto con la zona horaria original del registro (nombre IANA, ej. `America/Argentina/Buenos_Aires`), y se muestra siempre en esa zona original aunque el usuario viaje. El mes al que pertenece se calcula en la zona del registro, de forma estable. El Usuario incorpora un campo `timezone` (su zona "de casa"/default), usado para determinar "hoy"/"mes actual" al crear movimientos y en el dashboard. Los movimientos fijos y las cuotas no cambian: siguen a nivel mes, sin día ni hora. Impacta RF-MU-001, RF-MU-002, RF-VM-001 y RN-011. La mecánica técnica completa vive en `docs/technical.md` (sección "Fechas y zonas horarias"). Motivo: registrar el instante real del gasto y conservar la hora local del lugar donde ocurrió hace la información más precisa y estable frente a viajes o cambios de zona.

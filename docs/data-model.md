@@ -10,7 +10,7 @@
 | Entidad | Descripción |
 |---------|-------------|
 | **Usuario** | Puede autenticarse por **Google** o por **email + contraseña** (dos métodos que coexisten en v1). El email identifica al usuario. Las cuentas con email + contraseña almacenan un hash de la contraseña (`passwordHash`); las cuentas creadas solo con Google pueden no tener contraseña. Se crea al hacer login con Google por primera vez o al registrarse con email + contraseña. Todos los demás recursos le pertenecen. Tiene un campo `timezone` (zona horaria default / "de casa"). |
-| **Categoría** | Clasifica los movimientos. Personalizable por usuario. Se elimina con soft delete. |
+| **Categoría** | Clasifica los movimientos. Personalizable por usuario. Tiene un color asignado automáticamente desde un pool fijo de colores predefinidos (no editable por el usuario en v1). Se elimina con soft delete. |
 | **Movimiento único** | Gasto o ingreso que ocurrió una sola vez en un instante específico (fecha y hora). Se guarda como timestamp UTC (`occurredAt`) más la zona horaria original del registro (`timezone`, nombre IANA). No es solo una fecha de calendario. |
 | **Movimiento fijo** | Plantilla recurrente mensual activa desde un mes de inicio hasta que el usuario la elimina. |
 | **Grupo de cuotas** | Compra o cobro dividido en N pagos mensuales iguales desde un mes de inicio. |
@@ -21,6 +21,7 @@
 
 - **Montos en centavos.** Todos los montos se guardan como enteros en centavos (ej: $1.500 → `150000`). Sin decimales flotantes.
 - **Soft delete en categorías.** Eliminar una categoría la marca como eliminada pero no borra el registro. Los movimientos históricos conservan la referencia.
+- **Color de categoría asignado automáticamente.** Cada categoría tiene un color tomado de un **pool fijo de colores predefinidos**. El sistema lo asigna al crear la categoría (incluidas las categorías por defecto de la cuenta nueva); el usuario **no** elige ni edita el color en v1, ni al crear ni al editar. El color es solo presentación (identificar visualmente la categoría en la UI) y no afecta el cálculo de montos ni el scope.
 - **Movimientos fijos: el pasado es inmutable.** Editar o eliminar un fijo no modifica los meses ya pasados. El fijo tiene un mes de inicio y opcionalmente un mes desde el cual deja de aparecer.
 - **Moneda implícita en v1.** No hay campo de moneda. El modelo está diseñado para que se pueda agregar en el futuro sin romper datos existentes.
 - **Aislamiento por usuario.** Todos los recursos (movimientos, categorías) pertenecen a un usuario y nunca son visibles para otro.

@@ -201,7 +201,7 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 - Tres **tabs**: **Único**, **Fijo**, **Cuotas**. El tab **Único** está activo por defecto.
 - Dentro del tipo seleccionado, el tipo de movimiento **Gasto** está seleccionado por defecto (frente a Ingreso).
 - Campos según el tab activo:
-  - **Único** (RF-MU-001): tipo (Gasto/Ingreso), monto, categoría, fecha (default: hoy), descripción (opcional).
+  - **Único** (RF-MU-001): tipo (Gasto/Ingreso), monto, categoría, fecha y hora (default: el momento actual — fecha de hoy y hora actual al abrir el formulario en modo creación), descripción (opcional).
   - **Fijo** (RF-MF-001): tipo (Gasto/Ingreso), monto, categoría, descripción (opcional). Sin fecha de día.
   - **Cuotas** (RF-MC-001): tipo (Gasto/Ingreso), monto por cuota, cantidad de cuotas, mes de inicio (default: mes actual), categoría, descripción (opcional).
 - El selector de categorías se filtra según el tipo: para Gasto se muestran categorías con scope `EXPENSE` o `BOTH`; para Ingreso, scope `INCOME` o `BOTH` (RN-010). Las categorías con soft delete no aparecen.
@@ -229,7 +229,7 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 
 ### Estados
 
-- **Creación inicial:** tab Único activo, tipo Gasto, fecha en hoy, resto vacío.
+- **Creación inicial:** tab Único activo, tipo Gasto, fecha y hora en el momento actual, resto vacío.
 - **Edición:** sin tabs, campos pre-cargados con los valores actuales.
 - **Validación con error:** monto en cero/negativo/no numérico, cantidad de cuotas en cero/negativa, o categoría no seleccionada — se muestra el error y no se guarda.
 - **Sin categorías disponibles:** estado de bloqueo con enlace a `/categorias`.
@@ -240,7 +240,7 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 
 ## 6. Gestión de categorías (`/categorias`)
 
-**RF relacionados:** RF-CAT-001, RF-CAT-002, RF-CAT-003, RF-CAT-004
+**RF relacionados:** RF-CAT-001, RF-CAT-002, RF-CAT-003, RF-CAT-004, RF-CAT-005, RF-CAT-006
 
 ### Propósito
 
@@ -250,8 +250,10 @@ Pantalla dedicada para administrar las categorías del usuario: listar, crear, e
 
 - **Sidebar** con el link "Categorías" marcado como activo.
 - **Lista de categorías activas** del usuario. Cada ítem muestra:
+  - Color de la categoría (indicador visual, no editable; asignado automáticamente desde el pool fijo — RF-CAT-005).
   - Nombre de la categoría.
   - Scope (AMBOS / GASTO / INGRESO).
+  - Contador **"N movimientos"** — cantidad de movimientos asociados a la categoría. Es un dato derivado de solo lectura (RF-CAT-006).
 - Las categorías con soft delete (`deletedAt`) no aparecen en la lista.
 - **Botón "Nueva categoría"** que abre el modal de creación.
 
@@ -277,7 +279,7 @@ Pantalla dedicada para administrar las categorías del usuario: listar, crear, e
 ### Estados
 
 - **Cargando:** mientras se obtiene la lista de categorías.
-- **Con datos:** lista de categorías activas con nombre y scope.
+- **Con datos:** lista de categorías activas con su color, nombre, scope y contador de movimientos.
 - **Vacío (sin categorías activas):** se muestra un mensaje de estado vacío. (Nota: una cuenta nueva nace con categorías por defecto — RF-CAT-001 — por lo que el vacío total ocurre solo si el usuario eliminó todas).
 - **Modal con error de validación:** nombre vacío o nombre duplicado — se muestra el error y no se guarda.
 - **Error del backend al guardar (RNF-008):** el modal permanece abierto, conserva los datos y permite reintentar.
