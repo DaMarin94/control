@@ -128,6 +128,14 @@ El estado del servidor se maneja con **React Query**. Los hooks de datos son wra
 
 **Alcance v1:** tests unitarios + de integración. Los e2e (Playwright) quedan fuera de v1.
 
+### Ubicación
+
+- Los tests viven en una carpeta `tests/` **hermana de `src/`** en cada app — no colocados junto al código. `src/` contiene solo código.
+- La carpeta `tests/` **espeja el árbol de `src/`**: cada test refleja la ruta del archivo que prueba.
+- **Backend:** `tests/unit/` (specs de services, interceptors, etc.) y `tests/e2e/` (tests de endpoint con DB de test, junto a su `jest-e2e.json`).
+- **Frontend:** `tests/` espejando `src/`, con el setup global en `tests/setup.ts`. Los imports al código fuente usan el alias `@/`.
+- La cobertura apunta a `src/`, no a `tests/`.
+
 ### Qué priorizar
 
 Las reglas de negocio son lo más valioso a testear, porque un bug ahí corrompe datos:
@@ -279,6 +287,11 @@ Recuperación de contraseña, verificación de email y account linking (mismo em
 - **ESLint + Prettier** en ambas apps (cada una con su config; NestJS y Next.js ya traen ESLint, se suma Prettier para formato).
 - **Sin pre-commit hooks** por ahora (no husky/lint-staged).
 - **Sin CI** por ahora.
+
+### Notas de entorno (pnpm / Windows)
+
+- **pnpm 11 — builds nativos:** al clonar el repo correr `pnpm approve-builds --all` una vez. pnpm 11 requiere aprobación explícita de scripts de build de dependencias nativas (esbuild, sharp, etc.).
+- **Windows — scripts de package.json:** en el backend los scripts apuntan directo al binario (`node node_modules/<paquete>/bin/<bin>.js`) en lugar de los shims de `.bin/`. En Windows con pnpm los shims son scripts bash que Node no ejecuta directamente. En Linux/Mac los comandos cortos (`nest`, `jest`) funcionan normal. Al agregar un script nuevo, respetar esta forma.
 
 ---
 

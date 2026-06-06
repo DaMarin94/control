@@ -5,7 +5,7 @@
 ## Stack
 
 - Next.js 15 (App Router) + Tailwind CSS v4
-- TypeScript strict
+- TypeScript strict (`noUnusedLocals`, `noUnusedParameters`)
 
 ## Tipos
 
@@ -44,3 +44,12 @@ Lo visual se define **una sola vez**. Stack: **shadcn/ui + cva** sobre Tailwind 
 - **El código es propio:** los componentes de shadcn se copian al repo y se controlan desde acá; no es una dependencia black-box.
 
 **Límite con el diseño visual:** acá se define la regla arquitectónica (primitivas únicas, variantes por parámetro). El aspecto concreto (colores, tamaños, qué se ve como "primary") lo define el diseño sobre estas primitivas.
+
+## Tailwind v4 — gotcha
+
+- No usar `@apply` con clases que referencian tokens custom (ej: `border-border`). En `@layer base` referenciar las CSS variables directo con `var(--color-border)`. Es un cambio de comportamiento de v3 a v4 que produce un error de build poco claro si se ignora.
+
+## Testing — gotchas
+
+- Tests en `tests/` (carpeta hermana de `src/`), espejando el árbol de `src/`. Ver convención completa en `docs/technical.md`.
+- Con `vi.useFakeTimers()` activo: `waitFor` no funciona (usa `setInterval` internamente). Disparar eventos con `fireEvent` y avanzar el tiempo con `act(() => vi.advanceTimersByTime(...))`, luego assertions síncronas. En `afterEach` usar `vi.clearAllTimers()` (no `runAllTimers()`) antes de `vi.useRealTimers()` para evitar warnings de act() de React 19.

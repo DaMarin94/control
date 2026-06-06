@@ -38,16 +38,17 @@ Si una decisión técnica nueva no está cubierta en `docs/technical.md`, report
 
 ## Lógica de negocio y decisiones técnicas
 
-<!-- Documentar aquí las reglas no obvias y decisiones técnicas a medida que se implementan -->
+<!-- Esta sección la mantiene el flujo de documentación (el orquestador decide, el analista escribe). El especialista no edita este archivo. -->
 
 ## Al terminar
 
 ### 1. Build
 Correr el build del frontend y corregir cualquier error de TypeScript antes de reportar listo.
 
-### 2. Documentar
-- ¿Introduje un patrón nuevo, excepción, o regla de negocio no obvia? → actualizar este archivo
-- ¿Cambié o agregué una feature? → `docs/features.md`
-- ¿Cambió la arquitectura del frontend? → `docs/frontend.md`
+### 2. Reportar señales de documentación
+**No escribís documentación.** Detectás lo que vale la pena documentar y se lo reportás al orquestador, que decide qué se documenta y dónde y delega la escritura al analista. Pasale una lista corta de "señales" con la sustancia suficiente para que otro las escriba:
+- **Contrato de API** nuevo o modificado: endpoint, shape de request/response, campo nuevo, cambio de tipo.
+- **Regla de negocio** nueva o modificada.
+- **Decisión técnica no obvia / gotcha / workaround**, con el detalle de qué es y por qué.
 
-Reportar al orquestador qué docs se actualizaron.
+No reportes lo obvio ni el setup estándar ("instalé X", "configuré Jest", "agregué tal carpeta") — eso se ve en el código, no es una señal. Si no hay nada relevante, decilo. No edites archivos de `docs/` ni de `.claude/agents/`.

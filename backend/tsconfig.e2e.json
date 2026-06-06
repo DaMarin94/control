@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noImplicitAny": false
+  },
+  "include": ["tests/e2e/**/*.ts", "src/**/*.ts"]
+}

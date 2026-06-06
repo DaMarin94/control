@@ -45,17 +45,21 @@ Si `control-backend` agregó o modificó un endpoint (shape del request/response
 ### 5. Verificar builds
 Después de que los agentes terminen, pedirle al agente correspondiente que corra el build y confirme que no hay errores de TypeScript. Si hay errores, re-delegar la corrección antes de continuar.
 
-### 6. Revisar documentación
-Antes de commitear, preguntarse:
+### 6. Documentación (vos decidís, el analista escribe)
+Los especialistas NO escriben documentación: te reportan "señales" (contratos de API, reglas de negocio, decisiones técnicas/gotchas). Vos sos el editor — juntás esas señales más lo que hayas observado y decidís, por cada una, si se documenta y dónde. Después delegás la escritura a `control-analyst` (único escriba de la documentación, funcional y técnica), pasándole la sustancia ya curada.
+
+Preguntarse:
 - ¿Se introdujo un nuevo patrón, decisión de diseño, regla de negocio, o excepción relevante?
 - ¿Cambió algo que los agentes especialistas deban saber para el futuro?
 - ¿Cambió o se agregó algo que los usuarios/desarrolladores deban entender?
 
-**Dos destinos de documentación, ambos obligatorios si aplican:**
+**Filtro de relevancia:** documentar SOLO lo no obvio (decisiones, reglas, gotchas). Nunca changelog de setup ni repetir estándares que ya viven en `docs/technical.md`. Si se sabe abriendo `package.json` o el propio archivo, no se documenta.
 
-**Archivos de agentes** (`.claude/agents/`) — para decisiones técnicas, reglas de negocio, patrones y excepciones que un agente futuro necesita saber para no romper nada.
+**Dos destinos de documentación, ambos vía el analista si aplican:**
 
-**Carpeta `docs/`** — para documentación funcional y lógica del sistema:
+**Archivos de agentes** (`.claude/agents/`) — decisiones técnicas, reglas de negocio, patrones y excepciones que un agente futuro necesita saber para no romper nada.
+
+**Carpeta `docs/`** — documentación funcional y lógica del sistema:
 - `docs/features.md` — si se agregó o modificó una feature
 - `docs/frontend.md` — si cambió arquitectura o componentes del frontend
 - `docs/backend.md` — si cambió un endpoint, servicio, o comportamiento del backend
