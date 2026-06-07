@@ -293,6 +293,16 @@ Recuperación de contraseña, verificación de email y account linking (mismo em
 - **pnpm 11 — builds nativos:** al clonar el repo correr `pnpm approve-builds --all` una vez. pnpm 11 requiere aprobación explícita de scripts de build de dependencias nativas (esbuild, sharp, etc.).
 - **Windows — scripts de package.json:** en el backend los scripts apuntan directo al binario (`node node_modules/<paquete>/bin/<bin>.js`) en lugar de los shims de `.bin/`. En Windows con pnpm los shims son scripts bash que Node no ejecuta directamente. En Linux/Mac los comandos cortos (`nest`, `jest`) funcionan normal. Al agregar un script nuevo, respetar esta forma.
 
+### Deploy (Render)
+
+- **Backend como Web Service:** `rootDir: backend`, build `pnpm install --prod=false && pnpm build`, start `pnpm start:prod` (= `node dist/main`). El `--prod=false` es obligatorio: sin él, con `NODE_ENV=production` pnpm omite las devDependencies y `nest build` (que vive en `@nestjs/cli`, una devDependency) no está disponible.
+- **Gotcha — compilación incremental de TS + caché de Render (importante):** `tsconfig.json` tiene `incremental: true` (genera `tsconfig.build.tsbuildinfo`), que Render cachea entre deploys. La compilación incremental de TypeScript NO verifica si los archivos de salida existen: solo consulta el buildinfo. Con el buildinfo cacheado, `tsc` concluye "todo al día", sale con código 0 sin emitir nada y `dist/` queda vacío → el build figura como exitoso pero en runtime falla con "Cannot find module dist/main". **Solución:** `incremental: false` en `tsconfig.build.json` (override del tsconfig base), para que el build de producción siempre emita completo; el `tsconfig.json` de desarrollo mantiene `incremental: true` para que el IDE siga rápido. Workaround inmediato si reaparece: "Clear build cache & deploy".
+- **Versión de Node:** Render usa Node 24 por default; el proyecto apunta a Node 22. Se fija con un archivo `.node-version` (contenido `22`) ubicado en el `rootDir` del servicio (`backend/.node-version`), no en la raíz del repo.
+- **`PORT`:** Render lo inyecta automáticamente; no se declara como env var (declararlo pisaría el valor de Render y rompería el health check). El backend lo lee de `process.env.PORT` vía la config.
+- **Variables requeridas en Render:** `DATABASE_URL` (Internal URL de la base; obligatoria para bootear por la validación fail-fast aunque Prisma llegue en Fase 1), `JWT_SECRET` (≥32 chars; secreto compartido HS256 con el frontend), `NODE_ENV=production`.
+- **Blueprint (`render.yaml`):** hay un `render.yaml` en la raíz que versiona el web service + la base Postgres. Notas: `region` debe coincidir entre base y servicio; `JWT_SECRET` va con `sync: false` (se carga a mano en el dashboard, no se versiona); `DATABASE_URL` se enlaza desde la base con `fromDatabase`; `PORT` no se declara.
+- **Health check:** `healthCheckPath: /health`.
+
 ---
 
 ## Formato de presentación (moneda y fechas)
