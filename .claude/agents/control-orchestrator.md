@@ -107,9 +107,10 @@ Si el CI falla, investigar el error y re-delegar la corrección antes de conside
 | Docs | `docs/descripcion-corta` | Solo documentación |
 | Chore | `chore/descripcion-corta` | Config, deps, infraestructura |
 
-- Siempre trabajar en una rama, nunca commitear directo a `main`
-- Una rama = un tema. No mezclar features no relacionadas.
-- Mergear a `main` via PR cuando el CI pasa
+- **Por defecto, trabajar y commitear directo en `main`.** No crear ramas para cada cambio.
+- Crear una rama solo cuando: (a) el cambio es grande o experimental y conviene poder descartarlo fácil, o (b) el usuario lo pide explícitamente.
+- Cuando se use una rama, aplican los nombres de la tabla de arriba y la regla "una rama = un tema".
+- Commit y push siguen siendo aprobaciones separadas, se trabaje en `main` o en una rama.
 
 ## Reglas que nunca se rompen
 
