@@ -692,15 +692,32 @@ Las categorías clasifican los movimientos. Son personalizables por usuario y ti
 2. El usuario ingresa el nombre de la nueva categoría (obligatorio).
 3. El usuario selecciona el scope (default: AMBOS).
 4. El usuario confirma.
-5. La categoría queda disponible para asignar a movimientos.
+5. El sistema verifica que el nombre **normalizado** (RN-014) no colisione con otra categoría del mismo usuario.
+6. Sin colisión: la categoría queda creada y disponible para asignar a movimientos.
+
+**Flujos alternativos:**
+- *A1 — Nombre vacío:* el sistema muestra error de validación y no crea la categoría.
+- *A2 — Colisión con una categoría activa del mismo nombre normalizado:* el sistema bloquea la creación e informa que ya existe una categoría con ese nombre. No crea un duplicado (RN-008).
+- *A3 — Colisión con una categoría eliminada (soft delete) del mismo nombre normalizado:* el sistema **no crea un duplicado**. En su lugar **propone reactivar** la categoría eliminada mediante un prompt — *"Ya tenés una categoría 'X' eliminada. ¿Querés reactivarla?"* — con las acciones **Reactivar** y **Cancelar**. El prompt aclara explícitamente que la categoría se reactivará **con su configuración original** (mismo scope y color), de modo que el usuario no se sorprenda si el scope que tipeó no se aplica.
+  - *A3.1 — El usuario elige Reactivar:* el sistema restaura la categoría eliminada **exactamente como estaba** — mismo `id`, mismo `scope`, mismo color — y sus movimientos históricos vuelven a quedar bajo la categoría activa. Los valores que el usuario haya tipeado en el formulario de alta (nombre, scope) **se ignoran**: prevalece la configuración original de la categoría reactivada. No se crea una categoría nueva.
+  - *A3.2 — El usuario elige Cancelar:* no se crea ni se reactiva nada. El usuario vuelve al formulario.
 
 **Criterios de aceptación:**
 - [ ] El nombre es obligatorio y no puede estar vacío.
 - [ ] No pueden existir dos categorías activas con el mismo nombre para el mismo usuario.
+- [ ] La comparación de nombres para detectar colisiones usa la **normalización definida en RN-014** (trim, insensible a mayúsculas e insensible a acentos), aplicada tanto contra categorías activas como eliminadas.
+- [ ] Una colisión con una categoría **activa** del mismo nombre normalizado bloquea la creación como duplicado (RN-008).
+- [ ] Una colisión con una categoría **eliminada (soft delete)** del mismo nombre normalizado no crea un duplicado: el sistema propone reactivar la eliminada mediante un prompt con acciones Reactivar / Cancelar.
+- [ ] El prompt de reactivación aclara explícitamente que la categoría se reactivará con su configuración original (scope y color), no con lo tipeado en el formulario.
+- [ ] Al reactivar, la categoría vuelve **exactamente como estaba** (mismo `id`, scope y color) y sus movimientos históricos vuelven a quedar bajo la categoría activa; los datos tipeados en el alta se ignoran.
+- [ ] Al cancelar el prompt de reactivación, no se crea ni se reactiva ninguna categoría.
 - [ ] El scope puede ser: AMBOS, GASTO, INGRESO. Default: AMBOS.
 - [ ] El sistema asigna automáticamente un color a la categoría desde el pool fijo (RF-CAT-005); el usuario no lo elige.
 - [ ] La categoría creada está disponible inmediatamente en los selectores de movimientos.
 - [ ] La gestión de categorías (crear, editar, eliminar y listar) vive en una pantalla separada y dedicada, accesible desde el link "Categorías" del sidebar (RF-NAV-001). No es un modal ni una sección embebida en otra pantalla.
+
+**Notas:**
+- La unicidad de nombre de categoría activa se valida en **lógica de aplicación**, no con un constraint `@@unique` de base de datos. Motivo: la comparación normalizada (trim + insensible a mayúsculas y acentos) y el flujo "crear-o-reactivar" no caben en un constraint de DB. Ver `docs/data-model.md`.
 
 ---
 
@@ -742,9 +759,14 @@ Las categorías clasifican los movimientos. Son personalizables por usuario y ti
 
 **Criterios de aceptación:**
 - [ ] La categoría eliminada no aparece en los selectores al crear o editar movimientos.
+- [ ] La categoría eliminada desaparece de la pantalla de gestión de categorías (`/categorias`): mientras está eliminada no se ve su fila ni su contador (RF-CAT-006).
 - [ ] Los movimientos históricos que tenían esa categoría siguen mostrando su nombre.
 - [ ] La eliminación es lógica — los datos no se borran de la base de datos.
 - [ ] El sistema solicita confirmación antes de eliminar.
+- [ ] Una categoría eliminada puede **reactivarse** más adelante: al crear una categoría nueva cuyo nombre normalizado colisiona con una eliminada, el sistema propone reactivarla (ver RF-CAT-002, flujo alternativo A3). Al reactivarla, vuelve a aparecer en la pantalla de categorías y en los selectores.
+
+**Notas:**
+- *Aclaración (totales de dinero):* eliminar una categoría con soft delete **no** saca sus movimientos de los totales del mes ni del balance. La eliminación marca la categoría, no toca los movimientos: un movimiento sigue contando en los totales (RF-VM-002, RF-DASH-002) **siempre**, sin importar si su categoría fue eliminada. El único conteo que se ve afectado es el contador informativo "N movimientos" de la pantalla de categorías (RF-CAT-006), que desaparece junto con la fila de la categoría eliminada y es independiente de los totales de plata.
 
 ---
 
@@ -822,6 +844,10 @@ La vista del mes muestra todos los movimientos del mes seleccionado (únicos, fi
 - [ ] Se muestra el balance del mes (ingresos − gastos).
 - [ ] El balance positivo y negativo son visualmente diferenciables.
 - [ ] Los totales se actualizan inmediatamente al agregar, editar o eliminar un movimiento.
+- [ ] Los totales suman **movimientos**, no categorías: un movimiento cuenta en los totales aunque su categoría haya sido eliminada (soft delete). Eliminar una categoría no afecta los totales (ver nota en RF-CAT-004).
+
+**Notas:**
+- *Aclaración (categoría eliminada):* los totales y el balance suman `amountCents` de los movimientos del mes, sin importar el estado de su categoría. El soft delete de una categoría (RF-CAT-004) no remueve ni excluye ningún movimiento del cálculo. No confundir con el contador "N movimientos" de la pantalla de categorías (RF-CAT-006), que es un dato informativo por categoría e independiente de los totales de dinero.
 
 ---
 
@@ -913,9 +939,10 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 | RN-008 | No pueden coexistir dos categorías activas con el mismo nombre para el mismo usuario. |
 | RN-009 | En v1 no hay campo de moneda. El sistema opera sobre una moneda implícita. El diseño permite agregar `currency` en el futuro sin romper datos existentes. |
 | RN-010 | El selector de categorías se filtra según el tipo del movimiento en curso: para `EXPENSE` se muestran categorías con scope `EXPENSE` o `BOTH`; para `INCOME` se muestran categorías con scope `INCOME` o `BOTH`. |
+| RN-011 | El movimiento único representa un instante (fecha y hora). Se almacena como timestamp en UTC junto con la zona horaria original del registro (nombre IANA). Se muestra siempre en esa zona horaria original, sin importar dónde se encuentre el usuario después. El mes al que pertenece el movimiento se determina en la zona del propio registro, de forma estable. Los movimientos fijos y las cuotas no aplican esta regla: operan a nivel mes, sin día ni hora. Ver `docs/technical.md` (sección "Fechas y zonas horarias") para el detalle técnico. |
 | RN-012 | Las contraseñas de las cuentas con email + contraseña se almacenan siempre **hasheadas** (bcrypt/argon2), nunca en texto plano. El hash y la verificación ocurren en el backend; el frontend nunca almacena ni compara contraseñas. Las cuentas creadas solo con Google pueden no tener contraseña. |
 | RN-013 | Cada categoría tiene un color asignado automáticamente desde un pool fijo de colores predefinidos. El color es de presentación únicamente; en v1 el usuario no lo elige ni lo edita. |
-| RN-011 | El movimiento único representa un instante (fecha y hora). Se almacena como timestamp en UTC junto con la zona horaria original del registro (nombre IANA). Se muestra siempre en esa zona horaria original, sin importar dónde se encuentre el usuario después. El mes al que pertenece el movimiento se determina en la zona del propio registro, de forma estable. Los movimientos fijos y las cuotas no aplican esta regla: operan a nivel mes, sin día ni hora. Ver `docs/technical.md` (sección "Fechas y zonas horarias") para el detalle técnico. |
+| RN-014 | Para comparar nombres de categoría a efectos de unicidad, el nombre se **normaliza**: trim de espacios, insensible a mayúsculas/minúsculas e insensible a acentos/tildes. Ej: "comida", "Comida" y "Cómida" se consideran el mismo nombre. Esta normalización aplica tanto a la detección de duplicado contra categorías **activas** (bloqueo, RN-008) como contra categorías **eliminadas** (soft delete) para proponer reactivarla (RF-CAT-002). La regla se valida en **ambas capas** —backend como fuente de verdad y frontend para UX— y ambas deben mantenerse alineadas (ver `docs/technical.md`). |
 
 ---
 
@@ -1018,5 +1045,11 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 **2026-06-04 — Color de categoría desde pool fijo, no editable en v1.** Cada categoría incorpora un color asignado automáticamente desde un **pool fijo de colores predefinidos**. El sistema lo asigna al crear la categoría (tanto las por defecto de RF-CAT-001 como las creadas manualmente en RF-CAT-002); el usuario **no** elige ni edita el color en v1, ni al crear ni al editar. El color es solo de presentación —identifica visualmente la categoría en la UI— y no afecta montos, scope ni reglas de negocio. Se refleja en la pantalla de Categorías (`docs/screens.md`, pantalla 6) como indicador visual de cada ítem. Impacta el módulo 3.6 (nuevo RF-CAT-005, criterio agregado en RF-CAT-002 y RF-CAT-003), la sección 4 (RN-013) y `docs/data-model.md` (entidad Categoría). Motivo: dar identidad visual a las categorías sin sumar fricción de elección de color en v1; la edición de color queda como posible mejora futura.
 
 **2026-06-04 — Contador de movimientos por categoría en la pantalla de Categorías.** La pantalla de gestión de categorías (`docs/screens.md`, pantalla 6) muestra en cada ítem un contador **"N movimientos"** con la cantidad de movimientos asociados a esa categoría. Es un dato **derivado de solo lectura**: el usuario no lo edita. Una categoría sin movimientos muestra cero. Impacta el módulo 3.6 (nuevo RF-CAT-006) y la pantalla 6. Motivo: dar contexto al usuario sobre el uso real de cada categoría antes de editarla o eliminarla, sin agregar acciones nuevas.
+
+**2026-06-08 — Reactivar categoría eliminada en vez de duplicar (RF-CAT-002 / RF-CAT-004).** Al crear una categoría cuyo nombre colisiona con una categoría **eliminada (soft delete)** del mismo usuario, el sistema **no crea un duplicado**: propone reactivar la eliminada mediante un prompt ("Ya tenés una categoría 'X' eliminada. ¿Querés reactivarla?") con acciones **Reactivar / Cancelar**. Reactivar restaura la categoría **exactamente como estaba** (mismo `id`, scope y color), y sus movimientos históricos vuelven a quedar bajo la categoría activa; los valores tipeados en el formulario de alta se ignoran. El prompt aclara explícitamente que se reactiva con la configuración original. Cancelar no crea ni reactiva nada. La detección de colisión usa **match normalizado** (ver RN-014: trim + insensible a mayúsculas + insensible a acentos). La colisión contra una categoría **activa** sigue bloqueada como duplicado (RN-008, sin cambios). La unicidad de nombre de categoría activa se valida en **lógica de aplicación, no con un constraint `@@unique` de DB** (gotcha técnico): la comparación normalizada con acentos y el flujo crear-o-reactivar no caben en un constraint de base de datos. Se implementa en **Fase 3 (Categorías)**; ahora solo se documenta. Impacta RF-CAT-002, RF-CAT-004 y `docs/data-model.md` (entidad Categoría). Motivo: evitar categorías duplicadas y recuperar la categoría original (con su historial y configuración) en lugar de forzar una nueva entrada.
+
+**2026-06-08 — Aclaración: el soft delete de categoría no saca movimientos de los totales (RF-VM-002 / RF-CAT-004).** Se documenta explícitamente que hay dos conteos distintos que no deben confundirse. (1) **Totales del mes y balance** (RF-VM-002, RF-DASH-002) suman **movimientos** (`amountCents`), no categorías: un movimiento cuenta en los totales **siempre**, aunque su categoría haya sido eliminada con soft delete; eliminar una categoría no toca el movimiento, así que sigue sumando. (2) El **contador "N movimientos"** de la pantalla `/categorias` (RF-CAT-006) es un dato informativo por categoría, **solo en esa pantalla de gestión**, independiente de los totales de dinero; una categoría eliminada desaparece de esa pantalla (RF-CAT-004) y por lo tanto no muestra su fila ni su contador mientras está eliminada, hasta que se la reactiva. Aclaración documental (no cambia comportamiento). Impacta las notas de RF-VM-002 y RF-CAT-004. Motivo: prevenir el malentendido de que eliminar una categoría altera los totales del mes.
+
+**2026-06-08 — Normalización de nombre de categoría para unicidad como regla explícita (RN-014).** Se formaliza como regla de negocio la normalización del nombre de categoría usada para comparar unicidad: trim de espacios, insensible a mayúsculas/minúsculas e insensible a acentos/tildes ("comida" = "Comida" = "Cómida"). Aplica tanto a la detección de duplicado contra categorías **activas** (bloqueo, RN-008) como contra **eliminadas** para proponer reactivar (RF-CAT-002, A3). La regla se valida en **ambas capas** (backend fuente de verdad, frontend UX) y deben mantenerse alineadas (ver `docs/technical.md`). El detalle de la normalización deja de repetirse en RF-CAT-002 (flujo principal y criterios) y en la bitácora del 2026-06-08 sobre reactivación: ahora referencian RN-014. Aclaración documental (no cambia comportamiento). Impacta la sección 4 (nueva RN-014) y las referencias en RF-CAT-002. Motivo: tener una única fuente de la definición de normalización, referenciada desde los RF en lugar de duplicada, para evitar divergencias entre capas y documentos.
 
 **2026-06-04 — Movimiento único con fecha y hora, almacenamiento UTC + zona original.** El movimiento único pasa a capturar fecha **y hora** (antes solo fecha). Al crear, la fecha y la hora tienen como default el momento de creación ("ahora") y ambas son editables. Cada movimiento se almacena como instante en UTC junto con la zona horaria original del registro (nombre IANA, ej. `America/Argentina/Buenos_Aires`), y se muestra siempre en esa zona original aunque el usuario viaje. El mes al que pertenece se calcula en la zona del registro, de forma estable. El Usuario incorpora un campo `timezone` (su zona "de casa"/default), usado para determinar "hoy"/"mes actual" al crear movimientos y en el dashboard. Los movimientos fijos y las cuotas no cambian: siguen a nivel mes, sin día ni hora. Impacta RF-MU-001, RF-MU-002, RF-VM-001 y RN-011. La mecánica técnica completa vive en `docs/technical.md` (sección "Fechas y zonas horarias"). Motivo: registrar el instante real del gasto y conservar la hora local del lugar donde ocurrió hace la información más precisa y estable frente a viajes o cambios de zona.
