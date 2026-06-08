@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { v4 as uuidv4 } from 'uuid';
 import { AppConfigModule } from './config/config.module';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { AuthModule } from './auth/auth.module';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { IncomingMessage } from 'http';
 
 /**
@@ -12,7 +15,11 @@ import { IncomingMessage } from 'http';
  * Registra:
  * - AppConfigModule: configuración global con validación Zod fail-fast
  * - LoggerModule (Pino): logging estructurado JSON con requestId por request
- * - HealthModule: endpoint GET /health
+ * - HealthModule: endpoint GET /health (marcado como @Public())
+ * - PrismaModule: acceso a DB (global)
+ * - AuthModule: endpoints POST /auth/register, /auth/login, /auth/google
+ * - JwtAuthGuard: guard global — toda request requiere JWT válido (RNF-001)
+ *   excepto las rutas marcadas con @Public()
  */
 @Module({
   imports: [
@@ -64,6 +71,15 @@ import { IncomingMessage } from 'http';
 
     HealthModule,
     PrismaModule,
+    AuthModule,
+  ],
+  providers: [
+    // Guard global: toda request requiere JWT válido (RNF-001).
+    // Las rutas públicas se marcan con @Public() en el controller.
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
   ],
 })
 export class AppModule {}

@@ -40,6 +40,14 @@ Si una decisión técnica nueva no está cubierta en `docs/technical.md`, report
 
 <!-- Esta sección la mantiene el flujo de documentación (el orquestador decide, el analista escribe). El especialista no edita este archivo. -->
 
+### Autenticación (detalle en `docs/frontend.md`, sección Autenticación)
+
+- **Adjuntar el Bearer al backend — no hay interceptor global.** Toda fase que consuma el backend debe usar uno de estos dos caminos:
+  - **Client Components** → hook **`useApi`** (toma `session.accessToken`).
+  - **Server Components** → **`auth()`** + **`apiRequest({ token })`**.
+- **`accessToken` en la sesión.** `session.accessToken` es el **JWT de NestJS** (opaco — no lo decodifiques ni lo parsees); lo expone el callback `session`.
+- **Gotcha de Google (para la instancia que lo active).** `isGoogleConfigured` en `src/lib/env.ts` lee `process.env.GOOGLE_CLIENT_ID` (**sin** prefijo `NEXT_PUBLIC_`), y se usa en `login-form.tsx`, que es `"use client"`. En el navegador ese valor es **siempre `undefined`**, así que el botón de Google queda **siempre deshabilitado en cliente** aunque las credenciales existan. Para activar Google de verdad hay que exponer un flag con prefijo `NEXT_PUBLIC_` (ej. `NEXT_PUBLIC_GOOGLE_ENABLED`). Hoy es inofensivo porque Google está deshabilitado a propósito.
+
 ## Al terminar
 
 ### 1. Build

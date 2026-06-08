@@ -60,6 +60,16 @@ Este proyecto usa **Prisma 7**, que cambió cosas respecto de versiones anterior
 - `PrismaModule` es **global** y exporta `PrismaService`; ya está integrado en `AppModule`.
 - Los services inyectan `PrismaService` para acceder a la DB. (La capa Repository por recurso descrita en `docs/backend.md` se construye encima de `PrismaService`.)
 
+## Autenticación — gotchas y decisiones
+
+Detalle funcional y de contrato en `docs/backend.md` (sección Autenticación). Para agentes que toquen el backend:
+
+- **Guard global + `@Public()`.** El `JwtAuthGuard` es global: **todo endpoint nuevo está protegido por JWT por defecto**. Para exponer una ruta sin auth, decorarla con **`@Public()`** (`src/auth/public.decorator.ts`). El guard inyecta `request.user = { userId }` — usalo para scopear, nunca confíes en un `userId` que venga del body o la query.
+- **Timezone default hardcodeado en register.** `POST /auth/register` asigna `America/Argentina/Buenos_Aires` por defecto (el front no manda `timezone` todavía). Hay un **TODO**: cuando el front lo envíe, priorizar el recibido sobre el default.
+- **Colores provisorios de categorías por defecto.** Las 4 categorías del alta usan hex fijos provisorios; **reemplazar en Fase 3** con el pool de colores predefinidos. No tratarlos como definitivos.
+- **Google `id_token` NO verificado server-side.** `/auth/google` confía en el perfil que manda el front (no valida el `id_token`). Hay un **TODO** para verificarlo con `google-auth-library`, lo que requeriría `GOOGLE_CLIENT_ID`. No asumir que el email de Google está verificado mientras esto no exista.
+- **Gotcha de tests — `Logger` de nestjs-pino.** La clase `Logger` de nestjs-pino expone la **API de NestJS** (`log` / `warn` / `error` / `verbose` / `debug`), **no** la de Pino (`info` / `assign`). En tests unitarios, proveer `{ provide: Logger, useValue: mockLogger }` con esos métodos, o el test falla al resolver el provider.
+
 ## Contratos con el frontend
 
 Si modificás el shape de un endpoint o agregás uno nuevo: reportarlo al orquestador con el detalle exacto antes de que el frontend implemente algo que lo consuma.

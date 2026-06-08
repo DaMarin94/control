@@ -2,6 +2,10 @@
  * Validación de variables de entorno con Zod.
  * Falla en build/start si falta una variable requerida o tiene un formato inválido.
  * Acceso tipado y centralizado: nadie lee process.env directamente fuera de este módulo.
+ *
+ * Google OAuth (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET) son opcionales en esta versión:
+ * el provider está configurado y listo, pero requiere credenciales reales para activarse.
+ * Si están vacías, el flujo credentials (email/password) funciona normalmente.
  */
 import { z } from "zod";
 
@@ -16,18 +20,10 @@ const envSchema = z.object({
     message: "AUTH_SECRET debe tener al menos 32 caracteres",
   }),
 
-  AUTH_BACKEND_JWT_SECRET: z.string().min(16, {
-    message: "AUTH_BACKEND_JWT_SECRET debe tener al menos 16 caracteres",
-  }),
-
-  // --- Google OAuth ---
-  GOOGLE_CLIENT_ID: z.string().min(1, {
-    message: "GOOGLE_CLIENT_ID es requerido",
-  }),
-
-  GOOGLE_CLIENT_SECRET: z.string().min(1, {
-    message: "GOOGLE_CLIENT_SECRET es requerido",
-  }),
+  // --- Google OAuth (opcional — scaffolded, pendiente de credenciales reales) ---
+  // Dejar vacías para deshabilitar el flujo Google sin romper el arranque.
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
 });
 
 type Env = z.infer<typeof envSchema>;
@@ -36,9 +32,8 @@ function validateEnv(): Env {
   const result = envSchema.safeParse({
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     AUTH_SECRET: process.env.AUTH_SECRET,
-    AUTH_BACKEND_JWT_SECRET: process.env.AUTH_BACKEND_JWT_SECRET,
-    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
-    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ?? undefined,
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ?? undefined,
   });
 
   if (!result.success) {
@@ -56,3 +51,10 @@ function validateEnv(): Env {
 }
 
 export const env = validateEnv();
+
+/**
+ * Indica si Google OAuth está configurado (credenciales presentes).
+ * Usado por la UI para mostrar/ocultar el botón de Google.
+ */
+export const isGoogleConfigured =
+  Boolean(process.env.GOOGLE_CLIENT_ID) && Boolean(process.env.GOOGLE_CLIENT_SECRET);

@@ -28,3 +28,24 @@
 - **Aislamiento por usuario.** Todos los recursos (movimientos, categorías) pertenecen a un usuario y nunca son visibles para otro.
 - **Contraseñas hasheadas.** Las cuentas con email + contraseña guardan únicamente un hash de la contraseña (`passwordHash`, bcrypt/argon2), nunca el texto plano. El hash y la verificación viven en el backend. Las cuentas creadas solo con Google pueden no tener `passwordHash`. El caso de account linking (mismo email por ambos métodos) queda **pendiente sin resolver en v1** (ver `requirements.md`, sección 6).
 - **Fechas y zonas horarias (movimiento único).** El movimiento único es un instante (fecha y hora), no una fecha de calendario. Se almacena como timestamp en UTC (`occurredAt`) junto con la zona horaria original del registro (`timezone`, nombre IANA, ej. `America/Argentina/Buenos_Aires`). Se muestra siempre en esa zona original, aunque el usuario después cambie de zona o viaje. El mes al que pertenece se determina en la zona del propio registro. El Usuario tiene un campo `timezone` (zona default / "de casa") que se usa para calcular "hoy" / "mes actual" al crear movimientos y en el dashboard. Los movimientos fijos y las cuotas no aplican esto: operan a nivel mes, sin día ni hora. Ver `docs/technical.md` (sección "Fechas y zonas horarias") para el detalle técnico.
+
+---
+
+## Contrato de autenticación (auth / JWT)
+
+Los tres endpoints de auth (`/auth/register`, `/auth/login`, `/auth/google`) devuelven, dentro del sobre `{ success, statusCode, data }`, el mismo shape en `data`:
+
+```
+AuthResponse = {
+  accessToken: string,
+  user: {
+    id: string,
+    email: string,
+    name: string | null,
+    image: string | null
+  }
+}
+```
+
+- **`accessToken`** es el JWT que **emite NestJS** (HS256). Sus claims son: `sub` (el `userId`, cuid del usuario), `iat` y `exp` (expira a los **30 días**). El frontend lo trata como **opaco**: lo guarda y lo reenvía como `Authorization: Bearer`, no lo decodifica.
+- **Dos tokens distintos.** El `accessToken` (JWT de NestJS) viaja **dentro** de la sesión de Auth.js, que es un **JWE separado** encriptado por NextAuth. No confundirlos: el backend solo valida el JWT de NestJS; nunca ve el JWE de Auth.js. Detalle del flujo en `docs/architecture.md`.

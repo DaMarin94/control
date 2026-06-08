@@ -6,6 +6,10 @@
  * - En éxito: desenvuelve `data` del sobre { success, statusCode, data } y lo retorna.
  * - En error: loggea (nivel error) y propaga un ApiError normalizado.
  * - El JWT se adjunta como Authorization: Bearer <token> cuando se provee.
+ *
+ * Uso desde Server Components: usar `apiServer` (obtiene el token de la sesión del servidor).
+ * Uso desde Client Components: pasar el token obtenido de useSession() via options.token,
+ *   o usar el hook `useApi` que lo hace automáticamente.
  */
 
 import { ApiError, type ApiResponse } from "@/types/api";

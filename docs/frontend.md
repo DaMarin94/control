@@ -45,6 +45,34 @@ Lo visual se define **una sola vez**. Stack: **shadcn/ui + cva** sobre Tailwind 
 
 **Límite con el diseño visual:** acá se define la regla arquitectónica (primitivas únicas, variantes por parámetro). El aspecto concreto (colores, tamaños, qué se ve como "primary") lo define el diseño sobre estas primitivas.
 
+## Autenticación (Auth.js / NextAuth v5)
+
+NextAuth **orquesta el login** en el front pero **no emite un token de identidad propio**: el JWT que importa lo emite NestJS (ver `docs/architecture.md`). NextAuth solo lo persiste y lo expone para reenviarlo al backend.
+
+### Providers
+
+- **Credentials provider:** su `authorize` llama a `POST /auth/login` del backend y devuelve el `accessToken` y el `user` que el backend emite.
+- **Google provider:** scaffolded, condicional a que existan las credenciales. Hoy diferido — no está activo (ver gotcha en `.claude/agents/control-frontend.md`).
+
+### Callbacks y sesión
+
+Los callbacks `jwt` y `session` persisten el **`accessToken` de NestJS** y el **`userId`** dentro de la sesión de Auth.js. `session.accessToken` queda disponible para las llamadas al backend.
+
+> La sesión de Auth.js es un JWE propio (encriptado por NextAuth); el `accessToken` que viaja dentro es el JWT de NestJS, opaco para el front. Son dos tokens distintos (ver `docs/data-model.md`).
+
+### Adjuntar el Bearer al backend (patrón obligatorio)
+
+**No hay interceptor global.** Toda fase que consuma el backend debe usar uno de estos dos caminos:
+
+- **Client Components** → hook **`useApi`**, que toma `session.accessToken` de `useSession()`.
+- **Server Components** → llamar **`auth()`** directamente y pasar el token a **`apiRequest({ token })`**.
+
+### Pantallas y protección de rutas
+
+- Pantallas `/login` y `/registro`; dashboard placeholder en `/dashboard`.
+- **Protección de rutas** vía `src/middleware.ts`: una ruta privada sin sesión redirige a `/login`; un usuario autenticado que entra a `/login` o `/registro` es redirigido a `/dashboard`.
+- **Auto-login tras registro:** un registro exitoso deja al usuario logueado sin pasar por la pantalla de login (RF-AUTH-006).
+
 ## Tailwind v4 — gotcha
 
 - No usar `@apply` con clases que referencian tokens custom (ej: `border-border`). En `@layer base` referenciar las CSS variables directo con `var(--color-border)`. Es un cambio de comportamiento de v3 a v4 que produce un error de build poco claro si se ignora.

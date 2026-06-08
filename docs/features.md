@@ -9,7 +9,8 @@
 
 | Feature | ID req. | Estado |
 |---------|---------|--------|
-| Auth — Google OAuth, sesión persistente | RF-AUTH-001..004 | Pendiente |
+| Auth — email/contraseña (login + registro) | RF-AUTH-005..006, 002..004 | Implementado |
+| Auth — Google OAuth | RF-AUTH-001 | Scaffolded (diferido) |
 | Dashboard — resumen del mes + últimos movimientos | RF-DASH-001..005 | Pendiente |
 | Formulario de carga (tabs único/fijo/cuotas) | RF-CM-001 | Pendiente |
 | Movimiento único — crear, editar, eliminar | RF-MU-001..003 | Pendiente |
@@ -24,6 +25,13 @@
 
 <!-- Documentar decisiones técnicas, workarounds o comportamientos no obvios -->
 <!-- a medida que cada feature se implementa.                                 -->
+
+### Autenticación (Fase 2)
+
+- **Email + contraseña operativo end-to-end:** login y registro (`/auth/login`, `/auth/register`) funcionan; el backend emite el JWT y el front lo reenvía como Bearer (ver `docs/backend.md` y `docs/frontend.md`, secciones Autenticación).
+- **Google OAuth scaffolded y diferido:** `/auth/google` y el provider de NextAuth existen y funcionan, pero Google no está activo (faltan credenciales y la verificación server-side del `id_token`). No bloquea v1.
+- **Sesión persistente y protección de rutas:** vía Auth.js + `src/middleware.ts`; auto-login tras registro.
+- **Categorías por defecto al alta:** el backend genera las 4 categorías (RF-CAT-001) con colores hex provisorios; no se duplican para usuarios existentes.
 
 ---
 

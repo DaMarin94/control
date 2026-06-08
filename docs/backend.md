@@ -81,7 +81,7 @@ La fuente de verdad de tipos, campos y constraints es `backend/prisma/schema.pri
 | `installments` | `/installments` | Grupos de cuotas (crear, editar, eliminar) |
 | `categories` | `/categories` | Categorías (CRUD + soft delete) |
 | `users` | — | Creación de cuenta + categorías por defecto |
-| `auth` | — | JwtAuthGuard, extracción de userId del token |
+| `auth` | `/auth` | Registro, login y Google; emisión y validación del JWT (guard global) |
 | `prisma` | — | PrismaService |
 
 ## Endpoints
@@ -102,6 +102,52 @@ Gestión de grupos de cuotas. El PATCH edita el grupo completo (RF-MC-003). El D
 
 ### `GET /categories` · `POST /categories` · `PATCH /categories/:id` · `DELETE /categories/:id`
 CRUD de categorías. El DELETE es soft delete (`deletedAt`). El GET excluye categorías eliminadas por defecto; acepta `?includeDeleted=true` para incluirlas.
+
+## Autenticación
+
+El `AuthModule` es el **emisor del JWT**: el backend es la autoridad de identidad y firma el token que el frontend reenvía en cada request (ver `docs/architecture.md`, Flujo de autenticación).
+
+### Endpoints
+
+Todas las respuestas usan el sobre `{ success, statusCode, data }`. El payload de éxito (`data`) de los tres endpoints es `{ accessToken, user }`, donde `user = { id, email, name|null, image|null }`.
+
+| Endpoint | Body | Éxito | Errores |
+|----------|------|-------|---------|
+| `POST /auth/register` | `{ email, password }` (`password` ≥ 8) | `201` | `400` validación · `409` email ya registrado |
+| `POST /auth/login` | `{ email, password }` | `200` | `400` validación · `401` credenciales inválidas |
+| `POST /auth/google` | `{ email (req), name?, image?, googleId?, idToken? }` | `200` | — |
+
+- **`POST /auth/login` — mensaje genérico.** Ante credenciales inválidas devuelve `401` con el mensaje fijo `"Credenciales inválidas"`. **No distingue** si falló el email o la contraseña (RF-AUTH-005, A1) — es deliberado, para no revelar qué emails existen.
+- **`POST /auth/google` — upsert.** Crea o actualiza el usuario por email. Las categorías por defecto se crean **solo si es alta nueva** (`skipDuplicates`); un usuario existente no las vuelve a generar. El `idToken` aún **no se verifica server-side** (ver gotchas).
+
+### Hashing de contraseña
+
+El `passwordHash` se calcula con **argon2id** (no bcrypt). Las cuentas creadas solo con Google no tienen `passwordHash`.
+
+### JWT
+
+- Algoritmo **HS256**, firmado con `JWT_SECRET`.
+- Claims: `sub = userId` (cuid del usuario), `iat`, `exp` (**30 días**).
+- El frontend trata el token como **opaco**: lo guarda y lo reenvía, no lo decodifica.
+
+### Guard global y rutas públicas (RNF-001)
+
+- **`JwtAuthGuard` es global:** toda request exige un JWT válido. **Todo endpoint nuevo está protegido por defecto** — no hace falta decorar nada para que lo esté.
+- Para exponer una ruta **sin** auth, decorarla con **`@Public()`** (`src/auth/public.decorator.ts`). Hoy lo llevan los tres endpoints de auth y `GET /health`.
+- El guard inyecta `request.user = { userId }` a partir del claim `sub`.
+
+### Categorías por defecto al alta (RF-CAT-001)
+
+Al crear una cuenta nueva (por cualquiera de los dos métodos), el backend genera estas 4 categorías, todas con `scope: BOTH`:
+
+| Categoría | Color (provisorio) |
+|-----------|--------------------|
+| Consumibles | `#4F86C6` |
+| Tarjeta de crédito | `#E07B54` |
+| Gastos fijos | `#6DBF67` |
+| Servicios | `#A98BD6` |
+
+Los colores son **hex fijos provisorios** hasta que Fase 3 implemente el pool de colores y la asignación automática (ver `docs/data-model.md`, color de categoría). No se duplican si el usuario ya existía.
 
 ## Reglas de negocio implementadas
 

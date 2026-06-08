@@ -15,6 +15,9 @@ export const envSchema = z.object({
     .enum(['development', 'production', 'test'])
     .optional()
     .default('development'),
+  // GOOGLE_CLIENT_ID es opcional: solo necesario si se usa el endpoint /auth/google.
+  // Declarado como opcional para no romper el fail-fast en entornos que no usen Google OAuth.
+  GOOGLE_CLIENT_ID: z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
