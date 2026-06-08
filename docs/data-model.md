@@ -1,7 +1,7 @@
 # Data Model
 
 > Documento conceptual — describe qué entidades existen y las decisiones de negocio sobre cómo se almacenan los datos.
-> Los tipos TypeScript, el schema de Prisma y los contratos de API se documentan cuando se implementen.
+> El schema de Prisma ya está **implementado** en `backend/prisma/schema.prisma` (fuente de verdad para tipos, campos y constraints); las decisiones de modelado a nivel DB están en `docs/backend.md`, sección Capa de datos. Los tipos TypeScript y los contratos de API se documentan cuando se implementen.
 
 ---
 

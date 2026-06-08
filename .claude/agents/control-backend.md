@@ -45,6 +45,21 @@ Ver descripción funcional en `docs/requirements.md`. Los contratos técnicos (D
 | `POST/PATCH/DELETE` | `/installments` | Grupos de cuotas |
 | `GET/POST/PATCH/DELETE` | `/categories` | Categorías |
 
+## Prisma 7 — gotchas y capa de datos
+
+Este proyecto usa **Prisma 7**, que cambió cosas respecto de versiones anteriores. Antes de tocar Prisma, leé esto o vas a romper el build o el CLI:
+
+- **La URL de conexión NO va en el `datasource` del `schema.prisma`.** Va en `backend/prisma.config.ts` vía `defineConfig` + `env('DATABASE_URL')`. El `datasource db` del schema solo declara `provider = "postgresql"`.
+- **El `PrismaClient` exige un driver adapter explícito** (`@prisma/adapter-pg` + `pg`). Ya no acepta `datasources: { db: { url } }` en el constructor. El runtime usa `PrismaService` (`backend/src/prisma/prisma.service.ts`), que crea el adapter con la URL tomada del `ConfigService` de NestJS.
+- **El CLI de Prisma NO carga el `.env` automáticamente cuando existe `prisma.config.ts`.** Por eso `prisma.config.ts` hace `import 'dotenv/config'` al tope. dotenv resuelve relativo al `cwd`, así que **todos los comandos del Prisma CLI (`migrate`, `generate`, seed) se corren desde `backend/`**. Si los corrés desde otro directorio, fallan con `PrismaConfigEnvError: Cannot resolve environment variable: DATABASE_URL`.
+- **`prisma.config.ts` está excluido del build de producción** (en `tsconfig.build.json`): es solo para el CLI, no debe compilar a `dist/`. No lo saques de la exclusión.
+- **El seed se ejecuta con `tsx`** (no ts-node), vía `pnpm db:seed`. Es solo desarrollo.
+
+### Patrón de acceso a datos
+
+- `PrismaModule` es **global** y exporta `PrismaService`; ya está integrado en `AppModule`.
+- Los services inyectan `PrismaService` para acceder a la DB. (La capa Repository por recurso descrita en `docs/backend.md` se construye encima de `PrismaService`.)
+
 ## Contratos con el frontend
 
 Si modificás el shape de un endpoint o agregás uno nuevo: reportarlo al orquestador con el detalle exacto antes de que el frontend implemente algo que lo consuma.

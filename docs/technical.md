@@ -211,6 +211,13 @@ Las reglas de validación se escriben en cada lado por separado (back y front so
 
 ## Migraciones de base de datos (Prisma)
 
+El proyecto usa **Prisma 7**, que mueve la configuración de conexión fuera del schema y exige un driver adapter explícito. Esto cambia cómo se configura la URL y cómo se corre el CLI:
+
+- **La URL de conexión NO va en el `datasource` del `schema.prisma`.** En Prisma 7 vive en `backend/prisma.config.ts` (`defineConfig` + `env('DATABASE_URL')`). El `datasource db` del schema solo declara `provider = "postgresql"`.
+- **El `PrismaClient` requiere un driver adapter explícito** (`@prisma/adapter-pg` + `pg`); ya no acepta la URL en el constructor. En runtime el adapter lo arma `PrismaService` con la URL del `ConfigService` (ver `docs/backend.md`).
+- **El CLI no carga `.env` solo cuando hay `prisma.config.ts`.** Por eso el config hace `import 'dotenv/config'` al tope, y dotenv resuelve relativo al `cwd`: los comandos de Prisma CLI (`migrate`, `generate`, seed) se corren **desde `backend/`**, o fallan con `PrismaConfigEnvError: Cannot resolve environment variable: DATABASE_URL`.
+- **`prisma.config.ts` está excluido del build de producción** (`tsconfig.build.json`): es solo del CLI, no compila a `dist/`.
+
 - **`schema.prisma` es la fuente de verdad** del modelo. Toda la estructura de la DB vive ahí.
 - **Desarrollo:** `prisma migrate dev` — crea la migración a partir de los cambios del schema, la aplica a la DB local y regenera el Prisma Client.
 - **Producción / CI:** `prisma migrate deploy` — aplica las migraciones pendientes sin generar nuevas. Determinístico.

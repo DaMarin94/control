@@ -1,0 +1,176 @@
+// schema.prisma — Fuente de verdad del modelo de datos
+// Generador y datasource
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// En Prisma 7 la URL de conexión va en prisma.config.ts (defineConfig),
+// no en el datasource del schema. Ver prisma.config.ts en la raíz del backend.
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum MovementType {
+  EXPENSE
+  INCOME
+}
+
+enum CategoryScope {
+  BOTH
+  EXPENSE
+  INCOME
+}
+
+// ---------------------------------------------------------------------------
+// User
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  image        String?
+  // Nullable: cuentas solo-Google no tienen contraseña
+  passwordHash String?
+  // Zona horaria IANA "de casa" del usuario, usada como default al crear movimientos
+  timezone     String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones — onDelete: Cascade: si se borra el usuario, todo lo suyo desaparece
+  categories        Category[]
+  transactions      Transaction[]
+  recurrings        Recurring[]
+  installmentGroups InstallmentGroup[]
+}
+
+// ---------------------------------------------------------------------------
+// Category
+// ---------------------------------------------------------------------------
+
+// NOTA sobre unicidad de nombre:
+// NO hay @@unique([userId, name]) a propósito.
+// La unicidad de nombre de categoría activa se valida en lógica de aplicación
+// (comparación normalizada: trim + insensible a mayúsculas + insensible a acentos),
+// porque la normalización unicode y el flujo "crear-o-reactivar" (proponer reactivar
+// una categoría con soft-delete si el nombre normalizado coincide) no son expresables
+// en un constraint de DB estándar. Ver RF-CAT-002 y RN-014.
+model Category {
+  id     String        @id @default(cuid())
+  userId String
+  name   String
+  scope  CategoryScope
+  // color: string hex libre en Fase 1; el pool de colores y asignación automática
+  // van en Fase 3. Por ahora se almacena el valor elegido directamente.
+  color String
+
+  // Soft delete: deletedAt != null → categoría eliminada (no aparece en selectores,
+  // pero sus FK en Transaction/Recurring/InstallmentGroup siguen siendo válidas)
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // onDelete: Restrict en todas las FKs de categoryId:
+  // impide borrar físicamente una categoría mientras existan movimientos que la referencian.
+  // Las categorías usan soft delete, por lo que este caso nunca debería ocurrir en
+  // la práctica, pero el Restrict lo garantiza a nivel DB.
+  transactions      Transaction[]
+  recurrings        Recurring[]
+  installmentGroups InstallmentGroup[]
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Transaction (movimiento único)
+// ---------------------------------------------------------------------------
+
+// Hard delete (RF-MU-003): borrado permanente — NO lleva deletedAt.
+model Transaction {
+  id          String       @id @default(cuid())
+  userId      String
+  categoryId  String
+  type        MovementType
+  // Monto en centavos para evitar errores de punto flotante (RN-002)
+  amountCents Int
+  description String?
+
+  // occurredAt: instante UTC del movimiento (momento elegido por el usuario)
+  // @db.Timestamptz: guarda con zona en Postgres para cálculos correctos con AT TIME ZONE
+  occurredAt DateTime @db.Timestamptz
+  // timezone: nombre IANA de la zona en que ocurrió el gasto (no el offset crudo)
+  // Se guarda junto al registro para poder reconstruir la hora local original
+  // y para bucketear por mes en la zona correcta (ver docs/technical.md — Fechas)
+  timezone   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  // Índice compuesto para la consulta de movimientos por mes (filtra por usuario + ordena por fecha)
+  @@index([userId, occurredAt])
+}
+
+// ---------------------------------------------------------------------------
+// Recurring (movimiento fijo)
+// ---------------------------------------------------------------------------
+
+model Recurring {
+  id          String       @id @default(cuid())
+  userId      String
+  categoryId  String
+  type        MovementType
+  amountCents Int
+  description String?
+
+  // startMonth: mes desde el que aparece el fijo, formato "YYYY-MM"
+  startMonth String
+  // deletedFrom: mes desde el cual deja de aparecer (exclusivo); null = activo indefinidamente
+  // Formato "YYYY-MM"
+  deletedFrom String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// InstallmentGroup (grupo de cuotas)
+// ---------------------------------------------------------------------------
+
+model InstallmentGroup {
+  id                String       @id @default(cuid())
+  userId            String
+  categoryId        String
+  type              MovementType
+  // amountCents: monto POR CUOTA (no el total de la compra)
+  amountCents       Int
+  totalInstallments Int
+  description       String?
+
+  // startMonth: mes de la primera cuota, formato "YYYY-MM"
+  startMonth String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+}

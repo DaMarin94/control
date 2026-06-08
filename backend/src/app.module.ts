@@ -3,6 +3,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { v4 as uuidv4 } from 'uuid';
 import { AppConfigModule } from './config/config.module';
 import { HealthModule } from './health/health.module';
+import { PrismaModule } from './prisma/prisma.module';
 import { IncomingMessage } from 'http';
 
 /**
@@ -62,6 +63,7 @@ import { IncomingMessage } from 'http';
     }),
 
     HealthModule,
+    PrismaModule,
   ],
 })
 export class AppModule {}
