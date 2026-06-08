@@ -10,19 +10,26 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { GoogleAuthDto } from './dto/google-auth.dto';
+import { COLOR_POOL } from '../categories/color-pool';
 
 // -----------------------------------------------------------------------
 // Categorías por defecto (RF-CAT-001)
 //
-// PROVISORIO: colores hex fijos hasta que la Fase 3 implemente el pool de
-// colores y la asignación automática. Reemplazar en Fase 3.
+// Los colores se asignan del pool centralizado (COLOR_POOL) en orden de
+// definición del pool, uno por categoría. Las 4 categorías por defecto
+// toman los primeros 4 colores del pool.
 // -----------------------------------------------------------------------
-const DEFAULT_CATEGORIES = [
-  { name: 'Consumibles', color: '#4F86C6' },
-  { name: 'Tarjeta de crédito', color: '#E07B54' },
-  { name: 'Gastos fijos', color: '#6DBF67' },
-  { name: 'Servicios', color: '#A98BD6' },
+const DEFAULT_CATEGORY_NAMES = [
+  'Consumibles',
+  'Tarjeta de crédito',
+  'Gastos fijos',
+  'Servicios',
 ] as const;
+
+const DEFAULT_CATEGORIES = DEFAULT_CATEGORY_NAMES.map((name, i) => ({
+  name,
+  color: COLOR_POOL[i],
+}));
 
 // Timezone por defecto para usuarios que se registran vía email/contraseña.
 // El frontend todavía no envía la zona del cliente en el registro; se usa
@@ -191,10 +198,9 @@ export class AuthService {
   }
 
   /**
-   * Crea las 4 categorías por defecto para un usuario recién creado.
+   * Crea las 4 categorías por defecto para un usuario recién creado (RF-CAT-001).
+   * Los colores vienen del COLOR_POOL centralizado (src/categories/color-pool.ts).
    * No duplica si ya existen (skipDuplicates).
-   *
-   * PROVISORIO: colores hex fijos hasta Fase 3. Ver DEFAULT_CATEGORIES arriba.
    */
   private async createDefaultCategories(userId: string): Promise<void> {
     await this.prisma.category.createMany({

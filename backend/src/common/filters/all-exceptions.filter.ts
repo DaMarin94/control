@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Logger } from 'nestjs-pino';
+import { ReactivableConflictException } from '../exceptions/reactivable-conflict.exception';
 
 export interface ApiErrorResponse {
   success: false;
@@ -15,6 +16,8 @@ export interface ApiErrorResponse {
     message: string;
     timestamp: string;
     path: string;
+    // Presente solo en ReactivableConflictException (colisión con categoría eliminada)
+    data?: unknown;
   };
 }
 
@@ -43,6 +46,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     let statusCode: number;
     let clientMessage: string;
+    let extraData: unknown = undefined;
 
     if (exception instanceof HttpException) {
       statusCode = exception.getStatus();
@@ -62,7 +66,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
         clientMessage = exception.message;
       }
 
-      // Errores esperados: 400, 401, 403, 404, 422 → warn
+      // Excepción especial: colisión con categoría eliminada (RF-CAT-002, A3)
+      // Incluye payload estructurado { reactivable, category } en error.data
+      if (exception instanceof ReactivableConflictException) {
+        extraData = exception.reactivablePayload;
+      }
+
+      // Errores esperados: 400, 401, 403, 404, 409, 422 → warn
       this.logger.warn({
         requestId,
         statusCode,
@@ -93,6 +103,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message: clientMessage,
         timestamp,
         path,
+        ...(extraData !== undefined && { data: extraData }),
       },
     };
 

@@ -48,6 +48,13 @@ Si una decisión técnica nueva no está cubierta en `docs/technical.md`, report
 - **`accessToken` en la sesión.** `session.accessToken` es el **JWT de NestJS** (opaco — no lo decodifiques ni lo parsees); lo expone el callback `session`.
 - **Gotcha de Google (para la instancia que lo active).** `isGoogleConfigured` en `src/lib/env.ts` lee `process.env.GOOGLE_CLIENT_ID` (**sin** prefijo `NEXT_PUBLIC_`), y se usa en `login-form.tsx`, que es `"use client"`. En el navegador ese valor es **siempre `undefined`**, así que el botón de Google queda **siempre deshabilitado en cliente** aunque las credenciales existan. Para activar Google de verdad hay que exponer un flag con prefijo `NEXT_PUBLIC_` (ej. `NEXT_PUBLIC_GOOGLE_ENABLED`). Hoy es inofensivo porque Google está deshabilitado a propósito.
 
+### Categorías (detalle en `docs/frontend.md`, sección Categorías)
+
+- **`ApiError` porta `data?: unknown`.** El campo fluye desde `apiRequest` (capa centralizada). Lo usa el `409` reactivable de categorías; no asumas que siempre viene poblado.
+- **`isReactivableError`** — type guard sobre el `ApiError` para discriminar el `409` reactivable (que ofrece Reactivar/Cancelar) del `409` de colisión-con-activa (error de duplicado común). El flujo de reactivación **ignora lo tipeado** en el form: la categoría vuelve con su scope y color originales.
+- **`CATEGORIES_QUERY_KEY = ["categories"]`.** Clave de React Query del hook `use-categories`; todas las mutaciones la invalidan. El **futuro selector de categorías** en el formulario de movimientos **DEBE reusar esta misma clave** para compartir caché — no crear una clave nueva.
+- **`Select` primitivo es `<select>` nativo (no Radix).** Mínimo, reemplazable a futuro en un solo lugar.
+
 ## Al terminar
 
 ### 1. Build

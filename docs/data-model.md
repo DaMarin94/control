@@ -49,3 +49,42 @@ AuthResponse = {
 
 - **`accessToken`** es el JWT que **emite NestJS** (HS256). Sus claims son: `sub` (el `userId`, cuid del usuario), `iat` y `exp` (expira a los **30 días**). El frontend lo trata como **opaco**: lo guarda y lo reenvía como `Authorization: Bearer`, no lo decodifica.
 - **Dos tokens distintos.** El `accessToken` (JWT de NestJS) viaja **dentro** de la sesión de Auth.js, que es un **JWE separado** encriptado por NextAuth. No confundirlos: el backend solo valida el JWT de NestJS; nunca ve el JWE de Auth.js. Detalle del flujo en `docs/architecture.md`.
+
+---
+
+## Contrato de categoría (respuesta de la API)
+
+Toda respuesta exitosa de los endpoints de categorías devuelve, dentro del sobre `{ success, statusCode, data }`, este shape:
+
+```
+Categoria = {
+  id: string,
+  userId: string,
+  name: string,                          // tal cual lo tipeó el usuario
+  scope: "BOTH" | "EXPENSE" | "INCOME",
+  color: string,                         // "#hex" del pool, no editable
+  deletedAt: null,                       // las respuestas solo traen activas
+  createdAt: string,
+  updatedAt: string,
+  movementCount: number
+}
+```
+
+- **`movementCount` — derivado de solo lectura.** Es la suma de las **tres relaciones de movimiento** que referencian la categoría: movimientos únicos + fijos + grupos de cuotas. No es un campo almacenado ni editable; el backend lo calcula al responder. Cero si la categoría no tiene movimientos. Alimenta el contador "N movimientos" de la pantalla de categorías (RF-CAT-006) y **no** se confunde con los totales de dinero del mes (ver `requirements.md`, RF-VM-002).
+
+### Payload reactivable en errores (409)
+
+Cuando se intenta crear una categoría cuyo nombre normalizado colisiona con una **eliminada** (RF-CAT-002, A3), el backend responde `409` y adjunta, dentro del sobre de error, un `data` estructurado:
+
+```
+error.data = {
+  reactivable: true,
+  category: { id, name, scope, color }
+}
+```
+
+- Es el **único** caso en que el sobre de error lleva `data`; el resto de los errores no lo incluyen. El front usa `category.id` para ofrecer reactivar (`POST /categories/:id/reactivate`) sin un endpoint extra de búsqueda. La colisión con una categoría **activa** (RN-008) responde `409` **sin** `data`.
+
+### Pool de colores (dato del dominio)
+
+El color de categoría sale de un **pool fijo de 10 colores** predefinidos, único en el backend. El sistema asigna el **menos usado** entre las categorías activas del usuario al crear cada categoría (en empate, el primero del pool); las 4 por defecto toman los primeros 4 en orden. El color **no es editable** por el usuario (ni al crear ni al editar) y es solo presentación. Detalle de los 10 valores y la estrategia en `docs/backend.md`, sección Pool de colores.

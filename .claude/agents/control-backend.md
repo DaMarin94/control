@@ -66,9 +66,21 @@ Detalle funcional y de contrato en `docs/backend.md` (sección Autenticación). 
 
 - **Guard global + `@Public()`.** El `JwtAuthGuard` es global: **todo endpoint nuevo está protegido por JWT por defecto**. Para exponer una ruta sin auth, decorarla con **`@Public()`** (`src/auth/public.decorator.ts`). El guard inyecta `request.user = { userId }` — usalo para scopear, nunca confíes en un `userId` que venga del body o la query.
 - **Timezone default hardcodeado en register.** `POST /auth/register` asigna `America/Argentina/Buenos_Aires` por defecto (el front no manda `timezone` todavía). Hay un **TODO**: cuando el front lo envíe, priorizar el recibido sobre el default.
-- **Colores provisorios de categorías por defecto.** Las 4 categorías del alta usan hex fijos provisorios; **reemplazar en Fase 3** con el pool de colores predefinidos. No tratarlos como definitivos.
+- **Colores de categorías por defecto desde el pool central.** Las 4 categorías del alta toman los **primeros 4 colores del pool** (`src/categories/color-pool.ts`); `AuthService` importa ese módulo. Ya no hay hex hardcodeados sueltos ni colores provisorios (ver Categorías abajo).
 - **Google `id_token` NO verificado server-side.** `/auth/google` confía en el perfil que manda el front (no valida el `id_token`). Hay un **TODO** para verificarlo con `google-auth-library`, lo que requeriría `GOOGLE_CLIENT_ID`. No asumir que el email de Google está verificado mientras esto no exista.
 - **Gotcha de tests — `Logger` de nestjs-pino.** La clase `Logger` de nestjs-pino expone la **API de NestJS** (`log` / `warn` / `error` / `verbose` / `debug`), **no** la de Pino (`info` / `assign`). En tests unitarios, proveer `{ provide: Logger, useValue: mockLogger }` con esos métodos, o el test falla al resolver el provider.
+
+## Categorías — gotchas y decisiones
+
+Detalle de contrato en `docs/backend.md` (sección Categorías). Para agentes que toquen el backend:
+
+- **`ReactivableConflictException` + `error.data` opcional.** El caso "colisión con categoría eliminada" lanza esta excepción (409) que **adjunta un payload estructurado** (`error.data = { reactivable, category }`) al sobre de error. El Global Exception Filter se extendió de forma **mínima** para soportar un `data` **opcional**: es el único error que lo lleva. Patrón a seguir si otro error necesita adjuntar payload estructurado — no agregar `data` a errores que no lo requieran.
+- **Pool de colores central.** `src/categories/color-pool.ts` es la **única fuente** de los 10 colores; lo reusan `CategoriesService` y `AuthService`. No duplicar la lista ni hardcodear hex en otro lado. Asignación = color **menos usado** entre las activas del usuario (empate → primero del pool), determinística.
+- **`normalizeName()` para comparar, no para almacenar.** trim + lowercase + NFD + strip de diacríticos. El `name` se **almacena tal cual lo tipeó el usuario**; la normalización es **solo** para detectar colisiones de unicidad (RN-014). No persistir el nombre normalizado.
+- **Estados inválidos → 404/409.** DELETE / PATCH / reactivate sobre una categoría en estado inválido cortan antes:
+  - DELETE sobre **ya eliminada** → `404` (**no es idempotente**: no devuelve `204`).
+  - PATCH sobre **eliminada** → `404`. Reactivate sobre **ya activa** → `409`; sobre inexistente/de otro usuario → `404`.
+  - El `color` no se acepta en POST ni PATCH → `400`.
 
 ## Contratos con el frontend
 

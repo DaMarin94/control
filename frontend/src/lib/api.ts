@@ -102,6 +102,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     throw new ApiError(errorBody.message, parsed.statusCode, {
       path: errorBody.path,
       timestamp: errorBody.timestamp,
+      data: errorBody.data,
     });
   }
 

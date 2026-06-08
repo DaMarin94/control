@@ -6,6 +6,7 @@ import { AppConfigModule } from './config/config.module';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
+import { CategoriesModule } from './categories/categories.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { IncomingMessage } from 'http';
 
@@ -72,6 +73,7 @@ import { IncomingMessage } from 'http';
     HealthModule,
     PrismaModule,
     AuthModule,
+    CategoriesModule,
   ],
   providers: [
     // Guard global: toda request requiere JWT válido (RNF-001).

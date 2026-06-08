@@ -101,7 +101,61 @@ Gestión de movimientos fijos. El DELETE acepta `{ deleteFromCurrentMonth: boole
 Gestión de grupos de cuotas. El PATCH edita el grupo completo (RF-MC-003). El DELETE elimina el grupo completo (todas las cuotas, pasadas y futuras).
 
 ### `GET /categories` · `POST /categories` · `PATCH /categories/:id` · `DELETE /categories/:id`
-CRUD de categorías. El DELETE es soft delete (`deletedAt`). El GET excluye categorías eliminadas por defecto; acepta `?includeDeleted=true` para incluirlas.
+CRUD de categorías. El DELETE es soft delete (`deletedAt`). Ver el contrato completo en la sección **Categorías (CategoriesModule)**.
+
+## Categorías (CategoriesModule)
+
+CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca categorías de otro). Todas las respuestas exitosas devuelven el shape de categoría.
+
+### Shape de categoría
+
+```
+Categoria = {
+  id, userId,
+  name,                              // string, almacenado tal cual lo tipeó el usuario
+  scope: "BOTH" | "EXPENSE" | "INCOME",
+  color: "#hex",                     // del pool, no editable
+  deletedAt: null,                   // siempre null en las respuestas (solo se devuelven activas)
+  createdAt, updatedAt,
+  movementCount: number              // derivado, solo lectura
+}
+```
+
+- **`movementCount`** = suma de las filas de `transactions` + `recurrings` + `installmentGroups` que referencian la categoría (las 3 relaciones de movimiento). Es un dato calculado de solo lectura; el usuario no lo edita. Cero si no tiene movimientos. (Independiente de los totales de dinero del mes — ver RF-CAT-006 / RF-VM-002.)
+
+### Endpoints
+
+| Endpoint | Body | Éxito | Errores |
+|----------|------|-------|---------|
+| `GET /categories` | — | `200` · `data: Categoria[]` | — |
+| `POST /categories` | `{ name, scope? }` | `201` · `data: Categoria` | `400` · `409` (dos casos, ver abajo) |
+| `POST /categories/:id/reactivate` | — (ignora el body) | `200` · `data: Categoria` | `404` · `409` |
+| `PATCH /categories/:id` | `{ name?, scope? }` | `200` · `data: Categoria` | `400` · `404` · `409` |
+| `DELETE /categories/:id` | — | `204 No Content` | `404` |
+
+- **`GET /categories`** — solo activas (`deletedAt` null), ordenadas por **nombre ascendente**, cada una con su `movementCount`.
+- **`POST /categories`** — `name` obligatorio y no vacío; `scope` opcional (default `BOTH`). El campo **`color` NO se acepta**: enviarlo es `400`. Dos casos de `409`:
+  - **Colisión con una categoría activa** (RN-008): `error.message` = `"Ya existe una categoría activa..."`, **sin** `error.data`. Es un bloqueo duro de duplicado.
+  - **Colisión con una categoría eliminada / reactivable** (RF-CAT-002, A3): `error.data = { reactivable: true, category: { id, name, scope, color } }`. El front usa ese `id` para ofrecer reactivar. Ver `ReactivableConflictException` abajo.
+  - `400`: nombre vacío o faltante, `scope` inválido, o campo no permitido (`color`).
+- **`POST /categories/:id/reactivate`** — reactiva una categoría soft-deleted. Vuelve **exactamente como estaba** (mismo `id`, `name`, `scope`, `color`); lo que el usuario haya tipeado en el form de alta **se ignora**. `404` si no existe o no es del usuario; `409` si ya está activa.
+- **`PATCH /categories/:id`** — `name` y/o `scope`. El **`color` NO es editable**: enviarlo es `400`. `409` si el nuevo nombre colisiona con otra categoría activa (RN-014). `404` si no existe, no es del usuario, o está eliminada.
+- **`DELETE /categories/:id`** — soft delete (marca `deletedAt`). **`204` sin cuerpo.** **No es idempotente**: borrar una categoría **ya eliminada** devuelve `404` (no `204`). También `404` si no existe o no es del usuario.
+
+### Pool de colores (RF-CAT-005)
+
+- **Única fuente:** `backend/src/categories/color-pool.ts`. 10 colores fijos:
+  `#4F86C6`, `#E07B54`, `#6DBF67`, `#A98BD6`, `#E8C84A`, `#5BC4B8`, `#E06B8B`, `#8B9DBF`, `#C47D3E`, `#7DBF9E`.
+  Los primeros 4 son los que en Fase 2 eran "provisorios" para las categorías por defecto — ahora son parte del pool oficial. `AuthService` y `CategoriesService` importan el pool del mismo módulo; no hay colores hardcodeados sueltos.
+- **Asignación (determinística):** al crear una categoría se elige el color del pool **menos usado** entre las categorías **activas** del usuario; en empate gana el **primero en orden de definición**. Las 4 categorías por defecto del alta toman los primeros 4 colores en orden. El color no se reasigna al editar.
+
+### Normalización y unicidad (RN-014)
+
+- La unicidad de nombre entre activas se valida a **nivel de aplicación, no en la DB** (no hay `@@unique`). La comparación usa `normalizeName()`: trim + lowercase + NFD + strip de diacríticos (`"comida" = "Comida" = "Cómida"`). El `name` se **almacena tal cual lo tipeó el usuario**; la normalización es solo para comparar.
+
+### Manejo de errores — extensión del filter
+
+- **`ReactivableConflictException`** (409): el único error que adjunta `error.data` estructurado (`{ reactivable, category }`). Para soportarlo, el Global Exception Filter se extendió de forma **mínima** con un campo `data` **opcional** en el sobre de error: solo lo lleva este caso; el resto de los errores no incluyen `data`. Permite al front ofrecer Reactivar/Cancelar sin un endpoint extra de búsqueda.
 
 ## Autenticación
 
@@ -138,16 +192,16 @@ El `passwordHash` se calcula con **argon2id** (no bcrypt). Las cuentas creadas s
 
 ### Categorías por defecto al alta (RF-CAT-001)
 
-Al crear una cuenta nueva (por cualquiera de los dos métodos), el backend genera estas 4 categorías, todas con `scope: BOTH`:
+Al crear una cuenta nueva (por cualquiera de los dos métodos), el backend genera estas 4 categorías, todas con `scope: BOTH`, tomando los **primeros 4 colores del pool** en orden:
 
-| Categoría | Color (provisorio) |
-|-----------|--------------------|
+| Categoría | Color |
+|-----------|-------|
 | Consumibles | `#4F86C6` |
 | Tarjeta de crédito | `#E07B54` |
 | Gastos fijos | `#6DBF67` |
 | Servicios | `#A98BD6` |
 
-Los colores son **hex fijos provisorios** hasta que Fase 3 implemente el pool de colores y la asignación automática (ver `docs/data-model.md`, color de categoría). No se duplican si el usuario ya existía.
+`AuthService` importa el pool central (`src/categories/color-pool.ts`) — ya no hay hex hardcodeados sueltos. Estos 4 colores dejaron de ser provisorios: son los primeros 4 del pool oficial (ver más abajo, **Pool de colores**). No se duplican si el usuario ya existía.
 
 ## Reglas de negocio implementadas
 

@@ -19,6 +19,8 @@ export interface ApiErrorResponse {
     message: string;
     timestamp: string;
     path: string;
+    /** Datos adicionales opcionales (ej: `{ reactivable: true, category: {...} }` en 409 de categorías) */
+    data?: unknown;
   };
 }
 
@@ -33,17 +35,20 @@ export class ApiError extends Error {
   public readonly statusCode: number;
   public readonly path?: string;
   public readonly timestamp?: string;
+  /** Datos adicionales del error (ej: `{ reactivable: true, category: {...} }` en 409 de categorías) */
+  public readonly data?: unknown;
 
   constructor(
     message: string,
     statusCode: number,
-    options?: { path?: string; timestamp?: string },
+    options?: { path?: string; timestamp?: string; data?: unknown },
   ) {
     super(message);
     this.name = "ApiError";
     this.statusCode = statusCode;
     this.path = options?.path;
     this.timestamp = options?.timestamp;
+    this.data = options?.data;
   }
 
   /** Determina si es un error del cliente (4xx) */
