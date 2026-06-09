@@ -5,9 +5,16 @@
  *
  * Lee el mes desde props (derivado del query param ?month=YYYY-MM en la page).
  * Muestra totales y lista agrupada por origen: Únicos, Fijos, Cuotas.
- * Hoy solo "Únicos" tiene datos; Fijos y Cuotas se muestran solo si tienen ítems.
  *
- * Cableable con TransactionModal (editar) y DeleteTransactionDialog (eliminar).
+ * Cambios en Fase 6:
+ * - La sección Fijos ahora llega poblada desde el backend.
+ * - Editar y eliminar ramifican por origin:
+ *   - "unico" → TransactionModal (mode="edit-single") / DeleteTransactionDialog
+ *   - "fijo"  → TransactionModal (mode="edit-fixed") / DeleteRecurringDialog
+ * - movementItemToTransaction solo se usa para únicos (que sí tienen occurredAt).
+ * - movementItemToRecurring convierte un MovementItem de fijo al shape Recurring
+ *   que espera RecurringForm (no trae todos los campos de auditoría, pero son
+ *   los que el form necesita para el prefill).
  */
 
 import { useState } from "react";
@@ -16,6 +23,7 @@ import { useMovements } from "@/hooks/use-movements";
 import { MovementItemRow } from "@/components/movements/movement-item-row";
 import { TransactionModal } from "@/components/movements/transaction-modal";
 import { DeleteTransactionDialog } from "@/components/movements/delete-transaction-dialog";
+import { DeleteRecurringDialog } from "@/components/movements/delete-recurring-dialog";
 import { NewTransactionButton } from "@/components/movements/new-transaction-button";
 import {
   formatCurrency,
@@ -25,27 +33,52 @@ import {
 } from "@/lib/format";
 import type { MovementItem } from "@/types/movement";
 import type { Transaction } from "@/types/transaction";
+import type { Recurring } from "@/types/recurring";
 
-// ─── Mapeo MovementItem → Transaction ──────────────────────────────────────────
+// ─── Mapeo MovementItem → Transaction (únicos) ─────────────────────────────────
 //
-// TransactionModal y DeleteTransactionDialog esperan Transaction.
-// MovementItem tiene los mismos campos core; los campos de audit (userId,
-// createdAt, updatedAt) no vienen en la respuesta de /movements pero no son
-// necesarios para editar/eliminar — se rellenan con strings vacíos como placeholders.
-// categoryId se deriva de category.id que sí viene en MovementItem.
+// Solo para movimientos únicos — que sí tienen occurredAt y timezone no-null.
+// Los campos de audit (userId, createdAt, updatedAt) no vienen en /movements
+// pero los modales de edición no los usan — se rellenan con strings vacíos.
 
 function movementItemToTransaction(item: MovementItem): Transaction {
+  // Safeguard: solo llamar con un único que tenga occurredAt y timezone
+  const occurredAt = item.occurredAt ?? "";
+  const timezone = item.timezone ?? "";
+
   return {
     id: item.id,
-    userId: "", // no viene en /movements; no lo usa el form de edición
+    userId: "", // no viene en /movements; el form de edición no lo usa
     categoryId: item.category.id,
     type: item.type,
     amountCents: item.amountCents,
     description: item.description,
-    occurredAt: item.occurredAt,
-    timezone: item.timezone,
-    createdAt: item.occurredAt, // placeholder; no lo usa el form
-    updatedAt: item.occurredAt, // placeholder; no lo usa el form
+    occurredAt,
+    timezone,
+    createdAt: occurredAt, // placeholder; no lo usa el form
+    updatedAt: occurredAt, // placeholder; no lo usa el form
+    category: item.category,
+  };
+}
+
+// ─── Mapeo MovementItem → Recurring (fijos) ────────────────────────────────────
+//
+// El RecurringForm en modo edición solo necesita: id, type, amountCents,
+// categoryId, description, category. Los campos de auditoría no son usados.
+// startMonth y deletedFrom no son editables ni se muestran en el form.
+
+function movementItemToRecurring(item: MovementItem): Recurring {
+  return {
+    id: item.id,
+    userId: "", // placeholder; no lo usa RecurringForm
+    categoryId: item.category.id,
+    type: item.type,
+    amountCents: item.amountCents,
+    description: item.description,
+    startMonth: "", // placeholder; no lo usa RecurringForm en edición
+    deletedFrom: null,
+    createdAt: "", // placeholder
+    updatedAt: "", // placeholder
     category: item.category,
   };
 }
@@ -62,9 +95,13 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   const router = useRouter();
   const { data, isLoading, isError } = useMovements(month);
 
-  // Estado de modales
-  const [editingMovement, setEditingMovement] = useState<MovementItem | null>(null);
-  const [deletingMovement, setDeletingMovement] = useState<MovementItem | null>(null);
+  // Estado de modales para únicos
+  const [editingUnico, setEditingUnico] = useState<MovementItem | null>(null);
+  const [deletingUnico, setDeletingUnico] = useState<MovementItem | null>(null);
+
+  // Estado de modales para fijos
+  const [editingFijo, setEditingFijo] = useState<MovementItem | null>(null);
+  const [deletingFijo, setDeletingFijo] = useState<MovementItem | null>(null);
 
   const totals = data?.totals;
   const unicos = data?.movements.unicos ?? [];
@@ -79,6 +116,22 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
 
   function goToNextMonth() {
     router.push(`/mes?month=${nextMonth(month)}`);
+  }
+
+  function handleEdit(movement: MovementItem) {
+    if (movement.origin === "fijo") {
+      setEditingFijo(movement);
+    } else {
+      setEditingUnico(movement);
+    }
+  }
+
+  function handleDelete(movement: MovementItem) {
+    if (movement.origin === "fijo") {
+      setDeletingFijo(movement);
+    } else {
+      setDeletingUnico(movement);
+    }
   }
 
   return (
@@ -171,15 +224,15 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                     <MovementItemRow
                       key={item.id}
                       movement={item}
-                      onEdit={(m) => setEditingMovement(m)}
-                      onDelete={(m) => setDeletingMovement(m)}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
                     />
                   ))}
                 </div>
               </section>
             )}
 
-            {/* Fijos (solo si tienen datos — Fase 6) */}
+            {/* Fijos (poblado desde Fase 6) */}
             {fijos.length > 0 && (
               <section aria-labelledby="section-fijos">
                 <h3
@@ -193,15 +246,15 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                     <MovementItemRow
                       key={item.id}
                       movement={item}
-                      onEdit={(m) => setEditingMovement(m)}
-                      onDelete={(m) => setDeletingMovement(m)}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
                     />
                   ))}
                 </div>
               </section>
             )}
 
-            {/* Cuotas (solo si tienen datos — Fase 7) */}
+            {/* Cuotas (Fase 7) */}
             {cuotas.length > 0 && (
               <section aria-labelledby="section-cuotas">
                 <h3
@@ -215,8 +268,8 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                     <MovementItemRow
                       key={item.id}
                       movement={item}
-                      onEdit={(m) => setEditingMovement(m)}
-                      onDelete={(m) => setDeletingMovement(m)}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
                     />
                   ))}
                 </div>
@@ -238,19 +291,37 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
         </>
       )}
 
-      {/* ── Modal editar ── */}
-      {editingMovement && (
+      {/* ── Modal editar único ── */}
+      {editingUnico && (
         <TransactionModal
-          transaction={movementItemToTransaction(editingMovement)}
-          onClose={() => setEditingMovement(null)}
+          mode="edit-single"
+          transaction={movementItemToTransaction(editingUnico)}
+          onClose={() => setEditingUnico(null)}
         />
       )}
 
-      {/* ── Diálogo eliminar ── */}
-      {deletingMovement && (
+      {/* ── Diálogo eliminar único ── */}
+      {deletingUnico && (
         <DeleteTransactionDialog
-          transaction={movementItemToTransaction(deletingMovement)}
-          onClose={() => setDeletingMovement(null)}
+          transaction={movementItemToTransaction(deletingUnico)}
+          onClose={() => setDeletingUnico(null)}
+        />
+      )}
+
+      {/* ── Modal editar fijo ── */}
+      {editingFijo && (
+        <TransactionModal
+          mode="edit-fixed"
+          recurring={movementItemToRecurring(editingFijo)}
+          onClose={() => setEditingFijo(null)}
+        />
+      )}
+
+      {/* ── Diálogo eliminar fijo ── */}
+      {deletingFijo && (
+        <DeleteRecurringDialog
+          movement={deletingFijo}
+          onClose={() => setDeletingFijo(null)}
         />
       )}
     </div>

@@ -5,9 +5,11 @@
  * - Navegación prev/next cambia la URL (/mes?month=YYYY-MM)
  * - Render de totales del mes
  * - Lista agrupada: sección Únicos con ítems; secciones vacías no se muestran
+ * - Lista agrupada: sección Fijos con ítems (Fase 6)
  * - Estado vacío: sin movimientos → mensaje sin error
  * - Estado de error: mensaje sin romper la pantalla
- * - Cableado editar/eliminar: abren los modales con el ítem correcto
+ * - Cableado editar/eliminar: únicos → modal único / delete único
+ * - Cableado editar/eliminar: fijos → modal fijo / delete fijo (Fase 6)
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -35,6 +37,42 @@ vi.mock("@/hooks/use-toast", () => ({
     toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   })),
 }));
+
+vi.mock("@/hooks/use-categories", () => ({
+  useCategories: vi.fn(() => ({
+    categories: [],
+    isLoading: false,
+    isError: false,
+    error: null,
+    createCategory: vi.fn(),
+    updateCategory: vi.fn(),
+    deleteCategory: vi.fn(),
+    reactivateCategory: vi.fn(),
+    isCreating: false,
+    isUpdating: false,
+    isDeleting: false,
+    isReactivating: false,
+  })),
+}));
+
+vi.mock("@/hooks/use-recurring", () => ({
+  useRecurring: vi.fn(() => ({
+    createRecurring: vi.fn(),
+    updateRecurring: vi.fn(),
+    deleteRecurring: vi.fn(),
+    isCreating: false,
+    isUpdating: false,
+    isDeleting: false,
+  })),
+}));
+
+vi.mock("@/lib/format", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/format")>();
+  return {
+    ...actual,
+    getCurrentMonth: vi.fn(() => "2026-06"),
+  };
+});
 
 const mockPush = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -87,12 +125,34 @@ const mockMovementIncome = {
   category: { id: "cat-2", name: "Sueldo", color: "#33FF57", scope: "INCOME" as const },
 };
 
+/** Fijo de ejemplo — occurredAt y timezone son null (RF-MF-002) */
+const mockMovementFijo = {
+  id: "rec-1",
+  origin: "fijo" as const,
+  type: "EXPENSE" as const,
+  amountCents: 150000,
+  description: "Alquiler",
+  occurredAt: null,
+  timezone: null,
+  category: { id: "cat-3", name: "Servicios", color: "#5733FF", scope: "EXPENSE" as const },
+};
+
 const mockWithData: MonthMovements = {
   month: "2026-06",
   totals: { expenseCents: 15000, incomeCents: 500000, balanceCents: 485000 },
   movements: {
     unicos: [mockMovementExpense, mockMovementIncome],
     fijos: [],
+    cuotas: [],
+  },
+};
+
+const mockWithFijos: MonthMovements = {
+  month: "2026-06",
+  totals: { expenseCents: 165000, incomeCents: 500000, balanceCents: 335000 },
+  movements: {
+    unicos: [mockMovementExpense],
+    fijos: [mockMovementFijo],
     cuotas: [],
   },
 };
@@ -190,7 +250,7 @@ describe("MonthViewClient", () => {
     });
   });
 
-  // ── Lista agrupada por origen (RF-VM-001) ─────────────────────────────────
+  // ── Lista agrupada por origen — Únicos (RF-VM-001) ────────────────────────
 
   describe("Lista de movimientos — sección Únicos", () => {
     it("muestra la sección 'Únicos' cuando hay movimientos únicos", () => {
@@ -229,6 +289,47 @@ describe("MonthViewClient", () => {
     });
   });
 
+  // ── Lista agrupada por origen — Fijos (RF-VM-001, RF-MF-002) ─────────────
+
+  describe("Lista de movimientos — sección Fijos (Fase 6)", () => {
+    it("muestra la sección 'Fijos' cuando hay movimientos fijos", () => {
+      mockLoaded(mockWithFijos);
+      renderMonthView();
+
+      expect(screen.getByRole("region", { name: /fijos/i })).toBeInTheDocument();
+    });
+
+    it("muestra el fijo con su descripción", () => {
+      mockLoaded(mockWithFijos);
+      renderMonthView();
+
+      expect(screen.getByText("Alquiler")).toBeInTheDocument();
+    });
+
+    it("muestra el badge 'Fijo' en el ítem de origen fijo", () => {
+      mockLoaded(mockWithFijos);
+      renderMonthView();
+
+      // El badge de origen debe indicar "Fijo"
+      const fijoSection = screen.getByRole("region", { name: /fijos/i });
+      expect(fijoSection).toHaveTextContent(/fijo/i);
+    });
+
+    it("muestra 'Mensual' en lugar de fecha/hora para fijos (occurredAt=null)", () => {
+      mockLoaded(mockWithFijos);
+      renderMonthView();
+
+      expect(screen.getByText("Mensual")).toBeInTheDocument();
+    });
+
+    it("NO muestra la sección 'Fijos' cuando fijos está vacío", () => {
+      mockLoaded(mockWithData); // fijos: []
+      renderMonthView();
+
+      expect(screen.queryByRole("region", { name: /fijos/i })).not.toBeInTheDocument();
+    });
+  });
+
   // ── Estado vacío ──────────────────────────────────────────────────────────
 
   describe("Estado vacío", () => {
@@ -263,40 +364,36 @@ describe("MonthViewClient", () => {
     });
   });
 
-  // ── Cableado editar/eliminar ───────────────────────────────────────────────
+  // ── Cableado editar/eliminar — Únicos ─────────────────────────────────────
 
-  describe("Cableado editar/eliminar", () => {
+  describe("Cableado editar/eliminar — Únicos", () => {
     beforeEach(() => {
       mockLoaded(mockWithData);
     });
 
-    it("hace click en Editar abre el modal de edición con el movimiento correcto", () => {
+    it("click en Editar de único abre el modal de edición (TransactionModal mode=edit-single)", () => {
       renderMonthView();
 
-      // Debe haber botones de editar (uno por movimiento)
       const editButtons = screen.getAllByRole("button", { name: /editar/i });
-      expect(editButtons.length).toBeGreaterThan(0);
-
-      // Click en el primero
       fireEvent.click(editButtons[0]);
 
-      // El modal de edición debe abrirse — busca el título del modal
+      // El modal de edición debe abrirse
       expect(screen.getByRole("dialog")).toBeInTheDocument();
       expect(screen.getByText(/editar movimiento/i)).toBeInTheDocument();
     });
 
-    it("hace click en Eliminar abre el diálogo de confirmación", () => {
+    it("click en Eliminar de único abre el diálogo de eliminación (DeleteTransactionDialog)", () => {
       renderMonthView();
 
       const deleteButtons = screen.getAllByRole("button", { name: /eliminar/i });
-      // Filtrar solo los de "Eliminar" de la fila (no el del diálogo)
-      const rowDeleteButton = deleteButtons[0];
+      fireEvent.click(deleteButtons[0]);
 
-      fireEvent.click(rowDeleteButton);
-
-      // El diálogo de eliminación debe abrirse
       expect(screen.getByRole("dialog")).toBeInTheDocument();
-      expect(screen.getByText(/eliminar movimiento/i)).toBeInTheDocument();
+      // El diálogo de único tiene "Eliminar movimiento" (sin "fijo")
+      const title = screen.getByRole("heading", { name: /eliminar movimiento/i });
+      expect(title).toBeInTheDocument();
+      // No debe decir "fijo" en el título del diálogo de único
+      expect(title.textContent).not.toMatch(/fijo/i);
     });
 
     it("cerrar el modal de edición lo quita del DOM", () => {
@@ -305,14 +402,63 @@ describe("MonthViewClient", () => {
       const editButtons = screen.getAllByRole("button", { name: /editar/i });
       fireEvent.click(editButtons[0]);
 
-      // Modal abierto
       expect(screen.getByRole("dialog")).toBeInTheDocument();
 
-      // Cerrar
       const closeButton = screen.getByRole("button", { name: /cerrar/i });
       fireEvent.click(closeButton);
 
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
+
+  // ── Cableado editar/eliminar — Fijos (Fase 6) ─────────────────────────────
+
+  describe("Cableado editar/eliminar — Fijos", () => {
+    beforeEach(() => {
+      mockLoaded(mockWithFijos);
+    });
+
+    it("click en Editar de fijo abre el modal de edición de fijo (mode=edit-fixed)", () => {
+      renderMonthView();
+
+      // La sección Fijos debe existir
+      const fijoSection = screen.getByRole("region", { name: /fijos/i });
+      expect(fijoSection).toBeInTheDocument();
+
+      // Click en el botón Editar del fijo
+      const editBtns = screen.getAllByRole("button", { name: /editar/i });
+      // El primer Editar corresponde al único (sección Únicos viene antes que Fijos)
+      // El segundo al fijo
+      const fijoEditBtn = editBtns.find((btn) =>
+        btn.getAttribute("aria-label")?.includes("Alquiler"),
+      );
+      expect(fijoEditBtn).toBeTruthy();
+      fireEvent.click(fijoEditBtn!);
+
+      // Modal abierto en modo editar
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByText(/editar movimiento/i)).toBeInTheDocument();
+    });
+
+    it("click en Eliminar de fijo abre el DeleteRecurringDialog (con checkbox)", () => {
+      renderMonthView();
+
+      // Click en Eliminar del fijo
+      const deleteBtns = screen.getAllByRole("button", { name: /eliminar/i });
+      const fijoDeleteBtn = deleteBtns.find((btn) =>
+        btn.getAttribute("aria-label")?.includes("Alquiler"),
+      );
+      expect(fijoDeleteBtn).toBeTruthy();
+      fireEvent.click(fijoDeleteBtn!);
+
+      // El diálogo de fijo debe abrirse — tiene "Eliminar movimiento fijo" en el título
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /eliminar movimiento fijo/i })).toBeInTheDocument();
+
+      // El checkbox es la marca distintiva del diálogo de fijo
+      expect(screen.getByRole("checkbox")).toBeInTheDocument();
+      // Desmarcado por defecto (RF-MF-004)
+      expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
     });
   });
 

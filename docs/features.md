@@ -12,9 +12,9 @@
 | Auth — email/contraseña (login + registro) | RF-AUTH-005..006, 002..004 | Implementado |
 | Auth — Google OAuth | RF-AUTH-001 | Scaffolded (diferido) |
 | Dashboard — resumen del mes (en `/`) | RF-DASH-001..003, 005 | Implementado |
-| Formulario de carga (tabs único/fijo/cuotas) | RF-CM-001 | Parcial (Único; Fijo/Cuotas "Próximamente") |
+| Formulario de carga (tabs único/fijo/cuotas) | RF-CM-001 | Parcial (Único y Fijo; Cuotas "Próximamente") |
 | Movimiento único — crear, editar, eliminar | RF-MU-001..003 | Implementado (editar/eliminar cableados desde la vista del mes) |
-| Movimiento fijo — crear, visualizar, editar, eliminar | RF-MF-001..004 | Pendiente |
+| Movimiento fijo — crear, visualizar, editar, eliminar | RF-MF-001..004 | Implementado |
 | Movimiento en cuotas — crear, eliminar | RF-MC-001..002 | Pendiente |
 | Categorías — defaults + CRUD + soft delete | RF-CAT-001..006 | Implementado |
 | Vista del mes — lista + totales + navegación | RF-VM-001..004 | Implementado |
@@ -54,6 +54,15 @@
 - **Dashboard movido a `/`** (antes `/dashboard`, desviación de Fase 2 corregida): resumen del mes actual, "Nuevo movimiento", "Ver todos" → `/mes`, estado vacío con CTA. No lista movimientos.
 - **Vista del mes `/mes`:** lista por secciones (las vacías no se muestran), navegación prev/next del mes, totales que se actualizan al mutar. **Editar y eliminar de movimientos únicos quedan ahora cableados** desde acá (modales de Fase 4).
 - **Sidebar (RF-NAV-001) diferido formalmente:** la navegación entre `/`, `/mes` y `/categorias` usa los accesos definidos en cada pantalla. Ver `docs/frontend.md` y la bitácora 2026-06-09 de `docs/requirements.md`.
+
+### Movimientos fijos (Fase 6)
+
+- **CRUD operativo** end-to-end (backend `RecurringModule` + tab Fijo del modal de carga), scopeado por `userId` del JWT. Crear desde el botón "Nuevo movimiento" (tab **Fijo**): tipo, monto, categoría y descripción; **sin día ni hora**. El fijo arranca con `startMonth` = mes actual.
+- **Visualización en la Vista del mes:** los fijos activos aparecen en su sección "Fijos", con badge de origen "Fijo" y la etiqueta "Mensual" en vez de fecha (RF-MF-002). Cada ítem expone Editar y Eliminar.
+- **Editar (RF-MF-003):** solo monto, categoría y descripción. **El tipo no se edita.** Los cambios aplican desde el mes actual en adelante; los meses ya corridos no se tocan (ver decisión del split más abajo).
+- **Eliminar (RF-MF-004):** diálogo con checkbox "Eliminar también desde este mes" (desmarcado por default → deja de aparecer desde el mes siguiente; marcado → desde el mes actual inclusive). El pasado nunca se modifica.
+- **Totales del mes ahora incluyen los fijos activos:** tanto la Vista del mes como el Dashboard suman únicos + fijos del mes (RF-DASH-002 / RF-VM-002).
+- **Inmutabilidad del pasado vía "split":** un fijo lógico es una **cadena de filas `Recurring`**; editar un fijo que ya corrió meses pasados cierra la fila vigente y abre una nueva. Detalle en `docs/backend.md` (sección Movimientos fijos) y bitácora 2026-06-09.
 
 ---
 

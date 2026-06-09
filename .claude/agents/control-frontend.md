@@ -67,6 +67,15 @@ Si una decisión técnica nueva no está cubierta en `docs/technical.md`, report
 - **Modal con Fijo/Cuotas "Próximamente".** Los tabs Fijo y Cuotas están deshabilitados a propósito (Fases 6/7); no activarlos hasta esas fases.
 - **El selector de categorías del form reusa `CATEGORIES_QUERY_KEY`** (no crear otra clave).
 
+### Movimientos fijos (detalle en `docs/frontend.md`, sección Movimientos fijos) — Fase 6
+
+- **`TransactionModal` es una discriminated union por `mode`:** `"create"` (tabs Único + Fijo funcionales, Cuotas "Próximamente"), `"edit-single"` (`TransactionForm` precargado, sin tabs), `"edit-fixed"` (`RecurringForm` precargado, sin tabs). En edición no se muestran tabs (el tipo no se cambia por edición).
+- **`use-recurring` invalida toda la familia `["movements"]` (por prefijo), no una sola key de mes** — un fijo afecta muchos meses. No invalidar solo `["movements", month]`. El front calcula `currentMonth`/`startMonth` con `getCurrentMonth()` (zona del navegador) y los manda al backend; editar/eliminar son relativos al **mes actual real**, no al visualizado.
+- **`MovementItem.occurredAt`/`timezone` pueden ser `null`** (vienen null en fijos). No pasarlos a `formatDate`/`formatTime` sin chequear. En `movement-item-row`, para fijos se muestra "Mensual" en vez de fecha y un badge de origen "Fijo"/"Único".
+- **`updateRecurring` manda `description: null` explícito para limpiar** la descripción (no `undefined`, que el backend lee como "no cambiar").
+- **El campo `type` deshabilitado en edición necesita un `<input type="hidden">`** para que react-hook-form lo registre y Zod lo valide (un input disabled no lo registra RHF).
+- **`delete-recurring-dialog`** tiene el checkbox "Eliminar también desde este mes", **desmarcado por default** (RF-MF-004).
+
 ### Vista del mes y Dashboard (detalle en `docs/frontend.md`, sección Vista del mes y Dashboard)
 
 - **El dashboard vive en `/`, NO en `/dashboard`.** `src/app/page.tsx` es el dashboard; la carpeta `/dashboard` se eliminó. Todos los redirects post-auth van a `/` (`middleware.ts`, `callbackUrl`/`redirectTo` de login/registro/`use-register`). El sign-out va a `/login`. No reintroducir `/dashboard`.

@@ -60,6 +60,14 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  // recurring.findMany se usa para fijos (Fase 6 — findFijosByMonth / getFijosTotalsByMonth)
+  recurring: {
+    create: jest.fn(),
+    findUnique: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+    update: jest.fn(),
+    delete: jest.fn(),
+  },
   // $queryRaw se mockea para que MovementsRepository pueda funcionar
   $queryRaw: jest.fn(),
   $connect: jest.fn(),
@@ -153,6 +161,8 @@ describe('Movements (e2e)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPrisma.category.createMany.mockResolvedValue({ count: 0 });
+    // Default: sin fijos activos (Fase 6). Los tests de fijos lo sobreescriben.
+    mockPrisma.recurring.findMany.mockResolvedValue([]);
   });
 
   // -------------------------------------------------------------------------

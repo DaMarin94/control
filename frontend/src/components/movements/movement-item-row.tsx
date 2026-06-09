@@ -3,11 +3,14 @@
 /**
  * Fila de un movimiento en la lista del mes (RF-VM-001).
  *
- * Muestra: tipo (gasto/ingreso), monto, categoría (nombre + color), descripción
- * (si tiene), fecha/hora y acciones Editar / Eliminar.
+ * Muestra: tipo (gasto/ingreso), monto, categoría (nombre + color),
+ * descripción (si tiene), origen (badge "Único" / "Fijo"),
+ * fecha/hora (solo para únicos — los fijos tienen occurredAt null).
  *
- * Acepta un MovementItem y mapea los campos necesarios para abrir
- * TransactionModal (editar) y DeleteTransactionDialog (eliminar).
+ * Cambios en Fase 6:
+ * - occurredAt y timezone pueden ser null (fijos no tienen instante específico).
+ * - Badge de origen: "Fijo" para origin==="fijo"; "Único" para origin==="unico".
+ * - Fijos: se muestra "Mensual" en lugar de fecha/hora.
  */
 
 import { Button } from "@/components/ui/button";
@@ -24,8 +27,21 @@ export function MovementItemRow({ movement, onEdit, onDelete }: MovementItemRowP
   const isExpense = movement.type === "EXPENSE";
   const typeLabel = isExpense ? "Gasto" : "Ingreso";
   const amountFormatted = formatCurrency(movement.amountCents);
-  const dateFormatted = formatDate(movement.occurredAt, movement.timezone);
-  const timeFormatted = formatTime(movement.occurredAt, movement.timezone);
+
+  const isFijo = movement.origin === "fijo";
+
+  // Fecha y hora solo para únicos (occurredAt y timezone son strings para "unico")
+  const dateFormatted =
+    !isFijo && movement.occurredAt && movement.timezone
+      ? formatDate(movement.occurredAt, movement.timezone)
+      : null;
+  const timeFormatted =
+    !isFijo && movement.occurredAt && movement.timezone
+      ? formatTime(movement.occurredAt, movement.timezone)
+      : null;
+
+  // Badge de origen: "Fijo" o "Único"
+  const originLabel = isFijo ? "Fijo" : "Único";
 
   return (
     <div className="flex items-start gap-3 rounded-lg border bg-card px-4 py-3">
@@ -40,7 +56,7 @@ export function MovementItemRow({ movement, onEdit, onDelete }: MovementItemRowP
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           {/* Monto y tipo */}
-          <div>
+          <div className="flex items-center gap-2 flex-wrap">
             <span
               className={`text-base font-semibold ${
                 isExpense
@@ -51,7 +67,11 @@ export function MovementItemRow({ movement, onEdit, onDelete }: MovementItemRowP
               {isExpense ? "-" : "+"}
               {amountFormatted}
             </span>
-            <span className="ml-2 text-xs text-muted-foreground">{typeLabel}</span>
+            <span className="text-xs text-muted-foreground">{typeLabel}</span>
+            {/* Badge de origen */}
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {originLabel}
+            </span>
           </div>
 
           {/* Acciones */}
@@ -84,9 +104,13 @@ export function MovementItemRow({ movement, onEdit, onDelete }: MovementItemRowP
           <p className="mt-0.5 text-xs text-muted-foreground">{movement.description}</p>
         )}
 
-        {/* Fecha y hora */}
+        {/* Fecha y hora (únicos) / "Mensual" (fijos) */}
         <p className="mt-1 text-xs text-muted-foreground">
-          {dateFormatted} · {timeFormatted}
+          {isFijo ? (
+            "Mensual"
+          ) : dateFormatted && timeFormatted ? (
+            `${dateFormatted} · ${timeFormatted}`
+          ) : null}
         </p>
       </div>
     </div>

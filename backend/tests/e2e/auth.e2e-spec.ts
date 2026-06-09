@@ -39,6 +39,14 @@ const mockPrisma = {
   category: {
     createMany: jest.fn().mockResolvedValue({ count: 4 }),
   },
+  // recurring — necesario para RecurringModule (Fase 6 — registrado en AppModule)
+  recurring: {
+    create: jest.fn(),
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+  },
   $connect: jest.fn(),
   $disconnect: jest.fn(),
 };

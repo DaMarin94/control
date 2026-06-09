@@ -103,8 +103,11 @@ Carga de movimientos. El modal de carga se invoca desde el dashboard (`/`); **ed
 
 ### Modal de carga (`components/movements/transaction-modal.tsx`)
 
-- **Tres tabs: Único, Fijo, Cuotas.** Solo **Único es funcional**; **Fijo y Cuotas van deshabilitados** con badge "Próximamente" (llegan en Fases 6/7).
-- **Form único reutilizado** en modo crear y editar. En modo edición no muestra los tabs de selección de tipo (RF-CM-001).
+- **Props como discriminated union por `mode`** — el modal se comporta distinto según el modo y TypeScript fuerza el shape correcto en cada caso:
+  - **`"create"`** — abre con tabs: **Único** y **Fijo** funcionales, **Cuotas** deshabilitado con badge "Próximamente" (llega en Fase 7). Renderiza `TransactionForm` o `RecurringForm` según el tab.
+  - **`"edit-single"`** — sin tabs; `TransactionForm` precargado con un `Transaction` (RF-MU-002).
+  - **`"edit-fixed"`** — sin tabs; `RecurringForm` precargado con un `Recurring` (RF-MF-003).
+- En modo edición no muestra los tabs de selección de tipo (RF-CM-001): el tipo de un movimiento no se cambia por edición.
 
 ### transaction-form
 
@@ -117,7 +120,7 @@ Carga de movimientos. El modal de carga se invoca desde el dashboard (`/`); **ed
 
 ### Editar / eliminar — cableados desde la Vista del mes
 
-- `TransactionModal` acepta `transaction: Transaction | null` (null = crear, objeto = editar).
+- `TransactionModal` selecciona el flujo de único por `mode` (`"create"` / `"edit-single"`); ver la discriminated union por `mode` arriba.
 - `DeleteTransactionDialog` acepta `transaction` (diálogo de confirmación antes del hard delete).
 - La Vista del mes pasa a estos componentes el movimiento de la lista (ver mapeo `MovementItem → Transaction` en la sección Vista del mes y Dashboard).
 
@@ -136,6 +139,32 @@ Reusarlos, no reimplementar:
 - **`localToUtcIso` / `utcToLocalDate` / `utcToLocalTime`** — conversión local ↔ UTC con `Intl.DateTimeFormat` de doble pasada; **maneja DST** correctamente.
 - **`getBrowserTimezone`** — IANA del navegador.
 - **Helpers de mes (Fase 5):** **`getCurrentMonth`** — mes actual `YYYY-MM` en la zona del navegador; **`formatMonthLabel`** — `YYYY-MM` → rótulo legible (nombre de mes + año); **`prevMonth` / `nextMonth`** — desplazan un `YYYY-MM` un mes hacia atrás / adelante. Reusarlos para la navegación del mes; no reimplementar aritmética de meses.
+
+## Movimientos fijos
+
+Carga, edición y eliminación de movimientos fijos. Se crean desde el tab **Fijo** del modal de carga; editar y eliminar se cablean desde la Vista del mes, igual que los únicos.
+
+### `recurring-form.tsx`
+
+- Tipo **Gasto** (default) / **Ingreso**; monto en pesos; selector de categoría filtrado por scope (reusa `CATEGORIES_QUERY_KEY`); descripción opcional. **No tiene fecha ni hora** — el fijo opera a nivel mes (RF-MF-001).
+- **En edición el tipo es read-only** (RF-MF-003: el tipo no se edita). **Gotcha:** un campo `type` deshabilitado no lo registra react-hook-form; hay que mantener un `<input type="hidden">` con el valor para que RHF lo registre y Zod lo valide.
+
+### `delete-recurring-dialog.tsx`
+
+- Diálogo de confirmación con checkbox **"Eliminar también desde este mes"**, **desmarcado por default** (RF-MF-004). Desmarcado → el fijo deja de aparecer desde el mes siguiente; marcado → desde el mes actual inclusive.
+
+### `movement-item-row.tsx`
+
+- Fila de la lista del mes (compartida por únicos y fijos). Muestra un **badge de origen** ("Fijo" / "Único"). Para fijos muestra **"Mensual"** en lugar de fecha. **Null-safety:** `occurredAt` / `timezone` pueden venir `null` (fijos) — no pasarlos a `formatDate` / `formatTime` sin chequear.
+
+### Datos (`use-recurring`)
+
+- Hook con las mutaciones `createRecurring`, `updateRecurring`, `deleteRecurring`.
+- **Invalida toda la familia `["movements"]` (por prefijo), no una sola key de mes:** un fijo afecta muchos meses (mes actual + futuros), así que invalidar solo `["movements", month]` dejaría meses desactualizados en caché.
+- **El front calcula `currentMonth` / `startMonth` con `getCurrentMonth()`** (zona del navegador) y los manda al backend — editar/eliminar son relativos al **mes actual real**, no al mes visualizado.
+- **Gotchas:**
+  - En `updateRecurring`, para **limpiar** la descripción se envía `description: null` **explícito** (no `undefined`, que el backend interpretaría como "no cambiar").
+  - El mapeo `MovementItem → Recurring` para precargar el form de edición sigue el mismo patrón que el de únicos (el ítem no trae todos los campos del recurso).
 
 ## Vista del mes y Dashboard
 
@@ -162,7 +191,7 @@ El dashboard vive en **`/`** (`src/app/page.tsx`). Antes era `/dashboard` — un
 - Lee el mes de **`?month=YYYY-MM`** (default: mes actual en la zona del navegador, vía `getCurrentMonth`).
 - **Encabezado + navegación prev / next** que cambian `?month=` (con `prevMonth` / `nextMonth`); rótulo con `formatMonthLabel`.
 - **Totales del mes** (de `data.totals`).
-- **Lista agrupada en secciones Únicos / Fijos / Cuotas.** Una sección **sin movimientos no se muestra**; hoy solo Únicos trae datos. Cada ítem muestra tipo, monto, categoría, descripción y origen, con acciones **Editar** (abre `TransactionModal` en modo edición) y **Eliminar** (`DeleteTransactionDialog`).
+- **Lista agrupada en secciones Únicos / Fijos / Cuotas.** Una sección **sin movimientos no se muestra**; Únicos y Fijos traen datos (Cuotas vacío hasta Fase 7). Cada ítem (`movement-item-row`) muestra tipo, monto, categoría, descripción y badge de origen, con acciones **Editar** y **Eliminar** que abren el flujo según el origen: únicos → `TransactionModal` (`edit-single`) / `DeleteTransactionDialog`; fijos → `TransactionModal` (`edit-fixed`) / `delete-recurring-dialog`.
 - **Se actualiza al mutar** (crear / editar / eliminar) por invalidación de la query del mes.
 
 ### Datos (`use-movements`)

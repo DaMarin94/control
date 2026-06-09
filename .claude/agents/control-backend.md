@@ -106,6 +106,18 @@ Detalle de contrato en `docs/backend.md` (sección Movimientos únicos). Para ag
 - **Hard delete.** `DELETE /transactions/:id` borra **físicamente** (la entidad no tiene `deletedAt`). `204 No Content` sin cuerpo; `404` si no existe o no es del usuario (no idempotente sobre un id ya borrado).
 - **Categoría embebida en la respuesta.** Todo endpoint exitoso devuelve `category: { id, name, color, scope }` dentro del `Transaction` — no obligar al front a un GET extra.
 
+## Movimientos fijos (recurring) — gotchas y decisiones (Fase 6)
+
+Detalle de contrato en `docs/backend.md` (sección Movimientos fijos). Para agentes que toquen el backend:
+
+- **Split al editar (inmutabilidad del pasado).** Un fijo lógico es una **cadena de filas `Recurring`**. `PATCH /recurring/:id` recibe `currentMonth`: si `currentMonth > startMonth` (ya corrió meses pasados) → **cerrar la fila vieja** (`deletedFrom = currentMonth`) y **crear una nueva** (`startMonth = currentMonth`) con los valores nuevos (la respuesta trae **otro `id`**); si `currentMonth <= startMonth` → editar en su lugar. Solo se editan `amountCents`/`categoryId`/`description`; **`type` y `startMonth` no son editables**. No tocar nunca el pasado.
+- **Eliminación con boundary.** `DELETE /recurring/:id` con query `currentMonth` y `fromCurrentMonth`: `boundary = fromCurrentMonth ? currentMonth : nextMonth(currentMonth)`. Si `boundary <= startMonth` → **hard delete físico**; si no → `deletedFrom = boundary`.
+- **`fromCurrentMonth` llega como string** (`"true"`/`"false"`) en query params; NestJS **no** lo castea a boolean — parsearlo a mano.
+- **Condición de actividad por comparación léxica de `YYYY-MM`.** En `/movements`, un fijo está activo en `month` si `startMonth <= month AND (deletedFrom IS NULL OR deletedFrom > month)`, comparando los strings `YYYY-MM` **léxicamente** (válido: ese formato ordena cronológicamente). Usa Prisma ORM normal, **no** `$queryRaw` ni `AT TIME ZONE` (los fijos son a nivel mes).
+- **Totales de `/movements` suman únicos + fijos.** Al integrar fijos, `MovementsModule` llama a `RecurringService` (nunca toca la tabla) y suma los fijos activos a los totales.
+- **`validateCategory` está duplicada** entre `RecurringService` y `TransactionsService` — **consolidar en un helper compartido en Fase 7** (cuotas), no antes.
+- **No existe `GET /recurring/:id`** — el front prefilea desde el `MovementItem` de `/movements`. No agregarlo.
+
 ## Contratos con el frontend
 
 Si modificás el shape de un endpoint o agregás uno nuevo: reportarlo al orquestador con el detalle exacto antes de que el frontend implemente algo que lo consuma.

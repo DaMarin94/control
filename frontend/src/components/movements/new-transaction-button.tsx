@@ -30,7 +30,7 @@ export function NewTransactionButton({
       </Button>
 
       {isOpen && (
-        <TransactionModal transaction={null} onClose={() => setIsOpen(false)} />
+        <TransactionModal mode="create" onClose={() => setIsOpen(false)} />
       )}
     </>
   );

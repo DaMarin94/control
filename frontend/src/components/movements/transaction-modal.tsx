@@ -1,13 +1,18 @@
 "use client";
 
 /**
- * Modal de movimiento (RF-CM-001 / RF-MU-001 / RF-MU-002).
+ * Modal de movimiento (RF-CM-001 / RF-MU-001/002 / RF-MF-001/003).
  *
- * Modo crear (transaction = null):
- *   Muestra 3 tabs: Único (funcional), Fijo y Cuotas (deshabilitados, "Próximamente").
+ * ── Modo crear (mode === "create") ──
+ *   Muestra 3 tabs: Único (funcional), Fijo (funcional desde Fase 6),
+ *   Cuotas (deshabilitado, "Próximamente").
+ *   Tab Único activo por defecto.
  *
- * Modo editar (transaction = Transaction):
- *   Sin tabs, abre directamente el formulario del movimiento con campos precargados.
+ * ── Modo editar único (mode === "edit-single") ──
+ *   Sin tabs; abre el TransactionForm precargado con el movimiento único.
+ *
+ * ── Modo editar fijo (mode === "edit-fixed") ──
+ *   Sin tabs; abre el RecurringForm precargado con el fijo.
  *
  * El modal se superpone (no tiene ruta propia).
  */
@@ -16,7 +21,9 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { TransactionForm } from "@/components/movements/transaction-form";
+import { RecurringForm } from "@/components/movements/recurring-form";
 import { type Transaction } from "@/types/transaction";
+import { type Recurring } from "@/types/recurring";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -30,23 +37,54 @@ interface Tab {
 
 const TABS: Tab[] = [
   { id: "single", label: "Único", comingSoon: false },
-  { id: "fixed", label: "Fijo", comingSoon: true },
+  { id: "fixed", label: "Fijo", comingSoon: false },
   { id: "installments", label: "Cuotas", comingSoon: true },
 ];
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
-interface TransactionModalProps {
-  /** null = modo crear; Transaction = modo editar */
-  transaction: Transaction | null;
-  onClose: () => void;
-}
+/**
+ * Tres modos de uso:
+ *
+ * 1. Crear → mode="create", transaction=null, recurring=null
+ *    Muestra tabs; el usuario elige el tipo.
+ *
+ * 2. Editar único → mode="edit-single", transaction=Transaction, recurring=null
+ *    Sin tabs; abre TransactionForm precargado.
+ *
+ * 3. Editar fijo → mode="edit-fixed", transaction=null, recurring=Recurring
+ *    Sin tabs; abre RecurringForm precargado.
+ */
+export type TransactionModalProps =
+  | {
+      mode: "create";
+      transaction?: null;
+      recurring?: null;
+      onClose: () => void;
+    }
+  | {
+      mode: "edit-single";
+      transaction: Transaction;
+      recurring?: null;
+      onClose: () => void;
+    }
+  | {
+      mode: "edit-fixed";
+      transaction?: null;
+      recurring: Recurring;
+      onClose: () => void;
+    };
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
-export function TransactionModal({ transaction, onClose }: TransactionModalProps) {
-  const isEditing = transaction !== null;
+export function TransactionModal(props: TransactionModalProps) {
+  const { mode, onClose } = props;
+  const isEditing = mode !== "create";
+
   const [activeTab, setActiveTab] = useState<TabId>("single");
+
+  // Título del modal
+  const title = isEditing ? "Editar movimiento" : "Nuevo movimiento";
 
   return (
     <div
@@ -59,7 +97,7 @@ export function TransactionModal({ transaction, onClose }: TransactionModalProps
         {/* ── Header ── */}
         <div className="flex items-center justify-between border-b px-6 py-4">
           <h2 id="transaction-modal-title" className="text-lg font-semibold">
-            {isEditing ? "Editar movimiento" : "Nuevo movimiento"}
+            {title}
           </h2>
           <button
             onClick={onClose}
@@ -118,24 +156,49 @@ export function TransactionModal({ transaction, onClose }: TransactionModalProps
           </div>
         )}
 
-        {/* ── Contenido del tab activo ── */}
-        {!isEditing && activeTab !== "single" ? (
-          // Tabs deshabilitados — no deberían ser seleccionables, pero por si acaso
-          <div className="px-6 py-12 text-center text-sm text-muted-foreground">
-            Próximamente disponible.
+        {/* ── Contenido ── */}
+        {isEditing ? (
+          /* Modo edición — sin tabs */
+          <div>
+            {mode === "edit-single" ? (
+              <TransactionForm transaction={props.transaction} onClose={onClose} />
+            ) : (
+              /* mode === "edit-fixed" */
+              <RecurringForm recurring={props.recurring} onClose={onClose} />
+            )}
           </div>
         ) : (
-          <div
-            id={!isEditing ? "tab-panel-single" : undefined}
-            role={!isEditing ? "tabpanel" : undefined}
-            aria-labelledby={!isEditing ? "tab-single" : undefined}
-          >
-            <TransactionForm transaction={transaction} onClose={onClose} />
-          </div>
+          /* Modo creación — con tabs */
+          <>
+            {activeTab === "single" && (
+              <div
+                id="tab-panel-single"
+                role="tabpanel"
+                aria-labelledby="tab-single"
+              >
+                <TransactionForm transaction={null} onClose={onClose} />
+              </div>
+            )}
+            {activeTab === "fixed" && (
+              <div
+                id="tab-panel-fixed"
+                role="tabpanel"
+                aria-labelledby="tab-fixed"
+              >
+                <RecurringForm recurring={null} onClose={onClose} />
+              </div>
+            )}
+            {activeTab === "installments" && (
+              /* No debería ser seleccionable (disabled), pero por si acaso */
+              <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+                Próximamente disponible.
+              </div>
+            )}
+          </>
         )}
 
-        {/* Botón cancelar de fallback para tabs deshabilitados activos (no debería ocurrir) */}
-        {!isEditing && activeTab !== "single" && (
+        {/* Botón cancelar de fallback para el tab deshabilitado (Cuotas) */}
+        {!isEditing && activeTab === "installments" && (
           <div className="flex justify-end border-t px-6 py-4">
             <Button variant="outline" onClick={onClose}>
               Cerrar

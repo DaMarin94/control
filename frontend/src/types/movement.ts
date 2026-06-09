@@ -27,7 +27,8 @@ export interface MovementCategory {
 /**
  * Ítem individual de movimiento tal como lo devuelve GET /movements.
  * Para "unico": todos los campos están presentes.
- * Para "fijo" y "cuota" (Fases 6/7): occurredAt y timezone pueden diferir.
+ * Para "fijo": occurredAt y timezone son null (no tienen instante específico).
+ * Para "cuota" (Fase 7): occurredAt y timezone pueden diferir.
  */
 export interface MovementItem {
   id: string;
@@ -35,10 +36,16 @@ export interface MovementItem {
   type: MovementType;
   amountCents: number;
   description: string | null;
-  /** Instante en UTC (ISO 8601) */
-  occurredAt: string;
-  /** Nombre de zona IANA (ej: "America/Argentina/Buenos_Aires") */
-  timezone: string;
+  /**
+   * Instante en UTC (ISO 8601) para únicos.
+   * null para fijos (no tienen día específico dentro del mes).
+   */
+  occurredAt: string | null;
+  /**
+   * Nombre de zona IANA (ej: "America/Argentina/Buenos_Aires") para únicos.
+   * null para fijos.
+   */
+  timezone: string | null;
   category: MovementCategory;
 }
 
@@ -53,9 +60,9 @@ export interface MonthTotals {
 /** Movimientos agrupados por origen */
 export interface MovementsByOrigin {
   unicos: MovementItem[];
-  /** Vacío en Fase 5, poblado en Fase 6 */
+  /** Poblado desde Fase 6 — los fijos activos en el mes */
   fijos: MovementItem[];
-  /** Vacío en Fase 5, poblado en Fase 7 */
+  /** Vacío hasta Fase 7 */
   cuotas: MovementItem[];
 }
 

@@ -18,16 +18,20 @@ export interface MovementEmbeddedCategory {
  * MovementItem — ítem de la lista unificada del mes.
  *
  * El campo `origin` discrimina el tipo de movimiento para el front.
- * Hoy solo existe "unico"; se preparó el shape para "fijo" y "cuota".
+ *
+ * D3 — occurredAt y timezone son nullable para soportar fijos (Fase 6)
+ * y cuotas (Fase 7), que no tienen instante específico (solo mes).
+ * Para movimientos únicos: ambos siempre tienen valor.
+ * Para fijos y cuotas: ambos son null.
  */
 export interface MovementItem {
   id: string;
-  origin: 'unico';
+  origin: 'unico' | 'fijo';
   type: MovementType;
   amountCents: number;
   description: string | null;
-  occurredAt: Date;
-  timezone: string;
+  occurredAt: Date | null;
+  timezone: string | null;
   category: MovementEmbeddedCategory;
 }
 
@@ -141,6 +145,63 @@ export class MovementsRepository {
   }
 
   /**
+   * Lista los movimientos fijos (Recurring) activos en el mes YYYY-MM.
+   *
+   * Condición de actividad (comparación léxica de strings YYYY-MM):
+   *   startMonth <= month AND (deletedFrom IS NULL OR deletedFrom > month)
+   *
+   * Los fijos son a nivel mes, sin día ni hora: no requieren SQL raw ni AT TIME ZONE.
+   * La comparación léxica de strings YYYY-MM es correcta porque ese formato
+   * ordena lexicográficamente igual que cronológicamente.
+   *
+   * La categoría se incluye AUNQUE esté soft-deleted (RF-CAT-004):
+   * un fijo histórico sigue mostrando su categoría aunque haya sido eliminada.
+   *
+   * Los fijos no tienen occurredAt ni timezone (D3): ambos se mapean a null.
+   */
+  async findFijosByMonth(
+    userId: string,
+    month: string,
+  ): Promise<MovementItem[]> {
+    const recurrings = await this.prisma.recurring.findMany({
+      where: {
+        userId,
+        startMonth: { lte: month },
+        OR: [
+          { deletedFrom: null },
+          { deletedFrom: { gt: month } },
+        ],
+      },
+      include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            scope: true,
+          },
+        },
+      },
+    });
+
+    return recurrings.map((r) => ({
+      id: r.id,
+      origin: 'fijo' as const,
+      type: r.type,
+      amountCents: r.amountCents,
+      description: r.description,
+      occurredAt: null,
+      timezone: null,
+      category: {
+        id: r.category.id,
+        name: r.category.name,
+        color: r.category.color,
+        scope: r.category.scope as CategoryScope,
+      },
+    }));
+  }
+
+  /**
    * Calcula los totales de movimientos únicos del mes.
    *
    * Mismo criterio de bucketeo que findUnicosByMonth: AT TIME ZONE del registro.
@@ -173,6 +234,45 @@ export class MovementsRepository {
       expenseCents: Number(row.expenseCents),
       incomeCents: Number(row.incomeCents),
     };
+  }
+
+  /**
+   * Calcula los totales de los movimientos fijos activos en el mes.
+   *
+   * Condición de actividad: misma que findFijosByMonth (comparación léxica de YYYY-MM).
+   * Usa Prisma ORM normal (no SQL raw) — los fijos no necesitan AT TIME ZONE.
+   */
+  async getFijosTotalsByMonth(
+    userId: string,
+    month: string,
+  ): Promise<{ expenseCents: number; incomeCents: number }> {
+    const recurrings = await this.prisma.recurring.findMany({
+      where: {
+        userId,
+        startMonth: { lte: month },
+        OR: [
+          { deletedFrom: null },
+          { deletedFrom: { gt: month } },
+        ],
+      },
+      select: {
+        type: true,
+        amountCents: true,
+      },
+    });
+
+    let expenseCents = 0;
+    let incomeCents = 0;
+
+    for (const r of recurrings) {
+      if (r.type === MovementType.EXPENSE) {
+        expenseCents += r.amountCents;
+      } else {
+        incomeCents += r.amountCents;
+      }
+    }
+
+    return { expenseCents, incomeCents };
   }
 
   // ---------------------------------------------------------------------------

@@ -132,7 +132,7 @@ export function DashboardClient() {
       {/* ── Modal CTA estado vacío ── */}
       {isNewModalOpen && (
         <TransactionModal
-          transaction={null}
+          mode="create"
           onClose={() => setIsNewModalOpen(false)}
         />
       )}

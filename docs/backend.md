@@ -95,7 +95,7 @@ Devuelve todos los movimientos del mes **más los totales**: transacciones únic
 CRUD de movimientos únicos. El monto siempre en centavos (entero > 0). El instante se guarda en UTC más la zona original del registro (ver fechas/timezone en `docs/technical.md`).
 
 ### `POST /recurring` · `PATCH /recurring/:id` · `DELETE /recurring/:id`
-Gestión de movimientos fijos. El DELETE acepta `{ deleteFromCurrentMonth: boolean }` para controlar desde cuándo deja de aparecer el fijo.
+Gestión de movimientos fijos. El PATCH y el DELETE reciben el mes actual (`currentMonth`) para resolver la inmutabilidad del pasado; el DELETE además usa `fromCurrentMonth` (query) para controlar desde cuándo deja de aparecer el fijo. Contrato completo en la sección **Movimientos fijos (RecurringModule)**. **No hay `GET /recurring/:id`.**
 
 ### `POST /installments` · `PATCH /installments/:id` · `DELETE /installments/:id`
 Gestión de grupos de cuotas. El PATCH edita el grupo completo (RF-MC-003). El DELETE elimina el grupo completo (todas las cuotas, pasadas y futuras).
@@ -204,6 +204,48 @@ El join de movimientos y el cálculo de totales **no filtran por `Category.delet
 ### Por qué un módulo propio
 
 `MovementsModule` es un módulo separado (no vive dentro de `transactions`) para poder **unificar `transactions` + `recurring` + `installments`** en una sola respuesta sin generar dependencia circular entre esos módulos. Consume cada origen a través de su `Service` (regla de propiedad de dominio: nunca toca repositorios ni tablas ajenas).
+
+### Integración de fijos en `/movements` (Fase 6)
+
+`MovementsModule` puebla la lista `fijos` y suma los fijos activos a los totales del mes llamando a `RecurringService` (regla de propiedad de dominio: nunca toca la tabla `recurrings`).
+
+- **`findFijosByMonth` usa Prisma ORM normal** (no `$queryRaw`, no `AT TIME ZONE`): los fijos operan **a nivel mes**, sin día/hora/zona, así que no hay bucketeo por timezone que resolver.
+- **Condición de actividad en un mes:** `startMonth <= month AND (deletedFrom IS NULL OR deletedFrom > month)`. La comparación es **léxica de strings `YYYY-MM`** — válida porque ese formato ordena cronológicamente como texto (`"2026-02" < "2026-10"`). Se corresponde con RF-MF-002.
+- **Totales del mes ahora suman únicos + fijos activos** (antes solo únicos). El `MovementItem` de un fijo viene con `occurredAt` y `timezone` en `null` (ver shape en `docs/data-model.md`).
+
+## Movimientos fijos (RecurringModule)
+
+Gestión de movimientos fijos, **scopeada por `userId` del JWT**. El módulo expone **crear, editar y eliminar**; el listado del mes lo arma `MovementsModule` (sección anterior). **No existe `GET /recurring/:id`**: el front prefilea el formulario de edición desde el `MovementItem` que ya trae `/movements`, sin un GET extra.
+
+### Endpoints
+
+| Endpoint | Entrada | Éxito | Errores |
+|----------|---------|-------|---------|
+| `POST /recurring` | `{ type, amountCents, categoryId, startMonth, description? }` | `201` · `data: Recurring` | `400` |
+| `PATCH /recurring/:id` | `{ amountCents?, categoryId?, description?, currentMonth }` | `200` · `data: Recurring` | `400` · `404` |
+| `DELETE /recurring/:id` | query: `currentMonth`, `fromCurrentMonth` | `204 No Content` | `404` |
+
+- **`type` y `startMonth` no son editables** por PATCH: solo `amountCents`, `categoryId` y `description` (RF-MF-003). El `startMonth` del POST es el mes actual que envía el front.
+- **Validación de categoría:** idéntica a la de movimientos únicos — categoría propia, activa y con scope compatible (RN-010); inexistente / ajena / eliminada / scope incompatible son todas `400` (ver `validateCategory` abajo).
+
+### Inmutabilidad del pasado vía "split al editar"
+
+Un **fijo lógico** es una **cadena de filas `Recurring`** en el tiempo, no una sola fila. El PATCH recibe `currentMonth` (el mes actual real, calculado por el front) y decide según dónde cae respecto del `startMonth` de la fila editada (`R`):
+
+- **`currentMonth > R.startMonth`** (el fijo ya corrió meses pasados) → **split**: se cierra la fila vieja (`deletedFrom = currentMonth`, deja de aparecer desde el mes actual) y se **crea una fila nueva** (`startMonth = currentMonth`) con los valores nuevos. La respuesta trae la **fila nueva, con otro `id`**. Así los meses pasados conservan los valores viejos y el actual/futuro toman los nuevos.
+- **`currentMonth <= R.startMonth`** (la fila no tiene pasado todavía) → se **edita en su lugar**, sin crear filas nuevas.
+
+Esto materializa "el pasado es inmutable" (RF-MF-003) sin generar filas por instancia mensual.
+
+### Eliminación (DELETE con `currentMonth` y `fromCurrentMonth`)
+
+- **`boundary = fromCurrentMonth ? currentMonth : nextMonth(currentMonth)`** — el mes desde el cual el fijo deja de aparecer. `fromCurrentMonth = false` (checkbox desmarcado, default) → deja de aparecer desde el mes **siguiente**; `true` (checkbox marcado) → desde el mes **actual inclusive** (RF-MF-004).
+- **Si `boundary <= startMonth`** (el fijo no aparecería en ningún mes) → **hard delete físico** de la fila. **Si no** → set `deletedFrom = boundary` (soft, sigue visible en los meses anteriores al `boundary`). El pasado nunca se toca.
+
+### Gotchas
+
+- **`fromCurrentMonth` llega como string** (`"true"` / `"false"`) en los query params; NestJS **no lo castea a boolean**. Hay que parsearlo explícitamente.
+- **`validateCategory` es copia de `TransactionsService.validateCategory`** (existencia + `userId` + `deletedAt` + scope RN-010). Duplicación deliberada por ahora; **candidata a extraer a un helper compartido en Fase 7** (cuotas), cuando un tercer módulo necesite la misma validación.
 
 ## Categorías (CategoriesModule)
 

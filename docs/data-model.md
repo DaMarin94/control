@@ -23,7 +23,8 @@
 - **Soft delete en categorías.** Eliminar una categoría la marca como eliminada (`deletedAt`) pero no borra el registro. Los movimientos históricos conservan la referencia y siguen sumando en los totales del mes (el soft delete no excluye movimientos de los cálculos). Una categoría eliminada puede **reactivarse**: al crear una categoría cuyo nombre normalizado colisiona con una eliminada, el sistema propone reactivar la original en lugar de duplicarla (mismo `id`, scope y color); ver `requirements.md`, RF-CAT-002 / RF-CAT-004.
 - **Unicidad de nombre de categoría: app-level, no DB.** La unicidad de nombre entre categorías **activas** de un mismo usuario se valida en lógica de aplicación, no con un constraint `@@unique` de Prisma/DB. Motivo: la comparación es **normalizada** (trim + insensible a mayúsculas y acentos) y el flujo "crear-o-reactivar" frente a una categoría soft-deleted homónima no caben en un constraint de base de datos.
 - **Color de categoría asignado automáticamente.** Cada categoría tiene un color tomado de un **pool fijo de colores predefinidos**. El sistema lo asigna al crear la categoría (incluidas las categorías por defecto de la cuenta nueva); el usuario **no** elige ni edita el color en v1, ni al crear ni al editar. El color es solo presentación (identificar visualmente la categoría en la UI) y no afecta el cálculo de montos ni el scope.
-- **Movimientos fijos: el pasado es inmutable.** Editar o eliminar un fijo no modifica los meses ya pasados. El fijo tiene un mes de inicio y opcionalmente un mes desde el cual deja de aparecer.
+- **Movimientos fijos: el pasado es inmutable.** Editar o eliminar un fijo no modifica los meses ya pasados. El fijo tiene un mes de inicio (`startMonth`) y opcionalmente un mes desde el cual deja de aparecer (`deletedFrom`, **exclusivo**: "mes desde el cual ya no aparece").
+- **El movimiento fijo se modela como una _cadena_ de filas `Recurring`, no una sola.** Un "fijo lógico" puede estar compuesto por varias filas en el tiempo. Cada edición que afecta meses ya corridos **cierra la fila vigente** (le setea `deletedFrom = mes actual`) y **abre una fila nueva** (`startMonth = mes actual`) con los valores nuevos; así los meses pasados conservan los valores viejos y el actual/futuro toman los nuevos, sin generar filas por instancia mensual. Si el fijo todavía no corrió ningún mes, la edición es en su lugar (no se parte la cadena). Esto materializa "el pasado es inmutable". Detalle de la mecánica (split al editar, boundary de eliminación) en `docs/backend.md`, sección Movimientos fijos.
 - **Moneda implícita en v1.** No hay campo de moneda. El modelo está diseñado para que se pueda agregar en el futuro sin romper datos existentes.
 - **Aislamiento por usuario.** Todos los recursos (movimientos, categorías) pertenecen a un usuario y nunca son visibles para otro.
 - **Contraseñas hasheadas.** Las cuentas con email + contraseña guardan únicamente un hash de la contraseña (`passwordHash`, bcrypt/argon2), nunca el texto plano. El hash y la verificación viven en el backend. Las cuentas creadas solo con Google pueden no tener `passwordHash`. El caso de account linking (mismo email por ambos métodos) queda **pendiente sin resolver en v1** (ver `requirements.md`, sección 6).
@@ -144,13 +145,14 @@ MovementItem = {
   type: "EXPENSE" | "INCOME",
   amountCents: number,
   description: string | null,
-  occurredAt: string,                        // ISO 8601 en UTC
-  timezone: string,                          // IANA del registro
+  occurredAt: string | null,                 // ISO 8601 en UTC; null en fijos (sin día/hora)
+  timezone: string | null,                   // IANA del registro; null en fijos
   category: { id, name, color, scope }       // embebida
 }
 ```
 
-- **Discriminador `origin`.** Cada ítem declara su tipo de movimiento (`unico` / `fijo` / `cuota`), además de venir ya agrupado en su lista. El front lo usa para rotular el origen y elegir el flujo de edición/eliminación.
+- **Discriminador `origin`.** Cada ítem declara su tipo de movimiento (`unico` / `fijo` / `cuota`), además de venir ya agrupado en su lista. El front lo usa para rotular el origen y elegir el flujo de edición/eliminación. `origin: "fijo"` se puebla desde Fase 6; `"cuota"`, desde Fase 7.
+- **`occurredAt` / `timezone` son nullable.** Para **únicos** vienen presentes (instante + zona). Para **fijos** vienen **`null`**: el fijo opera a nivel mes, no tiene día/hora/zona. El front no debe pasar estos campos a `formatDate` / `formatTime` sin chequear null.
 - **Los totales suman movimientos, no categorías.** `expenseCents` / `incomeCents` agregan el `amountCents` de los movimientos del mes; `balanceCents = incomeCents - expenseCents`, sin piso (negativo si los gastos superan los ingresos). No se confunden con el contador `movementCount` de la pantalla de categorías (ver más arriba y `requirements.md`, RF-VM-002 / RF-CAT-006).
 - **La categoría embebida puede estar soft-deleted.** Un movimiento histórico muestra su categoría aunque haya sido eliminada (`deletedAt`), y **sigue contando en los totales** (RF-CAT-004 / RF-VM-002; el join de movimientos no filtra por `deletedAt`).
-- **Estructura preparada para fijos y cuotas.** Las listas `fijos` y `cuotas` existen desde ya pero llegan vacías hasta las Fases 6 y 7; el shape no cambia cuando se poblen.
+- **Estructura preparada para fijos y cuotas.** La lista `fijos` se **puebla desde Fase 6** (y los totales del mes ya suman los fijos activos); `cuotas` sigue vacía hasta Fase 7. El shape no cambia al poblarse — salvo que `occurredAt`/`timezone` pasaron a nullable para soportar fijos (ver `MovementItem` arriba).
