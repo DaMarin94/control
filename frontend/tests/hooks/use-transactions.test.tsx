@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { useTransactions, useTransactionsByMonth, TRANSACTIONS_QUERY_KEY } from "@/hooks/use-transactions";
+import { useTransactions } from "@/hooks/use-transactions";
 import { ApiError } from "@/types/api";
 import type { Transaction } from "@/types/transaction";
 
@@ -264,76 +264,3 @@ describe("useTransactions", () => {
   });
 });
 
-// ─── TRANSACTIONS_QUERY_KEY ──────────────────────────────────────────────────
-
-describe("TRANSACTIONS_QUERY_KEY", () => {
-  it("genera la query key correcta para un mes", () => {
-    expect(TRANSACTIONS_QUERY_KEY("2026-06")).toEqual(["transactions", "2026-06"]);
-  });
-
-  it("query keys de meses distintos son distintas", () => {
-    const key1 = TRANSACTIONS_QUERY_KEY("2026-06");
-    const key2 = TRANSACTIONS_QUERY_KEY("2026-07");
-    expect(key1).not.toEqual(key2);
-  });
-});
-
-// ─── useTransactionsByMonth ───────────────────────────────────────────────────
-
-describe("useTransactionsByMonth", () => {
-  const mockApiGet = vi.fn();
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockUseApi.mockReturnValue({
-      api: {
-        get: mockApiGet,
-        post: vi.fn(),
-        patch: vi.fn(),
-        delete: vi.fn(),
-        put: vi.fn(),
-      },
-      token: "test-token",
-    });
-  });
-
-  it("llama a GET /transactions con month y timezone como query params", async () => {
-    mockApiGet.mockResolvedValue([mockTransaction]);
-
-    const { result } = renderHook(
-      () =>
-        useTransactionsByMonth({
-          month: "2026-06",
-          timezone: "America/Argentina/Buenos_Aires",
-        }),
-      { wrapper: createWrapper() },
-    );
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(mockApiGet).toHaveBeenCalledWith(
-      expect.stringContaining("month=2026-06"),
-    );
-    expect(mockApiGet).toHaveBeenCalledWith(
-      expect.stringContaining("timezone="),
-    );
-    expect(result.current.data).toEqual([mockTransaction]);
-  });
-
-  it("isLoading es true durante la carga inicial", () => {
-    mockApiGet.mockReturnValue(new Promise(() => {})); // nunca resuelve
-
-    const { result } = renderHook(
-      () =>
-        useTransactionsByMonth({
-          month: "2026-06",
-          timezone: "America/Argentina/Buenos_Aires",
-        }),
-      { wrapper: createWrapper() },
-    );
-
-    expect(result.current.isLoading).toBe(true);
-  });
-});

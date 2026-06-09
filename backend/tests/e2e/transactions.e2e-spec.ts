@@ -7,12 +7,15 @@
  * - Crear OK (201) + shape de respuesta con categoría embebida
  * - Validaciones de DTO: monto 0/negativo, campos faltantes, ISO inválido
  * - Validación de categoría: inexistente, ajena, eliminada, scope incompatible (RN-010)
- * - GET por mes: parámetros obligatorios, listado OK
  * - GET /id: 200 OK, 404 si no existe/no es del usuario
  * - PATCH: edición OK, revalidación RN-010, 404
  * - DELETE: 204, 404
  * - Aislamiento por userId (RN-003)
  * - 401 sin JWT
+ *
+ * NOTA: GET /transactions?month=... fue eliminado en Fase 5.
+ * El listado por mes ahora es GET /movements?month=YYYY-MM.
+ * Ver movements.e2e-spec.ts.
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
@@ -367,85 +370,20 @@ describe('Transactions (e2e)', () => {
   });
 
   // -------------------------------------------------------------------------
-  // GET /transactions?month=YYYY-MM&timezone=IANA
+  // GET /transactions (sin :id) — eliminado en Fase 5
+  // El listado por mes migró a GET /movements?month=YYYY-MM
   // -------------------------------------------------------------------------
 
-  describe('GET /transactions', () => {
-    it('200 + data: Transaction[] con categorías embebidas', async () => {
-      const txs = [makeDbTransaction(), makeDbTransaction({ id: 'tx-e2e-002' })];
-      mockPrisma.transaction.findMany.mockResolvedValue(txs);
-
+  describe('GET /transactions (listado por mes — eliminado en Fase 5)', () => {
+    it('GET /transactions sin :id ya no existe como ruta de listado', async () => {
+      // Sin :id y sin month/timezone, no hay ruta de listado en TransactionsController.
+      // La solicitud GET /transactions sin parámetro de ruta :id
+      // no tiene handler → NestJS devuelve 404.
+      // (El endpoint de listado por mes fue eliminado en Fase 5 y reemplazado por GET /movements.)
       const res = await request(app.getHttpServer())
-        .get('/transactions?month=2026-06&timezone=America%2FArgentina%2FBuenos_Aires')
+        .get('/transactions')
         .set('Authorization', `Bearer ${tokenA}`)
-        .expect(200);
-
-      expect(res.body.success).toBe(true);
-      expect(res.body.statusCode).toBe(200);
-      expect(Array.isArray(res.body.data)).toBe(true);
-      expect(res.body.data).toHaveLength(2);
-      // Verificar que la categoría está embebida
-      expect(res.body.data[0].category).toBeDefined();
-      expect(res.body.data[0].category).toHaveProperty('id');
-    });
-
-    it('400 si falta month', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/transactions?timezone=UTC')
-        .set('Authorization', `Bearer ${tokenA}`)
-        .expect(400);
-
-      expect(res.body.success).toBe(false);
-    });
-
-    it('400 si falta timezone', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/transactions?month=2026-06')
-        .set('Authorization', `Bearer ${tokenA}`)
-        .expect(400);
-
-      expect(res.body.success).toBe(false);
-    });
-
-    it('400 si month tiene formato inválido', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/transactions?month=2026/06&timezone=UTC')
-        .set('Authorization', `Bearer ${tokenA}`)
-        .expect(400);
-
-      expect(res.body.success).toBe(false);
-    });
-
-    it('lista vacía si no hay transacciones en el mes', async () => {
-      mockPrisma.transaction.findMany.mockResolvedValue([]);
-
-      const res = await request(app.getHttpServer())
-        .get('/transactions?month=2026-06&timezone=UTC')
-        .set('Authorization', `Bearer ${tokenA}`)
-        .expect(200);
-
-      expect(res.body.data).toEqual([]);
-    });
-
-    it('aislamiento: usa userId del JWT para filtrar (RN-003)', async () => {
-      mockPrisma.transaction.findMany.mockResolvedValue([]);
-
-      await request(app.getHttpServer())
-        .get('/transactions?month=2026-06&timezone=UTC')
-        .set('Authorization', `Bearer ${tokenB}`)
-        .expect(200);
-
-      expect(mockPrisma.transaction.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({ userId: USER_B_ID }),
-        }),
-      );
-    });
-
-    it('401 sin JWT', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/transactions?month=2026-06&timezone=UTC')
-        .expect(401);
+        .expect(404);
 
       expect(res.body.success).toBe(false);
     });

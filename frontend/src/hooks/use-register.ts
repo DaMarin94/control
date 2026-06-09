@@ -43,7 +43,7 @@ export function useRegister() {
 
       // 2. Iniciar sesión automáticamente (RF-AUTH-006: redirigir sin pasar por /login)
       // redirect: true hace que Next.js navegue directamente — no hay valor de retorno.
-      const callbackUrl = data.redirectTo ?? "/dashboard";
+      const callbackUrl = data.redirectTo ?? "/";
 
       await signIn("credentials", {
         email: data.email,

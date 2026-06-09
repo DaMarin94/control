@@ -89,7 +89,7 @@ La fuente de verdad de tipos, campos y constraints es `backend/prisma/schema.pri
 El formato de toda respuesta (sobre `{ success, statusCode, data | error }`) está definido en `docs/technical.md`. Los DTOs y shapes concretos se definen al implementar cada endpoint.
 
 ### `GET /movements?month=YYYY-MM`
-Devuelve todos los movimientos del mes: transacciones únicas, recurrentes activos y cuotas que caen en el mes. Los recurrentes y cuotas se calculan on-the-fly — no hay filas generadas por instancia mensual.
+Devuelve todos los movimientos del mes **más los totales**: transacciones únicas, recurrentes activos y cuotas que caen en el mes. Los recurrentes y cuotas se calculan on-the-fly — no hay filas generadas por instancia mensual. Contrato completo en la sección **Movimientos del mes (MovementsModule)**.
 
 ### `POST /transactions` · `PATCH /transactions/:id` · `DELETE /transactions/:id`
 CRUD de movimientos únicos. El monto siempre en centavos (entero > 0). El instante se guarda en UTC más la zona original del registro (ver fechas/timezone en `docs/technical.md`).
@@ -130,16 +130,16 @@ Transaction = {
 | Endpoint | Body | Éxito | Errores |
 |----------|------|-------|---------|
 | `POST /transactions` | `{ type, amountCents, categoryId, occurredAt, timezone, description? }` | `201` · `data: Transaction` | `400` |
-| `GET /transactions?month=YYYY-MM&timezone=IANA` | — | `200` · `data: Transaction[]` | `400` |
 | `GET /transactions/:id` | — | `200` · `data: Transaction` | `404` |
 | `PATCH /transactions/:id` | parcial (cualquier campo de POST) | `200` · `data: Transaction` | `400` · `404` |
 | `DELETE /transactions/:id` | — | `204 No Content` | `404` |
 
 - **`POST /transactions`** — `amountCents` entero **en centavos** (`> 0`); `occurredAt` ISO 8601 en **UTC**; `timezone` IANA. `400` por validación de DTO o por categoría inválida (ver Validación de categoría abajo).
-- **`GET /transactions`** — **ambos query params son obligatorios** (`month=YYYY-MM` y `timezone=IANA`); si falta alguno, `400`. Devuelve los movimientos del mes ordenados por `occurredAt` **descendente**. Ver el criterio de bucketeo abajo.
 - **`GET /transactions/:id`** — `404` si no existe o no es del usuario.
 - **`PATCH /transactions/:id`** — body parcial (cualquier campo del POST). **Reaplica todas las validaciones** (RN-002 monto, RN-010 scope). `404` si no existe o no es del usuario.
 - **`DELETE /transactions/:id`** — **hard delete** (permanente, RF-MU-003; la entidad no tiene `deletedAt`). **`204` sin cuerpo.** `404` si no existe o no es del usuario.
+
+> **`GET /transactions?month&timezone` fue eliminado (Fase 5).** El listado del mes ya **no** vive en `transactions`: lo reemplaza `GET /movements?month=YYYY-MM` (ver la sección **Movimientos del mes (MovementsModule)**), que unifica únicos + fijos + cuotas y agrega los totales. De `transactions` solo quedan los cuatro endpoints de la tabla de arriba (`POST`, `GET /:id`, `PATCH`, `DELETE`).
 
 ### Validación de categoría (RN-010) — siempre 400, nunca 409
 
@@ -149,12 +149,61 @@ Se valida en **create y update**. El movimiento exige una categoría **propia, a
 - Categoría **inexistente, ajena (de otro usuario), eliminada (soft delete) o con scope incompatible** son todas **`400 BadRequest`** — es validación de input, **no `409`**.
 - **No revela ajenidad:** si la categoría es de otro usuario, el error es **idéntico** al de "inexistente" — no filtra si el `id` existe en la DB de otro.
 
-### Bucketeo por mes (GET) — decisión y deuda técnica
+## Movimientos del mes (MovementsModule)
 
-El rango UTC del mes se calcula a partir de la **timezone recibida en el query param** (`?timezone=IANA`), **no** de la `timezone` guardada en cada registro. Ejemplo: `month=2026-06&timezone=America/Argentina/Buenos_Aires` (UTC-3) filtra `occurredAt >= 2026-06-01T03:00:00Z AND < 2026-07-01T03:00:00Z`.
+Endpoint unificado que devuelve **todos los movimientos del mes más los totales**, scopeado por `userId` del JWT. Reemplaza al eliminado `GET /transactions?month&timezone` (Fase 5). Su estructura está diseñada para incorporar fijos y cuotas en Fases 6/7 sin rehacer el contrato; hoy solo `unicos` trae datos.
 
-- **`month` y `timezone` obligatorios:** el backend **no asume "mes actual"** porque no conoce la zona del usuario en ese punto; si falta `month`, devuelve `400` (no infiere).
-- **Limitación conocida (deuda técnica):** un movimiento cargado en una zona distinta a la del query puede caer en el mes "equivocado" según este criterio. La alternativa correcta —bucketear por la `timezone` propia de **cada registro** vía SQL `AT TIME ZONE`— requiere SQL crudo, no idiomático en Prisma 7; se difiere a **Fase 5** (Vista del mes).
+### `GET /movements?month=YYYY-MM`
+
+- **`month` (`YYYY-MM`) es el único query param y es obligatorio:** si falta o tiene formato inválido, `400`. **No recibe `timezone`** (a diferencia del endpoint eliminado): el mes de cada movimiento se calcula con la zona propia del registro (ver Bucketeo abajo).
+
+```
+data = {
+  month: "YYYY-MM",
+  totals: {
+    expenseCents: int,   // suma de gastos del mes
+    incomeCents: int,    // suma de ingresos del mes
+    balanceCents: int    // incomeCents - expenseCents (puede ser negativo)
+  },
+  movements: {
+    unicos: [MovementItem],   // ordenados por occurredAt descendente
+    fijos:  [],               // vacío hoy (Fase 6)
+    cuotas: []                // vacío hoy (Fase 7)
+  }
+}
+```
+
+```
+MovementItem = {
+  id: string,
+  origin: "unico" | "fijo" | "cuota",        // discriminador del tipo de movimiento
+  type: "EXPENSE" | "INCOME",
+  amountCents: int,
+  description: string | null,
+  occurredAt: string,                        // ISO 8601 en UTC
+  timezone: string,                          // IANA del registro
+  category: { id, name, color, scope }       // embebida; puede estar soft-deleted (ver abajo)
+}
+```
+
+### Bucketeo por mes (definitivo) — por la zona propia de cada registro
+
+El mes de un movimiento se determina con la **`timezone` guardada en cada registro**, no con una zona pasada por query. Se calcula en SQL con `date_trunc('month', "occurredAt" AT TIME ZONE timezone)` comparado contra el mes pedido, vía **`$queryRaw` parametrizado** (Prisma 7 no expresa `AT TIME ZONE` de forma idiomática; el raw va parametrizado por seguridad, sin interpolar strings).
+
+- Esto **reemplaza el criterio provisorio de Fase 4** (rango UTC calculado con la `timezone` del query param) y salda esa deuda técnica: dos movimientos cargados en zonas distintas caen cada uno en su mes correcto, sin depender de la zona del request.
+
+### Categoría soft-deleted incluida (RF-CAT-004)
+
+El join de movimientos y el cálculo de totales **no filtran por `Category.deletedAt`**: un movimiento histórico muestra su categoría embebida aunque esté eliminada, y **sigue contando en los totales** (RF-VM-002). El soft delete de categoría no saca movimientos de los cálculos (ver bitácora 2026-06-08).
+
+### Totales
+
+- **Los totales suman movimientos, no categorías** (`amountCents` de cada movimiento del mes). `balanceCents = incomeCents - expenseCents`, sin piso (negativo si los gastos superan los ingresos). Hoy solo agregan únicos; el cálculo está diseñado para sumar fijos y cuotas cuando existan (Fases 6/7).
+- **Gotcha BigInt → Number:** `SUM(...)` en Postgres devuelve `BIGINT`, que llega como `BigInt` de JS desde `$queryRaw`. El repositorio lo castea con `Number(...)` antes de serializar; sin el cast, `JSON.stringify` falla sobre `BigInt`.
+
+### Por qué un módulo propio
+
+`MovementsModule` es un módulo separado (no vive dentro de `transactions`) para poder **unificar `transactions` + `recurring` + `installments`** en una sola respuesta sin generar dependencia circular entre esos módulos. Consume cada origen a través de su `Service` (regla de propiedad de dominio: nunca toca repositorios ni tablas ajenas).
 
 ## Categorías (CategoriesModule)
 

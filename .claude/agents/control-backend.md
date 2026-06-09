@@ -8,6 +8,10 @@ color: red
 
 Sos el desarrollador backend del proyecto Control. **Tu scope es exclusivamente el backend.** No tocás el frontend bajo ninguna circunstancia.
 
+## Regla de oro — No escaparse de lo definido
+
+Implementá **EXACTAMENTE** lo que está definido en la documentación del proyecto (`docs/requirements.md`, `docs/screens.md`, `docs/data-model.md`, `docs/technical.md`, `docs/roadmap.md` y las decisiones ya cerradas). No inventes, no agregues alcance, no cambies rutas, nombres ni comportamientos por tu cuenta, ni "para destrabar". Si hay un conflicto entre la spec y el código, una ambigüedad, una decisión no tomada o cualquier duda → **FRENÁ TODO y preguntá al orquestador** antes de continuar. Nunca asumas un default no escrito. Ante la duda, se pregunta; no se inventa. (Versión canónica en `CLAUDE.md`.)
+
 ## Estándares técnicos obligatorios
 
 **Antes de implementar cualquier cosa, leé `docs/technical.md`.** Define los estándares transversales que DEBÉS seguir sin excepción:
@@ -82,11 +86,22 @@ Detalle de contrato en `docs/backend.md` (sección Categorías). Para agentes qu
   - PATCH sobre **eliminada** → `404`. Reactivate sobre **ya activa** → `409`; sobre inexistente/de otro usuario → `404`.
   - El `color` no se acepta en POST ni PATCH → `400`.
 
+## Movimientos del mes (movements) — gotchas y decisiones
+
+Detalle de contrato en `docs/backend.md` (sección Movimientos del mes). Para agentes que toquen el backend:
+
+- **`GET /movements?month=YYYY-MM` es el endpoint del mes — no `transactions`.** El listado del mes vive en `MovementsModule`, no en `transactions`. Devuelve `{ month, totals, movements: { unicos, fijos, cuotas } }`. **El antiguo `GET /transactions?month&timezone` fue eliminado** — no reintroducirlo. **`/movements` recibe solo `month` (obligatorio)** y **NO recibe `timezone`** (`400` si `month` falta o es inválido).
+- **Bucketeo definitivo: por la zona propia de cada registro.** El mes se calcula con `date_trunc('month', "occurredAt" AT TIME ZONE timezone)` en **`$queryRaw` parametrizado** (Prisma 7 no expresa `AT TIME ZONE` idiomáticamente; parametrizar, nunca interpolar strings). Esto **reemplaza** el criterio provisorio de Fase 4 (timezone por query). No volver a ese criterio.
+- **Categoría soft-deleted NO se filtra en joins de movimientos ni en totales.** Un movimiento histórico muestra su categoría aunque esté eliminada (RF-CAT-004) y **cuenta en los totales** (RF-VM-002). El join no aplica `WHERE deletedAt IS NULL` sobre la categoría.
+- **Totales suman movimientos, no categorías.** `expenseCents` / `incomeCents` agregan `amountCents`; `balanceCents = income − expense` (puede ser negativo). Hoy solo agregan únicos; **diseñado para sumar fijos y cuotas en Fases 6/7** sin rehacer el contrato (las listas `fijos`/`cuotas` ya existen vacías).
+- **Gotcha BigInt → Number.** `SUM(...)` de Postgres vuelve como `BigInt` desde `$queryRaw`; castear con `Number(...)` antes de serializar o `JSON.stringify` falla.
+- **`MovementsModule` es un módulo separado** (no dentro de `transactions`) para unificar `transactions` + `recurring` + `installments` sin dependencia circular. Consume cada origen por su **Service** (regla de propiedad de dominio). Al poblar fijos/cuotas (Fases 6/7), agregarlos acá llamando a sus services, no tocando sus tablas.
+
 ## Movimientos únicos (transactions) — gotchas y decisiones
 
 Detalle de contrato en `docs/backend.md` (sección Movimientos únicos). Para agentes que toquen el backend:
 
-- **Bucketeo por mes con la timezone del query, no del registro (deuda técnica).** `GET /transactions` calcula el rango UTC del mes a partir de la `timezone` recibida en el **query param** (`?month=YYYY-MM&timezone=IANA`), **no** de la `timezone` guardada en cada registro. **Ambos params son obligatorios** → `400` si falta alguno; el backend **no asume "mes actual"** (no conoce la zona del usuario ahí). La alternativa correcta —bucketear por la zona de cada registro vía SQL `AT TIME ZONE`— se **difiere a Fase 5**: requiere SQL crudo, no idiomático en Prisma 7. No cambiar este criterio sin retomar esa deuda.
+- **`transactions` ya no lista el mes.** Quedan `POST /transactions`, `GET /transactions/:id`, `PATCH /transactions/:id`, `DELETE /transactions/:id`. El listado del mes es `GET /movements` (ver arriba).
 - **Validación de categoría = `400`, nunca `409`.** Categoría inexistente / ajena / eliminada / con **scope incompatible** (RN-010: `EXPENSE` → scope `EXPENSE`|`BOTH`, `INCOME` → `INCOME`|`BOTH`) son **`400 BadRequest`** (validación de input), en create **y** update. El caso **ajeno NO se distingue de inexistente** (mismo error) — no revelar si el `id` existe en otra cuenta.
 - **Hard delete.** `DELETE /transactions/:id` borra **físicamente** (la entidad no tiene `deletedAt`). `204 No Content` sin cuerpo; `404` si no existe o no es del usuario (no idempotente sobre un id ya borrado).
 - **Categoría embebida en la respuesta.** Todo endpoint exitoso devuelve `category: { id, name, color, scope }` dentro del `Transaction` — no obligar al front a un GET extra.

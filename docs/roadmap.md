@@ -182,6 +182,8 @@ Backend y frontend se trabajan **en paralelo** porque en esta fase son independi
 - Vista del mes — `/mes`
 - Dashboard — `/`
 
+> **Decisión (2026-06-09) — Sidebar (RF-NAV-001) diferido.** El sidebar de navegación global que `screens.md` define para Dashboard, Vista del mes y Categorías **no** se construye en esta fase: se **difiere a una fase posterior**. La navegación interina entre `/`, `/mes` y `/categorias` se hace con los **accesos definidos en cada pantalla** (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL directa). La definición del sidebar en `screens.md` se conserva; solo queda marcado su estado como pendiente. Ver bitácora de `requirements.md` (2026-06-09).
+
 **Rama:** `feat/month-view-dashboard`
 **Depende de:** Fase 4.
 

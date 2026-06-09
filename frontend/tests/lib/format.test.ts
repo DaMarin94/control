@@ -4,7 +4,7 @@
  * helpers de presentación (formatCurrency, utcToLocalDate, utcToLocalTime).
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   parseCurrencyInput,
   formatCurrency,
@@ -12,6 +12,10 @@ import {
   utcToLocalDate,
   utcToLocalTime,
   getBrowserTimezone,
+  getCurrentMonth,
+  formatMonthLabel,
+  prevMonth,
+  nextMonth,
 } from "@/lib/format";
 
 // ─── parseCurrencyInput (pesos → centavos) ─────────────────────────────────
@@ -170,5 +174,101 @@ describe("getBrowserTimezone", () => {
     const tz = getBrowserTimezone();
     // Debe tener formato "Continent/City" o ser "UTC"
     expect(tz === "UTC" || tz.includes("/")).toBe(true);
+  });
+});
+
+// ─── getCurrentMonth ──────────────────────────────────────────────────────────
+
+describe("getCurrentMonth", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("retorna el mes actual en formato YYYY-MM", () => {
+    // Fijar fecha a 2026-06-08 (mediodía UTC)
+    vi.setSystemTime(new Date("2026-06-08T12:00:00Z"));
+    const result = getCurrentMonth();
+    // El formato debe ser YYYY-MM
+    expect(result).toMatch(/^\d{4}-\d{2}$/);
+  });
+
+  it("retorna el formato correcto para un mes de enero", () => {
+    vi.setSystemTime(new Date("2026-01-15T12:00:00Z"));
+    const result = getCurrentMonth();
+    expect(result).toMatch(/^\d{4}-\d{2}$/);
+    // El mes debe ser 01
+    const [, month] = result.split("-");
+    expect(month).toBe("01");
+  });
+
+  it("retorna el formato correcto para un mes de diciembre", () => {
+    vi.setSystemTime(new Date("2025-12-01T12:00:00Z"));
+    const result = getCurrentMonth();
+    const [, month] = result.split("-");
+    expect(month).toBe("12");
+  });
+});
+
+// ─── formatMonthLabel ─────────────────────────────────────────────────────────
+
+describe("formatMonthLabel", () => {
+  it("formatea '2026-06' como 'junio de 2026' o variante localizada", () => {
+    const result = formatMonthLabel("2026-06");
+    // Debe contener el año
+    expect(result).toContain("2026");
+    // Debe contener algo relativo a junio (en es-AR puede variar la preposición)
+    expect(result.toLowerCase()).toMatch(/jun/);
+  });
+
+  it("formatea '2025-12' con el año correcto", () => {
+    const result = formatMonthLabel("2025-12");
+    expect(result).toContain("2025");
+    expect(result.toLowerCase()).toMatch(/dic/);
+  });
+
+  it("formatea '2026-01' con enero", () => {
+    const result = formatMonthLabel("2026-01");
+    expect(result).toContain("2026");
+    expect(result.toLowerCase()).toMatch(/ene/);
+  });
+});
+
+// ─── prevMonth ────────────────────────────────────────────────────────────────
+
+describe("prevMonth", () => {
+  it("'2026-06' → '2026-05'", () => {
+    expect(prevMonth("2026-06")).toBe("2026-05");
+  });
+
+  it("cruza año: '2026-01' → '2025-12'", () => {
+    expect(prevMonth("2026-01")).toBe("2025-12");
+  });
+
+  it("'2026-10' → '2026-09'", () => {
+    expect(prevMonth("2026-10")).toBe("2026-09");
+  });
+
+  it("retorna formato YYYY-MM", () => {
+    expect(prevMonth("2026-03")).toMatch(/^\d{4}-\d{2}$/);
+  });
+});
+
+// ─── nextMonth ────────────────────────────────────────────────────────────────
+
+describe("nextMonth", () => {
+  it("'2026-06' → '2026-07'", () => {
+    expect(nextMonth("2026-06")).toBe("2026-07");
+  });
+
+  it("cruza año: '2025-12' → '2026-01'", () => {
+    expect(nextMonth("2025-12")).toBe("2026-01");
+  });
+
+  it("'2026-09' → '2026-10'", () => {
+    expect(nextMonth("2026-09")).toBe("2026-10");
+  });
+
+  it("retorna formato YYYY-MM", () => {
+    expect(nextMonth("2026-03")).toMatch(/^\d{4}-\d{2}$/);
   });
 });

@@ -114,3 +114,43 @@ Transaction = {
 - **`amountCents` — entero en centavos** (RN-002): el front recibe centavos y formatea a pesos para mostrar.
 - **`occurredAt` + `timezone` — instante, no fecha de calendario** (RN-004): `occurredAt` es el momento en UTC y `timezone` (IANA) es la zona original del registro, en la que siempre se muestra. El mes al que pertenece se determina en esa zona. Detalle técnico en `docs/technical.md` (Fechas y zonas horarias).
 - **Categoría embebida.** Cada movimiento trae `category: { id, name, color, scope }` — el front no necesita un GET extra de categorías para mostrar nombre y color.
+
+---
+
+## Contrato de movimientos del mes (respuesta de `GET /movements`)
+
+`GET /movements?month=YYYY-MM` devuelve, dentro del sobre `{ success, statusCode, data }`, los movimientos del mes agrupados por origen **más los totales**. Es el endpoint unificado de la Vista del mes y el Dashboard (detalle de implementación en `docs/backend.md`, sección Movimientos del mes).
+
+```
+data = {
+  month: "YYYY-MM",
+  totals: {
+    expenseCents: number,   // suma de gastos del mes
+    incomeCents: number,    // suma de ingresos del mes
+    balanceCents: number    // incomeCents - expenseCents (puede ser negativo)
+  },
+  movements: {
+    unicos: MovementItem[],   // ordenados por occurredAt descendente
+    fijos:  MovementItem[],   // vacío hasta Fase 6
+    cuotas: MovementItem[]    // vacío hasta Fase 7
+  }
+}
+```
+
+```
+MovementItem = {
+  id: string,
+  origin: "unico" | "fijo" | "cuota",        // discriminador del tipo de movimiento
+  type: "EXPENSE" | "INCOME",
+  amountCents: number,
+  description: string | null,
+  occurredAt: string,                        // ISO 8601 en UTC
+  timezone: string,                          // IANA del registro
+  category: { id, name, color, scope }       // embebida
+}
+```
+
+- **Discriminador `origin`.** Cada ítem declara su tipo de movimiento (`unico` / `fijo` / `cuota`), además de venir ya agrupado en su lista. El front lo usa para rotular el origen y elegir el flujo de edición/eliminación.
+- **Los totales suman movimientos, no categorías.** `expenseCents` / `incomeCents` agregan el `amountCents` de los movimientos del mes; `balanceCents = incomeCents - expenseCents`, sin piso (negativo si los gastos superan los ingresos). No se confunden con el contador `movementCount` de la pantalla de categorías (ver más arriba y `requirements.md`, RF-VM-002 / RF-CAT-006).
+- **La categoría embebida puede estar soft-deleted.** Un movimiento histórico muestra su categoría aunque haya sido eliminada (`deletedAt`), y **sigue contando en los totales** (RF-CAT-004 / RF-VM-002; el join de movimientos no filtra por `deletedAt`).
+- **Estructura preparada para fijos y cuotas.** Las listas `fijos` y `cuotas` existen desde ya pero llegan vacías hasta las Fases 6 y 7; el shape no cambia cuando se poblen.

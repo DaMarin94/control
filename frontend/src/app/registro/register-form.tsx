@@ -31,7 +31,7 @@ export function RegisterForm() {
   const { toast } = useToast();
   const { register: registerUser, isLoading } = useRegister();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/";
 
   const {
     register,

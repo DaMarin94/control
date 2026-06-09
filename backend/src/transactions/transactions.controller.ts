@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,7 +8,6 @@ import {
   Param,
   Patch,
   Post,
-  Query,
   Request,
 } from '@nestjs/common';
 import { TransactionsService } from './transactions.service';
@@ -40,36 +38,6 @@ export class TransactionsController {
   @HttpCode(HttpStatus.CREATED)
   create(@Request() req: AuthRequest, @Body() dto: CreateTransactionDto) {
     return this.transactionsService.create(req.user.userId, dto);
-  }
-
-  /**
-   * GET /transactions?month=YYYY-MM&timezone=IANA
-   * Lista los movimientos del mes del usuario (RF-VM-001 base).
-   *
-   * Parámetros:
-   * - month (obligatorio): mes en formato YYYY-MM
-   * - timezone (obligatorio): zona horaria IANA para calcular el rango UTC del mes
-   *
-   * Orden: occurredAt descendente (más reciente primero).
-   * 200 + sobre con Transaction[].
-   */
-  @Get()
-  findByMonth(
-    @Request() req: AuthRequest,
-    @Query('month') month: string | undefined,
-    @Query('timezone') timezone: string | undefined,
-  ) {
-    if (!month) {
-      throw new BadRequestException(
-        'El parámetro "month" es obligatorio (formato YYYY-MM)',
-      );
-    }
-    if (!timezone) {
-      throw new BadRequestException(
-        'El parámetro "timezone" es obligatorio (ej: "America/Argentina/Buenos_Aires")',
-      );
-    }
-    return this.transactionsService.findByMonth(req.user.userId, month, timezone);
   }
 
   /**

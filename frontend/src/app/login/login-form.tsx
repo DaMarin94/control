@@ -28,7 +28,7 @@ export function LoginForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const { toast } = useToast();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/";
 
   const {
     register,

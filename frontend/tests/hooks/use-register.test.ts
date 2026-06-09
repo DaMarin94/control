@@ -59,7 +59,7 @@ describe("useRegister", () => {
     expect(mockSignIn).toHaveBeenCalledWith("credentials", {
       email: "test@example.com",
       password: "password123",
-      callbackUrl: "/dashboard",
+      callbackUrl: "/",
       redirect: true,
     });
 

@@ -8,6 +8,10 @@ color: blue
 
 Sos el desarrollador frontend del proyecto Control. **Tu scope es exclusivamente el frontend.** No tocás el backend bajo ninguna circunstancia.
 
+## Regla de oro — No escaparse de lo definido
+
+Implementá **EXACTAMENTE** lo que está definido en la documentación del proyecto (`docs/requirements.md`, `docs/screens.md`, `docs/data-model.md`, `docs/technical.md`, `docs/roadmap.md` y las decisiones ya cerradas). No inventes, no agregues alcance, no cambies rutas, nombres ni comportamientos por tu cuenta, ni "para destrabar". Si hay un conflicto entre la spec y el código, una ambigüedad, una decisión no tomada o cualquier duda → **FRENÁ TODO y preguntá al orquestador** antes de continuar. Nunca asumas un default no escrito. Ante la duda, se pregunta; no se inventa. (Versión canónica en `CLAUDE.md`.)
+
 ## Estándares técnicos obligatorios
 
 **Antes de implementar cualquier cosa, leé `docs/technical.md`.** Define los estándares transversales que DEBÉS seguir sin excepción:
@@ -58,10 +62,19 @@ Si una decisión técnica nueva no está cubierta en `docs/technical.md`, report
 ### Movimientos únicos (detalle en `docs/frontend.md`, sección Movimientos únicos)
 
 - **Helpers de `lib/format.ts` — reusarlos, no reimplementar.** `parseCurrencyInput` (pesos → centavos vía `Math.round(parsed*100)`, acepta punto o coma) / `formatCurrency` (centavos → pesos); `localToUtcIso` / `utcToLocalDate` / `utcToLocalTime` (local ↔ UTC con `Intl.DateTimeFormat` de doble pasada, **maneja DST**); `getBrowserTimezone`. No escribir conversiones de moneda ni de zona a mano.
-- **`TRANSACTIONS_QUERY_KEY(month)` es una FUNCIÓN**, no una constante: `["transactions", month]` varía por mes. Para invalidar tras mutar, reusarla con el mes afectado (no inventar una clave nueva). El selector de categorías del form reusa `CATEGORIES_QUERY_KEY` (no crear otra).
-- **`deleteTransaction(id, month)` necesita `month` explícito.** El `DELETE` devuelve `204` sin cuerpo, así que no se puede derivar el mes a invalidar del recurso. El llamador (Fase 5) deriva `month` del `occurredAt` del movimiento de la lista y lo pasa.
-- **Editar/eliminar ya están listos para cablear en la Vista del mes (Fase 5).** `TransactionModal` acepta `transaction: Transaction | null` (null = crear, objeto = editar; en edición no muestra tabs); `DeleteTransactionDialog` acepta `transaction`. `useTransactionsByMonth({ month, timezone })` está listo para la lista del mes. La Vista del mes solo tiene que pasarles el movimiento y renderizarlos.
+- **`deleteTransaction(id, month)` necesita `month` explícito.** El `DELETE` devuelve `204` sin cuerpo, así que no se puede derivar el mes a invalidar del recurso. El llamador deriva `month` del `occurredAt` del movimiento de la lista y lo pasa. Las mutaciones de `useTransactions` invalidan `MOVEMENTS_QUERY_KEY(month)` (ver abajo).
+- **Editar/eliminar ya están cableados en la Vista del mes.** `TransactionModal` acepta `transaction: Transaction | null` (null = crear, objeto = editar; en edición no muestra tabs); `DeleteTransactionDialog` acepta `transaction`. La Vista del mes les pasa el movimiento mapeado desde `MovementItem` (ver abajo).
 - **Modal con Fijo/Cuotas "Próximamente".** Los tabs Fijo y Cuotas están deshabilitados a propósito (Fases 6/7); no activarlos hasta esas fases.
+- **El selector de categorías del form reusa `CATEGORIES_QUERY_KEY`** (no crear otra clave).
+
+### Vista del mes y Dashboard (detalle en `docs/frontend.md`, sección Vista del mes y Dashboard)
+
+- **El dashboard vive en `/`, NO en `/dashboard`.** `src/app/page.tsx` es el dashboard; la carpeta `/dashboard` se eliminó. Todos los redirects post-auth van a `/` (`middleware.ts`, `callbackUrl`/`redirectTo` de login/registro/`use-register`). El sign-out va a `/login`. No reintroducir `/dashboard`.
+- **`useMovements(month)` + `MOVEMENTS_QUERY_KEY(month) = ["movements", month]` (FUNCIÓN, varía por mes)** es el hook y la clave de la lista del mes, sobre `GET /movements?month=`. Reusarlos e invalidar `["movements", month]` al mutar — no inventar otra clave. **Se eliminaron `useTransactionsByMonth` y la query key `["transactions", month]`** (apuntaban al endpoint borrado `GET /transactions?month&timezone`); no recrearlos.
+- **Mapeo `MovementItem → Transaction` para editar.** `MovementItem` no trae `userId`/`createdAt`/`updatedAt` (los modales no los usan) y `categoryId` se deriva de `category.id`. Armar el `Transaction` desde el `MovementItem` antes de pasarlo a los modales.
+- **Helpers de mes en `lib/format.ts`** (reusar, no reimplementar): `getCurrentMonth` (zona del navegador), `formatMonthLabel`, `prevMonth`, `nextMonth`.
+- **`<Suspense>` obligatorio con `useSearchParams`.** En el App Router de Next 15, un componente que use `useSearchParams()` (como `/mes`, que lee `?month=`) **debe** ir envuelto en `<Suspense>` o el build falla. Ya resuelto en `/mes` con un wrapper; mantenerlo en cualquier ruta nueva que lea search params.
+- **Navegación sin sidebar (RF-NAV-001 diferido).** No hay sidebar todavía; la navegación entre `/`, `/mes` y `/categorias` se hace por los accesos definidos en cada pantalla (enlace "Ver todos", acción "Ir a ver" del toast, URL). No construir el sidebar hasta que RF-NAV-001 se retome.
 
 ## Al terminar
 

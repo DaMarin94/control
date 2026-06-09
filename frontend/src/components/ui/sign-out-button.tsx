@@ -3,6 +3,7 @@
 /**
  * Botón de cierre de sesión.
  * Client Component porque usa signOut de next-auth/react.
+ * Redirige a /login tras cerrar sesión (RF-AUTH-004).
  */
 
 import { signOut } from "next-auth/react";
@@ -12,7 +13,6 @@ export function SignOutButton() {
   return (
     <Button
       variant="outline"
-      className="w-full"
       onClick={() => signOut({ callbackUrl: "/login" })}
     >
       Cerrar sesión

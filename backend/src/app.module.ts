@@ -8,6 +8,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { CategoriesModule } from './categories/categories.module';
 import { TransactionsModule } from './transactions/transactions.module';
+import { MovementsModule } from './movements/movements.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { IncomingMessage } from 'http';
 
@@ -76,6 +77,7 @@ import { IncomingMessage } from 'http';
     AuthModule,
     CategoriesModule,
     TransactionsModule,
+    MovementsModule,
   ],
   providers: [
     // Guard global: toda request requiere JWT válido (RNF-001).

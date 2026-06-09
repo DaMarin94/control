@@ -11,13 +11,13 @@
 |---------|---------|--------|
 | Auth — email/contraseña (login + registro) | RF-AUTH-005..006, 002..004 | Implementado |
 | Auth — Google OAuth | RF-AUTH-001 | Scaffolded (diferido) |
-| Dashboard — resumen del mes + últimos movimientos | RF-DASH-001..005 | Pendiente |
+| Dashboard — resumen del mes (en `/`) | RF-DASH-001..003, 005 | Implementado |
 | Formulario de carga (tabs único/fijo/cuotas) | RF-CM-001 | Parcial (Único; Fijo/Cuotas "Próximamente") |
-| Movimiento único — crear, editar, eliminar | RF-MU-001..003 | Crear operativo; editar/eliminar listos para Fase 5 |
+| Movimiento único — crear, editar, eliminar | RF-MU-001..003 | Implementado (editar/eliminar cableados desde la vista del mes) |
 | Movimiento fijo — crear, visualizar, editar, eliminar | RF-MF-001..004 | Pendiente |
 | Movimiento en cuotas — crear, eliminar | RF-MC-001..002 | Pendiente |
 | Categorías — defaults + CRUD + soft delete | RF-CAT-001..006 | Implementado |
-| Vista del mes — lista + totales + navegación | RF-VM-001..004 | Pendiente |
+| Vista del mes — lista + totales + navegación | RF-VM-001..004 | Implementado |
 
 ---
 
@@ -46,6 +46,14 @@
 - **Editar y eliminar implementados** como componentes/hooks reutilizables (`TransactionModal`, `DeleteTransactionDialog`, `useTransactions`), pero **sin acceso visible todavía**: quedan listos para que la Vista del mes (Fase 5) los cablee. No hay lista ni Vista del mes en esta fase.
 - **Modal con tabs Único / Fijo / Cuotas:** solo Único es funcional; **Fijo y Cuotas están deshabilitados con badge "Próximamente"** (Fases 6/7).
 - Contrato de API y bucketeo por mes en `docs/backend.md`; patrón de datos y helpers en `docs/frontend.md`.
+
+### Vista del mes y Dashboard (Fase 5)
+
+- **Endpoint unificado `GET /movements?month=YYYY-MM`** (backend `MovementsModule`): totales del mes + movimientos agrupados por origen (únicos / fijos / cuotas). Hoy solo únicos trae datos; fijos y cuotas vienen vacíos, con el shape ya previsto para Fases 6/7. Contrato en `docs/backend.md` y `docs/data-model.md`.
+- **Bucketeo de mes definitivo:** el mes de cada movimiento se calcula con la **zona propia del registro** (`AT TIME ZONE` en raw SQL parametrizado), saldando la deuda técnica de Fase 4. `GET /movements` ya **no** recibe `timezone`. Se eliminó `GET /transactions?month&timezone`.
+- **Dashboard movido a `/`** (antes `/dashboard`, desviación de Fase 2 corregida): resumen del mes actual, "Nuevo movimiento", "Ver todos" → `/mes`, estado vacío con CTA. No lista movimientos.
+- **Vista del mes `/mes`:** lista por secciones (las vacías no se muestran), navegación prev/next del mes, totales que se actualizan al mutar. **Editar y eliminar de movimientos únicos quedan ahora cableados** desde acá (modales de Fase 4).
+- **Sidebar (RF-NAV-001) diferido formalmente:** la navegación entre `/`, `/mes` y `/categorias` usa los accesos definidos en cada pantalla. Ver `docs/frontend.md` y la bitácora 2026-06-09 de `docs/requirements.md`.
 
 ---
 

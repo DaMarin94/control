@@ -4,42 +4,29 @@
  * Hook de datos para transacciones/movimientos.
  * Wrapper fino sobre React Query + useApi (patrón establecido en Fase 2/3).
  *
- * Query keys:
- *   - TRANSACTIONS_QUERY_KEY(month) = ["transactions", month]
- *     Donde month tiene formato "YYYY-MM".
- *
  * Expone:
- * - getTransactions(month, timezone): query por mes — lista para Fase 5
  * - createTransaction(data): crea un movimiento único
- * - updateTransaction({ id, data }): edita un movimiento existente
- * - deleteTransaction(id): elimina un movimiento (hard delete, permanente)
+ * - updateTransaction(id, data): edita un movimiento existente
+ * - deleteTransaction(id, month): elimina un movimiento (hard delete, permanente)
  *
- * Invalidación: tras crear/editar/eliminar se invalida la query del mes afectado.
+ * Invalidación: tras crear/editar/eliminar se invalida MOVEMENTS_QUERY_KEY(month)
+ * (endpoint vigente desde Fase 5: GET /movements?month=YYYY-MM).
  */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useApi } from "@/hooks/use-api";
 import { ApiError } from "@/types/api";
 import {
   type Transaction,
   type CreateTransactionRequest,
   type UpdateTransactionRequest,
-  type GetTransactionsParams,
 } from "@/types/transaction";
+import { MOVEMENTS_QUERY_KEY } from "@/hooks/use-movements";
 import { createLogger } from "@/lib/logger";
 
 const logger = createLogger("useTransactions");
 
-// ─── Query keys ───────────────────────────────────────────────────────────────
-
-/**
- * Query key para la lista de transacciones de un mes.
- * Fase 5 reutiliza esta misma función para compartir caché.
- */
-export const TRANSACTIONS_QUERY_KEY = (month: string) =>
-  ["transactions", month] as const;
-
-// ─── Tipos de resultado de mutaciones ────────────────────────────────────────
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 
 export interface CreateTransactionResult {
   success: boolean;
@@ -62,7 +49,7 @@ export interface DeleteTransactionResult {
 
 /**
  * Hook con mutaciones create/update/delete.
- * La query GET por mes (para Fase 5) se expone via useTransactionsByMonth.
+ * La query GET por mes se hace via useMovements (use-movements.ts).
  */
 export function useTransactions() {
   const { api } = useApi();
@@ -73,9 +60,8 @@ export function useTransactions() {
   const createMutation = useMutation<Transaction, ApiError, CreateTransactionRequest>({
     mutationFn: (data) => api.post<Transaction>("/transactions", data),
     onSuccess: (transaction) => {
-      // Invalida el mes de la transacción creada
       const month = transaction.occurredAt.substring(0, 7);
-      void queryClient.invalidateQueries({ queryKey: TRANSACTIONS_QUERY_KEY(month) });
+      void queryClient.invalidateQueries({ queryKey: MOVEMENTS_QUERY_KEY(month) });
       logger.info("Transacción creada", { id: transaction.id });
     },
     onError: (err) => {
@@ -119,7 +105,7 @@ export function useTransactions() {
     mutationFn: ({ id, data }) => api.patch<Transaction>(`/transactions/${id}`, data),
     onSuccess: (transaction) => {
       const month = transaction.occurredAt.substring(0, 7);
-      void queryClient.invalidateQueries({ queryKey: TRANSACTIONS_QUERY_KEY(month) });
+      void queryClient.invalidateQueries({ queryKey: MOVEMENTS_QUERY_KEY(month) });
       logger.info("Transacción actualizada", { id: transaction.id });
     },
     onError: (err) => {
@@ -162,7 +148,7 @@ export function useTransactions() {
   const deleteMutation = useMutation<void, ApiError, { id: string; month: string }>({
     mutationFn: ({ id }) => api.delete<void>(`/transactions/${id}`),
     onSuccess: (_, { month }) => {
-      void queryClient.invalidateQueries({ queryKey: TRANSACTIONS_QUERY_KEY(month) });
+      void queryClient.invalidateQueries({ queryKey: MOVEMENTS_QUERY_KEY(month) });
       logger.info("Transacción eliminada");
     },
     onError: (err) => {
@@ -212,24 +198,3 @@ export function useTransactions() {
   };
 }
 
-// ─── Hook de query por mes (lista para Fase 5) ─────────────────────────────
-
-/**
- * Hook para obtener la lista de transacciones de un mes.
- * Fase 5 usa este hook para cablear la Vista del mes.
- *
- * @param params.month - Formato YYYY-MM
- * @param params.timezone - Nombre de zona IANA
- */
-export function useTransactionsByMonth(params: GetTransactionsParams) {
-  const { api } = useApi();
-
-  return useQuery<Transaction[]>({
-    queryKey: TRANSACTIONS_QUERY_KEY(params.month),
-    queryFn: () =>
-      api.get<Transaction[]>(
-        `/transactions?month=${params.month}&timezone=${encodeURIComponent(params.timezone)}`,
-      ),
-    enabled: Boolean(params.month && params.timezone),
-  });
-}

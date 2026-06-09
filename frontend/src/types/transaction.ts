@@ -1,6 +1,6 @@
 /**
  * Tipos del dominio de transacciones/movimientos.
- * Reflejan el contrato de la API del backend (/transactions).
+ * Reflejan el contrato de la API del backend.
  * No hay paquete compartido con el backend — el frontend define los suyos.
  */
 
@@ -62,10 +62,3 @@ export interface UpdateTransactionRequest {
   description?: string | null;
 }
 
-/** Parámetros para GET /transactions */
-export interface GetTransactionsParams {
-  /** Formato YYYY-MM */
-  month: string;
-  /** Nombre de zona IANA */
-  timezone: string;
-}

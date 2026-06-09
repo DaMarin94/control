@@ -69,8 +69,8 @@ Los callbacks `jwt` y `session` persisten el **`accessToken` de NestJS** y el **
 
 ### Pantallas y protección de rutas
 
-- Pantallas `/login` y `/registro`; dashboard placeholder en `/dashboard`.
-- **Protección de rutas** vía `src/middleware.ts`: una ruta privada sin sesión redirige a `/login`; un usuario autenticado que entra a `/login` o `/registro` es redirigido a `/dashboard`.
+- Pantallas `/login` y `/registro`; dashboard en `/` (ver sección Vista del mes y Dashboard).
+- **Protección de rutas** vía `src/middleware.ts`: una ruta privada sin sesión redirige a `/login`; un usuario autenticado que entra a `/login` o `/registro` es redirigido a `/`.
 - **Auto-login tras registro:** un registro exitoso deja al usuario logueado sin pasar por la pantalla de login (RF-AUTH-006).
 
 ## Categorías (`/categorias`)
@@ -99,7 +99,7 @@ Al crear, si el backend responde `409` con `error.data.reactivable`, el modal **
 
 ## Movimientos únicos
 
-Carga de movimientos. En Fase 4 solo está visible **crear** (desde el dashboard); editar y eliminar quedan implementados como componentes/hooks reutilizables, listos para que la **Vista del mes** (Fase 5) los cablee.
+Carga de movimientos. El modal de carga se invoca desde el dashboard (`/`); **editar y eliminar quedan cableados desde la Vista del mes** (`/mes`) — ver sección Vista del mes y Dashboard.
 
 ### Modal de carga (`components/movements/transaction-modal.tsx`)
 
@@ -113,20 +113,20 @@ Carga de movimientos. En Fase 4 solo está visible **crear** (desde el dashboard
 
 ### Crear desde el dashboard
 
-- Botón **"Nuevo movimiento"** en `/dashboard` abre el modal. Al guardar → toast con acción **"Ir a ver"** que navega a `/mes?month=YYYY-MM` (ruta real que construye Fase 5; hoy `404` por diseño).
+- Botón **"Nuevo movimiento"** en `/` abre el modal. Al guardar → toast con acción **"Ir a ver"** que navega a `/mes?month=YYYY-MM`.
 
-### Editar / eliminar — listos para Fase 5
+### Editar / eliminar — cableados desde la Vista del mes
 
 - `TransactionModal` acepta `transaction: Transaction | null` (null = crear, objeto = editar).
 - `DeleteTransactionDialog` acepta `transaction` (diálogo de confirmación antes del hard delete).
-- La Vista del mes solo tiene que pasarles el movimiento de la lista y renderizarlos.
+- La Vista del mes pasa a estos componentes el movimiento de la lista (ver mapeo `MovementItem → Transaction` en la sección Vista del mes y Dashboard).
 
 ### Datos (`use-transactions`)
 
 - Hook **`useTransactions()`** expone las mutaciones: `createTransaction`, `updateTransaction(id, data)`, `deleteTransaction(id, month)`.
-- **`useTransactionsByMonth({ month, timezone })`** — lista del mes, listo para la Vista del mes.
-- **Query key como función:** `TRANSACTIONS_QUERY_KEY(month) = ["transactions", month]` — **varía por mes**. Invalidar la clave del mes afectado al mutar.
-- **Gotcha — `deleteTransaction` recibe `month` explícito:** el `DELETE` devuelve `204` sin cuerpo, así que no se puede derivar del recurso qué mes invalidar. El llamador (Fase 5) deriva el `month` del `occurredAt` del movimiento de la lista y lo pasa.
+- **La lista del mes ya no vive acá:** se lee con `useMovements(month)` (ver sección Vista del mes y Dashboard). Se eliminó el hook `useTransactionsByMonth` y la query key legacy `["transactions", month]` — apuntaban al endpoint eliminado `GET /transactions?month&timezone`.
+- **Invalidación al mutar:** las mutaciones de `useTransactions` invalidan **`MOVEMENTS_QUERY_KEY(month) = ["movements", month]`** (la clave de `useMovements`).
+- **Gotcha — `deleteTransaction` recibe `month` explícito:** el `DELETE` devuelve `204` sin cuerpo, así que no se puede derivar del recurso qué mes invalidar. El llamador deriva el `month` del `occurredAt` del movimiento de la lista y lo pasa.
 
 ### Helpers (`lib/format.ts`)
 
@@ -135,6 +135,52 @@ Reusarlos, no reimplementar:
 - **`parseCurrencyInput`** — pesos → centavos vía `Math.round(parsed * 100)`; acepta punto o coma decimal. **`formatCurrency`** — centavos → string en pesos.
 - **`localToUtcIso` / `utcToLocalDate` / `utcToLocalTime`** — conversión local ↔ UTC con `Intl.DateTimeFormat` de doble pasada; **maneja DST** correctamente.
 - **`getBrowserTimezone`** — IANA del navegador.
+- **Helpers de mes (Fase 5):** **`getCurrentMonth`** — mes actual `YYYY-MM` en la zona del navegador; **`formatMonthLabel`** — `YYYY-MM` → rótulo legible (nombre de mes + año); **`prevMonth` / `nextMonth`** — desplazan un `YYYY-MM` un mes hacia atrás / adelante. Reusarlos para la navegación del mes; no reimplementar aritmética de meses.
+
+## Vista del mes y Dashboard
+
+Las dos pantallas de visualización (Fase 5), sobre el endpoint unificado `GET /movements?month=YYYY-MM` (contrato en `docs/backend.md`, sección Movimientos del mes).
+
+### Dashboard movido a `/`
+
+El dashboard vive en **`/`** (`src/app/page.tsx`). Antes era `/dashboard` — una desviación de `screens.md` introducida en Fase 2 que se corrigió acá. La carpeta `/dashboard` se eliminó. Redirects actualizados a `/`:
+
+- `src/middleware.ts`: un usuario autenticado que entra a `/login` o `/registro` se redirige a `/`.
+- `callbackUrl` / `redirectTo` por defecto del login, el registro y `use-register` apuntan a `/`.
+- **Sign-out sigue yendo a `/login`** (sin cambios).
+
+### Dashboard (`/`)
+
+- **Encabezado con el mes actual** (sin navegación entre meses — siempre el mes en curso).
+- **Resumen financiero** del mes (gastos / ingresos / balance) leído de `data.totals`.
+- Botón **"Nuevo movimiento"** (abre el modal de carga) y enlace **"Ver todos"** → `/mes`.
+- **Estado vacío** (sin movimientos en el mes): totales en cero y CTA **"Cargá tu primer movimiento"** que abre el modal.
+- **No lista movimientos** (decisión de producto; la lista vive en `/mes`).
+
+### Vista del mes (`/mes`)
+
+- Lee el mes de **`?month=YYYY-MM`** (default: mes actual en la zona del navegador, vía `getCurrentMonth`).
+- **Encabezado + navegación prev / next** que cambian `?month=` (con `prevMonth` / `nextMonth`); rótulo con `formatMonthLabel`.
+- **Totales del mes** (de `data.totals`).
+- **Lista agrupada en secciones Únicos / Fijos / Cuotas.** Una sección **sin movimientos no se muestra**; hoy solo Únicos trae datos. Cada ítem muestra tipo, monto, categoría, descripción y origen, con acciones **Editar** (abre `TransactionModal` en modo edición) y **Eliminar** (`DeleteTransactionDialog`).
+- **Se actualiza al mutar** (crear / editar / eliminar) por invalidación de la query del mes.
+
+### Datos (`use-movements`)
+
+- Hook **`useMovements(month)`** sobre `GET /movements?month=`. **Query key como función:** **`MOVEMENTS_QUERY_KEY(month) = ["movements", month]`** — varía por mes.
+- Las mutaciones de `useTransactions` invalidan `["movements", month]` (ver sección Movimientos únicos). Reusar esta clave para invalidar — no inventar otra.
+
+### Mapeo `MovementItem → Transaction` (para editar)
+
+- El ítem de la lista (`MovementItem`) **no trae `userId` / `createdAt` / `updatedAt`** (los modales de edición no los usan) y **`categoryId` se deriva de `category.id`**. La Vista del mes arma el `Transaction` que esperan `TransactionModal` / `DeleteTransactionDialog` a partir del `MovementItem`.
+
+### Gotcha — `<Suspense>` + `useSearchParams`
+
+- `/mes` usa **`useSearchParams()`**, que en el App Router de Next.js 15 **obliga a envolver el componente en `<Suspense>`** (si no, el build falla). Ya resuelto con un wrapper que provee el límite de Suspense.
+
+### Navegación entre pantallas (sin sidebar todavía)
+
+La navegación entre `/`, `/mes` y `/categorias` se hace por los **accesos definidos en cada pantalla** (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL): el **sidebar (RF-NAV-001) está diferido** a una fase posterior (ver bitácora 2026-06-09 en `docs/requirements.md`).
 
 ## Tailwind v4 — gotcha
 

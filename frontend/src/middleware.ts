@@ -20,9 +20,9 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  // Si ya está autenticado y entra a /login o /registro → redirigir al dashboard
+  // Si ya está autenticado y entra a /login o /registro → redirigir al dashboard (raíz)
   if (isAuthenticated && PUBLIC_PATHS.includes(pathname)) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+    return NextResponse.redirect(new URL("/", req.url));
   }
 
   // Si no está autenticado y la ruta es privada → redirigir a /login

@@ -86,7 +86,7 @@ describe("LoginForm", () => {
 
   it("llama a signIn('credentials') con email y password correctos", async () => {
     const user = userEvent.setup();
-    mockSignIn.mockResolvedValueOnce({ ok: true, error: null, status: 200, url: "/dashboard" });
+    mockSignIn.mockResolvedValueOnce({ ok: true, error: null, status: 200, url: "/" });
     renderLoginForm();
 
     await user.type(screen.getByLabelText(/email/i), "test@example.com");
@@ -97,7 +97,7 @@ describe("LoginForm", () => {
       expect(mockSignIn).toHaveBeenCalledWith("credentials", {
         email: "test@example.com",
         password: "password123",
-        callbackUrl: "/dashboard",
+        callbackUrl: "/",
         redirect: false,
       });
     });

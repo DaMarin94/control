@@ -100,6 +100,63 @@ export function getBrowserTimezone(): string {
 }
 
 /**
+ * Obtiene el mes actual del navegador en formato YYYY-MM.
+ * Usa la zona horaria local del navegador para determinar el mes calendario.
+ * Ej: "2026-06"
+ */
+export function getCurrentMonth(): string {
+  const tz = getBrowserTimezone();
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+  });
+  const parts = formatter.formatToParts(new Date());
+  const year = parts.find((p) => p.type === "year")?.value ?? "";
+  const month = parts.find((p) => p.type === "month")?.value ?? "";
+  return `${year}-${month}`;
+}
+
+/**
+ * Formatea un mes en formato YYYY-MM como encabezado legible.
+ * Ej: "2026-06" → "Junio 2026"
+ */
+export function formatMonthLabel(month: string): string {
+  // Construir un Date en el primer día del mes a mediodía UTC para evitar
+  // desfases de zona que cambien el mes.
+  const date = new Date(`${month}-01T12:00:00Z`);
+  return new Intl.DateTimeFormat("es-AR", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+}
+
+/**
+ * Dado un mes YYYY-MM, devuelve el mes anterior en formato YYYY-MM.
+ * Ej: "2026-01" → "2025-12"
+ */
+export function prevMonth(month: string): string {
+  const [yearStr, monthStr] = month.split("-");
+  const date = new Date(Number(yearStr), Number(monthStr) - 1 - 1, 1);
+  const year = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${m}`;
+}
+
+/**
+ * Dado un mes YYYY-MM, devuelve el mes siguiente en formato YYYY-MM.
+ * Ej: "2025-12" → "2026-01"
+ */
+export function nextMonth(month: string): string {
+  const [yearStr, monthStr] = month.split("-");
+  const date = new Date(Number(yearStr), Number(monthStr) - 1 + 1, 1);
+  const year = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${m}`;
+}
+
+/**
  * Convierte una fecha (YYYY-MM-DD) y hora local (HH:MM) en la timezone
  * dada a un instante ISO 8601 UTC.
  *

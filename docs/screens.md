@@ -20,6 +20,7 @@
 ## Convenciones
 
 - El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Categorías) y **no** se muestra en las pantallas no autenticadas (Login, Registro). Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo.
+  - **Estado de implementación (2026-06-09): pendiente / diferido.** El sidebar **todavía no está implementado** — su construcción se difirió a una fase posterior (ver bitácora de `requirements.md`, 2026-06-09). La definición de abajo describe el estado objetivo y **no cambia**. Mientras tanto, la navegación entre Dashboard (`/`), Vista del mes (`/mes`) y Categorías (`/categorias`) se hace por los **accesos definidos en cada pantalla** (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL directa). Donde una pantalla menciona el "Sidebar" en su contenido o acciones, léase como pendiente hasta que RF-NAV-001 se implemente.
 - El **formulario de carga** (pantalla 5) es un modal sin ruta propia. Se invoca desde el sidebar y desde el dashboard, y se superpone a la pantalla actual.
 
 ---
