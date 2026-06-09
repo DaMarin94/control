@@ -12,10 +12,10 @@
 | Auth — email/contraseña (login + registro) | RF-AUTH-005..006, 002..004 | Implementado |
 | Auth — Google OAuth | RF-AUTH-001 | Scaffolded (diferido) |
 | Dashboard — resumen del mes (en `/`) | RF-DASH-001..003, 005 | Implementado |
-| Formulario de carga (tabs único/fijo/cuotas) | RF-CM-001 | Parcial (Único y Fijo; Cuotas "Próximamente") |
+| Formulario de carga (tabs único/fijo/cuotas) | RF-CM-001 | Implementado (los tres tabs funcionales) |
 | Movimiento único — crear, editar, eliminar | RF-MU-001..003 | Implementado (editar/eliminar cableados desde la vista del mes) |
 | Movimiento fijo — crear, visualizar, editar, eliminar | RF-MF-001..004 | Implementado |
-| Movimiento en cuotas — crear, eliminar | RF-MC-001..002 | Pendiente |
+| Movimiento en cuotas — crear, visualizar, editar, eliminar | RF-MC-001..003 | Implementado (solo Gasto en v1) |
 | Categorías — defaults + CRUD + soft delete | RF-CAT-001..006 | Implementado |
 | Vista del mes — lista + totales + navegación | RF-VM-001..004 | Implementado |
 
@@ -63,6 +63,18 @@
 - **Eliminar (RF-MF-004):** diálogo con checkbox "Eliminar también desde este mes" (desmarcado por default → deja de aparecer desde el mes siguiente; marcado → desde el mes actual inclusive). El pasado nunca se modifica.
 - **Totales del mes ahora incluyen los fijos activos:** tanto la Vista del mes como el Dashboard suman únicos + fijos del mes (RF-DASH-002 / RF-VM-002).
 - **Inmutabilidad del pasado vía "split":** un fijo lógico es una **cadena de filas `Recurring`**; editar un fijo que ya corrió meses pasados cierra la fila vigente y abre una nueva. Detalle en `docs/backend.md` (sección Movimientos fijos) y bitácora 2026-06-09.
+
+### Movimientos en cuotas (Fase 7)
+
+- **CRUD operativo** end-to-end (backend `InstallmentsModule` + tab Cuotas del modal de carga), scopeado por `userId` del JWT. Con esto quedan completos los **tres tipos de movimiento** (únicos, fijos, cuotas) y el modal de carga ya **no tiene ningún tab "Próximamente"**.
+- **Solo Gasto en v1 (RF-MC-001..003):** el tab Cuotas **no ofrece selector de tipo** —siempre Gasto— y el backend rechaza `INCOME` con `400`. Resuelve la contradicción de la spec (RF-MC-001 ofrecía "Gasto o Ingreso", pero la sección 6 excluye "Ingreso en cuotas"); ver bitácora 2026-06-09.
+- **Crear (RF-MC-001):** monto **por cuota** (no el total), cantidad de cuotas, mes de inicio (default mes actual), categoría y descripción. No hay día ni hora —las cuotas operan a nivel mes.
+- **Visualización en la Vista del mes:** las cuotas activas en el mes aparecen en su sección "Cuotas", con badge de origen "Cuotas" y la etiqueta **"Cuota X/N"** en vez de fecha (RF-MC-001). Cada ítem expone Editar y Eliminar.
+- **Editar (RF-MC-003):** el grupo completo, in-place (monto por cuota, cantidad, mes de inicio, categoría, descripción; **el tipo no se edita**). A diferencia de los fijos, **no hay split ni inmutabilidad del pasado**: la edición aplica a todas las instancias del grupo.
+- **Eliminar (RF-MC-002):** **hard delete del grupo entero** (todas las cuotas, pasadas y futuras); el diálogo avisa que se elimina el grupo completo, sin checkbox.
+- **Totales del mes ahora incluyen las cuotas:** Vista del mes y Dashboard suman únicos + fijos + cuotas (RF-DASH-002 / RF-VM-002).
+- **Cuotas calculadas on-the-fly (RN-006):** no se crean filas por instancia mensual; una cuota cae en el mes si `startMonth ≤ mes < startMonth + totalInstallments`. Detalle en `docs/backend.md` (sección Movimientos en cuotas).
+- **Validación de categoría consolidada:** la validación duplicada en Fases 4/6 se extrajo a `CategoryValidatorService` (módulo `categories`); los tres módulos de movimientos lo reusan. Ver `docs/backend.md`.
 
 ---
 

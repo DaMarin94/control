@@ -68,6 +68,14 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  // installmentGroup.findMany se usa para cuotas (Fase 7 — findCuotasByMonth / getCuotasTotalsByMonth)
+  installmentGroup: {
+    create: jest.fn(),
+    findUnique: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+    update: jest.fn(),
+    delete: jest.fn(),
+  },
   // $queryRaw se mockea para que MovementsRepository pueda funcionar
   $queryRaw: jest.fn(),
   $connect: jest.fn(),
@@ -163,6 +171,8 @@ describe('Movements (e2e)', () => {
     mockPrisma.category.createMany.mockResolvedValue({ count: 0 });
     // Default: sin fijos activos (Fase 6). Los tests de fijos lo sobreescriben.
     mockPrisma.recurring.findMany.mockResolvedValue([]);
+    // Default: sin cuotas activas (Fase 7). Los tests de cuotas lo sobreescriben.
+    mockPrisma.installmentGroup.findMany.mockResolvedValue([]);
   });
 
   // -------------------------------------------------------------------------
@@ -477,6 +487,170 @@ describe('Movements (e2e)', () => {
       // verificamos que el userId del tokenB aparece en los argumentos
       const argsFlat = firstCall.flat(Infinity);
       expect(argsFlat).toContain(USER_B_ID);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Cuotas (Fase 7) — GET /movements mostrando cuotas con installment field
+  // -------------------------------------------------------------------------
+
+  describe('GET /movements — cuotas (Fase 7)', () => {
+    /**
+     * Helper: crea un InstallmentGroup tal como lo devuelve prisma.installmentGroup.findMany
+     * con include de categoría.
+     */
+    function makeDbInstallmentGroup(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'group-001',
+        userId: USER_A_ID,
+        categoryId: CAT_ID,
+        type: 'EXPENSE',
+        amountCents: 5000,
+        totalInstallments: 12,
+        startMonth: '2026-01',
+        description: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        category: {
+          id: CAT_ID,
+          name: 'Electrónica',
+          color: '#4F86C6',
+          scope: 'EXPENSE',
+        },
+        ...overrides,
+      };
+    }
+
+    it('200 + cuota activa aparece en movements.cuotas con campo installment', async () => {
+      // Grupo de 12 cuotas desde 2026-01: la cuota 6 cae en 2026-06
+      const group = makeDbInstallmentGroup({
+        startMonth: '2026-01',
+        totalInstallments: 12,
+        amountCents: 5000,
+      });
+      // findMany de installmentGroup: devuelve el grupo (startMonth '2026-01' <= '2026-06')
+      // Se llama 2 veces: findCuotasByMonth y getCuotasTotalsByMonth
+      mockPrisma.installmentGroup.findMany
+        .mockResolvedValueOnce([group])  // findCuotasByMonth
+        .mockResolvedValueOnce([group]); // getCuotasTotalsByMonth
+
+      // $queryRaw (únicos): sin únicos este mes
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([])                        // findUnicosByMonth
+        .mockResolvedValueOnce([makeRawTotalsRow(0n, 0n)]); // getTotalsByMonth
+
+      const res = await request(app.getHttpServer())
+        .get('/movements?month=2026-06')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const data = res.body.data;
+      expect(data.movements.cuotas).toHaveLength(1);
+
+      const cuota = data.movements.cuotas[0];
+      expect(cuota).toHaveProperty('id', 'group-001');
+      expect(cuota).toHaveProperty('origin', 'cuota');
+      expect(cuota).toHaveProperty('type', 'EXPENSE');
+      expect(cuota).toHaveProperty('amountCents', 5000);
+      expect(cuota.occurredAt).toBeNull();
+      expect(cuota.timezone).toBeNull();
+
+      // Campo installment: cuota 6 de 12, startMonth '2026-01'
+      expect(cuota.installment).toBeDefined();
+      expect(cuota.installment.number).toBe(6);  // monthDiff('2026-01', '2026-06') + 1
+      expect(cuota.installment.total).toBe(12);
+      expect(cuota.installment.startMonth).toBe('2026-01');
+
+      // Categoría embebida
+      expect(cuota.category).toBeDefined();
+      expect(cuota.category.id).toBe(CAT_ID);
+      expect(cuota.category.name).toBe('Electrónica');
+    });
+
+    it('cuota suma al total expenseCents', async () => {
+      const group = makeDbInstallmentGroup({ amountCents: 3000, totalInstallments: 6, startMonth: '2026-01' });
+      mockPrisma.installmentGroup.findMany
+        .mockResolvedValueOnce([group])
+        .mockResolvedValueOnce([group]);
+
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([makeRawTotalsRow(0n, 0n)]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements?month=2026-06')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      // Total debe incluir la cuota (3000) — únicos aportan 0
+      expect(res.body.data.totals.expenseCents).toBe(3000);
+      expect(res.body.data.totals.balanceCents).toBe(-3000);
+    });
+
+    it('cuota más único: totales combinados correctos', async () => {
+      const group = makeDbInstallmentGroup({ amountCents: 2000, totalInstallments: 3, startMonth: '2026-05' });
+      mockPrisma.installmentGroup.findMany
+        .mockResolvedValueOnce([group])
+        .mockResolvedValueOnce([group]);
+
+      // Un único de 1000 en el mes
+      const row = makeRawTransactionRow({ amountCents: 1000 });
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([row])
+        .mockResolvedValueOnce([makeRawTotalsRow(1000n, 0n)]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements?month=2026-06')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      // 1000 (único) + 2000 (cuota) = 3000
+      expect(res.body.data.totals.expenseCents).toBe(3000);
+      expect(res.body.data.movements.unicos).toHaveLength(1);
+      expect(res.body.data.movements.cuotas).toHaveLength(1);
+    });
+
+    it('grupo terminado no aparece como cuota activa', async () => {
+      // Grupo de 3 cuotas desde 2026-01: termina en 2026-03 (última cuota).
+      // En 2026-06 ya no está activo.
+      const group = makeDbInstallmentGroup({ startMonth: '2026-01', totalInstallments: 3 });
+      mockPrisma.installmentGroup.findMany
+        .mockResolvedValueOnce([group])
+        .mockResolvedValueOnce([group]);
+
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([makeRawTotalsRow(0n, 0n)]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements?month=2026-06')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      // El grupo terminó en 2026-03, no debe aparecer en 2026-06
+      expect(res.body.data.movements.cuotas).toHaveLength(0);
+      expect(res.body.data.totals.expenseCents).toBe(0);
+    });
+
+    it('primera cuota: number = 1 cuando month === startMonth', async () => {
+      // Grupo desde '2026-06': la primera cuota cae en 2026-06
+      const group = makeDbInstallmentGroup({ startMonth: '2026-06', totalInstallments: 6 });
+      mockPrisma.installmentGroup.findMany
+        .mockResolvedValueOnce([group])
+        .mockResolvedValueOnce([group]);
+
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([makeRawTotalsRow(0n, 0n)]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements?month=2026-06')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const cuota = res.body.data.movements.cuotas[0];
+      expect(cuota.installment.number).toBe(1);
+      expect(cuota.installment.total).toBe(6);
     });
   });
 

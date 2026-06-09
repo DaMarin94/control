@@ -3,9 +3,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { CategoryScope, MovementType } from '@prisma/client';
+import { MovementType } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
-import { PrismaService } from '../prisma/prisma.service';
+import { CategoryValidatorService } from '../categories/category-validator.service';
 import {
   TransactionsRepository,
   TransactionWithCategory,
@@ -17,7 +17,7 @@ import { UpdateTransactionDto } from './dto/update-transaction.dto';
 export class TransactionsService {
   constructor(
     private readonly repo: TransactionsRepository,
-    private readonly prisma: PrismaService,
+    private readonly categoryValidator: CategoryValidatorService,
     private readonly logger: Logger,
   ) {}
 
@@ -30,7 +30,7 @@ export class TransactionsService {
     dto: CreateTransactionDto,
   ): Promise<TransactionWithCategory> {
     // Validar categoría: propia + activa + scope compatible (RN-010)
-    await this.validateCategory(userId, dto.categoryId, dto.type);
+    await this.categoryValidator.validateCategory(userId, dto.categoryId, dto.type);
 
     const tx = await this.repo.create({
       user: { connect: { id: userId } },
@@ -129,7 +129,7 @@ export class TransactionsService {
 
     // Si cambió el type o la categoría, revalidar scope compatibility (RN-010)
     if (dto.type !== undefined || dto.categoryId !== undefined) {
-      await this.validateCategory(userId, effectiveCategoryId, effectiveType);
+      await this.categoryValidator.validateCategory(userId, effectiveCategoryId, effectiveType);
     }
 
     const updated = await this.repo.update(id, {
@@ -171,64 +171,6 @@ export class TransactionsService {
       { userId, transactionId: id },
       'Transacción eliminada (hard delete)',
     );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Helper privado: validación de categoría (RN-010)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Valida que la categoría:
-   * 1. Exista
-   * 2. Pertenezca al usuario (RN-003)
-   * 3. Esté activa (deletedAt null)
-   * 4. Su scope sea compatible con el type del movimiento (RN-010):
-   *    - EXPENSE: scope debe ser EXPENSE o BOTH
-   *    - INCOME:  scope debe ser INCOME o BOTH
-   *
-   * @throws BadRequestException en cualquier caso de fallo.
-   */
-  private async validateCategory(
-    userId: string,
-    categoryId: string,
-    type: MovementType,
-  ): Promise<void> {
-    const category = await this.prisma.category.findUnique({
-      where: { id: categoryId },
-      select: { id: true, userId: true, scope: true, deletedAt: true },
-    });
-
-    if (!category || category.userId !== userId) {
-      throw new BadRequestException('La categoría no existe o no pertenece al usuario');
-    }
-
-    if (category.deletedAt !== null) {
-      throw new BadRequestException('La categoría está eliminada');
-    }
-
-    const scopeCompatible = this.isScopeCompatible(category.scope, type);
-    if (!scopeCompatible) {
-      throw new BadRequestException(
-        `La categoría no es compatible con el tipo "${type}". ` +
-          `Su scope es "${category.scope}" y solo acepta movimientos de tipo ` +
-          (category.scope === CategoryScope.EXPENSE ? 'EXPENSE' : 'INCOME') +
-          '.',
-      );
-    }
-  }
-
-  /**
-   * Verifica si el scope de una categoría es compatible con el type de un movimiento.
-   *
-   * Regla (RN-010):
-   * - EXPENSE: scope EXPENSE o BOTH ✓; scope INCOME ✗
-   * - INCOME:  scope INCOME o BOTH ✓; scope EXPENSE ✗
-   */
-  private isScopeCompatible(scope: CategoryScope, type: MovementType): boolean {
-    if (scope === CategoryScope.BOTH) return true;
-    if (scope === CategoryScope.EXPENSE && type === MovementType.EXPENSE) return true;
-    if (scope === CategoryScope.INCOME && type === MovementType.INCOME) return true;
-    return false;
   }
 
   // ---------------------------------------------------------------------------

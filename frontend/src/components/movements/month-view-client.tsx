@@ -6,15 +6,14 @@
  * Lee el mes desde props (derivado del query param ?month=YYYY-MM en la page).
  * Muestra totales y lista agrupada por origen: Únicos, Fijos, Cuotas.
  *
- * Cambios en Fase 6:
- * - La sección Fijos ahora llega poblada desde el backend.
+ * Cambios en Fase 7:
+ * - La sección Cuotas ahora llega poblada desde el backend.
  * - Editar y eliminar ramifican por origin:
- *   - "unico" → TransactionModal (mode="edit-single") / DeleteTransactionDialog
- *   - "fijo"  → TransactionModal (mode="edit-fixed") / DeleteRecurringDialog
- * - movementItemToTransaction solo se usa para únicos (que sí tienen occurredAt).
- * - movementItemToRecurring convierte un MovementItem de fijo al shape Recurring
- *   que espera RecurringForm (no trae todos los campos de auditoría, pero son
- *   los que el form necesita para el prefill).
+ *   - "unico"  → TransactionModal (mode="edit-single") / DeleteTransactionDialog
+ *   - "fijo"   → TransactionModal (mode="edit-fixed") / DeleteRecurringDialog
+ *   - "cuota"  → TransactionModal (mode="edit-installment") / DeleteInstallmentDialog
+ * - movementItemToInstallment convierte un MovementItem de cuota al shape InstallmentGroup
+ *   que espera InstallmentForm en modo edición (prefill de todos los campos editables).
  */
 
 import { useState } from "react";
@@ -24,6 +23,7 @@ import { MovementItemRow } from "@/components/movements/movement-item-row";
 import { TransactionModal } from "@/components/movements/transaction-modal";
 import { DeleteTransactionDialog } from "@/components/movements/delete-transaction-dialog";
 import { DeleteRecurringDialog } from "@/components/movements/delete-recurring-dialog";
+import { DeleteInstallmentDialog } from "@/components/movements/delete-installment-dialog";
 import { NewTransactionButton } from "@/components/movements/new-transaction-button";
 import {
   formatCurrency,
@@ -34,6 +34,7 @@ import {
 import type { MovementItem } from "@/types/movement";
 import type { Transaction } from "@/types/transaction";
 import type { Recurring } from "@/types/recurring";
+import type { InstallmentGroup } from "@/types/installment";
 
 // ─── Mapeo MovementItem → Transaction (únicos) ─────────────────────────────────
 //
@@ -83,6 +84,34 @@ function movementItemToRecurring(item: MovementItem): Recurring {
   };
 }
 
+// ─── Mapeo MovementItem → InstallmentGroup (cuotas) ──────────────────────────
+//
+// El InstallmentForm en modo edición necesita: id, type, amountCents,
+// totalInstallments, startMonth, categoryId, description, category.
+//
+// - amountCents, categoryId, description, type → del MovementItem directamente.
+// - totalInstallments → de item.installment.total (cuántas cuotas tiene el grupo).
+// - startMonth        → de item.installment.startMonth (mes de inicio del grupo).
+//
+// Los campos de auditoría (userId, createdAt, updatedAt) no los usa el form.
+// Safeguard: solo llamar con origin==="cuota" que tenga installment no-null.
+
+function movementItemToInstallment(item: MovementItem): InstallmentGroup {
+  return {
+    id: item.id,
+    userId: "", // placeholder; no lo usa InstallmentForm
+    categoryId: item.category.id,
+    type: "EXPENSE", // cuotas son siempre EXPENSE en v1
+    amountCents: item.amountCents,
+    totalInstallments: item.installment?.total ?? 1, // total del grupo
+    startMonth: item.installment?.startMonth ?? "", // mes de inicio del grupo
+    description: item.description,
+    createdAt: "", // placeholder
+    updatedAt: "", // placeholder
+    category: item.category,
+  };
+}
+
 // ─── Props ─────────────────────────────────────────────────────────────────────
 
 interface MonthViewClientProps {
@@ -103,6 +132,10 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   const [editingFijo, setEditingFijo] = useState<MovementItem | null>(null);
   const [deletingFijo, setDeletingFijo] = useState<MovementItem | null>(null);
 
+  // Estado de modales para cuotas
+  const [editingCuota, setEditingCuota] = useState<MovementItem | null>(null);
+  const [deletingCuota, setDeletingCuota] = useState<MovementItem | null>(null);
+
   const totals = data?.totals;
   const unicos = data?.movements.unicos ?? [];
   const fijos = data?.movements.fijos ?? [];
@@ -121,6 +154,8 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   function handleEdit(movement: MovementItem) {
     if (movement.origin === "fijo") {
       setEditingFijo(movement);
+    } else if (movement.origin === "cuota") {
+      setEditingCuota(movement);
     } else {
       setEditingUnico(movement);
     }
@@ -129,6 +164,8 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   function handleDelete(movement: MovementItem) {
     if (movement.origin === "fijo") {
       setDeletingFijo(movement);
+    } else if (movement.origin === "cuota") {
+      setDeletingCuota(movement);
     } else {
       setDeletingUnico(movement);
     }
@@ -322,6 +359,23 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
         <DeleteRecurringDialog
           movement={deletingFijo}
           onClose={() => setDeletingFijo(null)}
+        />
+      )}
+
+      {/* ── Modal editar cuota ── */}
+      {editingCuota && (
+        <TransactionModal
+          mode="edit-installment"
+          installment={movementItemToInstallment(editingCuota)}
+          onClose={() => setEditingCuota(null)}
+        />
+      )}
+
+      {/* ── Diálogo eliminar cuota ── */}
+      {deletingCuota && (
+        <DeleteInstallmentDialog
+          movement={deletingCuota}
+          onClose={() => setDeletingCuota(null)}
         />
       )}
     </div>

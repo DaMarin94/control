@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TransactionsController } from './transactions.controller';
 import { TransactionsService } from './transactions.service';
 import { TransactionsRepository } from './transactions.repository';
+import { CategoriesModule } from '../categories/categories.module';
 
 /**
  * TransactionsModule — CRUD de movimientos únicos (RF-MU-001 a RF-MU-003).
@@ -9,11 +10,11 @@ import { TransactionsRepository } from './transactions.repository';
  * PrismaService ya está disponible globalmente (PrismaModule global).
  * Logger (nestjs-pino) también está disponible globalmente via LoggerModule.
  *
- * El service inyecta tanto el Repository (para queries de Transaction)
- * como PrismaService directamente (para validar categorías en RN-010,
- * manteniendo la regla de que la lógica de una entidad vive en su propio módulo).
+ * Importa CategoriesModule para acceder a CategoryValidatorService (D3 — Fase 7):
+ * la validación de categoría está consolidada en un servicio compartido.
  */
 @Module({
+  imports: [CategoriesModule],
   controllers: [TransactionsController],
   providers: [TransactionsService, TransactionsRepository],
   exports: [TransactionsService],

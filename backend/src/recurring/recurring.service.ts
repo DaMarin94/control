@@ -3,9 +3,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { CategoryScope, MovementType } from '@prisma/client';
+import { MovementType } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
-import { PrismaService } from '../prisma/prisma.service';
+import { CategoryValidatorService } from '../categories/category-validator.service';
 import {
   RecurringRepository,
   RecurringWithCategory,
@@ -17,7 +17,7 @@ import { UpdateRecurringDto } from './dto/update-recurring.dto';
 export class RecurringService {
   constructor(
     private readonly repo: RecurringRepository,
-    private readonly prisma: PrismaService,
+    private readonly categoryValidator: CategoryValidatorService,
     private readonly logger: Logger,
   ) {}
 
@@ -33,7 +33,7 @@ export class RecurringService {
     this.validateMonthValue(dto.startMonth);
 
     // Validar categoría: propia + activa + scope compatible (RN-010)
-    await this.validateCategory(userId, dto.categoryId, dto.type);
+    await this.categoryValidator.validateCategory(userId, dto.categoryId, dto.type);
 
     const r = await this.repo.create({
       user: { connect: { id: userId } },
@@ -78,7 +78,7 @@ export class RecurringService {
 
     // Si cambia categoryId, revalidar scope contra el type vigente (que NO cambia — D1)
     if (dto.categoryId !== undefined) {
-      await this.validateCategory(userId, dto.categoryId, existing.type);
+      await this.categoryValidator.validateCategory(userId, dto.categoryId, existing.type);
     }
 
     // Lógica de split (D1):
@@ -191,70 +191,6 @@ export class RecurringService {
         'Movimiento fijo eliminado (set deletedFrom)',
       );
     }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Helper privado: validación de categoría (RN-010)
-  // NOTA: duplicación intencional de TransactionsService.validateCategory.
-  // Candidata a extraer a un helper compartido en Fase 7 cuando se sumen cuotas.
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Valida que la categoría:
-   * 1. Exista
-   * 2. Pertenezca al usuario (RN-003)
-   * 3. Esté activa (deletedAt null)
-   * 4. Su scope sea compatible con el type del movimiento (RN-010):
-   *    - EXPENSE: scope debe ser EXPENSE o BOTH
-   *    - INCOME:  scope debe ser INCOME o BOTH
-   *
-   * @throws BadRequestException en cualquier caso de fallo.
-   */
-  private async validateCategory(
-    userId: string,
-    categoryId: string,
-    type: MovementType,
-  ): Promise<void> {
-    const category = await this.prisma.category.findUnique({
-      where: { id: categoryId },
-      select: { id: true, userId: true, scope: true, deletedAt: true },
-    });
-
-    if (!category || category.userId !== userId) {
-      throw new BadRequestException(
-        'La categoría no existe o no pertenece al usuario',
-      );
-    }
-
-    if (category.deletedAt !== null) {
-      throw new BadRequestException('La categoría está eliminada');
-    }
-
-    const scopeCompatible = this.isScopeCompatible(category.scope, type);
-    if (!scopeCompatible) {
-      throw new BadRequestException(
-        `La categoría no es compatible con el tipo "${type}". ` +
-          `Su scope es "${category.scope}" y solo acepta movimientos de tipo ` +
-          (category.scope === CategoryScope.EXPENSE ? 'EXPENSE' : 'INCOME') +
-          '.',
-      );
-    }
-  }
-
-  /**
-   * Verifica si el scope de una categoría es compatible con el type de un movimiento.
-   *
-   * Regla (RN-010):
-   * - EXPENSE: scope EXPENSE o BOTH ✓; scope INCOME ✗
-   * - INCOME:  scope INCOME o BOTH ✓; scope EXPENSE ✗
-   */
-  private isScopeCompatible(scope: CategoryScope, type: MovementType): boolean {
-    if (scope === CategoryScope.BOTH) return true;
-    if (scope === CategoryScope.EXPENSE && type === MovementType.EXPENSE)
-      return true;
-    if (scope === CategoryScope.INCOME && type === MovementType.INCOME)
-      return true;
-    return false;
   }
 
   // ---------------------------------------------------------------------------

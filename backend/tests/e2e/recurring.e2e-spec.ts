@@ -58,6 +58,14 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  // installmentGroup — necesario para InstallmentsModule (Fase 7 — registrado en AppModule)
+  installmentGroup: {
+    create: jest.fn(),
+    findUnique: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+    update: jest.fn(),
+    delete: jest.fn(),
+  },
   $queryRaw: jest.fn(),
   $connect: jest.fn(),
   $disconnect: jest.fn(),

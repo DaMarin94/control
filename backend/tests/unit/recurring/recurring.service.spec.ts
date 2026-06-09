@@ -23,7 +23,7 @@ import {
   RecurringRepository,
   RecurringWithCategory,
 } from '../../../src/recurring/recurring.repository';
-import { PrismaService } from '../../../src/prisma/prisma.service';
+import { CategoryValidatorService } from '../../../src/categories/category-validator.service';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -36,10 +36,13 @@ const mockRepo = {
   delete: jest.fn(),
 };
 
-const mockPrisma = {
-  category: {
-    findUnique: jest.fn(),
-  },
+/**
+ * Mock de CategoryValidatorService.
+ * Por defecto no lanza (categoría válida). Los tests que quieren fallar
+ * lo sobreescriben con mockRejectedValue(new BadRequestException(...)).
+ */
+const mockCategoryValidator = {
+  validateCategory: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockLogger = {
@@ -57,16 +60,6 @@ const mockLogger = {
 const USER_A = 'user-a-rec';
 const USER_B = 'user-b-rec';
 const CAT_ID = 'cat-expense-rec';
-
-function makeCategory(overrides: Record<string, unknown> = {}) {
-  return {
-    id: CAT_ID,
-    userId: USER_A,
-    scope: CategoryScope.EXPENSE,
-    deletedAt: null,
-    ...overrides,
-  };
-}
 
 function makeRecurring(
   overrides: Partial<RecurringWithCategory> = {},
@@ -101,12 +94,14 @@ describe('RecurringService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    // Restablecer el default (categoría válida) antes de cada test
+    mockCategoryValidator.validateCategory.mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RecurringService,
         { provide: RecurringRepository, useValue: mockRepo },
-        { provide: PrismaService, useValue: mockPrisma },
+        { provide: CategoryValidatorService, useValue: mockCategoryValidator },
         { provide: Logger, useValue: mockLogger },
       ],
     }).compile();
@@ -120,7 +115,7 @@ describe('RecurringService', () => {
 
   describe('create', () => {
     it('crea un fijo y lo devuelve con categoría embebida', async () => {
-      mockPrisma.category.findUnique.mockResolvedValue(makeCategory());
+      // mockCategoryValidator.validateCategory ya resuelve por defecto (sin lanzar)
       const rec = makeRecurring();
       mockRepo.create.mockResolvedValue(rec);
 
@@ -142,7 +137,6 @@ describe('RecurringService', () => {
     });
 
     it('persiste description null si no se pasa', async () => {
-      mockPrisma.category.findUnique.mockResolvedValue(makeCategory());
       mockRepo.create.mockResolvedValue(makeRecurring({ description: null }));
 
       await service.create(USER_A, {
@@ -158,7 +152,6 @@ describe('RecurringService', () => {
     });
 
     it('persiste description si se pasa', async () => {
-      mockPrisma.category.findUnique.mockResolvedValue(makeCategory());
       mockRepo.create.mockResolvedValue(makeRecurring({ description: 'Netflix' }));
 
       await service.create(USER_A, {
@@ -201,7 +194,10 @@ describe('RecurringService', () => {
     });
 
     it('categoría inexistente → BadRequestException (RN-010)', async () => {
-      mockPrisma.category.findUnique.mockResolvedValue(null);
+      // El validador compartido lanza BadRequestException
+      mockCategoryValidator.validateCategory.mockRejectedValue(
+        new BadRequestException('La categoría no existe o no pertenece al usuario'),
+      );
 
       await expect(
         service.create(USER_A, {
@@ -216,8 +212,8 @@ describe('RecurringService', () => {
     });
 
     it('categoría de otro usuario → BadRequestException (aislamiento RN-003)', async () => {
-      mockPrisma.category.findUnique.mockResolvedValue(
-        makeCategory({ userId: USER_B }),
+      mockCategoryValidator.validateCategory.mockRejectedValue(
+        new BadRequestException('La categoría no existe o no pertenece al usuario'),
       );
 
       await expect(
@@ -233,8 +229,8 @@ describe('RecurringService', () => {
     });
 
     it('categoría eliminada → BadRequestException (RN-010)', async () => {
-      mockPrisma.category.findUnique.mockResolvedValue(
-        makeCategory({ deletedAt: new Date('2024-01-01') }),
+      mockCategoryValidator.validateCategory.mockRejectedValue(
+        new BadRequestException('La categoría está eliminada'),
       );
 
       await expect(
@@ -250,8 +246,8 @@ describe('RecurringService', () => {
     });
 
     it('scope incompatible EXPENSE con categoría INCOME → BadRequestException (RN-010)', async () => {
-      mockPrisma.category.findUnique.mockResolvedValue(
-        makeCategory({ scope: CategoryScope.INCOME }),
+      mockCategoryValidator.validateCategory.mockRejectedValue(
+        new BadRequestException('La categoría no es compatible con el tipo'),
       );
 
       await expect(
@@ -265,8 +261,8 @@ describe('RecurringService', () => {
     });
 
     it('scope incompatible INCOME con categoría EXPENSE → BadRequestException (RN-010)', async () => {
-      mockPrisma.category.findUnique.mockResolvedValue(
-        makeCategory({ scope: CategoryScope.EXPENSE }),
+      mockCategoryValidator.validateCategory.mockRejectedValue(
+        new BadRequestException('La categoría no es compatible con el tipo'),
       );
 
       await expect(
@@ -280,9 +276,7 @@ describe('RecurringService', () => {
     });
 
     it('scope BOTH compatible con EXPENSE (RN-010)', async () => {
-      mockPrisma.category.findUnique.mockResolvedValue(
-        makeCategory({ scope: CategoryScope.BOTH }),
-      );
+      // El validador no lanza (default)
       mockRepo.create.mockResolvedValue(makeRecurring({ type: MovementType.EXPENSE }));
 
       await expect(
@@ -296,9 +290,7 @@ describe('RecurringService', () => {
     });
 
     it('scope BOTH compatible con INCOME (RN-010)', async () => {
-      mockPrisma.category.findUnique.mockResolvedValue(
-        makeCategory({ scope: CategoryScope.BOTH }),
-      );
+      // El validador no lanza (default)
       mockRepo.create.mockResolvedValue(makeRecurring({ type: MovementType.INCOME }));
 
       await expect(
@@ -393,9 +385,7 @@ describe('RecurringService', () => {
     it('split: R2 usa el nuevo categoryId si se pasa', async () => {
       const existing = makeRecurring({ startMonth: '2026-01' });
       mockRepo.findById.mockResolvedValue(existing);
-      mockPrisma.category.findUnique.mockResolvedValue(
-        makeCategory({ id: 'cat-new', scope: CategoryScope.EXPENSE }),
-      );
+      // El validador no lanza (la nueva categoría es válida)
       const r2 = makeRecurring({
         id: 'rec-002',
         startMonth: '2026-06',
@@ -555,9 +545,9 @@ describe('RecurringService', () => {
       });
       mockRepo.findById.mockResolvedValue(existing);
 
-      // Nueva categoría con scope INCOME → incompatible con EXPENSE
-      mockPrisma.category.findUnique.mockResolvedValue(
-        makeCategory({ scope: CategoryScope.INCOME }),
+      // El validador lanza porque la nueva categoría es incompatible (scope INCOME con EXPENSE)
+      mockCategoryValidator.validateCategory.mockRejectedValue(
+        new BadRequestException('La categoría no es compatible con el tipo'),
       );
 
       await expect(

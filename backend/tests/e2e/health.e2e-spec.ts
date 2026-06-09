@@ -46,7 +46,7 @@ describe('Health (e2e)', () => {
     return request(app.getHttpServer())
       .get('/health')
       .expect(200)
-      .expect((res) => {
+      .expect((res: { body: Record<string, unknown> }) => {
         expect(res.body).toEqual({
           success: true,
           statusCode: 200,
@@ -59,7 +59,7 @@ describe('Health (e2e)', () => {
     return request(app.getHttpServer())
       .get('/ruta-que-no-existe')
       .expect(404)
-      .expect((res) => {
+      .expect((res: { body: Record<string, unknown> }) => {
         expect(res.body.success).toBe(false);
         expect(res.body.statusCode).toBe(404);
         expect(res.body.error).toHaveProperty('message');

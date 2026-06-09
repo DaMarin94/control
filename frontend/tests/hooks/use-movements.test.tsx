@@ -43,6 +43,7 @@ const mockMonthMovements: MonthMovements = {
         description: "Almuerzo",
         occurredAt: "2026-06-17T17:30:00.000Z",
         timezone: "America/Argentina/Buenos_Aires",
+        installment: null,
         category: {
           id: "cat-1",
           name: "Alimentación",

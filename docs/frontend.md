@@ -103,10 +103,11 @@ Carga de movimientos. El modal de carga se invoca desde el dashboard (`/`); **ed
 
 ### Modal de carga (`components/movements/transaction-modal.tsx`)
 
-- **Props como discriminated union por `mode`** — el modal se comporta distinto según el modo y TypeScript fuerza el shape correcto en cada caso:
-  - **`"create"`** — abre con tabs: **Único** y **Fijo** funcionales, **Cuotas** deshabilitado con badge "Próximamente" (llega en Fase 7). Renderiza `TransactionForm` o `RecurringForm` según el tab.
+- **Props como discriminated union por `mode`** (4 variantes) — el modal se comporta distinto según el modo y TypeScript fuerza el shape correcto en cada caso:
+  - **`"create"`** — abre con tabs **Único / Fijo / Cuotas**, los tres funcionales (ya no queda ningún "Próximamente"). Renderiza `TransactionForm`, `RecurringForm` o `InstallmentForm` según el tab.
   - **`"edit-single"`** — sin tabs; `TransactionForm` precargado con un `Transaction` (RF-MU-002).
   - **`"edit-fixed"`** — sin tabs; `RecurringForm` precargado con un `Recurring` (RF-MF-003).
+  - **`"edit-installment"`** — sin tabs; `InstallmentForm` precargado con el grupo de cuotas (RF-MC-003).
 - En modo edición no muestra los tabs de selección de tipo (RF-CM-001): el tipo de un movimiento no se cambia por edición.
 
 ### transaction-form
@@ -155,7 +156,7 @@ Carga, edición y eliminación de movimientos fijos. Se crean desde el tab **Fij
 
 ### `movement-item-row.tsx`
 
-- Fila de la lista del mes (compartida por únicos y fijos). Muestra un **badge de origen** ("Fijo" / "Único"). Para fijos muestra **"Mensual"** en lugar de fecha. **Null-safety:** `occurredAt` / `timezone` pueden venir `null` (fijos) — no pasarlos a `formatDate` / `formatTime` sin chequear.
+- Fila de la lista del mes (compartida por únicos, fijos y cuotas). Muestra un **badge de origen** ("Único" / "Fijo" / "Cuotas"). Para fijos muestra **"Mensual"** y para cuotas la etiqueta **"Cuota X/N"** (de `installment.number` / `installment.total`) en lugar de fecha. **Null-safety:** `occurredAt` / `timezone` pueden venir `null` (fijos y cuotas) — no pasarlos a `formatDate` / `formatTime` sin chequear.
 
 ### Datos (`use-recurring`)
 
@@ -165,6 +166,27 @@ Carga, edición y eliminación de movimientos fijos. Se crean desde el tab **Fij
 - **Gotchas:**
   - En `updateRecurring`, para **limpiar** la descripción se envía `description: null` **explícito** (no `undefined`, que el backend interpretaría como "no cambiar").
   - El mapeo `MovementItem → Recurring` para precargar el form de edición sigue el mismo patrón que el de únicos (el ítem no trae todos los campos del recurso).
+
+## Movimientos en cuotas
+
+Carga, edición y eliminación de grupos de cuotas. Se crean desde el tab **Cuotas** del modal de carga; editar y eliminar se cablean desde la Vista del mes, igual que únicos y fijos. **Solo Gasto en v1.**
+
+### `installment-form.tsx`
+
+- Cubre el **tab Cuotas** (crear) y la **edición** del grupo. **No tiene selector de tipo** — siempre Gasto (RF-MC-001, solo Gasto en v1). Campos: **monto por cuota** (no el total; en pesos, se convierte a centavos), **cantidad de cuotas**, **mes de inicio** (`<input type="month">`, default mes actual), categoría (filtrada por scope, reusa `CATEGORIES_QUERY_KEY`) y descripción opcional. **No tiene fecha ni hora** — las cuotas operan a nivel mes.
+- **Gotcha:** el input de cantidad de cuotas (`type="number"`) devuelve **string**; se parsea con `parseInt` en el schema Zod antes de validar.
+- **Prefill de edición:** `totalInstallments` y `startMonth` salen de `MovementItem.installment`; el resto del propio ítem. El `type` va hardcodeado en `EXPENSE`.
+
+### `delete-installment-dialog.tsx`
+
+- Diálogo de confirmación que **avisa que elimina el grupo completo** (todas las cuotas, pasadas y futuras), **sin checkbox** (RF-MC-002). A diferencia de los fijos, no hay opción de "desde este mes": la eliminación es del grupo entero.
+
+### Datos (`use-installments`)
+
+- Hook con las mutaciones `createInstallment`, `updateInstallment`, `deleteInstallment`.
+- **Invalida toda la familia `["movements"]` (por prefijo)**, no una sola key de mes: un grupo de cuotas abarca varios meses, así que invalidar solo `["movements", month]` dejaría meses desactualizados en caché (mismo criterio que `use-recurring`).
+
+> **Gotcha — `MovementItem.installment` es campo requerido del tipo.** En los `MovementItem` de únicos y fijos hay que poner `installment: null` explícito (el tipo no lo hace opcional).
 
 ## Vista del mes y Dashboard
 
@@ -191,7 +213,7 @@ El dashboard vive en **`/`** (`src/app/page.tsx`). Antes era `/dashboard` — un
 - Lee el mes de **`?month=YYYY-MM`** (default: mes actual en la zona del navegador, vía `getCurrentMonth`).
 - **Encabezado + navegación prev / next** que cambian `?month=` (con `prevMonth` / `nextMonth`); rótulo con `formatMonthLabel`.
 - **Totales del mes** (de `data.totals`).
-- **Lista agrupada en secciones Únicos / Fijos / Cuotas.** Una sección **sin movimientos no se muestra**; Únicos y Fijos traen datos (Cuotas vacío hasta Fase 7). Cada ítem (`movement-item-row`) muestra tipo, monto, categoría, descripción y badge de origen, con acciones **Editar** y **Eliminar** que abren el flujo según el origen: únicos → `TransactionModal` (`edit-single`) / `DeleteTransactionDialog`; fijos → `TransactionModal` (`edit-fixed`) / `delete-recurring-dialog`.
+- **Lista agrupada en secciones Únicos / Fijos / Cuotas.** Una sección **sin movimientos no se muestra**; los tres orígenes traen datos. Cada ítem (`movement-item-row`) muestra tipo, monto, categoría, descripción y badge de origen, con acciones **Editar** y **Eliminar** que abren el flujo según el origen: únicos → `TransactionModal` (`edit-single`) / `DeleteTransactionDialog`; fijos → `TransactionModal` (`edit-fixed`) / `delete-recurring-dialog`; cuotas → `TransactionModal` (`edit-installment`) / `delete-installment-dialog`.
 - **Se actualiza al mutar** (crear / editar / eliminar) por invalidación de la query del mes.
 
 ### Datos (`use-movements`)

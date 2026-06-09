@@ -98,7 +98,7 @@ CRUD de movimientos únicos. El monto siempre en centavos (entero > 0). El insta
 Gestión de movimientos fijos. El PATCH y el DELETE reciben el mes actual (`currentMonth`) para resolver la inmutabilidad del pasado; el DELETE además usa `fromCurrentMonth` (query) para controlar desde cuándo deja de aparecer el fijo. Contrato completo en la sección **Movimientos fijos (RecurringModule)**. **No hay `GET /recurring/:id`.**
 
 ### `POST /installments` · `PATCH /installments/:id` · `DELETE /installments/:id`
-Gestión de grupos de cuotas. El PATCH edita el grupo completo (RF-MC-003). El DELETE elimina el grupo completo (todas las cuotas, pasadas y futuras).
+Gestión de grupos de cuotas. **Solo `EXPENSE` en v1** (rechaza `INCOME` con `400`). El PATCH edita el grupo completo in-place (RF-MC-003). El DELETE es **hard delete del grupo entero** (todas las cuotas, pasadas y futuras). **No hay `GET /installments/:id`**: el front prefilea desde el `MovementItem` de `/movements`. Contrato completo en la sección **Movimientos en cuotas (InstallmentsModule)**.
 
 ### `GET /categories` · `POST /categories` · `PATCH /categories/:id` · `DELETE /categories/:id`
 CRUD de categorías. El DELETE es soft delete (`deletedAt`). Ver el contrato completo en la sección **Categorías (CategoriesModule)**.
@@ -167,8 +167,8 @@ data = {
   },
   movements: {
     unicos: [MovementItem],   // ordenados por occurredAt descendente
-    fijos:  [],               // vacío hoy (Fase 6)
-    cuotas: []                // vacío hoy (Fase 7)
+    fijos:  [MovementItem],   // poblado desde Fase 6
+    cuotas: [MovementItem]    // poblado desde Fase 7
   }
 }
 ```
@@ -180,8 +180,13 @@ MovementItem = {
   type: "EXPENSE" | "INCOME",
   amountCents: int,
   description: string | null,
-  occurredAt: string,                        // ISO 8601 en UTC
-  timezone: string,                          // IANA del registro
+  occurredAt: string | null,                 // ISO 8601 en UTC; null en fijos y cuotas
+  timezone: string | null,                   // IANA del registro; null en fijos y cuotas
+  installment: {                             // presente solo en cuotas; null en únicos y fijos
+    number: int,                             //   nro de cuota del mes (1-based)
+    total: int,                              //   totalInstallments del grupo
+    startMonth: "YYYY-MM"                    //   mes de inicio del grupo
+  } | null,
   category: { id, name, color, scope }       // embebida; puede estar soft-deleted (ver abajo)
 }
 ```
@@ -198,7 +203,7 @@ El join de movimientos y el cálculo de totales **no filtran por `Category.delet
 
 ### Totales
 
-- **Los totales suman movimientos, no categorías** (`amountCents` de cada movimiento del mes). `balanceCents = incomeCents - expenseCents`, sin piso (negativo si los gastos superan los ingresos). Hoy solo agregan únicos; el cálculo está diseñado para sumar fijos y cuotas cuando existan (Fases 6/7).
+- **Los totales suman movimientos, no categorías** (`amountCents` de cada movimiento del mes). `balanceCents = incomeCents - expenseCents`, sin piso (negativo si los gastos superan los ingresos). Desde Fase 7 agregan únicos + fijos + cuotas.
 - **Gotcha BigInt → Number:** `SUM(...)` en Postgres devuelve `BIGINT`, que llega como `BigInt` de JS desde `$queryRaw`. El repositorio lo castea con `Number(...)` antes de serializar; sin el cast, `JSON.stringify` falla sobre `BigInt`.
 
 ### Por qué un módulo propio
@@ -212,6 +217,15 @@ El join de movimientos y el cálculo de totales **no filtran por `Category.delet
 - **`findFijosByMonth` usa Prisma ORM normal** (no `$queryRaw`, no `AT TIME ZONE`): los fijos operan **a nivel mes**, sin día/hora/zona, así que no hay bucketeo por timezone que resolver.
 - **Condición de actividad en un mes:** `startMonth <= month AND (deletedFrom IS NULL OR deletedFrom > month)`. La comparación es **léxica de strings `YYYY-MM`** — válida porque ese formato ordena cronológicamente como texto (`"2026-02" < "2026-10"`). Se corresponde con RF-MF-002.
 - **Totales del mes ahora suman únicos + fijos activos** (antes solo únicos). El `MovementItem` de un fijo viene con `occurredAt` y `timezone` en `null` (ver shape en `docs/data-model.md`).
+
+### Integración de cuotas en `/movements` (Fase 7)
+
+`MovementsModule` puebla la lista `cuotas` y suma las cuotas del mes a los totales llamando a `InstallmentsService` (regla de propiedad de dominio: nunca toca la tabla `installmentGroups`).
+
+- **Cálculo on-the-fly (RN-006):** no hay filas por instancia mensual. Se consultan los grupos con `startMonth <= month` (comparación léxica de strings `YYYY-MM`, como los fijos) y se filtra en JS por `month < addMonths(startMonth, totalInstallments)`. Una cuota cae en el mes si `startMonth <= month < addMonths(startMonth, totalInstallments)`.
+- **Número de cuota del mes (1-based):** `monthDiff(startMonth, month) + 1`. Va al campo `installment.number`; `installment.total = totalInstallments`. El `MovementItem` de una cuota trae `occurredAt`/`timezone` en `null` (sin día/hora) y `installment` poblado (en únicos/fijos `installment` es `null`).
+- **Helpers `addMonths` / `monthDiff`** exportados desde `movements.repository.ts` — reusarlos, no reimplementar aritmética de meses.
+- **Totales del mes ahora suman únicos + fijos + cuotas.**
 
 ## Movimientos fijos (RecurringModule)
 
@@ -245,7 +259,30 @@ Esto materializa "el pasado es inmutable" (RF-MF-003) sin generar filas por inst
 ### Gotchas
 
 - **`fromCurrentMonth` llega como string** (`"true"` / `"false"`) en los query params; NestJS **no lo castea a boolean**. Hay que parsearlo explícitamente.
-- **`validateCategory` es copia de `TransactionsService.validateCategory`** (existencia + `userId` + `deletedAt` + scope RN-010). Duplicación deliberada por ahora; **candidata a extraer a un helper compartido en Fase 7** (cuotas), cuando un tercer módulo necesite la misma validación.
+- **Validación de categoría consolidada (Fase 7):** la lógica que en Fases 4/6 estaba duplicada entre `TransactionsService` y `RecurringService` se extrajo a **`CategoryValidatorService`** (módulo `categories`). Los tres módulos de movimientos lo inyectan. Ver sección **Movimientos en cuotas** abajo.
+
+## Movimientos en cuotas (InstallmentsModule)
+
+Gestión de grupos de cuotas, **scopeada por `userId` del JWT**. El módulo expone **crear, editar y eliminar**; el listado del mes lo arma `MovementsModule` (ver **Integración de cuotas en `/movements`**). **No existe `GET /installments/:id`**: el front prefilea el formulario de edición desde el `MovementItem` que ya trae `/movements`.
+
+### Endpoints
+
+| Endpoint | Body | Éxito | Errores |
+|----------|------|-------|---------|
+| `POST /installments` | `{ type, amountCents, totalInstallments, startMonth, categoryId, description? }` | `201` · `data: InstallmentGroup` | `400` |
+| `PATCH /installments/:id` | `{ type?, amountCents?, totalInstallments?, startMonth?, categoryId?, description? }` | `200` · `data: InstallmentGroup` | `400` · `404` |
+| `DELETE /installments/:id` | — | `204 No Content` | `404` |
+
+- **Solo `EXPENSE` en v1:** el endpoint **rechaza `INCOME` con `400`** (resuelve la contradicción RF-MC-001 vs "Fuera de alcance: Ingreso en cuotas" — ver bitácora 2026-06-09). `amountCents` es el monto **por cuota** (entero `> 0`, RN-002), no el total. `totalInstallments` es la cantidad (entero `> 0`). `startMonth` es `YYYY-MM`.
+- **`PATCH /installments/:id` — edita el grupo completo in-place (RF-MC-003).** Campos editables: monto por cuota, cantidad, mes de inicio, categoría, descripción. **El `type` no se edita.** **No hay split ni inmutabilidad del pasado** (a diferencia de los fijos): la edición aplica a todas las instancias del grupo. `404` si no existe o no es del usuario.
+- **`DELETE /installments/:id` — hard delete del grupo entero.** Borra **físicamente** todas las cuotas (pasadas y futuras): `InstallmentGroup` no tiene `deletedFrom` ni soft delete. **`204` sin cuerpo.** `404` si no existe o no es del usuario.
+- **Validación de categoría:** idéntica a únicos y fijos (propia, activa, scope compatible RN-010); inexistente / ajena / eliminada / scope incompatible son todas `400`, nunca `409`; categoría ajena no se distingue de inexistente. Se delega en `CategoryValidatorService` (ver abajo).
+
+### `CategoryValidatorService` — validador de categoría consolidado
+
+La validación de categoría (existencia + pertenece al `userId` + activa + scope RN-010) que en Fases 4/6 estaba **duplicada** en `TransactionsService` y `RecurringService` se extrajo a **`CategoryValidatorService`**, en `backend/src/categories/`, exportado por `CategoriesModule`. Los tres módulos de movimientos (`transactions`, `recurring`, `installments`) lo **inyectan** en vez de reimplementar la lógica.
+
+- **Una sola fuente de verdad:** si la regla de validación de categoría cambia, cambia en un solo lugar. Se mantiene el comportamiento previo: errores de categoría en movimientos son **`400`** (no `409`), y categoría ajena no se distingue de inexistente.
 
 ## Categorías (CategoriesModule)
 

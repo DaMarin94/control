@@ -76,6 +76,15 @@ Si una decisión técnica nueva no está cubierta en `docs/technical.md`, report
 - **El campo `type` deshabilitado en edición necesita un `<input type="hidden">`** para que react-hook-form lo registre y Zod lo valide (un input disabled no lo registra RHF).
 - **`delete-recurring-dialog`** tiene el checkbox "Eliminar también desde este mes", **desmarcado por default** (RF-MF-004).
 
+### Movimientos en cuotas (detalle en `docs/frontend.md`, sección Movimientos en cuotas) — Fase 7
+
+- **`TransactionModal` tiene 4 variantes de `mode`:** `"create"` (tabs Único / Fijo / Cuotas, los tres funcionales — ya no hay "Próximamente"), `"edit-single"`, `"edit-fixed"`, `"edit-installment"`. El tab Cuotas renderiza `InstallmentForm`.
+- **El tab Cuotas no tiene selector de tipo — siempre Gasto** (solo Gasto en v1). No agregar Ingreso.
+- **`use-installments` invalida toda la familia `["movements"]` (por prefijo)**, no una sola key de mes — un grupo de cuotas abarca varios meses (mismo criterio que `use-recurring`).
+- **`MovementItem.installment` es campo requerido del tipo** (`{ number, total, startMonth } | null`): poner `installment: null` explícito en únicos y fijos. En `movement-item-row`, para cuotas se muestra "Cuota X/N" (de `installment.number`/`total`) y badge "Cuotas"; sin fecha.
+- **Cantidad de cuotas (`type="number"`) devuelve string → parsear con `parseInt` en el schema Zod.** El prefill de edición saca `totalInstallments`/`startMonth` de `MovementItem.installment` y hardcodea `type: EXPENSE`.
+- **`delete-installment-dialog`** avisa que elimina el **grupo completo**, **sin checkbox** (a diferencia de fijos).
+
 ### Vista del mes y Dashboard (detalle en `docs/frontend.md`, sección Vista del mes y Dashboard)
 
 - **El dashboard vive en `/`, NO en `/dashboard`.** `src/app/page.tsx` es el dashboard; la carpeta `/dashboard` se eliminó. Todos los redirects post-auth van a `/` (`middleware.ts`, `callbackUrl`/`redirectTo` de login/registro/`use-register`). El sign-out va a `/login`. No reintroducir `/dashboard`.

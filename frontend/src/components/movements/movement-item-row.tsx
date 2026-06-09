@@ -4,13 +4,13 @@
  * Fila de un movimiento en la lista del mes (RF-VM-001).
  *
  * Muestra: tipo (gasto/ingreso), monto, categoría (nombre + color),
- * descripción (si tiene), origen (badge "Único" / "Fijo"),
- * fecha/hora (solo para únicos — los fijos tienen occurredAt null).
+ * descripción (si tiene), origen (badge "Único" / "Fijo" / "Cuotas"),
+ * fecha/hora (solo para únicos — fijos y cuotas tienen occurredAt null).
  *
- * Cambios en Fase 6:
- * - occurredAt y timezone pueden ser null (fijos no tienen instante específico).
- * - Badge de origen: "Fijo" para origin==="fijo"; "Único" para origin==="unico".
- * - Fijos: se muestra "Mensual" en lugar de fecha/hora.
+ * Cambios en Fase 7:
+ * - origin === "cuota": badge "Cuotas" y muestra "Cuota X/N" usando installment.number/total.
+ * - Para cuotas no se muestran fecha/hora (occurredAt es null — no llamar formatDate/formatTime).
+ * - Mantiene intactos únicos (fecha·hora) y fijos ("Mensual").
  */
 
 import { Button } from "@/components/ui/button";
@@ -29,19 +29,26 @@ export function MovementItemRow({ movement, onEdit, onDelete }: MovementItemRowP
   const amountFormatted = formatCurrency(movement.amountCents);
 
   const isFijo = movement.origin === "fijo";
+  const isCuota = movement.origin === "cuota";
 
   // Fecha y hora solo para únicos (occurredAt y timezone son strings para "unico")
   const dateFormatted =
-    !isFijo && movement.occurredAt && movement.timezone
+    !isFijo && !isCuota && movement.occurredAt && movement.timezone
       ? formatDate(movement.occurredAt, movement.timezone)
       : null;
   const timeFormatted =
-    !isFijo && movement.occurredAt && movement.timezone
+    !isFijo && !isCuota && movement.occurredAt && movement.timezone
       ? formatTime(movement.occurredAt, movement.timezone)
       : null;
 
-  // Badge de origen: "Fijo" o "Único"
-  const originLabel = isFijo ? "Fijo" : "Único";
+  // Badge de origen
+  const originLabel = isFijo ? "Fijo" : isCuota ? "Cuotas" : "Único";
+
+  // Texto de cuota "X/N" para origin === "cuota" (RF-MC-001: cada cuota muestra su número y total)
+  const installmentLabel =
+    isCuota && movement.installment
+      ? `Cuota ${movement.installment.number}/${movement.installment.total}`
+      : null;
 
   return (
     <div className="flex items-start gap-3 rounded-lg border bg-card px-4 py-3">
@@ -104,10 +111,12 @@ export function MovementItemRow({ movement, onEdit, onDelete }: MovementItemRowP
           <p className="mt-0.5 text-xs text-muted-foreground">{movement.description}</p>
         )}
 
-        {/* Fecha y hora (únicos) / "Mensual" (fijos) */}
+        {/* Fecha y hora (únicos) / "Mensual" (fijos) / "Cuota X/N" (cuotas) */}
         <p className="mt-1 text-xs text-muted-foreground">
           {isFijo ? (
             "Mensual"
+          ) : isCuota ? (
+            installmentLabel
           ) : dateFormatted && timeFormatted ? (
             `${dateFormatted} · ${timeFormatted}`
           ) : null}

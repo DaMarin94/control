@@ -42,6 +42,7 @@ const mockFijoMovement: MovementItem = {
   description: "Alquiler",
   occurredAt: null,
   timezone: null,
+  installment: null,
   category: {
     id: "cat-1",
     name: "Servicios",

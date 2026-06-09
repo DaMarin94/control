@@ -570,6 +570,8 @@ Una compra o cobro dividido en N pagos mensuales iguales. El usuario ingresa el 
 1. El usuario inicia la carga de un movimiento y selecciona el tipo **Cuotas**.
 2. El usuario selecciona: **Gasto** o **Ingreso**.
 3. El usuario ingresa el **monto de cada cuota** (no el total de la compra).
+
+> **Nota:** En v1, las cuotas son **solo Gasto (`EXPENSE`)**. El "Ingreso en cuotas" está **fuera de alcance v1** (ver sección 6) — ver bitácora 2026-06-09 (resolución del conflicto de la spec, opción A). Por lo tanto, donde el paso 2 del flujo dice "selecciona Gasto o Ingreso", en v1 aplica únicamente Gasto: el selector de tipo **no se ofrece** en el tab Cuotas. El texto del flujo se conserva tal cual para una versión futura que incorpore "Ingreso en cuotas".
 4. El usuario ingresa la **cantidad de cuotas** (entero > 0).
 5. El usuario selecciona el **mes de inicio** (default: mes actual).
 6. El usuario selecciona una categoría (obligatorio).
@@ -649,6 +651,8 @@ Una compra o cobro dividido en N pagos mensuales iguales. El usuario ingresa el 
 - [ ] La cantidad de cuotas debe ser un entero mayor a cero (misma validación que RF-MC-001).
 - [ ] Al cambiar la cantidad de cuotas o el mes de inicio, el sistema recalcula en qué meses aparecen las cuotas.
 - [ ] Solo se pueden editar grupos propios.
+
+> **Nota:** El tipo (Gasto/Ingreso) no es editable: en v1 las cuotas son **solo Gasto** (ver nota en RF-MC-001 y bitácora 2026-06-09).
 
 ---
 
@@ -1095,3 +1099,17 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 3. **`MovementItem.occurredAt` / `timezone` pasan a nullable.** Para soportar fijos —que no tienen día/hora/zona— ambos campos del contrato de `GET /movements` admiten `null` (presentes en únicos, `null` en fijos). El front no los pasa a los formateadores de fecha/hora sin chequear null. La lista `movements.fijos` se puebla desde esta fase y los totales del mes (Vista del mes y Dashboard) suman únicos + fijos activos. Impacta `docs/data-model.md`, `docs/backend.md`, `docs/frontend.md`.
 
 Motivo: cerrar la mecánica de implementación de los fijos respetando los RF ya escritos, dejando registrado por qué el modelo es una cadena de filas y por qué el mes actual lo manda el front.
+
+**2026-06-09 — Cuotas solo Gasto en v1: resolución de conflicto de la spec (opción A, Fase 7).** La spec tenía una **contradicción**: RF-MC-001 ofrecía elegir "Gasto o Ingreso" al crear una compra en cuotas, pero la sección 6 ("Fuera de alcance — v1") excluye explícitamente "Ingreso en cuotas". Se resuelve a favor de la sección 6: **las cuotas son solo Gasto en v1**. El backend (`POST` / `PATCH /installments`) **rechaza `INCOME` con `400`** y el front **no ofrece selector de tipo** en el tab Cuotas (siempre Gasto). "Ingreso en cuotas" permanece fuera de alcance v1 (sin cambios en la sección 6). **No se reescribe el texto de los RF** (RF-MC-001..003): es una resolución de conflicto documentada en bitácora; cuando se incorpore "Ingreso en cuotas" en una versión futura, los RF ya lo contemplan. Impacta `docs/backend.md`, `docs/frontend.md`, `docs/features.md`. Motivo: tener un solo criterio coherente para v1, alineado con el alcance ya acotado de la sección 6, sin sumar un tipo de movimiento que estaba excluido.
+
+**2026-06-09 — Decisiones de implementación de Movimientos en cuotas (Fase 7).** Se implementan las cuotas (RF-MC-001..003) **sin cambiar ningún requerimiento** (más allá de la resolución de tipo de la entrada anterior). Se cierran las decisiones del **cómo**:
+
+1. **Cuotas on-the-fly, sin filas por instancia (RN-006).** El grupo (`InstallmentGroup`) no genera una fila por cuota mensual. En `/movements` se consultan los grupos con `startMonth <= month` y se filtra por `month < addMonths(startMonth, totalInstallments)`; el número de cuota del mes (1-based) es `monthDiff(startMonth, month) + 1`. Helpers `addMonths` / `monthDiff` en `movements.repository.ts`. Los totales del mes pasan a sumar únicos + fijos + cuotas. Impacta `docs/backend.md`, `docs/data-model.md`, `docs/features.md`.
+
+2. **Sin split ni soft delete (a diferencia de los fijos).** Editar (`PATCH /installments/:id`) actualiza el grupo completo **in-place** —no hay inmutabilidad del pasado en cuotas—; eliminar (`DELETE /installments/:id`) es **hard delete del grupo entero** (todas las cuotas, pasadas y futuras; `InstallmentGroup` no tiene `deletedFrom`). Campos editables: monto por cuota, cantidad, mes de inicio, categoría, descripción (no el `type`). El diálogo de eliminación avisa que borra el grupo completo, sin checkbox. **No hay `GET /installments/:id`**: el front prefilea desde el `MovementItem` de `/movements`. Impacta `docs/backend.md`, `docs/frontend.md`.
+
+3. **`MovementItem` suma el campo `installment`.** El contrato de `GET /movements` incorpora `installment: { number, total, startMonth } | null` —presente solo en cuotas, `null` en únicos y fijos— para la etiqueta "Cuota X/N" y el prefill de edición. Para cuotas, `occurredAt`/`timezone` vienen `null` (operan a nivel mes). Impacta `docs/data-model.md`, `docs/backend.md`, `docs/frontend.md`.
+
+4. **Validación de categoría consolidada en `CategoryValidatorService`.** La validación duplicada en Fases 4/6 (existencia + `userId` + activa + scope RN-010) se extrae a `CategoryValidatorService` (módulo `categories`), que los tres módulos de movimientos (`transactions`, `recurring`, `installments`) inyectan. Se mantiene el comportamiento: errores de categoría en movimientos son **`400`** (no `409`) y categoría ajena no se distingue de inexistente. Impacta `docs/backend.md`.
+
+Motivo: cerrar la mecánica de implementación de las cuotas respetando los RF, dejando registrado por qué el modelo es on-the-fly sin filas por instancia, por qué la edición/eliminación operan sobre el grupo entero (sin la inmutabilidad del pasado de los fijos) y por qué la validación de categoría se consolidó al sumar el tercer módulo de movimientos.

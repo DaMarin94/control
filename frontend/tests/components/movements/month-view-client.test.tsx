@@ -6,10 +6,12 @@
  * - Render de totales del mes
  * - Lista agrupada: sección Únicos con ítems; secciones vacías no se muestran
  * - Lista agrupada: sección Fijos con ítems (Fase 6)
+ * - Lista agrupada: sección Cuotas con ítems y "X/N" (Fase 7)
  * - Estado vacío: sin movimientos → mensaje sin error
  * - Estado de error: mensaje sin romper la pantalla
  * - Cableado editar/eliminar: únicos → modal único / delete único
  * - Cableado editar/eliminar: fijos → modal fijo / delete fijo (Fase 6)
+ * - Cableado editar/eliminar: cuotas → modal cuota / delete cuota (Fase 7)
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -66,6 +68,17 @@ vi.mock("@/hooks/use-recurring", () => ({
   })),
 }));
 
+vi.mock("@/hooks/use-installments", () => ({
+  useInstallments: vi.fn(() => ({
+    createInstallment: vi.fn(),
+    updateInstallment: vi.fn(),
+    deleteInstallment: vi.fn(),
+    isCreating: false,
+    isUpdating: false,
+    isDeleting: false,
+  })),
+}));
+
 vi.mock("@/lib/format", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/format")>();
   return {
@@ -111,6 +124,7 @@ const mockMovementExpense = {
   description: "Almuerzo en el trabajo",
   occurredAt: "2026-06-17T17:30:00.000Z",
   timezone: "America/Argentina/Buenos_Aires",
+  installment: null,
   category: { id: "cat-1", name: "Alimentación", color: "#FF5733", scope: "BOTH" as const },
 };
 
@@ -122,6 +136,7 @@ const mockMovementIncome = {
   description: null,
   occurredAt: "2026-06-01T12:00:00.000Z",
   timezone: "America/Argentina/Buenos_Aires",
+  installment: null,
   category: { id: "cat-2", name: "Sueldo", color: "#33FF57", scope: "INCOME" as const },
 };
 
@@ -134,7 +149,25 @@ const mockMovementFijo = {
   description: "Alquiler",
   occurredAt: null,
   timezone: null,
+  installment: null,
   category: { id: "cat-3", name: "Servicios", color: "#5733FF", scope: "EXPENSE" as const },
+};
+
+/** Cuota de ejemplo — occurredAt y timezone son null; installment presente (Fase 7) */
+const mockMovementCuota = {
+  id: "inst-1",
+  origin: "cuota" as const,
+  type: "EXPENSE" as const,
+  amountCents: 50000,
+  description: "Notebook",
+  occurredAt: null,
+  timezone: null,
+  installment: {
+    number: 3,
+    total: 12,
+    startMonth: "2026-01",
+  },
+  category: { id: "cat-4", name: "Tecnología", color: "#FF33AA", scope: "EXPENSE" as const },
 };
 
 const mockWithData: MonthMovements = {
@@ -154,6 +187,16 @@ const mockWithFijos: MonthMovements = {
     unicos: [mockMovementExpense],
     fijos: [mockMovementFijo],
     cuotas: [],
+  },
+};
+
+const mockWithCuotas: MonthMovements = {
+  month: "2026-06",
+  totals: { expenseCents: 65000, incomeCents: 500000, balanceCents: 435000 },
+  movements: {
+    unicos: [mockMovementExpense],
+    fijos: [],
+    cuotas: [mockMovementCuota],
   },
 };
 
@@ -459,6 +502,119 @@ describe("MonthViewClient", () => {
       expect(screen.getByRole("checkbox")).toBeInTheDocument();
       // Desmarcado por defecto (RF-MF-004)
       expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
+    });
+  });
+
+  // ── Lista agrupada por origen — Cuotas (RF-VM-001, RF-MC-001) ───────────────
+
+  describe("Lista de movimientos — sección Cuotas (Fase 7)", () => {
+    it("muestra la sección 'Cuotas' cuando hay movimientos de cuotas", () => {
+      mockLoaded(mockWithCuotas);
+      renderMonthView();
+
+      expect(screen.getByRole("region", { name: /cuotas/i })).toBeInTheDocument();
+    });
+
+    it("muestra el ítem de cuota con su descripción", () => {
+      mockLoaded(mockWithCuotas);
+      renderMonthView();
+
+      expect(screen.getByText("Notebook")).toBeInTheDocument();
+    });
+
+    it("muestra el badge 'Cuotas' en el ítem de origen cuota", () => {
+      mockLoaded(mockWithCuotas);
+      renderMonthView();
+
+      const cuotaSection = screen.getByRole("region", { name: /cuotas/i });
+      expect(cuotaSection).toHaveTextContent(/cuotas/i);
+    });
+
+    it("muestra 'Cuota X/N' (3/12) para la cuota del mes", () => {
+      mockLoaded(mockWithCuotas);
+      renderMonthView();
+
+      // Debe mostrar el número de cuota y el total (RF-MC-001)
+      expect(screen.getByText(/cuota 3\/12/i)).toBeInTheDocument();
+    });
+
+    it("NO muestra fecha/hora para cuotas (occurredAt=null)", () => {
+      mockLoaded(mockWithCuotas);
+      renderMonthView();
+
+      // Cuotas no tienen fecha/hora ni "Mensual" — solo "Cuota X/N"
+      // Verificamos que no haya texto con formato de fecha dd/mm/aaaa dentro de la sección
+      const cuotaSection = screen.getByRole("region", { name: /cuotas/i });
+      expect(cuotaSection).not.toHaveTextContent("Mensual");
+    });
+
+    it("NO muestra la sección 'Cuotas' cuando cuotas está vacío", () => {
+      mockLoaded(mockWithData); // cuotas: []
+      renderMonthView();
+
+      expect(screen.queryByRole("region", { name: /cuotas/i })).not.toBeInTheDocument();
+    });
+  });
+
+  // ── Cableado editar/eliminar — Cuotas (Fase 7) ───────────────────────────────
+
+  describe("Cableado editar/eliminar — Cuotas", () => {
+    beforeEach(() => {
+      mockLoaded(mockWithCuotas);
+    });
+
+    it("click en Editar de cuota abre el modal de edición de cuota (mode=edit-installment)", () => {
+      renderMonthView();
+
+      // La sección Cuotas debe existir
+      const cuotaSection = screen.getByRole("region", { name: /cuotas/i });
+      expect(cuotaSection).toBeInTheDocument();
+
+      // Click en el botón Editar de la cuota
+      const editBtns = screen.getAllByRole("button", { name: /editar/i });
+      const cuotaEditBtn = editBtns.find((btn) =>
+        btn.getAttribute("aria-label")?.includes("Notebook"),
+      );
+      expect(cuotaEditBtn).toBeTruthy();
+      fireEvent.click(cuotaEditBtn!);
+
+      // Modal abierto en modo editar
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByText(/editar movimiento/i)).toBeInTheDocument();
+    });
+
+    it("click en Eliminar de cuota abre el DeleteInstallmentDialog (sin checkbox)", () => {
+      renderMonthView();
+
+      // Click en Eliminar de la cuota
+      const deleteBtns = screen.getAllByRole("button", { name: /eliminar/i });
+      const cuotaDeleteBtn = deleteBtns.find((btn) =>
+        btn.getAttribute("aria-label")?.includes("Notebook"),
+      );
+      expect(cuotaDeleteBtn).toBeTruthy();
+      fireEvent.click(cuotaDeleteBtn!);
+
+      // El diálogo de cuota debe abrirse — tiene "Eliminar grupo de cuotas" en el título
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /eliminar grupo de cuotas/i }),
+      ).toBeInTheDocument();
+
+      // Sin checkbox — la eliminación siempre es total (a diferencia del diálogo de fijo)
+      expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    });
+
+    it("el DeleteInstallmentDialog advierte que se elimina el grupo completo", () => {
+      renderMonthView();
+
+      const deleteBtns = screen.getAllByRole("button", { name: /eliminar/i });
+      const cuotaDeleteBtn = deleteBtns.find((btn) =>
+        btn.getAttribute("aria-label")?.includes("Notebook"),
+      );
+      fireEvent.click(cuotaDeleteBtn!);
+
+      // Advertencia explícita del grupo completo (RF-MC-002)
+      expect(screen.getByText(/grupo completo/i)).toBeInTheDocument();
     });
   });
 

@@ -16,11 +16,12 @@
  */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { CategoryScope, MovementType } from '@prisma/client';
+import { MovementType } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { TransactionsService } from '../../../src/transactions/transactions.service';
 import { TransactionsRepository, TransactionWithCategory } from '../../../src/transactions/transactions.repository';
-import { PrismaService } from '../../../src/prisma/prisma.service';
+import { CategoryValidatorService } from '../../../src/categories/category-validator.service';
+import { CategoryScope } from '@prisma/client';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -34,10 +35,8 @@ const mockRepo = {
   delete: jest.fn(),
 };
 
-const mockPrisma = {
-  category: {
-    findUnique: jest.fn(),
-  },
+const mockCategoryValidator = {
+  validateCategory: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockLogger = {
@@ -55,16 +54,6 @@ const mockLogger = {
 const USER_A = 'user-a-id';
 const USER_B = 'user-b-id';
 const CAT_ID = 'cat-expense-id';
-
-function makeCategory(overrides: Record<string, unknown> = {}) {
-  return {
-    id: CAT_ID,
-    userId: USER_A,
-    scope: CategoryScope.EXPENSE,
-    deletedAt: null,
-    ...overrides,
-  };
-}
 
 function makeTransaction(overrides: Partial<TransactionWithCategory> = {}): TransactionWithCategory {
   return {
@@ -97,12 +86,13 @@ describe('TransactionsService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockCategoryValidator.validateCategory.mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TransactionsService,
         { provide: TransactionsRepository, useValue: mockRepo },
-        { provide: PrismaService, useValue: mockPrisma },
+        { provide: CategoryValidatorService, useValue: mockCategoryValidator },
         { provide: Logger, useValue: mockLogger },
       ],
     }).compile();
@@ -116,8 +106,6 @@ describe('TransactionsService', () => {
 
   describe('create', () => {
     it('crea una transacción y la devuelve', async () => {
-      const cat = makeCategory({ scope: CategoryScope.EXPENSE });
-      mockPrisma.category.findUnique.mockResolvedValue(cat);
       const tx = makeTransaction();
       mockRepo.create.mockResolvedValue(tx);
 
@@ -140,8 +128,6 @@ describe('TransactionsService', () => {
     });
 
     it('persiste occurredAt como objeto Date en UTC (RN-004)', async () => {
-      const cat = makeCategory({ scope: CategoryScope.EXPENSE });
-      mockPrisma.category.findUnique.mockResolvedValue(cat);
       mockRepo.create.mockResolvedValue(makeTransaction());
 
       await service.create(USER_A, {
@@ -161,8 +147,6 @@ describe('TransactionsService', () => {
     });
 
     it('persiste el timezone IANA del registro (RN-004)', async () => {
-      const cat = makeCategory({ scope: CategoryScope.BOTH });
-      mockPrisma.category.findUnique.mockResolvedValue(cat);
       mockRepo.create.mockResolvedValue(makeTransaction({ timezone: 'Europe/Madrid' }));
 
       await service.create(USER_A, {
@@ -179,7 +163,9 @@ describe('TransactionsService', () => {
     });
 
     it('categoría inexistente → BadRequestException (RN-010)', async () => {
-      mockPrisma.category.findUnique.mockResolvedValue(null);
+      mockCategoryValidator.validateCategory.mockRejectedValue(
+        new BadRequestException('La categoría no existe o no pertenece al usuario'),
+      );
 
       await expect(
         service.create(USER_A, {
@@ -195,8 +181,9 @@ describe('TransactionsService', () => {
     });
 
     it('categoría de otro usuario → BadRequestException (aislamiento RN-003)', async () => {
-      const catOtherUser = makeCategory({ userId: USER_B });
-      mockPrisma.category.findUnique.mockResolvedValue(catOtherUser);
+      mockCategoryValidator.validateCategory.mockRejectedValue(
+        new BadRequestException('La categoría no existe o no pertenece al usuario'),
+      );
 
       await expect(
         service.create(USER_A, {
@@ -212,8 +199,9 @@ describe('TransactionsService', () => {
     });
 
     it('categoría eliminada → BadRequestException (RN-010)', async () => {
-      const deletedCat = makeCategory({ deletedAt: new Date('2024-01-01') });
-      mockPrisma.category.findUnique.mockResolvedValue(deletedCat);
+      mockCategoryValidator.validateCategory.mockRejectedValue(
+        new BadRequestException('La categoría está eliminada'),
+      );
 
       await expect(
         service.create(USER_A, {
@@ -229,8 +217,9 @@ describe('TransactionsService', () => {
     });
 
     it('scope incompatible EXPENSE con categoría INCOME → BadRequestException (RN-010)', async () => {
-      const incomeCat = makeCategory({ scope: CategoryScope.INCOME });
-      mockPrisma.category.findUnique.mockResolvedValue(incomeCat);
+      mockCategoryValidator.validateCategory.mockRejectedValue(
+        new BadRequestException('La categoría no es compatible con el tipo "EXPENSE"'),
+      );
 
       await expect(
         service.create(USER_A, {
@@ -244,8 +233,9 @@ describe('TransactionsService', () => {
     });
 
     it('scope incompatible INCOME con categoría EXPENSE → BadRequestException (RN-010)', async () => {
-      const expenseCat = makeCategory({ scope: CategoryScope.EXPENSE });
-      mockPrisma.category.findUnique.mockResolvedValue(expenseCat);
+      mockCategoryValidator.validateCategory.mockRejectedValue(
+        new BadRequestException('La categoría no es compatible con el tipo "INCOME"'),
+      );
 
       await expect(
         service.create(USER_A, {
@@ -259,8 +249,7 @@ describe('TransactionsService', () => {
     });
 
     it('scope BOTH es compatible con EXPENSE (RN-010)', async () => {
-      const bothCat = makeCategory({ scope: CategoryScope.BOTH });
-      mockPrisma.category.findUnique.mockResolvedValue(bothCat);
+      // mockCategoryValidator resuelve sin error por default
       mockRepo.create.mockResolvedValue(makeTransaction({ type: MovementType.EXPENSE }));
 
       await expect(
@@ -275,8 +264,7 @@ describe('TransactionsService', () => {
     });
 
     it('scope BOTH es compatible con INCOME (RN-010)', async () => {
-      const bothCat = makeCategory({ scope: CategoryScope.BOTH });
-      mockPrisma.category.findUnique.mockResolvedValue(bothCat);
+      // mockCategoryValidator resuelve sin error por default
       mockRepo.create.mockResolvedValue(makeTransaction({ type: MovementType.INCOME }));
 
       await expect(
@@ -430,9 +418,10 @@ describe('TransactionsService', () => {
       const existing = makeTransaction({ type: MovementType.EXPENSE });
       mockRepo.findById.mockResolvedValue(existing);
 
-      // Intentar cambiar a INCOME → categoría EXPENSE incompatible
-      const expenseCat = makeCategory({ scope: CategoryScope.EXPENSE });
-      mockPrisma.category.findUnique.mockResolvedValue(expenseCat);
+      // Intentar cambiar a INCOME → categoría EXPENSE incompatible → validator rechaza
+      mockCategoryValidator.validateCategory.mockRejectedValue(
+        new BadRequestException('La categoría no es compatible con el tipo "INCOME"'),
+      );
 
       await expect(
         service.update(USER_A, 'tx-001', { type: MovementType.INCOME }),
@@ -445,9 +434,10 @@ describe('TransactionsService', () => {
       const existing = makeTransaction({ type: MovementType.EXPENSE });
       mockRepo.findById.mockResolvedValue(existing);
 
-      // Nueva categoría con scope INCOME → incompatible con EXPENSE
-      const incomeCat = makeCategory({ scope: CategoryScope.INCOME });
-      mockPrisma.category.findUnique.mockResolvedValue(incomeCat);
+      // Nueva categoría con scope INCOME → incompatible con EXPENSE → validator rechaza
+      mockCategoryValidator.validateCategory.mockRejectedValue(
+        new BadRequestException('La categoría no es compatible con el tipo "EXPENSE"'),
+      );
 
       await expect(
         service.update(USER_A, 'tx-001', { categoryId: 'new-cat-id' }),
@@ -460,9 +450,7 @@ describe('TransactionsService', () => {
       const existing = makeTransaction({ type: MovementType.EXPENSE });
       mockRepo.findById.mockResolvedValue(existing);
 
-      // Categoría INCOME + type INCOME → compatible
-      const incomeCat = makeCategory({ scope: CategoryScope.INCOME });
-      mockPrisma.category.findUnique.mockResolvedValue(incomeCat);
+      // Categoría INCOME + type INCOME → compatible → validator resuelve OK (default)
       const updated = makeTransaction({ type: MovementType.INCOME });
       mockRepo.update.mockResolvedValue(updated);
 

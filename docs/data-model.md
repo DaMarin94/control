@@ -132,8 +132,8 @@ data = {
   },
   movements: {
     unicos: MovementItem[],   // ordenados por occurredAt descendente
-    fijos:  MovementItem[],   // vacío hasta Fase 6
-    cuotas: MovementItem[]    // vacío hasta Fase 7
+    fijos:  MovementItem[],   // poblado desde Fase 6
+    cuotas: MovementItem[]    // poblado desde Fase 7
   }
 }
 ```
@@ -145,14 +145,20 @@ MovementItem = {
   type: "EXPENSE" | "INCOME",
   amountCents: number,
   description: string | null,
-  occurredAt: string | null,                 // ISO 8601 en UTC; null en fijos (sin día/hora)
-  timezone: string | null,                   // IANA del registro; null en fijos
+  occurredAt: string | null,                 // ISO 8601 en UTC; null en fijos y cuotas (sin día/hora)
+  timezone: string | null,                   // IANA del registro; null en fijos y cuotas
+  installment: {                             // presente solo en cuotas; null en únicos y fijos
+    number: number,                          //   nro de cuota del mes (1-based)
+    total: number,                           //   cantidad total de cuotas del grupo
+    startMonth: string                       //   "YYYY-MM", mes de inicio del grupo
+  } | null,
   category: { id, name, color, scope }       // embebida
 }
 ```
 
 - **Discriminador `origin`.** Cada ítem declara su tipo de movimiento (`unico` / `fijo` / `cuota`), además de venir ya agrupado en su lista. El front lo usa para rotular el origen y elegir el flujo de edición/eliminación. `origin: "fijo"` se puebla desde Fase 6; `"cuota"`, desde Fase 7.
-- **`occurredAt` / `timezone` son nullable.** Para **únicos** vienen presentes (instante + zona). Para **fijos** vienen **`null`**: el fijo opera a nivel mes, no tiene día/hora/zona. El front no debe pasar estos campos a `formatDate` / `formatTime` sin chequear null.
+- **`occurredAt` / `timezone` son nullable.** Para **únicos** vienen presentes (instante + zona). Para **fijos** y **cuotas** vienen **`null`**: operan a nivel mes, no tienen día/hora/zona. El front no debe pasar estos campos a `formatDate` / `formatTime` sin chequear null.
+- **`installment` solo en cuotas.** Para una cuota trae `{ number, total, startMonth }`: `number` es el número de cuota del mes (1-based), `total` es el `totalInstallments` del grupo y `startMonth` es el mes de inicio del grupo. Para **únicos** y **fijos** es **`null`**. El front lo usa para la etiqueta "Cuota X/N" y para prefilear la edición del grupo.
 - **Los totales suman movimientos, no categorías.** `expenseCents` / `incomeCents` agregan el `amountCents` de los movimientos del mes; `balanceCents = incomeCents - expenseCents`, sin piso (negativo si los gastos superan los ingresos). No se confunden con el contador `movementCount` de la pantalla de categorías (ver más arriba y `requirements.md`, RF-VM-002 / RF-CAT-006).
 - **La categoría embebida puede estar soft-deleted.** Un movimiento histórico muestra su categoría aunque haya sido eliminada (`deletedAt`), y **sigue contando en los totales** (RF-CAT-004 / RF-VM-002; el join de movimientos no filtra por `deletedAt`).
-- **Estructura preparada para fijos y cuotas.** La lista `fijos` se **puebla desde Fase 6** (y los totales del mes ya suman los fijos activos); `cuotas` sigue vacía hasta Fase 7. El shape no cambia al poblarse — salvo que `occurredAt`/`timezone` pasaron a nullable para soportar fijos (ver `MovementItem` arriba).
+- **Listas de fijos y cuotas pobladas.** La lista `fijos` se puebla desde Fase 6 y `cuotas` desde **Fase 7**; los totales del mes suman únicos + fijos + cuotas. El **grupo de cuotas no genera filas por instancia**: se calcula on-the-fly (RN-006) — una cuota cae en `startMonth ≤ mes < startMonth + totalInstallments`. Detalle del cálculo en `docs/backend.md`, sección Movimientos en cuotas.

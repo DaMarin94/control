@@ -4,7 +4,7 @@ import { MovementsRepository, MovementItem } from './movements.repository';
 
 /**
  * Shape de los totales del mes.
- * Suma movimientos únicos + fijos activos + cuotas (cuotas: Fase 7).
+ * Suma movimientos únicos + fijos activos + cuotas activas en el mes.
  */
 export interface MonthTotals {
   expenseCents: number;
@@ -15,12 +15,9 @@ export interface MonthTotals {
 /**
  * Shape completo de la respuesta de GET /movements.
  *
- * La estructura `movements` está diseñada para incorporar fijos y cuotas
- * en Fases 6 y 7 sin cambiar el shape del contrato con el frontend.
- *
  * - `unicos`: movimientos únicos del mes (poblado desde Fase 5)
  * - `fijos`: fijos activos en el mes (poblado desde Fase 6)
- * - `cuotas`: cuotas que caen en el mes (vacío en Fases 5-6; se puebla en Fase 7)
+ * - `cuotas`: cuotas que caen en el mes (poblado desde Fase 7)
  */
 export interface MonthMovementsResponse {
   month: string;
@@ -28,7 +25,7 @@ export interface MonthMovementsResponse {
   movements: {
     unicos: MovementItem[];
     fijos: MovementItem[];
-    cuotas: never[];
+    cuotas: MovementItem[];
   };
 }
 
@@ -45,12 +42,12 @@ export class MovementsService {
    * Bucketeo de únicos: por la timezone propia de CADA registro (AT TIME ZONE t.timezone),
    * implementado en SQL raw en MovementsRepository.
    * Bucketeo de fijos: comparación léxica de strings YYYY-MM (no requiere timezone).
+   * Bucketeo de cuotas: comparación léxica de strings YYYY-MM + cálculo on-the-fly en JS.
    *
    * Validación: month obligatorio y con formato YYYY-MM. Si falta o es inválido → 400.
-   * Ya no requiere ni acepta timezone en el query param (el criterio la obtiene
-   * de cada registro en la DB, o es irrelevante para fijos).
+   * No requiere ni acepta timezone en el query param.
    *
-   * Totales: suman movimientos únicos + fijos activos del mes (RF-VM-002, RF-DASH-002).
+   * Totales: suman movimientos únicos + fijos activos + cuotas activas del mes.
    *
    * @param userId  userId del JWT (RN-003: aislamiento por usuario)
    * @param month   Mes en formato YYYY-MM
@@ -62,19 +59,32 @@ export class MovementsService {
     // Validar formato y semántica del mes
     this.validateMonth(month);
 
-    // Obtener movimientos únicos, fijos y totales en paralelo para eficiencia
-    const [unicos, fijos, rawTotalsUnicos, rawTotalsFijos] = await Promise.all([
+    // Obtener movimientos y totales en paralelo para eficiencia
+    const [
+      unicos,
+      fijos,
+      cuotas,
+      rawTotalsUnicos,
+      rawTotalsFijos,
+      rawTotalsCuotas,
+    ] = await Promise.all([
       this.repo.findUnicosByMonth(userId, month),
       this.repo.findFijosByMonth(userId, month),
+      this.repo.findCuotasByMonth(userId, month),
       this.repo.getTotalsByMonth(userId, month),
       this.repo.getFijosTotalsByMonth(userId, month),
+      this.repo.getCuotasTotalsByMonth(userId, month),
     ]);
 
-    // Combinar totales de únicos + fijos
+    // Combinar totales de únicos + fijos + cuotas
     const expenseCents =
-      rawTotalsUnicos.expenseCents + rawTotalsFijos.expenseCents;
+      rawTotalsUnicos.expenseCents +
+      rawTotalsFijos.expenseCents +
+      rawTotalsCuotas.expenseCents;
     const incomeCents =
-      rawTotalsUnicos.incomeCents + rawTotalsFijos.incomeCents;
+      rawTotalsUnicos.incomeCents +
+      rawTotalsFijos.incomeCents +
+      rawTotalsCuotas.incomeCents;
 
     const totals: MonthTotals = {
       expenseCents,
@@ -88,6 +98,7 @@ export class MovementsService {
         month,
         unicosCount: unicos.length,
         fijosCount: fijos.length,
+        cuotasCount: cuotas.length,
         totals,
       },
       'Movimientos del mes listados',
@@ -99,7 +110,7 @@ export class MovementsService {
       movements: {
         unicos,
         fijos,
-        cuotas: [],
+        cuotas,
       },
     };
   }

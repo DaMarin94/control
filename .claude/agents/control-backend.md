@@ -118,6 +118,17 @@ Detalle de contrato en `docs/backend.md` (sección Movimientos fijos). Para agen
 - **`validateCategory` está duplicada** entre `RecurringService` y `TransactionsService` — **consolidar en un helper compartido en Fase 7** (cuotas), no antes.
 - **No existe `GET /recurring/:id`** — el front prefilea desde el `MovementItem` de `/movements`. No agregarlo.
 
+## Movimientos en cuotas (installments) — gotchas y decisiones (Fase 7)
+
+Detalle de contrato en `docs/backend.md` (sección Movimientos en cuotas). Para agentes que toquen el backend:
+
+- **Validación de categoría ahora vive en `CategoryValidatorService`** (módulo `categories`, exportado por `CategoriesModule`). Los tres módulos de movimientos (`transactions`, `recurring`, `installments`) lo **inyectan** — **NO volver a duplicar** la lógica de validación de categoría (existencia + `userId` + activa + scope RN-010). Sigue siendo `400` (no `409`); ajena no se distingue de inexistente.
+- **Cuotas solo `EXPENSE` en v1.** `POST` / `PATCH /installments` **rechazan `INCOME` con `400`** (resolución de conflicto RF-MC-001 vs sección 6; ver bitácora). No agregar el tipo Ingreso.
+- **Cuotas on-the-fly (RN-006), sin filas por instancia.** En `/movements` se consultan los grupos con `startMonth <= month` y se filtra por `month < addMonths(startMonth, totalInstallments)`; número de cuota del mes (1-based) = `monthDiff(startMonth, month) + 1`. Usar los helpers `addMonths` / `monthDiff` de `movements.repository.ts`, no reimplementar. `MovementsModule` puebla `cuotas` y suma a los totales llamando a `InstallmentsService` (nunca toca la tabla).
+- **Sin split, sin soft delete.** `PATCH` edita el grupo completo in-place (no hay inmutabilidad del pasado como en fijos); `DELETE` es **hard delete del grupo entero** (`InstallmentGroup` no tiene `deletedFrom`). El `type` no es editable.
+- **No existe `GET /installments/:id`** — el front prefilea desde el `MovementItem` de `/movements`. No agregarlo.
+- **Gotcha de tests — `installmentGroup` en el mock de `PrismaService`.** Los e2e que levantan `AppModule` necesitan `installmentGroup` en el mock de Prisma, o falla al resolver el módulo.
+
 ## Contratos con el frontend
 
 Si modificás el shape de un endpoint o agregás uno nuevo: reportarlo al orquestador con el detalle exacto antes de que el frontend implemente algo que lo consuma.

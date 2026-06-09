@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * Modal de movimiento (RF-CM-001 / RF-MU-001/002 / RF-MF-001/003).
+ * Modal de movimiento (RF-CM-001 / RF-MU-001/002 / RF-MF-001/003 / RF-MC-001/003).
  *
  * ── Modo crear (mode === "create") ──
  *   Muestra 3 tabs: Único (funcional), Fijo (funcional desde Fase 6),
- *   Cuotas (deshabilitado, "Próximamente").
+ *   Cuotas (funcional desde Fase 7).
  *   Tab Único activo por defecto.
  *
  * ── Modo editar único (mode === "edit-single") ──
@@ -14,16 +14,20 @@
  * ── Modo editar fijo (mode === "edit-fixed") ──
  *   Sin tabs; abre el RecurringForm precargado con el fijo.
  *
+ * ── Modo editar cuotas (mode === "edit-installment") ──
+ *   Sin tabs; abre el InstallmentForm precargado con el grupo de cuotas.
+ *
  * El modal se superpone (no tiene ruta propia).
  */
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { TransactionForm } from "@/components/movements/transaction-form";
 import { RecurringForm } from "@/components/movements/recurring-form";
+import { InstallmentForm } from "@/components/movements/installment-form";
 import { type Transaction } from "@/types/transaction";
 import { type Recurring } from "@/types/recurring";
+import { type InstallmentGroup } from "@/types/installment";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -32,46 +36,58 @@ type TabId = "single" | "fixed" | "installments";
 interface Tab {
   id: TabId;
   label: string;
-  comingSoon: boolean;
 }
 
 const TABS: Tab[] = [
-  { id: "single", label: "Único", comingSoon: false },
-  { id: "fixed", label: "Fijo", comingSoon: false },
-  { id: "installments", label: "Cuotas", comingSoon: true },
+  { id: "single", label: "Único" },
+  { id: "fixed", label: "Fijo" },
+  { id: "installments", label: "Cuotas" },
 ];
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 /**
- * Tres modos de uso:
+ * Cuatro modos de uso:
  *
- * 1. Crear → mode="create", transaction=null, recurring=null
- *    Muestra tabs; el usuario elige el tipo.
+ * 1. Crear → mode="create"
+ *    Muestra los 3 tabs (Único, Fijo, Cuotas); el usuario elige el tipo.
  *
- * 2. Editar único → mode="edit-single", transaction=Transaction, recurring=null
+ * 2. Editar único → mode="edit-single", transaction=Transaction
  *    Sin tabs; abre TransactionForm precargado.
  *
- * 3. Editar fijo → mode="edit-fixed", transaction=null, recurring=Recurring
+ * 3. Editar fijo → mode="edit-fixed", recurring=Recurring
  *    Sin tabs; abre RecurringForm precargado.
+ *
+ * 4. Editar cuotas → mode="edit-installment", installment=InstallmentGroup
+ *    Sin tabs; abre InstallmentForm precargado.
  */
 export type TransactionModalProps =
   | {
       mode: "create";
       transaction?: null;
       recurring?: null;
+      installment?: null;
       onClose: () => void;
     }
   | {
       mode: "edit-single";
       transaction: Transaction;
       recurring?: null;
+      installment?: null;
       onClose: () => void;
     }
   | {
       mode: "edit-fixed";
       transaction?: null;
       recurring: Recurring;
+      installment?: null;
+      onClose: () => void;
+    }
+  | {
+      mode: "edit-installment";
+      transaction?: null;
+      recurring?: null;
+      installment: InstallmentGroup;
       onClose: () => void;
     };
 
@@ -131,26 +147,16 @@ export function TransactionModal(props: TransactionModalProps) {
                 role="tab"
                 aria-selected={activeTab === tab.id}
                 aria-controls={`tab-panel-${tab.id}`}
-                disabled={tab.comingSoon}
-                onClick={() => {
-                  if (!tab.comingSoon) setActiveTab(tab.id);
-                }}
+                onClick={() => setActiveTab(tab.id)}
                 className={cn(
                   "relative flex flex-1 items-center justify-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                  tab.comingSoon
-                    ? "cursor-not-allowed text-muted-foreground/50"
-                    : activeTab === tab.id
-                      ? "border-b-2 border-primary text-primary"
-                      : "text-muted-foreground hover:text-foreground",
+                  activeTab === tab.id
+                    ? "border-b-2 border-primary text-primary"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 {tab.label}
-                {tab.comingSoon && (
-                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                    Próximamente
-                  </span>
-                )}
               </button>
             ))}
           </div>
@@ -162,48 +168,32 @@ export function TransactionModal(props: TransactionModalProps) {
           <div>
             {mode === "edit-single" ? (
               <TransactionForm transaction={props.transaction} onClose={onClose} />
-            ) : (
-              /* mode === "edit-fixed" */
+            ) : mode === "edit-fixed" ? (
               <RecurringForm recurring={props.recurring} onClose={onClose} />
+            ) : (
+              /* mode === "edit-installment" */
+              <InstallmentForm installment={props.installment} onClose={onClose} />
             )}
           </div>
         ) : (
           /* Modo creación — con tabs */
           <>
             {activeTab === "single" && (
-              <div
-                id="tab-panel-single"
-                role="tabpanel"
-                aria-labelledby="tab-single"
-              >
+              <div id="tab-panel-single" role="tabpanel" aria-labelledby="tab-single">
                 <TransactionForm transaction={null} onClose={onClose} />
               </div>
             )}
             {activeTab === "fixed" && (
-              <div
-                id="tab-panel-fixed"
-                role="tabpanel"
-                aria-labelledby="tab-fixed"
-              >
+              <div id="tab-panel-fixed" role="tabpanel" aria-labelledby="tab-fixed">
                 <RecurringForm recurring={null} onClose={onClose} />
               </div>
             )}
             {activeTab === "installments" && (
-              /* No debería ser seleccionable (disabled), pero por si acaso */
-              <div className="px-6 py-12 text-center text-sm text-muted-foreground">
-                Próximamente disponible.
+              <div id="tab-panel-installments" role="tabpanel" aria-labelledby="tab-installments">
+                <InstallmentForm installment={null} onClose={onClose} />
               </div>
             )}
           </>
-        )}
-
-        {/* Botón cancelar de fallback para el tab deshabilitado (Cuotas) */}
-        {!isEditing && activeTab === "installments" && (
-          <div className="flex justify-end border-t px-6 py-4">
-            <Button variant="outline" onClick={onClose}>
-              Cerrar
-            </Button>
-          </div>
         )}
       </div>
     </div>
