@@ -103,6 +103,59 @@ Gestión de grupos de cuotas. El PATCH edita el grupo completo (RF-MC-003). El D
 ### `GET /categories` · `POST /categories` · `PATCH /categories/:id` · `DELETE /categories/:id`
 CRUD de categorías. El DELETE es soft delete (`deletedAt`). Ver el contrato completo en la sección **Categorías (CategoriesModule)**.
 
+## Movimientos únicos (TransactionsModule)
+
+CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca movimientos de otro). Todas las respuestas exitosas devuelven el shape de Transaction, con la **categoría embebida**.
+
+### Shape de Transaction
+
+```
+Transaction = {
+  id, userId,
+  categoryId,
+  type: "EXPENSE" | "INCOME",
+  amountCents: int,                  // entero en centavos, siempre > 0 (RN-002)
+  description: string | null,
+  occurredAt: string,                // ISO 8601 en UTC (instante, no fecha de calendario)
+  timezone: string,                  // IANA del registro (ej. "America/Argentina/Buenos_Aires"), RN-004
+  createdAt, updatedAt,
+  category: { id, name, color, scope }  // embebida en toda respuesta
+}
+```
+
+- **La categoría viene embebida** (`{ id, name, color, scope }`) en toda respuesta exitosa — el front no necesita un GET extra de categorías para mostrar nombre y color del movimiento.
+
+### Endpoints
+
+| Endpoint | Body | Éxito | Errores |
+|----------|------|-------|---------|
+| `POST /transactions` | `{ type, amountCents, categoryId, occurredAt, timezone, description? }` | `201` · `data: Transaction` | `400` |
+| `GET /transactions?month=YYYY-MM&timezone=IANA` | — | `200` · `data: Transaction[]` | `400` |
+| `GET /transactions/:id` | — | `200` · `data: Transaction` | `404` |
+| `PATCH /transactions/:id` | parcial (cualquier campo de POST) | `200` · `data: Transaction` | `400` · `404` |
+| `DELETE /transactions/:id` | — | `204 No Content` | `404` |
+
+- **`POST /transactions`** — `amountCents` entero **en centavos** (`> 0`); `occurredAt` ISO 8601 en **UTC**; `timezone` IANA. `400` por validación de DTO o por categoría inválida (ver Validación de categoría abajo).
+- **`GET /transactions`** — **ambos query params son obligatorios** (`month=YYYY-MM` y `timezone=IANA`); si falta alguno, `400`. Devuelve los movimientos del mes ordenados por `occurredAt` **descendente**. Ver el criterio de bucketeo abajo.
+- **`GET /transactions/:id`** — `404` si no existe o no es del usuario.
+- **`PATCH /transactions/:id`** — body parcial (cualquier campo del POST). **Reaplica todas las validaciones** (RN-002 monto, RN-010 scope). `404` si no existe o no es del usuario.
+- **`DELETE /transactions/:id`** — **hard delete** (permanente, RF-MU-003; la entidad no tiene `deletedAt`). **`204` sin cuerpo.** `404` si no existe o no es del usuario.
+
+### Validación de categoría (RN-010) — siempre 400, nunca 409
+
+Se valida en **create y update**. El movimiento exige una categoría **propia, activa y con scope compatible**:
+
+- **Scope (RN-010):** `EXPENSE` requiere categoría con scope `EXPENSE` o `BOTH`; `INCOME` requiere `INCOME` o `BOTH`.
+- Categoría **inexistente, ajena (de otro usuario), eliminada (soft delete) o con scope incompatible** son todas **`400 BadRequest`** — es validación de input, **no `409`**.
+- **No revela ajenidad:** si la categoría es de otro usuario, el error es **idéntico** al de "inexistente" — no filtra si el `id` existe en la DB de otro.
+
+### Bucketeo por mes (GET) — decisión y deuda técnica
+
+El rango UTC del mes se calcula a partir de la **timezone recibida en el query param** (`?timezone=IANA`), **no** de la `timezone` guardada en cada registro. Ejemplo: `month=2026-06&timezone=America/Argentina/Buenos_Aires` (UTC-3) filtra `occurredAt >= 2026-06-01T03:00:00Z AND < 2026-07-01T03:00:00Z`.
+
+- **`month` y `timezone` obligatorios:** el backend **no asume "mes actual"** porque no conoce la zona del usuario en ese punto; si falta `month`, devuelve `400` (no infiere).
+- **Limitación conocida (deuda técnica):** un movimiento cargado en una zona distinta a la del query puede caer en el mes "equivocado" según este criterio. La alternativa correcta —bucketear por la `timezone` propia de **cada registro** vía SQL `AT TIME ZONE`— requiere SQL crudo, no idiomático en Prisma 7; se difiere a **Fase 5** (Vista del mes).
+
 ## Categorías (CategoriesModule)
 
 CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca categorías de otro). Todas las respuestas exitosas devuelven el shape de categoría.

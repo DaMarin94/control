@@ -82,6 +82,15 @@ Detalle de contrato en `docs/backend.md` (sección Categorías). Para agentes qu
   - PATCH sobre **eliminada** → `404`. Reactivate sobre **ya activa** → `409`; sobre inexistente/de otro usuario → `404`.
   - El `color` no se acepta en POST ni PATCH → `400`.
 
+## Movimientos únicos (transactions) — gotchas y decisiones
+
+Detalle de contrato en `docs/backend.md` (sección Movimientos únicos). Para agentes que toquen el backend:
+
+- **Bucketeo por mes con la timezone del query, no del registro (deuda técnica).** `GET /transactions` calcula el rango UTC del mes a partir de la `timezone` recibida en el **query param** (`?month=YYYY-MM&timezone=IANA`), **no** de la `timezone` guardada en cada registro. **Ambos params son obligatorios** → `400` si falta alguno; el backend **no asume "mes actual"** (no conoce la zona del usuario ahí). La alternativa correcta —bucketear por la zona de cada registro vía SQL `AT TIME ZONE`— se **difiere a Fase 5**: requiere SQL crudo, no idiomático en Prisma 7. No cambiar este criterio sin retomar esa deuda.
+- **Validación de categoría = `400`, nunca `409`.** Categoría inexistente / ajena / eliminada / con **scope incompatible** (RN-010: `EXPENSE` → scope `EXPENSE`|`BOTH`, `INCOME` → `INCOME`|`BOTH`) son **`400 BadRequest`** (validación de input), en create **y** update. El caso **ajeno NO se distingue de inexistente** (mismo error) — no revelar si el `id` existe en otra cuenta.
+- **Hard delete.** `DELETE /transactions/:id` borra **físicamente** (la entidad no tiene `deletedAt`). `204 No Content` sin cuerpo; `404` si no existe o no es del usuario (no idempotente sobre un id ya borrado).
+- **Categoría embebida en la respuesta.** Todo endpoint exitoso devuelve `category: { id, name, color, scope }` dentro del `Transaction` — no obligar al front a un GET extra.
+
 ## Contratos con el frontend
 
 Si modificás el shape de un endpoint o agregás uno nuevo: reportarlo al orquestador con el detalle exacto antes de que el frontend implemente algo que lo consuma.

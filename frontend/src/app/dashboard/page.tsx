@@ -2,11 +2,12 @@
  * Dashboard — /dashboard
  *
  * Ruta privada: el middleware redirige a /login si no hay sesión activa.
- * Placeholder para la Fase 3 (lista de movimientos).
+ * Fase 4: incluye el botón "Nuevo movimiento" que abre el modal de carga.
  */
 
 import { auth } from "@/auth";
 import { SignOutButton } from "./sign-out-button";
+import { NewTransactionButton } from "./new-transaction-button";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -23,15 +24,17 @@ export default async function DashboardPage() {
 
       <div className="w-full max-w-sm space-y-3">
         <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-          <p className="font-medium text-foreground">Dashboard</p>
-          <p className="mt-1">Fase 3: los movimientos irán aquí.</p>
+          <p className="font-medium text-foreground">Movimientos</p>
+          <p className="mt-1">Fase 5: la lista de movimientos del mes irá aquí.</p>
         </div>
+
+        <NewTransactionButton />
 
         <SignOutButton />
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Fase 2 — Autenticación completada
+        Fase 4 — Movimientos únicos
       </p>
     </main>
   );

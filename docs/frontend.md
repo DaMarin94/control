@@ -97,6 +97,45 @@ Al crear, si el backend responde `409` con `error.data.reactivable`, el modal **
 
 > **Nota — `Select` primitivo:** el scope se elige con un `Select` que es un `<select>` **nativo** (no Radix). Es un primitivo mínimo, reemplazable a futuro en un solo lugar.
 
+## Movimientos únicos
+
+Carga de movimientos. En Fase 4 solo está visible **crear** (desde el dashboard); editar y eliminar quedan implementados como componentes/hooks reutilizables, listos para que la **Vista del mes** (Fase 5) los cablee.
+
+### Modal de carga (`components/movements/transaction-modal.tsx`)
+
+- **Tres tabs: Único, Fijo, Cuotas.** Solo **Único es funcional**; **Fijo y Cuotas van deshabilitados** con badge "Próximamente" (llegan en Fases 6/7).
+- **Form único reutilizado** en modo crear y editar. En modo edición no muestra los tabs de selección de tipo (RF-CM-001).
+
+### transaction-form
+
+- Tipo **Gasto** (default) / **Ingreso**; monto **en pesos** (se convierte a centavos al enviar); selector de categoría **filtrado por scope** (RN-010) que **reusa `["categories"]`** (`CATEGORIES_QUERY_KEY`); fecha + hora (default: ahora); descripción opcional.
+- **Estados:** Guardando; **Sin categorías disponibles** (link a `/categorias`); **Error backend** — el modal **queda abierto y conserva los datos** ingresados (RNF-008).
+
+### Crear desde el dashboard
+
+- Botón **"Nuevo movimiento"** en `/dashboard` abre el modal. Al guardar → toast con acción **"Ir a ver"** que navega a `/mes?month=YYYY-MM` (ruta real que construye Fase 5; hoy `404` por diseño).
+
+### Editar / eliminar — listos para Fase 5
+
+- `TransactionModal` acepta `transaction: Transaction | null` (null = crear, objeto = editar).
+- `DeleteTransactionDialog` acepta `transaction` (diálogo de confirmación antes del hard delete).
+- La Vista del mes solo tiene que pasarles el movimiento de la lista y renderizarlos.
+
+### Datos (`use-transactions`)
+
+- Hook **`useTransactions()`** expone las mutaciones: `createTransaction`, `updateTransaction(id, data)`, `deleteTransaction(id, month)`.
+- **`useTransactionsByMonth({ month, timezone })`** — lista del mes, listo para la Vista del mes.
+- **Query key como función:** `TRANSACTIONS_QUERY_KEY(month) = ["transactions", month]` — **varía por mes**. Invalidar la clave del mes afectado al mutar.
+- **Gotcha — `deleteTransaction` recibe `month` explícito:** el `DELETE` devuelve `204` sin cuerpo, así que no se puede derivar del recurso qué mes invalidar. El llamador (Fase 5) deriva el `month` del `occurredAt` del movimiento de la lista y lo pasa.
+
+### Helpers (`lib/format.ts`)
+
+Reusarlos, no reimplementar:
+
+- **`parseCurrencyInput`** — pesos → centavos vía `Math.round(parsed * 100)`; acepta punto o coma decimal. **`formatCurrency`** — centavos → string en pesos.
+- **`localToUtcIso` / `utcToLocalDate` / `utcToLocalTime`** — conversión local ↔ UTC con `Intl.DateTimeFormat` de doble pasada; **maneja DST** correctamente.
+- **`getBrowserTimezone`** — IANA del navegador.
+
 ## Tailwind v4 — gotcha
 
 - No usar `@apply` con clases que referencian tokens custom (ej: `border-border`). En `@layer base` referenciar las CSS variables directo con `var(--color-border)`. Es un cambio de comportamiento de v3 a v4 que produce un error de build poco claro si se ignora.

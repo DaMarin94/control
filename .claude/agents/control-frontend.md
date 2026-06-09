@@ -55,6 +55,14 @@ Si una decisión técnica nueva no está cubierta en `docs/technical.md`, report
 - **`CATEGORIES_QUERY_KEY = ["categories"]`.** Clave de React Query del hook `use-categories`; todas las mutaciones la invalidan. El **futuro selector de categorías** en el formulario de movimientos **DEBE reusar esta misma clave** para compartir caché — no crear una clave nueva.
 - **`Select` primitivo es `<select>` nativo (no Radix).** Mínimo, reemplazable a futuro en un solo lugar.
 
+### Movimientos únicos (detalle en `docs/frontend.md`, sección Movimientos únicos)
+
+- **Helpers de `lib/format.ts` — reusarlos, no reimplementar.** `parseCurrencyInput` (pesos → centavos vía `Math.round(parsed*100)`, acepta punto o coma) / `formatCurrency` (centavos → pesos); `localToUtcIso` / `utcToLocalDate` / `utcToLocalTime` (local ↔ UTC con `Intl.DateTimeFormat` de doble pasada, **maneja DST**); `getBrowserTimezone`. No escribir conversiones de moneda ni de zona a mano.
+- **`TRANSACTIONS_QUERY_KEY(month)` es una FUNCIÓN**, no una constante: `["transactions", month]` varía por mes. Para invalidar tras mutar, reusarla con el mes afectado (no inventar una clave nueva). El selector de categorías del form reusa `CATEGORIES_QUERY_KEY` (no crear otra).
+- **`deleteTransaction(id, month)` necesita `month` explícito.** El `DELETE` devuelve `204` sin cuerpo, así que no se puede derivar el mes a invalidar del recurso. El llamador (Fase 5) deriva `month` del `occurredAt` del movimiento de la lista y lo pasa.
+- **Editar/eliminar ya están listos para cablear en la Vista del mes (Fase 5).** `TransactionModal` acepta `transaction: Transaction | null` (null = crear, objeto = editar; en edición no muestra tabs); `DeleteTransactionDialog` acepta `transaction`. `useTransactionsByMonth({ month, timezone })` está listo para la lista del mes. La Vista del mes solo tiene que pasarles el movimiento y renderizarlos.
+- **Modal con Fijo/Cuotas "Próximamente".** Los tabs Fijo y Cuotas están deshabilitados a propósito (Fases 6/7); no activarlos hasta esas fases.
+
 ## Al terminar
 
 ### 1. Build

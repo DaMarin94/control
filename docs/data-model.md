@@ -88,3 +88,29 @@ error.data = {
 ### Pool de colores (dato del dominio)
 
 El color de categoría sale de un **pool fijo de 10 colores** predefinidos, único en el backend. El sistema asigna el **menos usado** entre las categorías activas del usuario al crear cada categoría (en empate, el primero del pool); las 4 por defecto toman los primeros 4 en orden. El color **no es editable** por el usuario (ni al crear ni al editar) y es solo presentación. Detalle de los 10 valores y la estrategia en `docs/backend.md`, sección Pool de colores.
+
+---
+
+## Contrato de movimiento único (respuesta de la API)
+
+Toda respuesta exitosa de los endpoints de movimientos únicos devuelve, dentro del sobre `{ success, statusCode, data }`, este shape (el modelo Prisma ya está documentado en `docs/backend.md`, sección Capa de datos):
+
+```
+Transaction = {
+  id: string,
+  userId: string,
+  categoryId: string,
+  type: "EXPENSE" | "INCOME",
+  amountCents: number,                       // entero en centavos, siempre > 0
+  description: string | null,
+  occurredAt: string,                        // ISO 8601 en UTC (instante)
+  timezone: string,                          // IANA del registro
+  createdAt: string,
+  updatedAt: string,
+  category: { id, name, color, scope }       // categoría embebida
+}
+```
+
+- **`amountCents` — entero en centavos** (RN-002): el front recibe centavos y formatea a pesos para mostrar.
+- **`occurredAt` + `timezone` — instante, no fecha de calendario** (RN-004): `occurredAt` es el momento en UTC y `timezone` (IANA) es la zona original del registro, en la que siempre se muestra. El mes al que pertenece se determina en esa zona. Detalle técnico en `docs/technical.md` (Fechas y zonas horarias).
+- **Categoría embebida.** Cada movimiento trae `category: { id, name, color, scope }` — el front no necesita un GET extra de categorías para mostrar nombre y color.
