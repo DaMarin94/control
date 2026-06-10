@@ -86,33 +86,6 @@ export class TransactionsRepository {
   }
 
   /**
-   * Lista transacciones del usuario cuyo occurredAt UTC cae dentro del rango dado.
-   * Orden: occurredAt descendente (más reciente primero, RF-VM-001).
-   *
-   * El criterio de bucketeo por mes es: rango UTC calculado a partir del mes YYYY-MM
-   * en la timezone del usuario (pasada como parámetro).
-   * Ver TransactionsService.findByMonth para los detalles.
-   */
-  async findByUserAndDateRange(
-    userId: string,
-    from: Date,
-    to: Date,
-  ): Promise<TransactionWithCategory[]> {
-    const txs = await this.prisma.transaction.findMany({
-      where: {
-        userId,
-        occurredAt: {
-          gte: from,
-          lt: to,
-        },
-      },
-      orderBy: { occurredAt: 'desc' },
-      include: TRANSACTION_INCLUDE,
-    });
-    return txs.map(mapToTransactionWithCategory);
-  }
-
-  /**
    * Busca una transacción por id (sin filtrar por userId — el caller hace la validación).
    */
   async findById(id: string): Promise<TransactionWithCategory | null> {

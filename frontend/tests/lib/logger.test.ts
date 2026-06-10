@@ -6,8 +6,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createLogger } from "@/lib/logger";
 
 describe("createLogger", () => {
-  const originalNodeEnv = process.env.NODE_ENV;
-
   beforeEach(() => {
     vi.spyOn(console, "debug").mockImplementation(() => {});
     vi.spyOn(console, "info").mockImplementation(() => {});
@@ -17,7 +15,7 @@ describe("createLogger", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    process.env.NODE_ENV = originalNodeEnv;
+    vi.unstubAllEnvs();
   });
 
   it("emite un log con la forma estructurada correcta", () => {
@@ -38,7 +36,7 @@ describe("createLogger", () => {
   });
 
   it("emite debug en desarrollo", () => {
-    process.env.NODE_ENV = "development";
+    vi.stubEnv("NODE_ENV", "development");
     const logger = createLogger("Ctx");
     logger.debug("mensaje debug");
 
@@ -46,7 +44,7 @@ describe("createLogger", () => {
   });
 
   it("emite info en desarrollo", () => {
-    process.env.NODE_ENV = "development";
+    vi.stubEnv("NODE_ENV", "development");
     const logger = createLogger("Ctx");
     logger.info("mensaje info");
 
@@ -54,7 +52,7 @@ describe("createLogger", () => {
   });
 
   it("siempre emite error independientemente del entorno", () => {
-    process.env.NODE_ENV = "production";
+    vi.stubEnv("NODE_ENV", "production");
     const logger = createLogger("Ctx");
     logger.error("error crítico");
 
@@ -62,7 +60,7 @@ describe("createLogger", () => {
   });
 
   it("siempre emite warn independientemente del entorno", () => {
-    process.env.NODE_ENV = "production";
+    vi.stubEnv("NODE_ENV", "production");
     const logger = createLogger("Ctx");
     logger.warn("advertencia");
 

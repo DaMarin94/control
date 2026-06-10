@@ -9,7 +9,6 @@
  * - Categoría eliminada → 400
  * - Scope incompatible (RN-010): EXPENSE con categoría INCOME, etc.
  * - Persistencia de occurredAt UTC + timezone
- * - Listado por mes (incluyendo borde de timezone)
  * - Edición que cambia type/categoría → revalidación RN-010
  * - Hard delete
  * - Aislamiento por userId (RN-003)
@@ -29,7 +28,6 @@ import { CategoryScope } from '@prisma/client';
 
 const mockRepo = {
   create: jest.fn(),
-  findByUserAndDateRange: jest.fn(),
   findById: jest.fn(),
   update: jest.fn(),
   delete: jest.fn(),
@@ -280,85 +278,6 @@ describe('TransactionsService', () => {
   });
 
   // -------------------------------------------------------------------------
-  // findByMonth
-  // -------------------------------------------------------------------------
-
-  describe('findByMonth', () => {
-    it('llama al repo con rango UTC correcto para UTC-3', async () => {
-      mockRepo.findByUserAndDateRange.mockResolvedValue([]);
-
-      await service.findByMonth(USER_A, '2026-06', 'America/Argentina/Buenos_Aires');
-
-      // Junio 2026 en UTC-3:
-      // inicio local = 2026-06-01T00:00:00-03:00 → 2026-06-01T03:00:00Z
-      // fin   local = 2026-07-01T00:00:00-03:00 → 2026-07-01T03:00:00Z
-      expect(mockRepo.findByUserAndDateRange).toHaveBeenCalledWith(
-        USER_A,
-        new Date('2026-06-01T03:00:00Z'),
-        new Date('2026-07-01T03:00:00Z'),
-      );
-    });
-
-    it('llama al repo con rango UTC correcto para UTC+0 (zona sin offset)', async () => {
-      mockRepo.findByUserAndDateRange.mockResolvedValue([]);
-
-      await service.findByMonth(USER_A, '2026-06', 'UTC');
-
-      // Junio 2026 en UTC:
-      // inicio = 2026-06-01T00:00:00Z
-      // fin    = 2026-07-01T00:00:00Z
-      expect(mockRepo.findByUserAndDateRange).toHaveBeenCalledWith(
-        USER_A,
-        new Date('2026-06-01T00:00:00Z'),
-        new Date('2026-07-01T00:00:00Z'),
-      );
-    });
-
-    it('maneja correctamente el cambio de año (diciembre → enero)', async () => {
-      mockRepo.findByUserAndDateRange.mockResolvedValue([]);
-
-      await service.findByMonth(USER_A, '2026-12', 'UTC');
-
-      expect(mockRepo.findByUserAndDateRange).toHaveBeenCalledWith(
-        USER_A,
-        new Date('2026-12-01T00:00:00Z'),
-        new Date('2027-01-01T00:00:00Z'),
-      );
-    });
-
-    it('devuelve transacciones en orden recibido del repo (desc por occurredAt)', async () => {
-      const txs = [
-        makeTransaction({ id: 'tx-2', occurredAt: new Date('2026-06-15T00:00:00Z') }),
-        makeTransaction({ id: 'tx-1', occurredAt: new Date('2026-06-01T00:00:00Z') }),
-      ];
-      mockRepo.findByUserAndDateRange.mockResolvedValue(txs);
-
-      const result = await service.findByMonth(USER_A, '2026-06', 'UTC');
-
-      expect(result[0].id).toBe('tx-2');
-      expect(result[1].id).toBe('tx-1');
-    });
-
-    it('month con formato inválido → BadRequestException', async () => {
-      await expect(
-        service.findByMonth(USER_A, '2026/06', 'UTC'),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('month con mes inválido (13) → BadRequestException', async () => {
-      await expect(
-        service.findByMonth(USER_A, '2026-13', 'UTC'),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('timezone inválida → BadRequestException', async () => {
-      await expect(
-        service.findByMonth(USER_A, '2026-06', 'No/Valid/Timezone'),
-      ).rejects.toThrow(BadRequestException);
-    });
-  });
-
-  // -------------------------------------------------------------------------
   // findOne
   // -------------------------------------------------------------------------
 
@@ -532,43 +451,4 @@ describe('TransactionsService', () => {
     });
   });
 
-  // -------------------------------------------------------------------------
-  // parseMonthToUtcRange (método público para testear — borde de timezone)
-  // -------------------------------------------------------------------------
-
-  describe('parseMonthToUtcRange (bucketeo por mes)', () => {
-    it('timezone UTC-3 — inicio del mes en UTC es 03:00:00Z', () => {
-      const { from, to } = service.parseMonthToUtcRange('2026-01', 'America/Argentina/Buenos_Aires');
-
-      expect(from).toEqual(new Date('2026-01-01T03:00:00Z'));
-      expect(to).toEqual(new Date('2026-02-01T03:00:00Z'));
-    });
-
-    it('timezone UTC — inicio del mes en UTC es 00:00:00Z', () => {
-      const { from, to } = service.parseMonthToUtcRange('2026-01', 'UTC');
-
-      expect(from).toEqual(new Date('2026-01-01T00:00:00Z'));
-      expect(to).toEqual(new Date('2026-02-01T00:00:00Z'));
-    });
-
-    it('borde de año: diciembre 2026 → enero 2027', () => {
-      const { from, to } = service.parseMonthToUtcRange('2026-12', 'UTC');
-
-      expect(from).toEqual(new Date('2026-12-01T00:00:00Z'));
-      expect(to).toEqual(new Date('2027-01-01T00:00:00Z'));
-    });
-
-    it('formato inválido lanza BadRequestException', () => {
-      expect(() => service.parseMonthToUtcRange('2026/06', 'UTC')).toThrow(BadRequestException);
-      expect(() => service.parseMonthToUtcRange('202606', 'UTC')).toThrow(BadRequestException);
-    });
-
-    it('mes 00 lanza BadRequestException', () => {
-      expect(() => service.parseMonthToUtcRange('2026-00', 'UTC')).toThrow(BadRequestException);
-    });
-
-    it('mes 13 lanza BadRequestException', () => {
-      expect(() => service.parseMonthToUtcRange('2026-13', 'UTC')).toThrow(BadRequestException);
-    });
-  });
 });

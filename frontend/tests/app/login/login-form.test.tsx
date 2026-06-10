@@ -86,7 +86,7 @@ describe("LoginForm", () => {
 
   it("llama a signIn('credentials') con email y password correctos", async () => {
     const user = userEvent.setup();
-    mockSignIn.mockResolvedValueOnce({ ok: true, error: null, status: 200, url: "/" });
+    mockSignIn.mockResolvedValueOnce({ ok: true, error: undefined, code: undefined, status: 200, url: "/" });
     renderLoginForm();
 
     await user.type(screen.getByLabelText(/email/i), "test@example.com");
@@ -108,6 +108,7 @@ describe("LoginForm", () => {
     mockSignIn.mockResolvedValueOnce({
       ok: false,
       error: "CredentialsSignin",
+      code: undefined,
       status: 401,
       url: null,
     });
@@ -132,6 +133,7 @@ describe("LoginForm", () => {
     mockSignIn.mockResolvedValueOnce({
       ok: false,
       error: "CredentialsSignin",
+      code: undefined,
       status: 401,
       url: null,
     });

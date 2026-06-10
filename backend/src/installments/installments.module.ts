@@ -17,8 +17,8 @@ import { CategoriesModule } from '../categories/categories.module';
  * de GET /movements, que ya trae installment.number, installment.total,
  * amountCents, categoryId, etc.
  *
- * El service se exporta para que MovementsModule pueda llamar a findByMonth
- * sin tocar la tabla directamente (regla de propiedad de dominio).
+ * El service se exporta para que MovementsModule pueda acceder a los grupos
+ * de cuotas sin tocar la tabla directamente (regla de propiedad de dominio).
  */
 @Module({
   imports: [CategoriesModule],
