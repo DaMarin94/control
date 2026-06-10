@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { DeleteCategoryDialog } from "@/app/categorias/delete-category-dialog";
+import { DeleteCategoryDialog } from "@/app/(app)/categorias/delete-category-dialog";
 import { ToastProvider } from "@/components/ui/toast";
 import type { Category } from "@/types/category";
 

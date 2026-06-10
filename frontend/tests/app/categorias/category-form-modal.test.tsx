@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { CategoryFormModal } from "@/app/categorias/category-form-modal";
+import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
 import { ToastProvider } from "@/components/ui/toast";
 import type { Category } from "@/types/category";
 

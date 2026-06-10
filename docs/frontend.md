@@ -17,7 +17,9 @@ Organización **por tipo de archivo**:
 
 ```
 frontend/src/
-├── app/            (rutas del App Router: /login, /, /mes, /categorias)
+├── app/            (rutas del App Router)
+│   ├── login/, registro/   (públicas, sin sidebar)
+│   └── (app)/              (route group autenticado con layout+sidebar compartido: /, /mes, /categorias)
 ├── components/     (todos los componentes de UI)
 ├── hooks/          (todos los hooks: useToast, hooks de datos, etc.)
 ├── lib/            (capa de API centralizada, config, helpers)
@@ -75,7 +77,7 @@ Los callbacks `jwt` y `session` persisten el **`accessToken` de NestJS** y el **
 
 ## Categorías (`/categorias`)
 
-CRUD de categorías. Se accede **por URL** — todavía no hay sidebar/nav (RF-NAV-001 viene en una fase posterior).
+CRUD de categorías. Se accede desde el **link "Categorías" del sidebar** (RF-NAV-001) y por URL. Vive bajo el route group `app/(app)/categorias/` (ver sección Navegación global).
 
 ### Pantalla
 
@@ -229,9 +231,41 @@ El dashboard vive en **`/`** (`src/app/page.tsx`). Antes era `/dashboard` — un
 
 - `/mes` usa **`useSearchParams()`**, que en el App Router de Next.js 15 **obliga a envolver el componente en `<Suspense>`** (si no, el build falla). Ya resuelto con un wrapper que provee el límite de Suspense.
 
-### Navegación entre pantallas (sin sidebar todavía)
+### Navegación entre pantallas
 
-La navegación entre `/`, `/mes` y `/categorias` se hace por los **accesos definidos en cada pantalla** (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL): el **sidebar (RF-NAV-001) está diferido** a una fase posterior (ver bitácora 2026-06-09 en `docs/requirements.md`).
+La navegación entre `/`, `/mes` y `/categorias` se hace por el **sidebar global** (ver sección siguiente) y, en paralelo, por los **accesos definidos en cada pantalla** (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL). Ambos conviven.
+
+## Navegación global (sidebar — RF-NAV-001)
+
+Feature 100% frontend, construida **fuera de la secuencia de fases** (post-Fase 7). Resuelve la navegación entre secciones, la acción primaria de nuevo movimiento y el menú de usuario, persistente en pantallas autenticadas. Ver bitácora 2026-06-10 en `docs/requirements.md`.
+
+### Punto único de montaje: route group `app/(app)/`
+
+Las tres pantallas autenticadas (`/` dashboard, `/mes`, `/categorias`) viven dentro del **route group `app/(app)/`**, con un `layout.tsx` compartido que monta el sidebar **una sola vez**.
+
+- **Los route groups de Next.js no alteran las URLs:** `/`, `/mes` y `/categorias` siguen siendo idénticas — `(app)` es solo organización de archivos.
+- **`login` y `registro` quedan FUERA del grupo** → no heredan el layout, por eso no muestran sidebar (cumple el criterio de RF-NAV-001 "no se muestra en pantallas no autenticadas").
+- **Regla para pantallas futuras: toda pantalla nueva con sesión debe vivir bajo `app/(app)/`** para heredar el sidebar. No remontar el sidebar por pantalla.
+- El `<main className="min-h-screen ...">` con el contenedor `mx-auto max-w-2xl` vive ahora en este layout; **las páginas hijas solo devuelven su contenido**, no su propio `<main>` ni contenedor.
+- Los componentes co-ubicados de categorías (`categories-list`, `category-form-modal`, `delete-category-dialog`, `reactivation-prompt`) se movieron junto a su `page.tsx` dentro de `(app)/categorias/`.
+
+### Componentes
+
+- **`app/(app)/layout.tsx`** — Server Component. Obtiene el email con **`auth()`** y lo pasa como **prop** a `AppSidebar`.
+- **`components/layout/app-sidebar.tsx`** — Client Component (usa `usePathname()` para la sección activa y estado de colapsado).
+- **`components/layout/user-menu.tsx`** — avatar + desplegable con "Cerrar sesión" (RF-AUTH-004).
+
+### Contenido
+
+Logo/nombre "Control" → `/`; links **Dashboard** (`/`), **Vista del mes** (`/mes`, siempre abre en el mes actual porque la página defaultea a `getCurrentMonth`), **Categorías** (`/categorias`); botón **"Nuevo movimiento"** que reusa `NewTransactionButton` y abre `TransactionModal` en modo `create` (1 clic, RNF-003); **menú de usuario** abajo con avatar = **inicial del email en mayúscula**.
+
+### Decisiones y gotchas
+
+- **Sidebar colapsable:** fijo a la izquierda en desktop; en pantallas chicas se colapsa con botón hamburguesa.
+- **Avatar = inicial del email** (no hay imagen para usuarios de email).
+- **Email via prop drilling desde el Server layout, NO `useSession()` en el sidebar.** El layout (Server) lo resuelve con `auth()`. Si el email es `null`, fallback a string vacío (inofensivo: el middleware ya redirigió a usuarios sin sesión).
+- **Sección activa — match EXACTO para `/`:** el link Dashboard compara `pathname === "/"`. Con `startsWith("/")` quedaría activo en **todas** las rutas. Los links `/mes` y `/categorias` usan `startsWith` (no hay subrutas que colisionen).
+- **`<Suspense>` en `(app)/mes/page.tsx`:** se mantiene envolviendo `MonthViewWrapper` (que usa `useSearchParams()`); sin él el build de Next 15 falla. El cambio de carpeta al route group no lo altera (ver gotcha de `<Suspense>` en la sección Vista del mes).
 
 ## Tailwind v4 — gotcha
 

@@ -92,7 +92,12 @@ Si una decisión técnica nueva no está cubierta en `docs/technical.md`, report
 - **Mapeo `MovementItem → Transaction` para editar.** `MovementItem` no trae `userId`/`createdAt`/`updatedAt` (los modales no los usan) y `categoryId` se deriva de `category.id`. Armar el `Transaction` desde el `MovementItem` antes de pasarlo a los modales.
 - **Helpers de mes en `lib/format.ts`** (reusar, no reimplementar): `getCurrentMonth` (zona del navegador), `formatMonthLabel`, `prevMonth`, `nextMonth`.
 - **`<Suspense>` obligatorio con `useSearchParams`.** En el App Router de Next 15, un componente que use `useSearchParams()` (como `/mes`, que lee `?month=`) **debe** ir envuelto en `<Suspense>` o el build falla. Ya resuelto en `/mes` con un wrapper; mantenerlo en cualquier ruta nueva que lea search params.
-- **Navegación sin sidebar (RF-NAV-001 diferido).** No hay sidebar todavía; la navegación entre `/`, `/mes` y `/categorias` se hace por los accesos definidos en cada pantalla (enlace "Ver todos", acción "Ir a ver" del toast, URL). No construir el sidebar hasta que RF-NAV-001 se retome.
+### Navegación global / sidebar (detalle en `docs/frontend.md`, sección Navegación global) — RF-NAV-001
+
+- **Las pantallas autenticadas viven bajo `app/(app)/` y heredan el sidebar del `layout.tsx` compartido.** El route group `(app)` **no cambia las URLs** (`/`, `/mes`, `/categorias` siguen iguales). **Toda pantalla nueva con sesión debe crearse dentro de `app/(app)/`** para heredar el sidebar; `login`/`registro` quedan FUERA del grupo a propósito (sin sidebar). El `<main>` + contenedor `max-w-2xl` vive en el layout: las páginas hijas devuelven solo su contenido, no su propio `<main>`.
+- **Sección activa — match EXACTO para `/`.** El link Dashboard compara `pathname === "/"`; con `startsWith("/")` quedaría activo en todas las rutas. `/mes` y `/categorias` usan `startsWith`. No cambiar el Dashboard a `startsWith`.
+- **`<Suspense>` obligatorio en `(app)/mes/page.tsx`** (envuelve `MonthViewWrapper`, que usa `useSearchParams()`): sin él el build de Next 15 falla. Mantenerlo aunque la página esté ahora en el route group.
+- **Email via prop desde el Server layout, NO `useSession()` en el sidebar.** `app/(app)/layout.tsx` (Server) lo obtiene con `auth()` y lo pasa como prop a `AppSidebar`. Email `null` → fallback a string vacío (el middleware ya redirigió). El avatar es la **inicial del email**. No introducir `useSession()` en el sidebar.
 
 ## Al terminar
 

@@ -18,6 +18,7 @@
 | Movimiento en cuotas — crear, visualizar, editar, eliminar | RF-MC-001..003 | Implementado (solo Gasto en v1) |
 | Categorías — defaults + CRUD + soft delete | RF-CAT-001..006 | Implementado |
 | Vista del mes — lista + totales + navegación | RF-VM-001..004 | Implementado |
+| Navegación global — sidebar persistente | RF-NAV-001 | Implementado |
 
 ---
 
@@ -38,7 +39,7 @@
 - **CRUD completo operativo** (backend NestJS + frontend Next.js), scopeado por `userId` del JWT: crear, editar, eliminar (soft delete) y listar con el contador "N movimientos" (RF-CAT-006).
 - **Flujo crear-o-reactivar:** crear con un nombre que colisiona con una categoría eliminada propone reactivar la original en vez de duplicar (RF-CAT-002 / RF-CAT-004). El backend lo señala con un `409` que adjunta `error.data` (ver `docs/backend.md` y `docs/data-model.md`).
 - **Color automático del pool:** pool fijo de 10 colores en el backend, asignación "menos usado" (RF-CAT-005). El usuario no elige ni edita el color.
-- **Acceso por URL `/categorias`:** todavía **sin sidebar** — la navegación global (RF-NAV-001) queda para una fase posterior.
+- **Acceso a `/categorias`:** en Fase 3 era solo por URL (sin sidebar). El sidebar de navegación global (RF-NAV-001) **ya se implementó** post-Fase 7; ver nota "Navegación global" más abajo.
 
 ### Movimientos únicos (Fase 4)
 
@@ -53,7 +54,7 @@
 - **Bucketeo de mes definitivo:** el mes de cada movimiento se calcula con la **zona propia del registro** (`AT TIME ZONE` en raw SQL parametrizado), saldando la deuda técnica de Fase 4. `GET /movements` ya **no** recibe `timezone`. Se eliminó `GET /transactions?month&timezone`.
 - **Dashboard movido a `/`** (antes `/dashboard`, desviación de Fase 2 corregida): resumen del mes actual, "Nuevo movimiento", "Ver todos" → `/mes`, estado vacío con CTA. No lista movimientos.
 - **Vista del mes `/mes`:** lista por secciones (las vacías no se muestran), navegación prev/next del mes, totales que se actualizan al mutar. **Editar y eliminar de movimientos únicos quedan ahora cableados** desde acá (modales de Fase 4).
-- **Sidebar (RF-NAV-001) diferido formalmente:** la navegación entre `/`, `/mes` y `/categorias` usa los accesos definidos en cada pantalla. Ver `docs/frontend.md` y la bitácora 2026-06-09 de `docs/requirements.md`.
+- **Sidebar (RF-NAV-001):** en Fase 5 se difirió y la navegación entre `/`, `/mes` y `/categorias` usaba los accesos definidos en cada pantalla. **Ya implementado** post-Fase 7 (ver nota "Navegación global" más abajo); esos accesos por pantalla se conservan y conviven con el sidebar.
 
 ### Movimientos fijos (Fase 6)
 
@@ -75,6 +76,13 @@
 - **Totales del mes ahora incluyen las cuotas:** Vista del mes y Dashboard suman únicos + fijos + cuotas (RF-DASH-002 / RF-VM-002).
 - **Cuotas calculadas on-the-fly (RN-006):** no se crean filas por instancia mensual; una cuota cae en el mes si `startMonth ≤ mes < startMonth + totalInstallments`. Detalle en `docs/backend.md` (sección Movimientos en cuotas).
 - **Validación de categoría consolidada:** la validación duplicada en Fases 4/6 se extrajo a `CategoryValidatorService` (módulo `categories`); los tres módulos de movimientos lo reusan. Ver `docs/backend.md`.
+
+### Navegación global — sidebar (post-Fase 7)
+
+- **Feature 100% frontend, fuera de la secuencia de fases.** Resuelve la navegación entre las secciones (Dashboard `/`, Vista del mes `/mes`, Categorías `/categorias`), la **acción primaria de nuevo movimiento** y el **menú de usuario con cierre de sesión** (RF-AUTH-004), todo persistente en las pantallas autenticadas. Revierte las decisiones previas que lo diferían (bitácora 2026-06-08 y 2026-06-09); ver bitácora 2026-06-10.
+- **Punto único de montaje vía route group `app/(app)/`:** las tres pantallas autenticadas viven bajo `app/(app)/` con un `layout.tsx` compartido que monta el sidebar una sola vez. Los route groups **no cambian las URLs**. `login` y `registro` quedan fuera del grupo → sin sidebar (cumple "no se muestra en pantallas no autenticadas"). Detalle en `docs/frontend.md`, sección Navegación global.
+- **Contenido:** logo/nombre "Control" → `/`; links Dashboard / Vista del mes / Categorías (Vista del mes siempre abre en el mes actual); botón "Nuevo movimiento" (reusa `NewTransactionButton`, abre el modal en modo crear, 1 clic — RNF-003); menú de usuario abajo con avatar = inicial del email.
+- **Decisiones de diseño (aprobadas):** sidebar **colapsable** (fijo en desktop, hamburguesa en pantallas chicas) y **avatar por inicial del email** (no hay imagen para usuarios de email).
 
 ---
 
