@@ -125,11 +125,18 @@ export function formatMonthLabel(month: string): string {
   // Construir un Date en el primer día del mes a mediodía UTC para evitar
   // desfases de zona que cambien el mes.
   const date = new Date(`${month}-01T12:00:00Z`);
-  return new Intl.DateTimeFormat("es-AR", {
+  // Extraer mes y año por separado para evitar la preposición "de" que
+  // Intl.DateTimeFormat inserta al formatear ambos juntos en es-AR
+  // (ej. "junio de 2026"). Resultado: "junio 2026".
+  const formatter = new Intl.DateTimeFormat("es-AR", {
     month: "long",
     year: "numeric",
     timeZone: "UTC",
-  }).format(date);
+  });
+  const parts = formatter.formatToParts(date);
+  const monthPart = parts.find((p) => p.type === "month")?.value ?? "";
+  const yearPart = parts.find((p) => p.type === "year")?.value ?? "";
+  return `${monthPart} ${yearPart}`;
 }
 
 /**

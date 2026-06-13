@@ -212,12 +212,14 @@ describe("getCurrentMonth", () => {
 // ─── formatMonthLabel ─────────────────────────────────────────────────────────
 
 describe("formatMonthLabel", () => {
-  it("formatea '2026-06' como 'junio de 2026' o variante localizada", () => {
+  it("formatea '2026-06' como 'junio 2026' (sin preposición 'de')", () => {
     const result = formatMonthLabel("2026-06");
     // Debe contener el año
     expect(result).toContain("2026");
-    // Debe contener algo relativo a junio (en es-AR puede variar la preposición)
+    // Debe contener algo relativo a junio
     expect(result.toLowerCase()).toMatch(/jun/);
+    // No debe incluir la preposición " de " que Intl inserta al formatear mes+año juntos
+    expect(result).not.toContain(" de ");
   });
 
   it("formatea '2025-12' con el año correcto", () => {
