@@ -19,7 +19,7 @@
  * - Error del backend → modal queda abierto con datos conservados (RNF-008).
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -31,7 +31,8 @@ import { Select } from "@/components/ui/select";
 import { useCategories } from "@/hooks/use-categories";
 import { useInstallments } from "@/hooks/use-installments";
 import { useToast } from "@/hooks/use-toast";
-import { type CategoryScope } from "@/types/category";
+import { type Category, type CategoryScope } from "@/types/category";
+import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
 import { type InstallmentGroup } from "@/types/installment";
 import { parseCurrencyInput, getCurrentMonth } from "@/lib/format";
 import { useRouter } from "next/navigation";
@@ -100,6 +101,10 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
   const { categories } = useCategories();
   const { createInstallment, updateInstallment, isCreating, isUpdating } = useInstallments();
 
+  // Estado del modal inline de nueva categoría (RF-MU-004)
+  // Las cuotas son siempre EXPENSE → lockScopeToType es siempre "EXPENSE"
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+
   const isLoading = isEditing ? isUpdating : isCreating;
 
   const defaultValues: InstallmentFormData = isEditing
@@ -121,6 +126,7 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
   const {
     register,
     handleSubmit,
+    setValue,
     control,
     reset,
     formState: { errors },
@@ -200,6 +206,7 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4 px-6 py-5">
       {/* ── Tipo (read-only, siempre Gasto) ── */}
       <div className="space-y-1.5">
@@ -272,9 +279,20 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
 
       {/* ── Categoría ── */}
       <div className="space-y-1.5">
-        <Label htmlFor="inst-category" required>
-          Categoría
-        </Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="inst-category" required>
+            Categoría
+          </Label>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowCategoryModal(true)}
+            className="h-auto py-0.5 text-xs text-primary hover:text-primary/80"
+          >
+            + Nueva
+          </Button>
+        </div>
         {noCategoriesAvailable ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
             No hay categorías disponibles para Gasto.{" "}
@@ -283,8 +301,8 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
               className="font-semibold underline underline-offset-2 hover:opacity-80"
             >
               Creá una categoría
-            </Link>
-            .
+            </Link>{" "}
+            o usá el botón &ldquo;+ Nueva&rdquo; de arriba.
           </div>
         ) : (
           <Controller
@@ -335,5 +353,23 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
         </Button>
       </div>
     </form>
+
+      {/* ── Modal inline de nueva categoría (RF-MU-004) ── */}
+      {/* Las cuotas son siempre EXPENSE → lockScopeToType="EXPENSE".
+          Se renderiza como hermano del form (no descendiente) para evitar un
+          <form> anidado dentro de otro <form>, que es HTML inválido y rompe
+          la hidratación de React. */}
+      {showCategoryModal && (
+        <CategoryFormModal
+          category={null}
+          lockScopeToType="EXPENSE"
+          onClose={() => setShowCategoryModal(false)}
+          onCreated={(cat: Category) => {
+            setValue("categoryId", cat.id);
+            setShowCategoryModal(false);
+          }}
+        />
+      )}
+    </>
   );
 }

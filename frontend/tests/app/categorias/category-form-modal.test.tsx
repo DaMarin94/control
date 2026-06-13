@@ -33,11 +33,21 @@ const mockCategory: Category = {
   movementCount: 3,
 };
 
-function renderModal(props: { category: Category | null; onClose?: () => void }) {
+function renderModal(props: {
+  category: Category | null;
+  onClose?: () => void;
+  lockScopeToType?: "EXPENSE" | "INCOME";
+  onCreated?: (category: Category) => void;
+}) {
   const onClose = props.onClose ?? vi.fn();
   return render(
     <ToastProvider>
-      <CategoryFormModal category={props.category} onClose={onClose} />
+      <CategoryFormModal
+        category={props.category}
+        onClose={onClose}
+        lockScopeToType={props.lockScopeToType}
+        onCreated={props.onCreated}
+      />
     </ToastProvider>,
   );
 }
@@ -277,5 +287,87 @@ describe("CategoryFormModal", () => {
     });
 
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  // ─── Modo inline (RF-MU-004) ─────────────────────────────────────────────────
+
+  it("modo inline EXPENSE: oculta la opción INCOME y preselecciona EXPENSE", () => {
+    renderModal({ category: null, lockScopeToType: "EXPENSE" });
+
+    const scopeSelect = screen.getByLabelText(/tipo/i) as HTMLSelectElement;
+    const optionValues = Array.from(scopeSelect.options).map((o) => o.value);
+
+    // Oculta el tipo opuesto; mantiene EXPENSE y BOTH
+    expect(optionValues).toEqual(expect.arrayContaining(["EXPENSE", "BOTH"]));
+    expect(optionValues).not.toContain("INCOME");
+    // Preselecciona el tipo exacto del movimiento
+    expect(scopeSelect.value).toBe("EXPENSE");
+  });
+
+  it("modo inline INCOME: oculta la opción EXPENSE y preselecciona INCOME", () => {
+    renderModal({ category: null, lockScopeToType: "INCOME" });
+
+    const scopeSelect = screen.getByLabelText(/tipo/i) as HTMLSelectElement;
+    const optionValues = Array.from(scopeSelect.options).map((o) => o.value);
+
+    expect(optionValues).toEqual(expect.arrayContaining(["INCOME", "BOTH"]));
+    expect(optionValues).not.toContain("EXPENSE");
+    expect(scopeSelect.value).toBe("INCOME");
+  });
+
+  it("modo inline: al crear con éxito llama a onCreated con la categoría creada y cierra", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const onCreated = vi.fn();
+    const created = { ...mockCategory, name: "Supermercado", scope: "EXPENSE" as const };
+    mockCreateCategory.mockResolvedValue({ success: true, category: created });
+
+    renderModal({ category: null, onClose, lockScopeToType: "EXPENSE", onCreated });
+
+    await user.type(screen.getByLabelText(/nombre/i), "Supermercado");
+    await user.click(screen.getByRole("button", { name: /crear categoría/i }));
+
+    await waitFor(() => {
+      expect(mockCreateCategory).toHaveBeenCalledWith({
+        name: "Supermercado",
+        scope: "EXPENSE",
+      });
+      expect(onCreated).toHaveBeenCalledWith(created);
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
+
+  it("modo inline: al reactivar con éxito llama a onCreated con la categoría reactivada y cierra", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const onCreated = vi.fn();
+    const reactivated = { ...mockCategory, id: "cat-deleted-1" };
+    mockCreateCategory.mockResolvedValue({
+      success: false,
+      reactivable: {
+        id: "cat-deleted-1",
+        name: "Alimentación",
+        scope: "BOTH",
+        color: "#FF5733",
+      },
+    });
+    mockReactivateCategory.mockResolvedValue({ success: true, category: reactivated });
+
+    renderModal({ category: null, onClose, lockScopeToType: "EXPENSE", onCreated });
+
+    await user.type(screen.getByLabelText(/nombre/i), "Alimentación");
+    await user.click(screen.getByRole("button", { name: /crear categoría/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/categoría eliminada encontrada/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /^reactivar$/i }));
+
+    await waitFor(() => {
+      expect(mockReactivateCategory).toHaveBeenCalledWith("cat-deleted-1");
+      expect(onCreated).toHaveBeenCalledWith(reactivated);
+      expect(onClose).toHaveBeenCalled();
+    });
   });
 });

@@ -39,11 +39,30 @@ interface CategoryFormModalProps {
   /** null = modo crear; Category = modo editar */
   category: Category | null;
   onClose: () => void;
+  /**
+   * (Modo inline — RF-MU-004) Restringe las opciones de scope al tipo compatible
+   * con el movimiento en curso. Oculta el tipo opuesto; pre-selecciona el tipo exacto.
+   * - EXPENSE → ofrece EXPENSE ("Gasto") y BOTH ("Ambos"); oculta INCOME.
+   * - INCOME  → ofrece INCOME ("Ingreso") y BOTH ("Ambos"); oculta EXPENSE.
+   * Si no se pasa → comportamiento normal (tres opciones, default BOTH).
+   */
+  lockScopeToType?: "EXPENSE" | "INCOME";
+  /**
+   * (Modo inline — RF-MU-004) Callback invocado tras crear o reactivar con éxito.
+   * Recibe la categoría creada/reactivada para que el padre la autoseleccione.
+   * Si no se pasa, al crear con éxito solo se llama onClose() (comportamiento actual).
+   */
+  onCreated?: (category: Category) => void;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
-export function CategoryFormModal({ category, onClose }: CategoryFormModalProps) {
+export function CategoryFormModal({
+  category,
+  onClose,
+  lockScopeToType,
+  onCreated,
+}: CategoryFormModalProps) {
   const isEditing = category !== null;
   const { toast } = useToast();
   const { createCategory, updateCategory, isCreating, isUpdating } = useCategories();
@@ -56,6 +75,10 @@ export function CategoryFormModal({ category, onClose }: CategoryFormModalProps)
     color: string;
   } | null>(null);
 
+  // En modo inline (lockScopeToType presente), el scope pre-seleccionado es el
+  // tipo exacto del movimiento. Sin lockScopeToType, el default es "BOTH".
+  const defaultScope = lockScopeToType ?? (category?.scope ?? "BOTH");
+
   const {
     register,
     handleSubmit,
@@ -66,7 +89,7 @@ export function CategoryFormModal({ category, onClose }: CategoryFormModalProps)
     resolver: zodResolver(categorySchema),
     defaultValues: {
       name: category?.name ?? "",
-      scope: category?.scope ?? "BOTH",
+      scope: defaultScope,
     },
   });
 
@@ -74,9 +97,9 @@ export function CategoryFormModal({ category, onClose }: CategoryFormModalProps)
   useEffect(() => {
     reset({
       name: category?.name ?? "",
-      scope: category?.scope ?? "BOTH",
+      scope: lockScopeToType ?? (category?.scope ?? "BOTH"),
     });
-  }, [category, reset]);
+  }, [category, lockScopeToType, reset]);
 
   const isLoading = isEditing ? isUpdating : isCreating;
 
@@ -123,6 +146,10 @@ export function CategoryFormModal({ category, onClose }: CategoryFormModalProps)
       }
 
       toast.success("Categoría creada correctamente.");
+      // En modo inline, notificar al padre con la categoría recién creada (RF-MU-004)
+      if (onCreated && result.category) {
+        onCreated(result.category);
+      }
       onClose();
     }
   }
@@ -133,8 +160,12 @@ export function CategoryFormModal({ category, onClose }: CategoryFormModalProps)
       <ReactivationPrompt
         reactivable={reactivable}
         onCancel={() => setReactivable(null)}
-        onReactivated={() => {
+        onReactivated={(reactivatedCategory) => {
           setReactivable(null);
+          // En modo inline, notificar al padre con la categoría reactivada (RF-MU-004)
+          if (onCreated) {
+            onCreated(reactivatedCategory);
+          }
           onClose();
         }}
       />
@@ -146,7 +177,7 @@ export function CategoryFormModal({ category, onClose }: CategoryFormModalProps)
       role="dialog"
       aria-modal="true"
       aria-labelledby="category-modal-title"
-      className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
     >
       <div className="w-full max-w-md rounded-lg border bg-card shadow-lg">
         {/* Header */}
@@ -197,7 +228,15 @@ export function CategoryFormModal({ category, onClose }: CategoryFormModalProps)
           <div className="space-y-1.5">
             <Label htmlFor="cat-scope">Tipo</Label>
             <Select id="cat-scope" error={errors.scope?.message} {...register("scope")}>
-              {SCOPE_OPTIONS.map((opt) => (
+              {SCOPE_OPTIONS.filter((opt) => {
+                // En modo inline (lockScopeToType presente), ocultar el tipo opuesto
+                // al del movimiento en curso (RF-MU-004).
+                // EXPENSE → mostrar EXPENSE y BOTH; ocultar INCOME.
+                // INCOME  → mostrar INCOME y BOTH; ocultar EXPENSE.
+                if (lockScopeToType === "EXPENSE") return opt.value !== "INCOME";
+                if (lockScopeToType === "INCOME") return opt.value !== "EXPENSE";
+                return true; // Sin lockScopeToType → las tres opciones
+              }).map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>

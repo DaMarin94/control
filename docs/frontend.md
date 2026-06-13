@@ -109,6 +109,27 @@ Al crear, si el backend responde `409` con `error.data.reactivable`, el modal **
 
 > **Nota — `Select` primitivo:** el scope se elige con un `Select` que es un `<select>` **nativo** (no Radix). Es un primitivo mínimo, reemplazable a futuro en un solo lugar.
 
+### Uso dual de `CategoryFormModal` (standalone vs inline)
+
+El mismo `CategoryFormModal` se usa en **dos modos**, diferenciados **solo por props opcionales** — no hay flag explícito de modo:
+
+- **Standalone (desde `/categorias`):** comportamiento normal. El selector de scope ofrece las tres opciones (`AMBOS` / `GASTO` / `INGRESO`) con default **"Ambos"**.
+- **Inline (desde los formularios de movimiento, RF-MU-004):** se activa pasando las props **`lockScopeToType`** y **`onCreated`**:
+  - `lockScopeToType` (el tipo del movimiento en curso, `EXPENSE` / `INCOME`) **restringe el selector de scope** a ese tipo + "Ambos" y **preselecciona el tipo exacto**.
+  - Al crear o reactivar con éxito, el modal **devuelve la categoría al padre vía `onCreated`** para que el formulario de movimiento la **autoseleccione**.
+  - **Cuotas pasan `lockScopeToType="EXPENSE"` fijo** (las cuotas son siempre Gasto en v1).
+- **`ReactivationPrompt.onReactivated` propaga la categoría reactivada hacia arriba:** para soportar la autoselección inline, el prompt de reactivación ahora pasa la categoría reactivada al padre (no solo cierra). El `CategoryFormModal` la reenvía por `onCreated`.
+
+### Apilado de modales — gotcha de z-index
+
+Cuando `CategoryFormModal` se abre **inline** (por encima del modal de movimiento), hay tres capas con una escala fija:
+
+- **`TransactionModal`** (modal de movimiento): **`z-40`**.
+- **`CategoryFormModal`** abierto por encima: **`z-50`**.
+- **`ReactivationPrompt`**: también **`z-50`** — **reemplaza** al `CategoryFormModal` en el DOM, **no se apila** sobre él.
+
+> Si en el futuro se agregan más modales apilados, hay que **respetar/extender esta escala** de z-index (no reusar `z-50` para un nivel que deba quedar por encima del `CategoryFormModal`).
+
 ## Movimientos únicos
 
 Carga de movimientos. El modal de carga se invoca desde el dashboard (`/`); **editar y eliminar quedan cableados desde la Vista del mes** (`/mes`) — ver sección Vista del mes y Dashboard.

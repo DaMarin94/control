@@ -16,7 +16,7 @@
  * - Error del backend → modal queda abierto con datos conservados (RNF-008).
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -29,7 +29,8 @@ import { useCategories } from "@/hooks/use-categories";
 import { useTransactions } from "@/hooks/use-transactions";
 import { useToast } from "@/hooks/use-toast";
 import { type Transaction, type TransactionType } from "@/types/transaction";
-import { type CategoryScope } from "@/types/category";
+import { type Category, type CategoryScope } from "@/types/category";
+import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
 import {
   parseCurrencyInput,
   getBrowserTimezone,
@@ -111,6 +112,9 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
   const { toast } = useToast();
   const { categories } = useCategories();
   const { createTransaction, updateTransaction, isCreating, isUpdating } = useTransactions();
+
+  // Estado del modal inline de nueva categoría (RF-MU-004)
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
 
   const isLoading = isEditing ? isUpdating : isCreating;
 
@@ -238,6 +242,7 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4 px-6 py-5">
       {/* ── Tipo ── */}
       <div className="space-y-1.5">
@@ -279,9 +284,20 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
 
       {/* ── Categoría ── */}
       <div className="space-y-1.5">
-        <Label htmlFor="tx-category" required>
-          Categoría
-        </Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="tx-category" required>
+            Categoría
+          </Label>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowCategoryModal(true)}
+            className="h-auto py-0.5 text-xs text-primary hover:text-primary/80"
+          >
+            + Nueva
+          </Button>
+        </div>
         {noCategoriesAvailable ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
             No hay categorías disponibles para este tipo de movimiento.{" "}
@@ -290,8 +306,8 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
               className="font-semibold underline underline-offset-2 hover:opacity-80"
             >
               Creá una categoría
-            </Link>
-            .
+            </Link>{" "}
+            o usá el botón &ldquo;+ Nueva&rdquo; de arriba.
           </div>
         ) : (
           <Controller
@@ -373,5 +389,22 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
         </Button>
       </div>
     </form>
+
+      {/* ── Modal inline de nueva categoría (RF-MU-004) ── */}
+      {/* Se renderiza como hermano del form (no descendiente) para evitar un
+          <form> anidado dentro de otro <form>, que es HTML inválido y rompe
+          la hidratación de React. */}
+      {showCategoryModal && (
+        <CategoryFormModal
+          category={null}
+          lockScopeToType={selectedType}
+          onClose={() => setShowCategoryModal(false)}
+          onCreated={(cat: Category) => {
+            setValue("categoryId", cat.id);
+            setShowCategoryModal(false);
+          }}
+        />
+      )}
+    </>
   );
 }

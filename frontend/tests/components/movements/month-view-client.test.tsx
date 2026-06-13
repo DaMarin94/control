@@ -483,7 +483,7 @@ describe("MonthViewClient", () => {
       expect(screen.getByText(/editar movimiento/i)).toBeInTheDocument();
     });
 
-    it("click en Eliminar de fijo abre el DeleteRecurringDialog (con checkbox)", () => {
+    it("click en Eliminar de fijo abre el DeleteRecurringDialog", () => {
       renderMonthView();
 
       // Click en Eliminar del fijo
@@ -498,10 +498,9 @@ describe("MonthViewClient", () => {
       expect(screen.getByRole("dialog")).toBeInTheDocument();
       expect(screen.getByRole("heading", { name: /eliminar movimiento fijo/i })).toBeInTheDocument();
 
-      // El checkbox es la marca distintiva del diálogo de fijo
-      expect(screen.getByRole("checkbox")).toBeInTheDocument();
-      // Desmarcado por defecto (RF-MF-004)
-      expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
+      // El diálogo de fijo ya no tiene checkbox; elimina desde este mes en adelante (RF-MF-004)
+      expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+      expect(screen.getByText(/desde este mes en adelante/i)).toBeInTheDocument();
     });
   });
 

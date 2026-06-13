@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TransactionForm } from "@/components/movements/transaction-form";
 import { ToastProvider } from "@/components/ui/toast";
@@ -404,6 +404,35 @@ describe("TransactionForm — flujo crear", () => {
     expect(onClose).not.toHaveBeenCalled();
     // Los datos deben conservarse
     expect(screen.getByDisplayValue("100")).toBeInTheDocument();
+  });
+});
+
+// ─── Tests: creación inline de categoría (RF-MU-004) ──────────────────────────
+
+describe("TransactionForm — '+ Nueva' categoría inline", () => {
+  it("el botón '+ Nueva' abre el modal de nueva categoría", async () => {
+    const user = userEvent.setup();
+    renderForm({});
+
+    await user.click(screen.getByRole("button", { name: /\+ nueva/i }));
+
+    // El modal de categoría se abre en modo crear
+    expect(screen.getByText(/nueva categoría/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /crear categoría/i })).toBeInTheDocument();
+  });
+
+  it("el modal inline restringe el scope al tipo EXPENSE del movimiento (oculta INCOME)", async () => {
+    const user = userEvent.setup();
+    renderForm({}); // Tipo EXPENSE por defecto
+
+    await user.click(screen.getByRole("button", { name: /\+ nueva/i }));
+
+    // En el modal de categoría, el select de tipo no debe ofrecer INCOME y debe preseleccionar EXPENSE
+    const dialog = screen.getByRole("dialog");
+    const scopeSelect = within(dialog).getByLabelText(/tipo/i) as HTMLSelectElement;
+    const optionValues = Array.from(scopeSelect.options).map((o) => o.value);
+    expect(optionValues).not.toContain("INCOME");
+    expect(scopeSelect.value).toBe("EXPENSE");
   });
 });
 

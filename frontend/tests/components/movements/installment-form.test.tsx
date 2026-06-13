@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { InstallmentForm } from "@/components/movements/installment-form";
 import { ToastProvider } from "@/components/ui/toast";
@@ -177,6 +177,27 @@ describe("InstallmentForm — sin selector de tipo", () => {
     renderForm({});
     // No debe haber opción con texto "Ingreso" en ningún control
     expect(screen.queryByRole("option", { name: /ingreso/i })).not.toBeInTheDocument();
+  });
+});
+
+// ─── Tests: creación inline de categoría (RF-MU-004) ──────────────────────────
+
+describe("InstallmentForm — '+ Nueva' categoría inline", () => {
+  it("el botón '+ Nueva' abre el modal de nueva categoría con el scope restringido a EXPENSE", async () => {
+    const user = userEvent.setup();
+    renderForm({});
+
+    await user.click(screen.getByRole("button", { name: /\+ nueva/i }));
+
+    // El modal de categoría se abre en modo crear
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/nueva categoría/i)).toBeInTheDocument();
+
+    // Las cuotas son siempre EXPENSE → el modal oculta INCOME y preselecciona EXPENSE
+    const scopeSelect = within(dialog).getByLabelText(/tipo/i) as HTMLSelectElement;
+    const optionValues = Array.from(scopeSelect.options).map((o) => o.value);
+    expect(optionValues).not.toContain("INCOME");
+    expect(scopeSelect.value).toBe("EXPENSE");
   });
 });
 

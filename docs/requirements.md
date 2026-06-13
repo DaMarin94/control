@@ -439,6 +439,52 @@ Un movimiento único es un gasto o ingreso que ocurrió una sola vez en una fech
 
 ---
 
+#### RF-MU-004 — Crear categoría desde el formulario de carga de movimiento
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Desde el formulario de carga de movimiento, el usuario puede crear una categoría nueva sin abandonar el formulario ni perder los datos ya cargados. La categoría recién creada queda autoseleccionada en el campo categoría del movimiento. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El formulario de carga de movimiento está abierto (en cualquiera de sus tabs: Único, Fijo o Cuotas). |
+
+**Alcance:** Aplica al formulario de carga de movimiento (el formulario único `transaction-form` compartido por los tres tabs), tanto en modo creación como en modo edición, ya que el campo categoría está presente en los tres tipos (RF-MU-001/RF-MU-002, RF-MF-001/RF-MF-003, RF-MC-001/RF-MC-003). Reutiliza el modal de creación de categorías ya existente (RF-CAT-002), incluyendo la validación de unicidad (RN-008) y el flujo crear-o-reactivar (RF-CAT-002 A3). **No** crea un flujo de alta de categoría nuevo ni paralelo: es un nuevo punto de entrada al mismo modal.
+
+**Flujo principal:**
+1. El usuario tiene el formulario de carga abierto, con uno o más campos ya cargados (monto, fecha, hora, descripción, etc.).
+2. Junto al selector de categoría, el usuario activa el botón **"+ Nueva"**.
+3. El sistema abre el modal de creación de categoría (RF-CAT-002) **por encima** del formulario de carga. El formulario de carga permanece montado por debajo y **conserva todos los datos ya cargados**.
+4. El campo **"Tipo" (scope)** del modal, abierto en este modo inline, **solo ofrece las opciones compatibles** con el tipo del movimiento en curso y **oculta la opción del tipo opuesto**:
+   - Movimiento **Gasto (`EXPENSE`)** → el scope ofrece `EXPENSE` ("Gasto") y `BOTH` ("Ambos"); se **oculta** `INCOME` ("Ingreso").
+   - Movimiento **Ingreso (`INCOME`)** → el scope ofrece `INCOME` ("Ingreso") y `BOTH` ("Ambos"); se **oculta** `EXPENSE` ("Gasto").
+   La opción **pre-seleccionada** es el **tipo exacto** del movimiento (Gasto → "Gasto"; Ingreso → "Ingreso"). El usuario puede cambiarla a "Ambos", pero **no** puede elegir el tipo opuesto.
+5. El usuario completa el nombre (obligatorio) y confirma.
+6. El sistema crea la categoría (RF-CAT-002), cierra el modal y **autoselecciona** la categoría recién creada en el campo categoría del formulario de carga.
+7. El usuario continúa con la carga del movimiento desde donde estaba, con todos sus datos previos intactos y la categoría ya seleccionada.
+
+**Flujos alternativos:**
+- *A1 — El usuario cancela el modal de categoría:* el modal se cierra, no se crea ninguna categoría y el formulario de carga vuelve a primer plano conservando los datos cargados. La categoría seleccionada en el formulario no cambia.
+- *A2 — Colisión con una categoría activa (RN-008):* el modal informa el error de nombre duplicado y no crea la categoría (igual que RF-CAT-002 A2). El usuario sigue dentro del modal.
+- *A3 — Colisión con una categoría eliminada (reactivable):* el sistema propone reactivar la categoría eliminada mediante el prompt de reactivación existente (RF-CAT-002 A3). Si el usuario reactiva, el modal se cierra y la categoría **reactivada** queda autoseleccionada en el campo categoría del formulario de carga, igual que en el alta exitosa. Si cancela el prompt, vuelve al modal de categoría sin crear ni reactivar nada.
+- *A4 — Error del backend al crear/reactivar:* el modal informa el error y permite reintentar sin perder lo tipeado; el formulario de carga conserva sus datos por debajo.
+
+**Criterios de aceptación:**
+- [ ] El disparador es un botón **"+ Nueva"** ubicado **junto al selector de categoría** dentro del formulario de carga (no un ítem dentro del desplegable de categorías).
+- [ ] El botón abre el modal de creación de categoría ya existente (RF-CAT-002), superpuesto al formulario de carga.
+- [ ] Los datos ya cargados en el formulario de carga (monto, fecha, hora, descripción, mes de inicio, cantidad de cuotas, según el tipo) se conservan al abrir el modal y al volver de él.
+- [ ] Al abrir el modal desde el formulario de carga (modo inline), el campo "Tipo" (scope) **solo ofrece las opciones compatibles** con el tipo del movimiento en curso: Gasto → "Gasto" y "Ambos" (se oculta "Ingreso"); Ingreso → "Ingreso" y "Ambos" (se oculta "Gasto"). La opción pre-seleccionada es el tipo exacto del movimiento. El usuario puede cambiar a "Ambos" pero no puede elegir el tipo opuesto.
+- [ ] La restricción de opciones de scope aplica **únicamente** en modo inline (modal abierto desde el formulario de carga). Cuando el modal se abre desde su lugar normal en `/categorias`, sigue ofreciendo las tres opciones (Gasto / Ingreso / Ambos) con default "Ambos".
+- [ ] Al crear la categoría con éxito, el modal se cierra y la categoría recién creada queda autoseleccionada en el campo categoría del formulario de carga.
+- [ ] Si la creación choca con una categoría eliminada, se reutiliza el prompt de reactivación (RF-CAT-002 A3); al reactivar, la categoría reactivada queda autoseleccionada en el campo categoría.
+- [ ] Cancelar el modal de categoría no crea ni reactiva nada y devuelve el foco al formulario de carga sin alterar sus datos ni su categoría seleccionada.
+- [ ] La autoselección respeta el filtrado por scope del selector de categorías (RN-010): el selector del formulario solo ofrece categorías compatibles con el tipo del movimiento en curso. Como en modo inline el scope nunca puede quedar en el tipo opuesto, la categoría creada/reactivada siempre es compatible y la autoselección siempre funciona; no existe el caso de una categoría "fantasma" que el selector filtre.
+
+**Notas:**
+- Es un cambio **solo de frontend**. No se agrega ni modifica ningún endpoint ni contrato de API: se reutilizan el modal de creación de categoría (RF-CAT-002), el flujo crear-o-reactivar y la validación de unicidad ya existentes. La categoría creada/reactivada ya está disponible en el listado de categorías que alimenta el selector del formulario (RF-CAT-002: "disponible inmediatamente en los selectores").
+- **Caso borde — scope incompatible (RESUELTO 2026-06-13):** se elimina de raíz restringiendo las opciones de scope en modo inline. El campo "Tipo" del modal, cuando se abre desde el formulario de carga, **no ofrece el tipo opuesto** al del movimiento en curso (solo el tipo exacto y "Ambos"). Así el usuario no puede crear una categoría incompatible y la autoselección posterior siempre es válida; no hace falta lógica de aviso, bloqueo ni manejo del caso "fantasma". Esta restricción aplica **solo** en modo inline; el modal abierto desde `/categorias` mantiene las tres opciones con default "Ambos".
+
+---
+
 ### 3.4 Módulo: Movimientos fijos
 
 Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netflix. Aparece automáticamente en cada mes desde su inicio hasta que el usuario lo elimina. No tiene día específico dentro del mes.
@@ -1155,3 +1201,17 @@ Impacta RF-MF-003, RN-005, `docs/screens.md` (pantallas 4 y 5), `docs/frontend.m
 3. **Sin cambio de contrato de API.** El backend `DELETE /recurring/:id` ya recibe `currentMonth` y `fromCurrentMonth`; el cliente ahora **fija siempre `fromCurrentMonth = true`** y `currentMonth` = mes visualizado. La mecánica de borde no cambia: si el mes visualizado es anterior o igual al `startMonth`, el fijo no aparecería en ningún mes y se hace **hard delete** del fijo completo. Es un cambio **solo de frontend**.
 
 Referencias: amenda RF-MF-004 (se reescribe el flujo, antes con checkbox) y RN-005; se apoya en y completa la entrada **2026-06-13 (editar pivota sobre el mes visualizado)** y revierte, para eliminar, el pivote de la entrada **2026-06-09 (Fase 6, punto 2)**. Impacta RF-MF-004, RN-005, `docs/screens.md` (pantallas 4 y 5), `docs/frontend.md` y `docs/features.md`. **No** impacta `docs/backend.md` ni `docs/data-model.md` (sin cambio de contrato ni de modelo). Motivo: al eliminar un fijo mientras se revisa un mes concreto, lo esperable es el mismo comportamiento que al editarlo —arrancar en ese mes—; mantener dos pivotes distintos para editar y eliminar era incoherente, y el checkbox sumaba una decisión innecesaria.
+
+**2026-06-13 — Crear categoría desde el formulario de carga de movimiento (nuevo RF-MU-004).** Se agrega la posibilidad de crear una categoría **sin salir del formulario de carga de movimiento**, reutilizando el modal de categoría existente. Decisiones de producto cerradas por el usuario:
+
+1. **Disparador (opción B).** Un botón **"+ Nueva"** ubicado **junto al selector de categoría** dentro del formulario de carga, **no** un ítem dentro del desplegable de categorías.
+2. **Comportamiento.** "+ Nueva" abre el modal de creación de categoría **ya existente** (RF-CAT-002) **por encima** del formulario de carga. Los datos ya cargados del movimiento (monto, fecha, hora, descripción, mes de inicio, cantidad de cuotas, según el tipo) **se conservan** al ir al modal y al volver.
+3. **Pre-selección de scope.** Al abrir el modal desde el formulario de carga, el campo "Tipo" (scope) arranca **pre-seleccionado** en el tipo exacto del movimiento en curso (Gasto → "Gasto"; Ingreso → "Ingreso"). Ver la resolución del caso borde abajo para las opciones que se ofrecen.
+4. **Al crear con éxito.** El modal se cierra y la categoría recién creada queda **autoseleccionada** en el campo categoría del movimiento.
+5. **Caso reactivable (409).** Si el nombre choca con una categoría archivada, se reutiliza el **prompt de reactivación** existente (RF-CAT-002 A3); al reactivar, esa categoría también queda autoseleccionada.
+
+**Alcance técnico:** cambio **solo frontend**. **No** se agrega ni modifica ningún endpoint ni contrato de API: se reutilizan el modal de creación de categoría, el hook de categorías (cuyo `create` ya devuelve la categoría creada) y el prompt de reactivación. Impacta RF-MU-004 (nuevo), `docs/screens.md` (pantalla 5 — Formulario de carga) y `docs/features.md`. **No** impacta `docs/backend.md` ni `docs/data-model.md`.
+
+Motivo de la feature: reducir la fricción de cargar un movimiento cuya categoría todavía no existe, sin perder los datos ya tipeados ni obligar a salir del formulario hacia `/categorias`.
+
+**2026-06-13 — Resolución del caso borde de RF-MU-004 (scope incompatible) por restricción de opciones.** El caso borde que había quedado abierto (poder crear, desde el modal inline, una categoría con scope incompatible con el tipo del movimiento) se **resuelve eliminándolo de raíz**, con una variante que no coincide con ninguna de las opciones (a)/(b)/(c) planteadas: en lugar de manejar el conflicto después, se **restringen las opciones de scope** cuando el modal se abre en modo inline desde el formulario de carga. El campo "Tipo" ofrece solo las opciones compatibles y **oculta el tipo opuesto**: movimiento Gasto → "Gasto" + "Ambos" (oculta "Ingreso"); movimiento Ingreso → "Ingreso" + "Ambos" (oculta "Gasto"). La pre-selección es el tipo exacto del movimiento; el usuario puede pasar a "Ambos" pero no al tipo opuesto. Como consecuencia, nunca se crea una categoría incompatible y la autoselección posterior siempre funciona, sin necesidad de avisos, bloqueos ni manejo del caso "fantasma". **Alcance de la restricción:** aplica **únicamente** en modo inline; cuando el modal se abre desde su lugar normal en `/categorias`, sigue mostrando las **tres** opciones (Gasto / Ingreso / Ambos) con default "Ambos", exactamente como hoy. Es un cambio **solo frontend** y no afecta contratos de API ni el modelo de datos. Con esto **RF-MU-004 deja de tener preguntas abiertas**. Impacta RF-MU-004 y `docs/screens.md` (pantallas 5 y 6). Motivo: prevenir el estado inválido en origen es más simple y menos confuso para el usuario que detectarlo y reconciliarlo después de cerrar el modal.

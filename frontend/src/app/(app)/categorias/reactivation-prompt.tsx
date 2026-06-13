@@ -15,7 +15,7 @@
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useCategories } from "@/hooks/use-categories";
-import { SCOPE_LABELS, type CategoryScope } from "@/types/category";
+import { SCOPE_LABELS, type CategoryScope, type Category } from "@/types/category";
 
 interface ReactivationPromptProps {
   reactivable: {
@@ -26,8 +26,12 @@ interface ReactivationPromptProps {
   };
   /** Volver al formulario sin hacer nada */
   onCancel: () => void;
-  /** Llamado cuando la reactivación fue exitosa (para cerrar todo) */
-  onReactivated: () => void;
+  /**
+   * Llamado cuando la reactivación fue exitosa (para cerrar todo).
+   * Recibe la categoría reactivada para que el padre pueda autoseleccionarla
+   * cuando el prompt se usa en modo inline desde el formulario de movimiento (RF-MU-004).
+   */
+  onReactivated: (category: Category) => void;
 }
 
 export function ReactivationPrompt({ reactivable, onCancel, onReactivated }: ReactivationPromptProps) {
@@ -45,7 +49,20 @@ export function ReactivationPrompt({ reactivable, onCancel, onReactivated }: Rea
     }
 
     toast.success(`Categoría "${reactivable.name}" reactivada correctamente.`);
-    onReactivated();
+    // result.category siempre está presente en éxito; si por algún motivo no,
+    // construimos un objeto mínimo desde los datos que ya tenemos en el prompt.
+    const reactivated: Category = result.category ?? {
+      id: reactivable.id,
+      name: reactivable.name,
+      scope: reactivable.scope as CategoryScope,
+      color: reactivable.color,
+      userId: "",
+      deletedAt: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      movementCount: 0,
+    };
+    onReactivated(reactivated);
   }
 
   return (

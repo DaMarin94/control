@@ -190,7 +190,7 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 
 ## 5. Formulario de carga de movimiento (modal)
 
-**RF relacionados:** RF-CM-001, RF-MU-001, RF-MU-002, RF-MF-001, RF-MF-003, RF-MC-001, RF-MC-003; RNF-008
+**RF relacionados:** RF-CM-001, RF-MU-001, RF-MU-002, RF-MU-004, RF-MF-001, RF-MF-003, RF-MC-001, RF-MC-003, RF-CAT-002; RNF-008
 
 ### Propósito
 
@@ -207,6 +207,7 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
   - **Fijo** (RF-MF-001): tipo (Gasto/Ingreso), monto, categoría, mes de inicio, descripción (opcional). Sin fecha de día. El mes de inicio tiene como default el **mes contexto** si el modal se abrió desde la Vista del mes (`/mes`), o el **mes actual** en cualquier otro origen (dashboard, sidebar). Es editable y admite meses pasados.
   - **Cuotas** (RF-MC-001): tipo (Gasto/Ingreso), monto por cuota, cantidad de cuotas, mes de inicio, categoría, descripción (opcional). El mes de inicio tiene como default el **mes contexto** si el modal se abrió desde la Vista del mes (`/mes`), o el **mes actual** en cualquier otro origen. Es editable y admite meses pasados.
 - El selector de categorías se filtra según el tipo: para Gasto se muestran categorías con scope `EXPENSE` o `BOTH`; para Ingreso, scope `INCOME` o `BOTH` (RN-010). Las categorías con soft delete no aparecen.
+- **Botón "+ Nueva" junto al selector de categoría** (RF-MU-004): abre el modal de creación de categoría (pantalla 6, RF-CAT-002) por encima del formulario, sin cerrar el formulario ni perder los datos ya cargados. Presente en los tres tabs (el campo categoría existe en todos). Ver "Acciones disponibles".
 
 **Modo edición:**
 
@@ -221,13 +222,14 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 - **Cambiar de tab** (solo en creación) — limpia el formulario; no conserva datos del tab anterior.
 - **Seleccionar tipo** Gasto / Ingreso.
 - **Guardar / Confirmar** — valida y persiste. Al guardar con éxito, el modal se cierra y aparece un toast de confirmación con la acción "Ir a ver" (RF-MU-001, RF-MF-001, RF-MC-001).
+- **Crear categoría con "+ Nueva"** (RF-MU-004) — abre el modal de creación de categoría (RF-CAT-002) superpuesto al formulario, en **modo inline**. El formulario de carga queda montado por debajo y conserva los datos ya cargados. En este modo inline, el campo "Tipo" (scope) del modal **solo ofrece las opciones compatibles** con el tipo del movimiento en curso y **oculta el tipo opuesto**: Gasto → "Gasto" + "Ambos" (oculta "Ingreso"); Ingreso → "Ingreso" + "Ambos" (oculta "Gasto"). La opción pre-seleccionada es el tipo exacto del movimiento; el usuario puede cambiar a "Ambos" pero no al tipo opuesto. Al crear con éxito, el modal se cierra y la categoría recién creada queda **autoseleccionada** en el campo categoría (siempre es compatible, por la restricción anterior). Si el nombre choca con una categoría eliminada, se reutiliza el prompt de reactivación (RF-CAT-002 A3); al reactivar, la categoría reactivada también queda autoseleccionada. Cancelar el modal no crea ni reactiva nada y devuelve al formulario sin alterar sus datos ni la categoría seleccionada.
 - **Cancelar / Cerrar** — cierra el modal sin guardar, desde cualquier tab.
 
 ### Navegación
 
 - **Se invoca desde:** botón "Nuevo movimiento" del sidebar (cualquier pantalla autenticada); acceso de carga del dashboard; estado vacío del dashboard (CTA "Cargá tu primer movimiento"); acción editar de la vista del mes (modo edición).
 - **Tras guardar:** el modal se cierra y el usuario permanece en la pantalla en la que estaba. El toast de confirmación ofrece "Ir a ver", que navega a la vista del mes del movimiento guardado (mes de la fecha en únicos; mes de inicio en fijos y cuotas). Si el usuario no interactúa con el toast, este desaparece y el usuario sigue en su pantalla.
-- **Sin categorías disponibles:** si no existe ninguna categoría aplicable al tipo seleccionado, el formulario bloquea el guardado y ofrece un enlace a la pantalla de Gestión de categorías (`/categorias`) para crear una.
+- **Sin categorías disponibles:** si no existe ninguna categoría aplicable al tipo seleccionado, el formulario bloquea el guardado y ofrece un enlace a la pantalla de Gestión de categorías (`/categorias`) para crear una. (Independientemente de este caso, el botón "+ Nueva" junto al selector de categoría permite crear una categoría sin salir del formulario — RF-MU-004.)
 
 ### Estados
 
@@ -235,6 +237,7 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 - **Edición:** sin tabs, campos pre-cargados con los valores actuales.
 - **Validación con error:** monto en cero/negativo/no numérico, cantidad de cuotas en cero/negativa, o categoría no seleccionada — se muestra el error y no se guarda.
 - **Sin categorías disponibles:** estado de bloqueo con enlace a `/categorias`.
+- **Modal de categoría superpuesto (RF-MU-004):** el modal de creación de categoría (pantalla 6) se muestra por encima del formulario de carga, que permanece montado y con sus datos intactos por debajo. Al cerrarse (por crear, reactivar o cancelar), el formulario vuelve a primer plano.
 - **Guardando:** el modal indica que la operación está en curso.
 - **Error del backend al guardar (RNF-008):** el modal permanece abierto, conserva los datos ingresados y permite reintentar sin perder información.
 
@@ -242,7 +245,7 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 
 ## 6. Gestión de categorías (`/categorias`)
 
-**RF relacionados:** RF-CAT-001, RF-CAT-002, RF-CAT-003, RF-CAT-004, RF-CAT-005, RF-CAT-006
+**RF relacionados:** RF-CAT-001, RF-CAT-002, RF-CAT-003, RF-CAT-004, RF-CAT-005, RF-CAT-006, RF-MU-004
 
 ### Propósito
 
@@ -268,7 +271,8 @@ Pantalla dedicada para administrar las categorías del usuario: listar, crear, e
 
 ### Modal de creación / edición
 
-- **Creación:** modal con campos vacíos; scope por defecto AMBOS.
+- **Creación (origen `/categorias`):** modal con campos vacíos; el campo "Tipo" (scope) ofrece las **tres** opciones (Gasto / Ingreso / Ambos) con **default "Ambos"**.
+- **Creación desde el formulario de carga de movimiento — modo inline (RF-MU-004):** el mismo modal se abre también desde el botón "+ Nueva" del formulario de carga (pantalla 5). En este origen el campo "Tipo" (scope) se comporta **distinto**: **solo ofrece las opciones compatibles** con el tipo del movimiento en curso y **oculta el tipo opuesto** — Gasto → "Gasto" + "Ambos" (oculta "Ingreso"); Ingreso → "Ingreso" + "Ambos" (oculta "Gasto"). La opción **pre-seleccionada** es el tipo exacto del movimiento (no "Ambos"); el usuario puede pasar a "Ambos" pero no elegir el tipo opuesto. Al crear/reactivar con éxito el modal se cierra y la categoría queda autoseleccionada en el formulario de carga. El resto del comportamiento del modal (validaciones, prompt de reactivación) es idéntico. Esta diferencia de opciones aplica **solo** en modo inline; abierto desde `/categorias`, el scope conserva las tres opciones con default "Ambos".
 - **Edición:** el mismo modal pre-cargado con nombre y scope actuales.
 - **Validaciones:** el nombre es obligatorio y no puede estar vacío; no pueden coexistir dos categorías activas con el mismo nombre para el mismo usuario (RN-008).
 - **Acciones:** Guardar (valida y persiste, cierra el modal) y Cancelar (cierra sin guardar).
@@ -276,6 +280,7 @@ Pantalla dedicada para administrar las categorías del usuario: listar, crear, e
 ### Navegación
 
 - **Llega desde:** link "Categorías" del sidebar; enlace desde el formulario de carga cuando no hay categorías disponibles para el tipo en curso.
+- **Modal invocado desde otra pantalla:** el modal de creación de categoría también se abre desde el botón "+ Nueva" del formulario de carga de movimiento (pantalla 5, RF-MU-004), superpuesto a ese formulario y **sin** navegar a `/categorias`.
 - **Lleva a:** permanece en `/categorias` tras crear, editar o eliminar.
 
 ### Estados

@@ -19,6 +19,7 @@ Si aparece un conflicto entre la spec y el código existente, una ambigüedad, u
 El workflow de este proyecto está manejado por agentes en `.claude/agents/`:
 
 - **`control-orchestrator`** — agente por defecto. Analiza, propone, delega y maneja git.
+- **`control-analyst`** — análisis funcional, requerimientos y definición de pantallas; único escriba de la documentación (`docs/` y `.claude/agents/`). Invocado por el orquestador cuando: (a) un pedido agrega o cambia un requerimiento funcional o una pantalla (antes de cerrar la decisión), o (b) hay que escribir/actualizar documentación.
 - **`control-frontend`** — implementa cambios en el frontend. Invocado por el orquestador.
 - **`control-backend`** — implementa cambios en el backend. Invocado por el orquestador.
 

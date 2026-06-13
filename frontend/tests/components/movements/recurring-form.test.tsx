@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RecurringForm } from "@/components/movements/recurring-form";
 import { ToastProvider } from "@/components/ui/toast";
@@ -246,6 +246,27 @@ describe("RecurringForm — filtrado de categorías por scope", () => {
       expect(screen.getByText("Varios")).toBeInTheDocument(); // BOTH
       expect(screen.queryByText("Servicios")).not.toBeInTheDocument(); // EXPENSE — no debe aparecer
     });
+  });
+});
+
+// ─── Tests: creación inline de categoría (RF-MU-004) ──────────────────────────
+
+describe("RecurringForm — '+ Nueva' categoría inline", () => {
+  it("el botón '+ Nueva' abre el modal de nueva categoría con el scope restringido al tipo EXPENSE", async () => {
+    const user = userEvent.setup();
+    renderForm({}); // Tipo EXPENSE por defecto
+
+    await user.click(screen.getByRole("button", { name: /\+ nueva/i }));
+
+    // El modal de categoría se abre en modo crear
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/nueva categoría/i)).toBeInTheDocument();
+
+    // El scope queda restringido al tipo del movimiento: oculta INCOME y preselecciona EXPENSE
+    const scopeSelect = within(dialog).getByLabelText(/tipo/i) as HTMLSelectElement;
+    const optionValues = Array.from(scopeSelect.options).map((o) => o.value);
+    expect(optionValues).not.toContain("INCOME");
+    expect(scopeSelect.value).toBe("EXPENSE");
   });
 });
 

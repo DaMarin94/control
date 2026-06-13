@@ -19,6 +19,7 @@
 | Categorías — defaults + CRUD + soft delete | RF-CAT-001..006 | Implementado |
 | Vista del mes — lista + totales + navegación | RF-VM-001..004 | Implementado |
 | Navegación global — sidebar persistente | RF-NAV-001 | Implementado |
+| Crear categoría desde el formulario de movimiento | RF-MU-004 | Implementado (los tres tabs) |
 
 ---
 
@@ -90,6 +91,14 @@
 - **Mes de inicio en el tab Fijo (RF-MF-001):** el fijo deja de arrancar siempre en el mes actual; el tab Fijo suma un campo "mes de inicio" editable (igual que cuotas), que **admite meses pasados** (el fijo aparece retroactivamente y modifica los totales de esos meses).
 - **Mes contexto:** al abrir el modal "Nuevo movimiento" **desde la Vista del mes (`/mes`)**, el mes navegado se propaga como default del "mes de inicio" en los tabs **Fijo** y **Cuotas**. Desde el dashboard, el sidebar o cualquier otro origen no hay mes contexto y el default es el **mes actual**.
 - **Únicos sin cambios:** el tab Único ignora el mes contexto; su default sigue siendo hoy/ahora siempre (es instante-céntrico, no a nivel mes).
+
+### Crear categoría desde el formulario de movimiento (RF-MU-004)
+
+- **Feature 100% frontend.** No agrega ni modifica endpoints ni contrato de API: reutiliza el modal de creación de categoría (`category-form-modal.tsx`, RF-CAT-002), el hook de categorías (cuyo `create` ya devuelve la categoría creada) y el prompt de reactivación (`reactivation-prompt.tsx`, RF-CAT-002 A3). Ver bitácora 2026-06-13.
+- **Disparador (opción B):** botón "+ Nueva" junto al selector de categoría del formulario de carga (`transaction-form`), presente en los tres tabs. No es un ítem dentro del desplegable.
+- **Comportamiento:** abre el modal de categoría por encima del formulario, conservando los datos ya cargados; el scope arranca pre-seleccionado en el tipo exacto del movimiento en curso (Gasto/Ingreso) y solo ofrece ese tipo + "Ambos" (oculta el tipo opuesto); al crear/reactivar con éxito, la categoría queda autoseleccionada en el formulario.
+- **Detalles de implementación no obvios** (uso dual de `CategoryFormModal`, apilado de modales/z-index) en `docs/frontend.md`, sección Crear categoría desde el formulario de movimiento.
+- **Caso borde resuelto (scope incompatible):** el conflicto de crear una categoría con scope incompatible con el tipo del movimiento se previene en origen restringiendo las opciones de scope en modo inline (el modal ofrece solo el tipo del movimiento + "Ambos", oculta el tipo opuesto y preselecciona el tipo exacto), por lo que nunca se crea una categoría incompatible. Desde `/categorias` el modal sigue mostrando las tres opciones (Gasto / Ingreso / Ambos). Resuelto el 2026-06-13; ver detalle en RF-MU-004 (`docs/requirements.md`).
 
 ---
 
