@@ -168,8 +168,9 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 ### Acciones disponibles
 
 - **Navegar al mes anterior / siguiente** — actualiza lista y totales (RF-VM-004).
-- **Editar** un ítem — abre el modal de carga en modo edición, en el tipo del movimiento (RF-VM-003 → RF-MU-002, RF-MF-003 o RF-MC-003 según el tipo).
-- **Eliminar** un ítem — dispara el flujo de eliminación correspondiente al tipo (RF-MU-003 único, RF-MF-004 fijo, RF-MC-002 grupo de cuotas), con su confirmación específica.
+- **Editar** un ítem — abre el modal de carga en modo edición, en el tipo del movimiento (RF-VM-003 → RF-MU-002, RF-MF-003 o RF-MC-003 según el tipo). Al editar un **fijo**, el cambio se aplica **desde el mes activo (el mes que se está visualizando) en adelante**, preservando los meses anteriores: el mes activo es el pivote del split, no el mes actual real (RF-MF-003, RN-005; ver bitácora 2026-06-13).
+- **Eliminar** un ítem — dispara el flujo de eliminación correspondiente al tipo (RF-MU-003 único, RF-MF-004 fijo, RF-MC-002 grupo de cuotas), con su confirmación específica. Al eliminar un **fijo**, la confirmación **no ofrece opciones** (ya no existe el checkbox "Eliminar también desde este mes"): la eliminación aplica siempre **desde el mes activo (el mes visualizado) inclusive en adelante**, preservando los meses anteriores — mismo pivote que la edición de fijos (RF-MF-004, RN-005; ver bitácora 2026-06-13). Si el mes activo es anterior o igual al mes de inicio del fijo, este se elimina por completo.
+- **Nuevo movimiento** — abre el modal de carga (pantalla 5). Al abrirlo desde `/mes`, el **mes activo** se propaga al modal como **mes contexto**: es el default del "mes de inicio" en los tabs Fijo y Cuotas. No afecta al tab Único (ver pantalla 5).
 - Acciones globales del sidebar.
 
 ### Navegación
@@ -202,9 +203,9 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 - Tres **tabs**: **Único**, **Fijo**, **Cuotas**. El tab **Único** está activo por defecto.
 - Dentro del tipo seleccionado, el tipo de movimiento **Gasto** está seleccionado por defecto (frente a Ingreso).
 - Campos según el tab activo:
-  - **Único** (RF-MU-001): tipo (Gasto/Ingreso), monto, categoría, fecha y hora (default: el momento actual — fecha de hoy y hora actual al abrir el formulario en modo creación), descripción (opcional).
-  - **Fijo** (RF-MF-001): tipo (Gasto/Ingreso), monto, categoría, descripción (opcional). Sin fecha de día.
-  - **Cuotas** (RF-MC-001): tipo (Gasto/Ingreso), monto por cuota, cantidad de cuotas, mes de inicio (default: mes actual), categoría, descripción (opcional).
+  - **Único** (RF-MU-001): tipo (Gasto/Ingreso), monto, categoría, fecha y hora (default: el momento actual — fecha de hoy y hora actual al abrir el formulario en modo creación), descripción (opcional). El mes contexto **no** aplica al único: su default es siempre hoy/ahora, sin importar desde dónde se abra el modal.
+  - **Fijo** (RF-MF-001): tipo (Gasto/Ingreso), monto, categoría, mes de inicio, descripción (opcional). Sin fecha de día. El mes de inicio tiene como default el **mes contexto** si el modal se abrió desde la Vista del mes (`/mes`), o el **mes actual** en cualquier otro origen (dashboard, sidebar). Es editable y admite meses pasados.
+  - **Cuotas** (RF-MC-001): tipo (Gasto/Ingreso), monto por cuota, cantidad de cuotas, mes de inicio, categoría, descripción (opcional). El mes de inicio tiene como default el **mes contexto** si el modal se abrió desde la Vista del mes (`/mes`), o el **mes actual** en cualquier otro origen. Es editable y admite meses pasados.
 - El selector de categorías se filtra según el tipo: para Gasto se muestran categorías con scope `EXPENSE` o `BOTH`; para Ingreso, scope `INCOME` o `BOTH` (RN-010). Las categorías con soft delete no aparecen.
 
 **Modo edición:**
@@ -212,7 +213,7 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 - **No muestra los tabs de selección de tipo.** Abre directamente en el tipo del movimiento editado y solo expone los campos de ese tipo.
 - Campos pre-cargados con los valores actuales del movimiento.
   - Único (RF-MU-002): todos los campos editables.
-  - Fijo (RF-MF-003): monto, categoría, descripción.
+  - Fijo (RF-MF-003): monto, categoría, descripción. La edición aplica **desde el mes desde el que se abrió** (el mes activo de la Vista del mes) en adelante, sin tocar los meses anteriores a él (ver bitácora 2026-06-13).
   - Cuotas (RF-MC-003): monto por cuota, cantidad de cuotas, mes de inicio, categoría, descripción. La edición aplica al grupo completo.
 
 ### Acciones disponibles

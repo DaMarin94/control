@@ -41,6 +41,10 @@ async function bootstrap() {
   // Exception filter global: captura toda excepción y responde { success, statusCode, error }
   app.useGlobalFilters(new AllExceptionsFilter(logger));
 
+  // CORS: permite requests cross-origin desde el frontend
+  const corsOrigin = config.get('CORS_ORIGIN', { infer: true });
+  app.enableCors({ origin: corsOrigin, credentials: true });
+
   const port = config.get('PORT', { infer: true });
 
   await app.listen(port);

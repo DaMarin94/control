@@ -194,7 +194,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
 
       {/* ── Botón nuevo movimiento ── */}
       <div className="flex justify-end">
-        <NewTransactionButton />
+        <NewTransactionButton defaultMonth={month} />
       </div>
 
       {/* ── Totales ── */}
@@ -351,6 +351,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
           mode="edit-fixed"
           recurring={movementItemToRecurring(editingFijo)}
           onClose={() => setEditingFijo(null)}
+          viewMonth={month}
         />
       )}
 
@@ -359,6 +360,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
         <DeleteRecurringDialog
           movement={deletingFijo}
           onClose={() => setDeletingFijo(null)}
+          viewMonth={month}
         />
       )}
 

@@ -74,6 +74,12 @@ interface InstallmentFormProps {
    */
   installment: InstallmentGroup | null;
   onClose: () => void;
+  /**
+   * Mes contexto (YYYY-MM) desde la Vista del mes.
+   * Solo aplica en modo crear; en modo editar se ignora.
+   * Si no se pasa, el default es el mes actual del navegador.
+   */
+  defaultMonth?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -87,7 +93,7 @@ function filterCategoriesForExpense(
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
-export function InstallmentForm({ installment, onClose }: InstallmentFormProps) {
+export function InstallmentForm({ installment, onClose, defaultMonth }: InstallmentFormProps) {
   const isEditing = installment !== null;
   const router = useRouter();
   const { toast } = useToast();
@@ -107,7 +113,7 @@ export function InstallmentForm({ installment, onClose }: InstallmentFormProps) 
     : {
         amountInput: "",
         totalInstallments: "",
-        startMonth: getCurrentMonth(),
+        startMonth: defaultMonth ?? getCurrentMonth(),
         categoryId: "",
         description: "",
       };

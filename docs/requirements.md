@@ -449,7 +449,7 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El usuario registra un movimiento fijo que se repetirá en todos los meses desde el mes actual en adelante. |
+| **Descripción** | El usuario registra un movimiento fijo que se repetirá en todos los meses desde su mes de inicio en adelante. El mes de inicio es elegible y admite meses pasados. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | El usuario tiene sesión activa. Existe al menos una categoría disponible. |
@@ -458,20 +458,23 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 1. El usuario inicia la carga de un movimiento y selecciona el tipo **Fijo**.
 2. El usuario selecciona: **Gasto** o **Ingreso**.
 3. El usuario ingresa el monto (obligatorio).
-4. El usuario selecciona una categoría (obligatorio).
-5. El usuario ingresa una descripción (opcional).
-6. El usuario confirma.
-7. El sistema crea el movimiento fijo con `startMonth` igual al mes actual, cierra el formulario y muestra un toast de confirmación con la acción "Ir a ver". El toast permite navegar a la vista del mes en el que el fijo comienza a aparecer (mes actual). Si el usuario no interactúa con el toast, este desaparece y el usuario permanece en la pantalla en la que estaba.
+4. El usuario selecciona el **mes de inicio**. Default: el **mes contexto** si el formulario se abrió desde la Vista del mes (`/mes`); en cualquier otro origen (dashboard, sidebar), el **mes actual**. Es editable y admite meses pasados.
+5. El usuario selecciona una categoría (obligatorio).
+6. El usuario ingresa una descripción (opcional).
+7. El usuario confirma.
+8. El sistema crea el movimiento fijo con `startMonth` igual al mes de inicio elegido, cierra el formulario y muestra un toast de confirmación con la acción "Ir a ver". El toast permite navegar a la vista del mes de inicio del fijo. Si el usuario no interactúa con el toast, este desaparece y el usuario permanece en la pantalla en la que estaba.
 
 **Flujos alternativos:**
-- *A1 — El usuario hace clic en "Ir a ver" del toast:* el sistema navega a la vista del mes en el que el fijo comienza a aparecer (mes actual).
+- *A1 — El usuario hace clic en "Ir a ver" del toast:* el sistema navega a la vista del mes de inicio del fijo.
 
 **Criterios de aceptación:**
-- [ ] Un movimiento fijo creado en junio aparece en junio, julio, agosto, y todos los meses siguientes.
+- [ ] El mes de inicio tiene como default el mes contexto cuando el formulario se abre desde la Vista del mes, y el mes actual en cualquier otro origen. Es editable.
+- [ ] Se permite elegir un mes de inicio pasado; en ese caso el fijo aparece retroactivamente en los meses anteriores y modifica sus totales (consecuencia esperada).
+- [ ] Un movimiento fijo con mes de inicio en junio aparece en junio, julio, agosto, y todos los meses siguientes.
 - [ ] El movimiento fijo no tiene fecha de día — aparece como ítem mensual sin día específico.
 - [ ] Las validaciones de monto (> 0) aplican igual que en RF-MU-001.
 - [ ] Al guardar, el formulario se cierra y aparece un toast de confirmación.
-- [ ] El toast incluye una acción "Ir a ver" que navega a la vista del mes en el que el fijo comienza a aparecer (mes actual).
+- [ ] El toast incluye una acción "Ir a ver" que navega a la vista del mes de inicio del fijo.
 - [ ] Si el usuario no interactúa con el toast, este desaparece automáticamente y el usuario permanece en la pantalla actual.
 - [ ] Las categorías con soft delete no aparecen en el selector.
 
@@ -498,26 +501,28 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El usuario puede editar monto, categoría o descripción de un movimiento fijo. Los cambios aplican desde el mes actual en adelante; los meses pasados no se tocan. |
+| **Descripción** | El usuario puede editar monto, categoría o descripción de un movimiento fijo. Los cambios aplican desde el **mes visualizado** (el mes desde el que se abre la edición en la Vista del mes) en adelante; los meses anteriores a ese mes no se tocan. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | El movimiento fijo existe, está activo y pertenece al usuario autenticado. |
 
 **Flujo principal:**
-1. El usuario selecciona un movimiento fijo desde la vista del mes.
+1. El usuario selecciona un movimiento fijo desde la Vista del mes, estando posicionado en un mes determinado (el **mes visualizado**).
 2. El sistema presenta el formulario de edición con los datos actuales.
 3. El usuario modifica monto, categoría o descripción.
 4. El usuario confirma.
-5. El sistema actualiza el movimiento fijo.
+5. El sistema actualiza el movimiento fijo: aplica el cambio **desde el mes visualizado en adelante** (pivote del split), preservando los meses anteriores a él.
 
 **Criterios de aceptación:**
 - [ ] Los campos editables son: monto, categoría, descripción.
-- [ ] Los cambios se reflejan en el mes actual y en todos los meses futuros.
-- [ ] Los meses anteriores al actual no sufren ningún cambio.
+- [ ] El pivote del cambio es el **mes visualizado** en la Vista del mes desde el que se abrió la edición, no el mes actual real del usuario.
+- [ ] Los cambios se reflejan en el mes visualizado y en todos los meses siguientes.
+- [ ] Los meses anteriores al mes visualizado no sufren ningún cambio.
+- [ ] Editar un fijo desde un mes pasado modifica ese mes y los siguientes, preservando solo los meses anteriores a él (consecuencia esperada).
 - [ ] Las validaciones de monto (> 0) aplican en la edición.
 
 **Notas:**
-- La edición retroactiva de un mes pasado específico de un fijo está fuera de scope en v1.
+- La edición retroactiva de un mes específico anterior al mes visualizado está fuera de scope en v1: el split solo preserva los meses previos al pivote, no permite tocar uno puntual del pasado.
 
 ---
 
@@ -525,28 +530,26 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El usuario puede eliminar un movimiento fijo con la opción de que aplique desde el mes siguiente (default) o desde el mes actual. Los meses pasados nunca se modifican. |
+| **Descripción** | El usuario puede eliminar un movimiento fijo. La eliminación aplica **desde el mes visualizado** en la Vista del mes (`/mes`) **inclusive en adelante**, preservando los meses anteriores. Es un comportamiento único, sin opciones. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | El movimiento fijo existe, está activo y pertenece al usuario autenticado. |
 
 **Flujo principal:**
-1. El usuario selecciona la opción eliminar sobre un movimiento fijo.
-2. El sistema muestra una confirmación con un checkbox:
-   - ☐ *"Eliminar también desde este mes"* — desmarcado por defecto.
-3. El usuario decide si marcar el checkbox y confirma.
-4. **Checkbox desmarcado:** el fijo deja de aparecer desde el mes siguiente. Sigue visible en el mes actual.
-5. **Checkbox marcado:** el fijo deja de aparecer desde el mes actual inclusive.
-6. En ambos casos, los meses anteriores al actual no cambian.
+1. El usuario selecciona la opción eliminar sobre un movimiento fijo, estando parado en un mes en la Vista del mes (`/mes`). El **mes visualizado** es el pivote de la operación (mismo pivote que la edición de fijos — RF-MF-003, RN-005).
+2. El sistema muestra una confirmación, sin opciones a elegir.
+3. El usuario confirma.
+4. El fijo deja de aparecer **desde el mes visualizado inclusive en adelante**. Los meses anteriores al mes visualizado no cambian.
+5. **Borde:** si el mes visualizado es anterior o igual al mes de inicio del fijo, el fijo no aparecería en ningún mes y se elimina por completo.
 
 **Flujos alternativos:**
 - *A1 — El usuario cancela:* el movimiento fijo sigue sin cambios.
 
 **Criterios de aceptación:**
-- [ ] La confirmación muestra el checkbox "Eliminar también desde este mes", desmarcado por defecto.
-- [ ] Con checkbox desmarcado: el fijo aparece en el mes actual y desaparece en el siguiente.
-- [ ] Con checkbox marcado: el fijo no aparece en el mes actual ni en los siguientes.
-- [ ] En ningún caso se modifican meses anteriores al actual.
+- [ ] La confirmación no ofrece opciones: la eliminación siempre aplica desde el mes visualizado inclusive.
+- [ ] El fijo desaparece desde el mes visualizado en adelante y se preserva en los meses anteriores a él.
+- [ ] Si el mes visualizado es anterior o igual al mes de inicio del fijo, el fijo se elimina por completo.
+- [ ] En ningún caso se modifican los meses anteriores al mes visualizado.
 - [ ] Solo se pueden eliminar movimientos fijos propios.
 
 ---
@@ -573,7 +576,7 @@ Una compra o cobro dividido en N pagos mensuales iguales. El usuario ingresa el 
 
 > **Nota:** En v1, las cuotas son **solo Gasto (`EXPENSE`)**. El "Ingreso en cuotas" está **fuera de alcance v1** (ver sección 6) — ver bitácora 2026-06-09 (resolución del conflicto de la spec, opción A). Por lo tanto, donde el paso 2 del flujo dice "selecciona Gasto o Ingreso", en v1 aplica únicamente Gasto: el selector de tipo **no se ofrece** en el tab Cuotas. El texto del flujo se conserva tal cual para una versión futura que incorpore "Ingreso en cuotas".
 4. El usuario ingresa la **cantidad de cuotas** (entero > 0).
-5. El usuario selecciona el **mes de inicio** (default: mes actual).
+5. El usuario selecciona el **mes de inicio**. Default: el **mes contexto** si el formulario se abrió desde la Vista del mes (`/mes`); en cualquier otro origen (dashboard, sidebar), el **mes actual**. Es editable y admite meses pasados.
 6. El usuario selecciona una categoría (obligatorio).
 7. El usuario ingresa una descripción (opcional).
 8. El usuario confirma.
@@ -587,7 +590,7 @@ Una compra o cobro dividido en N pagos mensuales iguales. El usuario ingresa el 
 **Criterios de aceptación:**
 - [ ] El campo monto corresponde al monto de cada cuota, no al total.
 - [ ] La cantidad de cuotas debe ser un entero mayor a cero.
-- [ ] El mes de inicio tiene como default el mes actual y es editable.
+- [ ] El mes de inicio tiene como default el mes contexto cuando el formulario se abre desde la Vista del mes, y el mes actual en cualquier otro origen. Es editable y admite meses pasados.
 - [ ] Aparece exactamente una cuota por mes durante exactamente N meses consecutivos.
 - [ ] Todas las cuotas tienen el mismo monto (no hay cuotas variables).
 - [ ] Cada cuota en la lista muestra el número de cuota y el total (ej: "3/12").
@@ -937,7 +940,7 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 | RN-002 | Los montos se almacenan en centavos (entero). No se usan números de punto flotante para representar dinero. |
 | RN-003 | Todos los recursos (movimientos, categorías) están aislados por `userId`. El backend filtra siempre por el usuario del JWT. Un usuario nunca puede ver ni modificar datos de otro. |
 | RN-004 | El instante de un movimiento único (`occurredAt`) es el momento elegido por el usuario, con default "ahora". Define a qué momento/mes pertenece el movimiento. No se confunde con `createdAt` (timestamp de sistema de cuándo se creó el registro): el usuario puede elegir un instante distinto al de creación. |
-| RN-005 | Editar o eliminar un movimiento fijo no modifica los datos de meses ya pasados. El historial es inmutable. |
+| RN-005 | Editar o eliminar un movimiento fijo no modifica los meses anteriores al **mes pivote** de la operación; esos meses son inmutables. El pivote es, en ambos casos, el **mes visualizado** en la Vista del mes (`/mes`) desde el que se opera, **inclusive**: el cambio aplica desde ese mes en adelante y preserva todo mes previo a él (ver bitácora 2026-06-13). |
 | RN-006 | Los movimientos fijos y los grupos de cuotas no generan filas individuales por mes. Se calculan on-the-fly al consultar un período. |
 | RN-007 | Una categoría eliminada (soft delete) no aparece en selectores de nuevos movimientos, pero los movimientos históricos conservan la referencia a ella. |
 | RN-008 | No pueden coexistir dos categorías activas con el mismo nombre para el mismo usuario. |
@@ -1123,3 +1126,32 @@ Motivo: cerrar la mecánica de implementación de las cuotas respetando los RF, 
 3. **Email via Server layout → prop (no `useSession()`).** El `layout.tsx` (Server Component) obtiene el email con `auth()` y lo pasa como prop a `AppSidebar` (Client Component). Si el email es null, fallback a string vacío (inofensivo: el middleware ya redirigió).
 
 Impacta `docs/frontend.md`, `docs/features.md`, `docs/roadmap.md`, `.claude/agents/control-frontend.md`. Motivo: la navegación global ya no se justificaba diferir; se entrega como feature frontend independiente una vez completos los tres tipos de movimiento, sin acoplarla a una fase del roadmap.
+
+**2026-06-13 — Mes contexto en fijos y cuotas, y mes de inicio elegible en fijos (permite pasado).** Se cierran tres decisiones de producto sobre el mes de inicio de los movimientos a nivel mes:
+
+1. **Definición de "mes contexto".** El **mes contexto** es el mes que el usuario está navegando en la Vista del mes (`/mes`) al momento de abrir el modal "Nuevo movimiento". Solo existe cuando el modal se abre **desde `/mes`**; abierto desde el dashboard, el sidebar o cualquier otra pantalla, no hay mes contexto y el default es el **mes actual**.
+
+2. **Mes de inicio elegible en fijos (RF-MF-001).** El movimiento fijo deja de arrancar siempre en el mes actual: incorpora un campo **"Mes de inicio"** editable (igual que cuotas). Su default es el mes contexto si el modal se abrió desde `/mes`, o el mes actual en cualquier otro origen. **Se permite elegir un mes pasado:** el fijo aparece retroactivamente en los meses anteriores y modifica sus totales (consecuencia aceptada). El backend ya aceptaba cualquier `startMonth` YYYY-MM sin restricción de pasado, por lo que es solo un cambio de UI/UX; no toca el modelo de datos.
+
+3. **Mes contexto como default en fijos y cuotas, NO en únicos.** Al abrir el modal desde `/mes`, el mes navegado se propaga como default del mes de inicio en **fijos** (RF-MF-001) y **cuotas** (RF-MC-001, antes default = mes actual). Los **movimientos únicos quedan sin cambios** (RF-MU-001): el único es instante-céntrico (fecha + hora exactas) y mantiene su default de hoy/ahora siempre, sin importar el origen.
+
+**Política común fijos/cuotas:** ambos admiten mes de inicio pasado. Impacta RF-MF-001, RF-MC-001, `docs/screens.md` (pantallas 4 y 5) y `docs/features.md`. **No** impacta `docs/data-model.md` (el modelo ya soporta `startMonth` arbitrario). Motivo: al cargar fijos o cuotas mientras se revisa un mes concreto, lo esperable es que arranquen en ese mes; y permitir el mes pasado cubre el alta de fijos/cuotas que vienen corriendo desde antes. El único no sigue esta lógica porque su naturaleza es un instante puntual, no un mes.
+
+**2026-06-13 — Editar un fijo pivota sobre el mes visualizado (AMENDA la decisión 2026-06-09, Fase 6, punto 2).** Se cambia **qué mes se usa como pivote del split al editar un movimiento fijo** (RF-MF-003): pasa de ser el **mes actual real** del usuario a ser el **mes que el usuario está viendo** en la Vista del mes (`/mes`) al abrir la edición. Si el usuario navega a un mes X y edita un fijo, el cambio aplica **desde X en adelante**, preservando solo los meses anteriores a X. Esto **revierte, exclusivamente para editar**, el criterio de la entrada **2026-06-09 (Fase 6, punto 2)**, que fijaba `currentMonth = getCurrentMonth()` (mes real de hoy) tanto para editar como para eliminar.
+
+- **Solo cambia el pivote, no la mecánica.** El "split" del backend (cerrar la fila vigente en el mes pivote con `deletedFrom` y abrir una fila nueva con `startMonth` = mes pivote) **no cambia**; lo único que cambia es el valor de `currentMonth` que envía el frontend al `PATCH /recurring/:id`: pasa de "mes real de hoy" a "mes navegado".
+- **Sin cambio de contrato de API.** El backend ya recibe `currentMonth` del frontend y arma el split con ese valor, sin restringir meses pasados. Es un cambio **solo de frontend** (mandar el mes navegado en lugar de `getCurrentMonth()`). No toca el modelo de datos.
+- **Efecto en el pasado.** Editar desde un mes pasado ahora **sí** modifica desde ese mes en adelante. La inmutabilidad de RN-005 se reinterpreta para editar como "meses anteriores al mes visualizado", no "meses anteriores a hoy".
+- **Eliminar NO cambia.** La eliminación de un fijo (RF-MF-004, `DELETE /recurring/:id`) **sigue pivotando sobre el mes actual real** (`getCurrentMonth()`), tal como la entrada 2026-06-09. La consistencia editar/eliminar quedó marcada como pregunta abierta a relevar con el usuario.
+
+Impacta RF-MF-003, RN-005, `docs/screens.md` (pantallas 4 y 5), `docs/frontend.md` y `docs/features.md`. **No** impacta `docs/backend.md` ni `docs/data-model.md` (sin cambio de contrato ni de modelo). Motivo: al editar un fijo mientras se revisa un mes concreto, lo esperable es que el cambio arranque en ese mes; usar el mes real de hoy resultaba contraintuitivo cuando el usuario estaba parado en otro mes.
+
+**2026-06-13 — Eliminar un fijo pivota sobre el mes visualizado: se quita el checkbox y se REUNIFICA RN-005 (cierra la pregunta abierta de la entrada anterior).** Se cambia el comportamiento de **eliminar un movimiento fijo** (RF-MF-004) para alinearlo con la edición: pasa de pivotar sobre el **mes actual real** del usuario (`getCurrentMonth()`, como fijaba la entrada **2026-06-09**, Fase 6, punto 2) a pivotar sobre el **mes visualizado** en la Vista del mes (`/mes`), **inclusive en adelante**. Con esto se **resuelve la pregunta abierta** que dejó la entrada inmediatamente anterior (consistencia editar/eliminar): editar y eliminar **vuelven a comportarse igual**.
+
+1. **Se elimina la opción / checkbox.** Desaparece el checkbox *"Eliminar también desde este mes"* y las dos variantes ("desde el mes siguiente" como default vs "desde este mes inclusive"). El comportamiento pasa a ser **único y por defecto**: eliminar **desde el mes visualizado inclusive en adelante**, preservando los meses anteriores. "Mes visualizado" = el mes que el usuario está viendo en `/mes`, el mismo pivote que la edición de fijos.
+
+2. **RN-005 se REUNIFICA a un criterio único** para editar Y eliminar: pivote = mes visualizado, inclusive, preserva todo mes previo. Esto cierra la bifurcación que introdujo la entrada anterior de hoy (editar = mes visto / eliminar = mes real), volviendo RN-005 a un único criterio como antes del 2026-06-09.
+
+3. **Sin cambio de contrato de API.** El backend `DELETE /recurring/:id` ya recibe `currentMonth` y `fromCurrentMonth`; el cliente ahora **fija siempre `fromCurrentMonth = true`** y `currentMonth` = mes visualizado. La mecánica de borde no cambia: si el mes visualizado es anterior o igual al `startMonth`, el fijo no aparecería en ningún mes y se hace **hard delete** del fijo completo. Es un cambio **solo de frontend**.
+
+Referencias: amenda RF-MF-004 (se reescribe el flujo, antes con checkbox) y RN-005; se apoya en y completa la entrada **2026-06-13 (editar pivota sobre el mes visualizado)** y revierte, para eliminar, el pivote de la entrada **2026-06-09 (Fase 6, punto 2)**. Impacta RF-MF-004, RN-005, `docs/screens.md` (pantallas 4 y 5), `docs/frontend.md` y `docs/features.md`. **No** impacta `docs/backend.md` ni `docs/data-model.md` (sin cambio de contrato ni de modelo). Motivo: al eliminar un fijo mientras se revisa un mes concreto, lo esperable es el mismo comportamiento que al editarlo —arrancar en ese mes—; mantener dos pivotes distintos para editar y eliminar era incoherente, y el checkbox sumaba una decisión innecesaria.

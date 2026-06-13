@@ -37,7 +37,7 @@ export const MOVEMENTS_QUERY_KEY = (month: string) =>
  * @param month - Formato YYYY-MM (ej: "2026-06")
  */
 export function useMovements(month: string) {
-  const { api } = useApi();
+  const { api, isAuthenticated } = useApi();
 
   const query = useQuery<MonthMovements>({
     queryKey: MOVEMENTS_QUERY_KEY(month),
@@ -45,7 +45,9 @@ export function useMovements(month: string) {
       logger.debug("Cargando movimientos del mes", { month });
       return api.get<MonthMovements>(`/movements?month=${month}`);
     },
-    enabled: Boolean(month),
+    // No disparar hasta que la sesión resolvió y el token está presente;
+    // evita 401 espurios en el primer render cuando status === "loading".
+    enabled: Boolean(month) && isAuthenticated,
   });
 
   return query;

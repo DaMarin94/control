@@ -71,7 +71,7 @@ export interface ReactivateCategoryResult {
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useCategories() {
-  const { api } = useApi();
+  const { api, isAuthenticated } = useApi();
   const queryClient = useQueryClient();
 
   // ─── Query: listar categorías activas ──────────────────────────────────────
@@ -84,6 +84,9 @@ export function useCategories() {
   } = useQuery<Category[]>({
     queryKey: CATEGORIES_QUERY_KEY,
     queryFn: () => api.get<Category[]>("/categories"),
+    // No disparar hasta que la sesión resolvió y el token está presente;
+    // evita 401 espurios en el primer render cuando status === "loading".
+    enabled: isAuthenticated,
   });
 
   // ─── Mutation: crear categoría ─────────────────────────────────────────────

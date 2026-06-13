@@ -3,14 +3,10 @@
 /**
  * Diálogo de confirmación para eliminar un movimiento fijo (RF-MF-004).
  *
- * Incluye un checkbox "Eliminar también desde este mes" (desmarcado por defecto).
- * - Desmarcado: el fijo deja de aparecer desde el mes siguiente (sigue en el mes actual).
- * - Marcado: el fijo deja de aparecer desde el mes actual inclusive.
- *
- * Los meses anteriores al actual nunca se modifican.
+ * El fijo se elimina desde el mes visualizado (viewMonth) en adelante, inclusive.
+ * Los meses anteriores al mes visualizado no se modifican.
  */
 
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useRecurring } from "@/hooks/use-recurring";
@@ -21,19 +17,18 @@ interface DeleteRecurringDialogProps {
   /** MovementItem del fijo a eliminar (origin === "fijo") */
   movement: MovementItem;
   onClose: () => void;
+  /** Mes que el usuario está viendo (YYYY-MM). Si se omite, se usa el mes actual. */
+  viewMonth?: string;
 }
 
-export function DeleteRecurringDialog({ movement, onClose }: DeleteRecurringDialogProps) {
+export function DeleteRecurringDialog({ movement, onClose, viewMonth }: DeleteRecurringDialogProps) {
   const { toast } = useToast();
   const { deleteRecurring, isDeleting } = useRecurring();
 
-  /** Checkbox "Eliminar también desde este mes" — desmarcado por defecto (RF-MF-004) */
-  const [fromCurrentMonth, setFromCurrentMonth] = useState(false);
-
   async function handleConfirm() {
     const result = await deleteRecurring(movement.id, {
-      currentMonth: getCurrentMonth(),
-      fromCurrentMonth,
+      currentMonth: viewMonth ?? getCurrentMonth(),
+      fromCurrentMonth: true,
     });
 
     if (!result.success) {
@@ -77,28 +72,8 @@ export function DeleteRecurringDialog({ movement, onClose }: DeleteRecurringDial
             </p>
           </div>
 
-          {/* Checkbox de eliminación desde este mes (RF-MF-004) */}
-          <label className="mt-4 flex cursor-pointer items-start gap-2.5">
-            <input
-              type="checkbox"
-              checked={fromCurrentMonth}
-              onChange={(e) => setFromCurrentMonth(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border border-input accent-primary"
-              aria-describedby="delete-recurring-checkbox-hint"
-            />
-            <span className="text-sm text-foreground">Eliminar también desde este mes</span>
-          </label>
-          <p
-            id="delete-recurring-checkbox-hint"
-            className="mt-1.5 pl-6 text-xs text-muted-foreground"
-          >
-            {fromCurrentMonth
-              ? "El fijo dejará de aparecer desde el mes actual inclusive."
-              : "El fijo seguirá visible este mes y dejará de aparecer a partir del mes siguiente."}
-          </p>
-
-          <p className="mt-3 text-xs text-muted-foreground">
-            Los meses anteriores al actual no se modifican.
+          <p className="mt-4 text-xs text-muted-foreground">
+            El fijo se eliminará desde este mes en adelante. Los meses anteriores no se modifican.
           </p>
         </div>
 

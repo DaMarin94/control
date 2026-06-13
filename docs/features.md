@@ -58,7 +58,7 @@
 
 ### Movimientos fijos (Fase 6)
 
-- **CRUD operativo** end-to-end (backend `RecurringModule` + tab Fijo del modal de carga), scopeado por `userId` del JWT. Crear desde el botón "Nuevo movimiento" (tab **Fijo**): tipo, monto, categoría y descripción; **sin día ni hora**. El fijo arranca con `startMonth` = mes actual.
+- **CRUD operativo** end-to-end (backend `RecurringModule` + tab Fijo del modal de carga), scopeado por `userId` del JWT. Crear desde el botón "Nuevo movimiento" (tab **Fijo**): tipo, monto, categoría, **mes de inicio** y descripción; **sin día ni hora**. El mes de inicio es editable y admite meses pasados; su default es el **mes contexto** si el modal se abrió desde `/mes`, o el mes actual en otro origen (ver nota "Mes contexto" más abajo).
 - **Visualización en la Vista del mes:** los fijos activos aparecen en su sección "Fijos", con badge de origen "Fijo" y la etiqueta "Mensual" en vez de fecha (RF-MF-002). Cada ítem expone Editar y Eliminar.
 - **Editar (RF-MF-003):** solo monto, categoría y descripción. **El tipo no se edita.** Los cambios aplican desde el mes actual en adelante; los meses ya corridos no se tocan (ver decisión del split más abajo).
 - **Eliminar (RF-MF-004):** diálogo con checkbox "Eliminar también desde este mes" (desmarcado por default → deja de aparecer desde el mes siguiente; marcado → desde el mes actual inclusive). El pasado nunca se modifica.
@@ -69,7 +69,7 @@
 
 - **CRUD operativo** end-to-end (backend `InstallmentsModule` + tab Cuotas del modal de carga), scopeado por `userId` del JWT. Con esto quedan completos los **tres tipos de movimiento** (únicos, fijos, cuotas) y el modal de carga ya **no tiene ningún tab "Próximamente"**.
 - **Solo Gasto en v1 (RF-MC-001..003):** el tab Cuotas **no ofrece selector de tipo** —siempre Gasto— y el backend rechaza `INCOME` con `400`. Resuelve la contradicción de la spec (RF-MC-001 ofrecía "Gasto o Ingreso", pero la sección 6 excluye "Ingreso en cuotas"); ver bitácora 2026-06-09.
-- **Crear (RF-MC-001):** monto **por cuota** (no el total), cantidad de cuotas, mes de inicio (default mes actual), categoría y descripción. No hay día ni hora —las cuotas operan a nivel mes.
+- **Crear (RF-MC-001):** monto **por cuota** (no el total), cantidad de cuotas, mes de inicio, categoría y descripción. El mes de inicio admite meses pasados; su default es el **mes contexto** si el modal se abrió desde `/mes`, o el mes actual en otro origen (ver nota "Mes contexto" más abajo). No hay día ni hora —las cuotas operan a nivel mes.
 - **Visualización en la Vista del mes:** las cuotas activas en el mes aparecen en su sección "Cuotas", con badge de origen "Cuotas" y la etiqueta **"Cuota X/N"** en vez de fecha (RF-MC-001). Cada ítem expone Editar y Eliminar.
 - **Editar (RF-MC-003):** el grupo completo, in-place (monto por cuota, cantidad, mes de inicio, categoría, descripción; **el tipo no se edita**). A diferencia de los fijos, **no hay split ni inmutabilidad del pasado**: la edición aplica a todas las instancias del grupo.
 - **Eliminar (RF-MC-002):** **hard delete del grupo entero** (todas las cuotas, pasadas y futuras); el diálogo avisa que se elimina el grupo completo, sin checkbox.
@@ -83,6 +83,13 @@
 - **Punto único de montaje vía route group `app/(app)/`:** las tres pantallas autenticadas viven bajo `app/(app)/` con un `layout.tsx` compartido que monta el sidebar una sola vez. Los route groups **no cambian las URLs**. `login` y `registro` quedan fuera del grupo → sin sidebar (cumple "no se muestra en pantallas no autenticadas"). Detalle en `docs/frontend.md`, sección Navegación global.
 - **Contenido:** logo/nombre "Control" → `/`; links Dashboard / Vista del mes / Categorías (Vista del mes siempre abre en el mes actual); botón "Nuevo movimiento" (reusa `NewTransactionButton`, abre el modal en modo crear, 1 clic — RNF-003); menú de usuario abajo con avatar = inicial del email.
 - **Decisiones de diseño (aprobadas):** sidebar **colapsable** (fijo en desktop, hamburguesa en pantallas chicas) y **avatar por inicial del email** (no hay imagen para usuarios de email).
+
+### Mes contexto + mes de inicio elegible en fijos (post-Fase 7)
+
+- **Feature 100% frontend (UX).** No toca el backend ni el modelo: el backend ya aceptaba cualquier `startMonth` YYYY-MM, incluido pasado. Ver bitácora 2026-06-13. Cubre RF-MF-001 y RF-MC-001.
+- **Mes de inicio en el tab Fijo (RF-MF-001):** el fijo deja de arrancar siempre en el mes actual; el tab Fijo suma un campo "mes de inicio" editable (igual que cuotas), que **admite meses pasados** (el fijo aparece retroactivamente y modifica los totales de esos meses).
+- **Mes contexto:** al abrir el modal "Nuevo movimiento" **desde la Vista del mes (`/mes`)**, el mes navegado se propaga como default del "mes de inicio" en los tabs **Fijo** y **Cuotas**. Desde el dashboard, el sidebar o cualquier otro origen no hay mes contexto y el default es el **mes actual**.
+- **Únicos sin cambios:** el tab Único ignora el mes contexto; su default sigue siendo hoy/ahora siempre (es instante-céntrico, no a nivel mes).
 
 ---
 

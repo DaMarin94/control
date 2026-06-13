@@ -10,6 +10,7 @@
  */
 
 import { Suspense } from "react";
+import { isGoogleConfigured } from "@/lib/env";
 import { LoginForm } from "./login-form";
 
 export default function LoginPage() {
@@ -25,7 +26,7 @@ export default function LoginPage() {
 
         {/* Suspense necesario porque LoginForm usa useSearchParams() */}
         <Suspense fallback={<div className="h-64 animate-pulse rounded-lg bg-muted" />}>
-          <LoginForm />
+          <LoginForm isGoogleConfigured={isGoogleConfigured} />
         </Suspense>
 
         <p className="text-center text-sm text-muted-foreground">

@@ -49,6 +49,12 @@ Ver descripción funcional en `docs/requirements.md`. Los contratos técnicos (D
 | `POST/PATCH/DELETE` | `/installments` | Grupos de cuotas |
 | `GET/POST/PATCH/DELETE` | `/categories` | Categorías |
 
+## Arranque (bootstrap) — gotchas y decisiones
+
+Detalle en `docs/backend.md` (sección Arranque). Para agentes que toquen el backend:
+
+- **CORS configurable por env, single-origin.** `src/main.ts` habilita CORS con `origin: CORS_ORIGIN` (declarada en `src/config/env.schema.ts`, default `http://localhost:3000`) y `credentials: true`. **`enableCors` acepta UN SOLO origin (string), no una lista.** Si se necesita soportar **múltiples origins**, hay que tocar **dos lugares**: el schema (`CORS_ORIGIN`) y el `enableCors` para que acepten array — no asumir que pasar varios separados por coma funciona.
+
 ## Prisma 7 — gotchas y capa de datos
 
 Este proyecto usa **Prisma 7**, que cambió cosas respecto de versiones anteriores. Antes de tocar Prisma, leé esto o vas a romper el build o el CLI:

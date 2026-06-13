@@ -1,11 +1,12 @@
 /**
  * Tests del diálogo de eliminación de movimiento fijo (RF-MF-004).
  * Verifica:
- * - El checkbox "Eliminar también desde este mes" está desmarcado por defecto.
- * - Con checkbox desmarcado: envía fromCurrentMonth=false.
- * - Con checkbox marcado: envía fromCurrentMonth=true.
+ * - Renderizado del título, descripción y monto.
+ * - Siempre llama deleteRecurring con fromCurrentMonth=true.
+ * - Usa viewMonth cuando se pasa; cae a getCurrentMonth() si se omite.
  * - Toast de confirmación tras eliminar.
  * - Cancelar no elimina.
+ * - Manejo de error del backend.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -56,12 +57,13 @@ const mockFijoMovement: MovementItem = {
 function renderDialog(props: {
   movement?: MovementItem;
   onClose?: () => void;
+  viewMonth?: string;
 }) {
   const onClose = props.onClose ?? vi.fn();
   const movement = props.movement ?? mockFijoMovement;
   return render(
     <ToastProvider>
-      <DeleteRecurringDialog movement={movement} onClose={onClose} />
+      <DeleteRecurringDialog movement={movement} onClose={onClose} viewMonth={props.viewMonth} />
     </ToastProvider>,
   );
 }
@@ -100,64 +102,43 @@ describe("DeleteRecurringDialog", () => {
     expect(screen.getByText(/1\.500,00/)).toBeInTheDocument();
   });
 
-  it("el checkbox 'Eliminar también desde este mes' existe en el formulario", () => {
+  it("no renderiza ningún checkbox", () => {
     renderDialog({});
-    const checkbox = screen.getByRole("checkbox");
-    expect(checkbox).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
 
-  it("el checkbox está desmarcado por defecto (RF-MF-004)", () => {
+  it("muestra texto informando que se elimina desde este mes en adelante", () => {
     renderDialog({});
-    const checkbox = screen.getByRole("checkbox") as HTMLInputElement;
-    expect(checkbox.checked).toBe(false);
+    expect(screen.getByText(/desde este mes en adelante/i)).toBeInTheDocument();
   });
 
-  // ── Texto de ayuda dinámico ──────────────────────────────────────────────────
-
-  it("muestra texto 'desde el mes siguiente' cuando el checkbox está desmarcado", () => {
+  it("muestra texto informando que los meses anteriores no se modifican", () => {
     renderDialog({});
-    expect(screen.getByText(/mes siguiente/i)).toBeInTheDocument();
+    expect(screen.getByText(/meses anteriores no se modifican/i)).toBeInTheDocument();
   });
 
-  it("muestra texto 'desde el mes actual' cuando el checkbox está marcado", () => {
-    renderDialog({});
-    const checkbox = screen.getByRole("checkbox");
-    fireEvent.click(checkbox);
-    expect(screen.getByText(/mes actual inclusive/i)).toBeInTheDocument();
-  });
+  // ── Comportamiento de eliminación ───────────────────────────────────────────
 
-  // ── Envío de fromCurrentMonth=false (checkbox desmarcado) ───────────────────
-
-  it("con checkbox desmarcado: llama deleteRecurring con fromCurrentMonth=false", async () => {
+  it("siempre llama deleteRecurring con fromCurrentMonth=true", async () => {
     mockDeleteRecurring.mockResolvedValue({ success: true });
     const onClose = vi.fn();
     renderDialog({ onClose });
 
-    // Checkbox desmarcado — confirmar
     const confirmBtn = screen.getByRole("button", { name: /eliminar/i });
     fireEvent.click(confirmBtn);
 
     await waitFor(() => {
       expect(mockDeleteRecurring).toHaveBeenCalledWith(
         "rec-1",
-        expect.objectContaining({
-          currentMonth: "2026-06",
-          fromCurrentMonth: false,
-        }),
+        expect.objectContaining({ fromCurrentMonth: true }),
       );
     });
   });
 
-  // ── Envío de fromCurrentMonth=true (checkbox marcado) ───────────────────────
-
-  it("con checkbox marcado: llama deleteRecurring con fromCurrentMonth=true", async () => {
+  it("usa viewMonth cuando se proporciona como currentMonth", async () => {
     mockDeleteRecurring.mockResolvedValue({ success: true });
     const onClose = vi.fn();
-    renderDialog({ onClose });
-
-    // Marcar el checkbox
-    const checkbox = screen.getByRole("checkbox");
-    fireEvent.click(checkbox);
+    renderDialog({ onClose, viewMonth: "2026-03" });
 
     const confirmBtn = screen.getByRole("button", { name: /eliminar/i });
     fireEvent.click(confirmBtn);
@@ -165,10 +146,23 @@ describe("DeleteRecurringDialog", () => {
     await waitFor(() => {
       expect(mockDeleteRecurring).toHaveBeenCalledWith(
         "rec-1",
-        expect.objectContaining({
-          currentMonth: "2026-06",
-          fromCurrentMonth: true,
-        }),
+        expect.objectContaining({ currentMonth: "2026-03", fromCurrentMonth: true }),
+      );
+    });
+  });
+
+  it("usa getCurrentMonth() como fallback cuando viewMonth no se proporciona", async () => {
+    mockDeleteRecurring.mockResolvedValue({ success: true });
+    const onClose = vi.fn();
+    renderDialog({ onClose });
+
+    const confirmBtn = screen.getByRole("button", { name: /eliminar/i });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(mockDeleteRecurring).toHaveBeenCalledWith(
+        "rec-1",
+        expect.objectContaining({ currentMonth: "2026-06", fromCurrentMonth: true }),
       );
     });
   });

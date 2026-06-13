@@ -77,6 +77,14 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     throw new ApiError(`No se pudo conectar con el servidor: ${message}`, 503);
   }
 
+  // Short-circuit para respuestas sin contenido (204 No Content).
+  // Los cuatro DELETEs del backend responden 204; los errores siempre traen body JSON,
+  // así que un 204 es siempre éxito — no hay nada que parsear.
+  if (response.status === 204) {
+    logger.debug("Request completado sin contenido (204)", { path });
+    return undefined as T;
+  }
+
   let parsed: ApiResponse<T>;
 
   try {

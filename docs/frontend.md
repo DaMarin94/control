@@ -31,6 +31,7 @@ Dentro de cada carpeta se pueden agrupar archivos por dominio (ej: `components/m
 ## Convenciones
 
 - **Server vs Client Components:** por defecto Server Components (App Router de Next 15). Se marca `"use client"` solo cuando hace falta interactividad, estado o hooks. Páginas y layouts arrancan server; formularios, toasts y data-fetching con React Query van en client.
+- **`@/lib/env` es un módulo server-only.** Corre `validateEnv()` a nivel de módulo y valida secretos **sin** prefijo `NEXT_PUBLIC_` (`AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`). En el browser esas vars son `undefined`, así que un client component (`"use client"`) que lo importe **crashea en runtime** con un error de Zod ("AUTH_SECRET: Required") aunque la var esté correctamente seteada en `.env.local`. **Patrón obligatorio:** ningún client component importa `@/lib/env`; si necesita un valor derivado de env, el **Server Component padre lo lee y lo pasa como prop**. Ejemplo aplicado: `src/app/login/page.tsx` (server) lee `isGoogleConfigured` y lo pasa a `<LoginForm isGoogleConfigured={...} />` (client).
 - **Capa de llamadas al backend en `lib/`:** un único lugar centraliza las llamadas (ver Error handling en `docs/technical.md`). Ningún componente llama a `fetch` directo.
 - **Hooks de datos:** envuelven esa capa con React Query (ver Convenciones de hooks en `docs/technical.md`).
 
@@ -54,7 +55,7 @@ NextAuth **orquesta el login** en el front pero **no emite un token de identidad
 ### Providers
 
 - **Credentials provider:** su `authorize` llama a `POST /auth/login` del backend y devuelve el `accessToken` y el `user` que el backend emite.
-- **Google provider:** scaffolded, condicional a que existan las credenciales. Hoy diferido — no está activo (ver gotcha en `.claude/agents/control-frontend.md`).
+- **Google provider:** scaffolded, condicional a que existan las credenciales. Hoy diferido — no está activo. `isGoogleConfigured` depende de `GOOGLE_CLIENT_ID` (**sin** prefijo `NEXT_PUBLIC_`), así que solo se evalúa en el servidor: la página de login (server) lo lee y lo pasa por prop al `LoginForm` (client) — ver el patrón server-only de `@/lib/env` en Convenciones. Para activarlo de verdad hace falta exponer un flag con prefijo `NEXT_PUBLIC_`; no exponerlo mientras Google esté deshabilitado a propósito.
 
 ### Callbacks y sesión
 
@@ -68,6 +69,15 @@ Los callbacks `jwt` y `session` persisten el **`accessToken` de NestJS** y el **
 
 - **Client Components** → hook **`useApi`**, que toma `session.accessToken` de `useSession()`.
 - **Server Components** → llamar **`auth()`** directamente y pasar el token a **`apiRequest({ token })`**.
+
+### Queries de lectura gate-adas con `isAuthenticated` (patrón obligatorio)
+
+`useApi()` expone un flag **`isAuthenticated = status === "authenticated" && Boolean(token)`**, derivado del `status` de `useSession()`. **Toda query de lectura de React Query que se monta al cargar una pantalla autenticada DEBE incluir `enabled: isAuthenticated`** (o `enabled: <condición> && isAuthenticated`).
+
+- **Por qué:** durante el ciclo `status === "loading"` de Auth.js la sesión es `null` y el `accessToken` aún no está disponible. Sin el guard, React Query dispara la request **sin** header `Authorization`, el backend responde `401`, y el retry genera un **doble fetch** en cada carga (401 espurio + refetch).
+- **El criterio se centraliza en `useApi()`** — todos los hooks de lectura lo consumen de ahí; no reimplementar la condición.
+- **Las mutaciones NO necesitan el guard:** las dispara el usuario ya autenticado.
+- **Aplicado en:** `useMovements` (`enabled: Boolean(month) && isAuthenticated`) y `useCategories` (`enabled: isAuthenticated`).
 
 ### Pantallas y protección de rutas
 

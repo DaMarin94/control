@@ -18,6 +18,8 @@ export const envSchema = z.object({
   // GOOGLE_CLIENT_ID es opcional: solo necesario si se usa el endpoint /auth/google.
   // Declarado como opcional para no romper el fail-fast en entornos que no usen Google OAuth.
   GOOGLE_CLIENT_ID: z.string().optional(),
+  // CORS_ORIGIN: origin del frontend permitido para CORS. Default: http://localhost:3000.
+  CORS_ORIGIN: z.string().optional().default('http://localhost:3000'),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

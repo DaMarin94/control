@@ -15,11 +15,18 @@ interface NewTransactionButtonProps {
   label?: string;
   /** Variante del botón */
   variant?: "default" | "outline" | "ghost";
+  /**
+   * Mes contexto (YYYY-MM) desde la Vista del mes.
+   * Se pasa al TransactionModal para precargar el mes de inicio en Fijo y Cuotas.
+   * Opcional — si no se pasa, los forms usan el mes actual del navegador.
+   */
+  defaultMonth?: string;
 }
 
 export function NewTransactionButton({
   label = "Nuevo movimiento",
   variant = "default",
+  defaultMonth,
 }: NewTransactionButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -30,7 +37,11 @@ export function NewTransactionButton({
       </Button>
 
       {isOpen && (
-        <TransactionModal mode="create" onClose={() => setIsOpen(false)} />
+        <TransactionModal
+          mode="create"
+          onClose={() => setIsOpen(false)}
+          defaultMonth={defaultMonth}
+        />
       )}
     </>
   );

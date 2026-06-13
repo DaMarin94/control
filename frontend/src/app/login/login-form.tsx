@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { createLogger } from "@/lib/logger";
-import { isGoogleConfigured } from "@/lib/env";
 
 const logger = createLogger("LoginForm");
 
@@ -22,7 +21,11 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
-export function LoginForm() {
+interface LoginFormProps {
+  isGoogleConfigured: boolean;
+}
+
+export function LoginForm({ isGoogleConfigured }: LoginFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);

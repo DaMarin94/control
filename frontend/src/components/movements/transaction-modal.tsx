@@ -68,6 +68,12 @@ export type TransactionModalProps =
       recurring?: null;
       installment?: null;
       onClose: () => void;
+      /**
+       * Mes contexto (YYYY-MM) desde la Vista del mes.
+       * Se pasa a RecurringForm e InstallmentForm como default del campo "Mes de inicio".
+       * Opcional — si no se pasa, cada form usa el mes actual del navegador.
+       */
+      defaultMonth?: string;
     }
   | {
       mode: "edit-single";
@@ -82,6 +88,12 @@ export type TransactionModalProps =
       recurring: Recurring;
       installment?: null;
       onClose: () => void;
+      /**
+       * Mes navegado (YYYY-MM) desde la Vista del mes.
+       * Se pasa a RecurringForm para que el PATCH use este mes como pivote del split,
+       * en vez del mes real de hoy. Opcional — sin él RecurringForm cae a getCurrentMonth().
+       */
+      viewMonth?: string;
     }
   | {
       mode: "edit-installment";
@@ -96,6 +108,7 @@ export type TransactionModalProps =
 export function TransactionModal(props: TransactionModalProps) {
   const { mode, onClose } = props;
   const isEditing = mode !== "create";
+  const defaultMonth = mode === "create" ? props.defaultMonth : undefined;
 
   const [activeTab, setActiveTab] = useState<TabId>("single");
 
@@ -169,7 +182,7 @@ export function TransactionModal(props: TransactionModalProps) {
             {mode === "edit-single" ? (
               <TransactionForm transaction={props.transaction} onClose={onClose} />
             ) : mode === "edit-fixed" ? (
-              <RecurringForm recurring={props.recurring} onClose={onClose} />
+              <RecurringForm recurring={props.recurring} onClose={onClose} viewMonth={props.viewMonth} />
             ) : (
               /* mode === "edit-installment" */
               <InstallmentForm installment={props.installment} onClose={onClose} />
@@ -185,12 +198,12 @@ export function TransactionModal(props: TransactionModalProps) {
             )}
             {activeTab === "fixed" && (
               <div id="tab-panel-fixed" role="tabpanel" aria-labelledby="tab-fixed">
-                <RecurringForm recurring={null} onClose={onClose} />
+                <RecurringForm recurring={null} onClose={onClose} defaultMonth={defaultMonth} />
               </div>
             )}
             {activeTab === "installments" && (
               <div id="tab-panel-installments" role="tabpanel" aria-labelledby="tab-installments">
-                <InstallmentForm installment={null} onClose={onClose} />
+                <InstallmentForm installment={null} onClose={onClose} defaultMonth={defaultMonth} />
               </div>
             )}
           </>

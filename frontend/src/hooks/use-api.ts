@@ -6,8 +6,12 @@
  * nunca leen el token manualmente.
  *
  * Uso:
- *   const { api } = useApi();
+ *   const { api, isAuthenticated } = useApi();
  *   await api.get("/movements");
+ *
+ * `isAuthenticated` es true únicamente cuando la sesión ya resolvió Y el token
+ * está presente. Las queries de lectura deben usarlo en su opción `enabled`
+ * para no disparar antes de que el token esté disponible (evita 401 espurios).
  */
 
 import { useSession } from "next-auth/react";
@@ -17,8 +21,11 @@ import { apiRequest, type RequestOptions } from "@/lib/api";
 type ApiOptions = Omit<RequestOptions, "method" | "body">;
 
 export function useApi() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const token = session?.accessToken;
+
+  /** true solo cuando la sesión ya resolvió y el token está presente */
+  const isAuthenticated = status === "authenticated" && Boolean(token);
 
   const authenticatedApi = useMemo(
     () => ({
@@ -41,5 +48,5 @@ export function useApi() {
     [token],
   );
 
-  return { api: authenticatedApi, token };
+  return { api: authenticatedApi, token, isAuthenticated };
 }

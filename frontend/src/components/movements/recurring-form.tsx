@@ -3,7 +3,7 @@
 /**
  * Formulario de movimiento fijo (RF-MF-001 / RF-MF-003).
  *
- * Modo crear: campos con defaults (tipo=EXPENSE, sin fecha).
+ * Modo crear: campos con defaults (tipo=EXPENSE, mes de inicio editable).
  * Modo editar: campos precargados; tipo es read-only (RF-MF-003 no permite editar el type).
  *
  * Reglas de negocio:
@@ -11,8 +11,14 @@
  * - Categorías filtradas por scope según el tipo (RN-010).
  * - Si cambia el tipo (solo en crear) y la categoría deja de ser compatible, se resetea.
  * - Sin fecha ni hora — los fijos son ítems mensuales sin día específico.
- * - startMonth = getCurrentMonth() (mes actual del navegador, solo al crear).
- * - Al editar: PATCH con currentMonth = getCurrentMonth(); type y startMonth no se envían.
+ * - startMonth: campo editable en modo crear (<input type="month">);
+ *   default = defaultMonth (mes navegado) ?? getCurrentMonth() (mes actual del navegador).
+ *   Permite pasado — no hay validación de mes mínimo.
+ * - Al editar: PATCH con currentMonth = viewMonth ?? getCurrentMonth().
+ *   viewMonth es el mes que el usuario está viendo en la Vista del mes; permite
+ *   que el split del backend corte en el mes correcto al editar desde un mes pasado
+ *   o futuro. Si el form se abre desde un contexto sin mes navegado (ej. dashboard),
+ *   el fallback getCurrentMonth() garantiza compatibilidad. type y startMonth no se envían.
  * - Error del backend → modal queda abierto con datos conservados (RNF-008).
  */
 
@@ -32,7 +38,10 @@ import { type TransactionType } from "@/types/transaction";
 import { type CategoryScope } from "@/types/category";
 import { type Recurring } from "@/types/recurring";
 import { parseCurrencyInput, getCurrentMonth } from "@/lib/format";
+import { createLogger } from "@/lib/logger";
 import { useRouter } from "next/navigation";
+
+const logger = createLogger("RecurringForm");
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -44,6 +53,10 @@ const recurringSchema = z.object({
     .refine((val) => parseCurrencyInput(val) !== null, {
       message: "Ingresá un monto mayor a 0",
     }),
+  startMonth: z
+    .string()
+    .min(1, "El mes de inicio es requerido")
+    .regex(/^\d{4}-\d{2}$/, "El mes debe tener formato YYYY-MM"),
   categoryId: z.string().min(1, "La categoría es requerida"),
   description: z.string().optional(),
 });
@@ -59,6 +72,19 @@ interface RecurringFormProps {
    */
   recurring: Recurring | null;
   onClose: () => void;
+  /**
+   * Mes contexto (YYYY-MM) desde la Vista del mes.
+   * Solo aplica en modo crear: es el default del campo "Mes de inicio".
+   * Si no se pasa, el default es el mes actual del navegador.
+   */
+  defaultMonth?: string;
+  /**
+   * Mes navegado (YYYY-MM) desde la Vista del mes.
+   * Solo aplica en modo editar: se usa como currentMonth en el PATCH,
+   * para que el split del backend corte en el mes que el usuario está viendo.
+   * Si no se pasa, se cae al getCurrentMonth() (mes real de hoy).
+   */
+  viewMonth?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -76,7 +102,7 @@ function filterCategoriesByType(
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
-export function RecurringForm({ recurring, onClose }: RecurringFormProps) {
+export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: RecurringFormProps) {
   const isEditing = recurring !== null;
   const router = useRouter();
   const { toast } = useToast();
@@ -89,12 +115,18 @@ export function RecurringForm({ recurring, onClose }: RecurringFormProps) {
     ? {
         type: recurring.type,
         amountInput: String(recurring.amountCents / 100).replace(".", ","),
+        // En edición, startMonth no se muestra ni se envía en el PATCH.
+        // El mapper (movementItemToRecurring) setea "" porque el MovementItem
+        // de la lista no trae el startMonth real. Usamos getCurrentMonth() como
+        // valor de relleno válido solo para satisfacer el schema compartido.
+        startMonth: getCurrentMonth(),
         categoryId: recurring.categoryId,
         description: recurring.description ?? "",
       }
     : {
         type: "EXPENSE",
         amountInput: "",
+        startMonth: defaultMonth ?? getCurrentMonth(),
         categoryId: "",
         description: "",
       };
@@ -118,6 +150,9 @@ export function RecurringForm({ recurring, onClose }: RecurringFormProps) {
       reset({
         type: recurring.type,
         amountInput: String(recurring.amountCents / 100).replace(".", ","),
+        // Mismo relleno que en defaultValues: getCurrentMonth() satisface el
+        // schema compartido; este campo no se renderiza ni se envía en el PATCH.
+        startMonth: getCurrentMonth(),
         categoryId: recurring.categoryId,
         description: recurring.description ?? "",
       });
@@ -151,7 +186,10 @@ export function RecurringForm({ recurring, onClose }: RecurringFormProps) {
 
     if (isEditing) {
       const result = await updateRecurring(recurring.id, {
-        currentMonth: getCurrentMonth(),
+        // viewMonth es el mes que el usuario está viendo en la Vista del mes.
+        // Usarlo como pivote permite que el backend corte el fijo en el mes correcto.
+        // Fallback a getCurrentMonth() si el form se abre desde un contexto sin mes navegado.
+        currentMonth: viewMonth ?? getCurrentMonth(),
         amountCents,
         categoryId: data.categoryId,
         description: data.description || null,
@@ -165,13 +203,11 @@ export function RecurringForm({ recurring, onClose }: RecurringFormProps) {
       toast.success("Movimiento actualizado correctamente.");
       onClose();
     } else {
-      const startMonth = getCurrentMonth();
-
       const result = await createRecurring({
         type: data.type,
         amountCents,
         categoryId: data.categoryId,
-        startMonth,
+        startMonth: data.startMonth,
         description: data.description || undefined,
       });
 
@@ -180,11 +216,11 @@ export function RecurringForm({ recurring, onClose }: RecurringFormProps) {
         return;
       }
 
-      // Toast con acción "Ir a ver" → /mes?month=YYYY-MM del mes actual (RF-MF-001)
+      // Toast con acción "Ir a ver" → /mes?month=startMonth elegido (RF-MF-001)
       toast.success("Movimiento guardado correctamente.", {
         action: {
           label: "Ir a ver",
-          onClick: () => router.push(`/mes?month=${startMonth}`),
+          onClick: () => router.push(`/mes?month=${data.startMonth}`),
         },
       });
 
@@ -193,7 +229,13 @@ export function RecurringForm({ recurring, onClose }: RecurringFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4 px-6 py-5">
+    <form
+      onSubmit={handleSubmit(onSubmit, (errors) => {
+        logger.warn("Validación del form de fijo falló", { errors });
+      })}
+      noValidate
+      className="space-y-4 px-6 py-5"
+    >
       {/* ── Tipo ── */}
       <div className="space-y-1.5">
         <Label htmlFor="rec-type" required>
@@ -246,6 +288,24 @@ export function RecurringForm({ recurring, onClose }: RecurringFormProps) {
         />
         <p className="text-xs text-muted-foreground">Ingresá el monto en pesos (ej: 1500,50)</p>
       </div>
+
+      {/* ── Mes de inicio (solo en modo crear) ── */}
+      {!isEditing && (
+        <div className="space-y-1.5">
+          <Label htmlFor="rec-start-month" required>
+            Mes de inicio
+          </Label>
+          <Input
+            id="rec-start-month"
+            type="month"
+            error={errors.startMonth?.message}
+            {...register("startMonth")}
+          />
+          <p className="text-xs text-muted-foreground">
+            Mes a partir del cual aparece este gasto fijo
+          </p>
+        </div>
+      )}
 
       {/* ── Categoría ── */}
       <div className="space-y-1.5">

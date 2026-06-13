@@ -6,6 +6,16 @@
 - Puerto: `3001`
 - JwtAuthGuard global — valida token y extrae `userId` para scopear todos los recursos
 
+## Arranque (bootstrap)
+
+### CORS
+
+`src/main.ts` habilita CORS al arrancar (`app.enableCors({ origin: CORS_ORIGIN, credentials: true })`). Sin esto, el browser bloquea toda request cross-origin del frontend con error de preflight (era el bug que se corrigió).
+
+- **`CORS_ORIGIN` es configurable por env** (declarada en `src/config/env.schema.ts`): string, opcional, default `http://localhost:3000` (el frontend local). En staging/prod se setea con el dominio real del frontend.
+- **Acepta UN SOLO origin (string), no una lista.** Para soportar múltiples origins hay que ajustar el schema (`CORS_ORIGIN`) y el `enableCors` para que acepten array.
+- **`credentials: true`** permite que el frontend mande `Authorization`/cookie cross-origin.
+
 ## Estructura y capas
 
 Organización **por módulo/recurso**: un módulo NestJS por entidad.
@@ -87,6 +97,13 @@ La fuente de verdad de tipos, campos y constraints es `backend/prisma/schema.pri
 ## Endpoints
 
 El formato de toda respuesta (sobre `{ success, statusCode, data | error }`) está definido en `docs/technical.md`. Los DTOs y shapes concretos se definen al implementar cada endpoint.
+
+### DELETE → `204 No Content`, sin body (convención del backend)
+
+Los cuatro DELETE (`DELETE /categories/:id`, `/transactions/:id`, `/recurring/:id`, `/installments/:id`) responden **`204 No Content` sin cuerpo**, de forma deliberada y consistente — cada controller lo declara con `@HttpCode(HttpStatus.NO_CONTENT)`.
+
+- **El `ResponseInterceptor` NO aplica al 204.** Aunque el interceptor envuelve las respuestas exitosas en el sobre `{ success, statusCode, data }`, en un `204` Express descarta el body: el cliente recibe un **204 vacío** (no el sobre). Por eso el front no debe intentar parsear JSON en un 204 (ver gotcha de `apiRequest` en `.claude/agents/control-frontend.md`).
+- Los errores **nunca** llegan como 204: el `AllExceptionsFilter` siempre responde 4xx/5xx con body JSON. Un 204 es siempre éxito.
 
 ### `GET /movements?month=YYYY-MM`
 Devuelve todos los movimientos del mes **más los totales**: transacciones únicas, recurrentes activos y cuotas que caen en el mes. Los recurrentes y cuotas se calculan on-the-fly — no hay filas generadas por instancia mensual. Contrato completo en la sección **Movimientos del mes (MovementsModule)**.
