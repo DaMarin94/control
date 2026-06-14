@@ -14,8 +14,9 @@
  */
 
 import { useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { KebabMenu } from "@/components/ui/kebab-menu";
+import { Pencil, Trash2 } from "lucide-react";
 import { useCategories } from "@/hooks/use-categories";
 import { type Category, SCOPE_LABELS } from "@/types/category";
 import { CategoryFormModal } from "./category-form-modal";
@@ -202,25 +203,24 @@ function CategoryRow({ category, onEdit, onDelete }: CategoryRowProps) {
       {/* Badge de alcance */}
       <ScopeBadge scope={category.scope as ScopeVariant} />
 
-      {/* Acciones (visibles en hover) */}
-      <div className="flex gap-1 opacity-0 transition-opacity duration-[140ms] group-hover:opacity-100">
-        <button
-          type="button"
-          onClick={onEdit}
-          aria-label={`Editar categoría ${category.name}`}
-          className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-transparent bg-transparent text-muted transition-colors duration-[140ms] hover:border-line hover:bg-panel-3 hover:text-ink focus-visible:opacity-100 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
-        >
-          <Pencil size={16} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          aria-label={`Eliminar categoría ${category.name}`}
-          className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-transparent bg-transparent text-muted transition-colors duration-[140ms] hover:border-expense hover:bg-expense-soft hover:text-expense-ink focus-visible:opacity-100 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--expense-soft)]"
-        >
-          <Trash2 size={16} aria-hidden="true" />
-        </button>
-      </div>
+      {/* Acciones (visibles en hover) — KebabMenu por portal+fixed (overflow-hidden de tarjeta) */}
+      <KebabMenu
+        ariaLabel={`Acciones de ${category.name}`}
+        className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+        items={[
+          {
+            label: "Editar",
+            icon: Pencil,
+            onSelect: onEdit,
+          },
+          {
+            label: "Eliminar",
+            icon: Trash2,
+            danger: true,
+            onSelect: onDelete,
+          },
+        ]}
+      />
     </li>
   );
 }

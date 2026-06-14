@@ -10,6 +10,8 @@
  * No hay checkbox ni estado extra: la spec dice "sin opciones" (RF-MF-004).
  */
 
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useRecurring } from "@/hooks/use-recurring";
@@ -25,8 +27,13 @@ interface DeleteRecurringDialogProps {
 }
 
 export function DeleteRecurringDialog({ movement, onClose, viewMonth }: DeleteRecurringDialogProps) {
+  const [mounted, setMounted] = useState(false);
   const { toast } = useToast();
   const { deleteRecurring, isDeleting } = useRecurring();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   async function handleConfirm() {
     const result = await deleteRecurring(movement.id, {
@@ -48,7 +55,9 @@ export function DeleteRecurringDialog({ movement, onClose, viewMonth }: DeleteRe
   const typeLabel = movement.type === "EXPENSE" ? "Gasto" : "Ingreso";
   const description = movement.description ?? movement.category.name;
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     /* Scrim */
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-6"
@@ -105,6 +114,7 @@ export function DeleteRecurringDialog({ movement, onClose, viewMonth }: DeleteRe
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

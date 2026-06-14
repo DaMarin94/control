@@ -8,7 +8,7 @@
  * - Validación de month inválido / faltante → BadRequestException
  * - Mes vacío → totales en cero, listas vacías
  * - Aislamiento por userId (delega al repositorio con el userId correcto)
- * - Orden de únicos: occurredAt descendente
+ * - Orden de únicos: amountCents DESC (desempate occurredAt DESC — lo hace el repositorio/SQL)
  * - D3: fijos y cuotas con occurredAt=null, timezone=null
  * - D1: cuotas con campo installment { number, total, startMonth }
  */
@@ -312,19 +312,20 @@ describe('MovementsService', () => {
       expect(result.totals.expenseCents).toBe(2000);
     });
 
-    it('orden: el repositorio devuelve únicos en orden desc y el service lo preserva', async () => {
+    it('orden: el repositorio devuelve únicos en orden amountCents DESC y el service lo preserva', async () => {
+      // El repositorio ya ordenó por amountCents DESC; el service preserva ese orden sin reordenar
       const items = [
-        makeUnicoItem({ id: 'tx-newer', occurredAt: new Date('2026-06-15T00:00:00Z') }),
-        makeUnicoItem({ id: 'tx-older', occurredAt: new Date('2026-06-01T00:00:00Z') }),
+        makeUnicoItem({ id: 'tx-mayor', amountCents: 5000 }),
+        makeUnicoItem({ id: 'tx-menor', amountCents: 1000 }),
       ];
       setupEmptyMocks();
       mockRepo.findUnicosByMonth.mockResolvedValue(items);
-      mockRepo.getTotalsByMonth.mockResolvedValue({ expenseCents: 3000, incomeCents: 0 });
+      mockRepo.getTotalsByMonth.mockResolvedValue({ expenseCents: 6000, incomeCents: 0 });
 
       const result = await service.getMonthMovements(USER_A, '2026-06');
 
-      expect(result.movements.unicos[0].id).toBe('tx-newer');
-      expect(result.movements.unicos[1].id).toBe('tx-older');
+      expect(result.movements.unicos[0].id).toBe('tx-mayor');
+      expect(result.movements.unicos[1].id).toBe('tx-menor');
     });
 
     it('llama al repositorio con el userId correcto (aislamiento RN-003)', async () => {

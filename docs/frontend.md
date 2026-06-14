@@ -50,6 +50,7 @@ Lo visual se define **una sola vez**. Stack: **shadcn/ui + cva** sobre Tailwind 
 
 - **Las primitivas usan los tokens del design system "Precise Ledger"** (ver sección Design system). Detalle operativo del re-estilado (variantes de Button, patrones Tailwind v4, toast) en `.claude/agents/control-frontend.md`.
 - **Íconos: `lucide-react`** (no SVG inline). Es la librería de íconos del proyecto.
+- **`KebabMenu` (`components/ui/kebab-menu.tsx`)** — menú de tres puntos para las acciones de fila **editar / eliminar** en listas. Es el **componente estándar para esas acciones**: toda lista nueva que las necesite lo usa, en lugar de botones inline en la fila. Se renderiza **por portal a `document.body` con posición `fixed`** (coordenadas tomadas del trigger) porque las tarjetas de lista tienen `overflow-hidden` y el `transform` de los contenedores de página atraparía un `position: fixed` no portaleado — mismo motivo que los modales. Detalle operativo (API, comportamiento de apertura/cierre) en `.claude/agents/control-frontend.md`.
 
 ## Autenticación (Auth.js / NextAuth v5)
 

@@ -112,7 +112,8 @@ export class MovementsRepository {
    * La categoría se incluye AUNQUE esté soft-deleted (deletedAt != null):
    * RF-CAT-004 especifica que movimientos históricos siguen mostrando su categoría.
    *
-   * Orden: occurredAt DESC (más reciente primero, RF-VM-001).
+   * Orden: amountCents DESC (monto más alto primero); desempate por occurredAt DESC
+   * para resultados estables cuando dos registros tienen el mismo monto.
    *
    * Seguridad: $1, $2, $3 son parámetros posicionales de pg — nunca interpolados.
    */
@@ -161,7 +162,7 @@ export class MovementsRepository {
         t."userId" = ${userId}
         AND date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
             = date_trunc('month', ${monthStart}::timestamp)
-      ORDER BY t."occurredAt" DESC
+      ORDER BY t."amountCents" DESC, t."occurredAt" DESC
     `;
 
     return rows.map((row) => this.mapRowToMovementItem(row));
@@ -196,6 +197,10 @@ export class MovementsRepository {
           { deletedFrom: { gt: month } },
         ],
       },
+      orderBy: [
+        { amountCents: 'desc' },
+        { createdAt: 'desc' },
+      ],
       include: {
         category: {
           select: {
@@ -305,6 +310,12 @@ export class MovementsRepository {
         },
       });
     }
+
+    // Ordenar por amountCents DESC; desempate por id (CUID, lexicográfico) para
+    // que el resultado sea determinístico cuando dos grupos tienen el mismo monto.
+    result.sort(
+      (a, b) => b.amountCents - a.amountCents || a.id.localeCompare(b.id),
+    );
 
     return result;
   }

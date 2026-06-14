@@ -7,7 +7,7 @@
  * - Badge "Gasto" read-only (cuotas son siempre EXPENSE)
  * - Monto por cuota: input mono 20px con prefijo "$"
  * - Grid 2-col para Cantidad de cuotas + Mes de inicio
- * - Footer: helper + Cancelar / Guardar
+ * - Footer: Cancelar / Guardar
  *
  * Lógica de negocio preservada intacta.
  */
@@ -28,7 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import { type Category, type CategoryScope } from "@/types/category";
 import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
 import { type InstallmentGroup } from "@/types/installment";
-import { parseCurrencyInput, getCurrentMonth, formatMonthLabel } from "@/lib/format";
+import { parseCurrencyInput, getCurrentMonth } from "@/lib/format";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -111,7 +111,6 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
     handleSubmit,
     setValue,
     control,
-    watch,
     reset,
     formState: { errors },
   } = useForm<InstallmentFormData>({
@@ -136,11 +135,6 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
   );
 
   const noCategoriesAvailable = availableCategories.length === 0;
-
-  const selectedStartMonth = watch("startMonth");
-  const savedMonthLabel = selectedStartMonth
-    ? formatMonthLabel(selectedStartMonth)
-    : formatMonthLabel(getCurrentMonth());
 
   async function onSubmit(data: InstallmentFormData) {
     const amountCents = parseCurrencyInput(data.amountInput);
@@ -348,11 +342,7 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
         </div>
 
         {/* ── Footer ── */}
-        <div className="flex items-center justify-between gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
-          <span className="text-[12.5px] text-muted">
-            Se guarda en{" "}
-            <span className="font-semibold text-ink-2">{savedMonthLabel}</span>
-          </span>
+        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
           <div className="flex gap-3">
             <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
               Cancelar

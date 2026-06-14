@@ -183,12 +183,20 @@ data = {
     balanceCents: int    // incomeCents - expenseCents (puede ser negativo)
   },
   movements: {
-    unicos: [MovementItem],   // ordenados por occurredAt descendente
-    fijos:  [MovementItem],   // poblado desde Fase 6
-    cuotas: [MovementItem]    // poblado desde Fase 7
+    unicos: [MovementItem],   // ordenados por amountCents DESC (desempate: occurredAt DESC)
+    fijos:  [MovementItem],   // ordenados por amountCents DESC (desempate: createdAt DESC)
+    cuotas: [MovementItem]    // ordenados por amountCents DESC (desempate: id ASC)
   }
 }
 ```
+
+### Orden de las listas — por `amountCents` DESC
+
+Los tres grupos (`unicos`, `fijos`, `cuotas`) vienen ordenados por **`amountCents` descendente** (monto más alto primero). Como `amountCents` es siempre positivo, el orden es por **magnitud**, sin distinguir `EXPENSE` de `INCOME`. El desempate estable, cuando los montos son iguales, es por grupo:
+
+- **`unicos`** — `occurredAt` DESC (más reciente primero).
+- **`fijos`** — `createdAt` DESC.
+- **`cuotas`** — `id` ascendente (CUID, determinístico).
 
 ```
 MovementItem = {

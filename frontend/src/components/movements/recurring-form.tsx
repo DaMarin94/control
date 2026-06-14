@@ -7,7 +7,7 @@
  * - Toggle Gasto/Ingreso (o read-only con badge en edición)
  * - Input de monto mono 20px con prefijo "$"
  * - Nota de recurrencia (.field-note con ícono Repeat)
- * - Footer: helper "Se guarda en mes año" + Cancelar / Guardar
+ * - Footer: Cancelar / Guardar
  *
  * Lógica de negocio preservada intacta.
  */
@@ -29,7 +29,7 @@ import { type TransactionType } from "@/types/transaction";
 import { type Category, type CategoryScope } from "@/types/category";
 import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
 import { type Recurring } from "@/types/recurring";
-import { parseCurrencyInput, getCurrentMonth, formatMonthLabel } from "@/lib/format";
+import { parseCurrencyInput, getCurrentMonth } from "@/lib/format";
 import { createLogger } from "@/lib/logger";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -133,7 +133,6 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
 
   const selectedType = watch("type");
   const selectedCategoryId = watch("categoryId");
-  const selectedStartMonth = watch("startMonth");
 
   const availableCategories = filterCategoriesByType(
     (categories ?? []).map((c) => ({ id: c.id, name: c.name, scope: c.scope })),
@@ -194,10 +193,6 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
       onClose();
     }
   }
-
-  const savedMonthLabel = selectedStartMonth
-    ? formatMonthLabel(selectedStartMonth)
-    : formatMonthLabel(getCurrentMonth());
 
   return (
     <>
@@ -389,11 +384,7 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
         </div>
 
         {/* ── Footer ── */}
-        <div className="flex items-center justify-between gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
-          <span className="text-[12.5px] text-muted">
-            Se guarda en{" "}
-            <span className="font-semibold text-ink-2">{savedMonthLabel}</span>
-          </span>
+        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
           <div className="flex gap-3">
             <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
               Cancelar

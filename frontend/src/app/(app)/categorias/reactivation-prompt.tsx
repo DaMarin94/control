@@ -9,6 +9,8 @@
  * Lógica preservada intacta.
  */
 
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useCategories } from "@/hooks/use-categories";
@@ -26,8 +28,13 @@ interface ReactivationPromptProps {
 }
 
 export function ReactivationPrompt({ reactivable, onCancel, onReactivated }: ReactivationPromptProps) {
+  const [mounted, setMounted] = useState(false);
   const { toast } = useToast();
   const { reactivateCategory, isReactivating } = useCategories();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const scopeLabel = SCOPE_LABELS[reactivable.scope as CategoryScope] ?? reactivable.scope;
 
@@ -54,7 +61,9 @@ export function ReactivationPrompt({ reactivable, onCancel, onReactivated }: Rea
     onReactivated(reactivated);
   }
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     /* Scrim */
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-6"
@@ -132,6 +141,7 @@ export function ReactivationPrompt({ reactivable, onCancel, onReactivated }: Rea
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

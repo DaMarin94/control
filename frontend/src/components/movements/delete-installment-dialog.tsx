@@ -10,6 +10,8 @@
  * Lógica preservada intacta.
  */
 
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useInstallments } from "@/hooks/use-installments";
@@ -23,8 +25,13 @@ interface DeleteInstallmentDialogProps {
 }
 
 export function DeleteInstallmentDialog({ movement, onClose }: DeleteInstallmentDialogProps) {
+  const [mounted, setMounted] = useState(false);
   const { toast } = useToast();
   const { deleteInstallment, isDeleting } = useInstallments();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   async function handleConfirm() {
     const result = await deleteInstallment(movement.id);
@@ -46,7 +53,9 @@ export function DeleteInstallmentDialog({ movement, onClose }: DeleteInstallment
     ? `Cuota ${movement.installment.number}/${movement.installment.total}`
     : "Cuotas";
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     /* Scrim */
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-6"
@@ -120,6 +129,7 @@ export function DeleteInstallmentDialog({ movement, onClose }: DeleteInstallment
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

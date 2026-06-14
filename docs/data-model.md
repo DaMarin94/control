@@ -131,9 +131,9 @@ data = {
     balanceCents: number    // incomeCents - expenseCents (puede ser negativo)
   },
   movements: {
-    unicos: MovementItem[],   // ordenados por occurredAt descendente
-    fijos:  MovementItem[],   // poblado desde Fase 6
-    cuotas: MovementItem[]    // poblado desde Fase 7
+    unicos: MovementItem[],   // ordenados por amountCents DESC (desempate: occurredAt DESC)
+    fijos:  MovementItem[],   // ordenados por amountCents DESC (desempate: createdAt DESC)
+    cuotas: MovementItem[]    // ordenados por amountCents DESC (desempate: id ASC)
   }
 }
 ```
@@ -157,6 +157,7 @@ MovementItem = {
 ```
 
 - **Discriminador `origin`.** Cada ítem declara su tipo de movimiento (`unico` / `fijo` / `cuota`), además de venir ya agrupado en su lista. El front lo usa para rotular el origen y elegir el flujo de edición/eliminación. `origin: "fijo"` se puebla desde Fase 6; `"cuota"`, desde Fase 7.
+- **Orden de las listas.** Los tres grupos vienen ordenados por **`amountCents` descendente** (monto más alto primero, por magnitud — `amountCents` es siempre positivo, sin distinguir `EXPENSE` de `INCOME`). Desempate estable por grupo: `unicos` por `occurredAt` DESC, `fijos` por `createdAt` DESC, `cuotas` por `id` ascendente.
 - **`occurredAt` / `timezone` son nullable.** Para **únicos** vienen presentes (instante + zona). Para **fijos** y **cuotas** vienen **`null`**: operan a nivel mes, no tienen día/hora/zona. El front no debe pasar estos campos a `formatDate` / `formatTime` sin chequear null.
 - **`installment` solo en cuotas.** Para una cuota trae `{ number, total, startMonth }`: `number` es el número de cuota del mes (1-based), `total` es el `totalInstallments` del grupo y `startMonth` es el mes de inicio del grupo. Para **únicos** y **fijos** es **`null`**. El front lo usa para la etiqueta "Cuota X/N" y para prefilear la edición del grupo.
 - **Los totales suman movimientos, no categorías.** `expenseCents` / `incomeCents` agregan el `amountCents` de los movimientos del mes; `balanceCents = incomeCents - expenseCents`, sin piso (negativo si los gastos superan los ingresos). No se confunden con el contador `movementCount` de la pantalla de categorías (ver más arriba y `requirements.md`, RF-VM-002 / RF-CAT-006).

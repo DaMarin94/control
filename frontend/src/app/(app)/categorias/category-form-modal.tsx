@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -60,7 +61,12 @@ export function CategoryFormModal({
   onCreated,
 }: CategoryFormModalProps) {
   const isEditing = category !== null;
+  const [mounted, setMounted] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   const { createCategory, updateCategory, isCreating, isUpdating } = useCategories();
 
   // Estado para el prompt de reactivación
@@ -147,6 +153,8 @@ export function CategoryFormModal({
     }
   }
 
+  if (!mounted) return null;
+
   // Si hay un prompt de reactivación activo, renderizarlo
   if (reactivable) {
     return (
@@ -171,7 +179,7 @@ export function CategoryFormModal({
     return true;
   });
 
-  return (
+  return createPortal(
     /* Scrim */
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-6"
@@ -279,6 +287,7 @@ export function CategoryFormModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

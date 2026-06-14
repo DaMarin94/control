@@ -5,7 +5,7 @@
  *
  * Cubre:
  * - Shape completo de la respuesta (sobre + data con month, totals, movements)
- * - Listado del mes con únicos (orden desc)
+ * - Listado del mes con únicos (orden: amountCents DESC, desempate occurredAt DESC)
  * - Totales correctos (expenseCents, incomeCents, balanceCents)
  * - Movimiento con categoría soft-deleted sigue en totales y con categoría
  * - Bucketeo por zona propia: el mock devuelve los ítems que corresponden
@@ -307,27 +307,29 @@ describe('Movements (e2e)', () => {
       expect(res.body.data.totals.expenseCents).toBe(1500);
     });
 
-    it('200 + orden de unicos: más reciente primero (desc)', async () => {
-      // El SQL ordena DESC; el mock devuelve en ese orden y el service lo preserva
+    it('200 + orden de unicos: mayor monto primero (amountCents DESC)', async () => {
+      // El SQL ordena por amountCents DESC; el mock devuelve en ese orden y el service lo preserva
       const row1 = makeRawTransactionRow({
-        id: 'tx-newer',
-        occurredAt: new Date('2026-06-15T00:00:00Z'),
+        id: 'tx-mayor',
+        amountCents: 5000,
+        occurredAt: new Date('2026-06-01T00:00:00Z'),
       });
       const row2 = makeRawTransactionRow({
-        id: 'tx-older',
-        occurredAt: new Date('2026-06-01T00:00:00Z'),
+        id: 'tx-menor',
+        amountCents: 1000,
+        occurredAt: new Date('2026-06-15T00:00:00Z'),
       });
       mockPrisma.$queryRaw
         .mockResolvedValueOnce([row1, row2])
-        .mockResolvedValueOnce([makeRawTotalsRow(3000n, 0n)]);
+        .mockResolvedValueOnce([makeRawTotalsRow(6000n, 0n)]);
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(200);
 
-      expect(res.body.data.movements.unicos[0].id).toBe('tx-newer');
-      expect(res.body.data.movements.unicos[1].id).toBe('tx-older');
+      expect(res.body.data.movements.unicos[0].id).toBe('tx-mayor');
+      expect(res.body.data.movements.unicos[1].id).toBe('tx-menor');
     });
 
     /**

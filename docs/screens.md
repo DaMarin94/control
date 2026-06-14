@@ -158,9 +158,9 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 - **Sidebar** con el link "Vista del mes" marcado como activo.
 - **Encabezado con el mes activo** (nombre del mes y año) y **controles de navegación** para ir al mes anterior y al mes siguiente (RF-VM-004).
 - **Totales del mes** (RF-VM-002): total de gastos, total de ingresos y balance (ingresos − gastos), con positivo y negativo diferenciables. Se actualizan al agregar, editar o eliminar un movimiento.
-- **Lista de movimientos agrupada por tipo** en tres secciones rotuladas, en este orden (RF-VM-001):
-  1. **Únicos** — ordenados por fecha descendente (más reciente primero).
-  2. **Fijos** — sin día específico; sin ordenamiento por fecha.
+- **Lista de movimientos agrupada por tipo** en tres secciones rotuladas, en este orden (RF-VM-001). Dentro de cada sección, los movimientos se ordenan por **monto descendente** (el monto más alto primero, por magnitud, sin distinguir gasto de ingreso). Ante montos iguales, el desempate por sección es: Únicos por fecha descendente; Fijos por fecha de creación descendente; Cuotas por identificador ascendente.
+  1. **Únicos**.
+  2. **Fijos** — sin día específico.
   3. **Cuotas** — sin día específico; cada cuota muestra su número y total (ej: "3/12").
   - Cada ítem muestra: tipo (gasto/ingreso), monto, categoría, descripción (si la tiene) y su origen (único / fijo / cuota X/N).
   - Una sección sin movimientos en el mes no se muestra (no aparece su rótulo vacío).

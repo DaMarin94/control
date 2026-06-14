@@ -20,7 +20,7 @@ import { MonthViewWrapper } from "@/components/movements/month-view-wrapper";
 
 export default function MesPage() {
   return (
-    <div className="px-10 py-[34px] pb-20 max-w-[1120px] animate-screen-fade">
+    <div className="px-10 py-[34px] pb-20 max-w-[1120px] mx-auto animate-screen-fade">
       {/* Suspense necesario porque MonthViewWrapper usa useSearchParams */}
       <Suspense
         fallback={

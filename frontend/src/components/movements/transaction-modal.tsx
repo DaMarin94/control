@@ -13,6 +13,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TransactionForm } from "@/components/movements/transaction-form";
@@ -79,6 +80,11 @@ export function TransactionModal(props: TransactionModalProps) {
   const defaultMonth = mode === "create" ? props.defaultMonth : undefined;
 
   const [activeTab, setActiveTab] = useState<TabId>("single");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Cerrar con Escape
   const handleKeyDown = useCallback(
@@ -99,7 +105,9 @@ export function TransactionModal(props: TransactionModalProps) {
   else if (mode === "edit-fixed") title = "Editar · Fijo";
   else if (mode === "edit-installment") title = "Editar · Cuotas";
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     /* Scrim */
     <div
       className="fixed inset-0 z-40 flex items-center justify-center p-6"
@@ -206,6 +214,7 @@ export function TransactionModal(props: TransactionModalProps) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

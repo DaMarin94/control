@@ -7,7 +7,7 @@
  * - Toggle Gasto/Ingreso (.gi): dos botones 50/50 con variantes on-gasto/on-ingreso
  * - Monto: input mono 20px con prefijo "$"
  * - Bloque .warn para "sin categorías" (expense-soft, border expense/0.25)
- * - Footer: helper "Se guarda en mes año" + Cancelar ghost / Guardar
+ * - Footer: Cancelar ghost / Guardar
  *
  * Lógica de negocio preservada intacta.
  */
@@ -34,7 +34,6 @@ import {
   localToUtcIso,
   utcToLocalDate,
   utcToLocalTime,
-  formatMonthLabel,
 } from "@/lib/format";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -228,13 +227,6 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
     }
   }
 
-  // Helper "Se guarda en mes año"
-  const { date: currentDate } = getNowLocalDateAndTime();
-  const savedInMonth = watch("date") || currentDate;
-  const savedMonthLabel = savedInMonth
-    ? formatMonthLabel(savedInMonth.substring(0, 7))
-    : "";
-
   return (
     <>
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
@@ -409,11 +401,7 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
         </div>
 
         {/* ── Footer ── */}
-        <div className="flex items-center justify-between gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
-          <span className="text-[12.5px] text-muted">
-            Se guarda en{" "}
-            <span className="font-semibold text-ink-2">{savedMonthLabel}</span>
-          </span>
+        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
           <div className="flex gap-3">
             <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
               Cancelar

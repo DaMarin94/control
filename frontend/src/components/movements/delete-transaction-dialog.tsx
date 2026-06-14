@@ -9,6 +9,8 @@
  * Lógica preservada intacta.
  */
 
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useTransactions } from "@/hooks/use-transactions";
@@ -24,8 +26,13 @@ export function DeleteTransactionDialog({
   transaction,
   onClose,
 }: DeleteTransactionDialogProps) {
+  const [mounted, setMounted] = useState(false);
   const { toast } = useToast();
   const { deleteTransaction, isDeleting } = useTransactions();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   async function handleConfirm() {
     const month = transaction.occurredAt.substring(0, 7);
@@ -45,7 +52,9 @@ export function DeleteTransactionDialog({
   const typeLabel = transaction.type === "EXPENSE" ? "Gasto" : "Ingreso";
   const description = transaction.description ?? transaction.category.name;
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     /* Scrim */
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-6"
@@ -102,6 +111,7 @@ export function DeleteTransactionDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

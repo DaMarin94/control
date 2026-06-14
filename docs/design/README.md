@@ -146,7 +146,7 @@ Diálogos usan radio fijo 18px; logo gem 10px; avatar 50%.
   - **Fecha** (select con ícono calendario) — **solo en Único**.
   - **Nota de recurrencia** (ícono repetir, "Se registra automáticamente cada mes…") — **solo en Fijo**.
   - **Descripción** (siempre, opcional).
-- **Footer:** izq helper "Se guarda en junio 2026"; der "Cancelar" (ghost) + "Guardar" (primario con check).
+- **Footer:** der "Cancelar" (ghost) + "Guardar" (primario con check).
 - **Al guardar:** cierra el modal y muestra **toast** "Movimiento guardado" con acción "Ir a ver" → Vista del mes.
 - **Modo edición (de los wireframes, aún no implementado):** abre directamente en el tipo del movimiento, **sin tabs**, título "Editar · {tipo}". Si no hay categorías para el tipo elegido, mostrar bloque de advertencia con CTA a `/categorias`.
 
