@@ -3,17 +3,13 @@
 /**
  * Formulario de movimiento único (RF-MU-001 / RF-MU-002).
  *
- * Modo crear: campos con defaults (tipo=EXPENSE, fecha/hora=ahora).
- * Modo editar: campos precargados desde la transacción existente.
+ * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
+ * - Toggle Gasto/Ingreso (.gi): dos botones 50/50 con variantes on-gasto/on-ingreso
+ * - Monto: input mono 20px con prefijo "$"
+ * - Bloque .warn para "sin categorías" (expense-soft, border expense/0.25)
+ * - Footer: helper "Se guarda en mes año" + Cancelar ghost / Guardar
  *
- * Reglas de negocio:
- * - El usuario ingresa el monto en pesos; se convierte a centavos antes de enviar.
- * - Categorías filtradas por scope según el tipo (RN-010).
- * - Si cambia el tipo y la categoría deja de ser compatible, se resetea.
- * - occurredAt se construye combinando fecha + hora local → UTC ISO 8601 (RN-004).
- * - timezone = zona IANA del navegador en modo crear; zona guardada en modo editar.
- * - Sin categorías disponibles → bloquear guardado y mostrar enlace a /categorias.
- * - Error del backend → modal queda abierto con datos conservados (RNF-008).
+ * Lógica de negocio preservada intacta.
  */
 
 import { useEffect, useState } from "react";
@@ -21,6 +17,7 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Link from "next/link";
+import { AlertTriangle, Calendar, Check, ArrowDown, ArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,8 +34,10 @@ import {
   localToUtcIso,
   utcToLocalDate,
   utcToLocalTime,
+  formatMonthLabel,
 } from "@/lib/format";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -61,14 +60,12 @@ type TransactionFormData = z.infer<typeof transactionSchema>;
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface TransactionFormProps {
-  /** null = modo crear; Transaction = modo editar */
   transaction: Transaction | null;
   onClose: () => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Devuelve las categorías compatibles con el tipo dado (RN-010) */
 function filterCategoriesByType(
   categories: { id: string; name: string; scope: CategoryScope }[],
   type: TransactionType,
@@ -79,7 +76,6 @@ function filterCategoriesByType(
   });
 }
 
-/** Devuelve fecha y hora actuales en la timezone del navegador */
 function getNowLocalDateAndTime() {
   const now = new Date();
   const tz = getBrowserTimezone();
@@ -113,15 +109,10 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
   const { categories } = useCategories();
   const { createTransaction, updateTransaction, isCreating, isUpdating } = useTransactions();
 
-  // Estado del modal inline de nueva categoría (RF-MU-004)
   const [showCategoryModal, setShowCategoryModal] = useState(false);
 
   const isLoading = isEditing ? isUpdating : isCreating;
-
-  // Determinar timezone: al crear = browser; al editar = zona guardada del movimiento
   const timezone = isEditing ? transaction.timezone : getBrowserTimezone();
-
-  // Defaults para el form
   const { date: nowDate, time: nowTime } = getNowLocalDateAndTime();
 
   const defaultValues: TransactionFormData = isEditing
@@ -155,7 +146,6 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
     defaultValues,
   });
 
-  // Sincronizar cuando cambia la transacción (abrir en modo editar)
   useEffect(() => {
     if (isEditing) {
       reset({
@@ -172,13 +162,11 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
   const selectedType = watch("type");
   const selectedCategoryId = watch("categoryId");
 
-  // Categorías disponibles filtradas por tipo
   const availableCategories = filterCategoriesByType(
     (categories ?? []).map((c) => ({ id: c.id, name: c.name, scope: c.scope })),
     selectedType,
   );
 
-  // Si cambia el tipo y la categoría elegida deja de ser compatible → resetear
   useEffect(() => {
     if (selectedCategoryId && categories) {
       const isCompatible = availableCategories.some((c) => c.id === selectedCategoryId);
@@ -192,7 +180,7 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
 
   async function onSubmit(data: TransactionFormData) {
     const amountCents = parseCurrencyInput(data.amountInput);
-    if (amountCents === null) return; // Zod ya valida esto, pero guardarnos
+    if (amountCents === null) return;
 
     const occurredAt = localToUtcIso(data.date, data.time, timezone);
 
@@ -228,7 +216,6 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
         return;
       }
 
-      // Toast con acción "Ir a ver" → /mes?month=YYYY-MM del mes del movimiento
       const month = occurredAt.substring(0, 7);
       toast.success("Movimiento guardado correctamente.", {
         action: {
@@ -241,159 +228,212 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
     }
   }
 
+  // Helper "Se guarda en mes año"
+  const { date: currentDate } = getNowLocalDateAndTime();
+  const savedInMonth = watch("date") || currentDate;
+  const savedMonthLabel = savedInMonth
+    ? formatMonthLabel(savedInMonth.substring(0, 7))
+    : "";
+
   return (
     <>
-    <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4 px-6 py-5">
-      {/* ── Tipo ── */}
-      <div className="space-y-1.5">
-        <Label htmlFor="tx-type" required>
-          Tipo
-        </Label>
-        <Controller
-          name="type"
-          control={control}
-          render={({ field }) => (
-            <Select
-              id="tx-type"
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.type?.message}
-            >
-              <option value="EXPENSE">Gasto</option>
-              <option value="INCOME">Ingreso</option>
-            </Select>
-          )}
-        />
-      </div>
-
-      {/* ── Monto ── */}
-      <div className="space-y-1.5">
-        <Label htmlFor="tx-amount" required>
-          Monto ($)
-        </Label>
-        <Input
-          id="tx-amount"
-          type="text"
-          inputMode="decimal"
-          placeholder="0,00"
-          error={errors.amountInput?.message}
-          {...register("amountInput")}
-        />
-        <p className="text-xs text-muted-foreground">Ingresá el monto en pesos (ej: 1500,50)</p>
-      </div>
-
-      {/* ── Categoría ── */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="tx-category" required>
-            Categoría
-          </Label>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowCategoryModal(true)}
-            className="h-auto py-0.5 text-xs text-primary hover:text-primary/80"
-          >
-            + Nueva
-          </Button>
-        </div>
-        {noCategoriesAvailable ? (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-            No hay categorías disponibles para este tipo de movimiento.{" "}
-            <Link
-              href="/categorias"
-              className="font-semibold underline underline-offset-2 hover:opacity-80"
-            >
-              Creá una categoría
-            </Link>{" "}
-            o usá el botón &ldquo;+ Nueva&rdquo; de arriba.
-          </div>
-        ) : (
+      <form onSubmit={handleSubmit(onSubmit)} noValidate>
+        <div className="px-[22px] pb-[22px] space-y-[14px]">
+          {/* ── Toggle Gasto/Ingreso (.gi) ── */}
           <Controller
-            name="categoryId"
+            name="type"
             control={control}
             render={({ field }) => (
-              <Select
-                id="tx-category"
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.categoryId?.message}
-              >
-                <option value="">Seleccioná una categoría</option>
-                {availableCategories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </Select>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => field.onChange("EXPENSE")}
+                  className={cn(
+                    "flex items-center justify-center gap-2 rounded-ctl border-[1.5px] px-3 py-3 text-[14px] font-semibold transition-colors duration-[140ms] cursor-pointer",
+                    "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--expense-soft)]",
+                    field.value === "EXPENSE"
+                      ? "border-expense bg-expense-soft text-expense-ink"
+                      : "border-line bg-panel text-muted hover:text-ink",
+                  )}
+                >
+                  <ArrowDown size={16} aria-hidden="true" />
+                  Gasto
+                </button>
+                <button
+                  type="button"
+                  onClick={() => field.onChange("INCOME")}
+                  className={cn(
+                    "flex items-center justify-center gap-2 rounded-ctl border-[1.5px] px-3 py-3 text-[14px] font-semibold transition-colors duration-[140ms] cursor-pointer",
+                    "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--income-soft)]",
+                    field.value === "INCOME"
+                      ? "border-income bg-income-soft text-income-ink"
+                      : "border-line bg-panel text-muted hover:text-ink",
+                  )}
+                >
+                  <ArrowUp size={16} aria-hidden="true" />
+                  Ingreso
+                </button>
+              </div>
             )}
           />
-        )}
-      </div>
+          {errors.type && (
+            <p className="text-[12px] text-expense-ink">{errors.type.message}</p>
+          )}
 
-      {/* ── Fecha y hora ── */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="tx-date" required>
-            Fecha
-          </Label>
-          <Input
-            id="tx-date"
-            type="date"
-            error={errors.date?.message}
-            {...register("date")}
-          />
+          {/* ── Monto (input amount mono) ── */}
+          <div className="flex flex-col gap-[7px]">
+            <Label htmlFor="tx-amount" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+              Monto
+            </Label>
+            <div
+              className={cn(
+                "flex items-center gap-2 rounded-ctl border-[1.5px] px-[13px] py-[11px] transition-colors duration-[140ms]",
+                "focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft)]",
+                errors.amountInput
+                  ? "border-expense shadow-[0_0_0_3px_var(--expense-soft)]"
+                  : "border-line-strong bg-panel",
+              )}
+            >
+              <span className="text-[15px] text-muted mono shrink-0">$</span>
+              <input
+                id="tx-amount"
+                type="text"
+                inputMode="decimal"
+                placeholder="0,00"
+                className="flex-1 border-none outline-none bg-transparent mono text-[20px] font-semibold tracking-[-0.01em] text-ink placeholder:text-faint"
+                {...register("amountInput")}
+              />
+            </div>
+            {errors.amountInput && (
+              <p className="text-[12px] text-expense-ink">{errors.amountInput.message}</p>
+            )}
+          </div>
+
+          {/* ── Categoría ── */}
+          <div className="flex flex-col gap-[7px]">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="tx-category" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+                Categoría
+              </Label>
+              <button
+                type="button"
+                onClick={() => setShowCategoryModal(true)}
+                className="text-[12.5px] font-semibold text-accent-ink hover:text-accent transition-colors duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-sm"
+              >
+                + Nueva
+              </button>
+            </div>
+
+            {/* Bloque .warn cuando no hay categorías */}
+            {noCategoriesAvailable ? (
+              <div className="flex items-start gap-[11px] rounded-ctl border px-[14px] py-[13px] bg-expense-soft" style={{ borderColor: "oklch(0.57 0.16 27 / 0.25)" }}>
+                <AlertTriangle size={18} className="text-expense-ink shrink-0 mt-[1px]" aria-hidden="true" />
+                <div className="text-[13px] leading-[1.45] text-expense-ink">
+                  <b className="font-bold">Sin categorías para este tipo.</b>{" "}
+                  <Link
+                    href="/categorias"
+                    className="font-bold underline underline-offset-[2px] text-expense-ink hover:opacity-80"
+                    onClick={onClose}
+                  >
+                    Creá una categoría
+                  </Link>{" "}
+                  o usá el botón &ldquo;+ Nueva&rdquo; de arriba.
+                </div>
+              </div>
+            ) : (
+              <Controller
+                name="categoryId"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    id="tx-category"
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.categoryId?.message}
+                  >
+                    <option value="">Seleccioná una categoría</option>
+                    {availableCategories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              />
+            )}
+          </div>
+
+          {/* ── Fecha y hora ── */}
+          <div className="grid grid-cols-2 gap-[14px]">
+            <div className="flex flex-col gap-[7px]">
+              <Label htmlFor="tx-date" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+                <span className="inline-flex items-center gap-1">
+                  <Calendar size={13} aria-hidden="true" />
+                  Fecha
+                </span>
+              </Label>
+              <Input
+                id="tx-date"
+                type="date"
+                error={errors.date?.message}
+                {...register("date")}
+              />
+            </div>
+            <div className="flex flex-col gap-[7px]">
+              <Label htmlFor="tx-time" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+                Hora
+              </Label>
+              <Input
+                id="tx-time"
+                type="time"
+                error={errors.time?.message}
+                {...register("time")}
+              />
+            </div>
+          </div>
+
+          {/* ── Descripción ── */}
+          <div className="flex flex-col gap-[7px]">
+            <Label htmlFor="tx-description" className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+              Descripción{" "}
+              <span className="text-faint font-normal">(opcional)</span>
+            </Label>
+            <Input
+              id="tx-description"
+              type="text"
+              placeholder="Ej: Compra en Día"
+              error={errors.description?.message}
+              {...register("description")}
+            />
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="tx-time" required>
-            Hora
-          </Label>
-          <Input
-            id="tx-time"
-            type="time"
-            error={errors.time?.message}
-            {...register("time")}
-          />
+
+        {/* ── Footer ── */}
+        <div className="flex items-center justify-between gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
+          <span className="text-[12.5px] text-muted">
+            Se guarda en{" "}
+            <span className="font-semibold text-ink-2">{savedMonthLabel}</span>
+          </span>
+          <div className="flex gap-3">
+            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={isLoading || noCategoriesAvailable}
+              className="gap-1.5"
+            >
+              <Check size={14} aria-hidden="true" />
+              {isLoading
+                ? isEditing ? "Guardando..." : "Guardando..."
+                : isEditing ? "Guardar cambios" : "Guardar"}
+            </Button>
+          </div>
         </div>
-      </div>
-
-      {/* ── Descripción ── */}
-      <div className="space-y-1.5">
-        <Label htmlFor="tx-description">Descripción</Label>
-        <Input
-          id="tx-description"
-          type="text"
-          placeholder="Opcional"
-          error={errors.description?.message}
-          {...register("description")}
-        />
-      </div>
-
-      {/* ── Acciones ── */}
-      <div className="flex justify-end gap-3 pt-2">
-        <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
-          Cancelar
-        </Button>
-        <Button
-          type="submit"
-          disabled={isLoading || noCategoriesAvailable}
-        >
-          {isLoading
-            ? isEditing
-              ? "Guardando..."
-              : "Guardando..."
-            : isEditing
-              ? "Guardar cambios"
-              : "Guardar movimiento"}
-        </Button>
-      </div>
-    </form>
+      </form>
 
       {/* ── Modal inline de nueva categoría (RF-MU-004) ── */}
-      {/* Se renderiza como hermano del form (no descendiente) para evitar un
-          <form> anidado dentro de otro <form>, que es HTML inválido y rompe
-          la hidratación de React. */}
       {showCategoryModal && (
         <CategoryFormModal
           category={null}

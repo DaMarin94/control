@@ -291,28 +291,22 @@ describe("CategoryFormModal", () => {
 
   // ─── Modo inline (RF-MU-004) ─────────────────────────────────────────────────
 
-  it("modo inline EXPENSE: oculta la opción INCOME y preselecciona EXPENSE", () => {
+  it("modo inline EXPENSE: oculta el botón INCOME y muestra EXPENSE y BOTH", () => {
     renderModal({ category: null, lockScopeToType: "EXPENSE" });
 
-    const scopeSelect = screen.getByLabelText(/tipo/i) as HTMLSelectElement;
-    const optionValues = Array.from(scopeSelect.options).map((o) => o.value);
-
-    // Oculta el tipo opuesto; mantiene EXPENSE y BOTH
-    expect(optionValues).toEqual(expect.arrayContaining(["EXPENSE", "BOTH"]));
-    expect(optionValues).not.toContain("INCOME");
-    // Preselecciona el tipo exacto del movimiento
-    expect(scopeSelect.value).toBe("EXPENSE");
+    // El scope picker usa botones (no un select). Con lockScopeToType="EXPENSE" se oculta el botón "Ingreso"
+    expect(screen.queryByRole("button", { name: /^ingreso$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^gasto$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^ambos$/i })).toBeInTheDocument();
   });
 
-  it("modo inline INCOME: oculta la opción EXPENSE y preselecciona INCOME", () => {
+  it("modo inline INCOME: oculta el botón EXPENSE y muestra INCOME y BOTH", () => {
     renderModal({ category: null, lockScopeToType: "INCOME" });
 
-    const scopeSelect = screen.getByLabelText(/tipo/i) as HTMLSelectElement;
-    const optionValues = Array.from(scopeSelect.options).map((o) => o.value);
-
-    expect(optionValues).toEqual(expect.arrayContaining(["INCOME", "BOTH"]));
-    expect(optionValues).not.toContain("EXPENSE");
-    expect(scopeSelect.value).toBe("INCOME");
+    // Con lockScopeToType="INCOME" se oculta el botón "Gasto"
+    expect(screen.queryByRole("button", { name: /^gasto$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^ingreso$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^ambos$/i })).toBeInTheDocument();
   });
 
   it("modo inline: al crear con éxito llama a onCreated con la categoría creada y cierra", async () => {

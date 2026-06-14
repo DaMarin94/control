@@ -3,6 +3,15 @@ import { cn } from "@/lib/utils";
 
 /**
  * Primitiva Input tipada.
+ * Re-estilada contra tokens del design system "Precise Ledger" (Fase 2).
+ *
+ * Spec DS (.input):
+ *   - bg-panel, border 1.5px border-line, rounded-ctl
+ *   - padding 11px 13px, font-ui 15px, text-ink
+ *   - placeholder: text-faint
+ *   - focus-visible: border-accent + ring 3px var(--accent-soft)
+ *   - error: border-expense + texto text-expense-ink; ring expense-soft
+ *
  * Nunca se usa <input> HTML crudo en los formularios — todo pasa por aquí.
  */
 
@@ -18,12 +27,27 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         <input
           type={type}
           className={cn(
-            "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors",
-            "file:border-0 file:bg-transparent file:text-sm file:font-medium",
-            "placeholder:text-muted-foreground",
-            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            // Layout y tipografía base
+            "flex w-full font-ui text-[15px] text-ink",
+            // Superficie y borde
+            "rounded-ctl border-[1.5px] border-line bg-panel",
+            // Padding DS: 11px vertical, 13px horizontal
+            "px-[13px] py-[11px]",
+            // Transición
+            "transition-all duration-[140ms]",
+            // Placeholder
+            "placeholder:text-faint",
+            // Focus: borde accent + ring 3px accent-soft
+            "focus-visible:outline-none focus-visible:border-accent focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+            // Disabled
             "disabled:cursor-not-allowed disabled:opacity-50",
-            error && "border-red-500 focus-visible:ring-red-500",
+            // File inputs
+            "file:border-0 file:bg-transparent file:text-sm file:font-medium",
+            // Estado error: borde expense, ring expense-soft
+            error && [
+              "border-expense",
+              "focus-visible:border-expense focus-visible:shadow-[0_0_0_3px_var(--expense-soft)]",
+            ],
             className,
           )}
           ref={ref}
@@ -31,7 +55,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           {...props}
         />
         {error && (
-          <p className="text-xs text-red-600" role="alert">
+          <p className="text-xs text-expense-ink" role="alert">
             {error}
           </p>
         )}

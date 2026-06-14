@@ -6,14 +6,17 @@
  * actual. No lista movimientos individuales.
  *
  * Ruta privada: el middleware redirige a /login si no hay sesión activa.
- * El header y la navegación global viven en el AppSidebar del layout (app).
+ * La navegación global vive en el AppSidebar del layout (app).
+ *
+ * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
+ * Padding y max-width del DS: 34px 40px, max-width 1120px.
  */
 
 import { DashboardClient } from "@/components/dashboard/dashboard-client";
 
 export default function DashboardPage() {
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
+    <div className="px-10 py-[34px] pb-20 max-w-[1120px] animate-screen-fade">
       <DashboardClient />
     </div>
   );

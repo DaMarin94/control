@@ -1,17 +1,19 @@
 /**
  * Layout del grupo de rutas autenticadas — (app)
  *
+ * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
+ *
  * Aplica a: / (dashboard), /mes, /categorias.
  * NO aplica a: /login, /registro (están fuera del route group).
  *
  * Responsabilidades:
  * - Obtener el email del usuario vía auth() (Server Component).
  * - Renderizar el AppSidebar con el email ya disponible.
- * - Dar la estructura de dos columnas: sidebar fijo + contenido scrollable.
+ * - Dar la estructura de dos columnas: sidebar fijo 248px + contenido scrollable.
  *
- * El sidebar se posiciona fixed en desktop (lg:w-64). El contenido principal
- * recibe un padding-left igual al ancho del sidebar en desktop para no quedar
- * debajo de él.
+ * El sidebar se posiciona fixed en desktop (≥941px, 248px).
+ * El contenido principal recibe padding-left equivalente en desktop.
+ * El <main> tiene el padding y max-width del DS (content area).
  */
 
 import { auth } from "@/auth";
@@ -28,12 +30,12 @@ export default async function AppLayout({
   const email = session?.user?.email ?? "";
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-paper">
       {/* Sidebar: fixed en desktop, drawer en mobile */}
       <AppSidebar email={email} />
 
       {/* Contenido principal: desplazado a la derecha del sidebar en desktop */}
-      <main className="lg:pl-64 min-h-screen">
+      <main className="[@media(min-width:941px)]:pl-[248px] min-h-screen">
         {children}
       </main>
     </div>

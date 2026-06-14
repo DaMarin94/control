@@ -3,26 +3,27 @@
 /**
  * Modal de creación y edición de categorías (RF-CAT-002 / RF-CAT-003).
  *
- * Modo crear: campos vacíos, llama a createCategory.
- * Modo editar: campos precargados con la categoría actual, llama a updateCategory.
+ * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
+ * - Scrim: fijo, ink/0.46 + blur(3px)
+ * - Diálogo: max-width 380px, radio 18px, shadow-lg, animación modal-pop
+ * - Scope picker: .scopepick (tres botones Ambos/Gasto/Ingreso, activo en accent)
  *
- * Manejo de 409 al crear:
- * - Sin error.data → colisión con activa → error en el campo nombre.
- * - Con error.data.reactivable === true → muestra ReactivationPrompt.
+ * Lógica preservada intacta.
  */
 
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useCategories } from "@/hooks/use-categories";
-import { type Category, SCOPE_OPTIONS } from "@/types/category";
+import { type Category } from "@/types/category";
 import { ReactivationPrompt } from "./reactivation-prompt";
+import { cn } from "@/lib/utils";
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -33,25 +34,20 @@ const categorySchema = z.object({
 
 type CategoryFormData = z.infer<typeof categorySchema>;
 
+// ─── Scope picker config ──────────────────────────────────────────────────────
+
+const SCOPE_PICKER_OPTIONS = [
+  { value: "BOTH", label: "Ambos" },
+  { value: "EXPENSE", label: "Gasto" },
+  { value: "INCOME", label: "Ingreso" },
+] as const;
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface CategoryFormModalProps {
-  /** null = modo crear; Category = modo editar */
   category: Category | null;
   onClose: () => void;
-  /**
-   * (Modo inline — RF-MU-004) Restringe las opciones de scope al tipo compatible
-   * con el movimiento en curso. Oculta el tipo opuesto; pre-selecciona el tipo exacto.
-   * - EXPENSE → ofrece EXPENSE ("Gasto") y BOTH ("Ambos"); oculta INCOME.
-   * - INCOME  → ofrece INCOME ("Ingreso") y BOTH ("Ambos"); oculta EXPENSE.
-   * Si no se pasa → comportamiento normal (tres opciones, default BOTH).
-   */
   lockScopeToType?: "EXPENSE" | "INCOME";
-  /**
-   * (Modo inline — RF-MU-004) Callback invocado tras crear o reactivar con éxito.
-   * Recibe la categoría creada/reactivada para que el padre la autoseleccione.
-   * Si no se pasa, al crear con éxito solo se llama onClose() (comportamiento actual).
-   */
   onCreated?: (category: Category) => void;
 }
 
@@ -75,8 +71,6 @@ export function CategoryFormModal({
     color: string;
   } | null>(null);
 
-  // En modo inline (lockScopeToType presente), el scope pre-seleccionado es el
-  // tipo exacto del movimiento. Sin lockScopeToType, el default es "BOTH".
   const defaultScope = lockScopeToType ?? (category?.scope ?? "BOTH");
 
   const {
@@ -84,6 +78,7 @@ export function CategoryFormModal({
     handleSubmit,
     setError,
     reset,
+    control,
     formState: { errors },
   } = useForm<CategoryFormData>({
     resolver: zodResolver(categorySchema),
@@ -131,7 +126,6 @@ export function CategoryFormModal({
 
       if (!result.success) {
         if (result.reactivable) {
-          // Mostrar prompt de reactivación; no cerrar el modal aún
           setReactivable(result.reactivable);
           return;
         }
@@ -146,7 +140,6 @@ export function CategoryFormModal({
       }
 
       toast.success("Categoría creada correctamente.");
-      // En modo inline, notificar al padre con la categoría recién creada (RF-MU-004)
       if (onCreated && result.category) {
         onCreated(result.category);
       }
@@ -154,7 +147,7 @@ export function CategoryFormModal({
     }
   }
 
-  // Si hay un prompt de reactivación activo, renderizarlo sobre el modal
+  // Si hay un prompt de reactivación activo, renderizarlo
   if (reactivable) {
     return (
       <ReactivationPrompt
@@ -162,7 +155,6 @@ export function CategoryFormModal({
         onCancel={() => setReactivable(null)}
         onReactivated={(reactivatedCategory) => {
           setReactivable(null);
-          // En modo inline, notificar al padre con la categoría reactivada (RF-MU-004)
           if (onCreated) {
             onCreated(reactivatedCategory);
           }
@@ -172,106 +164,117 @@ export function CategoryFormModal({
     );
   }
 
+  // Opciones filtradas por lockScopeToType
+  const visibleOptions = SCOPE_PICKER_OPTIONS.filter((opt) => {
+    if (lockScopeToType === "EXPENSE") return opt.value !== "INCOME";
+    if (lockScopeToType === "INCOME") return opt.value !== "EXPENSE";
+    return true;
+  });
+
   return (
+    /* Scrim */
     <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-6"
+      style={{ background: "oklch(0.18 0.02 270 / 0.46)", backdropFilter: "blur(3px)" }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="category-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="w-full max-w-md rounded-lg border bg-card shadow-lg">
+      {/* Diálogo */}
+      <div
+        className="w-full max-w-[380px] bg-panel border border-line overflow-hidden animate-modal-pop"
+        style={{ borderRadius: "18px", boxShadow: "var(--shadow-lg)" }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between border-b px-6 py-4">
-          <h2 id="category-modal-title" className="text-lg font-semibold">
+        <div className="flex items-center justify-between px-[22px] pt-5 pb-4">
+          <h2
+            id="category-modal-title"
+            className="text-[18px] font-bold tracking-[-0.01em] text-ink m-0"
+          >
             {isEditing ? "Editar categoría" : "Nueva categoría"}
           </h2>
           <button
             onClick={onClose}
             aria-label="Cerrar"
-            className="rounded p-1 text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 
         {/* Formulario */}
-        <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4 px-6 py-5">
-          {/* Campo nombre */}
-          <div className="space-y-1.5">
-            <Label htmlFor="cat-name" required>
-              Nombre
-            </Label>
-            <Input
-              id="cat-name"
-              type="text"
-              placeholder="Ej: Alimentación"
-              error={errors.name?.message}
-              {...register("name")}
-            />
-          </div>
-
-          {/* Campo scope */}
-          <div className="space-y-1.5">
-            <Label htmlFor="cat-scope">Tipo</Label>
-            <Select id="cat-scope" error={errors.scope?.message} {...register("scope")}>
-              {SCOPE_OPTIONS.filter((opt) => {
-                // En modo inline (lockScopeToType presente), ocultar el tipo opuesto
-                // al del movimiento en curso (RF-MU-004).
-                // EXPENSE → mostrar EXPENSE y BOTH; ocultar INCOME.
-                // INCOME  → mostrar INCOME y BOTH; ocultar EXPENSE.
-                if (lockScopeToType === "EXPENSE") return opt.value !== "INCOME";
-                if (lockScopeToType === "INCOME") return opt.value !== "EXPENSE";
-                return true; // Sin lockScopeToType → las tres opciones
-              }).map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Define si esta categoría aplica a gastos, ingresos o ambos.
-            </p>
-          </div>
-
-          {/* Nota: color no editable */}
-          {isEditing && (
-            <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-              <span
-                className="inline-block h-4 w-4 shrink-0 rounded-full border"
-                style={{ backgroundColor: category.color }}
-                aria-hidden="true"
+        <form onSubmit={handleSubmit(onSubmit)} noValidate>
+          <div className="px-[22px] pb-[22px] space-y-[14px]">
+            {/* Campo nombre */}
+            <div className="flex flex-col gap-[7px]">
+              <Label htmlFor="cat-name" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+                Nombre
+              </Label>
+              <Input
+                id="cat-name"
+                type="text"
+                placeholder="Ej: Alimentación"
+                error={errors.name?.message}
+                {...register("name")}
               />
-              El color se asigna automáticamente y no se puede cambiar.
             </div>
-          )}
 
-          {/* Acciones */}
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
+            {/* Scope picker */}
+            <div className="flex flex-col gap-[7px]">
+              <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+                Alcance
+              </Label>
+              <Controller
+                name="scope"
+                control={control}
+                render={({ field }) => (
+                  <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${visibleOptions.length}, 1fr)` }}>
+                    {visibleOptions.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => field.onChange(opt.value)}
+                        className={cn(
+                          "text-[13px] font-semibold cursor-pointer px-2 py-[10px] rounded-ctl border transition-colors duration-[140ms]",
+                          field.value === opt.value
+                            ? "border-accent bg-accent-soft text-accent-ink"
+                            : "border-line bg-panel text-muted hover:text-ink",
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              />
+              <p className="text-[12.5px] text-muted">
+                Define si esta categoría aplica a gastos, ingresos o ambos.
+              </p>
+            </div>
+
+            {/* Nota de color en modo editar */}
+            {isEditing && (
+              <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-3 py-2 text-[13px] text-muted">
+                <span
+                  className="inline-block h-4 w-4 shrink-0 rounded-chip border border-line"
+                  style={{ backgroundColor: category.color }}
+                  aria-hidden="true"
+                />
+                El color se asigna automáticamente y no se puede cambiar.
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
+            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" size="sm" disabled={isLoading}>
               {isLoading
-                ? isEditing
-                  ? "Guardando..."
-                  : "Creando..."
-                : isEditing
-                  ? "Guardar cambios"
-                  : "Crear categoría"}
+                ? isEditing ? "Guardando..." : "Creando..."
+                : isEditing ? "Guardar cambios" : "Crear categoría"}
             </Button>
           </div>
         </form>

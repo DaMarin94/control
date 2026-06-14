@@ -3,13 +3,15 @@
 /**
  * Sidebar de navegación global — RF-NAV-001.
  *
+ * Re-estilada con tokens del DS "Precise Ledger" (Fase 3).
+ *
  * Client Component por:
  * - usePathname() para marcar la sección activa
  * - useState para el estado colapsado (mobile hamburguesa)
  *
  * Layout:
- * - Desktop: fijo a la izquierda (w-64), siempre visible
- * - Mobile: oculto por defecto; drawer overlay activado por botón hamburguesa
+ * - Desktop: fijo a la izquierda (248px), siempre visible
+ * - Mobile (≤940px): oculto por defecto; drawer overlay activado por botón hamburguesa
  *
  * Recibe el email del usuario del layout padre (Server Component que llama a auth()).
  */
@@ -20,15 +22,22 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NewTransactionButton } from "@/components/movements/new-transaction-button";
 import { UserMenu } from "@/components/layout/user-menu";
+import {
+  LayoutDashboard,
+  CalendarDays,
+  Tags,
+  Menu,
+  X,
+} from "lucide-react";
 
 interface AppSidebarProps {
   email: string;
 }
 
 const NAV_LINKS = [
-  { href: "/", label: "Dashboard", exact: true },
-  { href: "/mes", label: "Vista del mes", exact: false },
-  { href: "/categorias", label: "Categorías", exact: false },
+  { href: "/", label: "Dashboard", exact: true, Icon: LayoutDashboard },
+  { href: "/mes", label: "Vista del mes", exact: false, Icon: CalendarDays },
+  { href: "/categorias", label: "Categorías", exact: false, Icon: Tags },
 ] as const;
 
 export function AppSidebar({ email }: AppSidebarProps) {
@@ -46,84 +55,109 @@ export function AppSidebar({ email }: AppSidebarProps) {
   }
 
   const sidebarContent = (
-    <div className="flex h-full flex-col">
-      {/* ── Logo / nombre ── */}
-      <div className="border-b px-6 py-5">
-        <Link
-          href="/"
-          className="text-xl font-bold tracking-tight hover:opacity-80 transition-opacity"
-          onClick={() => setMobileOpen(false)}
+    <div className="flex h-full flex-col gap-1">
+      {/* ── Logo ── */}
+      <Link
+        href="/"
+        onClick={() => setMobileOpen(false)}
+        className="flex items-center gap-[11px] px-2 pb-[18px] pt-1 rounded-ctl transition-colors duration-[140ms] hover:bg-panel-2 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+      >
+        {/* Gem */}
+        <span
+          aria-hidden="true"
+          className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] text-white font-bold text-[18px] leading-none shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0_/_0.25)]"
+          style={{ background: "linear-gradient(150deg, var(--accent), var(--accent-press))" }}
         >
-          Control
-        </Link>
-      </div>
+          C
+        </span>
+        {/* Wordmark */}
+        <div>
+          <span className="block text-[18px] font-bold tracking-[-0.01em] text-ink leading-none">
+            Control
+          </span>
+          <span className="block text-[11px] font-medium text-muted tracking-[0.04em] mt-[-2px]">
+            Finanzas del mes
+          </span>
+        </div>
+      </Link>
 
-      {/* ── Botón "Nuevo movimiento" ── */}
-      <div className="px-4 py-4 border-b">
-        <NewTransactionButton label="Nuevo movimiento" variant="default" />
-      </div>
+      {/* ── Label de sección ── */}
+      <p className="px-[10px] pb-[6px] pt-[10px] text-[10.5px] font-semibold uppercase tracking-[0.12em] text-faint">
+        Menú
+      </p>
 
       {/* ── Links de navegación ── */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4">
-        <ul className="space-y-1" role="list">
-          {NAV_LINKS.map(({ href, label, exact }) => (
-            <li key={href}>
-              <Link
-                href={href}
-                onClick={() => setMobileOpen(false)}
-                className={cn(
-                  "flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  isActive(href, exact)
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                )}
-                aria-current={isActive(href, exact) ? "page" : undefined}
-              >
-                {label}
-              </Link>
-            </li>
-          ))}
+      <nav aria-label="Navegación principal">
+        <ul className="flex flex-col gap-0.5" role="list">
+          {NAV_LINKS.map(({ href, label, exact, Icon }) => {
+            const active = isActive(href, exact);
+            return (
+              <li key={href}>
+                <Link
+                  href={href}
+                  onClick={() => setMobileOpen(false)}
+                  className={cn(
+                    "flex items-center gap-[11px] rounded-ctl px-[11px] py-[9px]",
+                    "text-[14.5px] font-medium transition-colors duration-[140ms]",
+                    active
+                      ? "bg-accent-soft text-accent-ink font-semibold"
+                      : "text-ink-2 hover:bg-panel-2 hover:text-ink",
+                  )}
+                  aria-current={active ? "page" : undefined}
+                >
+                  <Icon
+                    size={18}
+                    className={cn("shrink-0", active ? "opacity-100" : "opacity-70")}
+                    aria-hidden="true"
+                  />
+                  {label}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </nav>
 
-      {/* ── Menú de usuario (parte inferior) ── */}
-      <div className="border-t px-4 py-4">
-        <UserMenu email={email} />
+      {/* ── Spacer ── */}
+      <div className="flex-1" />
+
+      {/* ── CTA Nuevo movimiento ── */}
+      <div className="mx-0.5 mb-[14px] mt-1 [&>*]:w-full [&>*>button]:w-full">
+        <NewTransactionButton label="+ Nuevo movimiento" variant="default" />
       </div>
+
+      {/* ── Menú de usuario (parte inferior) ── */}
+      <UserMenu email={email} />
     </div>
   );
 
   return (
     <>
-      {/* ── Botón hamburguesa — solo en mobile ── */}
+      {/* ── Botón hamburguesa — solo en mobile (≤940px) ── */}
       <button
         type="button"
         aria-label="Abrir menú"
         aria-expanded={mobileOpen}
         onClick={() => setMobileOpen(true)}
-        className="fixed top-4 left-4 z-40 flex items-center justify-center rounded-md p-2 text-foreground hover:bg-accent lg:hidden"
+        className={cn(
+          "fixed top-4 left-4 z-40",
+          "flex items-center justify-center rounded-ctl p-2",
+          "text-ink-2 hover:bg-panel-2 transition-colors duration-[140ms]",
+          "[@media(min-width:941px)]:hidden",
+        )}
       >
-        {/* Hamburguesa icon (3 líneas) */}
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <line x1="4" y1="6" x2="20" y2="6" />
-          <line x1="4" y1="12" x2="20" y2="12" />
-          <line x1="4" y1="18" x2="20" y2="18" />
-        </svg>
+        <Menu size={20} aria-hidden="true" />
       </button>
 
-      {/* ── Sidebar desktop — siempre visible ── */}
-      <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 lg:border-r lg:bg-background z-30">
+      {/* ── Sidebar desktop — siempre visible en ≥941px ── */}
+      <aside
+        className={cn(
+          "hidden [@media(min-width:941px)]:flex",
+          "fixed inset-y-0 left-0 z-30 w-[248px] flex-col",
+          "border-r border-line bg-panel",
+          "px-4 py-[22px]",
+        )}
+      >
         {sidebarContent}
       </aside>
 
@@ -132,34 +166,27 @@ export function AppSidebar({ email }: AppSidebarProps) {
         <>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+            className="fixed inset-0 z-40 bg-ink/50 [@media(min-width:941px)]:hidden"
             aria-hidden="true"
             onClick={() => setMobileOpen(false)}
           />
           {/* Panel del drawer */}
-          <aside className="fixed inset-y-0 left-0 z-50 w-64 flex-col border-r bg-background shadow-xl lg:hidden flex">
+          <aside
+            className={cn(
+              "fixed inset-y-0 left-0 z-50 w-[248px] flex flex-col",
+              "border-r border-line bg-panel shadow-[var(--shadow-lg)]",
+              "px-4 py-[22px]",
+              "[@media(min-width:941px)]:hidden",
+            )}
+          >
             {/* Botón cerrar dentro del drawer */}
             <button
               type="button"
               aria-label="Cerrar menú"
               onClick={() => setMobileOpen(false)}
-              className="absolute top-4 right-4 flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="absolute top-4 right-4 flex items-center justify-center rounded-ctl p-1.5 text-muted hover:bg-panel-2 hover:text-ink transition-colors duration-[140ms]"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
+              <X size={18} aria-hidden="true" />
             </button>
             {sidebarContent}
           </aside>

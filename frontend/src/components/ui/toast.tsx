@@ -2,7 +2,20 @@
 
 /**
  * Sistema de toasts centralizado.
- * Incluye: ToastContext, ToastProvider, y el componente visual de toast.
+ * Re-estilado contra tokens del design system "Precise Ledger" (Fase 2).
+ *
+ * Cambios de estilo (funcionalidad 100% preservada):
+ *  - Viewport: abajo-centro (fixed bottom-[26px] left-1/2 -translate-x-1/2)
+ *    → era abajo-derecha; el DS lo define en centro.
+ *  - Item: pill bg-ink text-paper, rounded-[13px], padding 12px 14px 12px 16px,
+ *    shadow-[var(--shadow-lg)], animación slide-up .3s.
+ *  - Ícono "tick": círculo 24px con ícono Lucide. Color varía por tipo:
+ *      success → bg-income  (verde) + Check
+ *      error   → bg-expense (rojo)  + X
+ *      warning → bg-warning (ámbar) + AlertTriangle
+ *      info    → bg-accent-ink      + Info
+ *  - Acción (.tlink): font-weight 700, border-bottom currentColor (texto underline pesado).
+ *  - Close: ícono X de lucide-react.
  *
  * Tipos: success | error | warning | info
  * Acción opcional: { label: string; onClick: () => void }
@@ -21,6 +34,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { AlertTriangle, Check, Info, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -128,22 +142,30 @@ export function ToastProvider({ children }: ToastProviderProps) {
   );
 }
 
-// ─── Componente visual ────────────────────────────────────────────────────────
+// ─── Mapeo tipo → ícono y color del círculo tick ──────────────────────────────
 
-const toastTypeStyles: Record<ToastType, string> = {
-  success: "border-green-500 bg-green-50 text-green-900 dark:bg-green-950 dark:text-green-100",
-  error: "border-red-500 bg-red-50 text-red-900 dark:bg-red-950 dark:text-red-100",
-  warning:
-    "border-yellow-500 bg-yellow-50 text-yellow-900 dark:bg-yellow-950 dark:text-yellow-100",
-  info: "border-blue-500 bg-blue-50 text-blue-900 dark:bg-blue-950 dark:text-blue-100",
+/**
+ * Mapeo tipo → clases de color del círculo tick del DS.
+ * success → bg-income   (verde, semántica correcta)
+ * error   → bg-expense  (rojo, semántica correcta)
+ * warning → bg-warning  (ámbar, semántica correcta)
+ * info    → bg-accent-ink (índigo oscuro)
+ */
+const tickColorMap: Record<ToastType, string> = {
+  success: "bg-income",
+  error:   "bg-expense",
+  warning: "bg-warning",
+  info:    "bg-accent-ink",
 };
 
-const toastIconMap: Record<ToastType, string> = {
-  success: "✓",
-  error: "✕",
-  warning: "⚠",
-  info: "ℹ",
+const tickIconMap: Record<ToastType, React.ReactElement> = {
+  success: <Check size={14} strokeWidth={2.5} aria-hidden="true" />,
+  error:   <X size={14} strokeWidth={2.5} aria-hidden="true" />,
+  warning: <AlertTriangle size={14} strokeWidth={2.5} aria-hidden="true" />,
+  info:    <Info size={14} strokeWidth={2.5} aria-hidden="true" />,
 };
+
+// ─── ToastItem ────────────────────────────────────────────────────────────────
 
 interface ToastItemProps {
   toast: Toast;
@@ -156,17 +178,34 @@ function ToastItem({ toast, onDismiss }: ToastItemProps) {
       role="alert"
       aria-live={toast.type === "error" ? "assertive" : "polite"}
       className={cn(
-        "pointer-events-auto flex w-full items-start gap-3 rounded-lg border-l-4 p-4 shadow-lg",
-        "animate-in slide-in-from-right-full duration-300",
-        toastTypeStyles[toast.type],
+        // Pill oscuro DS: bg-ink text-paper, rounded-[13px]
+        "pointer-events-auto flex items-center gap-[14px]",
+        "rounded-[13px] bg-ink text-paper",
+        // Padding DS: 12px top/bottom, 14px right, 16px left
+        "py-3 pl-4 pr-[14px]",
+        // Sombra DS
+        "shadow-[var(--shadow-lg)]",
+        // Fuente
+        "font-ui text-[14px] font-medium",
+        // Animación slide-up — keyframes definidos en globals.css via @layer
+        "animate-toast-in",
       )}
     >
-      <span className="mt-0.5 shrink-0 text-sm font-bold" aria-hidden="true">
-        {toastIconMap[toast.type]}
+      {/* Círculo tick con ícono semántico */}
+      <span
+        className={cn(
+          "grid shrink-0 place-items-center rounded-full text-white",
+          "h-6 w-6",
+          tickColorMap[toast.type],
+        )}
+        aria-hidden="true"
+      >
+        {tickIconMap[toast.type]}
       </span>
 
+      {/* Mensaje + acción opcional */}
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium">{toast.message}</p>
+        <p className="leading-snug">{toast.message}</p>
 
         {toast.action && (
           <button
@@ -174,37 +213,27 @@ function ToastItem({ toast, onDismiss }: ToastItemProps) {
               toast.action?.onClick();
               onDismiss(toast.id);
             }}
-            className="mt-1 text-sm font-semibold underline underline-offset-2 hover:opacity-80"
+            /* tlink DS: font-weight 700, borde inferior currentColor */
+            className="mt-0.5 cursor-pointer border-b border-b-current pb-px text-sm font-bold leading-none hover:opacity-80"
           >
             {toast.action.label}
           </button>
         )}
       </div>
 
+      {/* Botón cerrar con ícono Lucide X */}
       <button
         onClick={() => onDismiss(toast.id)}
         aria-label="Cerrar notificación"
-        className="shrink-0 rounded p-0.5 opacity-60 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-current"
+        className="shrink-0 rounded p-0.5 opacity-60 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-current"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <line x1="18" y1="6" x2="6" y2="18" />
-          <line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
+        <X size={14} strokeWidth={2.5} aria-hidden="true" />
       </button>
     </div>
   );
 }
+
+// ─── ToastViewport ────────────────────────────────────────────────────────────
 
 interface ToastViewportProps {
   toasts: Toast[];
@@ -215,9 +244,14 @@ function ToastViewport({ toasts, onDismiss }: ToastViewportProps) {
   if (toasts.length === 0) return null;
 
   return (
+    /*
+     * Viewport DS: fixed abajo-centro
+     * left-1/2 -translate-x-1/2 centra horizontalmente.
+     * pointer-events-none en el contenedor, pointer-events-auto en cada item.
+     */
     <div
       aria-label="Notificaciones"
-      className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-full max-w-sm flex-col gap-2"
+      className="pointer-events-none fixed bottom-[26px] left-1/2 z-[90] flex -translate-x-1/2 flex-col items-center gap-[10px]"
     >
       {toasts.map((t) => (
         <ToastItem key={t.id} toast={t} onDismiss={onDismiss} />

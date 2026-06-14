@@ -167,10 +167,14 @@ describe("InstallmentForm — sin selector de tipo", () => {
     expect(screen.getByLabelText(/categoría/i)).toBeInTheDocument();
   });
 
-  it("muestra el tipo como campo deshabilitado con valor 'Gasto'", () => {
+  it("muestra el tipo como campo read-only con valor 'Gasto' (div, no select/input)", () => {
     renderForm({});
-    const typeField = screen.getByDisplayValue(/gasto/i);
-    expect(typeField).toBeDisabled();
+    // El tipo es un div read-only que muestra "Gasto", no un input ni botones toggle
+    // No hay combobox de tipo, solo de categoría
+    const selects = screen.getAllByRole("combobox");
+    expect(selects).toHaveLength(1); // Solo el selector de categoría
+    // El texto "Gasto" debe aparecer como texto visible
+    expect(screen.getByText("Gasto")).toBeInTheDocument();
   });
 
   it("no muestra la opción 'Ingreso' en ningún selector", () => {
@@ -193,11 +197,10 @@ describe("InstallmentForm — '+ Nueva' categoría inline", () => {
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText(/nueva categoría/i)).toBeInTheDocument();
 
-    // Las cuotas son siempre EXPENSE → el modal oculta INCOME y preselecciona EXPENSE
-    const scopeSelect = within(dialog).getByLabelText(/tipo/i) as HTMLSelectElement;
-    const optionValues = Array.from(scopeSelect.options).map((o) => o.value);
-    expect(optionValues).not.toContain("INCOME");
-    expect(scopeSelect.value).toBe("EXPENSE");
+    // El scope picker usa botones con label "Alcance"
+    // Las cuotas son siempre EXPENSE → el modal oculta INCOME
+    expect(within(dialog).queryByRole("button", { name: /^ingreso$/i })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /^gasto$/i })).toBeInTheDocument();
   });
 });
 
@@ -224,7 +227,7 @@ describe("InstallmentForm — validación", () => {
     const user = userEvent.setup();
     renderForm({});
 
-    const submitBtn = screen.getByRole("button", { name: /guardar movimiento/i });
+    const submitBtn = screen.getByRole("button", { name: /^guardar$/i });
     await user.click(submitBtn);
 
     await waitFor(() => {
@@ -240,7 +243,7 @@ describe("InstallmentForm — validación", () => {
     const amountInput = screen.getByLabelText(/monto por cuota/i);
     await user.type(amountInput, "0");
 
-    const submitBtn = screen.getByRole("button", { name: /guardar movimiento/i });
+    const submitBtn = screen.getByRole("button", { name: /^guardar$/i });
     await user.click(submitBtn);
 
     await waitFor(() => {
@@ -257,11 +260,13 @@ describe("InstallmentForm — validación", () => {
     await user.type(amountInput, "1500");
 
     // No llenar cantidad de cuotas
-    const submitBtn = screen.getByRole("button", { name: /guardar movimiento/i });
+    const submitBtn = screen.getByRole("button", { name: /^guardar$/i });
     await user.click(submitBtn);
 
     await waitFor(() => {
-      expect(screen.getByText(/cantidad de cuotas es requerida/i)).toBeInTheDocument();
+      // El error puede aparecer en múltiples lugares (Input interno + div externo)
+      const errors = screen.getAllByText(/cantidad de cuotas es requerida/i);
+      expect(errors.length).toBeGreaterThanOrEqual(1);
     });
     expect(mockCreateInstallment).not.toHaveBeenCalled();
   });
@@ -273,15 +278,17 @@ describe("InstallmentForm — validación", () => {
     const amountInput = screen.getByLabelText(/monto por cuota/i);
     await user.type(amountInput, "1500");
 
-    const totalInput = screen.getByLabelText(/cantidad de cuotas/i);
+    const totalInput = screen.getByLabelText(/cant\. de cuotas/i);
     await user.clear(totalInput);
     await user.type(totalInput, "0");
 
-    const submitBtn = screen.getByRole("button", { name: /guardar movimiento/i });
+    const submitBtn = screen.getByRole("button", { name: /^guardar$/i });
     await user.click(submitBtn);
 
     await waitFor(() => {
-      expect(screen.getByText(/cantidad de cuotas mayor a 0/i)).toBeInTheDocument();
+      // El error puede aparecer en múltiples lugares (Input interno + div externo)
+      const errors = screen.getAllByText(/cantidad de cuotas mayor a 0/i);
+      expect(errors.length).toBeGreaterThanOrEqual(1);
     });
     expect(mockCreateInstallment).not.toHaveBeenCalled();
   });
@@ -293,10 +300,10 @@ describe("InstallmentForm — validación", () => {
     const amountInput = screen.getByLabelText(/monto por cuota/i);
     await user.type(amountInput, "1500");
 
-    const totalInput = screen.getByLabelText(/cantidad de cuotas/i);
+    const totalInput = screen.getByLabelText(/cant\. de cuotas/i);
     await user.type(totalInput, "12");
 
-    const submitBtn = screen.getByRole("button", { name: /guardar movimiento/i });
+    const submitBtn = screen.getByRole("button", { name: /^guardar$/i });
     await user.click(submitBtn);
 
     await waitFor(() => {
@@ -343,7 +350,7 @@ describe("InstallmentForm — sin categorías disponibles", () => {
     renderForm({});
 
     // El submit debe estar deshabilitado
-    const submitBtn = screen.getByRole("button", { name: /guardar movimiento/i });
+    const submitBtn = screen.getByRole("button", { name: /^guardar$/i });
     expect(submitBtn).toBeDisabled();
 
     // Debe mostrar enlace a /categorias
@@ -365,7 +372,7 @@ describe("InstallmentForm — prefill en edición", () => {
 
   it("precarga la cantidad de cuotas desde totalInstallments", () => {
     renderForm({ installment: mockInstallmentGroup });
-    const totalInput = screen.getByLabelText(/cantidad de cuotas/i) as HTMLInputElement;
+    const totalInput = screen.getByLabelText(/cant\. de cuotas/i) as HTMLInputElement;
     expect(totalInput.value).toBe("12");
   });
 
@@ -395,13 +402,13 @@ describe("InstallmentForm — flujo crear", () => {
     const amountInput = screen.getByLabelText(/monto por cuota/i);
     await user.type(amountInput, "500");
 
-    const totalInput = screen.getByLabelText(/cantidad de cuotas/i);
+    const totalInput = screen.getByLabelText(/cant\. de cuotas/i);
     await user.type(totalInput, "12");
 
     const categorySelect = screen.getByLabelText(/categoría/i);
     await user.selectOptions(categorySelect, "cat-expense");
 
-    const submitBtn = screen.getByRole("button", { name: /guardar movimiento/i });
+    const submitBtn = screen.getByRole("button", { name: /^guardar$/i });
     await user.click(submitBtn);
 
     await waitFor(() => {
@@ -427,13 +434,13 @@ describe("InstallmentForm — flujo crear", () => {
     const amountInput = screen.getByLabelText(/monto por cuota/i);
     await user.type(amountInput, "15,50");
 
-    const totalInput = screen.getByLabelText(/cantidad de cuotas/i);
+    const totalInput = screen.getByLabelText(/cant\. de cuotas/i);
     await user.type(totalInput, "3");
 
     const categorySelect = screen.getByLabelText(/categoría/i);
     await user.selectOptions(categorySelect, "cat-expense");
 
-    await user.click(screen.getByRole("button", { name: /guardar movimiento/i }));
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => {
       expect(mockCreateInstallment).toHaveBeenCalledWith(
@@ -452,13 +459,13 @@ describe("InstallmentForm — flujo crear", () => {
     const amountInput = screen.getByLabelText(/monto por cuota/i);
     await user.type(amountInput, "500");
 
-    const totalInput = screen.getByLabelText(/cantidad de cuotas/i);
+    const totalInput = screen.getByLabelText(/cant\. de cuotas/i);
     await user.type(totalInput, "12");
 
     const categorySelect = screen.getByLabelText(/categoría/i);
     await user.selectOptions(categorySelect, "cat-expense");
 
-    await user.click(screen.getByRole("button", { name: /guardar movimiento/i }));
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => {
       expect(mockCreateInstallment).toHaveBeenCalled();
@@ -522,13 +529,13 @@ describe("InstallmentForm — error del backend", () => {
     const amountInput = screen.getByLabelText(/monto por cuota/i);
     await user.type(amountInput, "500");
 
-    const totalInput = screen.getByLabelText(/cantidad de cuotas/i);
+    const totalInput = screen.getByLabelText(/cant\. de cuotas/i);
     await user.type(totalInput, "12");
 
     const categorySelect = screen.getByLabelText(/categoría/i);
     await user.selectOptions(categorySelect, "cat-expense");
 
-    await user.click(screen.getByRole("button", { name: /guardar movimiento/i }));
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => {
       expect(mockCreateInstallment).toHaveBeenCalled();

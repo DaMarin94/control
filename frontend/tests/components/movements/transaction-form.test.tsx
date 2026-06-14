@@ -160,7 +160,7 @@ describe("TransactionForm — validación", () => {
     // Limpiar el campo de monto y enviar
     const amountInput = screen.getByLabelText(/monto/i);
     await user.clear(amountInput);
-    await user.click(screen.getByRole("button", { name: /guardar movimiento/i }));
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/el monto es requerido/i)).toBeInTheDocument();
@@ -176,7 +176,7 @@ describe("TransactionForm — validación", () => {
     const amountInput = screen.getByLabelText(/monto/i);
     await user.clear(amountInput);
     await user.type(amountInput, "0");
-    await user.click(screen.getByRole("button", { name: /guardar movimiento/i }));
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/monto mayor a 0/i)).toBeInTheDocument();
@@ -189,7 +189,7 @@ describe("TransactionForm — validación", () => {
 
     const amountInput = screen.getByLabelText(/monto/i);
     await user.type(amountInput, "100");
-    await user.click(screen.getByRole("button", { name: /guardar movimiento/i }));
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/la categoría es requerida/i)).toBeInTheDocument();
@@ -213,7 +213,7 @@ describe("TransactionForm — validación", () => {
     const categorySelect = screen.getByLabelText(/categoría/i);
     await user.selectOptions(categorySelect, "cat-expense");
 
-    await user.click(screen.getByRole("button", { name: /guardar movimiento/i }));
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => {
       expect(mockCreateTransaction).toHaveBeenCalledWith(
@@ -239,9 +239,9 @@ describe("TransactionForm — filtrado de categorías por scope", () => {
     const user = userEvent.setup();
     renderForm({});
 
-    // Cambiar el tipo a INCOME
-    const typeSelect = screen.getByLabelText(/tipo/i);
-    await user.selectOptions(typeSelect, "INCOME");
+    // Cambiar el tipo a INCOME clickando el botón toggle
+    const ingresoBtn = screen.getByRole("button", { name: /^ingreso$/i });
+    await user.click(ingresoBtn);
 
     await waitFor(() => {
       expect(screen.getByText("Salario")).toBeInTheDocument(); // scope INCOME
@@ -268,8 +268,8 @@ describe("TransactionForm — filtrado de categorías por scope", () => {
 
     renderForm({}); // Tipo EXPENSE por defecto, ninguna categoría EXPENSE disponible
 
-    expect(screen.getByText(/no hay categorías disponibles/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /guardar movimiento/i })).toBeDisabled();
+    expect(screen.getByText(/sin categorías para este tipo/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^guardar$/i })).toBeDisabled();
   });
 });
 
@@ -289,7 +289,7 @@ describe("TransactionForm — flujo crear", () => {
     await user.type(screen.getByLabelText(/monto/i), "15.50");
     await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
 
-    await user.click(screen.getByRole("button", { name: /guardar movimiento/i }));
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => {
       expect(mockCreateTransaction).toHaveBeenCalledWith(
@@ -314,7 +314,7 @@ describe("TransactionForm — flujo crear", () => {
     await user.type(screen.getByLabelText(/monto/i), "100");
     await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
 
-    await user.click(screen.getByRole("button", { name: /guardar movimiento/i }));
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => {
       expect(mockCreateTransaction).toHaveBeenCalledWith(
@@ -339,7 +339,7 @@ describe("TransactionForm — flujo crear", () => {
     await user.type(screen.getByLabelText(/monto/i), "15.50");
     await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
 
-    await user.click(screen.getByRole("button", { name: /guardar movimiento/i }));
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => {
       expect(onClose).toHaveBeenCalled();
@@ -370,7 +370,7 @@ describe("TransactionForm — flujo crear", () => {
     await user.type(screen.getByLabelText(/monto/i), "100");
     await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
 
-    await user.click(screen.getByRole("button", { name: /guardar movimiento/i }));
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /ir a ver/i })).toBeInTheDocument();
@@ -394,7 +394,7 @@ describe("TransactionForm — flujo crear", () => {
     await user.type(screen.getByLabelText(/monto/i), "100");
     await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
 
-    await user.click(screen.getByRole("button", { name: /guardar movimiento/i }));
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/error del servidor/i)).toBeInTheDocument();
@@ -427,12 +427,11 @@ describe("TransactionForm — '+ Nueva' categoría inline", () => {
 
     await user.click(screen.getByRole("button", { name: /\+ nueva/i }));
 
-    // En el modal de categoría, el select de tipo no debe ofrecer INCOME y debe preseleccionar EXPENSE
+    // El modal de categoría usa el scope picker (botones) con label "Alcance"
+    // Cuando lockScopeToType="EXPENSE", el botón "Ingreso" no debe aparecer
     const dialog = screen.getByRole("dialog");
-    const scopeSelect = within(dialog).getByLabelText(/tipo/i) as HTMLSelectElement;
-    const optionValues = Array.from(scopeSelect.options).map((o) => o.value);
-    expect(optionValues).not.toContain("INCOME");
-    expect(scopeSelect.value).toBe("EXPENSE");
+    expect(within(dialog).queryByRole("button", { name: /^ingreso$/i })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /^gasto$/i })).toBeInTheDocument();
   });
 });
 

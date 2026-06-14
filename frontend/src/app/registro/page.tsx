@@ -6,34 +6,82 @@
  * - Si 409 (email en uso): muestra error sin perder el email.
  * - Si OK: inicia sesión automáticamente y redirige al dashboard.
  * - Usuario ya autenticado: el middleware redirige al dashboard antes de llegar aquí.
+ *
+ * Fase 3 — Mismo layout split "Precise Ledger" que el login.
+ *   Reutiliza BrandSide; panel derecho adapta textos/acciones al registro.
  */
 
 import { Suspense } from "react";
 import { RegisterForm } from "./register-form";
+import { BrandSide } from "@/components/ui/auth-brand-side";
+import { Lock } from "lucide-react";
 
 export default function RegistroPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold tracking-tight">Control</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Creá tu cuenta para empezar
+    <div className="grid min-h-screen [grid-template-columns:1.05fr_1fr] max-[940px]:grid-cols-1">
+      {/* Panel izquierdo — marca (idéntico al login) */}
+      <BrandSide />
+
+      {/* Panel derecho — acceso */}
+      <div className="flex items-center justify-center bg-paper px-10 py-10">
+        <div className="flex w-full max-w-[360px] flex-col">
+          {/* Eyebrow */}
+          <span className="text-[13px] font-semibold uppercase tracking-[.1em] text-muted">
+            Empezá gratis
+          </span>
+
+          {/* Título */}
+          <h3 className="mt-2 mb-1.5 text-[28px] font-bold tracking-[-0.02em] text-ink">
+            Creá tu cuenta
+          </h3>
+
+          {/* Subtítulo */}
+          <p className="mb-[30px] text-[14.5px] leading-[1.5] text-muted">
+            Completá tus datos para empezar a registrar tus finanzas.
+          </p>
+
+          {/* Formulario con Suspense (usa useSearchParams) */}
+          <Suspense fallback={<div className="h-72 animate-pulse rounded-ctl bg-panel-3" />}>
+            <RegisterForm />
+          </Suspense>
+
+          {/* Fine print */}
+          <p className="mt-[22px] text-center text-[12.5px] leading-[1.5] text-faint">
+            Al registrarte aceptás los{" "}
+            <a
+              href="#"
+              className="text-muted underline underline-offset-[2px] hover:text-ink"
+            >
+              Términos
+            </a>{" "}
+            y la{" "}
+            <a
+              href="#"
+              className="text-muted underline underline-offset-[2px] hover:text-ink"
+            >
+              Política de privacidad
+            </a>
+            .
+          </p>
+
+          {/* SSL */}
+          <div className="mt-7 flex items-center justify-center gap-[7px] text-[12px] text-muted">
+            <Lock size={14} aria-hidden="true" />
+            Conexión segura · cifrada de extremo a extremo
+          </div>
+
+          {/* Link a login */}
+          <p className="mt-8 text-center text-[13px] text-muted">
+            ¿Ya tenés cuenta?{" "}
+            <a
+              href="/login"
+              className="font-semibold text-accent-ink underline-offset-[2px] hover:underline"
+            >
+              Iniciá sesión
+            </a>
           </p>
         </div>
-
-        {/* Suspense por compatibilidad con useSearchParams */}
-        <Suspense fallback={<div className="h-72 animate-pulse rounded-lg bg-muted" />}>
-          <RegisterForm />
-        </Suspense>
-
-        <p className="text-center text-sm text-muted-foreground">
-          ¿Ya tenés cuenta?{" "}
-          <a href="/login" className="font-medium text-primary underline-offset-4 hover:underline">
-            Iniciá sesión
-          </a>
-        </p>
       </div>
-    </main>
+    </div>
   );
 }

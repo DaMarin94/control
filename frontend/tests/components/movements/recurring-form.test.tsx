@@ -161,7 +161,7 @@ describe("RecurringForm — validación", () => {
     const user = userEvent.setup();
     renderForm({});
 
-    const submitBtn = screen.getByRole("button", { name: /guardar movimiento/i });
+    const submitBtn = screen.getByRole("button", { name: /^guardar$/i });
     await user.click(submitBtn);
 
     await waitFor(() => {
@@ -177,7 +177,7 @@ describe("RecurringForm — validación", () => {
     const amountInput = screen.getByLabelText(/monto/i);
     await user.type(amountInput, "0");
 
-    const submitBtn = screen.getByRole("button", { name: /guardar movimiento/i });
+    const submitBtn = screen.getByRole("button", { name: /^guardar$/i });
     await user.click(submitBtn);
 
     await waitFor(() => {
@@ -193,7 +193,7 @@ describe("RecurringForm — validación", () => {
     const amountInput = screen.getByLabelText(/monto/i);
     await user.type(amountInput, "1500");
 
-    const submitBtn = screen.getByRole("button", { name: /guardar movimiento/i });
+    const submitBtn = screen.getByRole("button", { name: /^guardar$/i });
     await user.click(submitBtn);
 
     await waitFor(() => {
@@ -237,9 +237,9 @@ describe("RecurringForm — filtrado de categorías por scope", () => {
     const user = userEvent.setup();
     renderForm({});
 
-    // Cambiar tipo a INCOME
-    const typeSelect = screen.getByLabelText(/tipo/i);
-    await user.selectOptions(typeSelect, "INCOME");
+    // Cambiar tipo a INCOME clickando el botón toggle
+    const ingresoBtn = screen.getByRole("button", { name: /^ingreso$/i });
+    await user.click(ingresoBtn);
 
     await waitFor(() => {
       expect(screen.getByText("Sueldo")).toBeInTheDocument(); // INCOME
@@ -262,31 +262,31 @@ describe("RecurringForm — '+ Nueva' categoría inline", () => {
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText(/nueva categoría/i)).toBeInTheDocument();
 
-    // El scope queda restringido al tipo del movimiento: oculta INCOME y preselecciona EXPENSE
-    const scopeSelect = within(dialog).getByLabelText(/tipo/i) as HTMLSelectElement;
-    const optionValues = Array.from(scopeSelect.options).map((o) => o.value);
-    expect(optionValues).not.toContain("INCOME");
-    expect(scopeSelect.value).toBe("EXPENSE");
+    // El scope picker usa botones con label "Alcance"
+    // Cuando lockScopeToType="EXPENSE", el botón "Ingreso" no debe aparecer
+    expect(within(dialog).queryByRole("button", { name: /^ingreso$/i })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /^gasto$/i })).toBeInTheDocument();
   });
 });
 
 // ─── Tests: tipo read-only en edición (RF-MF-003) ─────────────────────────────
 
 describe("RecurringForm — tipo read-only en edición", () => {
-  it("muestra el tipo como campo de texto deshabilitado al editar", () => {
+  it("muestra el tipo como campo de texto read-only al editar (no botones toggle)", () => {
     renderForm({ recurring: mockRecurring });
 
-    // El campo de tipo debe ser un input deshabilitado (no un select)
-    const typeInput = screen.getByDisplayValue(/gasto/i);
-    expect(typeInput).toBeDisabled();
-    expect(typeInput.tagName).toBe("INPUT");
+    // En modo edición, el tipo se muestra como un div con el texto "Gasto" (no un select ni botones)
+    // Los botones toggle de tipo NO deben aparecer en modo edición
+    expect(screen.queryByRole("button", { name: /^gasto$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^ingreso$/i })).not.toBeInTheDocument();
+    // El texto "Gasto" sí debe aparecer como display read-only
+    expect(screen.getByText("Gasto")).toBeInTheDocument();
   });
 
   it("el selector de tipo NO aparece en modo edición", () => {
     renderForm({ recurring: mockRecurring });
 
     // No debe haber un select con las opciones Gasto/Ingreso accesibles para cambiar
-    // (el campo de tipo es un input disabled, no un select)
     const selects = screen.getAllByRole("combobox");
     // Solo debe haber el selector de categoría, no el de tipo
     expect(selects).toHaveLength(1);
@@ -327,7 +327,7 @@ describe("RecurringForm — flujo crear", () => {
     const categorySelect = screen.getByLabelText(/categoría/i);
     await user.selectOptions(categorySelect, "cat-expense");
 
-    const submitBtn = screen.getByRole("button", { name: /guardar movimiento/i });
+    const submitBtn = screen.getByRole("button", { name: /^guardar$/i });
     await user.click(submitBtn);
 
     await waitFor(() => {
@@ -355,7 +355,7 @@ describe("RecurringForm — flujo crear", () => {
     const categorySelect = screen.getByLabelText(/categoría/i);
     await user.selectOptions(categorySelect, "cat-expense");
 
-    await user.click(screen.getByRole("button", { name: /guardar movimiento/i }));
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => {
       expect(mockCreateRecurring).toHaveBeenCalledWith(
@@ -417,7 +417,7 @@ describe("RecurringForm — error del backend", () => {
     const categorySelect = screen.getByLabelText(/categoría/i);
     await user.selectOptions(categorySelect, "cat-expense");
 
-    await user.click(screen.getByRole("button", { name: /guardar movimiento/i }));
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => {
       expect(mockCreateRecurring).toHaveBeenCalled();

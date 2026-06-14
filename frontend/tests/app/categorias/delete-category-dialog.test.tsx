@@ -117,7 +117,10 @@ describe("DeleteCategoryDialog", () => {
   it("muestra cantidad de movimientos si movementCount > 0", () => {
     renderDialog(mockCategory); // movementCount: 3
 
-    expect(screen.getByText(/3 movimientos asociados/i)).toBeInTheDocument();
+    // El número está en un <span> separado del texto, usar función matcher
+    expect(screen.getByText((_, el) => {
+      return el?.tagName === "P" && (el.textContent ?? "").includes("3") && (el.textContent ?? "").toLowerCase().includes("movimientos asociados");
+    })).toBeInTheDocument();
   });
 
   it("no muestra info de movimientos si movementCount es 0", () => {

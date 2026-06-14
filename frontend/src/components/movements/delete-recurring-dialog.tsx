@@ -3,8 +3,11 @@
 /**
  * Diálogo de confirmación para eliminar un movimiento fijo (RF-MF-004).
  *
- * El fijo se elimina desde el mes visualizado (viewMonth) en adelante, inclusive.
- * Los meses anteriores al mes visualizado no se modifican.
+ * Comportamiento: la eliminación aplica SIEMPRE desde el mes visualizado inclusive
+ * en adelante, sin opciones a elegir (fromCurrentMonth = true hardcodeado).
+ * Los meses anteriores al mes visualizado nunca se modifican.
+ *
+ * No hay checkbox ni estado extra: la spec dice "sin opciones" (RF-MF-004).
  */
 
 import { Button } from "@/components/ui/button";
@@ -17,7 +20,7 @@ interface DeleteRecurringDialogProps {
   /** MovementItem del fijo a eliminar (origin === "fijo") */
   movement: MovementItem;
   onClose: () => void;
-  /** Mes que el usuario está viendo (YYYY-MM). Si se omite, se usa el mes actual. */
+  /** Mes visualizado en la Vista del mes (YYYY-MM). Fallback: mes actual del navegador. */
   viewMonth?: string;
 }
 
@@ -46,45 +49,55 @@ export function DeleteRecurringDialog({ movement, onClose, viewMonth }: DeleteRe
   const description = movement.description ?? movement.category.name;
 
   return (
+    /* Scrim */
     <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-6"
+      style={{ background: "oklch(0.18 0.02 270 / 0.46)", backdropFilter: "blur(3px)" }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="delete-recurring-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="w-full max-w-sm rounded-lg border bg-card shadow-lg">
+      {/* Diálogo */}
+      <div
+        className="w-full max-w-[380px] bg-panel border border-line overflow-hidden animate-modal-pop"
+        style={{ borderRadius: "18px", boxShadow: "var(--shadow-lg)" }}
+      >
         {/* Header */}
-        <div className="border-b px-6 py-4">
-          <h2 id="delete-recurring-title" className="text-lg font-semibold">
+        <div className="px-[22px] pt-5 pb-4">
+          <h2
+            id="delete-recurring-title"
+            className="text-[18px] font-bold tracking-[-0.01em] text-ink m-0"
+          >
             Eliminar movimiento fijo
           </h2>
         </div>
 
         {/* Cuerpo */}
-        <div className="px-6 py-5">
-          <p className="text-sm text-foreground">
+        <div className="px-[22px] pb-[22px] space-y-[14px]">
+          <p className="text-[14px] text-ink">
             ¿Estás seguro de que querés eliminar este movimiento fijo?
           </p>
-          <div className="mt-3 rounded-md border bg-muted/50 px-4 py-3 text-sm">
-            <p className="font-medium text-foreground">{description}</p>
-            <p className="mt-0.5 text-muted-foreground">
-              {typeLabel} &middot; {amountLabel} &middot; Mensual
+          <div className="rounded-ctl border border-line bg-panel-2 px-4 py-3 text-[13px]">
+            <p className="font-semibold text-ink">{description}</p>
+            <p className="mt-0.5 text-muted mono">
+              {typeLabel} · {amountLabel} · Mensual
             </p>
           </div>
-
-          <p className="mt-4 text-xs text-muted-foreground">
-            El fijo se eliminará desde este mes en adelante. Los meses anteriores no se modifican.
+          <p className="text-[13px] text-muted">
+            El fijo dejará de aparecer desde este mes en adelante. Los meses anteriores no se modifican.
           </p>
         </div>
 
-        {/* Acciones */}
-        <div className="flex justify-end gap-3 border-t px-6 py-4">
-          <Button type="button" variant="outline" onClick={onClose} disabled={isDeleting}>
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
+          <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isDeleting}>
             Cancelar
           </Button>
           <Button
             type="button"
             variant="destructive"
+            size="sm"
             onClick={handleConfirm}
             disabled={isDeleting}
           >

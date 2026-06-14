@@ -3,20 +3,13 @@
 /**
  * Formulario de movimiento en cuotas (RF-MC-001 / RF-MC-003).
  *
- * Modo crear: campos con defaults (type=EXPENSE fijo, mes=mes actual).
- * Modo editar: campos precargados; type NO se muestra (siempre EXPENSE, RF-MC-001).
+ * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
+ * - Badge "Gasto" read-only (cuotas son siempre EXPENSE)
+ * - Monto por cuota: input mono 20px con prefijo "$"
+ * - Grid 2-col para Cantidad de cuotas + Mes de inicio
+ * - Footer: helper + Cancelar / Guardar
  *
- * Reglas de negocio:
- * - Cuotas son SOLO Gasto en v1 — no hay selector de tipo (decisión cerrada).
- * - Monto POR CUOTA en pesos, convertido a centavos al enviar (parseCurrencyInput).
- * - Cantidad de cuotas: entero > 0 (Zod int positivo).
- * - Mes de inicio: <input type="month">, default getCurrentMonth(), editable.
- * - Categorías filtradas por scope EXPENSE/BOTH (siempre EXPENSE → RN-010).
- * - Sin categorías disponibles → bloqueo con enlace a /categorias.
- * - Al crear OK: modal cerrado + toast "Movimiento guardado correctamente." con
- *   acción "Ir a ver" → /mes?month=startMonth (RF-MC-001).
- * - Al editar OK: modal cerrado + toast "Movimiento actualizado correctamente." (sin acción).
- * - Error del backend → modal queda abierto con datos conservados (RNF-008).
+ * Lógica de negocio preservada intacta.
  */
 
 import { useEffect, useState } from "react";
@@ -24,6 +17,7 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Link from "next/link";
+import { AlertTriangle, Check, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,8 +28,9 @@ import { useToast } from "@/hooks/use-toast";
 import { type Category, type CategoryScope } from "@/types/category";
 import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
 import { type InstallmentGroup } from "@/types/installment";
-import { parseCurrencyInput, getCurrentMonth } from "@/lib/format";
+import { parseCurrencyInput, getCurrentMonth, formatMonthLabel } from "@/lib/format";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -69,23 +64,13 @@ type InstallmentFormData = z.infer<typeof installmentSchema>;
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface InstallmentFormProps {
-  /**
-   * null = modo crear.
-   * InstallmentGroup = modo editar (type no se muestra, siempre EXPENSE).
-   */
   installment: InstallmentGroup | null;
   onClose: () => void;
-  /**
-   * Mes contexto (YYYY-MM) desde la Vista del mes.
-   * Solo aplica en modo crear; en modo editar se ignora.
-   * Si no se pasa, el default es el mes actual del navegador.
-   */
   defaultMonth?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Devuelve las categorías compatibles con EXPENSE (RN-010) */
 function filterCategoriesForExpense(
   categories: { id: string; name: string; scope: CategoryScope }[],
 ) {
@@ -101,8 +86,6 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
   const { categories } = useCategories();
   const { createInstallment, updateInstallment, isCreating, isUpdating } = useInstallments();
 
-  // Estado del modal inline de nueva categoría (RF-MU-004)
-  // Las cuotas son siempre EXPENSE → lockScopeToType es siempre "EXPENSE"
   const [showCategoryModal, setShowCategoryModal] = useState(false);
 
   const isLoading = isEditing ? isUpdating : isCreating;
@@ -128,6 +111,7 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
     handleSubmit,
     setValue,
     control,
+    watch,
     reset,
     formState: { errors },
   } = useForm<InstallmentFormData>({
@@ -135,7 +119,6 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
     defaultValues,
   });
 
-  // Sincronizar cuando cambia el grupo (abrir en modo editar)
   useEffect(() => {
     if (isEditing) {
       reset({
@@ -148,16 +131,20 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
     }
   }, [installment, isEditing, reset]);
 
-  // Categorías disponibles — siempre EXPENSE (cuotas son solo Gasto en v1)
   const availableCategories = filterCategoriesForExpense(
     (categories ?? []).map((c) => ({ id: c.id, name: c.name, scope: c.scope })),
   );
 
   const noCategoriesAvailable = availableCategories.length === 0;
 
+  const selectedStartMonth = watch("startMonth");
+  const savedMonthLabel = selectedStartMonth
+    ? formatMonthLabel(selectedStartMonth)
+    : formatMonthLabel(getCurrentMonth());
+
   async function onSubmit(data: InstallmentFormData) {
     const amountCents = parseCurrencyInput(data.amountInput);
-    if (amountCents === null) return; // Zod ya valida esto
+    if (amountCents === null) return;
 
     const totalInstallments = parseInt(data.totalInstallments, 10);
 
@@ -192,7 +179,6 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
         return;
       }
 
-      // Toast con acción "Ir a ver" → /mes?month=startMonth (RF-MC-001)
       const startMonth = data.startMonth;
       toast.success("Movimiento guardado correctamente.", {
         action: {
@@ -207,158 +193,188 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
 
   return (
     <>
-    <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4 px-6 py-5">
-      {/* ── Tipo (read-only, siempre Gasto) ── */}
-      <div className="space-y-1.5">
-        <Label htmlFor="inst-type">Tipo</Label>
-        <Input
-          id="inst-type"
-          type="text"
-          value="Gasto"
-          disabled
-          className="bg-muted/50 text-muted-foreground"
-        />
-        <p className="text-xs text-muted-foreground">
-          Los movimientos en cuotas son siempre de tipo Gasto en esta versión.
-        </p>
-      </div>
-
-      {/* ── Monto por cuota ── */}
-      <div className="space-y-1.5">
-        <Label htmlFor="inst-amount" required>
-          Monto por cuota ($)
-        </Label>
-        <Input
-          id="inst-amount"
-          type="text"
-          inputMode="decimal"
-          placeholder="0,00"
-          error={errors.amountInput?.message}
-          {...register("amountInput")}
-        />
-        <p className="text-xs text-muted-foreground">
-          Ingresá el monto de cada cuota en pesos, no el total de la compra (ej: 1500,00)
-        </p>
-      </div>
-
-      {/* ── Cantidad de cuotas ── */}
-      <div className="space-y-1.5">
-        <Label htmlFor="inst-total" required>
-          Cantidad de cuotas
-        </Label>
-        <Input
-          id="inst-total"
-          type="number"
-          inputMode="numeric"
-          min="1"
-          step="1"
-          placeholder="12"
-          error={errors.totalInstallments?.message}
-          {...register("totalInstallments")}
-        />
-        <p className="text-xs text-muted-foreground">
-          Entero mayor a 0 (ej: 12 para cuotas en 12 meses)
-        </p>
-      </div>
-
-      {/* ── Mes de inicio ── */}
-      <div className="space-y-1.5">
-        <Label htmlFor="inst-start-month" required>
-          Mes de inicio
-        </Label>
-        <Input
-          id="inst-start-month"
-          type="month"
-          error={errors.startMonth?.message}
-          {...register("startMonth")}
-        />
-        <p className="text-xs text-muted-foreground">
-          Mes a partir del cual se empieza a descontar la primera cuota
-        </p>
-      </div>
-
-      {/* ── Categoría ── */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="inst-category" required>
-            Categoría
-          </Label>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowCategoryModal(true)}
-            className="h-auto py-0.5 text-xs text-primary hover:text-primary/80"
-          >
-            + Nueva
-          </Button>
-        </div>
-        {noCategoriesAvailable ? (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-            No hay categorías disponibles para Gasto.{" "}
-            <Link
-              href="/categorias"
-              className="font-semibold underline underline-offset-2 hover:opacity-80"
-            >
-              Creá una categoría
-            </Link>{" "}
-            o usá el botón &ldquo;+ Nueva&rdquo; de arriba.
+      <form onSubmit={handleSubmit(onSubmit)} noValidate>
+        <div className="px-[22px] pb-[22px] space-y-[14px]">
+          {/* ── Tipo (read-only: siempre Gasto) ── */}
+          <div className="flex flex-col gap-[7px]">
+            <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+              Tipo
+            </Label>
+            <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px] text-[14px] font-semibold text-ink-2">
+              <ArrowDown size={15} className="text-expense-ink" aria-hidden="true" />
+              Gasto
+            </div>
+            <p className="text-[12px] text-muted">
+              Los movimientos en cuotas son siempre de tipo Gasto en esta versión.
+            </p>
           </div>
-        ) : (
-          <Controller
-            name="categoryId"
-            control={control}
-            render={({ field }) => (
-              <Select
-                id="inst-category"
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.categoryId?.message}
-              >
-                <option value="">Seleccioná una categoría</option>
-                {availableCategories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </Select>
+
+          {/* ── Monto por cuota ── */}
+          <div className="flex flex-col gap-[7px]">
+            <Label htmlFor="inst-amount" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+              Monto por cuota
+            </Label>
+            <div
+              className={cn(
+                "flex items-center gap-2 rounded-ctl border-[1.5px] px-[13px] py-[11px] transition-colors duration-[140ms]",
+                "focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft)]",
+                errors.amountInput
+                  ? "border-expense shadow-[0_0_0_3px_var(--expense-soft)]"
+                  : "border-line-strong bg-panel",
+              )}
+            >
+              <span className="text-[15px] text-muted mono shrink-0">$</span>
+              <input
+                id="inst-amount"
+                type="text"
+                inputMode="decimal"
+                placeholder="0,00"
+                className="flex-1 border-none outline-none bg-transparent mono text-[20px] font-semibold tracking-[-0.01em] text-ink placeholder:text-faint"
+                {...register("amountInput")}
+              />
+            </div>
+            {errors.amountInput && (
+              <p className="text-[12px] text-expense-ink">{errors.amountInput.message}</p>
             )}
-          />
-        )}
-      </div>
+          </div>
 
-      {/* ── Descripción ── */}
-      <div className="space-y-1.5">
-        <Label htmlFor="inst-description">Descripción</Label>
-        <Input
-          id="inst-description"
-          type="text"
-          placeholder="Opcional"
-          error={errors.description?.message}
-          {...register("description")}
-        />
-      </div>
+          {/* ── Cantidad de cuotas + Mes de inicio (grid 2-col) ── */}
+          <div className="grid grid-cols-2 gap-[14px]">
+            <div className="flex flex-col gap-[7px]">
+              <Label htmlFor="inst-total" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+                Cant. de cuotas
+              </Label>
+              <Input
+                id="inst-total"
+                type="number"
+                inputMode="numeric"
+                min="1"
+                step="1"
+                placeholder="12"
+                error={errors.totalInstallments?.message}
+                {...register("totalInstallments")}
+              />
+            </div>
+            <div className="flex flex-col gap-[7px]">
+              <Label htmlFor="inst-start-month" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+                Mes de inicio
+              </Label>
+              <Input
+                id="inst-start-month"
+                type="month"
+                error={errors.startMonth?.message}
+                {...register("startMonth")}
+              />
+            </div>
+          </div>
+          {(errors.totalInstallments || errors.startMonth) && (
+            <div className="space-y-1">
+              {errors.totalInstallments && (
+                <p className="text-[12px] text-expense-ink">{errors.totalInstallments.message}</p>
+              )}
+              {errors.startMonth && (
+                <p className="text-[12px] text-expense-ink">{errors.startMonth.message}</p>
+              )}
+            </div>
+          )}
 
-      {/* ── Acciones ── */}
-      <div className="flex justify-end gap-3 pt-2">
-        <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
-          Cancelar
-        </Button>
-        <Button type="submit" disabled={isLoading || noCategoriesAvailable}>
-          {isLoading
-            ? "Guardando..."
-            : isEditing
-              ? "Guardar cambios"
-              : "Guardar movimiento"}
-        </Button>
-      </div>
-    </form>
+          {/* ── Categoría ── */}
+          <div className="flex flex-col gap-[7px]">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="inst-category" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+                Categoría
+              </Label>
+              <button
+                type="button"
+                onClick={() => setShowCategoryModal(true)}
+                className="text-[12.5px] font-semibold text-accent-ink hover:text-accent transition-colors duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-sm"
+              >
+                + Nueva
+              </button>
+            </div>
+
+            {noCategoriesAvailable ? (
+              <div className="flex items-start gap-[11px] rounded-ctl border px-[14px] py-[13px] bg-expense-soft" style={{ borderColor: "oklch(0.57 0.16 27 / 0.25)" }}>
+                <AlertTriangle size={18} className="text-expense-ink shrink-0 mt-[1px]" aria-hidden="true" />
+                <div className="text-[13px] leading-[1.45] text-expense-ink">
+                  <b className="font-bold">Sin categorías para Gasto.</b>{" "}
+                  <Link
+                    href="/categorias"
+                    className="font-bold underline underline-offset-[2px] text-expense-ink hover:opacity-80"
+                    onClick={onClose}
+                  >
+                    Creá una categoría
+                  </Link>{" "}
+                  o usá el botón &ldquo;+ Nueva&rdquo; de arriba.
+                </div>
+              </div>
+            ) : (
+              <Controller
+                name="categoryId"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    id="inst-category"
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.categoryId?.message}
+                  >
+                    <option value="">Seleccioná una categoría</option>
+                    {availableCategories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              />
+            )}
+          </div>
+
+          {/* ── Descripción ── */}
+          <div className="flex flex-col gap-[7px]">
+            <Label htmlFor="inst-description" className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+              Descripción{" "}
+              <span className="text-faint font-normal">(opcional)</span>
+            </Label>
+            <Input
+              id="inst-description"
+              type="text"
+              placeholder="Ej: Notebook Lenovo"
+              error={errors.description?.message}
+              {...register("description")}
+            />
+          </div>
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="flex items-center justify-between gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
+          <span className="text-[12.5px] text-muted">
+            Se guarda en{" "}
+            <span className="font-semibold text-ink-2">{savedMonthLabel}</span>
+          </span>
+          <div className="flex gap-3">
+            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={isLoading || noCategoriesAvailable}
+              className="gap-1.5"
+            >
+              <Check size={14} aria-hidden="true" />
+              {isLoading
+                ? "Guardando..."
+                : isEditing
+                  ? "Guardar cambios"
+                  : "Guardar"}
+            </Button>
+          </div>
+        </div>
+      </form>
 
       {/* ── Modal inline de nueva categoría (RF-MU-004) ── */}
-      {/* Las cuotas son siempre EXPENSE → lockScopeToType="EXPENSE".
-          Se renderiza como hermano del form (no descendiente) para evitar un
-          <form> anidado dentro de otro <form>, que es HTML inválido y rompe
-          la hidratación de React. */}
       {showCategoryModal && (
         <CategoryFormModal
           category={null}

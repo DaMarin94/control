@@ -54,8 +54,8 @@ export interface DeleteRecurringParams {
   /** Mes actual en formato YYYY-MM */
   currentMonth: string;
   /**
-   * true  → fromCurrentMonth="true"  → elimina desde el mes actual inclusive
-   * false → fromCurrentMonth="false" → elimina desde el mes siguiente (default)
+   * true  → fromCurrentMonth="true"  → elimina desde el mes visualizado inclusive (RF-MF-004)
+   * false → fromCurrentMonth="false" → elimina desde el mes siguiente
    */
   fromCurrentMonth: boolean;
 }

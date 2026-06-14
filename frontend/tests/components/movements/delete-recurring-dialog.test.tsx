@@ -2,8 +2,9 @@
  * Tests del diálogo de eliminación de movimiento fijo (RF-MF-004).
  * Verifica:
  * - Renderizado del título, descripción y monto.
+ * - No hay checkbox (la confirmación no ofrece opciones — RF-MF-004).
  * - Siempre llama deleteRecurring con fromCurrentMonth=true.
- * - Usa viewMonth cuando se pasa; cae a getCurrentMonth() si se omite.
+ * - Usa viewMonth cuando se pasa como currentMonth; cae a getCurrentMonth() si se omite.
  * - Toast de confirmación tras eliminar.
  * - Cancelar no elimina.
  * - Manejo de error del backend.
@@ -102,24 +103,24 @@ describe("DeleteRecurringDialog", () => {
     expect(screen.getByText(/1\.500,00/)).toBeInTheDocument();
   });
 
-  it("no renderiza ningún checkbox", () => {
+  it("no renderiza ningún checkbox (la confirmación no ofrece opciones — RF-MF-004)", () => {
     renderDialog({});
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
 
-  it("muestra texto informando que se elimina desde este mes en adelante", () => {
+  it("informa que el fijo dejará de aparecer desde este mes en adelante", () => {
     renderDialog({});
     expect(screen.getByText(/desde este mes en adelante/i)).toBeInTheDocument();
   });
 
-  it("muestra texto informando que los meses anteriores no se modifican", () => {
+  it("informa que los meses anteriores no se modifican", () => {
     renderDialog({});
     expect(screen.getByText(/meses anteriores no se modifican/i)).toBeInTheDocument();
   });
 
   // ── Comportamiento de eliminación ───────────────────────────────────────────
 
-  it("siempre llama deleteRecurring con fromCurrentMonth=true", async () => {
+  it("siempre llama deleteRecurring con fromCurrentMonth=true (RF-MF-004)", async () => {
     mockDeleteRecurring.mockResolvedValue({ success: true });
     const onClose = vi.fn();
     renderDialog({ onClose });

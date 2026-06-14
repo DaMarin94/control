@@ -280,16 +280,19 @@ describe("MonthViewClient", () => {
       expect(screen.getByText("$150,00")).toBeInTheDocument();
       // $5.000,00 (500000 centavos)
       expect(screen.getByText("$5.000,00")).toBeInTheDocument();
-      // $4.850,00 (485000 centavos)
-      expect(screen.getByText("$4.850,00")).toBeInTheDocument();
+      // Balance positivo se muestra como "+ $4.850,00" en el mini-balance card
+      expect(screen.getByText("+ $4.850,00")).toBeInTheDocument();
     });
 
     it("muestra totales en cero cuando el mes está vacío", () => {
       mockLoaded(mockEmpty);
       renderMonthView();
 
-      const zeroes = screen.getAllByText("$0,00");
-      expect(zeroes.length).toBeGreaterThanOrEqual(3);
+      // Gastos e ingresos muestran "$0,00"; el balance muestra "+ $0,00"
+      const zeroes = screen.getAllByText(/\$0,00/);
+      expect(zeroes.length).toBeGreaterThanOrEqual(2);
+      // El balance también aparece (con prefijo "+ ")
+      expect(screen.getByText("+ $0,00")).toBeInTheDocument();
     });
   });
 
@@ -478,9 +481,9 @@ describe("MonthViewClient", () => {
       expect(fijoEditBtn).toBeTruthy();
       fireEvent.click(fijoEditBtn!);
 
-      // Modal abierto en modo editar
+      // Modal abierto en modo edit-fixed — título "Editar · Fijo"
       expect(screen.getByRole("dialog")).toBeInTheDocument();
-      expect(screen.getByText(/editar movimiento/i)).toBeInTheDocument();
+      expect(screen.getByText(/editar/i)).toBeInTheDocument();
     });
 
     it("click en Eliminar de fijo abre el DeleteRecurringDialog", () => {
@@ -498,8 +501,9 @@ describe("MonthViewClient", () => {
       expect(screen.getByRole("dialog")).toBeInTheDocument();
       expect(screen.getByRole("heading", { name: /eliminar movimiento fijo/i })).toBeInTheDocument();
 
-      // El diálogo de fijo ya no tiene checkbox; elimina desde este mes en adelante (RF-MF-004)
+      // El diálogo de fijo no tiene checkbox — la eliminación no ofrece opciones (RF-MF-004)
       expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+      // Informa que el fijo dejará de aparecer desde este mes en adelante
       expect(screen.getByText(/desde este mes en adelante/i)).toBeInTheDocument();
     });
   });
@@ -577,9 +581,9 @@ describe("MonthViewClient", () => {
       expect(cuotaEditBtn).toBeTruthy();
       fireEvent.click(cuotaEditBtn!);
 
-      // Modal abierto en modo editar
+      // Modal abierto en modo edit-installment — título "Editar · Cuotas"
       expect(screen.getByRole("dialog")).toBeInTheDocument();
-      expect(screen.getByText(/editar movimiento/i)).toBeInTheDocument();
+      expect(screen.getByText(/editar/i)).toBeInTheDocument();
     });
 
     it("click en Eliminar de cuota abre el DeleteInstallmentDialog (sin checkbox)", () => {
@@ -599,7 +603,7 @@ describe("MonthViewClient", () => {
         screen.getByRole("heading", { name: /eliminar grupo de cuotas/i }),
       ).toBeInTheDocument();
 
-      // Sin checkbox — la eliminación siempre es total (a diferencia del diálogo de fijo)
+      // Sin checkbox — la eliminación siempre elimina el grupo completo
       expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     });
 

@@ -5,7 +5,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useSearchParams } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -71,73 +70,75 @@ export function RegisterForm() {
   }
 
   return (
-    <div className="rounded-lg border bg-card p-6 shadow-sm">
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
-        {/* Campo email */}
-        <div className="space-y-1.5">
-          <Label htmlFor="email" required>
-            Email
-          </Label>
-          <Input
-            id="email"
-            type="email"
-            autoComplete="email"
-            placeholder="tu@email.com"
-            error={errors.email?.message}
-            {...register("email")}
-          />
-          {/* Link a login si el email ya existe */}
-          {emailInUseError && (
-            <a
-              href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}
-              className="text-xs text-primary underline-offset-2 hover:underline"
-            >
-              Ir a iniciar sesión
-            </a>
-          )}
-        </div>
+    <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-[14px]">
+      {/* Campo email */}
+      <div className="flex flex-col gap-[7px]">
+        <Label htmlFor="email" required>
+          Email
+        </Label>
+        <Input
+          id="email"
+          type="email"
+          autoComplete="email"
+          placeholder="tu@email.com"
+          error={errors.email?.message}
+          {...register("email")}
+        />
+        {/* Link a login si el email ya existe */}
+        {emailInUseError && (
+          <a
+            href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+            className="text-[12.5px] font-semibold text-accent-ink underline-offset-[2px] hover:underline"
+          >
+            Ir a iniciar sesión
+          </a>
+        )}
+        {/* Indicador de email conservado — solo si hay error de email en uso */}
+        {emailInUseError && (
+          <p className="text-[12px] text-muted">
+            Email ingresado: {getValues("email")}
+          </p>
+        )}
+      </div>
 
-        {/* Campo contraseña */}
-        <div className="space-y-1.5">
-          <Label htmlFor="password" required>
-            Contraseña
-          </Label>
-          <Input
-            id="password"
-            type="password"
-            autoComplete="new-password"
-            placeholder="Mínimo 8 caracteres"
-            error={errors.password?.message}
-            {...register("password")}
-          />
-        </div>
+      {/* Campo contraseña */}
+      <div className="flex flex-col gap-[7px]">
+        <Label htmlFor="password" required>
+          Contraseña
+        </Label>
+        <Input
+          id="password"
+          type="password"
+          autoComplete="new-password"
+          placeholder="Mínimo 8 caracteres"
+          error={errors.password?.message}
+          {...register("password")}
+        />
+      </div>
 
-        {/* Campo confirmar contraseña */}
-        <div className="space-y-1.5">
-          <Label htmlFor="confirmPassword" required>
-            Confirmá tu contraseña
-          </Label>
-          <Input
-            id="confirmPassword"
-            type="password"
-            autoComplete="new-password"
-            placeholder="Repetí tu contraseña"
-            error={errors.confirmPassword?.message}
-            {...register("confirmPassword")}
-          />
-        </div>
+      {/* Campo confirmar contraseña */}
+      <div className="flex flex-col gap-[7px]">
+        <Label htmlFor="confirmPassword" required>
+          Confirmá tu contraseña
+        </Label>
+        <Input
+          id="confirmPassword"
+          type="password"
+          autoComplete="new-password"
+          placeholder="Repetí tu contraseña"
+          error={errors.confirmPassword?.message}
+          {...register("confirmPassword")}
+        />
+      </div>
 
-        <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? "Creando cuenta..." : "Crear cuenta"}
-        </Button>
-      </form>
-
-      {/* Indicador de email conservado en hover para debug — solo si hay error */}
-      {emailInUseError && (
-        <p className="mt-2 text-center text-xs text-muted-foreground">
-          Email ingresado: {getValues("email")}
-        </p>
-      )}
-    </div>
+      {/* Botón principal — mismo estilo que el btn primario del DS */}
+      <button
+        type="submit"
+        disabled={isLoading}
+        className="mt-1 inline-flex w-full items-center justify-center gap-2 rounded-ctl border border-transparent bg-accent px-4 py-[13px] text-[15px] font-semibold text-white shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0_/_0.2)] transition-all duration-[140ms] hover:-translate-y-px hover:bg-accent-press hover:shadow-[var(--shadow-md)] disabled:pointer-events-none disabled:opacity-50"
+      >
+        {isLoading ? "Creando cuenta..." : "Crear cuenta"}
+      </button>
+    </form>
   );
 }

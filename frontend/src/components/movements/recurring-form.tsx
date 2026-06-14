@@ -3,23 +3,13 @@
 /**
  * Formulario de movimiento fijo (RF-MF-001 / RF-MF-003).
  *
- * Modo crear: campos con defaults (tipo=EXPENSE, mes de inicio editable).
- * Modo editar: campos precargados; tipo es read-only (RF-MF-003 no permite editar el type).
+ * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
+ * - Toggle Gasto/Ingreso (o read-only con badge en edición)
+ * - Input de monto mono 20px con prefijo "$"
+ * - Nota de recurrencia (.field-note con ícono Repeat)
+ * - Footer: helper "Se guarda en mes año" + Cancelar / Guardar
  *
- * Reglas de negocio:
- * - Monto en pesos, convertido a centavos al enviar (parseCurrencyInput).
- * - Categorías filtradas por scope según el tipo (RN-010).
- * - Si cambia el tipo (solo en crear) y la categoría deja de ser compatible, se resetea.
- * - Sin fecha ni hora — los fijos son ítems mensuales sin día específico.
- * - startMonth: campo editable en modo crear (<input type="month">);
- *   default = defaultMonth (mes navegado) ?? getCurrentMonth() (mes actual del navegador).
- *   Permite pasado — no hay validación de mes mínimo.
- * - Al editar: PATCH con currentMonth = viewMonth ?? getCurrentMonth().
- *   viewMonth es el mes que el usuario está viendo en la Vista del mes; permite
- *   que el split del backend corte en el mes correcto al editar desde un mes pasado
- *   o futuro. Si el form se abre desde un contexto sin mes navegado (ej. dashboard),
- *   el fallback getCurrentMonth() garantiza compatibilidad. type y startMonth no se envían.
- * - Error del backend → modal queda abierto con datos conservados (RNF-008).
+ * Lógica de negocio preservada intacta.
  */
 
 import { useEffect, useState } from "react";
@@ -27,6 +17,7 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Link from "next/link";
+import { AlertTriangle, Repeat, Check, ArrowDown, ArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,9 +29,10 @@ import { type TransactionType } from "@/types/transaction";
 import { type Category, type CategoryScope } from "@/types/category";
 import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
 import { type Recurring } from "@/types/recurring";
-import { parseCurrencyInput, getCurrentMonth } from "@/lib/format";
+import { parseCurrencyInput, getCurrentMonth, formatMonthLabel } from "@/lib/format";
 import { createLogger } from "@/lib/logger";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 
 const logger = createLogger("RecurringForm");
 
@@ -67,30 +59,14 @@ type RecurringFormData = z.infer<typeof recurringSchema>;
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface RecurringFormProps {
-  /**
-   * null = modo crear.
-   * Recurring = modo editar (type es read-only).
-   */
   recurring: Recurring | null;
   onClose: () => void;
-  /**
-   * Mes contexto (YYYY-MM) desde la Vista del mes.
-   * Solo aplica en modo crear: es el default del campo "Mes de inicio".
-   * Si no se pasa, el default es el mes actual del navegador.
-   */
   defaultMonth?: string;
-  /**
-   * Mes navegado (YYYY-MM) desde la Vista del mes.
-   * Solo aplica en modo editar: se usa como currentMonth en el PATCH,
-   * para que el split del backend corte en el mes que el usuario está viendo.
-   * Si no se pasa, se cae al getCurrentMonth() (mes real de hoy).
-   */
   viewMonth?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Devuelve las categorías compatibles con el tipo dado (RN-010) */
 function filterCategoriesByType(
   categories: { id: string; name: string; scope: CategoryScope }[],
   type: TransactionType,
@@ -110,7 +86,6 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
   const { categories } = useCategories();
   const { createRecurring, updateRecurring, isCreating, isUpdating } = useRecurring();
 
-  // Estado del modal inline de nueva categoría (RF-MU-004)
   const [showCategoryModal, setShowCategoryModal] = useState(false);
 
   const isLoading = isEditing ? isUpdating : isCreating;
@@ -119,10 +94,6 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
     ? {
         type: recurring.type,
         amountInput: String(recurring.amountCents / 100).replace(".", ","),
-        // En edición, startMonth no se muestra ni se envía en el PATCH.
-        // El mapper (movementItemToRecurring) setea "" porque el MovementItem
-        // de la lista no trae el startMonth real. Usamos getCurrentMonth() como
-        // valor de relleno válido solo para satisfacer el schema compartido.
         startMonth: getCurrentMonth(),
         categoryId: recurring.categoryId,
         description: recurring.description ?? "",
@@ -148,14 +119,11 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
     defaultValues,
   });
 
-  // Sincronizar cuando cambia el fijo (abrir en modo editar)
   useEffect(() => {
     if (isEditing) {
       reset({
         type: recurring.type,
         amountInput: String(recurring.amountCents / 100).replace(".", ","),
-        // Mismo relleno que en defaultValues: getCurrentMonth() satisface el
-        // schema compartido; este campo no se renderiza ni se envía en el PATCH.
         startMonth: getCurrentMonth(),
         categoryId: recurring.categoryId,
         description: recurring.description ?? "",
@@ -165,14 +133,13 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
 
   const selectedType = watch("type");
   const selectedCategoryId = watch("categoryId");
+  const selectedStartMonth = watch("startMonth");
 
-  // Categorías disponibles filtradas por tipo
   const availableCategories = filterCategoriesByType(
     (categories ?? []).map((c) => ({ id: c.id, name: c.name, scope: c.scope })),
     selectedType,
   );
 
-  // Si cambia el tipo (solo en crear) y la categoría deja de ser compatible → resetear
   useEffect(() => {
     if (!isEditing && selectedCategoryId && categories) {
       const isCompatible = availableCategories.some((c) => c.id === selectedCategoryId);
@@ -186,13 +153,10 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
 
   async function onSubmit(data: RecurringFormData) {
     const amountCents = parseCurrencyInput(data.amountInput);
-    if (amountCents === null) return; // Zod ya valida esto
+    if (amountCents === null) return;
 
     if (isEditing) {
       const result = await updateRecurring(recurring.id, {
-        // viewMonth es el mes que el usuario está viendo en la Vista del mes.
-        // Usarlo como pivote permite que el backend corte el fijo en el mes correcto.
-        // Fallback a getCurrentMonth() si el form se abre desde un contexto sin mes navegado.
         currentMonth: viewMonth ?? getCurrentMonth(),
         amountCents,
         categoryId: data.categoryId,
@@ -220,7 +184,6 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
         return;
       }
 
-      // Toast con acción "Ir a ver" → /mes?month=startMonth elegido (RF-MF-001)
       toast.success("Movimiento guardado correctamente.", {
         action: {
           label: "Ir a ver",
@@ -232,167 +195,227 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
     }
   }
 
+  const savedMonthLabel = selectedStartMonth
+    ? formatMonthLabel(selectedStartMonth)
+    : formatMonthLabel(getCurrentMonth());
+
   return (
     <>
-    <form
-      onSubmit={handleSubmit(onSubmit, (errors) => {
-        logger.warn("Validación del form de fijo falló", { errors });
-      })}
-      noValidate
-      className="space-y-4 px-6 py-5"
-    >
-      {/* ── Tipo ── */}
-      <div className="space-y-1.5">
-        <Label htmlFor="rec-type" required>
-          Tipo
-        </Label>
-        {isEditing ? (
-          /* En edición el tipo es read-only (RF-MF-003) */
-          <div className="flex items-center gap-2">
-            <Input
-              id="rec-type"
-              type="text"
-              value={recurring.type === "EXPENSE" ? "Gasto" : "Ingreso"}
-              disabled
-              className="bg-muted/50 text-muted-foreground"
+      <form
+        onSubmit={handleSubmit(onSubmit, (errors) => {
+          logger.warn("Validación del form de fijo falló", { errors });
+        })}
+        noValidate
+      >
+        <div className="px-[22px] pb-[22px] space-y-[14px]">
+          {/* ── Tipo (toggle o read-only en edición) ── */}
+          {isEditing ? (
+            <div className="flex flex-col gap-[7px]">
+              <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+                Tipo
+              </Label>
+              <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px] text-[14px] font-semibold text-ink-2">
+                {recurring.type === "EXPENSE" ? (
+                  <ArrowDown size={15} className="text-expense-ink" aria-hidden="true" />
+                ) : (
+                  <ArrowUp size={15} className="text-income-ink" aria-hidden="true" />
+                )}
+                {recurring.type === "EXPENSE" ? "Gasto" : "Ingreso"}
+              </div>
+              {/* Campo oculto para que RHF lo tenga en el form state */}
+              <input type="hidden" {...register("type")} />
+            </div>
+          ) : (
+            <Controller
+              name="type"
+              control={control}
+              render={({ field }) => (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => field.onChange("EXPENSE")}
+                    className={cn(
+                      "flex items-center justify-center gap-2 rounded-ctl border-[1.5px] px-3 py-3 text-[14px] font-semibold transition-colors duration-[140ms] cursor-pointer",
+                      "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--expense-soft)]",
+                      field.value === "EXPENSE"
+                        ? "border-expense bg-expense-soft text-expense-ink"
+                        : "border-line bg-panel text-muted hover:text-ink",
+                    )}
+                  >
+                    <ArrowDown size={16} aria-hidden="true" />
+                    Gasto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => field.onChange("INCOME")}
+                    className={cn(
+                      "flex items-center justify-center gap-2 rounded-ctl border-[1.5px] px-3 py-3 text-[14px] font-semibold transition-colors duration-[140ms] cursor-pointer",
+                      "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--income-soft)]",
+                      field.value === "INCOME"
+                        ? "border-income bg-income-soft text-income-ink"
+                        : "border-line bg-panel text-muted hover:text-ink",
+                    )}
+                  >
+                    <ArrowUp size={16} aria-hidden="true" />
+                    Ingreso
+                  </button>
+                </div>
+              )}
             />
-            {/* Campo oculto para que react-hook-form lo tenga en el form state */}
-            <input type="hidden" {...register("type")} />
-          </div>
-        ) : (
-          <Controller
-            name="type"
-            control={control}
-            render={({ field }) => (
-              <Select
-                id="rec-type"
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.type?.message}
-              >
-                <option value="EXPENSE">Gasto</option>
-                <option value="INCOME">Ingreso</option>
-              </Select>
-            )}
-          />
-        )}
-      </div>
+          )}
 
-      {/* ── Monto ── */}
-      <div className="space-y-1.5">
-        <Label htmlFor="rec-amount" required>
-          Monto ($)
-        </Label>
-        <Input
-          id="rec-amount"
-          type="text"
-          inputMode="decimal"
-          placeholder="0,00"
-          error={errors.amountInput?.message}
-          {...register("amountInput")}
-        />
-        <p className="text-xs text-muted-foreground">Ingresá el monto en pesos (ej: 1500,50)</p>
-      </div>
-
-      {/* ── Mes de inicio (solo en modo crear) ── */}
-      {!isEditing && (
-        <div className="space-y-1.5">
-          <Label htmlFor="rec-start-month" required>
-            Mes de inicio
-          </Label>
-          <Input
-            id="rec-start-month"
-            type="month"
-            error={errors.startMonth?.message}
-            {...register("startMonth")}
-          />
-          <p className="text-xs text-muted-foreground">
-            Mes a partir del cual aparece este gasto fijo
-          </p>
-        </div>
-      )}
-
-      {/* ── Categoría ── */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="rec-category" required>
-            Categoría
-          </Label>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowCategoryModal(true)}
-            className="h-auto py-0.5 text-xs text-primary hover:text-primary/80"
-          >
-            + Nueva
-          </Button>
-        </div>
-        {noCategoriesAvailable ? (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-            No hay categorías disponibles para este tipo de movimiento.{" "}
-            <Link
-              href="/categorias"
-              className="font-semibold underline underline-offset-2 hover:opacity-80"
+          {/* ── Monto ── */}
+          <div className="flex flex-col gap-[7px]">
+            <Label htmlFor="rec-amount" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+              Monto
+            </Label>
+            <div
+              className={cn(
+                "flex items-center gap-2 rounded-ctl border-[1.5px] px-[13px] py-[11px] transition-colors duration-[140ms]",
+                "focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft)]",
+                errors.amountInput
+                  ? "border-expense shadow-[0_0_0_3px_var(--expense-soft)]"
+                  : "border-line-strong bg-panel",
+              )}
             >
-              Creá una categoría
-            </Link>{" "}
-            o usá el botón &ldquo;+ Nueva&rdquo; de arriba.
-          </div>
-        ) : (
-          <Controller
-            name="categoryId"
-            control={control}
-            render={({ field }) => (
-              <Select
-                id="rec-category"
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.categoryId?.message}
-              >
-                <option value="">Seleccioná una categoría</option>
-                {availableCategories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </Select>
+              <span className="text-[15px] text-muted mono shrink-0">$</span>
+              <input
+                id="rec-amount"
+                type="text"
+                inputMode="decimal"
+                placeholder="0,00"
+                className="flex-1 border-none outline-none bg-transparent mono text-[20px] font-semibold tracking-[-0.01em] text-ink placeholder:text-faint"
+                {...register("amountInput")}
+              />
+            </div>
+            {errors.amountInput && (
+              <p className="text-[12px] text-expense-ink">{errors.amountInput.message}</p>
             )}
-          />
-        )}
-      </div>
+          </div>
 
-      {/* ── Descripción ── */}
-      <div className="space-y-1.5">
-        <Label htmlFor="rec-description">Descripción</Label>
-        <Input
-          id="rec-description"
-          type="text"
-          placeholder="Opcional"
-          error={errors.description?.message}
-          {...register("description")}
-        />
-      </div>
+          {/* ── Mes de inicio (solo en modo crear) ── */}
+          {!isEditing && (
+            <div className="flex flex-col gap-[7px]">
+              <Label htmlFor="rec-start-month" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+                Mes de inicio
+              </Label>
+              <Input
+                id="rec-start-month"
+                type="month"
+                error={errors.startMonth?.message}
+                {...register("startMonth")}
+              />
+              <p className="text-[12.5px] text-muted">
+                Mes a partir del cual aparece este gasto fijo
+              </p>
+            </div>
+          )}
 
-      {/* ── Acciones ── */}
-      <div className="flex justify-end gap-3 pt-2">
-        <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
-          Cancelar
-        </Button>
-        <Button type="submit" disabled={isLoading || noCategoriesAvailable}>
-          {isLoading
-            ? "Guardando..."
-            : isEditing
-              ? "Guardar cambios"
-              : "Guardar movimiento"}
-        </Button>
-      </div>
-    </form>
+          {/* ── Categoría ── */}
+          <div className="flex flex-col gap-[7px]">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="rec-category" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+                Categoría
+              </Label>
+              <button
+                type="button"
+                onClick={() => setShowCategoryModal(true)}
+                className="text-[12.5px] font-semibold text-accent-ink hover:text-accent transition-colors duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-sm"
+              >
+                + Nueva
+              </button>
+            </div>
+
+            {noCategoriesAvailable ? (
+              <div className="flex items-start gap-[11px] rounded-ctl border px-[14px] py-[13px] bg-expense-soft" style={{ borderColor: "oklch(0.57 0.16 27 / 0.25)" }}>
+                <AlertTriangle size={18} className="text-expense-ink shrink-0 mt-[1px]" aria-hidden="true" />
+                <div className="text-[13px] leading-[1.45] text-expense-ink">
+                  <b className="font-bold">Sin categorías para este tipo.</b>{" "}
+                  <Link
+                    href="/categorias"
+                    className="font-bold underline underline-offset-[2px] text-expense-ink hover:opacity-80"
+                    onClick={onClose}
+                  >
+                    Creá una categoría
+                  </Link>{" "}
+                  o usá el botón &ldquo;+ Nueva&rdquo; de arriba.
+                </div>
+              </div>
+            ) : (
+              <Controller
+                name="categoryId"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    id="rec-category"
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.categoryId?.message}
+                  >
+                    <option value="">Seleccioná una categoría</option>
+                    {availableCategories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              />
+            )}
+          </div>
+
+          {/* ── Nota de recurrencia (solo en crear) ── */}
+          {!isEditing && (
+            <div className="flex items-center gap-[7px] pt-[2px] text-[12.5px] text-muted">
+              <Repeat size={14} className="text-accent-ink shrink-0" aria-hidden="true" />
+              Se registra automáticamente cada mes a partir del mes de inicio.
+            </div>
+          )}
+
+          {/* ── Descripción ── */}
+          <div className="flex flex-col gap-[7px]">
+            <Label htmlFor="rec-description" className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+              Descripción{" "}
+              <span className="text-faint font-normal">(opcional)</span>
+            </Label>
+            <Input
+              id="rec-description"
+              type="text"
+              placeholder="Ej: Alquiler departamento"
+              error={errors.description?.message}
+              {...register("description")}
+            />
+          </div>
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="flex items-center justify-between gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
+          <span className="text-[12.5px] text-muted">
+            Se guarda en{" "}
+            <span className="font-semibold text-ink-2">{savedMonthLabel}</span>
+          </span>
+          <div className="flex gap-3">
+            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={isLoading || noCategoriesAvailable}
+              className="gap-1.5"
+            >
+              <Check size={14} aria-hidden="true" />
+              {isLoading
+                ? "Guardando..."
+                : isEditing
+                  ? "Guardar cambios"
+                  : "Guardar"}
+            </Button>
+          </div>
+        </div>
+      </form>
 
       {/* ── Modal inline de nueva categoría (RF-MU-004) ── */}
-      {/* Se renderiza como hermano del form (no descendiente) para evitar un
-          <form> anidado dentro de otro <form>, que es HTML inválido y rompe
-          la hidratación de React. */}
       {showCategoryModal && (
         <CategoryFormModal
           category={null}

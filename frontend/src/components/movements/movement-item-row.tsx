@@ -3,19 +3,20 @@
 /**
  * Fila de un movimiento en la lista del mes (RF-VM-001).
  *
- * Muestra: tipo (gasto/ingreso), monto, categoría (nombre + color),
- * descripción (si tiene), origen (badge "Único" / "Fijo" / "Cuotas"),
- * fecha/hora (solo para únicos — fijos y cuotas tienen occurredAt null).
+ * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
  *
- * Cambios en Fase 7:
- * - origin === "cuota": badge "Cuotas" y muestra "Cuota X/N" usando installment.number/total.
- * - Para cuotas no se muestran fecha/hora (occurredAt es null — no llamar formatDate/formatTime).
- * - Mantiene intactos únicos (fecha·hora) y fijos ("Mensual").
+ * Layout: grid 40px 1fr auto auto
+ *   1. Ícono 40×40 tintado (expense-soft/expense-ink o income-soft/income-ink)
+ *   2. Texto: nombre + sub-línea (categoría · tipo · [mensual para fijos])
+ *   3. Fecha en mono (DD Mmm); en fijos "Mensual"; en cuotas "Cuota X/N" + sub "cuota X/Y"
+ *   4. Monto mono 15.5px (gastos con −$, ingresos con +$ en income-ink)
+ *
+ * Acciones editar/borrar: aparecen en hover de la fila (opacity 0→1).
  */
 
-import { Button } from "@/components/ui/button";
 import { type MovementItem } from "@/types/movement";
-import { formatCurrency, formatDate, formatTime } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
+import { ArrowDown, ArrowUp, Repeat, Pencil, Trash2 } from "lucide-react";
 
 interface MovementItemRowProps {
   movement: MovementItem;
@@ -25,102 +26,123 @@ interface MovementItemRowProps {
 
 export function MovementItemRow({ movement, onEdit, onDelete }: MovementItemRowProps) {
   const isExpense = movement.type === "EXPENSE";
-  const typeLabel = isExpense ? "Gasto" : "Ingreso";
-  const amountFormatted = formatCurrency(movement.amountCents);
-
   const isFijo = movement.origin === "fijo";
   const isCuota = movement.origin === "cuota";
 
-  // Fecha y hora solo para únicos (occurredAt y timezone son strings para "unico")
+  // Fecha formateada "02 Jun" (solo para únicos)
   const dateFormatted =
     !isFijo && !isCuota && movement.occurredAt && movement.timezone
       ? formatDate(movement.occurredAt, movement.timezone)
       : null;
-  const timeFormatted =
-    !isFijo && !isCuota && movement.occurredAt && movement.timezone
-      ? formatTime(movement.occurredAt, movement.timezone)
-      : null;
 
-  // Badge de origen
-  const originLabel = isFijo ? "Fijo" : isCuota ? "Cuotas" : "Único";
+  // Monto: gastos con −$, ingresos con +$
+  const amountFormatted = formatCurrency(movement.amountCents);
+  const amountDisplay = isExpense ? `−${amountFormatted}` : `+${amountFormatted}`;
 
-  // Texto de cuota "X/N" para origin === "cuota" (RF-MC-001: cada cuota muestra su número y total)
+  // Ícono y clases de color por tipo
+  const IconComponent = isExpense ? ArrowDown : ArrowUp;
+  const iconBg = isExpense ? "bg-expense-soft" : "bg-income-soft";
+  const iconColor = isExpense ? "text-expense-ink" : "text-income-ink";
+
+  // Sublínea: "Categoría · tipo · [repeat mensual]"
+  const typeLabel = isExpense ? "gasto" : "ingreso";
+  const categoryName = movement.category.name;
+
+  // Cuota label: "Cuota X/N"
   const installmentLabel =
     isCuota && movement.installment
       ? `Cuota ${movement.installment.number}/${movement.installment.total}`
       : null;
 
   return (
-    <div className="flex items-start gap-3 rounded-lg border bg-card px-4 py-3">
-      {/* Indicador de color de categoría */}
-      <div
-        className="mt-1 h-3 w-3 shrink-0 rounded-full"
-        style={{ backgroundColor: movement.category.color }}
+    <div
+      className="group relative grid items-center gap-[14px] px-[18px] cursor-pointer transition-colors duration-[120ms] hover:bg-panel-2 [&+&]:border-t [&+&]:border-hair"
+      style={{ gridTemplateColumns: "40px 1fr auto auto", padding: `var(--row-pad) 18px` }}
+    >
+      {/* Col 1: Ícono tintado */}
+      <span
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] ${iconBg} ${iconColor}`}
         aria-hidden="true"
-      />
+      >
+        <IconComponent size={19} strokeWidth={2.2} />
+      </span>
 
-      {/* Contenido principal */}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          {/* Monto y tipo */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span
-              className={`text-base font-semibold ${
-                isExpense
-                  ? "text-red-600 dark:text-red-400"
-                  : "text-green-600 dark:text-green-400"
-              }`}
-            >
-              {isExpense ? "-" : "+"}
-              {amountFormatted}
-            </span>
-            <span className="text-xs text-muted-foreground">{typeLabel}</span>
-            {/* Badge de origen */}
-            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-              {originLabel}
-            </span>
-          </div>
+      {/* Col 2: Nombre + sublínea */}
+      <div className="min-w-0">
+        <b className="block text-[14.5px] font-semibold tracking-[-0.01em] text-ink leading-snug truncate">
+          {movement.description ?? categoryName}
+        </b>
+        <span className="flex items-center gap-[7px] text-[12.5px] text-muted flex-wrap">
+          <span>{categoryName}</span>
+          <span
+            className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
+            aria-hidden="true"
+          />
+          <span>{typeLabel}</span>
+          {isFijo && (
+            <>
+              <span
+                className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
+                aria-hidden="true"
+              />
+              <span className="inline-flex items-center gap-[4px]">
+                <Repeat size={12} className="opacity-60" aria-hidden="true" />
+                mensual
+              </span>
+            </>
+          )}
+        </span>
+      </div>
 
-          {/* Acciones */}
-          <div className="flex shrink-0 gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onEdit(movement)}
-              aria-label={`Editar movimiento${movement.description ? `: ${movement.description}` : ""}`}
-            >
-              Editar
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onDelete(movement)}
-              aria-label={`Eliminar movimiento${movement.description ? `: ${movement.description}` : ""}`}
-              className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-            >
-              Eliminar
-            </Button>
-          </div>
-        </div>
-
-        {/* Categoría */}
-        <p className="mt-0.5 text-sm text-foreground">{movement.category.name}</p>
-
-        {/* Descripción (si tiene) */}
-        {movement.description && (
-          <p className="mt-0.5 text-xs text-muted-foreground">{movement.description}</p>
+      {/* Col 3: Fecha / tipo de cuota */}
+      <div className="text-right">
+        <span className="block text-[12.5px] text-muted mono whitespace-nowrap">
+          {isFijo ? "Mensual" : isCuota ? (installmentLabel ?? "") : (dateFormatted ?? "")}
+        </span>
+        {isCuota && installmentLabel && (
+          <span className="block text-[11px] text-muted mono mt-[1px]">
+            {/* sub-línea de cuota vacía — el label ya es "Cuota X/N" */}
+          </span>
         )}
+      </div>
 
-        {/* Fecha y hora (únicos) / "Mensual" (fijos) / "Cuota X/N" (cuotas) */}
-        <p className="mt-1 text-xs text-muted-foreground">
-          {isFijo ? (
-            "Mensual"
-          ) : isCuota ? (
-            installmentLabel
-          ) : dateFormatted && timeFormatted ? (
-            `${dateFormatted} · ${timeFormatted}`
-          ) : null}
-        </p>
+      {/* Col 4: Monto mono */}
+      <span
+        className={`text-[15.5px] font-semibold text-right min-w-[100px] mono ${
+          isExpense ? "text-ink" : "text-income-ink"
+        }`}
+      >
+        {amountDisplay}
+      </span>
+
+      {/* Acciones editar/borrar: aparecen al hover de la fila */}
+      <div
+        className="absolute right-[18px] top-1/2 -translate-y-1/2 flex gap-1 opacity-0 transition-opacity duration-[140ms] group-hover:opacity-100"
+      >
+        <button
+          type="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit(movement);
+          }}
+          aria-label={`Editar ${movement.description ?? categoryName}`}
+          className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-transparent bg-transparent text-muted transition-colors duration-[140ms] hover:border-line hover:bg-panel-3 hover:text-ink focus-visible:opacity-100 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+        >
+          <Pencil size={16} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(movement);
+          }}
+          aria-label={`Eliminar ${movement.description ?? categoryName}`}
+          className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-transparent bg-transparent text-muted transition-colors duration-[140ms] hover:border-expense hover:bg-expense-soft hover:text-expense-ink focus-visible:opacity-100 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--expense-soft)]"
+        >
+          <Trash2 size={16} aria-hidden="true" />
+        </button>
       </div>
     </div>
   );

@@ -1,6 +1,10 @@
 /**
  * Root layout — Server Component.
  * Monta los providers globales (ReactQuery, Toast, SessionProvider) y carga la validación de env.
+ *
+ * Fuentes del design system "Precise Ledger":
+ *   - Space Grotesk  → var(--font-ui)   → consumida por --ui en globals.css
+ *   - IBM Plex Mono  → var(--font-mono) → consumida por --mono en globals.css
  */
 
 // La importación de env.ts dispara la validación al arrancar.
@@ -8,20 +12,22 @@
 import "@/lib/env";
 
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import { ReactQueryProvider } from "@/lib/react-query";
 import { ToastProvider } from "@/components/ui/toast";
 import { AuthSessionProvider } from "@/lib/session-provider";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-ui",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const ibmPlexMono = IBM_Plex_Mono({
+  variable: "--font-mono",
   subsets: ["latin"],
+  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -36,7 +42,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} antialiased`}>
         <AuthSessionProvider>
           <ReactQueryProvider>
             <ToastProvider>{children}</ToastProvider>

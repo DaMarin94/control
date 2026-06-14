@@ -10,6 +10,9 @@
  * Ruta privada: el middleware redirige a /login si no hay sesión activa.
  * El header y la navegación global viven en el AppSidebar del layout (app).
  * Suspense necesario porque MonthViewWrapper usa useSearchParams().
+ *
+ * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
+ * Mismo padding y max-width que el dashboard.
  */
 
 import { Suspense } from "react";
@@ -17,13 +20,17 @@ import { MonthViewWrapper } from "@/components/movements/month-view-wrapper";
 
 export default function MesPage() {
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
+    <div className="px-10 py-[34px] pb-20 max-w-[1120px] animate-screen-fade">
       {/* Suspense necesario porque MonthViewWrapper usa useSearchParams */}
       <Suspense
         fallback={
-          <div className="space-y-4">
-            <div className="h-10 animate-pulse rounded-lg bg-muted" />
-            <div className="h-20 animate-pulse rounded-lg bg-muted" />
+          <div className="space-y-[var(--gap)]">
+            <div className="h-12 animate-pulse rounded-card bg-panel-3" />
+            <div className="grid grid-cols-3 gap-[var(--gap)]">
+              <div className="h-[90px] animate-pulse rounded-card bg-panel-3" />
+              <div className="h-[90px] animate-pulse rounded-card bg-panel-3" />
+              <div className="h-[90px] animate-pulse rounded-card bg-panel-3" />
+            </div>
           </div>
         }
       >

@@ -1,5 +1,10 @@
 /**
  * Tests de la primitiva Button.
+ * Actualizados en Fase 2 para reflejar los tokens del design system "Precise Ledger".
+ *
+ * Las clases de shadcn (bg-primary, bg-destructive, border-input, h-8, h-10)
+ * fueron reemplazadas por los tokens del DS (bg-accent, bg-expense-soft,
+ * border-line-strong, py-[7px], py-[13px]).
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -13,41 +18,55 @@ describe("Button", () => {
     expect(screen.getByRole("button", { name: "Guardar" })).toBeInTheDocument();
   });
 
-  it("aplica variante default por defecto", () => {
+  it("aplica variante default por defecto (bg-accent)", () => {
     render(<Button>Default</Button>);
     const btn = screen.getByRole("button");
-    expect(btn).toHaveClass("bg-primary");
+    expect(btn).toHaveClass("bg-accent");
+    expect(btn).toHaveClass("text-white");
   });
 
-  it("aplica variante outline", () => {
+  it("aplica variante outline (borde line-strong, bg-panel)", () => {
     render(<Button variant="outline">Outline</Button>);
     const btn = screen.getByRole("button");
     expect(btn).toHaveClass("border");
-    expect(btn).toHaveClass("border-input");
+    expect(btn).toHaveClass("border-line-strong");
+    expect(btn).toHaveClass("bg-panel");
   });
 
-  it("aplica variante ghost", () => {
+  it("aplica variante ghost (bg-panel, borde line)", () => {
     render(<Button variant="ghost">Ghost</Button>);
     const btn = screen.getByRole("button");
-    expect(btn).toHaveClass("hover:bg-accent");
+    expect(btn).toHaveClass("bg-panel");
+    expect(btn).toHaveClass("border-line");
+    expect(btn).toHaveClass("text-ink");
   });
 
-  it("aplica variante destructive", () => {
+  it("aplica variante destructive (expense-soft, expense-ink)", () => {
     render(<Button variant="destructive">Eliminar</Button>);
     const btn = screen.getByRole("button");
-    expect(btn).toHaveClass("bg-destructive");
+    expect(btn).toHaveClass("bg-expense-soft");
+    expect(btn).toHaveClass("text-expense-ink");
   });
 
-  it("aplica tamaño sm", () => {
+  it("aplica tamaño sm (py-[7px])", () => {
     render(<Button size="sm">Pequeño</Button>);
     const btn = screen.getByRole("button");
-    expect(btn).toHaveClass("h-8");
+    expect(btn).toHaveClass("py-[7px]");
+    expect(btn).toHaveClass("px-3");
   });
 
-  it("aplica tamaño lg", () => {
+  it("aplica tamaño lg (py-[13px])", () => {
     render(<Button size="lg">Grande</Button>);
     const btn = screen.getByRole("button");
-    expect(btn).toHaveClass("h-10");
+    expect(btn).toHaveClass("py-[13px]");
+    expect(btn).toHaveClass("px-5");
+  });
+
+  it("aplica tamaño default (py-[10px] px-4)", () => {
+    render(<Button>Default size</Button>);
+    const btn = screen.getByRole("button");
+    expect(btn).toHaveClass("py-[10px]");
+    expect(btn).toHaveClass("px-4");
   });
 
   it("llama al onClick cuando se hace click", async () => {
@@ -90,8 +109,17 @@ describe("Button", () => {
 
   it("tiene atributo type button por defecto (evita submit accidental)", () => {
     render(<Button>Test</Button>);
-    // No tiene type explícito en la implementación, pero verifica que no rompe el form
     const btn = screen.getByRole("button");
     expect(btn.tagName).toBe("BUTTON");
+  });
+
+  it("aplica rounded-ctl (radio del design system)", () => {
+    render(<Button>Test</Button>);
+    expect(screen.getByRole("button")).toHaveClass("rounded-ctl");
+  });
+
+  it("aplica transición de 140ms", () => {
+    render(<Button>Test</Button>);
+    expect(screen.getByRole("button")).toHaveClass("duration-[140ms]");
   });
 });

@@ -32,8 +32,10 @@ describe("UserMenu", () => {
   it("muestra la inicial del email en mayúscula en el avatar", () => {
     render(<UserMenu email="usuario@example.com" />);
 
-    // La inicial es "U" (mayúscula de "usuario")
-    expect(screen.getByText("U")).toBeInTheDocument();
+    // La inicial "U" aparece en el avatar (aria-hidden) y en el display name del trigger
+    // getAllByText para manejar múltiples ocurrencias
+    const initials = screen.getAllByText("U");
+    expect(initials.length).toBeGreaterThanOrEqual(1);
   });
 
   it("muestra el email en el trigger", () => {
@@ -80,6 +82,8 @@ describe("UserMenu", () => {
     render(<UserMenu email="Admin@control.com" />);
 
     // charAt(0).toUpperCase() de "Admin" = "A"
-    expect(screen.getByText("A")).toBeInTheDocument();
+    // La inicial aparece múltiples veces (avatar + display name)
+    const initials = screen.getAllByText("A");
+    expect(initials.length).toBeGreaterThanOrEqual(1);
   });
 });

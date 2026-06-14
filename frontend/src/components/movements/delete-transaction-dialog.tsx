@@ -1,16 +1,12 @@
 "use client";
 
 /**
- * Diálogo de confirmación para eliminar un movimiento (RF-MU-003).
+ * Diálogo de confirmación para eliminar un movimiento único (RF-MU-003).
  *
- * Eliminación hard delete permanente — no hay papelera ni soft delete.
- * Pide confirmación explícita antes de ejecutar el DELETE.
+ * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
+ * Misma estructura: scrim + diálogo max-width 380px, radio 18px, shadow-lg, modal-pop.
  *
- * Props:
- * - transaction: movimiento a eliminar (necesario para mostrar descripción y el mes para invalidar)
- * - onClose: llamado al cancelar o al finalizar la eliminación
- *
- * Fase 5 cableará este diálogo desde la Vista del mes.
+ * Lógica preservada intacta.
  */
 
 import { Button } from "@/components/ui/button";
@@ -32,7 +28,6 @@ export function DeleteTransactionDialog({
   const { deleteTransaction, isDeleting } = useTransactions();
 
   async function handleConfirm() {
-    // El mes se deriva del occurredAt para invalidar la query correcta
     const month = transaction.occurredAt.substring(0, 7);
     const result = await deleteTransaction(transaction.id, month);
 
@@ -51,44 +46,55 @@ export function DeleteTransactionDialog({
   const description = transaction.description ?? transaction.category.name;
 
   return (
+    /* Scrim */
     <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-6"
+      style={{ background: "oklch(0.18 0.02 270 / 0.46)", backdropFilter: "blur(3px)" }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="delete-transaction-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="w-full max-w-sm rounded-lg border bg-card shadow-lg">
+      {/* Diálogo */}
+      <div
+        className="w-full max-w-[380px] bg-panel border border-line overflow-hidden animate-modal-pop"
+        style={{ borderRadius: "18px", boxShadow: "var(--shadow-lg)" }}
+      >
         {/* Header */}
-        <div className="border-b px-6 py-4">
-          <h2 id="delete-transaction-title" className="text-lg font-semibold">
+        <div className="px-[22px] pt-5 pb-4">
+          <h2
+            id="delete-transaction-title"
+            className="text-[18px] font-bold tracking-[-0.01em] text-ink m-0"
+          >
             Eliminar movimiento
           </h2>
         </div>
 
         {/* Cuerpo */}
-        <div className="px-6 py-5">
-          <p className="text-sm text-foreground">
+        <div className="px-[22px] pb-[22px] space-y-[14px]">
+          <p className="text-[14px] text-ink">
             ¿Estás seguro de que querés eliminar este movimiento?
           </p>
-          <div className="mt-3 rounded-md border bg-muted/50 px-4 py-3 text-sm">
-            <p className="font-medium text-foreground">{description}</p>
-            <p className="mt-0.5 text-muted-foreground">
-              {typeLabel} &middot; {amountLabel}
+          <div className="rounded-ctl border border-line bg-panel-2 px-4 py-3 text-[13px]">
+            <p className="font-semibold text-ink">{description}</p>
+            <p className="mt-0.5 text-muted mono">
+              {typeLabel} · {amountLabel}
             </p>
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">
+          <p className="text-[12.5px] text-muted">
             Esta acción es permanente y no se puede deshacer.
           </p>
         </div>
 
-        {/* Acciones */}
-        <div className="flex justify-end gap-3 border-t px-6 py-4">
-          <Button type="button" variant="outline" onClick={onClose} disabled={isDeleting}>
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
+          <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isDeleting}>
             Cancelar
           </Button>
           <Button
             type="button"
             variant="destructive"
+            size="sm"
             onClick={handleConfirm}
             disabled={isDeleting}
           >

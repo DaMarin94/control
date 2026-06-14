@@ -48,6 +48,9 @@ Lo visual se define **una sola vez**. Stack: **shadcn/ui + cva** sobre Tailwind 
 
 **Límite con el diseño visual:** acá se define la regla arquitectónica (primitivas únicas, variantes por parámetro). El aspecto concreto (colores, tamaños, qué se ve como "primary") lo define el diseño sobre estas primitivas.
 
+- **Las primitivas usan los tokens del design system "Precise Ledger"** (ver sección Design system). Detalle operativo del re-estilado (variantes de Button, patrones Tailwind v4, toast) en `.claude/agents/control-frontend.md`.
+- **Íconos: `lucide-react`** (no SVG inline). Es la librería de íconos del proyecto.
+
 ## Autenticación (Auth.js / NextAuth v5)
 
 NextAuth **orquesta el login** en el front pero **no emite un token de identidad propio**: el JWT que importa lo emite NestJS (ver `docs/architecture.md`). NextAuth solo lo persiste y lo expone para reenviarlo al backend.
@@ -185,7 +188,7 @@ Carga, edición y eliminación de movimientos fijos. Se crean desde el tab **Fij
 
 ### `delete-recurring-dialog.tsx`
 
-- Diálogo de confirmación con checkbox **"Eliminar también desde este mes"**, **desmarcado por default** (RF-MF-004). Desmarcado → el fijo deja de aparecer desde el mes siguiente; marcado → desde el mes actual inclusive.
+- Diálogo de confirmación **sin opciones** (RF-MF-004, reescrito en Bitácora 2026-06-13): la eliminación aplica **siempre desde el mes visualizado inclusive en adelante**. El cliente fija `fromCurrentMonth = true` y `currentMonth` = mes visualizado (`viewMonth`, fallback `getCurrentMonth()`). El checkbox "Eliminar también desde este mes" que existió en versiones previas fue **quitado** — no reintroducirlo (ver gotcha en `.claude/agents/control-frontend.md`, Fase 3).
 
 ### `movement-item-row.tsx`
 
@@ -297,6 +300,19 @@ Logo/nombre "Control" → `/`; links **Dashboard** (`/`), **Vista del mes** (`/m
 - **Email via prop drilling desde el Server layout, NO `useSession()` en el sidebar.** El layout (Server) lo resuelve con `auth()`. Si el email es `null`, fallback a string vacío (inofensivo: el middleware ya redirigió a usuarios sin sesión).
 - **Sección activa — match EXACTO para `/`:** el link Dashboard compara `pathname === "/"`. Con `startsWith("/")` quedaría activo en **todas** las rutas. Los links `/mes` y `/categorias` usan `startsWith` (no hay subrutas que colisionen).
 - **`<Suspense>` en `(app)/mes/page.tsx`:** se mantiene envolviendo `MonthViewWrapper` (que usa `useSearchParams()`); sin él el build de Next 15 falla. El cambio de carpeta al route group no lo altera (ver gotcha de `<Suspense>` en la sección Vista del mes).
+
+## Design system "Precise Ledger" — tokens (Fase 1)
+
+Detalle operativo para no romper tokens en `.claude/agents/control-frontend.md`. Lo esencial:
+
+- **Fuente de verdad de los valores:** `docs/design/control.css`. Implementación: tokens en `frontend/src/app/globals.css`, fuentes en `frontend/src/app/layout.tsx`. Hoy solo modo claro, preset Medio, acento Índigo.
+- **Tokens en dos lugares por diseño de Tailwind v4 (no es redundancia):** `@theme` (valores literales que generan utilidades `bg-paper`/`text-accent`/`rounded-card`/`font-ui`) y `:root` (CSS vars directas `var(--accent)`… + sombras compuestas, densidad y fuentes). Cambiar un color implica mantener **ambos** alias.
+- **Acento:** hue por `var(--accent-h)` (264) en `:root`, pero **hardcodeado a `264` en `@theme`** porque Tailwind v4 no resuelve CSS vars dentro de `@theme` en build.
+- **Sin utilidad `shadow-*` del DS:** las sombras compuestas viven solo en `:root` (`var(--shadow-sm|md|lg)`).
+- **Densidad fija** (`--row-pad`/`--card-pad`/`--gap`); sin toggles. **Dark mode no portado** (se hará sobreescribiendo `:root` bajo `[data-theme="dark"]`).
+- **Cifras de dinero:** helper `.mono` (IBM Plex Mono + `tnum`).
+- **Token semántico `warning`** (ámbar, hue 75) agregado en Fase 2 con la misma dualidad `@theme`/`:root` que income/expense; al portar dark mode necesita su variante oscura. Detalle de valores y del re-estilado de primitivas en `.claude/agents/control-frontend.md`.
+- **Todas las pantallas y modales usan el DS y `lucide-react`** (Fase 3): login, registro, sidebar, dashboard, vista del mes, categorías y los modales de movimiento/borrado. No queda SVG inline ni estilos fuera del DS. Nuevos componentes/utilidades compartidos: **`components/ui/auth-brand-side.tsx`** (panel de marca de login y registro) y la animación de modal **`animate-modal-pop`** (utility en `globals.css`). Detalle operativo (grilla/glow con `<div>` absolutos, gradiente hardcodeado, botón Google placeholder, scrim del modal) en `.claude/agents/control-frontend.md`, sección Fase 3.
 
 ## Tailwind v4 — gotcha
 

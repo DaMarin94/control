@@ -1,17 +1,18 @@
 "use client";
 
 /**
- * Menú de usuario — avatar + desplegable con "Cerrar sesión".
+ * Menú de usuario — bloque .me del sidebar del DS "Precise Ledger".
  *
- * Avatar: inicial en mayúscula del email del usuario en un círculo.
- * Al hacer clic en el avatar, se despliega un menú con "Cerrar sesión".
- * Cerrar sesión usa signOut de next-auth/react con callbackUrl "/login" (RF-AUTH-004).
+ * Avatar: inicial en mayúscula del email en un círculo con gradiente de acento.
+ * Al hacer clic, desplegable con "Cerrar sesión".
+ * Cerrar sesión usa signOut de next-auth/react con callbackUrl "/login".
  *
- * El menú se cierra al hacer clic fuera (useEffect con listener en document).
+ * Re-estilado en Fase 3 con tokens del DS.
  */
 
 import { useState, useEffect, useRef } from "react";
 import { signOut } from "next-auth/react";
+import { ChevronDown, LogOut } from "lucide-react";
 
 interface UserMenuProps {
   email: string;
@@ -57,46 +58,45 @@ export function UserMenu({ email }: UserMenuProps) {
 
   return (
     <div ref={containerRef} className="relative">
-      {/* ── Trigger: avatar + email ── */}
+      {/* ── Trigger: bloque .me ── */}
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="flex w-full items-center gap-3 rounded-md px-1 py-1.5 text-left hover:bg-accent transition-colors"
+        className="flex w-full items-center gap-[10px] rounded-ctl p-2 text-left transition-colors duration-[140ms] hover:bg-panel-2"
       >
-        {/* Avatar: círculo con la inicial */}
+        {/* Avatar: gradiente de acento con la inicial */}
         <span
           aria-hidden="true"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12.5px] font-bold text-white"
+          style={{
+            background:
+              "linear-gradient(140deg, oklch(0.7 0.1 264), oklch(0.55 0.13 304))",
+          }}
         >
           {initial}
         </span>
         {/* Email truncado */}
-        <span className="flex-1 truncate text-sm text-foreground">{email}</span>
+        <div className="min-w-0 flex-1">
+          <span className="block truncate text-[13.5px] font-semibold text-ink leading-tight">
+            {initial}
+          </span>
+          <span className="block truncate text-[12px] text-muted leading-tight">{email}</span>
+        </div>
         {/* Chevron */}
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+        <ChevronDown
+          size={14}
           aria-hidden="true"
-          className={`shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
-        >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
+          className={`shrink-0 text-muted transition-transform duration-[140ms] ${open ? "rotate-180" : ""}`}
+        />
       </button>
 
       {/* ── Desplegable ── */}
       {open && (
         <div
           role="menu"
-          className="absolute bottom-full left-0 mb-2 w-full rounded-md border bg-popover shadow-md"
+          className="absolute bottom-full left-0 mb-2 w-full rounded-ctl border border-line bg-panel shadow-[var(--shadow-md)] overflow-hidden"
         >
           <button
             type="button"
@@ -105,8 +105,9 @@ export function UserMenu({ email }: UserMenuProps) {
               setOpen(false);
               signOut({ callbackUrl: "/login" });
             }}
-            className="flex w-full items-center rounded-md px-3 py-2 text-sm text-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+            className="flex w-full items-center gap-2 px-3 py-2 text-[14px] font-medium text-ink-2 transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink"
           >
+            <LogOut size={14} aria-hidden="true" className="shrink-0 opacity-70" />
             Cerrar sesión
           </button>
         </div>

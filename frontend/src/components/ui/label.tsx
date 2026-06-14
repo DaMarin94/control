@@ -3,6 +3,11 @@ import { cn } from "@/lib/utils";
 
 /**
  * Primitiva Label.
+ * Re-estilada contra tokens del design system "Precise Ledger" (Fase 2).
+ *
+ * Spec DS (.f label):
+ *   - 12.5px, font-weight 600, text-ink-2, letter-spacing .01em
+ *   - Prop `required` agrega asterisco visual en text-expense-ink
  */
 
 export interface LabelProps extends React.LabelHTMLAttributes<HTMLLabelElement> {
@@ -15,7 +20,8 @@ const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
     return (
       <label
         className={cn(
-          "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
+          "text-[12.5px] font-semibold leading-none tracking-[0.01em] text-ink-2",
+          "peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
           className,
         )}
         ref={ref}
@@ -23,7 +29,7 @@ const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
       >
         {children}
         {required && (
-          <span className="ml-0.5 text-red-500" aria-hidden="true">
+          <span className="ml-0.5 text-expense-ink" aria-hidden="true">
             *
           </span>
         )}

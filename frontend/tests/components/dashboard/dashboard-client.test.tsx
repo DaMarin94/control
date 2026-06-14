@@ -157,23 +157,29 @@ describe("DashboardClient", () => {
 
     it("muestra el mes actual en el encabezado", () => {
       renderDashboard();
-      // El encabezado debe contener "junio" (capitalizado por CSS pero texto "junio")
-      expect(screen.getByText(/junio/i)).toBeInTheDocument();
+      // "Junio" aparece en el encabezado h1 y en el balance hero (can be multiple)
+      const junioElements = screen.getAllByText(/junio/i);
+      expect(junioElements.length).toBeGreaterThanOrEqual(1);
     });
 
     it("muestra el total de gastos", () => {
       renderDashboard();
-      expect(screen.getByText("$150,00")).toBeInTheDocument();
+      // $150,00 aparece en la tarjeta de gastos y en la leyenda del balance hero
+      const gastos = screen.getAllByText("$150,00");
+      expect(gastos.length).toBeGreaterThanOrEqual(1);
     });
 
     it("muestra el total de ingresos", () => {
       renderDashboard();
-      expect(screen.getByText("$500,00")).toBeInTheDocument();
+      // $500,00 aparece en la tarjeta de ingresos y en la leyenda del balance hero
+      const ingresos = screen.getAllByText("$500,00");
+      expect(ingresos.length).toBeGreaterThanOrEqual(1);
     });
 
     it("muestra el balance positivo", () => {
       renderDashboard();
-      expect(screen.getByText("$350,00")).toBeInTheDocument();
+      // El balance positivo se muestra como "+ $350,00" en el hero card
+      expect(screen.getByText("+ $350,00")).toBeInTheDocument();
     });
 
     it("el enlace 'Ver todos' apunta a /mes?month=2026-06", () => {

@@ -6,7 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -90,20 +89,41 @@ export function LoginForm({ isGoogleConfigured }: LoginFormProps) {
   }
 
   return (
-    <div className="rounded-lg border bg-card p-6 shadow-sm">
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+    <div className="flex flex-col gap-0">
+      {/* Botón Google — estilo .gbtn del DS */}
+      <GoogleButton
+        onClick={handleGoogleLogin}
+        disabled={!isGoogleConfigured || isGoogleLoading}
+        isLoading={isGoogleLoading}
+        isConfigured={isGoogleConfigured}
+      />
+
+      {/* Separador */}
+      <div className="relative my-5">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t border-line" />
+        </div>
+        <div className="relative flex justify-center">
+          <span className="bg-paper px-3 text-[12px] uppercase tracking-[.08em] text-faint">
+            o ingresá con email
+          </span>
+        </div>
+      </div>
+
+      {/* Form de credenciales */}
+      <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-[14px]">
         {/* Error general del formulario */}
         {formError && (
           <div
             role="alert"
-            className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+            className="rounded-ctl border border-expense/25 bg-expense-soft px-3 py-2.5 text-[13px] text-expense-ink"
           >
             {formError}
           </div>
         )}
 
         {/* Campo email */}
-        <div className="space-y-1.5">
+        <div className="flex flex-col gap-[7px]">
           <Label htmlFor="email" required>
             Email
           </Label>
@@ -118,7 +138,7 @@ export function LoginForm({ isGoogleConfigured }: LoginFormProps) {
         </div>
 
         {/* Campo contraseña */}
-        <div className="space-y-1.5">
+        <div className="flex flex-col gap-[7px]">
           <Label htmlFor="password" required>
             Contraseña
           </Label>
@@ -133,65 +153,48 @@ export function LoginForm({ isGoogleConfigured }: LoginFormProps) {
         </div>
 
         {/* Botón principal */}
-        <Button type="submit" className="w-full" disabled={isLoading}>
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="mt-1 inline-flex w-full items-center justify-center gap-2 rounded-ctl border border-transparent bg-accent px-4 py-[13px] text-[15px] font-semibold text-white shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0_/_0.2)] transition-all duration-[140ms] hover:-translate-y-px hover:bg-accent-press hover:shadow-[var(--shadow-md)] disabled:pointer-events-none disabled:opacity-50"
+        >
           {isLoading ? "Iniciando sesión..." : "Iniciar sesión"}
-        </Button>
+        </button>
       </form>
-
-      {/* Separador */}
-      <div className="relative my-4">
-        <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t" />
-        </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-card px-2 text-muted-foreground">o</span>
-        </div>
-      </div>
-
-      {/* Botón de Google */}
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full"
-        onClick={handleGoogleLogin}
-        disabled={!isGoogleConfigured || isGoogleLoading}
-        title={!isGoogleConfigured ? "Google OAuth no está configurado" : undefined}
-      >
-        <GoogleIcon />
-        {isGoogleLoading
-          ? "Redirigiendo..."
-          : isGoogleConfigured
-            ? "Continuar con Google"
-            : "Google (no disponible)"}
-      </Button>
     </div>
   );
 }
 
-function GoogleIcon() {
+/* ----------------------------------------------------------------
+   GoogleButton — replica .gbtn del design system
+   Panel + borde fuerte + gmark cuadrado con "G" placeholder neutro.
+   NO se usa el logo oficial de Google (norma del DS).
+---------------------------------------------------------------- */
+interface GoogleButtonProps {
+  onClick: () => void;
+  disabled: boolean;
+  isLoading: boolean;
+  isConfigured: boolean;
+}
+
+function GoogleButton({ onClick, disabled, isLoading, isConfigured }: GoogleButtonProps) {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      className="size-4"
-      aria-hidden="true"
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={!isConfigured ? "Google OAuth no está configurado" : undefined}
+      className="flex w-full cursor-pointer items-center justify-center gap-3 rounded-ctl border border-line-strong bg-panel px-[14px] py-[14px] font-ui text-[15px] font-semibold text-ink shadow-[var(--shadow-sm)] transition-all duration-[140ms] hover:-translate-y-px hover:border-muted hover:bg-panel-2 hover:shadow-[var(--shadow-md)] disabled:pointer-events-none disabled:opacity-50"
     >
-      <path
-        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-        fill="#4285F4"
-      />
-      <path
-        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-        fill="#34A853"
-      />
-      <path
-        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-        fill="#FBBC05"
-      />
-      <path
-        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-        fill="#EA4335"
-      />
-    </svg>
+      {/* gmark — placeholder cuadrado neutro con "G" en accent-ink */}
+      <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[6px] border border-line bg-panel-3 text-[13px] font-bold text-accent-ink">
+        G
+      </span>
+      {isLoading
+        ? "Redirigiendo..."
+        : isConfigured
+          ? "Continuar con Google"
+          : "Google (no disponible)"}
+    </button>
   );
 }

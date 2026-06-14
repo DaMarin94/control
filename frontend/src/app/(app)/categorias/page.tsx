@@ -1,6 +1,8 @@
 /**
  * Página de categorías — /categorias
  *
+ * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
+ *
  * Ruta privada: el middleware la protege (redirige a /login sin sesión).
  * La navegación global vive en el AppSidebar del layout (app).
  *
@@ -17,7 +19,7 @@ export const metadata = {
 
 export default function CategoriasPage() {
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
+    <div className="px-10 py-[34px] pb-20 max-w-[1120px] animate-screen-fade">
       <CategoriesList />
     </div>
   );
