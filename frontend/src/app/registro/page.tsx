@@ -14,7 +14,6 @@
 import { Suspense } from "react";
 import { RegisterForm } from "./register-form";
 import { BrandSide } from "@/components/ui/auth-brand-side";
-import { Lock } from "lucide-react";
 
 export default function RegistroPage() {
   return (
@@ -63,12 +62,6 @@ export default function RegistroPage() {
             </a>
             .
           </p>
-
-          {/* SSL */}
-          <div className="mt-7 flex items-center justify-center gap-[7px] text-[12px] text-muted">
-            <Lock size={14} aria-hidden="true" />
-            Conexión segura · cifrada de extremo a extremo
-          </div>
 
           {/* Link a login */}
           <p className="mt-8 text-center text-[13px] text-muted">

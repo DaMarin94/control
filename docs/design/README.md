@@ -107,7 +107,7 @@ Diálogos usan radio fijo 18px; logo gem 10px; avatar 50%.
 - **Propósito:** único punto de entrada sin sesión. Acceso solo con Google.
 - **Layout:** grid 2 columnas `1.05fr 1fr`, alto = viewport. Izquierda = panel de marca; derecha = acceso. En ≤940px colapsa a 1 columna (marca arriba, min-height 280px).
 - **Panel de marca (izq):** fondo gradiente diagonal del acento (`135–150°`, de `--accent-press` a `--accent` a un hue +30). Textura de grilla sutil (líneas a `white/0.07`, celdas 44px, con máscara radial de fade) + un glow radial inferior-derecho. Contenido en `space-between`: arriba logo (gem blanco 44px radio 13px con "C" en `--accent-ink` + wordmark "Control" 22px/700 blanco); centro hero (`h2` 42px/700 tracking -.03em "Tus finanzas del mes, sin sorpresas." + `p` 16px a `white/0.82`); abajo línea con ícono escudo "Privado · solo vos ves tus números." a `white/0.7`.
-- **Panel de acceso (der):** fondo `--paper`. Tarjeta centrada max-width 360px: eyebrow "Bienvenido"; `h3` 28px/700 "Ingresá a Control"; sub 14.5px muted; **botón Google** ancho completo (ver componente `gbtn`); fine-print 12.5px con links subrayados (Términos / Política); línea SSL con ícono candado "Conexión segura · cifrada de extremo a extremo".
+- **Panel de acceso (der):** fondo `--paper`. Tarjeta centrada max-width 360px: eyebrow "Bienvenido"; `h3` 28px/700 "Ingresá a Control"; sub 14.5px muted; **botón Google** ancho completo (ver componente `gbtn`); fine-print 12.5px con links subrayados (Términos / Política);
 - **Interacción:** click en el botón Google → navega a Dashboard.
 
 ### 2. Dashboard  (`/`)

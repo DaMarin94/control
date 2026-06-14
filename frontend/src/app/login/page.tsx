@@ -66,12 +66,6 @@ export default function LoginPage() {
             .
           </p>
 
-          {/* SSL */}
-          <div className="mt-7 flex items-center justify-center gap-[7px] text-[12px] text-muted">
-            <LockIcon />
-            Conexión segura · cifrada de extremo a extremo
-          </div>
-
           {/* Link a registro */}
           <p className="mt-8 text-center text-[13px] text-muted">
             ¿No tenés cuenta?{" "}
@@ -85,24 +79,5 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-function LockIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="5" y="11" width="14" height="9" rx="2" />
-      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
-    </svg>
   );
 }
