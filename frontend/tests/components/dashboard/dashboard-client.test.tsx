@@ -7,6 +7,7 @@
  * - Estado vacío: totales en cero + CTA "Cargá tu primer movimiento"
  * - Estado de error: mensaje sin romper la pantalla
  * - Enlace "Ver todos" apunta al mes actual (/mes?month=YYYY-MM)
+ * - El widget de gráfico anual se monta con navigable=false (RF-GRA-002)
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -21,6 +22,17 @@ import type { MonthMovements } from "@/types/movement";
 vi.mock("@/hooks/use-movements", () => ({
   useMovements: vi.fn(),
   MOVEMENTS_QUERY_KEY: (month: string) => ["movements", month],
+}));
+
+// Mock del widget AnnualChartWidget — evita cargar Recharts en los tests del dashboard
+vi.mock("@/components/charts/annual-chart-widget", () => ({
+  AnnualChartWidget: ({ year, navigable }: { year: number; navigable: boolean }) => (
+    <div
+      data-testid="annual-chart-widget"
+      data-year={year}
+      data-navigable={String(navigable)}
+    />
+  ),
 }));
 
 // Mock del hook useApi (requerido por TransactionModal/TransactionForm vía NewTransactionButton)
@@ -191,6 +203,20 @@ describe("DashboardClient", () => {
     it("no muestra el estado vacío cuando hay movimientos", () => {
       renderDashboard();
       expect(screen.queryByText(/cargá tu primer movimiento/i)).not.toBeInTheDocument();
+    });
+
+    it("monta el widget de gráfico anual con navigable=false (RF-GRA-002)", () => {
+      renderDashboard();
+      const widget = screen.getByTestId("annual-chart-widget");
+      expect(widget).toBeInTheDocument();
+      expect(widget).toHaveAttribute("data-navigable", "false");
+    });
+
+    it("el widget de gráfico anual recibe el año actual", () => {
+      renderDashboard();
+      const widget = screen.getByTestId("annual-chart-widget");
+      // El año viene de getCurrentMonth mockeado como "2026-06" → año 2026
+      expect(widget).toHaveAttribute("data-year", "2026");
     });
   });
 

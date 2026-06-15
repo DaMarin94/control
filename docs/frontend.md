@@ -302,6 +302,44 @@ Logo/nombre "Control" → `/`; links **Dashboard** (`/`), **Vista del mes** (`/m
 - **Sección activa — match EXACTO para `/`:** el link Dashboard compara `pathname === "/"`. Con `startsWith("/")` quedaría activo en **todas** las rutas. Los links `/mes` y `/categorias` usan `startsWith` (no hay subrutas que colisionen).
 - **`<Suspense>` en `(app)/mes/page.tsx`:** se mantiene envolviendo `MonthViewWrapper` (que usa `useSearchParams()`); sin él el build de Next 15 falla. El cambio de carpeta al route group no lo altera (ver gotcha de `<Suspense>` en la sección Vista del mes).
 
+## Gráfico anual (RF-GRA-001..003)
+
+Visualización anual de ingresos/gastos. El spec visual completo (color, alturas, jerarquía, comportamiento de transición) vive en `docs/design.md` — acá se documenta solo la arquitectura y los gotchas técnicos.
+
+### Arquitectura en dos capas (enfoque shadcn charts)
+
+El gráfico se separa en una **primitiva reutilizable** (motor de charting, agnóstica de la feature) y un **widget de feature** que la compone. Cualquier gráfico futuro reusa la primitiva.
+
+- **Primitiva `components/ui/chart.tsx`** — primitiva estilo shadcn charts sobre **Recharts v3** (el motor; instalado con `pnpm add`, no npm), themeada con los tokens del DS (CSS vars `oklch`). Es una **primitiva nueva de `components/ui/`**, pensada para reusarse en futuros gráficos, no solo en el anual. Exporta:
+  - **`ChartContainer`** — wrapper de `ResponsiveContainer` de Recharts + theming del DS.
+  - **`ChartTooltipContent`** — tooltip themeado con el DS.
+  - **`ChartLegend`** — leyenda themeada con el DS.
+- **Widget `components/charts/annual-chart-widget.tsx`** — compone la primitiva. Props: **`year`** (number) y **`navigable`** (boolean). Contiene el toggle segmented entre formas, el stepper de año (solo si `navigable`) y los 5 estados (skeleton / con datos / vacío / meses futuros / error).
+  - **Forma 1** = `AreaChart` con ingresos y gastos superpuestos.
+  - **Forma 2** = `BarChart` apilado por categoría, usando `category.color` de cada categoría.
+
+### Datos (`use-annual`)
+
+- Hook **`useAnnual(year)`** sobre `GET /movements/annual?year=`. **Query key como función:** **`ANNUAL_QUERY_KEY(year) = ["annual", year]`** — varía por año. Sin mutaciones (es solo lectura).
+- Aplica el patrón obligatorio **`enabled: isAuthenticated`** (igual que `useMovements` / `useCategories`; ver Queries de lectura gate-adas en la sección Autenticación).
+- Tipos del contrato en **`types/annual.ts`**: `AnnualMovementsResponse` / `AnnualMonth` / `AnnualCategory`.
+
+### Puntos de uso
+
+- **Pantalla dedicada `app/(app)/anual/page.tsx`** (dentro del route group `(app)`, hereda el sidebar). Monta el widget con **`navigable=true`**. **El año es estado interno del componente, NO va en la URL** → esta pantalla **no usa `useSearchParams()` ni necesita `<Suspense>`** (a diferencia de `/mes`, que sí lee `?month=`).
+- **Dashboard (`dashboard-client.tsx`)** — monta el widget con **`navigable=false`** y año fijo (el año en curso), ubicado **tras el balance hero y antes del footer**.
+- **Sidebar** — link **"Anual"** (`/anual`), activo por `startsWith("/anual")`. Orden de links: Dashboard → Vista del mes → Anual → Categorías.
+
+### Gotchas técnicos (Recharts v3 + Tailwind v4 + DS)
+
+Para que un agente futuro que toque gráficos no los re-tropiece:
+
+- **CSS vars `oklch` directas en el SVG de Recharts:** se pueden pasar `var(--token)` directo en props de color (`stroke`, `fill`, y `stopColor` de `<stop>` dentro de `<defs>`). **No** hace falta `getComputedStyle` en runtime para resolver el token.
+- **Cifras tabulares (`tnum`):** la propiedad `fontFeatureSettings` **no existe** en el tipo de tick SVG de Recharts; el `tnum` se delega a la CSS var **`--mono`** (IBM Plex Mono ya trae `tnum`). No intentar setear `fontFeatureSettings` en el tick.
+- **Recharts 3.x + TypeScript strict:** `TooltipPayload` es **`readonly`** → el componente custom de tooltip requiere un **doble cast** (`as unknown as Array<...>`). El prop `label` del tooltip es `string | number | undefined` (no solo `string`).
+- **Alto responsive — por prop `height`, no CSS var:** Recharts necesita el alto como **valor numérico en el prop `height`** (no acepta una CSS var de altura). Se resuelve con **dos `<div>` + media queries de Tailwind v4** (`[@media(max-width:940px)]:hidden` / `[@media(min-width:941px)]:hidden`): uno con el alto desktop (`chartHeight`: **280** en dashboard, **340** en `/anual`) y otro con **220** en ≤940px.
+- **`prefers-reduced-motion`:** el widget usa un detector interno de reduced-motion. **jsdom no implementa `window.matchMedia`**, así que se agregó un **mock global de `matchMedia` en `tests/setup.ts`** — necesario para cualquier componente futuro que detecte reduced-motion.
+
 ## Design system "Precise Ledger" — tokens (Fase 1)
 
 Detalle operativo para no romper tokens en `.claude/agents/control-frontend.md`. Lo esencial:

@@ -18,9 +18,17 @@ import { useMovements } from "@/hooks/use-movements";
 import { getCurrentMonth, formatMonthLabel, formatCurrency } from "@/lib/format";
 import { NewTransactionButton } from "@/components/movements/new-transaction-button";
 import { TransactionModal } from "@/components/movements/transaction-modal";
+import { AnnualChartWidget } from "@/components/charts/annual-chart-widget";
+
+/** Deriva el año actual del helper getCurrentMonth para no usar new Date() directamente. */
+function getCurrentYear(): number {
+  const month = getCurrentMonth(); // "YYYY-MM"
+  return parseInt(month.split("-")[0] ?? String(new Date().getFullYear()), 10);
+}
 
 export function DashboardClient() {
   const month = getCurrentMonth();
+  const currentYear = getCurrentYear();
   const { data, isLoading, isError } = useMovements(month);
 
   // Estado para el CTA "Cargá tu primer movimiento" del estado vacío
@@ -216,6 +224,17 @@ export function DashboardClient() {
               </button>
             </div>
           )}
+
+          {/* ── Widget de gráfico anual (RF-GRA-002) ──
+              Ubicación: después del balance hero y ANTES del footer "Ver todos".
+              Año actual fijo, navegación de año deshabilitada (RF-GRA-002). */}
+          <div className="mt-[var(--gap)]">
+            <AnnualChartWidget
+              year={currentYear}
+              navigable={false}
+              chartHeight={280}
+            />
+          </div>
 
           {/* Footer de sección */}
           <div className="flex items-center justify-between mt-7 px-0.5">

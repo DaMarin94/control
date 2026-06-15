@@ -148,6 +148,18 @@ Re-estilado de todas las pantallas y modales con los tokens del DS y migración 
 - **`<Suspense>` obligatorio en `(app)/mes/page.tsx`** (envuelve `MonthViewWrapper`, que usa `useSearchParams()`): sin él el build de Next 15 falla. Mantenerlo aunque la página esté ahora en el route group.
 - **Email via prop desde el Server layout, NO `useSession()` en el sidebar.** `app/(app)/layout.tsx` (Server) lo obtiene con `auth()` y lo pasa como prop a `AppSidebar`. Email `null` → fallback a string vacío (el middleware ya redirigió). El avatar es la **inicial del email**. No introducir `useSession()` en el sidebar.
 
+### Gráfico anual (detalle en `docs/frontend.md`, sección Gráfico anual) — RF-GRA-001..003
+
+- **Arquitectura en dos capas.** Primitiva reutilizable de charting **`components/ui/chart.tsx`** (Recharts v3 — instalado con `pnpm add`, no npm — themeada con tokens del DS; exporta `ChartContainer`/`ChartTooltipContent`/`ChartLegend`), pensada para reusarse en cualquier gráfico futuro. El **widget de feature `components/charts/annual-chart-widget.tsx`** la compone (props `year`/`navigable`; Forma 1 = `AreaChart` ingresos/gastos, Forma 2 = `BarChart` apilado por `category.color`). Gráfico nuevo → reusar la primitiva, no rehacer el motor.
+- **Datos.** Hook **`useAnnual(year)`** sobre `GET /movements/annual?year=`, clave **`ANNUAL_QUERY_KEY(year) = ["annual", year]`** (función, varía por año; solo lectura). Aplica el guard obligatorio **`enabled: isAuthenticated`** (ver Autenticación). Tipos del contrato en `types/annual.ts`.
+- **Puntos de uso.** Pantalla dedicada `app/(app)/anual/page.tsx` (`navigable=true`; **el año es estado interno, NO va en la URL → no usa `useSearchParams()` ni `<Suspense>`**, a diferencia de `/mes`) y dashboard (`navigable=false`, año fijo). Link "Anual" en el sidebar, activo por `startsWith("/anual")`.
+- **Gotchas reusables (Recharts v3 + Tailwind v4 + DS):**
+  - **CSS vars `oklch` directas en el SVG de Recharts:** pasar `var(--token)` directo en `stroke`/`fill`/`stopColor`. No usar `getComputedStyle` en runtime.
+  - **`tnum`:** `fontFeatureSettings` no existe en el tipo de tick SVG de Recharts → delegar el `tnum` a la CSS var **`--mono`** (no setearlo en el tick).
+  - **Recharts 3.x + TS strict:** `TooltipPayload` es `readonly` → el tooltip custom requiere **doble cast** (`as unknown as Array<...>`); el prop `label` es `string | number | undefined`.
+  - **Alto por prop, no CSS var:** Recharts necesita el alto como valor numérico en `height`. Resuelto con dos `<div>` + media queries de Tailwind v4 (`[@media(max-width:940px)]:hidden` / `[@media(min-width:941px)]:hidden`): alto desktop 280 (dashboard) / 340 (`/anual`), 220 en ≤940px.
+  - **`prefers-reduced-motion`:** el widget detecta reduced-motion; jsdom no implementa `window.matchMedia` → hay un **mock global de `matchMedia` en `tests/setup.ts`**. Necesario para cualquier componente futuro que detecte reduced-motion.
+
 ## Al terminar
 
 ### 1. Build

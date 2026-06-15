@@ -25,6 +25,7 @@ import { UserMenu } from "@/components/layout/user-menu";
 import {
   LayoutDashboard,
   CalendarDays,
+  BarChart2,
   Tags,
   Menu,
   X,
@@ -37,6 +38,7 @@ interface AppSidebarProps {
 const NAV_LINKS = [
   { href: "/", label: "Dashboard", exact: true, Icon: LayoutDashboard },
   { href: "/mes", label: "Vista del mes", exact: false, Icon: CalendarDays },
+  { href: "/anual", label: "Anual", exact: false, Icon: BarChart2 },
   { href: "/categorias", label: "Categorías", exact: false, Icon: Tags },
 ] as const;
 

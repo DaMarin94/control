@@ -20,7 +20,7 @@
 | Vista del mes — lista + totales + navegación | RF-VM-001..004 | Implementado |
 | Navegación global — sidebar persistente | RF-NAV-001 | Implementado |
 | Crear categoría desde el formulario de movimiento | RF-MU-004 | Implementado (los tres tabs) |
-| Gráfico anual — widget reutilizable + pantalla dedicada | RF-GRA-001..003 | Especificado (funcional cerrado; todas las decisiones de producto confirmadas; sin implementar) |
+| Gráfico anual — widget reutilizable + pantalla dedicada | RF-GRA-001..003 | Implementado |
 
 ---
 
@@ -101,13 +101,11 @@
 - **Detalles de implementación no obvios** (uso dual de `CategoryFormModal`, apilado de modales/z-index) en `docs/frontend.md`, sección Crear categoría desde el formulario de movimiento.
 - **Caso borde resuelto (scope incompatible):** el conflicto de crear una categoría con scope incompatible con el tipo del movimiento se previene en origen restringiendo las opciones de scope en modo inline (el modal ofrece solo el tipo del movimiento + "Ambos", oculta el tipo opuesto y preselecciona el tipo exacto), por lo que nunca se crea una categoría incompatible. Desde `/categorias` el modal sigue mostrando las tres opciones (Gasto / Ingreso / Ambos). Resuelto el 2026-06-13; ver detalle en RF-MU-004 (`docs/requirements.md`).
 
-### Gráfico anual — widget reutilizable (especificado, sin implementar)
+### Gráfico anual — widget reutilizable (implementado)
 
-- **Estado:** funcional cerrado y documentado (RF-GRA-001..003 en `docs/requirements.md`; pantallas 7 y 8 en `docs/screens.md`). **Sin implementar.** Las **5 decisiones de producto quedaron confirmadas** el 2026-06-14 (ver bitácora): pantalla **"Anual"** en **`/anual`**, debajo de "Vista del mes" en el sidebar (orden Dashboard → Vista del mes → Anual → Categorías); **Forma 1 (Ingresos vs. Gastos)** por defecto en dashboard y pantalla dedicada; navegación de año hacia atrás sin tope artificial pero deshabilitada antes del primer año con movimientos, y años futuros bloqueados (máximo = año en curso); **12 meses siempre presentes en cero** donde no hay datos; **drill-down clic-en-mes → Vista del mes fuera de v1** (candidato post-v1). RF-GRA-001..003 ya no tienen pendientes.
-- **Necesidades de datos (funcional, no contrato técnico — lo define el backend al implementar):** hoy el backend solo expone los totales de **un único mes** vía `GET /movements?month=YYYY-MM`. El gráfico anual necesita, para un **año** dado:
-  - **Forma 1 (ingresos vs. gastos):** el total de **ingresos** y el total de **gastos** de cada uno de los **12 meses** del año (suma de únicos + fijos activos + cuotas del mes, mismo criterio que RF-VM-002).
-  - **Forma 2 (gastos por categoría):** el **desglose del total de gastos por categoría, por mes** — para cada mes, cuánto gasto corresponde a cada categoría (con su `id`, `name` y `color`, consistente con la categoría embebida que ya devuelven los movimientos). Solo gastos.
-  - El mes de cada movimiento se resuelve con el criterio de RN-015 (zona propia del registro para únicos; `startMonth` para fijos y cuotas), reutilizando el bucketeo ya existente. El **diseño del/los endpoint(s)** (uno anual nuevo, parámetros, shape) es responsabilidad del backend; acá solo se deja la necesidad funcional.
+- **Estado:** implementado end-to-end (front + back). RF-GRA-001..003 en `docs/requirements.md`; pantallas 7 y 8 en `docs/screens.md`; spec visual en `docs/design.md`. Las **5 decisiones de producto** quedaron confirmadas el 2026-06-14 (ver bitácora): pantalla **"Anual"** en **`/anual`**, debajo de "Vista del mes" en el sidebar (orden Dashboard → Vista del mes → Anual → Categorías); **Forma 1 (Ingresos vs. Gastos)** por defecto en dashboard y pantalla dedicada; navegación de año hacia atrás sin tope artificial pero deshabilitada antes del primer año con movimientos, y años futuros bloqueados (máximo = año en curso); **12 meses siempre presentes en cero** donde no hay datos; **drill-down clic-en-mes → Vista del mes fuera de v1** (candidato post-v1).
+- **Backend:** el endpoint **`GET /movements/annual?year=`** ya existe y devuelve, para el año dado, los totales de **ingresos** y **gastos** por mes (Forma 1) y el **desglose de gastos por categoría por mes** con `id`/`name`/`color` (Forma 2), para los 12 meses. El mes de cada movimiento se resuelve con el criterio de RN-015 (zona propia del registro para únicos; `startMonth` para fijos y cuotas), reutilizando el bucketeo existente. Contrato en `docs/backend.md`.
+- **Frontend (arquitectura en dos capas):** primitiva reutilizable de charting **`components/ui/chart.tsx`** (Recharts v3 themeado con el DS) + widget de feature **`components/charts/annual-chart-widget.tsx`** (props `year`/`navigable`), hook **`useAnnual` / `ANNUAL_QUERY_KEY(year) = ["annual", year]`**. Montado en la pantalla dedicada `/anual` (`navigable=true`, año como estado interno, sin URL/Suspense) y en el dashboard (`navigable=false`, año fijo). Detalles y gotchas técnicos (oklch en SVG de Recharts, `tnum` vía `--mono`, casts de Recharts 3.x, alto por prop + media queries, mock de `matchMedia` en tests) en `docs/frontend.md`, sección Gráfico anual.
 
 ---
 

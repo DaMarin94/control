@@ -3,9 +3,11 @@
  *
  * Verifica:
  * - Renderiza el logo "Control" con link al dashboard.
- * - Renderiza los tres links de navegación.
+ * - Renderiza los cuatro links de navegación (Dashboard, Vista del mes, Anual, Categorías).
  * - El link activo tiene aria-current="page" (marca la sección activa).
- * - Dashboard activo solo en "/" exacto (no en /mes ni /categorias).
+ * - Dashboard activo solo en "/" exacto (no en /mes ni /categorias ni /anual).
+ * - El link "Anual" se ubica entre "Vista del mes" y "Categorías" (RF-NAV-001).
+ * - En /anual el link "Anual" tiene aria-current="page".
  * - El botón hamburguesa aparece (accesible por aria-label).
  * - Renderiza el botón "Nuevo movimiento".
  * - Renderiza el UserMenu con el email recibido.
@@ -70,13 +72,22 @@ describe("AppSidebar", () => {
     expect(logo).toHaveAttribute("href", "/");
   });
 
-  it("renderiza los tres links de navegación", () => {
+  it("renderiza los cuatro links de navegación (con Anual)", () => {
     mockUsePathname.mockReturnValue("/");
     renderSidebar();
 
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Vista del mes" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Anual" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Categorías" })).toBeInTheDocument();
+  });
+
+  it("el link 'Anual' apunta a /anual", () => {
+    mockUsePathname.mockReturnValue("/");
+    renderSidebar();
+
+    const link = screen.getByRole("link", { name: "Anual" });
+    expect(link).toHaveAttribute("href", "/anual");
   });
 
   it("el link 'Vista del mes' apunta a /mes (sin query)", () => {
@@ -114,6 +125,16 @@ describe("AppSidebar", () => {
 
     expect(screen.getByRole("link", { name: "Categorías" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("en /anual el link 'Anual' tiene aria-current='page' y Dashboard NO", () => {
+    mockUsePathname.mockReturnValue("/anual");
+    renderSidebar();
+
+    expect(screen.getByRole("link", { name: "Anual" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Vista del mes" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Categorías" })).not.toHaveAttribute("aria-current");
   });
 
   it("renderiza el botón 'Nuevo movimiento'", () => {
