@@ -24,13 +24,19 @@ vi.mock("@/hooks/use-movements", () => ({
   MOVEMENTS_QUERY_KEY: (month: string) => ["movements", month],
 }));
 
-// Mock del widget AnnualChartWidget — evita cargar Recharts en los tests del dashboard
+// Mock de IncomeExpenseCard — evita cargar Recharts en los tests del dashboard
 vi.mock("@/components/charts/annual-chart-widget", () => ({
-  AnnualChartWidget: ({ year, navigable }: { year: number; navigable: boolean }) => (
+  IncomeExpenseCard: ({ year, showYearInHeader }: { year: number; showYearInHeader?: boolean }) => (
     <div
-      data-testid="annual-chart-widget"
+      data-testid="income-expense-card"
       data-year={year}
-      data-navigable={String(navigable)}
+      data-show-year={String(showYearInHeader ?? false)}
+    />
+  ),
+  ByCategoryCard: ({ year }: { year: number }) => (
+    <div
+      data-testid="by-category-card"
+      data-year={year}
     />
   ),
 }));
@@ -205,18 +211,28 @@ describe("DashboardClient", () => {
       expect(screen.queryByText(/cargá tu primer movimiento/i)).not.toBeInTheDocument();
     });
 
-    it("monta el widget de gráfico anual con navigable=false (RF-GRA-002)", () => {
+    it("monta la tarjeta IncomeExpenseCard (solo Ingresos y gastos, RF-GRA-002)", () => {
       renderDashboard();
-      const widget = screen.getByTestId("annual-chart-widget");
-      expect(widget).toBeInTheDocument();
-      expect(widget).toHaveAttribute("data-navigable", "false");
+      const card = screen.getByTestId("income-expense-card");
+      expect(card).toBeInTheDocument();
     });
 
-    it("el widget de gráfico anual recibe el año actual", () => {
+    it("la tarjeta IncomeExpenseCard recibe el año actual", () => {
       renderDashboard();
-      const widget = screen.getByTestId("annual-chart-widget");
+      const card = screen.getByTestId("income-expense-card");
       // El año viene de getCurrentMonth mockeado como "2026-06" → año 2026
-      expect(widget).toHaveAttribute("data-year", "2026");
+      expect(card).toHaveAttribute("data-year", "2026");
+    });
+
+    it("la tarjeta IncomeExpenseCard tiene showYearInHeader=true (año en cabecera, sin control externo)", () => {
+      renderDashboard();
+      const card = screen.getByTestId("income-expense-card");
+      expect(card).toHaveAttribute("data-show-year", "true");
+    });
+
+    it("NO monta la tarjeta ByCategoryCard en el dashboard", () => {
+      renderDashboard();
+      expect(screen.queryByTestId("by-category-card")).not.toBeInTheDocument();
     });
   });
 

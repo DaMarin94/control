@@ -18,7 +18,7 @@ import { useMovements } from "@/hooks/use-movements";
 import { getCurrentMonth, formatMonthLabel, formatCurrency } from "@/lib/format";
 import { NewTransactionButton } from "@/components/movements/new-transaction-button";
 import { TransactionModal } from "@/components/movements/transaction-modal";
-import { AnnualChartWidget } from "@/components/charts/annual-chart-widget";
+import { IncomeExpenseCard } from "@/components/charts/annual-chart-widget";
 
 /** Deriva el año actual del helper getCurrentMonth para no usar new Date() directamente. */
 function getCurrentYear(): number {
@@ -225,14 +225,14 @@ export function DashboardClient() {
             </div>
           )}
 
-          {/* ── Widget de gráfico anual (RF-GRA-002) ──
+          {/* ── Tarjeta Ingresos y gastos (RF-GRA-002) ──
               Ubicación: después del balance hero y ANTES del footer "Ver todos".
-              Año actual fijo, navegación de año deshabilitada (RF-GRA-002). */}
+              Año actual fijo, sin control de año (RF-GRA-002). */}
           <div className="mt-[var(--gap)]">
-            <AnnualChartWidget
+            <IncomeExpenseCard
               year={currentYear}
-              navigable={false}
               chartHeight={280}
+              showYearInHeader={true}
             />
           </div>
 

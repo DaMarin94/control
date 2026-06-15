@@ -1,34 +1,24 @@
 "use client";
 
 /**
- * Widget de gráfico anual — RF-GRA-001/002/003.
+ * Gráfico anual — RF-GRA-001/002/003.
  *
- * Componente reutilizable que se monta en:
- *   - Dashboard (año actual, navigable=false)
- *   - Pantalla dedicada /anual (navigable=true)
+ * Dos tarjetas autónomas exportadas por separado:
+ *   - IncomeExpenseCard  — Forma 1 (AreaChart, ingresos vs gastos)
+ *   - ByCategoryCard     — Forma 2 (BarChart apilado, gastos por categoría)
  *
- * Props:
- *   - year: number      — año a mostrar (estado externo pasado por el anfitrión)
- *   - navigable: boolean — si true, muestra el control ‹ › de año
- *   - onYearChange?: (year: number) => void — callback cuando el año cambia (solo si navigable)
- *   - chartHeight?: number — alto del área de gráfico (280 dashboard, 340 /anual)
+ * Ambas consumen useAnnual(year); React Query dedupea por la clave ["annual", year].
  *
- * Dos formas alternables:
- *   - Forma 1 (default): AreaChart — ingresos vs gastos superpuestos, NO apilados.
- *   - Forma 2: BarChart apilado — gastos por categoría, una banda por categoría.
+ * Puntos de uso:
+ *   - Dashboard (/):       solo IncomeExpenseCard (año fijo, sin control de año)
+ *   - Pantalla /anual:     IncomeExpenseCard + ByCategoryCard apiladas;
+ *                          el control ‹ › vive en el .phead de la página (fuera de las tarjetas).
  *
  * Spec visual: docs/design.md, sección "Gráfico anual — spec visual del widget".
- * Implementa los 5 estados: skeleton, con datos, vacío, año con meses futuros, error.
- *
- * Theming:
- *   - Recharts usa SVG; los colores se pasan como valores concretos o CSS vars.
- *   - CSS vars oklch se resuelven en el browser correctamente en elementos SVG.
- *   - Se usa getComputedStyle para leer los valores resueltos de las CSS vars
- *     cuando Recharts necesita valores concretos (ej. stroke, fill).
  *
  * prefers-reduced-motion:
- *   - isAnimationActive={false} en todos los charts cuando reduced-motion está activo.
- *   - Detección con useReducedMotion (hook interno con matchMedia).
+ *   isAnimationActive={false} en todos los charts cuando reduced-motion está activo.
+ *   Detección con useReducedMotion (hook privado del módulo).
  */
 
 import { useState, useEffect } from "react";
@@ -44,12 +34,11 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { useAnnual } from "@/hooks/use-annual";
 import { formatCurrency } from "@/lib/format";
 import { ChartTooltipContent } from "@/components/ui/chart";
 import { ChartLegend } from "@/components/ui/chart";
-import { cn } from "@/lib/utils";
 import type { AnnualMovementsResponse } from "@/types/annual";
 
 // ─── Constantes ────────────────────────────────────────────────────────────────
@@ -65,8 +54,6 @@ const MONTH_LABELS_FULL = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
-
-type ChartForm = "form1" | "form2";
 
 // ─── Hook: prefers-reduced-motion ─────────────────────────────────────────────
 
@@ -93,7 +80,6 @@ function formatYAxisTick(valueCents: number): string {
   if (pesos === 0) return "$0";
   if (pesos >= 1_000_000) {
     const m = pesos / 1_000_000;
-    // 1 decimal si no es entero
     const label = m % 1 === 0 ? String(m) : m.toFixed(1).replace(".", ",");
     return `$${label}M`;
   }
@@ -105,12 +91,12 @@ function formatYAxisTick(valueCents: number): string {
   return `$${pesos}`;
 }
 
-// ─── Preparar datos para Recharts ─────────────────────────────────────────────
+// ─── Tipos de datos del chart ──────────────────────────────────────────────────
 
 interface ChartDataPoint {
-  monthIndex: number;      // 0–11
-  shortLabel: string;      // "Ene" … "Dic"
-  fullLabel: string;       // "Enero" … "Diciembre"
+  monthIndex: number;
+  shortLabel: string;
+  fullLabel: string;
   incomeCents: number;
   expenseCents: number;
   [key: string]: number | string; // categoryId → cents (para Forma 2)
@@ -125,7 +111,6 @@ function buildChartData(data: AnnualMovementsResponse): ChartDataPoint[] {
       incomeCents: m.incomeCents,
       expenseCents: m.expenseCents,
     };
-    // Agregar columnas por categoría para Forma 2
     data.categories.forEach((cat) => {
       point[cat.categoryId] = cat.monthlyExpenseCents[i] ?? 0;
     });
@@ -133,55 +118,63 @@ function buildChartData(data: AnnualMovementsResponse): ChartDataPoint[] {
   });
 }
 
-// ─── Tooltip personalizado ─────────────────────────────────────────────────────
+// ─── Tooltip — Forma 1 ────────────────────────────────────────────────────────
 
-interface CustomTooltipProps {
-  /** Inyectado por Recharts cuando el tooltip está activo. */
+interface Form1TooltipProps {
   active?: boolean;
-  /** Inyectado por Recharts con las series del punto activo. */
   payload?: Array<{ dataKey: string; value: number }>;
-  /** Inyectado por Recharts con el valor del eje X (shortLabel). Puede ser string o number. */
   label?: string | number;
-  form: ChartForm;
+  year: number;
+}
+
+function Form1Tooltip({ active, payload, label, year }: Form1TooltipProps) {
+  if (!active || !payload || payload.length === 0) return null;
+
+  const labelStr = String(label ?? "");
+  const monthIndex = MONTH_LABELS_SHORT.indexOf(labelStr);
+  if (monthIndex === -1) return null;
+
+  const fullLabel = `${MONTH_LABELS_FULL[monthIndex] ?? label} ${year}`;
+  const incomeVal = payload.find((p) => p.dataKey === "incomeCents")?.value ?? 0;
+  const expenseVal = payload.find((p) => p.dataKey === "expenseCents")?.value ?? 0;
+
+  const rows = [
+    {
+      color: "var(--income)",
+      label: "Ingresos",
+      formattedValue: formatCurrency(incomeVal as number),
+      valueColor: "var(--income-ink)",
+    },
+    {
+      color: "var(--expense)",
+      label: "Gastos",
+      formattedValue: formatCurrency(expenseVal as number),
+      valueColor: "var(--expense-ink)",
+    },
+  ];
+
+  return <ChartTooltipContent monthLabel={fullLabel} rows={rows} />;
+}
+
+// ─── Tooltip — Forma 2 ────────────────────────────────────────────────────────
+
+interface Form2TooltipProps {
+  active?: boolean;
+  payload?: Array<{ dataKey: string; value: number }>;
+  label?: string | number;
   data: AnnualMovementsResponse;
   year: number;
 }
 
-function CustomTooltip({ active, payload, label, form, data, year }: CustomTooltipProps) {
+function Form2Tooltip({ active, payload, label, data, year }: Form2TooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
 
-  // label es el shortLabel (índice del eje X). Necesitamos el índice del mes.
   const labelStr = String(label ?? "");
   const monthIndex = MONTH_LABELS_SHORT.indexOf(labelStr);
   if (monthIndex === -1) return null;
 
   const fullLabel = `${MONTH_LABELS_FULL[monthIndex] ?? label} ${year}`;
 
-  if (form === "form1") {
-    // Forma 1: ingresos y gastos
-    const incomeVal = payload.find((p) => p.dataKey === "incomeCents")?.value ?? 0;
-    const expenseVal = payload.find((p) => p.dataKey === "expenseCents")?.value ?? 0;
-
-    const rows = [
-      {
-        color: "var(--income)",
-        label: "Ingresos",
-        formattedValue: formatCurrency(incomeVal as number),
-        valueColor: "var(--income-ink)",
-      },
-      {
-        color: "var(--expense)",
-        label: "Gastos",
-        formattedValue: formatCurrency(expenseVal as number),
-        valueColor: "var(--expense-ink)",
-      },
-    ];
-
-    return <ChartTooltipContent monthLabel={fullLabel} rows={rows} />;
-  }
-
-  // Forma 2: gastos por categoría
-  // Filtrar categorías con valor > 0 en este mes
   const catRows = data.categories
     .filter((cat) => (cat.monthlyExpenseCents[monthIndex] ?? 0) > 0)
     .map((cat) => ({
@@ -208,18 +201,16 @@ function CustomTooltip({ active, payload, label, form, data, year }: CustomToolt
   );
 }
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
+// ─── Skeleton de tarjeta ──────────────────────────────────────────────────────
 
 function ChartSkeleton({ height }: { height: number }) {
   return (
     <div>
-      {/* Área del gráfico: bloque animado */}
       <div
         className="animate-pulse rounded-ctl bg-panel-3"
         style={{ height }}
         aria-hidden="true"
       />
-      {/* Leyenda skeleton: 2–3 chips */}
       <div className="mt-[14px] flex gap-4">
         {[70, 56, 80].map((w, i) => (
           <div
@@ -234,306 +225,78 @@ function ChartSkeleton({ height }: { height: number }) {
   );
 }
 
-// ─── Props del widget ─────────────────────────────────────────────────────────
+// ─── Estado de error de tarjeta ───────────────────────────────────────────────
 
-export interface AnnualChartWidgetProps {
-  /** Año a mostrar. */
-  year: number;
-  /** Si true, muestra el control ‹ › de año. */
-  navigable: boolean;
-  /** Callback cuando el año cambia (solo si navigable). */
-  onYearChange?: (year: number) => void;
-  /**
-   * Alto del área de gráfico en px.
-   * 280 en dashboard, 340 en /anual. Default: 280.
-   */
-  chartHeight?: number;
-}
-
-// ─── Widget principal ─────────────────────────────────────────────────────────
-
-export function AnnualChartWidget({
-  year,
-  navigable,
-  onYearChange,
-  chartHeight = 280,
-}: AnnualChartWidgetProps) {
-  const [form, setForm] = useState<ChartForm>("form1");
-  const reducedMotion = useReducedMotion();
-
-  const { data, isLoading, isError, refetch } = useAnnual(year);
-
-  // Año actual real (tope superior de navegación)
-  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-  useEffect(() => {
-    setCurrentYear(new Date().getFullYear());
-  }, []);
-
-  // Límites de navegación (RF-GRA-003)
-  const earliestYear = data?.earliestYear ?? null;
-  const canGoPrev = earliestYear !== null && year > earliestYear;
-  const canGoNext = year < currentYear;
-
-  function handlePrev() {
-    if (canGoPrev) onYearChange?.(year - 1);
-  }
-  function handleNext() {
-    if (canGoNext) onYearChange?.(year + 1);
-  }
-
-  // Preparar datos para el gráfico
-  const chartData = data ? buildChartData(data) : [];
-
-  // Verificar si el año está completamente vacío
-  const isYearEmpty =
-    data !== undefined &&
-    data.months.every((m) => m.incomeCents === 0 && m.expenseCents === 0);
-
-  // ── Altura responsive (≤940px → 220px) ──────────────────────────────────────
-  // Nota: en la implementación usamos el alto pasado por prop; el responsive
-  // se maneja con un media query CSS aplicado sobre el contenedor.
-  // El spec dice que en ≤940px el alto baja a 220px, pero como el widget
-  // ya es responsive container de Recharts al 100% de ancho, bastará con
-  // aplicar la altura responsive al contenedor externo.
-
-  // ── Render ──────────────────────────────────────────────────────────────────
-
+function ChartError({ height, onRetry }: { height: number; onRetry: () => void }) {
   return (
     <div
-      className="bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] p-[var(--card-pad)]"
-      aria-label={`Gráfico anual ${year}`}
+      className="flex flex-col items-center justify-center gap-3"
+      style={{ height }}
+      role="alert"
     >
-      {/* ── Cabecera ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-[18px]">
-        {/* Izquierda: eyebrow + año (sin nav) o solo eyebrow (con nav) */}
-        <div>
-          <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
-            Resumen anual
-          </p>
-          {/* Si NO es navigable, el año va suelto aquí */}
-          {!navigable && (
-            <p className="text-[20px] font-semibold leading-tight mt-[2px] mono text-ink">
-              {year}
-            </p>
-          )}
-        </div>
+      <AlertTriangle
+        size={20}
+        aria-hidden="true"
+        className="text-warning-ink"
+      />
+      <p className="text-[14px] text-ink-2">No se pudo cargar el gráfico.</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="rounded-ctl border border-line bg-panel px-3 py-[6px] text-[13px] font-semibold text-ink-2 shadow-[var(--shadow-sm)] transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+      >
+        Reintentar
+      </button>
+    </div>
+  );
+}
 
-        {/* Derecha: stepper de año (si navigable) + toggle de forma */}
-        <div className="flex items-center gap-3">
-          {/* Stepper de año — solo si navigable */}
-          {navigable && (
-            <div
-              className="flex items-center rounded-pill border border-line bg-panel shadow-[var(--shadow-sm)] p-1"
-              role="group"
-              aria-label="Navegación de año"
-            >
-              {/* ‹ Anterior */}
-              <button
-                type="button"
-                onClick={handlePrev}
-                disabled={!canGoPrev}
-                aria-label="Año anterior"
-                className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-[140ms]",
-                  canGoPrev
-                    ? "text-ink-2 hover:bg-panel-2 hover:text-ink cursor-pointer"
-                    : "text-faint opacity-45 cursor-default",
-                )}
-              >
-                <ChevronLeft size={16} aria-hidden="true" />
-              </button>
+// ─── Estructura interna de cabecera de tarjeta ────────────────────────────────
 
-              {/* Año */}
-              <span
-                className="mono text-[14.5px] font-semibold text-ink min-w-[64px] text-center select-none"
-                aria-live="polite"
-                aria-atomic="true"
-              >
-                {year}
-              </span>
+interface CardHeaderProps {
+  /** Título de la tarjeta ("Ingresos y gastos" o "Por categoría"). */
+  title: string;
+  /** Si se muestra el año como cifra mono (solo en Dashboard, Forma 1). */
+  year?: number;
+}
 
-              {/* › Siguiente */}
-              <button
-                type="button"
-                onClick={handleNext}
-                disabled={!canGoNext}
-                aria-label="Año siguiente"
-                className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-[140ms]",
-                  canGoNext
-                    ? "text-ink-2 hover:bg-panel-2 hover:text-ink cursor-pointer"
-                    : "text-faint opacity-45 cursor-default",
-                )}
-              >
-                <ChevronRight size={16} aria-hidden="true" />
-              </button>
-            </div>
-          )}
-
-          {/* Toggle de forma — segmented .dtabs */}
-          <div
-            className="flex rounded-ctl p-1 bg-panel-3 gap-0.5"
-            role="group"
-            aria-label="Tipo de visualización"
-          >
-            <button
-              type="button"
-              onClick={() => setForm("form1")}
-              aria-pressed={form === "form1"}
-              className={cn(
-                "rounded-[8px] px-[10px] py-[5px] text-[13.5px] font-semibold transition-colors duration-[140ms]",
-                form === "form1"
-                  ? "bg-panel shadow-[var(--shadow-sm)] text-ink"
-                  : "text-muted hover:text-ink",
-              )}
-            >
-              Ingresos y gastos
-            </button>
-            <button
-              type="button"
-              onClick={() => setForm("form2")}
-              aria-pressed={form === "form2"}
-              className={cn(
-                "rounded-[8px] px-[10px] py-[5px] text-[13.5px] font-semibold transition-colors duration-[140ms]",
-                form === "form2"
-                  ? "bg-panel shadow-[var(--shadow-sm)] text-ink"
-                  : "text-muted hover:text-ink",
-              )}
-            >
-              Por categoría
-            </button>
-          </div>
-        </div>
+function CardHeader({ title, year }: CardHeaderProps) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 mb-[18px]">
+      <div>
+        <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+          Resumen anual
+        </p>
+        <p className="text-[16px] font-semibold leading-tight mt-[3px] text-ink">
+          {title}
+        </p>
       </div>
-
-      {/* ── Área del gráfico ── */}
-      {isLoading ? (
-        <ChartSkeleton height={chartHeight} />
-      ) : isError ? (
-        /* Estado de error */
-        <div>
-          <div
-            className="flex flex-col items-center justify-center gap-3"
-            style={{ height: chartHeight }}
-            role="alert"
-          >
-            <AlertTriangle
-              size={20}
-              aria-hidden="true"
-              className="text-warning-ink"
-            />
-            <p className="text-[14px] text-ink-2">No se pudo cargar el gráfico.</p>
-            <button
-              type="button"
-              onClick={() => refetch()}
-              className="rounded-ctl border border-line bg-panel px-3 py-[6px] text-[13px] font-semibold text-ink-2 shadow-[var(--shadow-sm)] transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
-            >
-              Reintentar
-            </button>
-          </div>
-        </div>
-      ) : (
-        /* Con datos o vacío */
-        <div className="relative">
-          {/* Mensaje de año vacío — centrado sobre el gráfico */}
-          {isYearEmpty && (
-            <div
-              className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none"
-              aria-live="polite"
-            >
-              <p className="text-[14px] text-muted">Sin movimientos en {year}.</p>
-            </div>
-          )}
-
-          {/* Alto responsive: en ≤940px → 220px */}
-          <div
-            className="[@media(max-width:940px)]:hidden"
-            style={{ height: chartHeight }}
-          >
-            <ChartArea
-              form={form}
-              chartData={chartData}
-              data={data!}
-              year={year}
-              height={chartHeight}
-              reducedMotion={reducedMotion}
-            />
-          </div>
-          {/* Mobile: 220px */}
-          <div
-            className="[@media(min-width:941px)]:hidden"
-            style={{ height: 220 }}
-          >
-            <ChartArea
-              form={form}
-              chartData={chartData}
-              data={data!}
-              year={year}
-              height={220}
-              reducedMotion={reducedMotion}
-            />
-          </div>
-
-          {/* ── Leyenda ── */}
-          {data && (
-            <ChartLegend
-              items={
-                form === "form1"
-                  ? [
-                      { color: "var(--income)", label: "Ingresos" },
-                      { color: "var(--expense)", label: "Gastos" },
-                    ]
-                  : data.categories.map((cat) => ({
-                      color: cat.color,
-                      label: cat.name,
-                    }))
-              }
-            />
-          )}
-        </div>
+      {year !== undefined && (
+        <span className="mono text-[20px] font-semibold text-ink">
+          {year}
+        </span>
       )}
     </div>
   );
 }
 
-// ─── ChartArea — el gráfico propiamente dicho ──────────────────────────────────
+// ─── Forma 1 — AreaChart interno ──────────────────────────────────────────────
 
-interface ChartAreaProps {
-  form: ChartForm;
+interface Form1ChartInnerProps {
   chartData: ChartDataPoint[];
-  data: AnnualMovementsResponse;
   year: number;
   height: number;
   reducedMotion: boolean;
 }
 
-function ChartArea({ form, chartData, data, year, height, reducedMotion }: ChartAreaProps) {
-  if (form === "form1") {
-    return <Form1Chart chartData={chartData} data={data} year={year} height={height} reducedMotion={reducedMotion} />;
-  }
-  return <Form2Chart chartData={chartData} data={data} year={year} height={height} reducedMotion={reducedMotion} />;
-}
-
-// ─── Forma 1 — AreaChart: ingresos vs gastos ──────────────────────────────────
-
-interface FormChartProps {
-  chartData: ChartDataPoint[];
-  data: AnnualMovementsResponse;
-  year: number;
-  height: number;
-  reducedMotion: boolean;
-}
-
-function Form1Chart({ chartData, data, year, height, reducedMotion }: FormChartProps) {
+function Form1ChartInner({ chartData, year, height, reducedMotion }: Form1ChartInnerProps) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart
         data={chartData}
         margin={{ top: 8, right: 4, left: 0, bottom: 0 }}
       >
-        {/* Gradientes para el relleno de áreas */}
         <defs>
-          {/* Plano a 0.14 (opción canónica del spec) */}
           <linearGradient id="areaIncome" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--income)" stopOpacity={0.18} />
             <stop offset="100%" stopColor="var(--income)" stopOpacity={0.02} />
@@ -544,7 +307,6 @@ function Form1Chart({ chartData, data, year, height, reducedMotion }: FormChartP
           </linearGradient>
         </defs>
 
-        {/* Gridlines horizontales — color --hair */}
         <CartesianGrid
           horizontal
           vertical={false}
@@ -552,7 +314,6 @@ function Form1Chart({ chartData, data, year, height, reducedMotion }: FormChartP
           strokeWidth={1}
         />
 
-        {/* Eje X — nombres cortos de mes */}
         <XAxis
           dataKey="shortLabel"
           axisLine={false}
@@ -566,7 +327,6 @@ function Form1Chart({ chartData, data, year, height, reducedMotion }: FormChartP
           interval={0}
         />
 
-        {/* Eje Y — montos abreviados en mono */}
         <YAxis
           axisLine={false}
           tickLine={false}
@@ -576,24 +336,17 @@ function Form1Chart({ chartData, data, year, height, reducedMotion }: FormChartP
             fontSize: 11.5,
             fill: "var(--muted)",
             fontFamily: "var(--mono)",
-            // fontFeatureSettings no es parte del tipo de tick SVG de Recharts;
-            // el tnum se aplica via font-feature-settings CSS en .mono del body.
-            // El font-family var(--mono) es IBM Plex Mono que ya tiene tnum como
-            // feature por defecto en la mayoría de navegadores.
           }}
           width={64}
         />
 
-        {/* Tooltip */}
         <Tooltip
           cursor={{ stroke: "var(--hair)", strokeWidth: 1 }}
           content={({ active, payload, label }) => (
-            <CustomTooltip
+            <Form1Tooltip
               active={active}
               payload={payload as unknown as Array<{ dataKey: string; value: number }>}
               label={label}
-              form="form1"
-              data={data}
               year={year}
             />
           )}
@@ -631,9 +384,17 @@ function Form1Chart({ chartData, data, year, height, reducedMotion }: FormChartP
   );
 }
 
-// ─── Forma 2 — BarChart apilado: gastos por categoría ─────────────────────────
+// ─── Forma 2 — BarChart interno ───────────────────────────────────────────────
 
-function Form2Chart({ chartData, data, year, height, reducedMotion }: FormChartProps) {
+interface Form2ChartInnerProps {
+  chartData: ChartDataPoint[];
+  data: AnnualMovementsResponse;
+  year: number;
+  height: number;
+  reducedMotion: boolean;
+}
+
+function Form2ChartInner({ chartData, data, year, height, reducedMotion }: Form2ChartInnerProps) {
   const categories = data.categories;
 
   return (
@@ -643,7 +404,6 @@ function Form2Chart({ chartData, data, year, height, reducedMotion }: FormChartP
         margin={{ top: 8, right: 4, left: 0, bottom: 0 }}
         barCategoryGap="27%"
       >
-        {/* Gridlines horizontales */}
         <CartesianGrid
           horizontal
           vertical={false}
@@ -651,7 +411,6 @@ function Form2Chart({ chartData, data, year, height, reducedMotion }: FormChartP
           strokeWidth={1}
         />
 
-        {/* Eje X */}
         <XAxis
           dataKey="shortLabel"
           axisLine={false}
@@ -665,7 +424,6 @@ function Form2Chart({ chartData, data, year, height, reducedMotion }: FormChartP
           interval={0}
         />
 
-        {/* Eje Y */}
         <YAxis
           axisLine={false}
           tickLine={false}
@@ -675,36 +433,25 @@ function Form2Chart({ chartData, data, year, height, reducedMotion }: FormChartP
             fontSize: 11.5,
             fill: "var(--muted)",
             fontFamily: "var(--mono)",
-            // fontFeatureSettings no es parte del tipo de tick SVG de Recharts;
-            // el tnum se aplica via font-feature-settings CSS en .mono del body.
-            // El font-family var(--mono) es IBM Plex Mono que ya tiene tnum como
-            // feature por defecto en la mayoría de navegadores.
           }}
           width={64}
         />
 
-        {/* Tooltip */}
         <Tooltip
           cursor={{ fill: "var(--accent-soft)", fillOpacity: 0.5 }}
           content={({ active, payload, label }) => (
-            <CustomTooltip
+            <Form2Tooltip
               active={active}
               payload={payload as unknown as Array<{ dataKey: string; value: number }>}
               label={label}
-              form="form2"
               data={data}
               year={year}
             />
           )}
         />
 
-        {/* Una barra apilada por categoría */}
         {categories.map((cat, idx) => {
-          // La primera categoría (mayor gasto anual) va en la base.
-          // Recharts apila en el orden en que se declaran los <Bar>;
-          // el spec pide de mayor a menor gasto anual — ya viene así del backend (ORDER BY gasto DESC).
           const isTop = idx === categories.length - 1;
-
           return (
             <Bar
               key={cat.categoryId}
@@ -713,13 +460,11 @@ function Form2Chart({ chartData, data, year, height, reducedMotion }: FormChartP
               fill={cat.color}
               stroke="var(--panel)"
               strokeWidth={1}
-              // Redondeo solo en el segmento superior de la barra (el último en apilar)
               radius={isTop ? [7, 7, 0, 0] : [0, 0, 0, 0]}
               isAnimationActive={!reducedMotion}
               animationDuration={400}
               animationEasing="ease-out"
             >
-              {/* Cell aplica el color individualmente (necesario porque Cell permite override) */}
               {chartData.map((_, cellIdx) => (
                 <Cell key={cellIdx} fill={cat.color} />
               ))}
@@ -728,5 +473,197 @@ function Form2Chart({ chartData, data, year, height, reducedMotion }: FormChartP
         })}
       </BarChart>
     </ResponsiveContainer>
+  );
+}
+
+// ─── Área del gráfico con responsivo ──────────────────────────────────────────
+
+/**
+ * Renderiza el gráfico con dos versiones: desktop (altura por prop) y mobile (220px).
+ * El responsive se maneja con media queries de Tailwind v4 — dos divs con hidden/visible.
+ */
+interface ChartResponsiveAreaProps {
+  desktopHeight: number;
+  children: (height: number) => React.ReactNode;
+}
+
+function ChartResponsiveArea({ desktopHeight, children }: ChartResponsiveAreaProps) {
+  return (
+    <>
+      {/* Desktop: altura por prop */}
+      <div className="[@media(max-width:940px)]:hidden" style={{ height: desktopHeight }}>
+        {children(desktopHeight)}
+      </div>
+      {/* Mobile ≤940px: 220px */}
+      <div className="[@media(min-width:941px)]:hidden" style={{ height: 220 }}>
+        {children(220)}
+      </div>
+    </>
+  );
+}
+
+// ─── IncomeExpenseCard ─────────────────────────────────────────────────────────
+
+export interface IncomeExpenseCardProps {
+  /** Año a mostrar. */
+  year: number;
+  /**
+   * Alto del área de gráfico en desktop (px).
+   * 280 en dashboard, 300 en /anual. Default: 280.
+   */
+  chartHeight?: number;
+  /**
+   * Si se muestra el año como cifra mono en la cabecera de la tarjeta.
+   * true = dashboard (año fijo, sin control externo).
+   * false = /anual (el año vive en el control compartido del .phead).
+   * Default: false.
+   */
+  showYearInHeader?: boolean;
+}
+
+/**
+ * Tarjeta "Ingresos y gastos" — Forma 1.
+ * AreaChart: dos series superpuestas (income / expense), NO apiladas.
+ *
+ * Se monta en el Dashboard (año fijo, showYearInHeader=true)
+ * y en /anual (showYearInHeader=false, el año está en el .phead).
+ */
+export function IncomeExpenseCard({
+  year,
+  chartHeight = 280,
+  showYearInHeader = false,
+}: IncomeExpenseCardProps) {
+  const reducedMotion = useReducedMotion();
+  const { data, isLoading, isError, refetch } = useAnnual(year);
+
+  const chartData = data ? buildChartData(data) : [];
+  const isYearEmpty =
+    data !== undefined &&
+    data.months.every((m) => m.incomeCents === 0 && m.expenseCents === 0);
+
+  return (
+    <div
+      className="bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] p-[var(--card-pad)]"
+      aria-label={`Ingresos y gastos ${year}`}
+    >
+      <CardHeader
+        title="Ingresos y gastos"
+        year={showYearInHeader ? year : undefined}
+      />
+
+      {isLoading ? (
+        <ChartSkeleton height={chartHeight} />
+      ) : isError ? (
+        <ChartError height={chartHeight} onRetry={() => refetch()} />
+      ) : (
+        <div className="relative">
+          {isYearEmpty && (
+            <div
+              className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none"
+              aria-live="polite"
+            >
+              <p className="text-[14px] text-muted">Sin movimientos en {year}.</p>
+            </div>
+          )}
+
+          <ChartResponsiveArea desktopHeight={chartHeight}>
+            {(height) => (
+              <Form1ChartInner
+                chartData={chartData}
+                year={year}
+                height={height}
+                reducedMotion={reducedMotion}
+              />
+            )}
+          </ChartResponsiveArea>
+
+          {data && (
+            <ChartLegend
+              items={[
+                { color: "var(--income)", label: "Ingresos" },
+                { color: "var(--expense)", label: "Gastos" },
+              ]}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── ByCategoryCard ───────────────────────────────────────────────────────────
+
+export interface ByCategoryCardProps {
+  /** Año a mostrar. */
+  year: number;
+  /**
+   * Alto del área de gráfico en desktop (px).
+   * 300 en /anual. Default: 300.
+   */
+  chartHeight?: number;
+}
+
+/**
+ * Tarjeta "Por categoría" — Forma 2.
+ * BarChart apilado: una barra por mes, una banda por categoría con su color.
+ *
+ * Solo se monta en /anual (las dos tarjetas apiladas). No va en el Dashboard.
+ */
+export function ByCategoryCard({ year, chartHeight = 300 }: ByCategoryCardProps) {
+  const reducedMotion = useReducedMotion();
+  const { data, isLoading, isError, refetch } = useAnnual(year);
+
+  const chartData = data ? buildChartData(data) : [];
+
+  // Vacío en Forma 2: sin gastos en ningún mes del año
+  const isYearEmpty =
+    data !== undefined &&
+    data.months.every((m) => m.expenseCents === 0);
+
+  return (
+    <div
+      className="bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] p-[var(--card-pad)]"
+      aria-label={`Gastos por categoría ${year}`}
+    >
+      <CardHeader title="Por categoría" />
+
+      {isLoading ? (
+        <ChartSkeleton height={chartHeight} />
+      ) : isError ? (
+        <ChartError height={chartHeight} onRetry={() => refetch()} />
+      ) : (
+        <div className="relative">
+          {isYearEmpty && (
+            <div
+              className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none"
+              aria-live="polite"
+            >
+              <p className="text-[14px] text-muted">Sin movimientos en {year}.</p>
+            </div>
+          )}
+
+          <ChartResponsiveArea desktopHeight={chartHeight}>
+            {(height) => (
+              <Form2ChartInner
+                chartData={chartData}
+                data={data!}
+                year={year}
+                height={height}
+                reducedMotion={reducedMotion}
+              />
+            )}
+          </ChartResponsiveArea>
+
+          {data && data.categories.length > 0 && (
+            <ChartLegend
+              items={data.categories.map((cat) => ({
+                color: cat.color,
+                label: cat.name,
+              }))}
+            />
+          )}
+        </div>
+      )}
+    </div>
   );
 }

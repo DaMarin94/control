@@ -308,15 +308,16 @@ Visualización anual de ingresos/gastos. El spec visual completo (color, alturas
 
 ### Arquitectura en dos capas (enfoque shadcn charts)
 
-El gráfico se separa en una **primitiva reutilizable** (motor de charting, agnóstica de la feature) y un **widget de feature** que la compone. Cualquier gráfico futuro reusa la primitiva.
+El gráfico se separa en una **primitiva reutilizable** (motor de charting, agnóstica de la feature) y **tarjetas de feature** que la componen. Cualquier gráfico futuro reusa la primitiva.
 
 - **Primitiva `components/ui/chart.tsx`** — primitiva estilo shadcn charts sobre **Recharts v3** (el motor; instalado con `pnpm add`, no npm), themeada con los tokens del DS (CSS vars `oklch`). Es una **primitiva nueva de `components/ui/`**, pensada para reusarse en futuros gráficos, no solo en el anual. Exporta:
   - **`ChartContainer`** — wrapper de `ResponsiveContainer` de Recharts + theming del DS.
   - **`ChartTooltipContent`** — tooltip themeado con el DS.
   - **`ChartLegend`** — leyenda themeada con el DS.
-- **Widget `components/charts/annual-chart-widget.tsx`** — compone la primitiva. Props: **`year`** (number) y **`navigable`** (boolean). Contiene el toggle segmented entre formas, el stepper de año (solo si `navigable`) y los 5 estados (skeleton / con datos / vacío / meses futuros / error).
-  - **Forma 1** = `AreaChart` con ingresos y gastos superpuestos.
-  - **Forma 2** = `BarChart` apilado por categoría, usando `category.color` de cada categoría.
+- **Dos tarjetas autónomas en `components/charts/annual-chart-widget.tsx`** — el módulo ya **no** exporta un widget único con toggle interno; exporta **dos tarjetas independientes**, cada una con su propia cabecera, gráfico, leyenda, tooltip y estados (skeleton / con datos / vacío / meses futuros / error), y cada una consume `useAnnual(year)` por su cuenta:
+  - **`IncomeExpenseCard`** (Forma 1) — `AreaChart` con ingresos y gastos superpuestos. Props: **`year`** (number), **`chartHeight`** (number), **`showYearInHeader`** (boolean — muestra el año fijo en la cabecera de la tarjeta cuando no hay control externo de año).
+  - **`ByCategoryCard`** (Forma 2) — `BarChart` apilado por categoría, usando `category.color` de cada categoría. Props: **`year`** (number), **`chartHeight`** (number).
+  - **El control de año NO vive en las tarjetas.** Cambiar de año es responsabilidad de la página anfitriona (ver Puntos de uso).
 
 ### Datos (`use-annual`)
 
@@ -326,8 +327,8 @@ El gráfico se separa en una **primitiva reutilizable** (motor de charting, agn�
 
 ### Puntos de uso
 
-- **Pantalla dedicada `app/(app)/anual/page.tsx`** (dentro del route group `(app)`, hereda el sidebar). Monta el widget con **`navigable=true`**. **El año es estado interno del componente, NO va en la URL** → esta pantalla **no usa `useSearchParams()` ni necesita `<Suspense>`** (a diferencia de `/mes`, que sí lee `?month=`).
-- **Dashboard (`dashboard-client.tsx`)** — monta el widget con **`navigable=false`** y año fijo (el año en curso), ubicado **tras el balance hero y antes del footer**.
+- **Pantalla dedicada `app/(app)/anual/page.tsx`** (dentro del route group `(app)`, hereda el sidebar). Monta **`IncomeExpenseCard` + `ByCategoryCard` apiladas**, ambas con el mismo `year`. **El año es estado local de la página** (no de las tarjetas): el control de año `‹ ›` (`YearStepper`) vive en el **`.phead`**, a la derecha del H1 "Anual", y gobierna ambas tarjetas a la vez. La página también lee `earliestYear` (vía `useAnnual`) para deshabilitar el retroceso antes del primer año con movimientos. **El año NO va en la URL** → esta pantalla **no usa `useSearchParams()` ni necesita `<Suspense>`** (a diferencia de `/mes`, que sí lee `?month=`).
+- **Dashboard (`dashboard-client.tsx`)** — monta **solo `IncomeExpenseCard`** con **`showYearInHeader=true`** y año fijo (el año en curso), sin control externo de año, ubicado **tras el balance hero y antes del footer**.
 - **Sidebar** — link **"Anual"** (`/anual`), activo por `startsWith("/anual")`. Orden de links: Dashboard → Vista del mes → Anual → Categorías.
 
 ### Gotchas técnicos (Recharts v3 + Tailwind v4 + DS)
@@ -337,8 +338,9 @@ Para que un agente futuro que toque gráficos no los re-tropiece:
 - **CSS vars `oklch` directas en el SVG de Recharts:** se pueden pasar `var(--token)` directo en props de color (`stroke`, `fill`, y `stopColor` de `<stop>` dentro de `<defs>`). **No** hace falta `getComputedStyle` en runtime para resolver el token.
 - **Cifras tabulares (`tnum`):** la propiedad `fontFeatureSettings` **no existe** en el tipo de tick SVG de Recharts; el `tnum` se delega a la CSS var **`--mono`** (IBM Plex Mono ya trae `tnum`). No intentar setear `fontFeatureSettings` en el tick.
 - **Recharts 3.x + TypeScript strict:** `TooltipPayload` es **`readonly`** → el componente custom de tooltip requiere un **doble cast** (`as unknown as Array<...>`). El prop `label` del tooltip es `string | number | undefined` (no solo `string`).
-- **Alto responsive — por prop `height`, no CSS var:** Recharts necesita el alto como **valor numérico en el prop `height`** (no acepta una CSS var de altura). Se resuelve con **dos `<div>` + media queries de Tailwind v4** (`[@media(max-width:940px)]:hidden` / `[@media(min-width:941px)]:hidden`): uno con el alto desktop (`chartHeight`: **280** en dashboard, **340** en `/anual`) y otro con **220** en ≤940px.
-- **`prefers-reduced-motion`:** el widget usa un detector interno de reduced-motion. **jsdom no implementa `window.matchMedia`**, así que se agregó un **mock global de `matchMedia` en `tests/setup.ts`** — necesario para cualquier componente futuro que detecte reduced-motion.
+- **Alto responsive — por prop `height`, no CSS var:** Recharts necesita el alto como **valor numérico en el prop `height`** (no acepta una CSS var de altura). Se resuelve con **dos `<div>` + media queries de Tailwind v4** (`[@media(max-width:940px)]:hidden` / `[@media(min-width:941px)]:hidden`): uno con el alto desktop (el `chartHeight` que pasa la página: **280** en dashboard, **340** en `/anual`) y otro con **220** en ≤940px.
+- **`prefers-reduced-motion`:** las tarjetas usan un detector interno de reduced-motion. **jsdom no implementa `window.matchMedia`**, así que se agregó un **mock global de `matchMedia` en `tests/setup.ts`** — necesario para cualquier componente futuro que detecte reduced-motion.
+- **Dedupe de `useAnnual` por query key — no es doble fetch:** en `/anual`, `useAnnual(year)` se invoca **varias veces a la vez** (cada tarjeta por su cuenta, más la página para leer `earliestYear`). React Query lo resuelve como **una sola request** porque todos comparten la misma key `["annual", year]` (dedupe por key). No es N peticiones simultáneas; que no sorprenda al próximo que vea varios `useAnnual` en el mismo árbol.
 
 ## Design system "Precise Ledger" — tokens (Fase 1)
 

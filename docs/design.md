@@ -169,27 +169,33 @@ El pool es la fuente de verdad (`backend/src/categories/color-pool.ts`). Valores
 
 ## Gráfico anual — spec visual del widget
 
-> Spec del widget de gráfico anual (RF-GRA-001/002/003, pantallas 7 y 8 de `screens.md`). Componente reutilizable con dos formas alternables, montado en el Dashboard (año fijo) y en `/anual` (con navegación de año). **Librería destino: Tremor Raw (Recharts por debajo).** Esta sección define lo visual; la conducta funcional vive en los RF citados y no se redefine acá.
+> Spec del widget de gráfico anual (RF-GRA-001/002/003, pantallas 7 y 8 de `screens.md`). **Dos visualizaciones que son dos recuadros (`.card`) separados, ambos visibles a la vez — sin toggle, sin "forma por defecto", sin morph entre formas.** Forma 1 (Ingresos vs. Gastos) se monta sola en el Dashboard (año fijo); Forma 1 + Forma 2 (Gastos por categoría) se montan apiladas en `/anual` (con navegación de año compartida). Cada recuadro es un componente reutilizable configurable por props. **Librería destino: Tremor Raw (Recharts por debajo).** Esta sección define lo visual; la conducta funcional vive en los RF citados y no se redefine acá.
 
-### Contenedor y ubicación
+### Dos recuadros independientes (no un widget con toggle)
 
-El widget vive dentro de una **tarjeta `.card`** (panel blanco, `--line`, `--r-card` 14px, `--shadow-sm`), con padding interior `--card-pad` (22px). La tarjeta es la misma primitiva que stats y listas — el gráfico no inventa contenedor propio.
+Cada visualización es una **tarjeta `.card` propia y autónoma** (panel blanco, `--line`, `--r-card` 14px, `--shadow-sm`), con padding interior `--card-pad` (22px), su propia cabecera, su propio gráfico, su propia leyenda y sus propios estados. No hay un contenedor padre que las una ni un control que alterne entre ellas: son dos paneles separados. En el Dashboard se monta **solo** la tarjeta de Forma 1; en `/anual`, las dos tarjetas **apiladas** (Forma 1 arriba, Forma 2 abajo). El control de año, cuando existe, es **compartido** y vive fuera de las tarjetas (ver "Control de año compartido").
 
-**Estructura interna de la tarjeta (de arriba hacia abajo):**
+### Contenedor y cabecera de cada tarjeta
 
-1. **Barra de cabecera del widget** — fila flex `space-between`, `align-items: center`, alto natural, `margin-bottom` 18px (`--gap`):
-   - **Izquierda:** título del widget. Eyebrow uppercase (rol *Eyebrow/labels*: 12px/600, `.1em`, uppercase, `--muted`) "Resumen anual" + el **año** debajo o al lado como cifra mono. El año va en **mono tabular** (es un número), peso 600, ~20px, color `--ink`. Cuando la navegación de año está habilitada, el año vive **dentro del control ‹ ›** (ver abajo) y no se repite suelto.
-   - **Derecha:** el **toggle de Forma** (segmented). Si la navegación de año está habilitada, el **control de año ‹ ›** va también en esta zona, a la izquierda del toggle (orden: ‹ año › … toggle), separados por 12px.
+**Estructura interna de cada tarjeta (de arriba hacia abajo):**
+
+1. **Barra de cabecera de la tarjeta** — fila flex `space-between`, `align-items: center`, alto natural, `margin-bottom` 18px (`--gap`):
+   - **Izquierda:** identidad de la tarjeta. Eyebrow uppercase (rol *Eyebrow/labels*: 12px/600, `.1em`, uppercase, `--muted`) "Resumen anual" + **título de la tarjeta** debajo (rol de título de tarjeta, UI font 16px/600 `--ink`):
+     - Tarjeta de Forma 1 → **"Ingresos y gastos"**.
+     - Tarjeta de Forma 2 → **"Por categoría"**.
+     (Son los rótulos que antes etiquetaban el toggle; ahora titulan cada recuadro.)
+   - **Derecha:** **solo en el Dashboard** (Forma 1, año fijo, sin navegación) el **año** aparece acá como cifra **mono tabular** (es un número), peso 600, ~20px, color `--ink`. En `/anual` la cabecera de cada tarjeta **no** lleva año suelto: el año lo gobierna el control compartido del header de página (ver abajo), y la zona derecha de la cabecera queda vacía.
 2. **Área del gráfico** — el chart propiamente dicho.
 3. **Leyenda** — debajo del área del gráfico (ver "Leyenda").
 
-> En desktop, si el ancho lo permite, cabecera en una sola fila. Ver "Responsive" para el colapso.
+> Ya no hay toggle de Forma en la cabecera. Ver "Responsive" para el colapso de la cabecera.
 
 ### Alto y proporción del área de gráfico
 
-- **Alto del área de gráfico (canvas Recharts):** **280px** fijo en desktop. Es suficiente para leer 12 meses sin que el widget domine la página, y es el alto consistente para ambas formas (no cambia al togglear).
-- **Ancho:** 100% del contenedor (responsive container de Recharts).
-- El alto **no** incluye la cabecera ni la leyenda; esas suman por fuera.
+- **Dashboard (`/`), tarjeta de Forma 1:** **280px** fijo en desktop. Es suficiente para leer 12 meses sin que el recuadro domine la página. (Se conserva el alto que ya tenía el recuadro de ingresos/gastos del dashboard.)
+- **`/anual`, cada una de las dos tarjetas:** **300px** fijo en desktop, por tarjeta. Como ahora son dos recuadros apilados (antes era uno solo a 340px), 300px da aire de pantalla dedicada a cada gráfico sin que la columna total se vuelva excesivamente alta. Ambas tarjetas usan el mismo alto de canvas (300px) para que se lean como un par homogéneo.
+- **Ancho:** 100% del contenedor (responsive container de Recharts), en ambos anfitriones.
+- El alto **no** incluye la cabecera ni la leyenda; esas suman por fuera, en cada tarjeta.
 
 ### Forma 1 — Ingresos vs. Gastos
 
@@ -236,22 +242,20 @@ El widget vive dentro de una **tarjeta `.card`** (panel blanco, `--line`, `--r-c
 - **Eje Y (monto):** cifras en **mono tabular** (regla dura 3) — IBM Plex Mono + `tnum`, 11.5px, color `--muted`. **Formato abreviado** para no saturar: `$0`, `$50k`, `$120k`, `$2,5M` (k = miles, M = millones; separador decimal coma es-AR; prefijo `$`). El monto completo sin abreviar aparece en el **tooltip**, no en el eje. Eje Y sin línea ni ticks visibles. 4–5 ticks como máximo (Recharts `tickCount`), redondeados a valores "lindos".
 - **Gridlines:** solo **horizontales**, color `--hair` (`ink/0.10`), 1px, sólidas. Sin gridlines verticales (los meses ya se separan por las etiquetas/barras). La línea base (y=0) puede ser levemente más marcada (`--line`).
 
-### Toggle de Forma (Forma 1 / Forma 2)
+### Control de año ‹ › compartido (`/anual`)
 
-- **Patrón:** segmented control, reutiliza el lenguaje de **`.dtabs`** del DS (el segmented del modal): contenedor `bg-panel-3`, padding 4px, `--r-ctl` (10px); dos botones, el activo en `--panel` (blanco) con `--shadow-sm` y texto `--ink`; el inactivo con texto `--muted` que pasa a `--ink` en hover. Texto 13.5px/600, UI font.
-- **Etiquetas (fijas, confirmadas):** botón 1 **"Ingresos y gastos"**; botón 2 **"Por categoría"**. Son las etiquetas definitivas en todos los anchos — no se acortan ni se sustituyen por variantes en responsive.
-- **Ubicación:** extremo derecho de la cabecera del widget. Es parte del widget en ambos anfitriones (dashboard y `/anual`).
-- **Default:** abre en **Forma 1** (botón 1 activo), en ambos anfitriones.
-- **Estado activo:** no usa acento como fondo (el acento es solo marca; un segmented activo del DS usa panel blanco + sombra, no acento). El texto del activo es `--ink`.
+En `/anual` hay **un único control de año** que gobierna **las dos tarjetas a la vez**. Para que se lea inequívocamente como compartido (y no como propiedad de una de las dos tarjetas), vive en el **header de página `.phead`**, por encima del par de tarjetas, no dentro de ninguna de ellas.
 
-### Control de año ‹ ›
-
-- **Patrón:** reutiliza **`.stepper`** del DS (el navegador de mes): pill (`--r-pill`) `--panel` con borde `--line` y `--shadow-sm`, padding 4px; dos botones circulares 32px (chevron-left / chevron-right) con ícono `--ink-2` que pasa a `--ink` sobre fondo `--panel-2` en hover; en el centro, el **año** como label mono tabular (es un número), 14.5px/600, `min-width` ~64px centrado. Sin la sub-línea "Mes en curso" del stepper de mes (acá no aplica).
-- **Ubicación:** en la cabecera del widget, **solo cuando la navegación de año está habilitada** (prop). A la izquierda del toggle de Forma.
-- **Estados de los chevrons (límites de RF-GRA-003):**
-  - **‹ deshabilitado** cuando el año mostrado es el primer año con movimientos del usuario (no se navega más atrás): chevron en `--faint`, `cursor: default`, sin hover, `opacity` 0.45. No se oculta — se ve presente pero apagado.
+- **Ubicación dentro del `.phead`:** fila flex `space-between`, `align-items: center`. A la **izquierda**, el bloque de título de página (eyebrow "Tu actividad" + H1 "Anual"). A la **derecha**, el control de año ‹ ›, alineado al baseline/centro del H1. Así un único stepper preside ambos recuadros y se entiende que los mueve juntos.
+- **Patrón del control:** reutiliza **`.stepper`** del DS (el navegador de mes): pill (`--r-pill`) `--panel` con borde `--line` y `--shadow-sm`, padding 4px; dos botones circulares 32px (chevron-left / chevron-right) con ícono `--ink-2` que pasa a `--ink` sobre fondo `--panel-2` en hover; en el centro, el **año** como label mono tabular (es un número), 14.5px/600, `min-width` ~64px centrado. Sin la sub-línea "Mes en curso" del stepper de mes (acá no aplica).
+- **Estados de los chevrons (límites de RF-GRA-003) — se mantienen:**
+  - **‹ deshabilitado** cuando el año mostrado es el primer año con movimientos del usuario (`earliestYear`, no se navega más atrás): chevron en `--faint`, `cursor: default`, sin hover, `opacity` 0.45. No se oculta — se ve presente pero apagado.
   - **› deshabilitado** cuando el año mostrado es el año en curso (no se navega al futuro): mismo tratamiento apagado.
-- **Ausencia en el dashboard:** cuando la navegación está **deshabilitada** (dashboard), el control ‹ › **no se renderiza**. En su lugar, el año aparece como cifra mono suelta en la zona izquierda de la cabecera (junto al eyebrow "Resumen anual"), sin pill ni chevrons. No se muestra un stepper deshabilitado.
+- **Año en las tarjetas:** como el año vive en el `.phead`, las cabeceras de las dos tarjetas de `/anual` **no** repiten el año suelto (su zona derecha queda vacía). El año es uno solo y se lee en el control compartido.
+
+### Año en el Dashboard (sin control)
+
+En el Dashboard la navegación de año está **deshabilitada**: **no se renderiza** ningún stepper. El **año actual** aparece como cifra **mono tabular** suelta en la **zona derecha de la cabecera** de la única tarjeta (Forma 1), peso 600 ~20px `--ink`. No se muestra un stepper deshabilitado ni un control inerte.
 
 ### Leyenda
 
@@ -272,25 +276,34 @@ El widget vive dentro de una **tarjeta `.card`** (panel blanco, `--line`, `--r-c
 
 ### Estados
 
-- **Cargando (skeleton):** la tarjeta `.card` se renderiza con su cabecera ya presente (eyebrow + año + controles, estos últimos inertes); el área de gráfico se reemplaza por un **skeleton** del DS: bloque de 280px de alto, `bg-panel-3`, `rounded-[--r-ctl]`, `animate-pulse`. Opcionalmente, barras/ondas fantasma con el mismo `bg-panel-3`. La leyenda muestra 2–3 chips fantasma (`bg-panel-3 animate-pulse`, ~70px × 14px). Sin spinner.
-- **Con datos:** lo descrito arriba según la forma activa.
-- **Año sin movimientos (vacío):** los 12 meses **igual se dibujan en cero** (eje X completo, sin huecos) — el gráfico no desaparece. Sobre el área (centrada), un **mensaje de estado vacío** sobrio: texto UI 14px `--muted` "Sin movimientos en {año}." Sin ilustración. El eje Y puede mostrar una escala mínima (`$0`). En el dashboard, si el **año entero** está vacío, mismo tratamiento (no se mezcla con el empty del dashboard de "primer movimiento"; este es el empty del widget). No es un error.
+- **Cargando (skeleton):** cada tarjeta `.card` se renderiza con su cabecera ya presente (eyebrow + título de tarjeta; el año del dashboard, si aplica, como cifra mono ya visible). El área de gráfico se reemplaza por un **skeleton** del DS: bloque del alto del canvas de esa tarjeta (280px en dashboard, 300px en `/anual`), `bg-panel-3`, `rounded-[--r-ctl]`, `animate-pulse`. Opcionalmente, barras/ondas fantasma con el mismo `bg-panel-3`. La leyenda muestra 2–3 chips fantasma (`bg-panel-3 animate-pulse`, ~70px × 14px). Sin spinner. En `/anual` cada una de las dos tarjetas tiene su propio skeleton (cargan como un par). El control de año compartido del `.phead` ya está presente con el año, inerte mientras cargan los datos.
+- **Con datos:** lo descrito arriba, por tarjeta según su forma.
+- **Año sin movimientos (vacío):** los 12 meses **igual se dibujan en cero** (eje X completo, sin huecos) — el gráfico no desaparece. Sobre el área (centrada), un **mensaje de estado vacío** sobrio: texto UI 14px `--muted` "Sin movimientos en {año}." Sin ilustración. El eje Y puede mostrar una escala mínima (`$0`). En el dashboard, si el **año entero** está vacío, mismo tratamiento (no se mezcla con el empty del dashboard de "primer movimiento"; este es el empty de la tarjeta). En `/anual` cada tarjeta resuelve su vacío por separado (la de Forma 2 puede estar vacía aunque la de Forma 1 tenga ingresos, ya que Forma 2 es solo gastos). No es un error.
 - **Año en curso con meses futuros:** los meses futuros sin datos se dibujan en **cero** como cualquier mes vacío (sin estilo especial de "futuro" en v1: no se atenúan ni se marcan distinto — la spec no introduce un tratamiento de "futuro" que los RF no pidieron). Los fijos/cuotas proyectados (RN-006) aparecen como datos normales.
-- **Error:** la tarjeta se mantiene (no se rompe el layout del anfitrión). En el área del gráfico, mensaje centrado: ícono `alert-triangle` (lucide) 20px `--warning-ink`, texto UI 14px `--ink-2` "No se pudo cargar el gráfico." y, debajo, un botón `.btn.ghost.sm` "Reintentar". Fondo de la tarjeta normal (`--panel`), sin tinte de error en toda la tarjeta.
+- **Error:** la tarjeta se mantiene (no se rompe el layout del anfitrión ni de la otra tarjeta en `/anual`). En el área del gráfico, mensaje centrado: ícono `alert-triangle` (lucide) 20px `--warning-ink`, texto UI 14px `--ink-2` "No se pudo cargar el gráfico." y, debajo, un botón `.btn.ghost.sm` "Reintentar". Fondo de la tarjeta normal (`--panel`), sin tinte de error en toda la tarjeta. En `/anual` cada tarjeta maneja su error por separado.
 
 ### Ubicación en cada anfitrión
 
-- **Dashboard (`/`):** el widget va **después del bloque de stats + balance hero y ANTES del footer "Ver todos los movimientos →"** (orden fijo, ya definido — no queda a criterio del frontend). Es decir, de arriba hacia abajo en la columna principal: stats + balance hero → widget de gráfico anual → footer "Ver todos los movimientos →". Full-width del contenido (respeta el `max-width` 1120px del dashboard), separado del bloque superior por `--gap` (18px). Navegación de año **ausente**; año actual como cifra mono en la cabecera. Abre en Forma 1.
-- **Pantalla dedicada (`/anual`):** el widget es el **contenido central** y prácticamente único de la pantalla. Header de página estándar (`.phead`): eyebrow "Tu actividad" + H1 "Anual" (rol H1 página, 32px/700; sin teñir el año en el H1 — el año vive en el control ‹ ›). Debajo, la tarjeta del widget, full-width del contenido (`max-width` 1120px como el resto). Acá el área de gráfico puede crecer a **340px** de alto (más aire que en el dashboard, al ser la pantalla dedicada). Navegación de año **habilitada** (control ‹ ›). Abre en Forma 1 y año actual.
+- **Dashboard (`/`):** se monta **solo la tarjeta de Forma 1 (Ingresos vs. Gastos)**. Va **después del bloque de stats + balance hero y ANTES del footer "Ver todos los movimientos →"** (orden fijo, ya definido — no queda a criterio del frontend). De arriba hacia abajo en la columna principal: stats + balance hero → tarjeta de Ingresos vs. Gastos → footer "Ver todos los movimientos →". Full-width del contenido (respeta el `max-width` 1120px del dashboard), separada del bloque superior por `--gap` (18px). Navegación de año **ausente**; año actual como cifra mono en la cabecera de la tarjeta. La tarjeta de Gastos por categoría (Forma 2) **no** va en el dashboard.
+- **Pantalla dedicada (`/anual`):** el contenido central son las **dos tarjetas apiladas**, ambas visibles a la vez. Header de página estándar (`.phead`): eyebrow "Tu actividad" + H1 "Anual" (rol H1 página, 32px/700; sin teñir el año en el H1) a la izquierda, y el **control de año ‹ › compartido** a la derecha (ver "Control de año compartido"). Debajo del `.phead`, las dos tarjetas:
+  - **Arriba:** tarjeta de **Forma 1 — "Ingresos y gastos"**.
+  - **Abajo:** tarjeta de **Forma 2 — "Por categoría"**.
+  - **Separación entre tarjetas:** `--gap` (18px) vertical, el mismo aire que separa bloques de tarjetas en el resto del DS. Ambas full-width del contenido (`max-width` 1120px como el resto).
+  Cada área de gráfico es de **300px** de alto (ver "Alto y proporción"). Navegación de año **habilitada** mediante el control compartido del `.phead`. Al abrir, ambas tarjetas en el **año actual**.
 
 ### Responsive (desktop-first)
 
-- **Desktop (> 940px):** cabecera en una fila (título izquierda; ‹ año › + toggle derecha). 12 meses en el eje X sin rotación. Altos: 280px (dashboard) / 340px (`/anual`).
-- **≤ 940px:** la cabecera del widget **envuelve en dos filas** (título arriba; controles ‹ año › + toggle abajo, alineados al inicio). El área de gráfico baja a **220px**. Las etiquetas de mes, si no entran las 12, se muestran de a una sí/una no (Recharts `interval`) o se acortan a la inicial — preferencia: `interval` para saltear, manteniendo las 12 barras/puntos. La leyenda envuelve (`flex-wrap`). Coherente con el resto del DS, que en ≤940px oculta la sidebar.
-- El widget nunca scrollea horizontal; siempre encaja al ancho del contenedor.
+- **Desktop (> 940px):** cabecera de cada tarjeta en una fila (título izquierda; en dashboard, año mono a la derecha; en `/anual` la derecha de la cabecera queda vacía). En `/anual`, el `.phead` en una fila (título izquierda; control de año derecha). 12 meses en el eje X sin rotación. Altos de canvas: 280px (dashboard) / 300px por tarjeta (`/anual`).
+- **≤ 940px:**
+  - En `/anual`, el `.phead` **envuelve en dos filas** (título arriba; control de año compartido debajo, alineado al inicio). Las dos tarjetas siguen **apiladas** (ya lo estaban) con la misma separación `--gap`.
+  - La cabecera de cada tarjeta, si su contenido no entra en una fila, envuelve también (título arriba; en dashboard, año mono debajo).
+  - El área de gráfico de cada tarjeta baja a **220px**.
+  - Las etiquetas de mes, si no entran las 12, se muestran de a una sí/una no (Recharts `interval`) o se acortan a la inicial — preferencia: `interval` para saltear, manteniendo las 12 barras/puntos. La leyenda envuelve (`flex-wrap`). Coherente con el resto del DS, que en ≤940px oculta la sidebar.
+- Ninguna tarjeta scrollea horizontal; siempre encajan al ancho del contenedor.
 
 ### Movimiento y prefers-reduced-motion
 
-- **Animación de entrada:** al montar/cargar, las áreas/barras hacen un *grow* desde la base (Recharts `isAnimationActive`), duración ~0.4s, easing suave — coherente con el movimiento sobrio del DS (0.32s de entrada de pantalla). El toggle de forma hace un *cross-fade*/morph corto (~0.2s) entre formas.
+- **Animación de entrada:** al montar/cargar, las áreas/barras de cada tarjeta hacen un *grow* desde la base (Recharts `isAnimationActive`), duración ~0.4s, easing suave — coherente con el movimiento sobrio del DS (0.32s de entrada de pantalla). En `/anual`, las dos tarjetas pueden animar a la vez al entrar. Ya no hay morph/cross-fade entre formas (no existe toggle).
+- **Cambio de año (`/anual`):** al navegar con el control compartido, ambas tarjetas recalculan; las áreas/barras pueden reanimar su *grow* (~0.4s) sincronizadas, ya que comparten el año.
 - **Hover:** transición 0.14s (tooltip aparece, dot crece) — igual que el resto del DS.
-- **`prefers-reduced-motion`:** se **desactivan** la animación de entrada y el morph de toggle (Recharts `isAnimationActive={false}`); el cambio de forma y la carga son instantáneos. El tooltip sigue apareciendo pero sin transición. Regla obligatoria del DS (principios de jerarquía y layout).
+- **`prefers-reduced-motion`:** se **desactiva** la animación de entrada y la reanimación al cambiar de año (Recharts `isAnimationActive={false}`); la carga y el cambio de año son instantáneos. El tooltip sigue apareciendo pero sin transición. Regla obligatoria del DS (principios de jerarquía y layout).

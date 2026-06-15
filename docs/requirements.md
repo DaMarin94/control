@@ -982,9 +982,9 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 
 ### 3.9 Módulo: Gráfico anual
 
-El gráfico anual es un **widget reutilizable** que visualiza los movimientos del usuario a lo largo de un año, mes a mes. El eje X son los 12 meses del año; el eje Y es el monto. Ofrece **dos formas de visualización** que el usuario puede alternar para "jugar con los datos". El widget es **configurable por props** (año y navegabilidad) y se inyecta en más de una pantalla: en el dashboard con año fijo, y en una pantalla dedicada con año navegable.
+El gráfico anual visualiza los movimientos del usuario a lo largo de un año, mes a mes. El eje X son los 12 meses del año; el eje Y es el monto. Ofrece **dos visualizaciones** —ingresos vs. gastos por mes, y gastos por categoría apilados— que se presentan en **recuadros (paneles) separados, ambos visibles simultáneamente** (no hay toggle ni alternancia entre ellas). Cada visualización es un **componente reutilizable, configurable por props** (año y navegabilidad). En la **pantalla dedicada** se montan las dos visualizaciones apiladas con un control de año compartido; en el **dashboard** se monta solo la de ingresos vs. gastos, con año fijo.
 
-> **Alcance v1:** solo las dos formas descritas en RF-GRA-001 (área ingresos/gastos y apilado por categoría de gastos). Otros tipos de gráfico (torta, barras, línea) quedan fuera de alcance v1 (ver sección 6) y se evalúan en una iteración futura.
+> **Alcance v1:** solo las dos visualizaciones descritas en RF-GRA-001 (área ingresos/gastos y apilado por categoría de gastos). Otros tipos de gráfico (torta, barras, línea) quedan fuera de alcance v1 (ver sección 6) y se evalúan en una iteración futura.
 
 ---
 
@@ -992,7 +992,7 @@ El gráfico anual es un **widget reutilizable** que visualiza los movimientos de
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El sistema ofrece un gráfico que muestra, por cada uno de los 12 meses de un año, los movimientos del usuario (eje X: los meses del año; eje Y: monto). Tiene dos formas de visualización alternables: (Forma 1) ingresos vs. gastos por mes, y (Forma 2) gastos del mes descompuestos por categoría. Es un componente reutilizable, configurable por props, que aparece en el dashboard y en una pantalla dedicada. |
+| **Descripción** | El sistema ofrece un gráfico que muestra, por cada uno de los 12 meses de un año, los movimientos del usuario (eje X: los meses del año; eje Y: monto). Tiene dos visualizaciones: (Forma 1) ingresos vs. gastos por mes, y (Forma 2) gastos del mes descompuestos por categoría. Las dos se presentan en **recuadros separados, ambos visibles a la vez** (sin toggle). Cada visualización es un componente reutilizable, configurable por props; aparecen en el dashboard (solo Forma 1) y en una pantalla dedicada (las dos, apiladas). |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | El usuario tiene sesión activa. |
@@ -1002,12 +1002,11 @@ El gráfico anual es un **widget reutilizable** que visualiza los movimientos de
 - **Forma 1 — Ingresos vs. Gastos.** Dos series por mes a lo largo del año: el **total de ingresos** del mes y el **total de gastos** del mes. Cada mes del eje X tiene su par de valores (ingresos, gastos). Los totales por mes suman los tres tipos de movimiento que caen en el mes (únicos + fijos activos + cuotas), con el mismo criterio que los totales de la Vista del mes (RF-VM-002) y el Dashboard (RF-DASH-002).
 - **Forma 2 — Gastos por categoría (apilado).** Toma el **total de gastos** de cada mes y lo descompone en bandas apiladas, una por **categoría**, cada una con el **color propio de su categoría** (RF-CAT-005 / RN-013). Las bandas de un mes se apilan y suman exactamente el total de gastos de ese mes (el mismo valor que la serie "gastos" de la Forma 1). **La Forma 2 es solo de gastos** (`EXPENSE`): los ingresos no se descomponen por categoría en este gráfico; viven únicamente en la Forma 1.
 
-**Comportamiento de toggle y año:**
+**Presentación y comportamiento de año:**
 
-1. El usuario abre una pantalla que incluye el widget (dashboard o pantalla dedicada).
-2. El widget muestra el gráfico del año configurado por props, en la forma por defecto.
-3. El usuario puede **alternar entre la Forma 1 y la Forma 2** mediante un control del propio widget. El cambio de forma no cambia el año ni recarga la pantalla.
-4. Si el widget se montó con **navegación de año habilitada** (pantalla dedicada), el usuario puede ir al **año anterior / siguiente** con un control ‹ ›; el gráfico se recalcula para el año seleccionado. Si la navegación está **deshabilitada** (dashboard), el año es fijo y no se muestra el control de año.
+1. Las dos visualizaciones (Forma 1 y Forma 2) se presentan en **recuadros separados, ambos visibles al mismo tiempo**. No hay toggle ni alternancia: no se "switchea" de una a otra ni existe una "forma por defecto".
+2. En el **dashboard** se monta **solo la Forma 1** (ingresos vs. gastos); la Forma 2 no aparece en el dashboard. En la **pantalla dedicada** se montan las **dos visualizaciones apiladas** (arriba la Forma 1, debajo la Forma 2).
+3. Cada visualización grafica el año configurado por props. Si está montada con **navegación de año habilitada** (pantalla dedicada), el usuario puede ir al **año anterior / siguiente** con un control ‹ ›; el gráfico se recalcula para el año seleccionado. En la pantalla dedicada el control de año es **compartido** entre los dos recuadros: mueve a ambos al mismo año a la vez (ver RF-GRA-003). Si la navegación está **deshabilitada** (dashboard), el año es fijo y no se muestra el control de año.
 
 **Criterios de aceptación:**
 - [ ] El eje X representa los 12 meses del año configurado; el eje Y representa el monto.
@@ -1017,9 +1016,9 @@ El gráfico anual es un **widget reutilizable** que visualiza los movimientos de
 - [ ] La Forma 2 considera **solo gastos** (`EXPENSE`); los ingresos no aparecen descompuestos por categoría.
 - [ ] En v1 la Forma 2 muestra **una banda por cada categoría con gasto, sin agrupar ni colapsar** ninguna en una banda "Otras"; no hay tope de categorías visibles (ver bitácora 2026-06-15). La agrupación "Otras" para la cola de categorías queda como candidato post-v1.
 - [ ] Los colores de las bandas de la Forma 2 son los colores ya asignados a cada categoría (RF-CAT-005); el gráfico no inventa ni reasigna colores.
-- [ ] El usuario puede alternar entre Forma 1 y Forma 2 sin cambiar el año ni abandonar la pantalla.
+- [ ] Las dos visualizaciones se presentan en **recuadros separados, ambos visibles a la vez**; no hay toggle, alternancia ni "forma por defecto".
 - [ ] El mes al que pertenece cada movimiento, para la agregación anual, se determina con el mismo criterio de zona horaria ya definido (RN-015): la zona propia de cada registro para los únicos, y el `startMonth` `YYYY-MM` para fijos y cuotas.
-- [ ] El widget es **configurable por props** que controlan el año a mostrar y si la navegación de año está habilitada (ver RF-GRA-002).
+- [ ] Cada visualización es **configurable por props** que controlan el año a mostrar y si la navegación de año está habilitada (ver RF-GRA-002).
 - [ ] Un movimiento cuya categoría fue eliminada (soft delete) sigue contando en los totales y, en la Forma 2, sigue apareciendo bajo su categoría con su color (consistente con RF-CAT-004 / RF-VM-002).
 
 **Notas:**
@@ -1031,26 +1030,26 @@ El gráfico anual es un **widget reutilizable** que visualiza los movimientos de
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El gráfico anual (RF-GRA-001) se implementa como un único componente reutilizable, configurable por props, que se inyecta en distintas pantallas con distinto comportamiento. |
+| **Descripción** | Las visualizaciones del gráfico anual (RF-GRA-001) se implementan como componentes reutilizables, configurables por props, que se inyectan en distintas pantallas. En el dashboard se monta solo la visualización de ingresos vs. gastos (Forma 1) con año fijo; en la pantalla dedicada se montan las dos visualizaciones, apiladas, con un control de año compartido. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | El usuario tiene sesión activa. |
 
-**Props funcionales del widget:**
+**Props funcionales:**
 
 - **Año a mostrar.** Define el año cuyos 12 meses se grafican.
-- **Navegación de año (habilitada / deshabilitada).** Controla si el widget expone el control ‹ › para cambiar de año. Deshabilitada: el año es fijo. Habilitada: el usuario navega entre años (con los límites de RF-GRA-003).
+- **Navegación de año (habilitada / deshabilitada).** Controla si se expone el control ‹ › para cambiar de año. Deshabilitada: el año es fijo. Habilitada: el usuario navega entre años (con los límites de RF-GRA-003).
 
 **Puntos de uso en v1:**
 
-- **Dashboard (`/`):** el widget se monta con el **año actual** y la **navegación de año deshabilitada** (año fijo). El dashboard siempre muestra el año en curso, consistente con que tampoco navega entre meses (RF-DASH-001).
-- **Pantalla dedicada (RF-GRA-003):** el widget se monta con la **navegación de año habilitada**; el año inicial es el año actual y el usuario puede moverse a otros años.
+- **Dashboard (`/`):** se monta **solo la visualización de ingresos vs. gastos (Forma 1)**, con el **año actual** y la **navegación de año deshabilitada** (año fijo). La visualización de gastos por categoría (Forma 2) **no** aparece en el dashboard. El dashboard siempre muestra el año en curso, consistente con que tampoco navega entre meses (RF-DASH-001).
+- **Pantalla dedicada (RF-GRA-003):** se montan las **dos visualizaciones apiladas** (arriba Forma 1, debajo Forma 2), con la **navegación de año habilitada** mediante un **control de año compartido**; el año inicial es el año actual y el usuario puede moverse a otros años, moviendo ambos recuadros a la vez.
 
 **Criterios de aceptación:**
-- [ ] El gráfico anual es un único componente reutilizable; su año y su navegabilidad se controlan por props, no por lógica interna distinta en cada pantalla.
-- [ ] En el dashboard, el widget muestra el año actual sin control de navegación de año.
-- [ ] En la pantalla dedicada, el widget muestra el control de navegación de año habilitado.
-- [ ] El toggle entre Forma 1 y Forma 2 está disponible en ambos puntos de uso (es parte del widget, no de la pantalla anfitriona).
+- [ ] Cada visualización es un componente reutilizable; su año y su navegabilidad se controlan por props, no por lógica interna distinta en cada pantalla.
+- [ ] En el dashboard se monta **solo** la visualización de ingresos vs. gastos (Forma 1), con el año actual y sin control de navegación de año.
+- [ ] En la pantalla dedicada se montan las **dos** visualizaciones, apiladas y ambas visibles, con el control de navegación de año habilitado y **compartido** entre las dos.
+- [ ] No existe un toggle entre Forma 1 y Forma 2 en ningún punto de uso: las dos visualizaciones son recuadros separados; en el dashboard se monta una sola y en la pantalla dedicada conviven ambas.
 
 ---
 
@@ -1058,16 +1057,17 @@ El gráfico anual es un **widget reutilizable** que visualiza los movimientos de
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | Una pantalla dedicada cuyo contenido central es el widget de gráfico anual (RF-GRA-001) con la navegación de año habilitada. Es el lugar donde el usuario explora sus movimientos a lo largo de los años. |
+| **Descripción** | Una pantalla dedicada cuyo contenido central son las dos visualizaciones del gráfico anual (RF-GRA-001) presentadas en **recuadros apilados, ambos visibles a la vez** (arriba ingresos vs. gastos, debajo gastos por categoría), con un **control de año ‹ › compartido**. Es el lugar donde el usuario explora sus movimientos a lo largo de los años. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | El usuario tiene sesión activa. |
 
 **Criterios de aceptación:**
-- [ ] La pantalla monta el widget de gráfico anual con navegación de año habilitada (RF-GRA-002).
+- [ ] La pantalla monta las **dos visualizaciones del gráfico anual apiladas** (arriba la Forma 1 — ingresos vs. gastos; debajo la Forma 2 — gastos por categoría), **ambas visibles simultáneamente**, sin toggle (RF-GRA-001, RF-GRA-002).
 - [ ] La ruta de la pantalla es **`/anual`** y su link en el sidebar se rotula **"Anual"**.
-- [ ] Al abrir, la pantalla muestra el **año actual** y la **Forma 1 (Ingresos vs. Gastos)** como forma por defecto.
-- [ ] El usuario puede navegar a otros años con el control ‹ › del widget, dentro de los límites de navegación: hacia atrás **sin tope artificial**, pero el control ‹ se deshabilita antes del **primer año con movimientos del usuario**; hacia adelante se **bloquean los años futuros** (el máximo navegable es el año en curso).
+- [ ] Al abrir, la pantalla muestra el **año actual** en ambos recuadros.
+- [ ] El control de año ‹ › es **único y compartido**: al cambiar de año mueve a los dos recuadros a la vez, de modo que ambos muestran siempre el mismo año.
+- [ ] El usuario puede navegar a otros años con el control ‹ › compartido, dentro de los límites de navegación: hacia atrás **sin tope artificial**, pero el control ‹ se deshabilita antes del **primer año con movimientos del usuario**; hacia adelante se **bloquean los años futuros** (el máximo navegable es el año en curso).
 - [ ] La pantalla es accesible desde el sidebar (RF-NAV-001) con el link **"Anual"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Anual → Categorías).
 - [ ] La definición funcional completa (contenido, acciones, navegación y estados) vive en `docs/screens.md`.
 
@@ -1116,7 +1116,7 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 
 | Feature | Motivo de exclusión |
 |---|---|
-| Gráficos: otros tipos (torta, barras de comparación, etc.) | El gráfico anual con sus dos formas (área ingresos/gastos y apilado por categoría de gastos) **sí** entra en v1 (RF-GRA-001, ver bitácora 2026-06-14). Los demás tipos de gráfico siguen fuera de alcance: requieren definición de UX y no son bloqueantes |
+| Gráficos: otros tipos (torta, barras de comparación, etc.) | El gráfico anual con sus dos visualizaciones (área ingresos/gastos y apilado por categoría de gastos) **sí** entra en v1 (RF-GRA-001, ver bitácora 2026-06-14 y 2026-06-15). Los demás tipos de gráfico siguen fuera de alcance: requieren definición de UX y no son bloqueantes |
 | Tarjetas con fecha de corte | Requiere flujo propio; demasiado complejo para v1 |
 | Edición retroactiva de mes pasado de un fijo | Complejidad en el modelo de datos |
 | Cancelación parcial de cuotas restantes | Pendiente de definición |
@@ -1211,6 +1211,8 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 5. **Drill-down (clic en un mes → Vista del mes): fuera de v1.** No se implementa en v1 la navegación desde el gráfico a la Vista del mes; queda como candidato post-v1 (ya anotado en el roadmap, sección 6).
 
 Impacta RF-GRA-001 (criterio de los 12 meses en cero), RF-GRA-003 (criterios de ruta, link, forma por defecto y límites de año), RF-NAV-001 (link "Anual" en el orden del sidebar) y `docs/screens.md` (pantallas 7 y 8). **No** impacta `docs/backend.md` ni `docs/data-model.md`. Motivo: el usuario confirmó los valores recomendados; cerrar estas decisiones desbloquea la implementación sin ambigüedades.
+
+**2026-06-15 — Las dos visualizaciones del gráfico anual pasan de "toggle alternable" a "dos recuadros separados que coexisten" (RF-GRA-001..003).** Cambio de **presentación** (cómo se muestran las visualizaciones), no de datos. **Antes:** un único widget con dos formas alternables mediante un **toggle** ("Ingresos y gastos" / "Por categoría"), abriendo en la Forma 1 **por defecto**. **Ahora:** las dos visualizaciones son **dos recuadros (paneles) separados, ambos visibles al mismo tiempo** — se elimina el toggle, no se "switchea", y deja de existir la noción de "forma por defecto". Concretamente: (a) en la **pantalla dedicada `/anual`** los dos recuadros se muestran **apilados** (arriba Ingresos vs. Gastos, debajo Gastos por categoría), ambos siempre visibles, con un **único control de año ‹ › compartido** que mueve a los dos al mismo año a la vez; (b) en el **dashboard (`/`)** se muestra **solo el recuadro de Ingresos vs. Gastos** (año fijo, sin navegación) — el recuadro de gastos por categoría **no** aparece en el dashboard y vive solo en `/anual`. El **contenido de cada visualización no cambia** (Forma 1 = ingresos vs. gastos por mes; Forma 2 = gastos por categoría apilados, solo `EXPENSE`, con el color propio de cada categoría) y todos los criterios sobre los datos se conservan (12 meses siempre presentes y en cero, invariante de suma de bandas, criterio de zona horaria RN-015, sin "Otras", colores de RF-CAT-005). **No impacta el backend ni el contrato de datos:** el endpoint ya devuelve ambos conjuntos de datos (totales mensuales de ingresos/gastos y desglose de gastos por categoría por mes); no cambia `docs/backend.md` ni `docs/data-model.md`. Impacta RF-GRA-001, RF-GRA-002 y RF-GRA-003 y `docs/screens.md` (pantallas 3, 7 y 8). Motivo: decisión del usuario — prefiere ver las dos visualizaciones a la vez en vez de alternarlas con un toggle, y reservar el desglose por categoría a la pantalla de exploración.
 
 **2026-06-08 — NestJS como emisor del JWT (Fase 2).** El backend es la autoridad de identidad y **emite** el JWT (HS256, claim `sub = userId`, `exp` 30 días). NextAuth (frontend) **no emite un token de identidad propio**: orquesta el login y guarda el JWT de NestJS dentro de su sesión (un JWE separado) para reenviarlo como `Authorization: Bearer` en cada request, que el backend valida con un guard global. Hay **un solo `userId`** (cuid de Postgres) compartido por front y back. Esto reemplaza la idea previa (entrada 2026-06-03) de que Auth.js firmaba el JWT. Impacta `docs/architecture.md`, `docs/backend.md`, `docs/frontend.md` y `docs/data-model.md`. Motivo: que la identidad viva en el backend deja la puerta abierta a mobile u otros clientes, que se autentican contra los mismos endpoints sin depender de Auth.js.
 

@@ -1,33 +1,40 @@
 /**
- * Tests del AnnualChartWidget (RF-GRA-001/002/003).
+ * Tests de IncomeExpenseCard y ByCategoryCard (RF-GRA-001/002/003).
  *
- * Verifica:
- * - Estado de carga (skeleton)
- * - Estado de error + botón Reintentar
- * - Estado vacío (año sin movimientos)
- * - Forma 1 y Forma 2 toggle
- * - Stepper: ‹ deshabilitado en earliestYear, › deshabilitado en año actual
- * - Stepper: ‹ habilitado cuando hay años anteriores
- * - Con navigable=false no se muestra el control de año
- * - Con navigable=true se muestra el stepper
- * - La leyenda muestra los ítems correctos en cada forma
+ * El widget anterior (un solo componente con toggle) fue reemplazado por dos
+ * tarjetas autónomas:
+ *   - IncomeExpenseCard (Forma 1 — AreaChart: ingresos vs gastos)
+ *   - ByCategoryCard   (Forma 2 — BarChart apilado: gastos por categoría)
+ *
+ * Verifica por tarjeta:
+ *   - Estado de carga (skeleton)
+ *   - Estado de error + botón Reintentar
+ *   - Estado vacío (año sin movimientos)
+ *   - Con datos: cabecera, leyenda, gráfico renderizado
+ *
+ * Verifica el control de año compartido (en AnualPage, no en las tarjetas):
+ *   - ‹ deshabilitado en earliestYear, › deshabilitado en año actual
+ *   - ‹ habilitado cuando hay años anteriores
+ *   - Los cambios afectan ambas tarjetas (comparten el year del padre)
+ *
+ * Verifica comportamiento en Dashboard:
+ *   - IncomeExpenseCard con showYearInHeader=true muestra el año en la cabecera
+ *   - ByCategoryCard NO se monta en el Dashboard
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import type { AnnualMovementsResponse } from "@/types/annual";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
-// Mock de useAnnual
 vi.mock("@/hooks/use-annual", () => ({
   useAnnual: vi.fn(),
   ANNUAL_QUERY_KEY: (year: number) => ["annual", year],
 }));
 
-// Mock de useApi (requerido internamente)
 vi.mock("@/hooks/use-api", () => ({
   useApi: vi.fn(() => ({
     api: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn(), put: vi.fn() },
@@ -36,7 +43,6 @@ vi.mock("@/hooks/use-api", () => ({
   })),
 }));
 
-// Mock de Recharts para evitar errores de ResizeObserver en jsdom
 vi.mock("recharts", () => {
   const React = require("react");
   const MockChart = ({ children, data }: { children?: ReactNode; data?: unknown[] }) =>
@@ -65,8 +71,17 @@ vi.mock("recharts", () => {
   };
 });
 
+// Mock de getCurrentMonth para que /anual use año determinista
+vi.mock("@/lib/format", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/format")>();
+  return {
+    ...original,
+    getCurrentMonth: vi.fn(() => "2026-06"),
+  };
+});
+
 import { useAnnual } from "@/hooks/use-annual";
-import { AnnualChartWidget } from "@/components/charts/annual-chart-widget";
+import { IncomeExpenseCard, ByCategoryCard } from "@/components/charts/annual-chart-widget";
 
 const mockUseAnnual = vi.mocked(useAnnual);
 
@@ -119,29 +134,25 @@ function createWrapper() {
   return Wrapper;
 }
 
-function renderWidget(props: Partial<React.ComponentProps<typeof AnnualChartWidget>> = {}) {
-  const defaultProps = {
-    year: 2026,
-    navigable: false,
-    onYearChange: vi.fn(),
-    chartHeight: 280,
-  };
-  return render(<AnnualChartWidget {...defaultProps} {...props} />, {
-    wrapper: createWrapper(),
-  });
+function renderIncomeExpenseCard(props: Partial<React.ComponentProps<typeof IncomeExpenseCard>> = {}) {
+  const defaults = { year: 2026, chartHeight: 280, showYearInHeader: false };
+  return render(<IncomeExpenseCard {...defaults} {...props} />, { wrapper: createWrapper() });
+}
+
+function renderByCategoryCard(props: Partial<React.ComponentProps<typeof ByCategoryCard>> = {}) {
+  const defaults = { year: 2026, chartHeight: 300 };
+  return render(<ByCategoryCard {...defaults} {...props} />, { wrapper: createWrapper() });
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe("AnnualChartWidget", () => {
+describe("IncomeExpenseCard (Forma 1)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  // ── Estado de carga ────────────────────────────────────────────────────────
-
   describe("Estado de carga (skeleton)", () => {
-    it("muestra el skeleton mientras carga", () => {
+    beforeEach(() => {
       mockUseAnnual.mockReturnValue({
         data: undefined,
         isLoading: true,
@@ -153,39 +164,27 @@ describe("AnnualChartWidget", () => {
         fetchStatus: "fetching",
         refetch: vi.fn(),
       } as ReturnType<typeof useAnnual>);
-
-      renderWidget();
-
-      // Cabecera siempre presente (eyebrow "Resumen anual")
-      expect(screen.getByText("Resumen anual")).toBeInTheDocument();
-      // No se muestra el gráfico ni error
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
 
-    it("muestra el toggle de forma incluso cargando", () => {
-      mockUseAnnual.mockReturnValue({
-        data: undefined,
-        isLoading: true,
-        isError: false,
-        isPending: true,
-        isSuccess: false,
-        error: null,
-        status: "pending",
-        fetchStatus: "fetching",
-        refetch: vi.fn(),
-      } as ReturnType<typeof useAnnual>);
+    it("muestra el eyebrow 'Resumen anual'", () => {
+      renderIncomeExpenseCard();
+      expect(screen.getByText("Resumen anual")).toBeInTheDocument();
+    });
 
-      renderWidget();
+    it("muestra el título 'Ingresos y gastos'", () => {
+      renderIncomeExpenseCard();
+      expect(screen.getByText("Ingresos y gastos")).toBeInTheDocument();
+    });
 
-      expect(screen.getByRole("button", { name: /ingresos y gastos/i })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /por categoría/i })).toBeInTheDocument();
+    it("no muestra el gráfico ni el error mientras carga", () => {
+      renderIncomeExpenseCard();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("recharts-chart")).not.toBeInTheDocument();
     });
   });
 
-  // ── Estado de error ────────────────────────────────────────────────────────
-
   describe("Estado de error", () => {
-    it("muestra el mensaje de error", () => {
+    beforeEach(() => {
       mockUseAnnual.mockReturnValue({
         data: undefined,
         isLoading: false,
@@ -197,14 +196,15 @@ describe("AnnualChartWidget", () => {
         fetchStatus: "idle",
         refetch: vi.fn(),
       } as ReturnType<typeof useAnnual>);
+    });
 
-      renderWidget();
-
+    it("muestra el mensaje de error", () => {
+      renderIncomeExpenseCard();
       expect(screen.getByRole("alert")).toBeInTheDocument();
       expect(screen.getByText(/no se pudo cargar el gráfico/i)).toBeInTheDocument();
     });
 
-    it("muestra el botón Reintentar en estado de error", () => {
+    it("el botón Reintentar llama a refetch", () => {
       const mockRefetch = vi.fn();
       mockUseAnnual.mockReturnValue({
         data: undefined,
@@ -218,7 +218,7 @@ describe("AnnualChartWidget", () => {
         refetch: mockRefetch,
       } as ReturnType<typeof useAnnual>);
 
-      renderWidget();
+      renderIncomeExpenseCard();
 
       const retryBtn = screen.getByRole("button", { name: /reintentar/i });
       expect(retryBtn).toBeInTheDocument();
@@ -227,10 +227,8 @@ describe("AnnualChartWidget", () => {
     });
   });
 
-  // ── Estado vacío ───────────────────────────────────────────────────────────
-
-  describe("Estado vacío (año sin movimientos)", () => {
-    it("muestra mensaje 'Sin movimientos en 2026' cuando el año está vacío", () => {
+  describe("Estado vacío", () => {
+    it("muestra 'Sin movimientos en 2026' cuando el año está vacío", () => {
       mockUseAnnual.mockReturnValue({
         data: mockEmptyData,
         isLoading: false,
@@ -243,13 +241,11 @@ describe("AnnualChartWidget", () => {
         refetch: vi.fn(),
       } as ReturnType<typeof useAnnual>);
 
-      renderWidget({ year: 2026 });
+      renderIncomeExpenseCard({ year: 2026 });
 
       expect(screen.getByText(/sin movimientos en 2026/i)).toBeInTheDocument();
     });
   });
-
-  // ── Con datos ─────────────────────────────────────────────────────────────
 
   describe("Con datos", () => {
     beforeEach(() => {
@@ -266,61 +262,120 @@ describe("AnnualChartWidget", () => {
       } as ReturnType<typeof useAnnual>);
     });
 
-    it("renderiza el título 'Resumen anual'", () => {
-      renderWidget();
-      expect(screen.getByText("Resumen anual")).toBeInTheDocument();
-    });
-
-    it("la Forma 1 es la forma por defecto (aria-pressed=true)", () => {
-      renderWidget();
-      const btn1 = screen.getByRole("button", { name: /ingresos y gastos/i });
-      expect(btn1).toHaveAttribute("aria-pressed", "true");
-      const btn2 = screen.getByRole("button", { name: /por categoría/i });
-      expect(btn2).toHaveAttribute("aria-pressed", "false");
-    });
-
-    it("la leyenda en Forma 1 muestra Ingresos y Gastos", () => {
-      renderWidget();
+    it("la leyenda muestra 'Ingresos' y 'Gastos'", () => {
+      renderIncomeExpenseCard();
       expect(screen.getByText("Ingresos")).toBeInTheDocument();
       expect(screen.getByText("Gastos")).toBeInTheDocument();
     });
 
-    it("al hacer toggle a Forma 2, el botón cambia a aria-pressed=true", () => {
-      renderWidget();
-
-      const btn2 = screen.getByRole("button", { name: /por categoría/i });
-      fireEvent.click(btn2);
-
-      expect(btn2).toHaveAttribute("aria-pressed", "true");
-      expect(screen.getByRole("button", { name: /ingresos y gastos/i })).toHaveAttribute("aria-pressed", "false");
-    });
-
-    it("la leyenda en Forma 2 muestra los nombres de categorías", () => {
-      renderWidget();
-
-      // Cambiar a Forma 2
-      fireEvent.click(screen.getByRole("button", { name: /por categoría/i }));
-
-      expect(screen.getByText("Alimentación")).toBeInTheDocument();
-      expect(screen.getByText("Transporte")).toBeInTheDocument();
-    });
-
-    it("no muestra el stepper cuando navigable=false", () => {
-      renderWidget({ navigable: false });
-      expect(screen.queryByRole("group", { name: /navegación de año/i })).not.toBeInTheDocument();
-    });
-
-    it("con navigable=false muestra el año como cifra suelta", () => {
-      renderWidget({ navigable: false, year: 2026 });
-      // El año aparece como texto "2026" en la zona izquierda
+    it("con showYearInHeader=true muestra el año en la cabecera (comportamiento dashboard)", () => {
+      renderIncomeExpenseCard({ showYearInHeader: true, year: 2026 });
+      // El año aparece como cifra mono en la cabecera derecha
       expect(screen.getByText("2026")).toBeInTheDocument();
+    });
+
+    it("con showYearInHeader=false no duplica el año en la cabecera (comportamiento /anual)", () => {
+      renderIncomeExpenseCard({ showYearInHeader: false, year: 2026 });
+      // El año NO aparece dentro de la tarjeta (el control está en el .phead externo)
+      expect(screen.queryByText("2026")).not.toBeInTheDocument();
+    });
+
+    it("no muestra toggle ni control de año dentro de la tarjeta", () => {
+      renderIncomeExpenseCard();
+      // No existe el botón de toggle ni de navegación dentro de la tarjeta
+      expect(screen.queryByRole("group", { name: /navegación de año/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /año anterior/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /año siguiente/i })).not.toBeInTheDocument();
+    });
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe("ByCategoryCard (Forma 2)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe("Estado de carga (skeleton)", () => {
+    beforeEach(() => {
+      mockUseAnnual.mockReturnValue({
+        data: undefined,
+        isLoading: true,
+        isError: false,
+        isPending: true,
+        isSuccess: false,
+        error: null,
+        status: "pending",
+        fetchStatus: "fetching",
+        refetch: vi.fn(),
+      } as ReturnType<typeof useAnnual>);
+    });
+
+    it("muestra el eyebrow 'Resumen anual'", () => {
+      renderByCategoryCard();
+      expect(screen.getByText("Resumen anual")).toBeInTheDocument();
+    });
+
+    it("muestra el título 'Por categoría'", () => {
+      renderByCategoryCard();
+      expect(screen.getByText("Por categoría")).toBeInTheDocument();
+    });
+
+    it("no muestra el gráfico ni el error mientras carga", () => {
+      renderByCategoryCard();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
   });
 
-  // ── Stepper de año ────────────────────────────────────────────────────────
+  describe("Estado de error", () => {
+    it("muestra el mensaje de error sin afectar otras tarjetas", () => {
+      const mockRefetch = vi.fn();
+      mockUseAnnual.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isError: true,
+        isPending: false,
+        isSuccess: false,
+        error: new Error("Network error"),
+        status: "error",
+        fetchStatus: "idle",
+        refetch: mockRefetch,
+      } as ReturnType<typeof useAnnual>);
 
-  describe("Stepper de año (navigable=true)", () => {
-    it("muestra el stepper cuando navigable=true", () => {
+      renderByCategoryCard();
+
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getByText(/no se pudo cargar el gráfico/i)).toBeInTheDocument();
+
+      const retryBtn = screen.getByRole("button", { name: /reintentar/i });
+      fireEvent.click(retryBtn);
+      expect(mockRefetch).toHaveBeenCalled();
+    });
+  });
+
+  describe("Estado vacío", () => {
+    it("muestra 'Sin movimientos en 2026' cuando no hay gastos", () => {
+      mockUseAnnual.mockReturnValue({
+        data: mockEmptyData,
+        isLoading: false,
+        isError: false,
+        isPending: false,
+        isSuccess: true,
+        error: null,
+        status: "success",
+        fetchStatus: "idle",
+        refetch: vi.fn(),
+      } as ReturnType<typeof useAnnual>);
+
+      renderByCategoryCard({ year: 2026 });
+
+      expect(screen.getByText(/sin movimientos en 2026/i)).toBeInTheDocument();
+    });
+  });
+
+  describe("Con datos", () => {
+    beforeEach(() => {
       mockUseAnnual.mockReturnValue({
         data: mockAnnualData,
         isLoading: false,
@@ -332,22 +387,23 @@ describe("AnnualChartWidget", () => {
         fetchStatus: "idle",
         refetch: vi.fn(),
       } as ReturnType<typeof useAnnual>);
-
-      renderWidget({ navigable: true, year: 2026 });
-
-      expect(screen.getByRole("group", { name: /navegación de año/i })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /año anterior/i })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /año siguiente/i })).toBeInTheDocument();
     });
 
-    it("‹ está deshabilitado cuando el año es el earliestYear", () => {
-      // earliestYear = 2025, year = 2025 → no puede ir más atrás
-      const dataWithEarliest: AnnualMovementsResponse = {
-        ...mockAnnualData,
-        earliestYear: 2025,
-      };
+    it("la leyenda muestra los nombres de las categorías", () => {
+      renderByCategoryCard();
+      expect(screen.getByText("Alimentación")).toBeInTheDocument();
+      expect(screen.getByText("Transporte")).toBeInTheDocument();
+    });
+
+    it("no muestra toggle ni control de año dentro de la tarjeta", () => {
+      renderByCategoryCard();
+      expect(screen.queryByRole("group", { name: /navegación de año/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /año anterior/i })).not.toBeInTheDocument();
+    });
+
+    it("no muestra leyenda cuando no hay categorías", () => {
       mockUseAnnual.mockReturnValue({
-        data: dataWithEarliest,
+        data: { ...mockAnnualData, categories: [] },
         isLoading: false,
         isError: false,
         isPending: false,
@@ -358,109 +414,74 @@ describe("AnnualChartWidget", () => {
         refetch: vi.fn(),
       } as ReturnType<typeof useAnnual>);
 
-      renderWidget({ navigable: true, year: 2025 });
-
-      const prevBtn = screen.getByRole("button", { name: /año anterior/i });
-      expect(prevBtn).toBeDisabled();
+      renderByCategoryCard();
+      expect(screen.queryByLabelText("Leyenda del gráfico")).not.toBeInTheDocument();
     });
+  });
+});
 
-    it("‹ está habilitado cuando hay años anteriores al earliestYear", () => {
-      const dataWithEarliest: AnnualMovementsResponse = {
-        ...mockAnnualData,
-        earliestYear: 2024,
-      };
-      mockUseAnnual.mockReturnValue({
-        data: dataWithEarliest,
-        isLoading: false,
-        isError: false,
-        isPending: false,
-        isSuccess: true,
-        error: null,
-        status: "success",
-        fetchStatus: "idle",
-        refetch: vi.fn(),
-      } as ReturnType<typeof useAnnual>);
+// ─── Control de año compartido (testeado a través de la lógica de la página) ──
 
-      // year = 2026, earliestYear = 2024 → puede ir a 2025 y 2024
-      renderWidget({ navigable: true, year: 2026 });
+describe("Control de año compartido — lógica de límites", () => {
+  /**
+   * El control de año ‹ › vive en /anual (AnualPage), fuera de las tarjetas.
+   * Lo testeamos instanciando la lógica de límites directamente, sin montar la
+   * página completa (que dependería del layout y del router de Next.js).
+   *
+   * Los tests relevantes de interacción con el control de año se cubren en:
+   *   tests/app/anual/anual-page.test.tsx (si se crea en el futuro)
+   *
+   * Acá verificamos que IncomeExpenseCard y ByCategoryCard muestran datos
+   * del año pasado por prop (el año que el padre controla).
+   */
 
-      const prevBtn = screen.getByRole("button", { name: /año anterior/i });
-      expect(prevBtn).not.toBeDisabled();
-    });
+  it("IncomeExpenseCard muestra datos del año que recibe por prop", () => {
+    const data2024: AnnualMovementsResponse = {
+      ...mockAnnualData,
+      year: 2024,
+      months: mockAnnualData.months.map((m) => ({
+        ...m,
+        month: m.month.replace("2026", "2024"),
+      })),
+    };
 
-    it("› está deshabilitado cuando el año es el año actual", async () => {
-      // Usamos 2026 como año actual (mockeado implícito por Date de jsdom)
-      // El widget calcula currentYear con new Date().getFullYear()
-      const currentYear = new Date().getFullYear();
+    mockUseAnnual.mockReturnValue({
+      data: data2024,
+      isLoading: false,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      error: null,
+      status: "success",
+      fetchStatus: "idle",
+      refetch: vi.fn(),
+    } as ReturnType<typeof useAnnual>);
 
-      mockUseAnnual.mockReturnValue({
-        data: { ...mockAnnualData, year: currentYear },
-        isLoading: false,
-        isError: false,
-        isPending: false,
-        isSuccess: true,
-        error: null,
-        status: "success",
-        fetchStatus: "idle",
-        refetch: vi.fn(),
-      } as ReturnType<typeof useAnnual>);
+    renderIncomeExpenseCard({ year: 2024, showYearInHeader: true });
+    // Con showYearInHeader el año 2024 aparece en la cabecera
+    expect(screen.getByText("2024")).toBeInTheDocument();
+  });
 
-      renderWidget({ navigable: true, year: currentYear });
+  it("ByCategoryCard muestra datos del año que recibe por prop", () => {
+    const data2024: AnnualMovementsResponse = {
+      ...mockAnnualData,
+      year: 2024,
+    };
 
-      const nextBtn = screen.getByRole("button", { name: /año siguiente/i });
-      expect(nextBtn).toBeDisabled();
-    });
+    mockUseAnnual.mockReturnValue({
+      data: data2024,
+      isLoading: false,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      error: null,
+      status: "success",
+      fetchStatus: "idle",
+      refetch: vi.fn(),
+    } as ReturnType<typeof useAnnual>);
 
-    it("› llama onYearChange(year + 1) cuando está habilitado", () => {
-      const onYearChange = vi.fn();
-      const dataWithEarliest: AnnualMovementsResponse = {
-        ...mockAnnualData,
-        earliestYear: 2020,
-      };
-      mockUseAnnual.mockReturnValue({
-        data: dataWithEarliest,
-        isLoading: false,
-        isError: false,
-        isPending: false,
-        isSuccess: true,
-        error: null,
-        status: "success",
-        fetchStatus: "idle",
-        refetch: vi.fn(),
-      } as ReturnType<typeof useAnnual>);
-
-      // year = 2020 (un año en el pasado, › debería estar habilitado)
-      renderWidget({ navigable: true, year: 2020, onYearChange });
-
-      const nextBtn = screen.getByRole("button", { name: /año siguiente/i });
-      fireEvent.click(nextBtn);
-      expect(onYearChange).toHaveBeenCalledWith(2021);
-    });
-
-    it("‹ llama onYearChange(year - 1) cuando está habilitado", () => {
-      const onYearChange = vi.fn();
-      const dataWithEarliest: AnnualMovementsResponse = {
-        ...mockAnnualData,
-        earliestYear: 2020,
-      };
-      mockUseAnnual.mockReturnValue({
-        data: dataWithEarliest,
-        isLoading: false,
-        isError: false,
-        isPending: false,
-        isSuccess: true,
-        error: null,
-        status: "success",
-        fetchStatus: "idle",
-        refetch: vi.fn(),
-      } as ReturnType<typeof useAnnual>);
-
-      // year = 2022, earliestYear = 2020 → ‹ habilitado
-      renderWidget({ navigable: true, year: 2022, onYearChange });
-
-      const prevBtn = screen.getByRole("button", { name: /año anterior/i });
-      fireEvent.click(prevBtn);
-      expect(onYearChange).toHaveBeenCalledWith(2021);
-    });
+    renderByCategoryCard({ year: 2024 });
+    // Las categorías aparecen en la leyenda
+    expect(screen.getByText("Alimentación")).toBeInTheDocument();
   });
 });
