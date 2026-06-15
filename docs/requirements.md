@@ -955,9 +955,10 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 **Contenido:**
 
 - **Logo / nombre "Control"** (parte superior): actúa como enlace al dashboard.
-- **Links de navegación:**
+- **Links de navegación** (en este orden):
   - **Dashboard** — lleva al dashboard (RF-DASH-001).
   - **Vista del mes** — lleva a la vista del mes (RF-VM-001), abierta en el mes actual.
+  - **Anual** — lleva a la pantalla dedicada del gráfico anual (`/anual`, RF-GRA-003).
   - **Categorías** — lleva a la gestión de categorías (módulo 3.6).
 - **Botón "Nuevo movimiento"** (acción primaria): abre el formulario de carga de movimiento (RF-CM-001).
 - **Menú de usuario** (parte inferior): representado por el avatar del usuario. Al activarlo, despliega la opción **"Cerrar sesión"** (RF-AUTH-004).
@@ -966,8 +967,9 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 - [ ] El sidebar está presente en todas las pantallas accesibles con sesión activa.
 - [ ] El sidebar no se muestra en la pantalla de login ni en otras pantallas no autenticadas.
 - [ ] El logo/nombre "Control" lleva al dashboard.
-- [ ] Los links Dashboard, Vista del mes y Categorías navegan a sus respectivas pantallas.
+- [ ] Los links Dashboard, Vista del mes, Anual y Categorías navegan a sus respectivas pantallas, en ese orden.
 - [ ] El link "Vista del mes" abre la vista en el mes actual.
+- [ ] El link "Anual" lleva a `/anual` (RF-GRA-003) y se ubica entre "Vista del mes" y "Categorías".
 - [ ] El botón "Nuevo movimiento" abre el formulario de carga (RF-CM-001) desde cualquier pantalla, cumpliendo el límite de 2 interacciones (RNF-003).
 - [ ] El sidebar indica visualmente cuál es la sección activa.
 - [ ] El menú de usuario se ubica en la parte inferior del sidebar y muestra el avatar del usuario.
@@ -975,6 +977,98 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 
 **Notas:**
 - Este RF cubre la decisión sobre RF-AUTH-004 (cierre de sesión disponible "desde cualquier pantalla"): el punto de acceso al cierre de sesión es el menú de usuario del sidebar.
+
+---
+
+### 3.9 Módulo: Gráfico anual
+
+El gráfico anual es un **widget reutilizable** que visualiza los movimientos del usuario a lo largo de un año, mes a mes. El eje X son los 12 meses del año; el eje Y es el monto. Ofrece **dos formas de visualización** que el usuario puede alternar para "jugar con los datos". El widget es **configurable por props** (año y navegabilidad) y se inyecta en más de una pantalla: en el dashboard con año fijo, y en una pantalla dedicada con año navegable.
+
+> **Alcance v1:** solo las dos formas descritas en RF-GRA-001 (área ingresos/gastos y apilado por categoría de gastos). Otros tipos de gráfico (torta, barras, línea) quedan fuera de alcance v1 (ver sección 6) y se evalúan en una iteración futura.
+
+---
+
+#### RF-GRA-001 — Gráfico anual de movimientos (widget)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El sistema ofrece un gráfico que muestra, por cada uno de los 12 meses de un año, los movimientos del usuario (eje X: los meses del año; eje Y: monto). Tiene dos formas de visualización alternables: (Forma 1) ingresos vs. gastos por mes, y (Forma 2) gastos del mes descompuestos por categoría. Es un componente reutilizable, configurable por props, que aparece en el dashboard y en una pantalla dedicada. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Formas de visualización:**
+
+- **Forma 1 — Ingresos vs. Gastos.** Dos series por mes a lo largo del año: el **total de ingresos** del mes y el **total de gastos** del mes. Cada mes del eje X tiene su par de valores (ingresos, gastos). Los totales por mes suman los tres tipos de movimiento que caen en el mes (únicos + fijos activos + cuotas), con el mismo criterio que los totales de la Vista del mes (RF-VM-002) y el Dashboard (RF-DASH-002).
+- **Forma 2 — Gastos por categoría (apilado).** Toma el **total de gastos** de cada mes y lo descompone en bandas apiladas, una por **categoría**, cada una con el **color propio de su categoría** (RF-CAT-005 / RN-013). Las bandas de un mes se apilan y suman exactamente el total de gastos de ese mes (el mismo valor que la serie "gastos" de la Forma 1). **La Forma 2 es solo de gastos** (`EXPENSE`): los ingresos no se descomponen por categoría en este gráfico; viven únicamente en la Forma 1.
+
+**Comportamiento de toggle y año:**
+
+1. El usuario abre una pantalla que incluye el widget (dashboard o pantalla dedicada).
+2. El widget muestra el gráfico del año configurado por props, en la forma por defecto.
+3. El usuario puede **alternar entre la Forma 1 y la Forma 2** mediante un control del propio widget. El cambio de forma no cambia el año ni recarga la pantalla.
+4. Si el widget se montó con **navegación de año habilitada** (pantalla dedicada), el usuario puede ir al **año anterior / siguiente** con un control ‹ ›; el gráfico se recalcula para el año seleccionado. Si la navegación está **deshabilitada** (dashboard), el año es fijo y no se muestra el control de año.
+
+**Criterios de aceptación:**
+- [ ] El eje X representa los 12 meses del año configurado; el eje Y representa el monto.
+- [ ] Los **12 meses están siempre presentes** en el eje X; un mes sin datos se grafica en **cero** (no se omite ni deja hueco). Esto incluye los meses futuros del año en curso, que también se muestran en cero salvo lo que proyecten los fijos activos y las cuotas en tramo (RN-006). La representación visual concreta de un mes en cero la define `control-design`.
+- [ ] La Forma 1 muestra, por mes, el total de ingresos y el total de gastos del mes; ambos totales suman únicos + fijos activos + cuotas del mes (mismo criterio que RF-VM-002).
+- [ ] La Forma 2 muestra, por mes, el total de gastos del mes descompuesto en bandas apiladas por categoría, cada banda con el color de su categoría; la suma de las bandas de un mes iguala el total de gastos de ese mes.
+- [ ] La Forma 2 considera **solo gastos** (`EXPENSE`); los ingresos no aparecen descompuestos por categoría.
+- [ ] Los colores de las bandas de la Forma 2 son los colores ya asignados a cada categoría (RF-CAT-005); el gráfico no inventa ni reasigna colores.
+- [ ] El usuario puede alternar entre Forma 1 y Forma 2 sin cambiar el año ni abandonar la pantalla.
+- [ ] El mes al que pertenece cada movimiento, para la agregación anual, se determina con el mismo criterio de zona horaria ya definido (RN-015): la zona propia de cada registro para los únicos, y el `startMonth` `YYYY-MM` para fijos y cuotas.
+- [ ] El widget es **configurable por props** que controlan el año a mostrar y si la navegación de año está habilitada (ver RF-GRA-002).
+- [ ] Un movimiento cuya categoría fue eliminada (soft delete) sigue contando en los totales y, en la Forma 2, sigue apareciendo bajo su categoría con su color (consistente con RF-CAT-004 / RF-VM-002).
+
+**Notas:**
+- Las decisiones de presentación visual del gráfico (tipo de trazo, relleno de áreas, leyenda, ejes, interacción de hover/tooltip, comportamiento responsivo) son responsabilidad de `control-design` (`docs/design.md`), no de este RF.
+
+---
+
+#### RF-GRA-002 — Widget reutilizable y sus puntos de uso
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El gráfico anual (RF-GRA-001) se implementa como un único componente reutilizable, configurable por props, que se inyecta en distintas pantallas con distinto comportamiento. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Props funcionales del widget:**
+
+- **Año a mostrar.** Define el año cuyos 12 meses se grafican.
+- **Navegación de año (habilitada / deshabilitada).** Controla si el widget expone el control ‹ › para cambiar de año. Deshabilitada: el año es fijo. Habilitada: el usuario navega entre años (con los límites de RF-GRA-003).
+
+**Puntos de uso en v1:**
+
+- **Dashboard (`/`):** el widget se monta con el **año actual** y la **navegación de año deshabilitada** (año fijo). El dashboard siempre muestra el año en curso, consistente con que tampoco navega entre meses (RF-DASH-001).
+- **Pantalla dedicada (RF-GRA-003):** el widget se monta con la **navegación de año habilitada**; el año inicial es el año actual y el usuario puede moverse a otros años.
+
+**Criterios de aceptación:**
+- [ ] El gráfico anual es un único componente reutilizable; su año y su navegabilidad se controlan por props, no por lógica interna distinta en cada pantalla.
+- [ ] En el dashboard, el widget muestra el año actual sin control de navegación de año.
+- [ ] En la pantalla dedicada, el widget muestra el control de navegación de año habilitado.
+- [ ] El toggle entre Forma 1 y Forma 2 está disponible en ambos puntos de uso (es parte del widget, no de la pantalla anfitriona).
+
+---
+
+#### RF-GRA-003 — Pantalla dedicada del gráfico anual
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Una pantalla dedicada cuyo contenido central es el widget de gráfico anual (RF-GRA-001) con la navegación de año habilitada. Es el lugar donde el usuario explora sus movimientos a lo largo de los años. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Criterios de aceptación:**
+- [ ] La pantalla monta el widget de gráfico anual con navegación de año habilitada (RF-GRA-002).
+- [ ] La ruta de la pantalla es **`/anual`** y su link en el sidebar se rotula **"Anual"**.
+- [ ] Al abrir, la pantalla muestra el **año actual** y la **Forma 1 (Ingresos vs. Gastos)** como forma por defecto.
+- [ ] El usuario puede navegar a otros años con el control ‹ › del widget, dentro de los límites de navegación: hacia atrás **sin tope artificial**, pero el control ‹ se deshabilita antes del **primer año con movimientos del usuario**; hacia adelante se **bloquean los años futuros** (el máximo navegable es el año en curso).
+- [ ] La pantalla es accesible desde el sidebar (RF-NAV-001) con el link **"Anual"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Anual → Categorías).
+- [ ] La definición funcional completa (contenido, acciones, navegación y estados) vive en `docs/screens.md`.
 
 ---
 
@@ -996,6 +1090,7 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 | RN-012 | Las contraseñas de las cuentas con email + contraseña se almacenan siempre **hasheadas** (bcrypt/argon2), nunca en texto plano. El hash y la verificación ocurren en el backend; el frontend nunca almacena ni compara contraseñas. Las cuentas creadas solo con Google pueden no tener contraseña. |
 | RN-013 | Cada categoría tiene un color asignado automáticamente desde un pool fijo de colores predefinidos. El color es de presentación únicamente; en v1 el usuario no lo elige ni lo edita. |
 | RN-014 | Para comparar nombres de categoría a efectos de unicidad, el nombre se **normaliza**: trim de espacios, insensible a mayúsculas/minúsculas e insensible a acentos/tildes. Ej: "comida", "Comida" y "Cómida" se consideran el mismo nombre. Esta normalización aplica tanto a la detección de duplicado contra categorías **activas** (bloqueo, RN-008) como contra categorías **eliminadas** (soft delete) para proponer reactivarla (RF-CAT-002). La regla se valida en **ambas capas** —backend como fuente de verdad y frontend para UX— y ambas deben mantenerse alineadas (ver `docs/technical.md`). |
+| RN-015 | Para la agregación anual del gráfico (RF-GRA-001), el mes al que se imputa cada movimiento se determina con el **mismo criterio ya definido** para la Vista del mes, sin introducir una regla de zona horaria nueva: para los movimientos **únicos**, el mes se calcula en la **zona horaria propia de cada registro** (RN-011, igual que el bucketeo de `GET /movements`); para los **fijos** y las **cuotas**, que operan a nivel mes (RN-006), el mes es el de su `startMonth` `YYYY-MM` (los fijos caen en cada mes donde están activos; las cuotas, en cada mes de su tramo). Un movimiento se imputa a un año determinado solo si su mes resuelto pertenece a ese año. |
 
 ---
 
@@ -1020,8 +1115,7 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 
 | Feature | Motivo de exclusión |
 |---|---|
-| Gráficos (torta, barras, línea) | Requiere definición de UX; no es bloqueante para v1 |
-| Vista de historial anual | No es prioridad inicial |
+| Gráficos: otros tipos (torta, barras de comparación, etc.) | El gráfico anual con sus dos formas (área ingresos/gastos y apilado por categoría de gastos) **sí** entra en v1 (RF-GRA-001, ver bitácora 2026-06-14). Los demás tipos de gráfico siguen fuera de alcance: requieren definición de UX y no son bloqueantes |
 | Tarjetas con fecha de corte | Requiere flujo propio; demasiado complejo para v1 |
 | Edición retroactiva de mes pasado de un fijo | Complejidad en el modelo de datos |
 | Cancelación parcial de cuotas restantes | Pendiente de definición |
@@ -1104,6 +1198,18 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 **2026-06-08 — Aclaración: el soft delete de categoría no saca movimientos de los totales (RF-VM-002 / RF-CAT-004).** Se documenta explícitamente que hay dos conteos distintos que no deben confundirse. (1) **Totales del mes y balance** (RF-VM-002, RF-DASH-002) suman **movimientos** (`amountCents`), no categorías: un movimiento cuenta en los totales **siempre**, aunque su categoría haya sido eliminada con soft delete; eliminar una categoría no toca el movimiento, así que sigue sumando. (2) El **contador "N movimientos"** de la pantalla `/categorias` (RF-CAT-006) es un dato informativo por categoría, **solo en esa pantalla de gestión**, independiente de los totales de dinero; una categoría eliminada desaparece de esa pantalla (RF-CAT-004) y por lo tanto no muestra su fila ni su contador mientras está eliminada, hasta que se la reactiva. Aclaración documental (no cambia comportamiento). Impacta las notas de RF-VM-002 y RF-CAT-004. Motivo: prevenir el malentendido de que eliminar una categoría altera los totales del mes.
 
 **2026-06-08 — Normalización de nombre de categoría para unicidad como regla explícita (RN-014).** Se formaliza como regla de negocio la normalización del nombre de categoría usada para comparar unicidad: trim de espacios, insensible a mayúsculas/minúsculas e insensible a acentos/tildes ("comida" = "Comida" = "Cómida"). Aplica tanto a la detección de duplicado contra categorías **activas** (bloqueo, RN-008) como contra **eliminadas** para proponer reactivar (RF-CAT-002, A3). La regla se valida en **ambas capas** (backend fuente de verdad, frontend UX) y deben mantenerse alineadas (ver `docs/technical.md`). El detalle de la normalización deja de repetirse en RF-CAT-002 (flujo principal y criterios) y en la bitácora del 2026-06-08 sobre reactivación: ahora referencian RN-014. Aclaración documental (no cambia comportamiento). Impacta la sección 4 (nueva RN-014) y las referencias en RF-CAT-002. Motivo: tener una única fuente de la definición de normalización, referenciada desde los RF en lugar de duplicada, para evitar divergencias entre capas y documentos.
+
+**2026-06-14 — Gráfico anual de movimientos como widget reutilizable (RF-GRA-001..003).** Se incorpora a v1 un **gráfico anual** que muestra, por mes a lo largo de un año (eje X: los 12 meses; eje Y: monto), los movimientos del usuario, con **dos formas de visualización alternables**: (Forma 1) **ingresos vs. gastos** por mes —dos series de totales mensuales—, y (Forma 2) **gastos por categoría apilados** —el total de gastos de cada mes descompuesto en bandas por categoría, cada una con su color propio (RF-CAT-005); la Forma 2 es **solo de gastos**, los ingresos viven en la Forma 1; el gráfico no inventa colores—. Se implementa como **widget reutilizable configurable por props** (año a mostrar + navegación de año habilitada/deshabilitada) y se usa en **dos lugares**: el **dashboard** (`/`) con año actual fijo y sin navegación, y una **pantalla dedicada nueva** con navegación de año habilitada. El mes de cada movimiento para la agregación anual reutiliza el criterio de zona horaria ya definido, sin regla nueva (RN-015 → RN-011 para únicos; `startMonth` para fijos y cuotas). **Alcance v1: solo estas dos formas**; torta y otros tipos de gráfico quedan para una iteración futura (sección 6). Impacta el nuevo módulo 3.9 (RF-GRA-001, RF-GRA-002, RF-GRA-003), la sección 4 (RN-015), la sección 6 y `docs/screens.md` (nueva pantalla). **Necesidad de datos para el backend (funcional, sin diseñar endpoint):** totales mensuales de ingresos y de gastos para los 12 meses de un año (Forma 1) y el desglose de gastos por categoría por mes (Forma 2) — hoy el backend solo expone totales de un único mes (`GET /movements?month=YYYY-MM`). **Decisiones de producto pendientes de confirmar con el usuario** (quedan anotadas en RF-GRA-003, sin cerrar): (1) nombre de la pantalla nueva y de su link en el sidebar y su ubicación/orden; (2) forma por defecto al abrir (Forma 1 o Forma 2); (3) límites de la navegación de año (año mínimo hacia atrás y si se permiten años futuros); (4) comportamiento de los meses sin datos dentro de un año (mostrar en cero vs. otro). Motivo: el usuario quiere poder ver y "jugar" con la evolución anual de sus movimientos —comparar ingresos contra gastos y ver en qué categorías se va la plata mes a mes—, reutilizando un mismo componente en el panorama del dashboard y en una pantalla de exploración con navegación de años.
+
+**2026-06-14 — Cierre de las 5 decisiones de producto pendientes del gráfico anual (RF-GRA-001..003).** Se confirman, con los valores recomendados, las cinco decisiones que la entrada anterior de esta fecha había dejado abiertas. Con esto **RF-GRA-001..003 dejan de tener pendientes** y la feature queda lista para implementar:
+
+1. **Pantalla dedicada nueva: link "Anual", ruta `/anual`.** El link en el sidebar (RF-NAV-001) se rotula **"Anual"** y se ubica **debajo de "Vista del mes"** → orden final del sidebar: Dashboard → Vista del mes → Anual → Categorías. La ruta de la pantalla es **`/anual`**.
+2. **Forma por defecto al abrir: Forma 1 (Ingresos vs. Gastos).** Tanto el widget del dashboard como la pantalla dedicada abren mostrando la **Forma 1** (dos series por mes: ingresos y gastos). El usuario puede alternar a la Forma 2 con el toggle del widget.
+3. **Límites de navegación de año.** Hacia atrás, **sin tope artificial**, pero el control ‹ se **deshabilita antes del primer año con movimientos** del usuario (no se navega a años previos al primer dato). Hacia adelante, **los años futuros quedan bloqueados**: el máximo navegable es el **año en curso**.
+4. **Meses sin datos: los 12 meses siempre presentes, en cero.** El eje X muestra siempre los 12 meses; un mes sin datos se grafica en **cero** (sin huecos ni omisiones). Los meses futuros del año en curso también van en cero, salvo lo que proyecten los fijos activos y las cuotas en tramo (RN-006). La representación visual concreta de un mes en cero la define `control-design`.
+5. **Drill-down (clic en un mes → Vista del mes): fuera de v1.** No se implementa en v1 la navegación desde el gráfico a la Vista del mes; queda como candidato post-v1 (ya anotado en el roadmap, sección 6).
+
+Impacta RF-GRA-001 (criterio de los 12 meses en cero), RF-GRA-003 (criterios de ruta, link, forma por defecto y límites de año), RF-NAV-001 (link "Anual" en el orden del sidebar) y `docs/screens.md` (pantallas 7 y 8). **No** impacta `docs/backend.md` ni `docs/data-model.md`. Motivo: el usuario confirmó los valores recomendados; cerrar estas decisiones desbloquea la implementación sin ambigüedades.
 
 **2026-06-08 — NestJS como emisor del JWT (Fase 2).** El backend es la autoridad de identidad y **emite** el JWT (HS256, claim `sub = userId`, `exp` 30 días). NextAuth (frontend) **no emite un token de identidad propio**: orquesta el login y guarda el JWT de NestJS dentro de su sesión (un JWE separado) para reenviarlo como `Authorization: Bearer` en cada request, que el backend valida con un guard global. Hay **un solo `userId`** (cuid de Postgres) compartido por front y back. Esto reemplaza la idea previa (entrada 2026-06-03) de que Auth.js firmaba el JWT. Impacta `docs/architecture.md`, `docs/backend.md`, `docs/frontend.md` y `docs/data-model.md`. Motivo: que la identidad viva en el backend deja la puerta abierta a mobile u otros clientes, que se autentican contra los mismos endpoints sin depender de Auth.js.
 
