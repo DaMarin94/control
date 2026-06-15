@@ -163,3 +163,36 @@ MovementItem = {
 - **Los totales suman movimientos, no categorías.** `expenseCents` / `incomeCents` agregan el `amountCents` de los movimientos del mes; `balanceCents = incomeCents - expenseCents`, sin piso (negativo si los gastos superan los ingresos). No se confunden con el contador `movementCount` de la pantalla de categorías (ver más arriba y `requirements.md`, RF-VM-002 / RF-CAT-006).
 - **La categoría embebida puede estar soft-deleted.** Un movimiento histórico muestra su categoría aunque haya sido eliminada (`deletedAt`), y **sigue contando en los totales** (RF-CAT-004 / RF-VM-002; el join de movimientos no filtra por `deletedAt`).
 - **Listas de fijos y cuotas pobladas.** La lista `fijos` se puebla desde Fase 6 y `cuotas` desde **Fase 7**; los totales del mes suman únicos + fijos + cuotas. El **grupo de cuotas no genera filas por instancia**: se calcula on-the-fly (RN-006) — una cuota cae en `startMonth ≤ mes < startMonth + totalInstallments`. Detalle del cálculo en `docs/backend.md`, sección Movimientos en cuotas.
+
+---
+
+## Contrato de serie anual (respuesta de `GET /movements/annual`)
+
+`GET /movements/annual?year=YYYY` devuelve, dentro del sobre `{ success, statusCode, data }`, la serie **anual agregada** del usuario para el gráfico anual (RF-GRA-001/002/003): ingreso/gasto por mes y el gasto mensual desglosado por categoría. **No** devuelve movimientos individuales. Reutiliza el mismo criterio de bucketeo que el contrato mensual (RN-015), sin introducir reglas de zona nuevas. Detalle de implementación en `docs/backend.md`, sección Movimientos del mes (subsección Serie anual).
+
+```
+AnnualMovementsResponse = {
+  year: number,                       // el año pedido
+  months: AnnualMonth[],              // SIEMPRE 12 entradas, ene→dic, en orden
+  categories: AnnualCategory[],       // solo categorías con gasto EXPENSE en el año
+  earliestYear: number | null         // año más antiguo con algún movimiento del usuario; null si no tiene ninguno
+}
+
+AnnualMonth = {
+  month: string,                      // "YYYY-MM"
+  incomeCents: number,                // suma de ingresos del mes (únicos + fijos + cuotas)
+  expenseCents: number                // suma de gastos del mes (únicos + fijos + cuotas)
+}
+
+AnnualCategory = {
+  categoryId: string,
+  name: string,
+  color: string,                      // "#rrggbb"
+  monthlyExpenseCents: number[]       // EXACTAMENTE 12 valores, ene→dic, 0 donde no hay gasto
+}
+```
+
+- **`months` — siempre 12, ene→dic.** Los meses sin datos (incluidos los **futuros** del año en curso) vienen con `incomeCents` / `expenseCents` en **cero**, nunca omitidos. El mes de cada movimiento se determina con el mismo bucketeo que el mensual (RN-015): únicos por la zona propia del registro (`AT TIME ZONE`), fijos y cuotas a nivel mes.
+- **`categories` — solo gasto (`EXPENSE`).** Los ingresos **no** se desglosan por categoría; solo aparecen agregados en `months[*].incomeCents`. Una categoría aparece si tuvo gasto en algún mes del año e **incluye categorías soft-deleted** con gasto histórico (RF-CAT-004; el desglose no filtra por `deletedAt`). Orden: por **gasto anual total DESC**, desempate por `categoryId` ASC.
+- **Invariante de consistencia.** Para cada mes `i`, la suma de `categories[*].monthlyExpenseCents[i]` **es igual a** `months[i].expenseCents`. El front puede confiar en que las bandas de gasto apiladas por categoría suman exactamente el total de gastos del mes.
+- **`earliestYear`.** Año más antiguo con algún movimiento del usuario (mínimo entre el año del mes local de cualquier único y el año del `startMonth` de cualquier fijo/cuota); `null` si el usuario no tiene ningún movimiento. El front lo usa para deshabilitar la navegación ‹ antes del primer año con datos (RF-GRA-003).

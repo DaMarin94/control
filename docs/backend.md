@@ -85,7 +85,7 @@ La fuente de verdad de tipos, campos y constraints es `backend/prisma/schema.pri
 
 | Módulo | Ruta base | Descripción |
 |--------|-----------|-------------|
-| `movements` | `GET /movements` | Lista unificada del mes (transacciones + recurrentes + cuotas) |
+| `movements` | `GET /movements`, `GET /movements/annual` | Lista unificada del mes + serie anual agregada (transacciones + recurrentes + cuotas) |
 | `transactions` | `/transactions` | Movimientos únicos (CRUD) |
 | `recurring` | `/recurring` | Movimientos fijos (crear, editar, eliminar) |
 | `installments` | `/installments` | Grupos de cuotas (crear, editar, eliminar) |
@@ -107,6 +107,9 @@ Los cuatro DELETE (`DELETE /categories/:id`, `/transactions/:id`, `/recurring/:i
 
 ### `GET /movements?month=YYYY-MM`
 Devuelve todos los movimientos del mes **más los totales**: transacciones únicas, recurrentes activos y cuotas que caen en el mes. Los recurrentes y cuotas se calculan on-the-fly — no hay filas generadas por instancia mensual. Contrato completo en la sección **Movimientos del mes (MovementsModule)**.
+
+### `GET /movements/annual?year=YYYY`
+Devuelve la serie **anual agregada** del usuario para el gráfico anual (RF-GRA-001/002/003): ingreso/gasto por cada uno de los 12 meses y el gasto mensual desglosado por categoría. No devuelve movimientos individuales. Contrato completo en la sección **Movimientos del mes (MovementsModule)**.
 
 ### `POST /transactions` · `PATCH /transactions/:id` · `DELETE /transactions/:id`
 CRUD de movimientos únicos. El monto siempre en centavos (entero > 0). El instante se guarda en UTC más la zona original del registro (ver fechas/timezone en `docs/technical.md`).
@@ -251,6 +254,54 @@ El join de movimientos y el cálculo de totales **no filtran por `Category.delet
 - **Número de cuota del mes (1-based):** `monthDiff(startMonth, month) + 1`. Va al campo `installment.number`; `installment.total = totalInstallments`. El `MovementItem` de una cuota trae `occurredAt`/`timezone` en `null` (sin día/hora) y `installment` poblado (en únicos/fijos `installment` es `null`).
 - **Helpers `addMonths` / `monthDiff`** exportados desde `movements.repository.ts` — reusarlos, no reimplementar aritmética de meses.
 - **Totales del mes ahora suman únicos + fijos + cuotas.**
+
+### Serie anual (`GET /movements/annual?year=YYYY`)
+
+Endpoint **agregado** para el gráfico anual (RF-GRA-001/002/003), scopeado por `userId` del JWT (RN-003). Devuelve totales por mes y el gasto mensual desglosado por categoría para un año — **no** devuelve movimientos individuales. **No modifica `GET /movements` mensual**: es un endpoint nuevo y aparte, que reutiliza el mismo criterio de bucketeo (RN-015) sin introducir reglas de zona nuevas.
+
+- **`year` (`YYYY`) es el único query param y es obligatorio:** exactamente **4 dígitos**, rango **1900–2200**. Si falta, no tiene 4 dígitos o cae fuera de rango → `400`. `401` global por JWT inválido/ausente.
+
+```
+data = {
+  year: number,                     // el año pedido
+  months: [                         // SIEMPRE 12 entradas, ene→dic, en orden
+    { month: "YYYY-MM", incomeCents: number, expenseCents: number }
+  ],
+  categories: [                     // solo categorías con gasto EXPENSE en el año
+    {
+      categoryId: string,
+      name: string,
+      color: string,                // "#rrggbb"
+      monthlyExpenseCents: number[] // EXACTAMENTE 12 valores, ene→dic, 0 donde no hay gasto
+    }
+  ],
+  earliestYear: number | null       // año más antiguo con algún movimiento del usuario; null si no tiene ninguno
+}
+```
+
+#### `months` — 12 meses, mismo bucketeo que el mensual (RN-015)
+
+- **Siempre 12 entradas**, de enero a diciembre del `year` pedido, en orden. Los meses sin datos (incluidos los meses **futuros** del año en curso) van con `incomeCents` y `expenseCents` en **cero** — nunca se omiten.
+- Cada `incomeCents` / `expenseCents` suma **únicos + fijos activos + cuotas activas** del mes con el **mismo criterio de bucketeo que `GET /movements` mensual** (reutiliza RN-015), sin regla de zona nueva:
+  - **únicos** por `date_trunc('month', "occurredAt" AT TIME ZONE timezone)` (la zona propia del registro);
+  - **fijos** por `startMonth <= mes AND (deletedFrom IS NULL OR deletedFrom > mes)`;
+  - **cuotas** por `startMonth <= mes < addMonths(startMonth, totalInstallments)`.
+
+#### `categories` — solo EXPENSE, ordenadas por gasto anual
+
+- **Solo gasto (`EXPENSE`).** Los ingresos **no** se desglosan por categoría: aparecen únicamente agregados en `months[*].incomeCents`.
+- Una categoría aparece **si tuvo gasto en algún mes del año**. Incluye categorías **soft-deleted** con gasto histórico (RF-CAT-004): el desglose no filtra por `Category.deletedAt`, igual que el mensual.
+- **`monthlyExpenseCents` tiene exactamente 12 valores**, ene→dic, con `0` en los meses sin gasto de esa categoría.
+- **Orden:** por **gasto anual total DESC** (la categoría con más gasto en el año primero); desempate por `categoryId` **ASC**.
+
+#### Invariante de consistencia (garantizado por el backend)
+
+- Para cada mes `i`, la suma de `categories[*].monthlyExpenseCents[i]` **es igual a** `months[i].expenseCents`. El front puede confiar en que las bandas de gasto apiladas por categoría suman exactamente el total de gastos del mes, sin recalcular.
+
+#### `earliestYear` — primer año con datos
+
+- Es el año más antiguo con **algún** movimiento del usuario: el mínimo entre el año del mes local de cualquier único (`AT TIME ZONE`) y el año del `startMonth` de cualquier fijo o cuota. Es **`null`** si el usuario no tiene ningún movimiento.
+- Lo usa el front para **deshabilitar la navegación ‹** antes del primer año con datos (RF-GRA-003).
 
 ## Movimientos fijos (RecurringModule)
 

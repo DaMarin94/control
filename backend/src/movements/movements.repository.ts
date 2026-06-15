@@ -2,6 +2,76 @@ import { Injectable } from '@nestjs/common';
 import { CategoryScope, MovementType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
+// ---------------------------------------------------------------------------
+// Interfaces para la agregación anual
+// ---------------------------------------------------------------------------
+
+/**
+ * Fila devuelta por el SQL raw de agregación anual de únicos.
+ * Una fila por (mes local, categoryId, type).
+ */
+interface RawAnnualUnicoRow {
+  /** Mes en formato YYYY-MM (calculado con AT TIME ZONE del registro) */
+  monthKey: string;
+  categoryId: string;
+  categoryName: string;
+  categoryColor: string;
+  categoryScope: string;
+  type: string;
+  /** BigInt de JS — resultado de SUM de Postgres */
+  totalCents: bigint;
+}
+
+/**
+ * Shape de una fila de Recurring para la proyección anual.
+ */
+export interface RecurringForAnnual {
+  id: string;
+  type: MovementType;
+  amountCents: number;
+  startMonth: string;
+  deletedFrom: string | null;
+  categoryId: string;
+  categoryName: string;
+  categoryColor: string;
+  categoryScope: string;
+}
+
+/**
+ * Shape de una fila de InstallmentGroup para la proyección anual.
+ */
+export interface InstallmentGroupForAnnual {
+  id: string;
+  type: MovementType;
+  amountCents: number;
+  totalInstallments: number;
+  startMonth: string;
+  categoryId: string;
+  categoryName: string;
+  categoryColor: string;
+  categoryScope: string;
+}
+
+/**
+ * Agregado intermedio de un mes para el cálculo anual.
+ * Clave: "YYYY-MM".
+ */
+export interface MonthAggregate {
+  incomeCents: number;
+  expenseCents: number;
+  /** Gasto por categoría en este mes: clave = categoryId */
+  categoryExpense: Map<string, number>;
+}
+
+/**
+ * Metadato de categoría para el resultado anual.
+ */
+export interface AnnualCategoryMeta {
+  categoryId: string;
+  name: string;
+  color: string;
+}
+
 /**
  * Shape de categoría embebida en un MovementItem.
  * Se incluye AUNQUE la categoría esté soft-deleted (RF-CAT-004):
@@ -434,6 +504,185 @@ export class MovementsRepository {
     }
 
     return { expenseCents, incomeCents };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Métodos de agregación anual (RF-GRA-001, RN-015)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Devuelve la agregación de movimientos únicos del año, agrupada por
+   * mes local y por (categoryId, type).
+   *
+   * Para cada combinación (mes local, categoría, tipo) se suma el monto.
+   * El "mes local" se calcula con AT TIME ZONE propia de cada registro,
+   * igual que el criterio definitivo del endpoint mensual (RN-015).
+   *
+   * Se filtran solo registros cuyo mes local pertenezca al año pedido:
+   *   EXTRACT(year FROM date_trunc('month', "occurredAt" AT TIME ZONE timezone)) = $year
+   *
+   * La categoría se incluye AUNQUE esté soft-deleted (RF-CAT-004).
+   *
+   * $1 = userId, $2 = año (int)
+   */
+  async getAnnualUnicosAggregated(
+    userId: string,
+    year: number,
+  ): Promise<RawAnnualUnicoRow[]> {
+    const rows = await this.prisma.$queryRaw<RawAnnualUnicoRow[]>`
+      SELECT
+        to_char(
+          date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone),
+          'YYYY-MM'
+        )                    AS "monthKey",
+        t."categoryId"       AS "categoryId",
+        c.name               AS "categoryName",
+        c.color              AS "categoryColor",
+        c.scope::text        AS "categoryScope",
+        t.type::text         AS "type",
+        SUM(t."amountCents") AS "totalCents"
+      FROM "Transaction" t
+      JOIN "Category" c ON c.id = t."categoryId"
+      WHERE
+        t."userId" = ${userId}
+        AND EXTRACT(year FROM
+              date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
+            ) = ${year}
+      GROUP BY
+        date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone),
+        t."categoryId",
+        c.name,
+        c.color,
+        c.scope,
+        t.type
+      ORDER BY
+        date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone),
+        t."categoryId"
+    `;
+    return rows;
+  }
+
+  /**
+   * Devuelve todos los movimientos fijos del usuario para la proyección anual.
+   * Incluye categoría aunque esté soft-deleted (RF-CAT-004).
+   * La proyección sobre los 12 meses se hace en JS en el service.
+   */
+  async getAllFijosForAnnual(userId: string): Promise<RecurringForAnnual[]> {
+    const rows = await this.prisma.recurring.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        type: true,
+        amountCents: true,
+        startMonth: true,
+        deletedFrom: true,
+        categoryId: true,
+        category: {
+          select: {
+            name: true,
+            color: true,
+            scope: true,
+          },
+        },
+      },
+    });
+
+    return rows.map((r) => ({
+      id: r.id,
+      type: r.type,
+      amountCents: r.amountCents,
+      startMonth: r.startMonth,
+      deletedFrom: r.deletedFrom,
+      categoryId: r.categoryId,
+      categoryName: r.category.name,
+      categoryColor: r.category.color,
+      categoryScope: r.category.scope as string,
+    }));
+  }
+
+  /**
+   * Devuelve todos los grupos de cuotas del usuario para la proyección anual.
+   * Incluye categoría aunque esté soft-deleted (RF-CAT-004).
+   * La proyección sobre los 12 meses se hace en JS en el service.
+   */
+  async getAllCuotasForAnnual(
+    userId: string,
+  ): Promise<InstallmentGroupForAnnual[]> {
+    const rows = await this.prisma.installmentGroup.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        type: true,
+        amountCents: true,
+        totalInstallments: true,
+        startMonth: true,
+        categoryId: true,
+        category: {
+          select: {
+            name: true,
+            color: true,
+            scope: true,
+          },
+        },
+      },
+    });
+
+    return rows.map((g) => ({
+      id: g.id,
+      type: g.type,
+      amountCents: g.amountCents,
+      totalInstallments: g.totalInstallments,
+      startMonth: g.startMonth,
+      categoryId: g.categoryId,
+      categoryName: g.category.name,
+      categoryColor: g.category.color,
+      categoryScope: g.category.scope as string,
+    }));
+  }
+
+  /**
+   * Devuelve el año más antiguo con movimientos del usuario,
+   * considerando los tres tipos (RN-015):
+   * - Únicos: año de su mes local (AT TIME ZONE)
+   * - Fijos: año del startMonth
+   * - Cuotas: año del startMonth
+   *
+   * Devuelve null si el usuario no tiene ningún movimiento.
+   *
+   * Se usan tres sub-queries (una por tipo) y se toma el MIN global.
+   */
+  async getEarliestYear(userId: string): Promise<number | null> {
+    // Para únicos: extraemos el año del mes local (AT TIME ZONE)
+    // Para fijos y cuotas: tomamos los 4 primeros chars del startMonth (YYYY)
+    const rows = await this.prisma.$queryRaw<{ earliestYear: bigint | null }[]>`
+      SELECT MIN(y) AS "earliestYear"
+      FROM (
+        -- Únicos: año del mes local del registro
+        SELECT EXTRACT(year FROM
+          date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
+        )::int AS y
+        FROM "Transaction" t
+        WHERE t."userId" = ${userId}
+
+        UNION ALL
+
+        -- Fijos: año del startMonth (primeros 4 caracteres de YYYY-MM)
+        SELECT SUBSTRING(r."startMonth" FROM 1 FOR 4)::int AS y
+        FROM "Recurring" r
+        WHERE r."userId" = ${userId}
+
+        UNION ALL
+
+        -- Cuotas: año del startMonth
+        SELECT SUBSTRING(ig."startMonth" FROM 1 FOR 4)::int AS y
+        FROM "InstallmentGroup" ig
+        WHERE ig."userId" = ${userId}
+      ) sub
+    `;
+
+    const raw = rows[0]?.earliestYear;
+    if (raw === null || raw === undefined) return null;
+    return Number(raw);
   }
 
   // ---------------------------------------------------------------------------
