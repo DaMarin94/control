@@ -39,6 +39,7 @@ Si una decisión técnica nueva no está cubierta en `docs/technical.md`, report
 - No tocar el backend bajo ninguna circunstancia
 - No hacer git (eso es del orquestador)
 - No crear features no pedidas ni refactors fuera del scope
+- **Cuando una feature trae un spec visual de `control-design`, implementala siguiendo ese spec.** Las decisiones de color, tipografía, tamaño, ubicación y jerarquía las define `control-design` (guía viva en `docs/design.md`), no vos. No improvises valores visuales ni te desvíes del spec "para destrabar" — si el spec falta, es ambiguo o choca con el código, FRENÁ y preguntá al orquestador.
 
 ## Lógica de negocio y decisiones técnicas
 

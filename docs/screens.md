@@ -1,6 +1,6 @@
 # Definiciones de pantalla — Control v1.0
 
-> Documento funcional de pantallas. Describe qué muestra cada pantalla, qué acciones expone y cómo se conecta con el resto. **No incluye diseño visual** (colores, tipografías, layouts, breakpoints) — eso es responsabilidad de Claude Design.
+> Documento funcional de pantallas. Describe qué muestra cada pantalla, qué acciones expone y cómo se conecta con el resto. **No incluye diseño visual** (colores, tipografías, layouts, breakpoints) — eso es responsabilidad de `control-design` (ver `docs/design.md`).
 >
 > Para los requerimientos funcionales completos ver `requirements.md`. Para el modelo de datos ver `data-model.md`.
 
