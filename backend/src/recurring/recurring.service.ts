@@ -98,7 +98,7 @@ export class RecurringService {
         type: existing.type, // type es inmutable (RF-MF-003)
         amountCents: dto.amountCents ?? existing.amountCents,
         startMonth: dto.currentMonth,
-        deletedFrom: null,
+        deletedFrom: existing.deletedFrom,
         description: dto.description !== undefined
           ? dto.description
           : existing.description,

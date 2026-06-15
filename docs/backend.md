@@ -322,7 +322,7 @@ Gestión de movimientos fijos, **scopeada por `userId` del JWT**. El módulo exp
 
 Un **fijo lógico** es una **cadena de filas `Recurring`** en el tiempo, no una sola fila. El PATCH recibe `currentMonth` (el mes actual real, calculado por el front) y decide según dónde cae respecto del `startMonth` de la fila editada (`R`):
 
-- **`currentMonth > R.startMonth`** (el fijo ya corrió meses pasados) → **split**: se cierra la fila vieja (`deletedFrom = currentMonth`, deja de aparecer desde el mes actual) y se **crea una fila nueva** (`startMonth = currentMonth`) con los valores nuevos. La respuesta trae la **fila nueva, con otro `id`**. Así los meses pasados conservan los valores viejos y el actual/futuro toman los nuevos.
+- **`currentMonth > R.startMonth`** (el fijo ya corrió meses pasados) → **split**: se cierra la fila vieja (`deletedFrom = currentMonth`, deja de aparecer desde el mes actual) y se **crea una fila nueva** R2 (`startMonth = currentMonth`) con los valores nuevos. La respuesta trae la **fila nueva, con otro `id`**. Así los meses pasados conservan los valores viejos y el actual/futuro toman los nuevos. R2 **hereda `deletedFrom` de la fila original** (además de `type`, `categoryId` y `description`) para preservar una terminación previa: si el fijo ya tenía una eliminación futura programada (`deletedFrom` no nulo), R2 debe respetarla; de lo contrario el gasto reaparecería después del mes en que se había eliminado.
 - **`currentMonth <= R.startMonth`** (la fila no tiene pasado todavía) → se **edita en su lugar**, sin crear filas nuevas.
 
 Esto materializa "el pasado es inmutable" (RF-MF-003) sin generar filas por instancia mensual.

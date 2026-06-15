@@ -452,6 +452,35 @@ describe('RecurringService', () => {
         expect.objectContaining({ description: null }),
       );
     });
+
+    it('split: R2 hereda deletedFrom del original (bug E1 — no pierde terminación)', async () => {
+      // Escenario: fijo con startMonth='2026-01' eliminado desde '2026-06'
+      // (deletedFrom='2026-06'). Se edita en un mes activo intermedio ('2026-03').
+      // El split debe crear R2 con deletedFrom='2026-06', NO con null.
+      const existing = makeRecurring({
+        startMonth: '2026-01',
+        deletedFrom: '2026-06',
+      });
+      mockRepo.findById.mockResolvedValue(existing);
+
+      const r2 = makeRecurring({
+        id: 'rec-002',
+        startMonth: '2026-03',
+        deletedFrom: '2026-06',
+      });
+      mockRepo.update.mockResolvedValue({ ...existing, deletedFrom: '2026-03' });
+      mockRepo.create.mockResolvedValue(r2);
+
+      await service.update(USER_A, 'rec-001', {
+        amountCents: 8000,
+        currentMonth: '2026-03',
+      });
+
+      // R2 debe preservar la terminación original, no nacer con null
+      expect(mockRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ deletedFrom: '2026-06' }),
+      );
+    });
   });
 
   // -------------------------------------------------------------------------
