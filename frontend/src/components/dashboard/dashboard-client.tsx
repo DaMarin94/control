@@ -219,13 +219,7 @@ export function DashboardClient() {
 
           {/* Footer de sección */}
           <div className="flex items-center justify-between mt-7 px-0.5">
-            <span className="text-[14px] text-muted">
-              <span className="mono">{expenseCount}</span> gasto
-              {expenseCount !== 1 ? "s" : ""} y{" "}
-              <span className="mono">{incomeCount}</span> ingreso
-              {incomeCount !== 1 ? "s" : ""} registrado
-              {totalMovements !== 1 ? "s" : ""} este mes
-            </span>
+            <span className="text-[14px] text-muted"></span>
             <Link
               href={`/mes?month=${month}`}
               className="inline-flex items-center gap-[5px] text-[14px] font-semibold text-accent-ink transition-[gap] duration-[140ms] hover:gap-2"

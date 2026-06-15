@@ -118,7 +118,7 @@ Diálogos usan radio fijo 18px; logo gem 10px; avatar 50%.
   - **Gastos** — ícono cuadrado `--expense-soft`/`--expense-ink` con flecha abajo; valor mono 30px `$ 219.400,00` (decimales en `.cents` 18px muted); meta "8 movimientos · 2 fijos".
   - **Ingresos** — ícono `--income-soft`/`--income-ink` flecha arriba; valor mono 30px en `--income-ink` `$ 365.000,00`; meta "2 movimientos · sueldo + freelance".
 - **Balance hero:** tarjeta full-width, fondo gradiente del acento, texto blanco. Label "Balance de junio"; cifra mono 46px `+ $ 145.600,00`; **barra de proporción** (alto 7px, pill) ingreso vs gasto (verde claro / rojo claro, anchos 62.5% / 37.5%); debajo, fila de leyenda "Ingresos $ 365.000" / "Gastos $ 219.400". Detalles decorativos: dos círculos (uno relleno `white/0.08`, otro solo borde) en pseudo-elementos.
-- **Footer de sección:** texto muted "8 gastos y 2 ingresos registrados este mes" + link "Ver todos los movimientos →" que navega a Vista del mes.
+- **Footer de sección:** link "Ver todos los movimientos →" que navega a Vista del mes.
 
 ### 3. Vista del mes  (`/mes`)
 - **Propósito:** lista completa del mes activo, agrupada en **Únicos · Fijos · Cuotas**. Navegación entre meses.
