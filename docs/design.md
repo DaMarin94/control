@@ -142,6 +142,155 @@ Foco visible del DS: anillo de 3px en `--accent-soft` (`shadow-[0_0_0_3px_var(--
 
 ---
 
-## Pendientes
+## Paleta de colores para categorías — RESUELTO (2026-06-14)
 
-- **Paleta de colores para categorías — PENDIENTE.** El DS reserva verde/rojo (income/expense) e índigo (marca), así que las categorías van a necesitar **su propia paleta de swatches**, distinta de los semánticos y del acento, para no chocar con su significado. Queda por definir cuando se encare el gráfico anual. *No se inventan valores acá* — este es solo el marcador del gap.
+Las categorías **no tienen una paleta propia definida en el DS**: cada categoría trae **su color asignado por el backend** desde un pool fijo de 10 colores (RF-CAT-005 / RN-013), embebido en el dato como `category.color`. El DS **consume** ese color tal cual; no lo reasigna, no lo retiñe, no inventa swatches alternativos.
+
+El pool es la fuente de verdad (`backend/src/categories/color-pool.ts`). Valores vigentes (no se cambian acá):
+
+| # | Hex | Nombre |
+|---|---|---|
+| 1 | `#4F86C6` | azul |
+| 2 | `#E07B54` | naranja |
+| 3 | `#6DBF67` | verde |
+| 4 | `#A98BD6` | violeta |
+| 5 | `#E8C84A` | amarillo |
+| 6 | `#5BC4B8` | turquesa |
+| 7 | `#E06B8B` | rosa |
+| 8 | `#8B9DBF` | azul grisáceo |
+| 9 | `#C47D3E` | marrón |
+| 10 | `#7DBF9E` | verde menta |
+
+**Convivencia con las reglas duras:** el pool fue elegido para **no chocar** con los semánticos ni con la marca: ninguno es el verde income (`#1f8a5b`), el rojo expense (`#c64637`) ni el índigo de acento. El `#6DBF67` (verde) y el `#E07B54` (naranja) son tonos claramente distintos de los semánticos, por lo que se usan sin reserva como color de categoría. **Regla:** el color de categoría se usa **solo** como identificador de categoría (swatch en la lista, bandas del apilado de la Forma 2 del gráfico). Nunca se usa para teñir un monto ni para comunicar ingreso/gasto — eso lo siguen haciendo income/expense.
+
+**Dónde se consume hoy:** swatch de la fila de categoría (pantalla `/categorias`, 14px radio 5px) y bandas del gráfico anual Forma 2 (ver sección siguiente).
+
+---
+
+## Gráfico anual — spec visual del widget
+
+> Spec del widget de gráfico anual (RF-GRA-001/002/003, pantallas 7 y 8 de `screens.md`). Componente reutilizable con dos formas alternables, montado en el Dashboard (año fijo) y en `/anual` (con navegación de año). **Librería destino: Tremor Raw (Recharts por debajo).** Esta sección define lo visual; la conducta funcional vive en los RF citados y no se redefine acá.
+
+### Contenedor y ubicación
+
+El widget vive dentro de una **tarjeta `.card`** (panel blanco, `--line`, `--r-card` 14px, `--shadow-sm`), con padding interior `--card-pad` (22px). La tarjeta es la misma primitiva que stats y listas — el gráfico no inventa contenedor propio.
+
+**Estructura interna de la tarjeta (de arriba hacia abajo):**
+
+1. **Barra de cabecera del widget** — fila flex `space-between`, `align-items: center`, alto natural, `margin-bottom` 18px (`--gap`):
+   - **Izquierda:** título del widget. Eyebrow uppercase (rol *Eyebrow/labels*: 12px/600, `.1em`, uppercase, `--muted`) "Resumen anual" + el **año** debajo o al lado como cifra mono. El año va en **mono tabular** (es un número), peso 600, ~20px, color `--ink`. Cuando la navegación de año está habilitada, el año vive **dentro del control ‹ ›** (ver abajo) y no se repite suelto.
+   - **Derecha:** el **toggle de Forma** (segmented). Si la navegación de año está habilitada, el **control de año ‹ ›** va también en esta zona, a la izquierda del toggle (orden: ‹ año › … toggle), separados por 12px.
+2. **Área del gráfico** — el chart propiamente dicho.
+3. **Leyenda** — debajo del área del gráfico (ver "Leyenda").
+
+> En desktop, si el ancho lo permite, cabecera en una sola fila. Ver "Responsive" para el colapso.
+
+### Alto y proporción del área de gráfico
+
+- **Alto del área de gráfico (canvas Recharts):** **280px** fijo en desktop. Es suficiente para leer 12 meses sin que el widget domine la página, y es el alto consistente para ambas formas (no cambia al togglear).
+- **Ancho:** 100% del contenedor (responsive container de Recharts).
+- El alto **no** incluye la cabecera ni la leyenda; esas suman por fuera.
+
+### Forma 1 — Ingresos vs. Gastos
+
+**Tipo de gráfico: área (`AreaChart` de Tremor/Recharts), dos series superpuestas, NO apiladas.** Justificación: las dos series (ingresos, gastos) son magnitudes que el usuario compara mes a mes; el área comunica volumen y deja ver de un vistazo cuándo ingreso supera a gasto. No se apilan porque son dos lecturas independientes (no suman un total con sentido). Es el patrón de la imagen de referencia del usuario, pero con la semántica del DS.
+
+**Mapeo de color (regla dura 1):**
+
+| Serie | Stroke (línea) | Fill (área) | Opacidad de fill |
+|---|---|---|---|
+| **Ingresos** | `var(--income)` (`#1f8a5b`) | `var(--income)` | **0.14** |
+| **Gastos** | `var(--expense)` (`#c64637`) | `var(--expense)` | **0.14** |
+
+- **Stroke:** 2px, sólido, opacidad 1. Sin punteado.
+- **Fill:** relleno plano a opacidad 0.14 (translúcido para que ambas áreas se lean aunque se solapen). Recharts admite un `fillOpacity`; si se usa gradiente, que sea del **mismo hue** del token, de 0.18 (arriba) a 0.02 (abajo) — pero el plano a 0.14 es la opción canónica y suficiente.
+- **Orden de pintado:** gastos primero (debajo), ingresos después (encima), para que la lectura "¿me sobró?" (verde sobre rojo) quede arriba. Como ambos son translúcidos, el solape se ve igual en cualquier orden; este orden es la preferencia.
+- **Puntos (dots):** ocultos en reposo; visibles solo en hover del punto activo (Recharts `activeDot`), radio 4px, relleno del color de la serie, borde `--panel` 2px.
+- **Curva:** `monotone` (suavizado suave), no `linear` con esquinas duras, para un trazo sobrio coherente con el DS.
+
+**Prohibido:** teñir cualquiera de estas series con el acento índigo o con un color de categoría. Income = verde, expense = rojo, sin excepción.
+
+### Forma 2 — Gastos por categoría (apilado)
+
+**Tipo de gráfico: barras apiladas (`BarChart` apilado de Tremor/Recharts), una barra por mes, una banda por categoría.** Justificación: el apilado por categoría es una **descomposición de un total** (las bandas de un mes suman el total de gastos del mes). Las **barras apiladas** comunican esa descomposición discreta mes-a-mes mucho mejor que un área apilada: cada banda es un rectángulo nítido, fácil de leer y de asociar a su categoría por color, y los meses en cero se ven como ausencia de barra sin ambigüedad. El área apilada, en cambio, sugiere continuidad/flujo entre meses que acá no aplica (cada mes es una cuenta cerrada). Por eso **Forma 2 = barras apiladas**, aunque Forma 1 sea área.
+
+**Mapeo de color:** cada banda usa **`category.color`** tal cual viene del dato (pool de 10, ver sección anterior). El gráfico **no** reasigna ni retiñe. Una categoría soft-deleted que todavía tiene gastos en el año sigue apareciendo con su color (RF-GRA-001).
+
+**Guía de uso del apilado (sin cambiar los valores del pool):**
+
+- **Orden de apilado (stack order):** determinístico y estable entre meses — apilar **de mayor a menor gasto anual total** de cada categoría (la categoría que más gastó en el año queda en la base de cada barra). El orden es el **mismo para los 12 meses** (no se reordena por mes), para que el ojo siga cada banda horizontalmente. La categoría "más grande" abajo da una base visual estable.
+- **Separadores entre bandas:** 1px de separación con el color del panel (`--panel`, blanco) entre bandas apiladas, para que dos categorías de color parecido no se fundan. En Recharts se logra con un `stroke="var(--panel)"` + `strokeWidth={1}` por banda, o un pequeño `gap`. La banda inferior y superior de cada barra llevan el redondeo de la barra (ver abajo); las intermedias, cantos rectos.
+- **Redondeo de barra:** la barra apilada completa lleva `--r-chip` (7px) **solo en la esquina superior** del segmento más alto (top del stack). El resto, cantos rectos. Si Recharts complica el redondeo selectivo, aceptable: barras de cantos rectos (0px) — la prioridad es la legibilidad de las bandas, no el redondeo.
+- **Ancho de barra / gap entre meses:** barras con `barCategoryGap` ~25–30% para que las 12 barras respiren; ancho de barra el que resulte (no fijar px).
+- **Muchas categorías (legibilidad) — sin agrupar en v1:** en v1, Forma 2 muestra **TODAS las categorías con gasto en el año, cada una en su propia banda, sin agrupar ni colapsar** — fiel a RF-GRA-001 ("una banda por categoría"). El gráfico no introduce ninguna regla de agregación que altere los datos. Notas de legibilidad cuando hay muchas categorías (todas puramente visuales, no cambian los valores):
+  - **Orden de apilado** como ya se definió (mayor a menor gasto anual, estable entre meses): concentra las bandas grandes en la base y deja las finas arriba, donde el ojo ya espera detalle menor.
+  - **Separadores de 1px `--panel`** entre bandas (ya definido): clave justamente cuando hay muchas categorías y colores del pool reciclados, para que dos bandas de color parecido no se fundan.
+  - **Leyenda con `flex-wrap`** (ver "Leyenda"): absorbe muchos ítems envolviendo en varias filas, sin truncar.
+  - *(Post-v1, candidato a evaluar: una banda "Otras" que agrupe la cola de categorías de menor gasto. Queda fuera de la spec de v1 por ser una agregación que cambia la lectura del dato; no se implementa hasta decisión explícita.)*
+
+**Prohibido:** usar income/expense o el acento para las bandas. Las bandas son color de categoría; el rojo expense **no** se usa acá aunque sean gastos (el rojo semántico es para el monto/serie de gasto agregada, no para descomponer).
+
+### Ejes
+
+- **Eje X (meses):** etiquetas con el **nombre corto del mes en es-AR**: `Ene Feb Mar Abr May Jun Jul Ago Sep Oct Nov Dic`. Tipografía UI (Space Grotesk), 12px, peso 500, color `--muted`. Sin rotación (deben entrar los 12 en desktop). Línea de eje (`axisLine`) y ticks (`tickLine`) **ocultos**; solo las etiquetas.
+- **Eje Y (monto):** cifras en **mono tabular** (regla dura 3) — IBM Plex Mono + `tnum`, 11.5px, color `--muted`. **Formato abreviado** para no saturar: `$0`, `$50k`, `$120k`, `$2,5M` (k = miles, M = millones; separador decimal coma es-AR; prefijo `$`). El monto completo sin abreviar aparece en el **tooltip**, no en el eje. Eje Y sin línea ni ticks visibles. 4–5 ticks como máximo (Recharts `tickCount`), redondeados a valores "lindos".
+- **Gridlines:** solo **horizontales**, color `--hair` (`ink/0.10`), 1px, sólidas. Sin gridlines verticales (los meses ya se separan por las etiquetas/barras). La línea base (y=0) puede ser levemente más marcada (`--line`).
+
+### Toggle de Forma (Forma 1 / Forma 2)
+
+- **Patrón:** segmented control, reutiliza el lenguaje de **`.dtabs`** del DS (el segmented del modal): contenedor `bg-panel-3`, padding 4px, `--r-ctl` (10px); dos botones, el activo en `--panel` (blanco) con `--shadow-sm` y texto `--ink`; el inactivo con texto `--muted` que pasa a `--ink` en hover. Texto 13.5px/600, UI font.
+- **Etiquetas (fijas, confirmadas):** botón 1 **"Ingresos y gastos"**; botón 2 **"Por categoría"**. Son las etiquetas definitivas en todos los anchos — no se acortan ni se sustituyen por variantes en responsive.
+- **Ubicación:** extremo derecho de la cabecera del widget. Es parte del widget en ambos anfitriones (dashboard y `/anual`).
+- **Default:** abre en **Forma 1** (botón 1 activo), en ambos anfitriones.
+- **Estado activo:** no usa acento como fondo (el acento es solo marca; un segmented activo del DS usa panel blanco + sombra, no acento). El texto del activo es `--ink`.
+
+### Control de año ‹ ›
+
+- **Patrón:** reutiliza **`.stepper`** del DS (el navegador de mes): pill (`--r-pill`) `--panel` con borde `--line` y `--shadow-sm`, padding 4px; dos botones circulares 32px (chevron-left / chevron-right) con ícono `--ink-2` que pasa a `--ink` sobre fondo `--panel-2` en hover; en el centro, el **año** como label mono tabular (es un número), 14.5px/600, `min-width` ~64px centrado. Sin la sub-línea "Mes en curso" del stepper de mes (acá no aplica).
+- **Ubicación:** en la cabecera del widget, **solo cuando la navegación de año está habilitada** (prop). A la izquierda del toggle de Forma.
+- **Estados de los chevrons (límites de RF-GRA-003):**
+  - **‹ deshabilitado** cuando el año mostrado es el primer año con movimientos del usuario (no se navega más atrás): chevron en `--faint`, `cursor: default`, sin hover, `opacity` 0.45. No se oculta — se ve presente pero apagado.
+  - **› deshabilitado** cuando el año mostrado es el año en curso (no se navega al futuro): mismo tratamiento apagado.
+- **Ausencia en el dashboard:** cuando la navegación está **deshabilitada** (dashboard), el control ‹ › **no se renderiza**. En su lugar, el año aparece como cifra mono suelta en la zona izquierda de la cabecera (junto al eyebrow "Resumen anual"), sin pill ni chevrons. No se muestra un stepper deshabilitado.
+
+### Leyenda
+
+- **Ubicación:** debajo del área de gráfico, alineada al inicio (izquierda), `margin-top` 14px, separada del chart por aire (no por línea).
+- **Ítem de leyenda:** swatch + etiqueta. Swatch cuadrado 10px radio 3px (más chico que el de `/categorias`) con el color de la serie/categoría; etiqueta UI 12.5px/500 `--ink-2`. Separación entre ítems 16px, `flex-wrap` permitido.
+- **Forma 1:** dos ítems — "Ingresos" (swatch `--income`) y "Gastos" (swatch `--expense`).
+- **Forma 2:** un ítem por categoría con gasto en el año, en el **mismo orden del apilado** (mayor a menor); cada swatch con su `category.color`. Un ítem por categoría: no se agrupa ni se colapsa (ver "Forma 2", sin agrupar en v1). Si hay muchos ítems, la leyenda envuelve (`flex-wrap`).
+- Las cifras **no** van en la leyenda (van en el tooltip). La leyenda es solo color → nombre.
+
+### Tooltip / hover
+
+- **Disparo:** hover sobre un mes (Recharts tooltip, `cursor` activo). El cursor de hover es una franja vertical sutil `--accent-soft` translúcida (en barras) o una guía vertical `--hair` 1px (en área) — el `--accent-soft` acá es fondo de UI (resaltado de interacción), no tiñe montos, así que es admisible.
+- **Caja del tooltip:** panel `--panel`, borde `--line`, `--r-ctl` (10px), `--shadow-lg`, padding 10px 12px.
+- **Encabezado del tooltip:** el mes y año en texto UI 12.5px/600 `--ink` (ej. "Marzo 2026").
+- **Filas del tooltip:** una por serie/categoría visible en ese mes — swatch 8px + nombre (UI 12.5px `--ink-2`) a la izquierda, **monto en mono tabular** (regla dura 3) a la derecha, formato es-AR completo `$ 219.400,00` (sin abreviar). En Forma 1, ingresos en `--income-ink` y gastos en `--expense-ink` (el monto sí lleva color semántico acá). En Forma 2, el monto de cada banda va en `--ink` (el color lo da el swatch, no el número; el número no es income/expense, es un gasto de categoría).
+- **Total (Forma 2):** fila final separada por un `--hair`, "Total gastos" + monto mono `--expense-ink` (es el total de gastos del mes — sí es expense).
+- **Orden de filas:** el del apilado/serie. Categorías con valor 0 en ese mes se omiten del tooltip.
+
+### Estados
+
+- **Cargando (skeleton):** la tarjeta `.card` se renderiza con su cabecera ya presente (eyebrow + año + controles, estos últimos inertes); el área de gráfico se reemplaza por un **skeleton** del DS: bloque de 280px de alto, `bg-panel-3`, `rounded-[--r-ctl]`, `animate-pulse`. Opcionalmente, barras/ondas fantasma con el mismo `bg-panel-3`. La leyenda muestra 2–3 chips fantasma (`bg-panel-3 animate-pulse`, ~70px × 14px). Sin spinner.
+- **Con datos:** lo descrito arriba según la forma activa.
+- **Año sin movimientos (vacío):** los 12 meses **igual se dibujan en cero** (eje X completo, sin huecos) — el gráfico no desaparece. Sobre el área (centrada), un **mensaje de estado vacío** sobrio: texto UI 14px `--muted` "Sin movimientos en {año}." Sin ilustración. El eje Y puede mostrar una escala mínima (`$0`). En el dashboard, si el **año entero** está vacío, mismo tratamiento (no se mezcla con el empty del dashboard de "primer movimiento"; este es el empty del widget). No es un error.
+- **Año en curso con meses futuros:** los meses futuros sin datos se dibujan en **cero** como cualquier mes vacío (sin estilo especial de "futuro" en v1: no se atenúan ni se marcan distinto — la spec no introduce un tratamiento de "futuro" que los RF no pidieron). Los fijos/cuotas proyectados (RN-006) aparecen como datos normales.
+- **Error:** la tarjeta se mantiene (no se rompe el layout del anfitrión). En el área del gráfico, mensaje centrado: ícono `alert-triangle` (lucide) 20px `--warning-ink`, texto UI 14px `--ink-2` "No se pudo cargar el gráfico." y, debajo, un botón `.btn.ghost.sm` "Reintentar". Fondo de la tarjeta normal (`--panel`), sin tinte de error en toda la tarjeta.
+
+### Ubicación en cada anfitrión
+
+- **Dashboard (`/`):** el widget va **después del bloque de stats + balance hero y ANTES del footer "Ver todos los movimientos →"** (orden fijo, ya definido — no queda a criterio del frontend). Es decir, de arriba hacia abajo en la columna principal: stats + balance hero → widget de gráfico anual → footer "Ver todos los movimientos →". Full-width del contenido (respeta el `max-width` 1120px del dashboard), separado del bloque superior por `--gap` (18px). Navegación de año **ausente**; año actual como cifra mono en la cabecera. Abre en Forma 1.
+- **Pantalla dedicada (`/anual`):** el widget es el **contenido central** y prácticamente único de la pantalla. Header de página estándar (`.phead`): eyebrow "Tu actividad" + H1 "Anual" (rol H1 página, 32px/700; sin teñir el año en el H1 — el año vive en el control ‹ ›). Debajo, la tarjeta del widget, full-width del contenido (`max-width` 1120px como el resto). Acá el área de gráfico puede crecer a **340px** de alto (más aire que en el dashboard, al ser la pantalla dedicada). Navegación de año **habilitada** (control ‹ ›). Abre en Forma 1 y año actual.
+
+### Responsive (desktop-first)
+
+- **Desktop (> 940px):** cabecera en una fila (título izquierda; ‹ año › + toggle derecha). 12 meses en el eje X sin rotación. Altos: 280px (dashboard) / 340px (`/anual`).
+- **≤ 940px:** la cabecera del widget **envuelve en dos filas** (título arriba; controles ‹ año › + toggle abajo, alineados al inicio). El área de gráfico baja a **220px**. Las etiquetas de mes, si no entran las 12, se muestran de a una sí/una no (Recharts `interval`) o se acortan a la inicial — preferencia: `interval` para saltear, manteniendo las 12 barras/puntos. La leyenda envuelve (`flex-wrap`). Coherente con el resto del DS, que en ≤940px oculta la sidebar.
+- El widget nunca scrollea horizontal; siempre encaja al ancho del contenedor.
+
+### Movimiento y prefers-reduced-motion
+
+- **Animación de entrada:** al montar/cargar, las áreas/barras hacen un *grow* desde la base (Recharts `isAnimationActive`), duración ~0.4s, easing suave — coherente con el movimiento sobrio del DS (0.32s de entrada de pantalla). El toggle de forma hace un *cross-fade*/morph corto (~0.2s) entre formas.
+- **Hover:** transición 0.14s (tooltip aparece, dot crece) — igual que el resto del DS.
+- **`prefers-reduced-motion`:** se **desactivan** la animación de entrada y el morph de toggle (Recharts `isAnimationActive={false}`); el cambio de forma y la carga son instantáneos. El tooltip sigue apareciendo pero sin transición. Regla obligatoria del DS (principios de jerarquía y layout).

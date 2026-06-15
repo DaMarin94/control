@@ -117,6 +117,7 @@
 |---------|-------|
 | Gráficos: otros tipos (torta, barras de comparación) | El gráfico anual (área ingresos/gastos + apilado por categoría) entra en v1 — RF-GRA-001, bitácora 2026-06-14. Los demás tipos quedan post-v1, requieren definición de UX |
 | Drill-down desde el gráfico anual (clic en un mes → Vista del mes) | Fuera de alcance v1; candidato post-v1 |
+| Agrupar la cola de categorías en una banda "Otras" en la Forma 2 del gráfico anual | En v1 la Forma 2 muestra todas las categorías con gasto sin agrupar (RF-GRA-001, bitácora 2026-06-15). El colapso "Otras" por legibilidad con muchas categorías queda post-v1, requiere definición de UX |
 | Tarjetas con fecha de corte | Requiere flujo propio |
 | Multi-moneda | Diseñado para venir después |
 | Importación desde extracto bancario | Sin decisión |
