@@ -365,7 +365,10 @@ describe("MonthViewClient", () => {
       mockLoaded(mockWithFijos);
       renderMonthView();
 
-      expect(screen.getByText("Mensual")).toBeInTheDocument();
+      // El componente renderiza "mensual" (minúscula) en la sublínea del fijo
+      // y la col de fecha queda vacía (sin texto de fecha) — verificamos ambas cosas
+      const fijoSection = screen.getByRole("region", { name: /fijos/i });
+      expect(fijoSection).toHaveTextContent(/mensual/i);
     });
 
     it("NO muestra la sección 'Fijos' cuando fijos está vacío", () => {
@@ -420,8 +423,13 @@ describe("MonthViewClient", () => {
     it("click en Editar de único abre el modal de edición (TransactionModal mode=edit-single)", () => {
       renderMonthView();
 
-      const editButtons = screen.getAllByRole("button", { name: /editar/i });
-      fireEvent.click(editButtons[0]);
+      // Abrir el KebabMenu del primer único ("Almuerzo en el trabajo")
+      const trigger = screen.getByRole("button", { name: /acciones de almuerzo en el trabajo/i });
+      fireEvent.click(trigger);
+
+      // Hacer click en el ítem "Editar" del menú abierto
+      const editItem = screen.getByRole("menuitem", { name: /editar/i });
+      fireEvent.click(editItem);
 
       // El modal de edición debe abrirse
       expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -431,8 +439,13 @@ describe("MonthViewClient", () => {
     it("click en Eliminar de único abre el diálogo de eliminación (DeleteTransactionDialog)", () => {
       renderMonthView();
 
-      const deleteButtons = screen.getAllByRole("button", { name: /eliminar/i });
-      fireEvent.click(deleteButtons[0]);
+      // Abrir el KebabMenu del primer único ("Almuerzo en el trabajo")
+      const trigger = screen.getByRole("button", { name: /acciones de almuerzo en el trabajo/i });
+      fireEvent.click(trigger);
+
+      // Hacer click en el ítem "Eliminar" del menú abierto
+      const deleteItem = screen.getByRole("menuitem", { name: /eliminar/i });
+      fireEvent.click(deleteItem);
 
       expect(screen.getByRole("dialog")).toBeInTheDocument();
       // El diálogo de único tiene "Eliminar movimiento" (sin "fijo")
@@ -445,8 +458,12 @@ describe("MonthViewClient", () => {
     it("cerrar el modal de edición lo quita del DOM", () => {
       renderMonthView();
 
-      const editButtons = screen.getAllByRole("button", { name: /editar/i });
-      fireEvent.click(editButtons[0]);
+      // Abrir el KebabMenu del primer único ("Almuerzo en el trabajo")
+      const trigger = screen.getByRole("button", { name: /acciones de almuerzo en el trabajo/i });
+      fireEvent.click(trigger);
+
+      const editItem = screen.getByRole("menuitem", { name: /editar/i });
+      fireEvent.click(editItem);
 
       expect(screen.getByRole("dialog")).toBeInTheDocument();
 
@@ -471,15 +488,13 @@ describe("MonthViewClient", () => {
       const fijoSection = screen.getByRole("region", { name: /fijos/i });
       expect(fijoSection).toBeInTheDocument();
 
-      // Click en el botón Editar del fijo
-      const editBtns = screen.getAllByRole("button", { name: /editar/i });
-      // El primer Editar corresponde al único (sección Únicos viene antes que Fijos)
-      // El segundo al fijo
-      const fijoEditBtn = editBtns.find((btn) =>
-        btn.getAttribute("aria-label")?.includes("Alquiler"),
-      );
-      expect(fijoEditBtn).toBeTruthy();
-      fireEvent.click(fijoEditBtn!);
+      // Abrir el KebabMenu del fijo ("Alquiler")
+      const trigger = screen.getByRole("button", { name: /acciones de alquiler/i });
+      fireEvent.click(trigger);
+
+      // Hacer click en el ítem "Editar" del menú abierto
+      const editItem = screen.getByRole("menuitem", { name: /editar/i });
+      fireEvent.click(editItem);
 
       // Modal abierto en modo edit-fixed — título "Editar · Fijo"
       expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -489,13 +504,13 @@ describe("MonthViewClient", () => {
     it("click en Eliminar de fijo abre el DeleteRecurringDialog", () => {
       renderMonthView();
 
-      // Click en Eliminar del fijo
-      const deleteBtns = screen.getAllByRole("button", { name: /eliminar/i });
-      const fijoDeleteBtn = deleteBtns.find((btn) =>
-        btn.getAttribute("aria-label")?.includes("Alquiler"),
-      );
-      expect(fijoDeleteBtn).toBeTruthy();
-      fireEvent.click(fijoDeleteBtn!);
+      // Abrir el KebabMenu del fijo ("Alquiler")
+      const trigger = screen.getByRole("button", { name: /acciones de alquiler/i });
+      fireEvent.click(trigger);
+
+      // Hacer click en el ítem "Eliminar" del menú abierto
+      const deleteItem = screen.getByRole("menuitem", { name: /eliminar/i });
+      fireEvent.click(deleteItem);
 
       // El diálogo de fijo debe abrirse — tiene "Eliminar movimiento fijo" en el título
       expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -573,13 +588,13 @@ describe("MonthViewClient", () => {
       const cuotaSection = screen.getByRole("region", { name: /cuotas/i });
       expect(cuotaSection).toBeInTheDocument();
 
-      // Click en el botón Editar de la cuota
-      const editBtns = screen.getAllByRole("button", { name: /editar/i });
-      const cuotaEditBtn = editBtns.find((btn) =>
-        btn.getAttribute("aria-label")?.includes("Notebook"),
-      );
-      expect(cuotaEditBtn).toBeTruthy();
-      fireEvent.click(cuotaEditBtn!);
+      // Abrir el KebabMenu de la cuota ("Notebook")
+      const trigger = screen.getByRole("button", { name: /acciones de notebook/i });
+      fireEvent.click(trigger);
+
+      // Hacer click en el ítem "Editar" del menú abierto
+      const editItem = screen.getByRole("menuitem", { name: /editar/i });
+      fireEvent.click(editItem);
 
       // Modal abierto en modo edit-installment — título "Editar · Cuotas"
       expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -589,13 +604,13 @@ describe("MonthViewClient", () => {
     it("click en Eliminar de cuota abre el DeleteInstallmentDialog (sin checkbox)", () => {
       renderMonthView();
 
-      // Click en Eliminar de la cuota
-      const deleteBtns = screen.getAllByRole("button", { name: /eliminar/i });
-      const cuotaDeleteBtn = deleteBtns.find((btn) =>
-        btn.getAttribute("aria-label")?.includes("Notebook"),
-      );
-      expect(cuotaDeleteBtn).toBeTruthy();
-      fireEvent.click(cuotaDeleteBtn!);
+      // Abrir el KebabMenu de la cuota ("Notebook")
+      const trigger = screen.getByRole("button", { name: /acciones de notebook/i });
+      fireEvent.click(trigger);
+
+      // Hacer click en el ítem "Eliminar" del menú abierto
+      const deleteItem = screen.getByRole("menuitem", { name: /eliminar/i });
+      fireEvent.click(deleteItem);
 
       // El diálogo de cuota debe abrirse — tiene "Eliminar grupo de cuotas" en el título
       expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -610,11 +625,13 @@ describe("MonthViewClient", () => {
     it("el DeleteInstallmentDialog advierte que se elimina el grupo completo", () => {
       renderMonthView();
 
-      const deleteBtns = screen.getAllByRole("button", { name: /eliminar/i });
-      const cuotaDeleteBtn = deleteBtns.find((btn) =>
-        btn.getAttribute("aria-label")?.includes("Notebook"),
-      );
-      fireEvent.click(cuotaDeleteBtn!);
+      // Abrir el KebabMenu de la cuota ("Notebook")
+      const trigger = screen.getByRole("button", { name: /acciones de notebook/i });
+      fireEvent.click(trigger);
+
+      // Hacer click en el ítem "Eliminar" del menú abierto
+      const deleteItem = screen.getByRole("menuitem", { name: /eliminar/i });
+      fireEvent.click(deleteItem);
 
       // Advertencia explícita del grupo completo (RF-MC-002)
       expect(screen.getByText(/grupo completo/i)).toBeInTheDocument();
