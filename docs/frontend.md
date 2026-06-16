@@ -89,6 +89,30 @@ Los callbacks `jwt` y `session` persisten el **`accessToken` de NestJS** y el **
 - **Protección de rutas** vía `src/middleware.ts`: una ruta privada sin sesión redirige a `/login`; un usuario autenticado que entra a `/login` o `/registro` es redirigido a `/`.
 - **Auto-login tras registro:** un registro exitoso deja al usuario logueado sin pasar por la pantalla de login (RF-AUTH-006).
 
+## Preferencias de usuario (cimiento — fase 1.1.0)
+
+Mecanismo de persistencia de preferencias del usuario (estado de UI que sobrevive a la navegación y al cierre de sesión). Es el **cimiento** que consumirán fases posteriores (1.1.4 secciones colapsadas/orden, 1.1.5 reportes, 1.1.6 filtro por categoría); en la fase 1.1.0 **no hay UI de producto**. Contrato del backend en `docs/data-model.md` ("Contrato de preferencias de usuario").
+
+### Preferencias en la sesión de Auth.js
+
+El blob de preferencias viaja **dentro de la sesión de Auth.js**, junto al `accessToken` y el `userId`. Tipado en **`next-auth.d.ts`**: `preferences` está declarado en `Session`, `User` y `JWT`.
+
+- **Carga al loguear:** el blob llega en el `AuthResponse` (`data.preferences`) de los flujos Credentials y Google, y los callbacks de Auth.js lo persisten en el token y lo exponen en **`session.preferences`**. No se pide aparte; viaja con el login (igual que el `accessToken`).
+- **Refresh sin re-login:** el callback **`jwt` maneja `trigger === "update"`** para refrescar el blob del token cuando una mutación llama a `useSession().update()`, sin que el usuario tenga que volver a loguearse.
+
+### Hook `usePreferences` (`src/hooks/use-preferences.ts`)
+
+API para las fases consumidoras. Expone:
+
+```
+const { preferences, isLoading, isSaving, setPreferences } = usePreferences()
+// setPreferences(newBlob): Promise<{ success, preferences?, error? }>
+```
+
+- **`preferences`** — el blob actual. La query usa **`initialData: session?.preferences ?? {}`** para evitar el flash de `undefined` en el primer render de la consumidora.
+- **`setPreferences(newBlob)`** — persiste con **`PUT /preferences`** y, al confirmar, actualiza la sesión con **`useSession().update()`** (dispara el `trigger === "update"` del callback `jwt`). Devuelve `{ success, preferences?, error? }`.
+- **El llamador hace el merge.** Como la semántica del backend es **reemplazo total** (no merge), para cambiar una sola clave el consumidor parte del blob actual y manda el objeto completo: `setPreferences({ ...preferences, clave: valor })`. Omitir una clave la **borra**.
+
 ## Categorías (`/categorias`)
 
 CRUD de categorías. Se accede desde el **link "Categorías" del sidebar** (RF-NAV-001) y por URL. Vive bajo el route group `app/(app)/categorias/` (ver sección Navegación global).

@@ -48,6 +48,28 @@ model User {
   transactions      Transaction[]
   recurrings        Recurring[]
   installmentGroups InstallmentGroup[]
+  preferences       UserPreferences?
+}
+
+// ---------------------------------------------------------------------------
+// UserPreferences (Fase 1.1.0 — cimiento de preferencias de usuario)
+// ---------------------------------------------------------------------------
+
+// Una fila por usuario. El contenido es un blob JSON abierto (Json type de Prisma).
+// Default {} — arranca vacío, cada fase consumidora agrega sus claves.
+// onDelete: Cascade — se elimina automáticamente si se borra el usuario.
+model UserPreferences {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  // Blob JSON de preferencias. Arranca como {} y se muta vía PUT /preferences.
+  // No tiene claves fijas: cada fase consumidora agrega las suyas sin migración.
+  data Json @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // ---------------------------------------------------------------------------

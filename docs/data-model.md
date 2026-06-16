@@ -14,6 +14,7 @@
 | **Movimiento único** | Gasto o ingreso que ocurrió una sola vez en un instante específico (fecha y hora). Se guarda como timestamp UTC (`occurredAt`) más la zona horaria original del registro (`timezone`, nombre IANA). No es solo una fecha de calendario. |
 | **Movimiento fijo** | Plantilla recurrente mensual activa desde un mes de inicio hasta que el usuario la elimina. |
 | **Grupo de cuotas** | Compra o cobro dividido en N pagos mensuales iguales desde un mes de inicio. |
+| **Preferencias de usuario** | Conjunto de preferencias del usuario (estado de UI que sobrevive a la navegación y al cierre de sesión). Una fila por usuario (1:1 con Usuario), con el contenido guardado como **blob JSON** en lugar de una columna por preferencia. Cimiento introducido en la fase 1.1.0, sin UI de producto en esa fase; lo consumen 1.1.4 (secciones colapsadas / orden), 1.1.5 (config de reportes) y 1.1.6 (filtro por categoría). |
 
 ---
 
@@ -26,7 +27,8 @@
 - **Movimientos fijos: el pasado es inmutable.** Editar o eliminar un fijo no modifica los meses ya pasados. El fijo tiene un mes de inicio (`startMonth`) y opcionalmente un mes desde el cual deja de aparecer (`deletedFrom`, **exclusivo**: "mes desde el cual ya no aparece").
 - **El movimiento fijo se modela como una _cadena_ de filas `Recurring`, no una sola.** Un "fijo lógico" puede estar compuesto por varias filas en el tiempo. Cada edición que afecta meses ya corridos **cierra la fila vigente** (le setea `deletedFrom = mes actual`) y **abre una fila nueva** (`startMonth = mes actual`) con los valores nuevos; así los meses pasados conservan los valores viejos y el actual/futuro toman los nuevos, sin generar filas por instancia mensual. Si el fijo todavía no corrió ningún mes, la edición es en su lugar (no se parte la cadena). Esto materializa "el pasado es inmutable". Detalle de la mecánica (split al editar, boundary de eliminación) en `docs/backend.md`, sección Movimientos fijos.
 - **Moneda implícita en v1.** No hay campo de moneda. El modelo está diseñado para que se pueda agregar en el futuro sin romper datos existentes.
-- **Aislamiento por usuario.** Todos los recursos (movimientos, categorías) pertenecen a un usuario y nunca son visibles para otro.
+- **Aislamiento por usuario.** Todos los recursos (movimientos, categorías, preferencias) pertenecen a un usuario y nunca son visibles para otro.
+- **Preferencias de usuario como blob JSON (1:1 con Usuario).** Las preferencias se guardan en una **fila por usuario** (`UserPreferences`, `userId` único, `onDelete: Cascade` — borrar el usuario borra sus preferencias) con el contenido en un único campo `data` de tipo JSON (default `{}`). **Motivo del blob:** poder **agregar preferencias futuras sin migraciones** de esquema — cada fase consumidora suma sus propias claves al objeto sin tocar la DB. Es un objeto **abierto / extensible**; en la fase 1.1.0 (cimiento) está **vacío**: las claves las agregan las fases que lo consumen (1.1.4, 1.1.5, 1.1.6). Una fila se crea solo cuando el usuario muta una preferencia por primera vez (o al dar de alta la cuenta); ver back-compat en `docs/backend.md`.
 - **Contraseñas hasheadas.** Las cuentas con email + contraseña guardan únicamente un hash de la contraseña (`passwordHash`, bcrypt/argon2), nunca el texto plano. El hash y la verificación viven en el backend. Las cuentas creadas solo con Google pueden no tener `passwordHash`. El caso de account linking (mismo email por ambos métodos) queda **pendiente sin resolver en v1** (ver `requirements.md`, sección 6).
 - **Fechas y zonas horarias (movimiento único).** El movimiento único es un instante (fecha y hora), no una fecha de calendario. Se almacena como timestamp en UTC (`occurredAt`) junto con la zona horaria original del registro (`timezone`, nombre IANA, ej. `America/Argentina/Buenos_Aires`). Se muestra siempre en esa zona original, aunque el usuario después cambie de zona o viaje. El mes al que pertenece se determina en la zona del propio registro. El Usuario tiene un campo `timezone` (zona default / "de casa") que se usa para calcular "hoy" / "mes actual" al crear movimientos y en el dashboard. Los movimientos fijos y las cuotas no aplican esto: operan a nivel mes, sin día ni hora. Ver `docs/technical.md` (sección "Fechas y zonas horarias") para el detalle técnico.
 
@@ -44,12 +46,29 @@ AuthResponse = {
     email: string,
     name: string | null,
     image: string | null
-  }
+  },
+  preferences: { ... }      // blob JSON de preferencias del usuario; {} si no tiene fila
 }
 ```
 
 - **`accessToken`** es el JWT que **emite NestJS** (HS256). Sus claims son: `sub` (el `userId`, cuid del usuario), `iat` y `exp` (expira a los **30 días**). El frontend lo trata como **opaco**: lo guarda y lo reenvía como `Authorization: Bearer`, no lo decodifica.
 - **Dos tokens distintos.** El `accessToken` (JWT de NestJS) viaja **dentro** de la sesión de Auth.js, que es un **JWE separado** encriptado por NextAuth. No confundirlos: el backend solo valida el JWT de NestJS; nunca ve el JWE de Auth.js. Detalle del flujo en `docs/architecture.md`.
+- **`preferences` — blob JSON cargado al loguear (fase 1.1.0).** Los tres flujos (`/auth/login`, `/auth/register`, `/auth/google`) incluyen el blob de preferencias del usuario en `data`, para que el frontend lo cargue **una sola vez** en la sesión de Auth.js al iniciar sesión y no tenga que pedirlo aparte. Es **`{}`** si el usuario no tiene fila de preferencias (usuarios viejos; ver back-compat en `docs/backend.md`). Mutaciones posteriores se hacen contra `PUT /preferences` (abajo), no re-logueando.
+
+---
+
+## Contrato de preferencias de usuario (preferences)
+
+Endpoints de lectura y escritura del blob de preferencias del usuario autenticado. **JWT requerido** en ambos (scope por `userId` del token); `401` global si falta o es inválido. Detalle de implementación y reglas de back-compat en `docs/backend.md`, sección Preferencias de usuario.
+
+| Endpoint | Body | Éxito | Errores |
+|----------|------|-------|---------|
+| `GET /preferences` | — | `200` · `data: <blob>` | `401` |
+| `PUT /preferences` | `{ data: { ...objeto plano... } }` | `200` · `data: <blob persistido>` | `400` · `401` |
+
+- **`GET /preferences`** — sin body. El `data` del sobre es el **blob** de preferencias del usuario, o **`{}`** si no tiene fila (no la crea).
+- **`PUT /preferences`** — body `{ data: <objeto plano> }`. El `data` de la respuesta es el blob **persistido**. Hace **upsert** (crea la fila si no existía). `400` si `data` falta o **no es un objeto**.
+- **Semántica de reemplazo completo (no merge).** El server **NO** mergea: guarda el `data` recibido **tal cual**, reemplazando el blob entero. **El frontend manda el blob completo** en cada `PUT` — para cambiar una sola clave, el llamador parte del blob actual y reescribe todo (`{ ...preferences, clave: valor }`). Consecuencia: omitir una clave en el `PUT` la **borra**.
 
 ---
 

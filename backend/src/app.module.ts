@@ -11,6 +11,7 @@ import { TransactionsModule } from './transactions/transactions.module';
 import { MovementsModule } from './movements/movements.module';
 import { RecurringModule } from './recurring/recurring.module';
 import { InstallmentsModule } from './installments/installments.module';
+import { PreferencesModule } from './preferences/preferences.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { IncomingMessage } from 'http';
 
@@ -82,6 +83,7 @@ import { IncomingMessage } from 'http';
     MovementsModule,
     RecurringModule,
     InstallmentsModule,
+    PreferencesModule,
   ],
   providers: [
     // Guard global: toda request requiere JWT válido (RNF-001).

@@ -21,6 +21,7 @@
 | Navegación global — sidebar persistente | RF-NAV-001 | Implementado |
 | Crear categoría desde el formulario de movimiento | RF-MU-004 | Implementado (los tres tabs) |
 | Gráfico anual — widget reutilizable + pantalla dedicada | RF-GRA-001..003 | Implementado |
+| Preferencias de usuario — cimiento (blob JSON + sesión) | — (fase 1.1.0, ST1) | Implementado (sin UI de producto) |
 
 ---
 
@@ -106,6 +107,12 @@
 - **Estado:** implementado end-to-end (front + back). RF-GRA-001..003 en `docs/requirements.md`; pantallas 7 y 8 en `docs/screens.md`; spec visual en `docs/design.md`. Las **5 decisiones de producto** quedaron confirmadas el 2026-06-14 (ver bitácora): pantalla **"Anual"** en **`/anual`**, debajo de "Vista del mes" en el sidebar (orden Dashboard → Vista del mes → Anual → Categorías); **Forma 1 (Ingresos vs. Gastos)** presente en dashboard y pantalla dedicada (en `/anual` además se muestra la Forma 2 apilada por categoría; ver `docs/frontend.md` por el modelo actual de dos tarjetas); navegación de año hacia atrás sin tope artificial pero deshabilitada antes del primer año con movimientos, y años futuros bloqueados (máximo = año en curso); **12 meses siempre presentes en cero** donde no hay datos; **drill-down clic-en-mes → Vista del mes fuera de v1** (candidato post-v1).
 - **Backend:** el endpoint **`GET /movements/annual?year=`** ya existe y devuelve, para el año dado, los totales de **ingresos** y **gastos** por mes (Forma 1) y el **desglose de gastos por categoría por mes** con `id`/`name`/`color` (Forma 2), para los 12 meses. El mes de cada movimiento se resuelve con el criterio de RN-015 (zona propia del registro para únicos; `startMonth` para fijos y cuotas), reutilizando el bucketeo existente. Contrato en `docs/backend.md`.
 - **Frontend (arquitectura en dos capas):** primitiva reutilizable de charting **`components/ui/chart.tsx`** (Recharts v3 themeado con el DS) + **dos tarjetas autónomas** en **`components/charts/annual-chart-widget.tsx`** (`IncomeExpenseCard` Forma 1 y `ByCategoryCard` Forma 2), hook **`useAnnual` / `ANNUAL_QUERY_KEY(year) = ["annual", year]`**. En `/anual` se montan ambas tarjetas apiladas con el control de año en la página (estado local, sin URL/Suspense); en el dashboard se monta solo `IncomeExpenseCard` con año fijo. Detalles y gotchas técnicos (oklch en SVG de Recharts, `tnum` vía `--mono`, casts de Recharts 3.x, alto por prop + media queries, mock de `matchMedia` en tests, dedupe de `useAnnual` por key) en `docs/frontend.md`, sección Gráfico anual.
+
+### Preferencias de usuario — cimiento (fase 1.1.0)
+
+- **Cimiento de v1.1, sin UI de producto.** Mecanismo de persistencia de preferencias del usuario que sobrevive a la navegación y al cierre de sesión. Lo consumen 1.1.4 (secciones colapsadas / orden de `/mes`), 1.1.5 (reportes configurables) y 1.1.6 (filtro por categoría); en 1.1.0 no hay pantalla ni comportamiento observable. Ver bitácora 2026-06-15.
+- **Backend (`PreferencesModule`):** entidad `UserPreferences` (1 fila por usuario, contenido en blob JSON `data`, default `{}`, para sumar prefs sin migraciones). Endpoints `GET /preferences` / `PUT /preferences` scopeados por `userId`; el `PUT` hace **upsert con reemplazo completo** (no merge). El blob se incluye en el `AuthResponse` de los tres flujos de auth (`buildAuthResult` pasó a `async`). Usuarios viejos sin fila reciben `{}` sin que se cree la fila. Contrato en `docs/data-model.md`; gotchas (Prisma 7 + `Json`, mock e2e) en `docs/backend.md`.
+- **Frontend:** el blob viaja en la sesión de Auth.js (`Session` / `User` / `JWT`, tipos en `next-auth.d.ts`), se carga al loguear y se expone en `session.preferences`. Hook **`usePreferences`** (`{ preferences, isLoading, isSaving, setPreferences }`) para las fases consumidoras: persiste con `PUT /preferences` y refresca la sesión con `useSession().update()`; el **llamador hace el merge** (semántica de reemplazo total). Detalle en `docs/frontend.md`, sección Preferencias de usuario.
 
 ---
 

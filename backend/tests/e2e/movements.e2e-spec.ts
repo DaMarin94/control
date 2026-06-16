@@ -60,6 +60,12 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  // userPreferences — necesario para PreferencesModule (Fase 1.1.0)
+  userPreferences: {
+    findUnique: jest.fn().mockResolvedValue(null),
+    upsert: jest.fn(),
+    create: jest.fn().mockResolvedValue({ id: 'prefs-1', userId: 'u', data: {}, createdAt: new Date(), updatedAt: new Date() }),
+  },
   // recurring.findMany se usa para fijos (Fase 6 — findFijosByMonth / getFijosTotalsByMonth)
   recurring: {
     create: jest.fn(),

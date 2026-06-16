@@ -11,6 +11,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { GoogleAuthDto } from './dto/google-auth.dto';
 import { COLOR_POOL } from '../categories/color-pool';
+import { PreferencesService } from '../preferences/preferences.service';
 
 // -----------------------------------------------------------------------
 // Categorías por defecto (RF-CAT-001)
@@ -48,6 +49,7 @@ export interface AuthUserPublic {
 export interface AuthResult {
   accessToken: string;
   user: AuthUserPublic;
+  preferences: Record<string, unknown>;
 }
 
 @Injectable()
@@ -56,6 +58,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly logger: Logger,
+    private readonly preferencesService: PreferencesService,
   ) {}
 
   // -----------------------------------------------------------------------
@@ -85,6 +88,9 @@ export class AuthService {
 
     // Crear categorías por defecto (RF-CAT-001)
     await this.createDefaultCategories(user.id);
+
+    // Crear fila de preferencias vacía para el usuario nuevo (Fase 1.1.0)
+    await this.createDefaultPreferences(user.id);
 
     this.logger.log(`Usuario registrado: ${user.id}`);
 
@@ -146,6 +152,8 @@ export class AuthService {
 
       // Crear categorías por defecto solo en alta nueva (RF-CAT-001)
       await this.createDefaultCategories(user.id);
+      // Crear fila de preferencias vacía para el usuario nuevo (Fase 1.1.0)
+      await this.createDefaultPreferences(user.id);
       this.logger.log(`Usuario Google creado: ${user.id}`);
     } else {
       // Actualizar nombre e imagen si cambiaron (RF-AUTH-001)
@@ -180,12 +188,16 @@ export class AuthService {
     return this.jwtService.sign({ sub: userId });
   }
 
-  private buildAuthResult(user: {
+  private async buildAuthResult(user: {
     id: string;
     email: string;
     name: string | null;
     image: string | null;
-  }): AuthResult {
+  }): Promise<AuthResult> {
+    // Leer preferencias actuales (Fase 1.1.0).
+    // Para usuarios viejos sin fila → {} (back-compat, no crea la fila).
+    const preferences = await this.preferencesService.getPreferencesForAuth(user.id);
+
     return {
       accessToken: this.signToken(user.id),
       user: {
@@ -194,6 +206,7 @@ export class AuthService {
         name: user.name,
         image: user.image,
       },
+      preferences,
     };
   }
 
@@ -211,6 +224,19 @@ export class AuthService {
         color: cat.color,
       })),
       skipDuplicates: true,
+    });
+  }
+
+  /**
+   * Crea la fila de preferencias vacía para un usuario recién creado (Fase 1.1.0).
+   * Default: blob {} (sin claves — cada fase consumidora agrega las suyas).
+   */
+  private async createDefaultPreferences(userId: string): Promise<void> {
+    await this.prisma.userPreferences.create({
+      data: {
+        userId,
+        data: {},
+      },
     });
   }
 }

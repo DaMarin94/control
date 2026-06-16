@@ -39,6 +39,12 @@ const mockPrisma = {
   category: {
     createMany: jest.fn().mockResolvedValue({ count: 4 }),
   },
+  // userPreferences — necesario para PreferencesModule (Fase 1.1.0)
+  userPreferences: {
+    findUnique: jest.fn().mockResolvedValue(null),
+    upsert: jest.fn(),
+    create: jest.fn().mockResolvedValue({ id: 'prefs-1', userId: 'user-id', data: {}, createdAt: new Date(), updatedAt: new Date() }),
+  },
   // recurring — necesario para RecurringModule (Fase 6 — registrado en AppModule)
   recurring: {
     create: jest.fn(),
@@ -100,6 +106,15 @@ describe('Auth (e2e)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPrisma.category.createMany.mockResolvedValue({ count: 4 });
+    // Preferences: findUnique devuelve null por defecto (→ {} en AuthResult)
+    mockPrisma.userPreferences.findUnique.mockResolvedValue(null);
+    mockPrisma.userPreferences.create.mockResolvedValue({
+      id: 'prefs-1',
+      userId: mockUser.id,
+      data: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -306,6 +321,72 @@ describe('Auth (e2e)', () => {
         .expect(400);
 
       expect(res.body.success).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // AuthResponse incluye preferences (Fase 1.1.0)
+  // -------------------------------------------------------------------------
+  describe('AuthResponse incluye preferences', () => {
+    it('register: data incluye preferences como objeto ({}  cuando es usuario nuevo)', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.user.create.mockResolvedValue({ ...mockUser });
+      // create de preferences devuelve {} (mock ya configurado en beforeEach)
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({ email: 'new@example.com', password: 'password123' })
+        .expect(201);
+
+      expect(res.body.data).toHaveProperty('preferences');
+      expect(typeof res.body.data.preferences).toBe('object');
+      expect(Array.isArray(res.body.data.preferences)).toBe(false);
+    });
+
+    it('login: data incluye preferences con el blob actual del usuario', async () => {
+      const hash = await argon2.hash('password123', { type: argon2.argon2id });
+      const existingPrefs = { monthSections: { collapsed: ['cuotas'] } };
+      mockPrisma.user.findUnique.mockResolvedValue({ ...mockUser, passwordHash: hash });
+      mockPrisma.userPreferences.findUnique.mockResolvedValue({
+        id: 'prefs-1',
+        userId: mockUser.id,
+        data: existingPrefs,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'e2e@example.com', password: 'password123' })
+        .expect(200);
+
+      expect(res.body.data).toHaveProperty('preferences');
+      expect(res.body.data.preferences).toEqual(existingPrefs);
+    });
+
+    it('login: preferences es {} cuando el usuario no tiene fila (back-compat)', async () => {
+      const hash = await argon2.hash('password123', { type: argon2.argon2id });
+      mockPrisma.user.findUnique.mockResolvedValue({ ...mockUser, passwordHash: hash });
+      mockPrisma.userPreferences.findUnique.mockResolvedValue(null);
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'e2e@example.com', password: 'password123' })
+        .expect(200);
+
+      expect(res.body.data.preferences).toEqual({});
+    });
+
+    it('google auth: data incluye preferences', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.user.create.mockResolvedValue({ ...mockUser, name: 'G User' });
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/google')
+        .send({ email: 'google@example.com', name: 'G User' })
+        .expect(200);
+
+      expect(res.body.data).toHaveProperty('preferences');
     });
   });
 

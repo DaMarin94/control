@@ -12,10 +12,20 @@ export interface AuthUser {
   image: string | null;
 }
 
-/** Respuesta de /auth/login y /auth/register */
+/**
+ * Blob de preferencias del usuario.
+ * Es un objeto abierto/extensible: en Fase 1.1.0 está vacío ({}).
+ * Cada fase posterior agrega sus claves sin cambiar el tipo base.
+ * El backend usa semántica de reemplazo completo (PUT sobreescribe, no merge).
+ */
+export type UserPreferences = Record<string, unknown>;
+
+/** Respuesta de /auth/login, /auth/register y /auth/google */
 export interface AuthResponse {
   accessToken: string;
   user: AuthUser;
+  /** Blob de preferencias del usuario. Vacío ({}) si el usuario no tiene fila aún. */
+  preferences: UserPreferences;
 }
 
 /** Body de /auth/register */

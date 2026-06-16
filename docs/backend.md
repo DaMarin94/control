@@ -61,6 +61,7 @@ La fuente de verdad de tipos, campos y constraints es `backend/prisma/schema.pri
 | `Transaction` | Movimiento único (gasto o ingreso en un instante). Hard delete. |
 | `Recurring` | Movimiento fijo mensual (plantilla activa desde un mes). |
 | `InstallmentGroup` | Grupo de cuotas. `amountCents` es el monto **por cuota**, no el total; `totalInstallments` es la cantidad. |
+| `UserPreferences` | Preferencias del usuario. **1:1 con `User`** (`userId` único, `onDelete: Cascade`); contenido en un campo `Json` `data` (default `{}`). Blob extensible para sumar prefs sin migraciones (fase 1.1.0). |
 
 **Enums:** `MovementType` (`EXPENSE` | `INCOME`) y `CategoryScope` (`BOTH` | `EXPENSE` | `INCOME`).
 
@@ -90,6 +91,7 @@ La fuente de verdad de tipos, campos y constraints es `backend/prisma/schema.pri
 | `recurring` | `/recurring` | Movimientos fijos (crear, editar, eliminar) |
 | `installments` | `/installments` | Grupos de cuotas (crear, editar, eliminar) |
 | `categories` | `/categories` | Categorías (CRUD + soft delete) |
+| `preferences` | `/preferences` | Preferencias de usuario (blob JSON, lectura/escritura) |
 | `users` | — | Creación de cuenta + categorías por defecto |
 | `auth` | `/auth` | Registro, login y Google; emisión y validación del JWT (guard global) |
 | `prisma` | — | PrismaService |
@@ -122,6 +124,9 @@ Gestión de grupos de cuotas. **Solo `EXPENSE` en v1** (rechaza `INCOME` con `40
 
 ### `GET /categories` · `POST /categories` · `PATCH /categories/:id` · `DELETE /categories/:id`
 CRUD de categorías. El DELETE es soft delete (`deletedAt`). Ver el contrato completo en la sección **Categorías (CategoriesModule)**.
+
+### `GET /preferences` · `PUT /preferences`
+Lectura y escritura del blob JSON de preferencias del usuario autenticado. El `PUT` **reemplaza el blob entero** (no mergea) y hace upsert. Ver el contrato completo en la sección **Preferencias de usuario (PreferencesModule)**.
 
 ## Movimientos únicos (TransactionsModule)
 
@@ -414,13 +419,43 @@ Categoria = {
 
 - **`ReactivableConflictException`** (409): el único error que adjunta `error.data` estructurado (`{ reactivable, category }`). Para soportarlo, el Global Exception Filter se extendió de forma **mínima** con un campo `data` **opcional** en el sobre de error: solo lo lleva este caso; el resto de los errores no incluyen `data`. Permite al front ofrecer Reactivar/Cancelar sin un endpoint extra de búsqueda.
 
+## Preferencias de usuario (PreferencesModule)
+
+Lectura y escritura del blob JSON de preferencias, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca preferencias de otro). Es el **cimiento de la fase 1.1.0**: no tiene UI de producto propia; lo consumen fases posteriores (1.1.4 secciones colapsadas/orden, 1.1.5 reportes, 1.1.6 filtro por categoría). El blob es **abierto/extensible** — las claves las definen las fases consumidoras, no este módulo. Modelo y contrato en `docs/data-model.md` (entidad y "Contrato de preferencias de usuario").
+
+### Endpoints
+
+| Endpoint | Body | Éxito | Errores |
+|----------|------|-------|---------|
+| `GET /preferences` | — | `200` · `data: <blob>` (`{}` si no hay fila) | `401` |
+| `PUT /preferences` | `{ data: <objeto plano> }` | `200` · `data: <blob persistido>` | `400` · `401` |
+
+- **`GET /preferences`** — devuelve el blob del usuario, o **`{}` sin crear la fila** si no existe.
+- **`PUT /preferences`** — **upsert** (crea la fila si no existía). **Reemplazo completo, no merge:** persiste el `data` recibido tal cual; el frontend manda el blob entero. `400` si `data` falta o **no es un objeto** (validación de DTO).
+
+### Back-compat de usuarios sin fila (no se crea en lectura)
+
+La fila `UserPreferences` **no se crea al leer**. Tanto `GET /preferences` como el armado del `AuthResponse` en los flujos de login devuelven **`{}`** cuando el usuario no tiene fila (usuarios anteriores a la fase 1.1.0). La fila se materializa solo:
+
+- en el **`PUT`** (upsert al mutar la primera preferencia), o
+- en el **alta de cuenta nueva** — `register` y `google` con usuario nuevo crean la fila junto con las categorías por defecto (no en el `google` de un usuario que ya existía).
+
+### `buildAuthResult` ahora es `async`
+
+El helper que arma el `AuthResponse` de los tres flujos de auth pasó a ser **`async`** porque ahora lee las preferencias del usuario. Relevante para quien lo **llame o lo mockee** (hay que `await`-earlo).
+
+### Gotchas
+
+- **Prisma 7 + tipo `Json` (cast obligatorio).** El campo `Json` tiene tipado estricto en `create` / `update` / `upsert`: un `Record<string, unknown>` **no es asignable directo** al input de Prisma. Requiere un cast (`as any` con comentario explicativo). El comportamiento en runtime es correcto; el cast es solo para el type-checker.
+- **Tests e2e que levantan `AppModule` necesitan `userPreferences` en el mock de `PrismaService`.** Como `PreferencesModule` ahora vive en `AppModule` y `AuthService` lo usa, el mock de `PrismaService` de cualquier e2e que arranque `AppModule` debe exponer `userPreferences` con `findUnique`, `upsert` y `create` — análogo al gotcha de `installmentGroup`. Sin esto, los flujos de auth (que ahora leen preferencias) rompen en el setup del test.
+
 ## Autenticación
 
 El `AuthModule` es el **emisor del JWT**: el backend es la autoridad de identidad y firma el token que el frontend reenvía en cada request (ver `docs/architecture.md`, Flujo de autenticación).
 
 ### Endpoints
 
-Todas las respuestas usan el sobre `{ success, statusCode, data }`. El payload de éxito (`data`) de los tres endpoints es `{ accessToken, user }`, donde `user = { id, email, name|null, image|null }`.
+Todas las respuestas usan el sobre `{ success, statusCode, data }`. El payload de éxito (`data`) de los tres endpoints es `{ accessToken, user, preferences }`, donde `user = { id, email, name|null, image|null }` y `preferences` es el **blob JSON de preferencias** del usuario (`{}` si no tiene fila; fase 1.1.0, ver sección Preferencias de usuario). El armado lo hace `buildAuthResult`, que ahora es **`async`** porque lee las preferencias.
 
 | Endpoint | Body | Éxito | Errores |
 |----------|------|-------|---------|
@@ -459,6 +494,8 @@ Al crear una cuenta nueva (por cualquiera de los dos métodos), el backend gener
 | Servicios | `#A98BD6` |
 
 `AuthService` importa el pool central (`src/categories/color-pool.ts`) — ya no hay hex hardcodeados sueltos. Estos 4 colores dejaron de ser provisorios: son los primeros 4 del pool oficial (ver más abajo, **Pool de colores**). No se duplican si el usuario ya existía.
+
+El alta nueva también crea la fila de **preferencias de usuario** (`UserPreferences`, blob `{}`) junto con las categorías por defecto — `register` y `google` con usuario nuevo (no el `google` de un usuario existente). Ver sección **Preferencias de usuario**.
 
 ## Reglas de negocio implementadas
 

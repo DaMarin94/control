@@ -34,8 +34,22 @@ const mockPrisma = {
     update: jest.fn(),
     createMany: jest.fn().mockResolvedValue({ count: 0 }),
   },
+  // userPreferences — necesario para PreferencesModule (Fase 1.1.0)
+  userPreferences: {
+    findUnique: jest.fn().mockResolvedValue(null),
+    upsert: jest.fn(),
+    create: jest.fn().mockResolvedValue({ id: 'prefs-1', userId: 'u', data: {}, createdAt: new Date(), updatedAt: new Date() }),
+  },
   // recurring — necesario para RecurringModule (Fase 6 — registrado en AppModule)
   recurring: {
+    create: jest.fn(),
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+  },
+  // installmentGroup — necesario para InstallmentsModule (Fase 7 — registrado en AppModule)
+  installmentGroup: {
     create: jest.fn(),
     findUnique: jest.fn(),
     findMany: jest.fn(),

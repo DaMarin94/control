@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { EnvConfig } from '../config/env.schema';
+import { PreferencesModule } from '../preferences/preferences.module';
 
 /**
  * AuthModule — autenticación email/contraseña + Google OAuth scaffolded.
@@ -13,6 +14,9 @@ import { EnvConfig } from '../config/env.schema';
  * - expiresIn: 30d — tiempo de expiración deliberado para app personal.
  *   Auth.js en el frontend gestiona la sesión; el JWT del backend es solo
  *   el mecanismo de validación de cada request.
+ *
+ * Importa PreferencesModule para que AuthService pueda embeber las
+ * preferencias del usuario en el AuthResult (Fase 1.1.0).
  */
 @Module({
   imports: [
@@ -26,6 +30,7 @@ import { EnvConfig } from '../config/env.schema';
         },
       }),
     }),
+    PreferencesModule,
   ],
   controllers: [AuthController],
   providers: [AuthService],

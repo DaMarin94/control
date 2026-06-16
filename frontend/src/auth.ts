@@ -21,7 +21,7 @@ import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { z } from "zod";
 import { createLogger } from "@/lib/logger";
-import type { AuthResponse, GoogleAuthRequest } from "@/types/auth";
+import type { AuthResponse, GoogleAuthRequest, UserPreferences } from "@/types/auth";
 
 const logger = createLogger("Auth");
 
@@ -125,8 +125,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: result.user.email,
           name: result.user.name,
           image: result.user.image,
-          // Campo custom: accessToken del backend NestJS
+          // Campos custom: accessToken y preferences del backend NestJS
           accessToken: result.accessToken,
+          preferences: result.preferences,
         };
       },
     }),
@@ -151,18 +152,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
      * En el flujo de Credentials, el accessToken viene en user.accessToken.
      * En el flujo de Google, se obtiene llamando a POST /auth/google con el perfil.
      */
-    async jwt({ token, user, account, profile }) {
+    async jwt({ token, user, account, profile, trigger, session }) {
+      // Actualización de sesión vía useSession().update() (trigger === "update").
+      // El hook usePreferences llama update({ preferences: {...} }) después de persistir
+      // en el backend. Acá se sobreescribe el token con el nuevo blob.
+      if (trigger === "update" && session?.preferences !== undefined) {
+        token.preferences = session.preferences as UserPreferences;
+        return token;
+      }
+
       // Primera vez que se crea el token (login)
       if (user) {
         token.userId = user.id;
 
-        // Credentials: el accessToken viene directo en el user object
+        // Credentials: el accessToken y preferences vienen directo en el user object
         if ("accessToken" in user && typeof user.accessToken === "string") {
           token.accessToken = user.accessToken;
         }
+        if ("preferences" in user && user.preferences !== undefined) {
+          token.preferences = user.preferences;
+        }
       }
 
-      // Google OAuth: obtener el accessToken del backend NestJS
+      // Google OAuth: obtener el accessToken y preferences del backend NestJS
       if (account?.provider === "google" && profile?.email) {
         const result = await loginWithGoogle({
           email: profile.email,
@@ -175,6 +187,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (result) {
           token.accessToken = result.accessToken;
           token.userId = result.user.id;
+          token.preferences = result.preferences;
         }
       }
 
@@ -183,11 +196,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
     /**
      * session: expone los campos del token a la sesión del cliente.
-     * accessToken y userId quedan disponibles en useSession() / getServerSession().
+     * accessToken, userId y preferences quedan disponibles en useSession() / auth().
+     *
+     * Las preferences se actualizan sin re-login cuando el cliente llama a
+     * useSession().update() después de persistir en el backend (ver usePreferences).
      */
     session({ session, token }) {
       session.accessToken = token.accessToken as string | undefined;
       session.user.id = token.userId as string;
+      session.preferences = token.preferences as UserPreferences | undefined;
       return session;
     },
   },
