@@ -6,6 +6,8 @@
 >
 > El repo arranca **greenfield**: hoy solo existen `docs/` y `.claude/`. No hay carpetas `backend/` ni `frontend/` todavía — la Fase 0 las crea.
 
+> **Estado: v1.0 completa.** Las Fases 0–7 descritas en este documento están **terminadas**. La continuación del plan vive en [`roadmap-v1.1.md`](roadmap-v1.1.md).
+
 ## Documentos relacionados
 
 - **Requerimientos funcionales:** `requirements.md`
@@ -245,3 +247,9 @@ El orden de las fases no es arbitrario; sigue las dependencias reales del sistem
 - **Categorías antes que movimientos** porque **un movimiento exige una categoría**, y el alta de cuenta ya genera las 4 por defecto.
 - **Movimientos únicos antes que la vista del mes y el dashboard** porque esas pantallas necesitan **datos reales** para poblarse y validarse.
 - **Fijos y cuotas al final** por ser los tipos **más complejos**, y porque el endpoint `GET /movements` ya los previó desde la Fase 5, evitando rehacerlo.
+
+---
+
+## Continuación
+
+Con las Fases 0–7 completas, **v1.0 está cerrada**. El plan de trabajo posterior continúa en [`roadmap-v1.1.md`](roadmap-v1.1.md).
