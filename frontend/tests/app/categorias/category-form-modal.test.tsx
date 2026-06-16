@@ -1,7 +1,8 @@
 /**
  * Tests del modal de creación y edición de categorías.
  * Verifica: validación del formulario, flujo de creación exitosa, flujo 409 activa,
- * flujo 409 reactivable (dispara prompt), edición exitosa, edición con colisión.
+ * flujo 409 reactivable (dispara prompt), edición exitosa, edición con colisión,
+ * picker de color (selección, default menos-usado, pre-selección en editar, aleatorio).
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -10,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
 import { ToastProvider } from "@/components/ui/toast";
 import type { Category } from "@/types/category";
+import { CATEGORY_COLOR_PALETTE, CATEGORY_BASE_COLORS } from "@/types/category";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -21,12 +23,15 @@ import { useCategories } from "@/hooks/use-categories";
 
 const mockUseCategories = vi.mocked(useCategories);
 
+// Color en T4 (índice 30 de la paleta = fila T4, columna C1)
+const T4_FIRST = CATEGORY_BASE_COLORS[0]; // "#4F86C6"
+
 const mockCategory: Category = {
   id: "cat-1",
   userId: "user-1",
   name: "Alimentación",
   scope: "BOTH",
-  color: "#FF5733",
+  color: T4_FIRST,
   deletedAt: null,
   createdAt: "2024-01-01T00:00:00Z",
   updatedAt: "2024-01-01T00:00:00Z",
@@ -38,6 +43,8 @@ function renderModal(props: {
   onClose?: () => void;
   lockScopeToType?: "EXPENSE" | "INCOME";
   onCreated?: (category: Category) => void;
+  /** Categorías activas inyectadas al mock (para testear el cálculo de menos-usado) */
+  categories?: Category[];
 }) {
   const onClose = props.onClose ?? vi.fn();
   return render(
@@ -50,6 +57,35 @@ function renderModal(props: {
       />
     </ToastProvider>,
   );
+}
+
+// Helper: configura el mock de useCategories con los parámetros dados
+function setupMock({
+  categories = [],
+  createCategory = vi.fn(),
+  updateCategory = vi.fn(),
+  reactivateCategory = vi.fn(),
+}: {
+  categories?: Category[];
+  createCategory?: ReturnType<typeof vi.fn>;
+  updateCategory?: ReturnType<typeof vi.fn>;
+  reactivateCategory?: ReturnType<typeof vi.fn>;
+} = {}) {
+  mockUseCategories.mockReturnValue({
+    categories,
+    isLoading: false,
+    isError: false,
+    error: null,
+    createCategory,
+    updateCategory,
+    deleteCategory: vi.fn(),
+    reactivateCategory,
+    isCreating: false,
+    isUpdating: false,
+    isDeleting: false,
+    isReactivating: false,
+  });
+  return { createCategory, updateCategory, reactivateCategory };
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -112,7 +148,7 @@ describe("CategoryFormModal", () => {
 
   // ─── Flujo crear exitoso ─────────────────────────────────────────────────────
 
-  it("flujo crear: llama a createCategory con los datos correctos y llama a onClose al éxito", async () => {
+  it("flujo crear: llama a createCategory con los datos correctos (incluyendo color) y llama a onClose al éxito", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     mockCreateCategory.mockResolvedValue({ success: true, category: mockCategory });
@@ -124,10 +160,13 @@ describe("CategoryFormModal", () => {
     await user.click(screen.getByRole("button", { name: /crear categoría/i }));
 
     await waitFor(() => {
-      expect(mockCreateCategory).toHaveBeenCalledWith({
-        name: "Alimentación",
-        scope: "BOTH",
-      });
+      expect(mockCreateCategory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Alimentación",
+          scope: "BOTH",
+          color: expect.stringMatching(/^#[0-9A-Fa-f]{6}$/),
+        }),
+      );
       expect(onClose).toHaveBeenCalled();
     });
   });
@@ -163,7 +202,7 @@ describe("CategoryFormModal", () => {
         id: "cat-deleted-1",
         name: "Alimentación",
         scope: "BOTH",
-        color: "#FF5733",
+        color: T4_FIRST,
       },
     });
 
@@ -191,7 +230,7 @@ describe("CategoryFormModal", () => {
         id: "cat-deleted-1",
         name: "Alimentación",
         scope: "BOTH",
-        color: "#FF5733",
+        color: T4_FIRST,
       },
     });
 
@@ -224,7 +263,7 @@ describe("CategoryFormModal", () => {
         id: "cat-deleted-1",
         name: "Alimentación",
         scope: "BOTH",
-        color: "#FF5733",
+        color: T4_FIRST,
       },
     });
     mockReactivateCategory.mockResolvedValue({ success: true, category: mockCategory });
@@ -248,7 +287,7 @@ describe("CategoryFormModal", () => {
 
   // ─── Flujo editar exitoso ────────────────────────────────────────────────────
 
-  it("flujo editar: llama a updateCategory con el id y datos correctos", async () => {
+  it("flujo editar: llama a updateCategory con el id y datos correctos (incluyendo color)", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     const updated = { ...mockCategory, name: "Comida" };
@@ -264,7 +303,7 @@ describe("CategoryFormModal", () => {
     await waitFor(() => {
       expect(mockUpdateCategory).toHaveBeenCalledWith(
         "cat-1",
-        expect.objectContaining({ name: "Comida" }),
+        expect.objectContaining({ name: "Comida", color: T4_FIRST }),
       );
       expect(onClose).toHaveBeenCalled();
     });
@@ -322,10 +361,13 @@ describe("CategoryFormModal", () => {
     await user.click(screen.getByRole("button", { name: /crear categoría/i }));
 
     await waitFor(() => {
-      expect(mockCreateCategory).toHaveBeenCalledWith({
-        name: "Supermercado",
-        scope: "EXPENSE",
-      });
+      expect(mockCreateCategory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Supermercado",
+          scope: "EXPENSE",
+          color: expect.stringMatching(/^#[0-9A-Fa-f]{6}$/),
+        }),
+      );
       expect(onCreated).toHaveBeenCalledWith(created);
       expect(onClose).toHaveBeenCalled();
     });
@@ -342,7 +384,7 @@ describe("CategoryFormModal", () => {
         id: "cat-deleted-1",
         name: "Alimentación",
         scope: "BOTH",
-        color: "#FF5733",
+        color: T4_FIRST,
       },
     });
     mockReactivateCategory.mockResolvedValue({ success: true, category: reactivated });
@@ -363,5 +405,188 @@ describe("CategoryFormModal", () => {
       expect(onCreated).toHaveBeenCalledWith(reactivated);
       expect(onClose).toHaveBeenCalled();
     });
+  });
+
+  // ─── Picker de color ─────────────────────────────────────────────────────────
+
+  it("muestra el bloque Color con el grid de swatches y el botón Aleatorio", () => {
+    renderModal({ category: null });
+
+    // Debe haber una label "Color"
+    expect(screen.getByText(/^color$/i)).toBeInTheDocument();
+    // Debe haber el botón Aleatorio
+    expect(screen.getByRole("button", { name: /aleatorio/i })).toBeInTheDocument();
+    // Debe haber el radiogroup de swatches
+    expect(screen.getByRole("radiogroup", { name: /seleccionar color/i })).toBeInTheDocument();
+    // 70 swatches
+    const swatches = screen.getAllByRole("radio");
+    expect(swatches).toHaveLength(70);
+  });
+
+  it("pre-selecciona el color actual de la categoría en modo editar", () => {
+    renderModal({ category: mockCategory });
+
+    // El swatch con aria-label = color de la categoría debe estar seleccionado
+    const selectedSwatch = screen.getByRole("radio", { name: T4_FIRST });
+    expect(selectedSwatch).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("pre-selecciona el primer color de T4 en crear cuando no hay categorías activas (todas en cero → primero de T4)", () => {
+    // Con categories: [] → todos los colores de T4 tienen conteo 0 → el primero gana
+    renderModal({ category: null });
+
+    const firstT4Swatch = screen.getByRole("radio", { name: T4_FIRST });
+    expect(firstT4Swatch).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("pre-selecciona el segundo color de T4 en crear cuando el primero ya está en uso", () => {
+    // Inyectar una categoría activa con el primer color de T4
+    const catUsingFirst: Category = {
+      ...mockCategory,
+      id: "cat-existing",
+      color: CATEGORY_BASE_COLORS[0],
+    };
+    setupMock({ categories: [catUsingFirst] });
+
+    renderModal({ category: null });
+
+    // El segundo color de T4 debe quedar seleccionado
+    const secondColor = CATEGORY_BASE_COLORS[1];
+    const secondSwatch = screen.getByRole("radio", { name: secondColor });
+    expect(secondSwatch).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("al hacer clic en un swatch, ese queda seleccionado (aria-checked=true) y el anterior queda deseleccionado", async () => {
+    const user = userEvent.setup();
+    renderModal({ category: null });
+
+    // El tercer color de T4 (índice 2)
+    const targetColor = CATEGORY_BASE_COLORS[2];
+    const targetSwatch = screen.getByRole("radio", { name: targetColor });
+
+    await user.click(targetSwatch);
+
+    expect(targetSwatch).toHaveAttribute("aria-checked", "true");
+
+    // El primero (que estaba seleccionado antes) ya no debe estar seleccionado
+    const firstSwatch = screen.getByRole("radio", { name: T4_FIRST });
+    expect(firstSwatch).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("botón Aleatorio selecciona exactamente un swatch de la paleta", async () => {
+    const user = userEvent.setup();
+    renderModal({ category: null });
+
+    await user.click(screen.getByRole("button", { name: /aleatorio/i }));
+
+    // Exactamente un swatch debe estar seleccionado
+    const allSwatches = screen.getAllByRole("radio");
+    const selectedSwatches = allSwatches.filter(
+      (sw) => sw.getAttribute("aria-checked") === "true",
+    );
+    expect(selectedSwatches).toHaveLength(1);
+
+    // El color seleccionado (aria-label = hex) debe pertenecer a la paleta
+    const selectedColor = selectedSwatches[0].getAttribute("aria-label") ?? "";
+    const paletteUppercase = CATEGORY_COLOR_PALETTE.map((c) => c.toUpperCase());
+    expect(paletteUppercase).toContain(selectedColor.toUpperCase());
+  });
+
+  it("al crear con un color seleccionado manualmente, se envía ese color al backend", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    mockCreateCategory.mockResolvedValue({ success: true, category: mockCategory });
+
+    renderModal({ category: null, onClose });
+
+    // Elegir el cuarto color de T4
+    const targetColor = CATEGORY_BASE_COLORS[3]; // "#A98BD6"
+    await user.click(screen.getByRole("radio", { name: targetColor }));
+
+    await user.type(screen.getByLabelText(/nombre/i), "Transporte");
+    await user.click(screen.getByRole("button", { name: /crear categoría/i }));
+
+    await waitFor(() => {
+      expect(mockCreateCategory).toHaveBeenCalledWith(
+        expect.objectContaining({ color: targetColor }),
+      );
+    });
+  });
+
+  it("al editar y cambiar de color, se envía el nuevo color al backend", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    mockUpdateCategory.mockResolvedValue({ success: true, category: mockCategory });
+
+    renderModal({ category: mockCategory, onClose });
+
+    // El color actual es T4_FIRST; cambiar al quinto de T4
+    const newColor = CATEGORY_BASE_COLORS[4]; // "#E8C84A"
+    await user.click(screen.getByRole("radio", { name: newColor }));
+
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(mockUpdateCategory).toHaveBeenCalledWith(
+        "cat-1",
+        expect.objectContaining({ color: newColor }),
+      );
+    });
+  });
+});
+
+// ─── Tests unitarios: getLeastUsedBaseColor ───────────────────────────────────
+
+import { getLeastUsedBaseColor } from "@/types/category";
+
+describe("getLeastUsedBaseColor", () => {
+  it("devuelve el primer color de T4 cuando no hay categorías activas", () => {
+    expect(getLeastUsedBaseColor([])).toBe(CATEGORY_BASE_COLORS[0]);
+  });
+
+  it("devuelve el primer color de T4 cuando todos tienen el mismo conteo", () => {
+    const cats = CATEGORY_BASE_COLORS.map((color, i) => ({
+      ...mockCategory,
+      id: `cat-${i}`,
+      color,
+    }));
+    expect(getLeastUsedBaseColor(cats)).toBe(CATEGORY_BASE_COLORS[0]);
+  });
+
+  it("devuelve el color menos usado cuando hay un claro ganador", () => {
+    // Usar el primero 3 veces, el segundo 1 vez → el tercero (0 veces) debe ganar
+    const cats = [
+      { ...mockCategory, id: "a", color: CATEGORY_BASE_COLORS[0] },
+      { ...mockCategory, id: "b", color: CATEGORY_BASE_COLORS[0] },
+      { ...mockCategory, id: "c", color: CATEGORY_BASE_COLORS[0] },
+      { ...mockCategory, id: "d", color: CATEGORY_BASE_COLORS[1] },
+    ];
+    expect(getLeastUsedBaseColor(cats)).toBe(CATEGORY_BASE_COLORS[2]);
+  });
+
+  it("en empate entre múltiples colores de cero usos, devuelve el primero de T4 en orden", () => {
+    // Solo el primer color está usado; los demás tienen 0
+    const cats = [{ ...mockCategory, id: "a", color: CATEGORY_BASE_COLORS[0] }];
+    // El segundo tiene 0 → gana (es el primero en T4 con 0 usos)
+    expect(getLeastUsedBaseColor(cats)).toBe(CATEGORY_BASE_COLORS[1]);
+  });
+
+  it("es case-insensitive: cuenta colores en minúsculas o mezclados correctamente", () => {
+    const cats = [
+      { color: CATEGORY_BASE_COLORS[0].toLowerCase() }, // minúsculas
+      { color: CATEGORY_BASE_COLORS[1] },
+    ];
+    // El tercero tiene 0 → gana
+    expect(getLeastUsedBaseColor(cats)).toBe(CATEGORY_BASE_COLORS[2]);
+  });
+
+  it("ignora colores que no están en T4", () => {
+    // Un color fuera de T4 no debería afectar el conteo
+    const cats = [
+      { color: "#FFFFFF" }, // no está en T4
+      { color: CATEGORY_BASE_COLORS[0] },
+    ];
+    // Solo el primero de T4 tiene 1 uso; el segundo tiene 0 → gana el segundo
+    expect(getLeastUsedBaseColor(cats)).toBe(CATEGORY_BASE_COLORS[1]);
   });
 });

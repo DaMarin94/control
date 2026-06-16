@@ -260,7 +260,7 @@ Pantalla dedicada para administrar las categorías del usuario: listar, crear, e
 
 - **Sidebar** con el link "Categorías" marcado como activo.
 - **Lista de categorías activas** del usuario. Cada ítem muestra:
-  - Color de la categoría (indicador visual, no editable; asignado automáticamente desde el pool fijo — RF-CAT-005).
+  - Color de la categoría (indicador visual; el usuario lo elige/edita desde el modal — RF-CAT-005).
   - Nombre de la categoría.
   - Scope (AMBOS / GASTO / INGRESO).
   - Contador **"N movimientos"** — cantidad de movimientos asociados a la categoría. Es un dato derivado de solo lectura (RF-CAT-006).
@@ -278,7 +278,8 @@ Pantalla dedicada para administrar las categorías del usuario: listar, crear, e
 
 - **Creación (origen `/categorias`):** modal con campos vacíos; el campo "Tipo" (scope) ofrece las **tres** opciones (Gasto / Ingreso / Ambos) con **default "Ambos"**.
 - **Creación desde el formulario de carga de movimiento — modo inline (RF-MU-004):** el mismo modal se abre también desde el botón "+ Nueva" del formulario de carga (pantalla 5). En este origen el campo "Tipo" (scope) se comporta **distinto**: **solo ofrece las opciones compatibles** con el tipo del movimiento en curso y **oculta el tipo opuesto** — Gasto → "Gasto" + "Ambos" (oculta "Ingreso"); Ingreso → "Ingreso" + "Ambos" (oculta "Gasto"). La opción **pre-seleccionada** es el tipo exacto del movimiento (no "Ambos"); el usuario puede pasar a "Ambos" pero no elegir el tipo opuesto. Al crear/reactivar con éxito el modal se cierra y la categoría queda autoseleccionada en el formulario de carga. El resto del comportamiento del modal (validaciones, prompt de reactivación) es idéntico. Esta diferencia de opciones aplica **solo** en modo inline; abierto desde `/categorias`, el scope conserva las tres opciones con default "Ambos".
-- **Edición:** el mismo modal pre-cargado con nombre y scope actuales.
+- **Edición:** el mismo modal pre-cargado con nombre, scope y color actuales.
+- **Picker de color — matriz (RF-CAT-005), presente en crear y editar.** El modal incluye un selector de color con la **matriz de 70 colores** (7 tonalidades × 10 hues). En **crear**, arranca con el color **"menos usado"** pre-seleccionado como default (calculado sobre los 10 colores base); en **editar**, arranca con el **color actual** de la categoría seleccionado. Incluye un botón **"aleatorio"** que elige un color al azar de la matriz. Solo se puede elegir un color de la matriz (sin hex libre). El detalle visual del picker lo define `control-design` (`docs/design.md`).
 - **Validaciones:** el nombre es obligatorio y no puede estar vacío; no pueden coexistir dos categorías activas con el mismo nombre para el mismo usuario (RN-008).
 - **Acciones:** Guardar (valida y persiste, cierra el modal) y Cancelar (cierra sin guardar).
 

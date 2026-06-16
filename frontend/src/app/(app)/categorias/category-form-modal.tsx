@@ -7,6 +7,7 @@
  * - Scrim: fijo, ink/0.46 + blur(3px)
  * - Diálogo: max-width 380px, radio 18px, shadow-lg, animación modal-pop
  * - Scope picker: .scopepick (tres botones Ambos/Gasto/Ingreso, activo en accent)
+ * - Color picker: grid 10×7, ring de selección neutro (--ink), botón "Aleatorio" (Fase 1.1.2)
  *
  * Lógica preservada intacta.
  */
@@ -16,13 +17,17 @@ import { createPortal } from "react-dom";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { X } from "lucide-react";
+import { X, Shuffle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useCategories } from "@/hooks/use-categories";
-import { type Category } from "@/types/category";
+import {
+  type Category,
+  CATEGORY_COLOR_PALETTE,
+  getLeastUsedBaseColor,
+} from "@/types/category";
 import { ReactivationPrompt } from "./reactivation-prompt";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +36,7 @@ import { cn } from "@/lib/utils";
 const categorySchema = z.object({
   name: z.string().min(1, "El nombre es requerido").trim(),
   scope: z.enum(["BOTH", "EXPENSE", "INCOME"]),
+  color: z.string().min(1, "El color es requerido"),
 });
 
 type CategoryFormData = z.infer<typeof categorySchema>;
@@ -67,7 +73,8 @@ export function CategoryFormModal({
   useEffect(() => {
     setMounted(true);
   }, []);
-  const { createCategory, updateCategory, isCreating, isUpdating } = useCategories();
+
+  const { createCategory, updateCategory, isCreating, isUpdating, categories } = useCategories();
 
   // Estado para el prompt de reactivación
   const [reactivable, setReactivable] = useState<{
@@ -78,6 +85,12 @@ export function CategoryFormModal({
   } | null>(null);
 
   const defaultScope = lockScopeToType ?? (category?.scope ?? "BOTH");
+
+  // Color inicial: en editar = color actual; en crear = menos usado de T4
+  const activeCategories = categories ?? [];
+  const defaultColor = isEditing
+    ? category.color
+    : getLeastUsedBaseColor(activeCategories);
 
   const {
     register,
@@ -91,15 +104,21 @@ export function CategoryFormModal({
     defaultValues: {
       name: category?.name ?? "",
       scope: defaultScope,
+      color: defaultColor,
     },
   });
 
   // Sincronizar valores cuando cambia la categoría (al abrir en modo editar)
   useEffect(() => {
+    const syncColor = isEditing
+      ? category.color
+      : getLeastUsedBaseColor(activeCategories);
     reset({
       name: category?.name ?? "",
       scope: lockScopeToType ?? (category?.scope ?? "BOTH"),
+      color: syncColor,
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category, lockScopeToType, reset]);
 
   const isLoading = isEditing ? isUpdating : isCreating;
@@ -109,6 +128,7 @@ export function CategoryFormModal({
       const result = await updateCategory(category.id, {
         name: data.name,
         scope: data.scope,
+        color: data.color,
       });
 
       if (!result.success) {
@@ -128,6 +148,7 @@ export function CategoryFormModal({
       const result = await createCategory({
         name: data.name,
         scope: data.scope,
+        color: data.color,
       });
 
       if (!result.success) {
@@ -261,17 +282,17 @@ export function CategoryFormModal({
               </p>
             </div>
 
-            {/* Nota de color en modo editar */}
-            {isEditing && (
-              <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-3 py-2 text-[13px] text-muted">
-                <span
-                  className="inline-block h-4 w-4 shrink-0 rounded-chip border border-line"
-                  style={{ backgroundColor: category.color }}
-                  aria-hidden="true"
+            {/* Color picker */}
+            <Controller
+              name="color"
+              control={control}
+              render={({ field }) => (
+                <ColorPicker
+                  value={field.value}
+                  onChange={field.onChange}
                 />
-                El color se asigna automáticamente y no se puede cambiar.
-              </div>
-            )}
+              )}
+            />
           </div>
 
           {/* Footer */}
@@ -289,5 +310,95 @@ export function CategoryFormModal({
       </div>
     </div>,
     document.body,
+  );
+}
+
+// ─── ColorPicker ─────────────────────────────────────────────────────────────
+
+interface ColorPickerProps {
+  value: string;
+  onChange: (color: string) => void;
+}
+
+function ColorPicker({ value, onChange }: ColorPickerProps) {
+  function handleRandom() {
+    const idx = Math.floor(Math.random() * CATEGORY_COLOR_PALETTE.length);
+    onChange(CATEGORY_COLOR_PALETTE[idx]);
+  }
+
+  return (
+    <div className="flex flex-col gap-[7px]">
+      {/* Fila cabecera: Label + botón Aleatorio */}
+      <div className="flex items-center justify-between">
+        <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+          Color
+        </Label>
+        <button
+          type="button"
+          onClick={handleRandom}
+          aria-label="Elegir color aleatorio"
+          className="inline-flex items-center gap-[5px] rounded-ctl px-2 py-1 text-[12.5px] font-semibold text-ink-2 border border-line bg-panel transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+        >
+          <Shuffle size={15} aria-hidden="true" />
+          Aleatorio
+        </button>
+      </div>
+
+      {/* Grid de swatches */}
+      <div
+        role="radiogroup"
+        aria-label="Seleccionar color"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(10, 1fr)",
+          gap: "6px",
+        }}
+      >
+        {CATEGORY_COLOR_PALETTE.map((hex) => {
+          const isSelected = value.toUpperCase() === hex.toUpperCase();
+          return (
+            <button
+              key={hex}
+              type="button"
+              role="radio"
+              aria-checked={isSelected}
+              aria-label={hex}
+              onClick={() => onChange(hex)}
+              style={{
+                backgroundColor: hex,
+                aspectRatio: "1",
+                borderRadius: "var(--r-chip, 7px)",
+                border: isSelected
+                  ? "1px solid transparent"
+                  : "1px solid var(--line)",
+                boxShadow: isSelected
+                  ? "0 0 0 2px var(--panel), 0 0 0 4px var(--ink)"
+                  : undefined,
+                cursor: "pointer",
+                position: "relative",
+                transition: "transform 0.14s, box-shadow 0.14s, border-color 0.14s",
+                zIndex: 0,
+              }}
+              className={cn(
+                "hover:scale-[1.12] hover:z-10 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+                isSelected && "scale-100",
+              )}
+              onMouseEnter={(e) => {
+                if (!isSelected) {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--line-strong)";
+                  (e.currentTarget as HTMLButtonElement).style.boxShadow = "var(--shadow-sm)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isSelected) {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--line)";
+                  (e.currentTarget as HTMLButtonElement).style.boxShadow = "";
+                }
+              }}
+            />
+          );
+        })}
+      </div>
+    </div>
   );
 }

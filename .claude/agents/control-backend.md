@@ -85,12 +85,12 @@ Detalle funcional y de contrato en `docs/backend.md` (sección Autenticación). 
 Detalle de contrato en `docs/backend.md` (sección Categorías). Para agentes que toquen el backend:
 
 - **`ReactivableConflictException` + `error.data` opcional.** El caso "colisión con categoría eliminada" lanza esta excepción (409) que **adjunta un payload estructurado** (`error.data = { reactivable, category }`) al sobre de error. El Global Exception Filter se extendió de forma **mínima** para soportar un `data` **opcional**: es el único error que lo lleva. Patrón a seguir si otro error necesita adjuntar payload estructurado — no agregar `data` a errores que no lo requieran.
-- **Pool de colores central.** `src/categories/color-pool.ts` es la **única fuente** de los 10 colores; lo reusan `CategoriesService` y `AuthService`. No duplicar la lista ni hardcodear hex en otro lado. Asignación = color **menos usado** entre las activas del usuario (empate → primero del pool), determinística.
+- **Matriz/pool de colores central.** `src/categories/color-pool.ts` es la **única fuente** en el backend: `COLOR_MATRIX` (70 colores = set elegible por el usuario, fase 1.1.2) y `COLOR_POOL` (10 = fila base T4, base del "menos usado"). Lo reusan `CategoriesService` y `AuthService`. No duplicar ni hardcodear hex en otro lado. El `color` que llega en POST/PATCH se valida contra `COLOR_MATRIX` (`isValidCategoryColor()` / `@IsColorInMatrix`) y se normaliza a mayúsculas (`normalizeColorHex()`); fuera de la matriz → `400`. `assignColor()` (default cuando POST no trae color, red de seguridad) sigue calculando el **menos usado sobre `COLOR_POOL` (los 10 base)**, empate → primero, determinística. **Gotcha:** esta matriz está **espejada en el frontend** (`frontend/src/types/category.ts`, `CATEGORY_COLOR_PALETTE` / `CATEGORY_BASE_COLORS`) — no hay paquete compartido; si cambia la paleta, actualizar **ambos lados**. El criterio "menos usado" también está replicado en el front (`getLeastUsedBaseColor`).
 - **`normalizeName()` para comparar, no para almacenar.** trim + lowercase + NFD + strip de diacríticos. El `name` se **almacena tal cual lo tipeó el usuario**; la normalización es **solo** para detectar colisiones de unicidad (RN-014). No persistir el nombre normalizado.
 - **Estados inválidos → 404/409.** DELETE / PATCH / reactivate sobre una categoría en estado inválido cortan antes:
   - DELETE sobre **ya eliminada** → `404` (**no es idempotente**: no devuelve `204`).
   - PATCH sobre **eliminada** → `404`. Reactivate sobre **ya activa** → `409`; sobre inexistente/de otro usuario → `404`.
-  - El `color` no se acepta en POST ni PATCH → `400`.
+  - El `color` **es opcional** en POST y **editable** en PATCH (fase 1.1.2); fuera de la matriz → `400` (ver "Matriz/pool de colores central" arriba).
 
 ## Movimientos del mes (movements) — gotchas y decisiones
 

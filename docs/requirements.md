@@ -38,6 +38,7 @@ Cubre exclusivamente la plataforma **web** de Control en su versión 1.0. La pla
 |---|---|---|
 | 1.0 | 2026-06-03 | Versión inicial |
 | 1.1.1 | 2026-06-16 | Fijos extendidos: anulación por mes puntual (RF-MF-005) y periodicidad (RF-MF-006); nueva RN-016. Fase 1.1.1. |
+| 1.1.2 | 2026-06-16 | Color de categoría editable: el usuario elige/edita el color desde una matriz de 70 colores (reabre RF-CAT-005, RN-013; ajusta RF-CAT-002/003). Fase 1.1.2. |
 
 ---
 
@@ -771,7 +772,7 @@ Una compra o cobro dividido en N pagos mensuales iguales. El usuario ingresa el 
 
 ### 3.6 Módulo: Categorías
 
-Las categorías clasifican los movimientos. Son personalizables por usuario y tienen un scope que define a qué tipo de movimiento aplican, y un color asignado automáticamente desde un pool fijo (no editable en v1).
+Las categorías clasifican los movimientos. Son personalizables por usuario y tienen un scope que define a qué tipo de movimiento aplican, y un color que el usuario elige y edita desde una matriz de colores predefinidos (v1.1, fase 1.1.2).
 
 ---
 
@@ -829,7 +830,7 @@ Las categorías clasifican los movimientos. Son personalizables por usuario y ti
 - [ ] Al reactivar, la categoría vuelve **exactamente como estaba** (mismo `id`, scope y color) y sus movimientos históricos vuelven a quedar bajo la categoría activa; los datos tipeados en el alta se ignoran.
 - [ ] Al cancelar el prompt de reactivación, no se crea ni se reactiva ninguna categoría.
 - [ ] El scope puede ser: AMBOS, GASTO, INGRESO. Default: AMBOS.
-- [ ] El sistema asigna automáticamente un color a la categoría desde el pool fijo (RF-CAT-005); el usuario no lo elige.
+- [ ] El usuario **elige el color** de la categoría desde la matriz de colores (RF-CAT-005). El sistema **pre-selecciona** el color "menos usado" como default, pero el usuario puede cambiarlo (incluye un botón "aleatorio").
 - [ ] La categoría creada está disponible inmediatamente en los selectores de movimientos.
 - [ ] La gestión de categorías (crear, editar, eliminar y listar) vive en una pantalla separada y dedicada, accesible desde el link "Categorías" del sidebar (RF-NAV-001). No es un modal ni una sección embebida en otra pantalla.
 
@@ -842,14 +843,13 @@ Las categorías clasifican los movimientos. Son personalizables por usuario y ti
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El usuario puede modificar el nombre y el scope de una categoría existente. |
+| **Descripción** | El usuario puede modificar el nombre, el scope y el color de una categoría existente. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | La categoría existe y pertenece al usuario autenticado. |
 
 **Criterios de aceptación:**
-- [ ] El nombre y el scope son editables.
-- [ ] El color de la categoría no es editable en v1 (RF-CAT-005).
+- [ ] El nombre, el scope y el **color** son editables (color: ver RF-CAT-005; editable desde v1.1, fase 1.1.2).
 - [ ] No puede quedar con el mismo nombre que otra categoría activa del mismo usuario.
 - [ ] Los movimientos ya cargados con esa categoría reflejan automáticamente el nuevo nombre.
 
@@ -889,17 +889,24 @@ Las categorías clasifican los movimientos. Son personalizables por usuario y ti
 
 #### RF-CAT-005 — Color de categoría
 
+> **REABIERTO en v1.1 (Fase 1.1.2, 2026-06-16).** En v1.0 este RF definía el color como **asignado automáticamente y NO editable**. v1.1 lo reabre: el usuario **elige y edita** el color desde una matriz de colores. Lo que sigue es la definición vigente; el criterio v1.0 (no editable) queda derogado (ver bitácora 2026-06-16).
+
 | Campo | Detalle |
 |---|---|
-| **Descripción** | Cada categoría tiene un color asignado automáticamente desde un pool fijo de colores predefinidos. El color identifica visualmente a la categoría en la UI. En v1 el usuario no elige ni edita el color. |
-| **Actor** | Sistema |
+| **Descripción** | Cada categoría tiene un color que el usuario **elige y puede editar**, tanto al crear como al editar la categoría, desde una **matriz de colores predefinidos**. El color identifica visualmente a la categoría en la UI. |
+| **Actor** | Usuario autenticado |
 | **Prioridad** | Baja |
-| **Precondiciones** | Se crea una categoría (por defecto, manual, o por cualquiera de los métodos de alta de cuenta). |
+| **Precondiciones** | Se crea o edita una categoría. |
+
+**Matriz de colores:** el color se elige de una **matriz fija de 70 colores** (7 tonalidades × 10 hues, estilo Office). **No** hay ingreso de hex libre: solo colores que pertenezcan a la matriz. (Definición de la matriz y de la fila base en `docs/data-model.md`, "Pool de colores".)
 
 **Criterios de aceptación:**
-- [ ] El sistema asigna un color a cada categoría al crearla, tomado de un pool fijo de colores predefinidos.
-- [ ] La asignación aplica tanto a las categorías por defecto (RF-CAT-001) como a las creadas manualmente (RF-CAT-002).
-- [ ] El usuario no puede elegir ni modificar el color en v1 (ni al crear ni al editar la categoría).
+- [ ] Al **crear** una categoría, el usuario puede elegir su color de la matriz de 70 colores.
+- [ ] El sistema **pre-selecciona** un color por defecto al abrir el alta: el color **"menos usado"** entre las categorías activas del usuario, calculado sobre los 10 colores base (RN-013). El usuario puede dejar ese default o elegir otro de la matriz.
+- [ ] Existe un botón **"aleatorio"** que selecciona un color al azar de la matriz.
+- [ ] Al **editar** una categoría, el color es modificable: el picker abre con el color actual de la categoría seleccionado.
+- [ ] Solo se aceptan colores que pertenezcan a la matriz; no hay hex libre.
+- [ ] Las categorías por defecto del alta de cuenta (RF-CAT-001) se siguen asignando automáticamente (el alta no tiene UI de elección).
 - [ ] El color es solo de presentación: no afecta el cálculo de montos, el scope ni ninguna regla de negocio.
 
 ---
@@ -1153,7 +1160,7 @@ El gráfico anual visualiza los movimientos del usuario a lo largo de un año, m
 | RN-010 | El selector de categorías se filtra según el tipo del movimiento en curso: para `EXPENSE` se muestran categorías con scope `EXPENSE` o `BOTH`; para `INCOME` se muestran categorías con scope `INCOME` o `BOTH`. |
 | RN-011 | El movimiento único representa un instante (fecha y hora). Se almacena como timestamp en UTC junto con la zona horaria original del registro (nombre IANA). Se muestra siempre en esa zona horaria original, sin importar dónde se encuentre el usuario después. El mes al que pertenece el movimiento se determina en la zona del propio registro, de forma estable. Los movimientos fijos y las cuotas no aplican esta regla: operan a nivel mes, sin día ni hora. Ver `docs/technical.md` (sección "Fechas y zonas horarias") para el detalle técnico. |
 | RN-012 | Las contraseñas de las cuentas con email + contraseña se almacenan siempre **hasheadas** (bcrypt/argon2), nunca en texto plano. El hash y la verificación ocurren en el backend; el frontend nunca almacena ni compara contraseñas. Las cuentas creadas solo con Google pueden no tener contraseña. |
-| RN-013 | Cada categoría tiene un color asignado automáticamente desde un pool fijo de colores predefinidos. El color es de presentación únicamente; en v1 el usuario no lo elige ni lo edita. |
+| RN-013 | Cada categoría tiene un color tomado de una **matriz de colores predefinidos** (70 colores). Desde v1.1 (fase 1.1.2) el usuario lo **elige y edita** al crear o editar la categoría; solo se aceptan colores de la matriz (sin hex libre). Al **crear**, el sistema pre-selecciona como default el color "menos usado" entre las categorías activas del usuario, calculado sobre los **10 colores base** (la fila base de la matriz). Las categorías por defecto del alta se asignan automáticamente. El color es de presentación únicamente: no afecta montos, scope ni ninguna regla de negocio. (En v1.0 el color era no editable; reabierto en la fase 1.1.2 — ver bitácora 2026-06-16.) |
 | RN-014 | Para comparar nombres de categoría a efectos de unicidad, el nombre se **normaliza**: trim de espacios, insensible a mayúsculas/minúsculas e insensible a acentos/tildes. Ej: "comida", "Comida" y "Cómida" se consideran el mismo nombre. Esta normalización aplica tanto a la detección de duplicado contra categorías **activas** (bloqueo, RN-008) como contra categorías **eliminadas** (soft delete) para proponer reactivarla (RF-CAT-002). La regla se valida en **ambas capas** —backend como fuente de verdad y frontend para UX— y ambas deben mantenerse alineadas (ver `docs/technical.md`). |
 | RN-015 | Para la agregación anual del gráfico (RF-GRA-001), el mes al que se imputa cada movimiento se determina con el **mismo criterio ya definido** para la Vista del mes, sin introducir una regla de zona horaria nueva: para los movimientos **únicos**, el mes se calcula en la **zona horaria propia de cada registro** (RN-011, igual que el bucketeo de `GET /movements`); para los **fijos** y las **cuotas**, que operan a nivel mes (RN-006), el mes es el de su `startMonth` `YYYY-MM` (los fijos caen en cada mes donde están activos; las cuotas, en cada mes de su tramo). Un movimiento se imputa a un año determinado solo si su mes resuelto pertenece a ese año. |
 | RN-016 | **Frecuencia y anulación de movimientos fijos (RF-MF-005, RF-MF-006).** Un movimiento fijo con mes de inicio `S` y frecuencia `F` aparece en el mes `M` si y solo si: `S <= M` **y** (`deletedFrom` es null **o** `deletedFrom > M`) **y** `monthDiff(S, M) % step(F) === 0`, donde el paso por frecuencia es `MONTHLY=1`, `BIMONTHLY=2`, `QUARTERLY=3`, `BIANNUAL=6`, `ANNUAL=12`. La frecuencia está **anclada al mes de inicio** (no al mes consultado). Una **anulación** `(fijo, mes)` no cambia si el fijo aparece o no según esta regla: un fijo anulado para un mes **se sigue listando** en `GET /movements` con la marca de anulado, pero su monto **no suma** a los totales del mes ni a la proyección anual. La anulación es **reversible** (toggle) y solo tiene sentido sobre meses donde el fijo efectivamente aparece según `F`. El cálculo sigue siendo on-the-fly (RN-006): no se generan filas por instancia mensual. |
@@ -1413,5 +1420,17 @@ Motivo de la feature: reducir la fricción de cargar un movimiento cuya categor�
 4. **Back-compat de usuarios viejos sin fila.** La fila **no se crea en lectura**: `GET /preferences` y el armado del `AuthResponse` devuelven `{}` sin materializarla. Se crea en el `PUT` (upsert) o en el alta de cuenta nueva (junto a las categorías por defecto).
 
 **Alcance v1.1.0:** exactamente el mecanismo descripto — **no** se definen claves de preferencias ni features de producto (eso llega con 1.1.4 / 1.1.5 / 1.1.6). No se agrega un RF en este punto: la fase es infraestructura de datos/sesión sin comportamiento observable por el usuario (igual criterio que otras piezas de cimiento); los RF correspondientes nacerán con las fases consumidoras, que sí definen comportamiento de pantalla. Impacta `docs/data-model.md` (nueva entidad + contratos + `AuthResponse`), `docs/backend.md` (módulo `preferences`, `buildAuthResult` async, gotchas) y `docs/frontend.md` (preferencias en la sesión, hook `usePreferences`). Motivo: construir primero el cimiento que varias fases de v1.1 consumen evita rehacer esas fases, y el blob JSON deja sumar preferencias sin migraciones.
+
+**2026-06-16 — Color de categoría editable desde una matriz de colores — Fase 1.1.2 (REABRE RF-CAT-005, RN-013).** Se **reabre una decisión cerrada de v1.0**: el color de categoría pasa de **"asignado automáticamente y NO editable"** (entrada 2026-06-04, "Color de categoría desde pool fijo, no editable en v1") a **elegible y editable por el usuario**. Decisiones cerradas:
+
+1. **El usuario elige y edita el color**, tanto al **crear** como al **editar** la categoría, desde una **matriz fija de 70 colores** (7 tonalidades × 10 hues, estilo Office). **No** hay hex libre: solo colores de la matriz.
+
+2. **Default al crear: el color "menos usado".** Al abrir el alta, el sistema **pre-selecciona** el color menos usado entre las categorías activas del usuario, calculado sobre los **10 colores base** (la fila base de la matriz, que coincide con el pool de 10 de v1.0). El usuario puede dejar ese default o elegir otro. Hay además un botón **"aleatorio"** que toma un color al azar de la matriz.
+
+3. **El color sigue siendo solo de presentación** (no afecta montos ni scope). Las **categorías por defecto del alta** (RF-CAT-001) se siguen asignando automáticamente (el alta no tiene UI de elección de color).
+
+4. **Back-compat:** los colores preexistentes son todos de la fila base (los 10 de v1.0), que es un subconjunto de la matriz de 70 — ya pertenecen a ella, sin migración de datos.
+
+**Contrato:** `POST /categories` y `PATCH /categories/:id` ahora **aceptan** `color?: string` opcional, validado contra la matriz de 70 (case-insensitive, se almacena en mayúsculas); fuera de la matriz → `400`. En `POST` sin color, el backend asigna el menos-usado como red de seguridad (el frontend igualmente siempre lo envía). Impacta RF-CAT-005 (reabierto), RF-CAT-002 y RF-CAT-003 (criterios de color), RN-013, `docs/screens.md` (pantalla 6, modal crear/editar con picker de matriz), `docs/data-model.md` (pool/matriz + contrato de categoría), `docs/backend.md` (`COLOR_MATRIX`, validación en DTOs) y `docs/frontend.md` (`ColorPicker`, paleta espejada). `docs/design.md` lo cubre `control-design`. Motivo: el usuario quiere identificar sus categorías con un color propio en vez de aceptar el asignado; la matriz acota la elección a una paleta coherente sin abrir hex libre.
 
 **2026-06-15 — Forma 2 del gráfico anual muestra todas las categorías sin agrupar (RF-GRA-001).** Se cierra una decisión de producto sobre la **Forma 2 (gastos por categoría, apilado)** del gráfico anual: en **v1 se muestran TODAS las categorías con gasto, sin agrupar ni colapsar** ninguna en una banda "Otras", sin tope de categorías visibles. Esto es **fiel a RF-GRA-001**, que ya definía "una banda por categoría" sin límite. La decisión surgió porque `control-design`, por legibilidad cuando hay muchas categorías (más de 8), había propuesto agrupar la cola en una banda "Otras"; el usuario decidió **NO** hacerlo en v1. La agrupación "Otras" / colapso de la cola de categorías queda como **candidato post-v1** (anotado en `docs/features.md`, Roadmap post v1). Se agrega un criterio de aceptación a RF-GRA-001 dejándolo explícito. Impacta RF-GRA-001 y `docs/features.md`. **No** impacta `docs/screens.md`, `docs/design.md`, `docs/backend.md` ni `docs/data-model.md`, ni el código. Motivo: respetar el requerimiento ya escrito (sin tope de bandas) y no introducir en v1 una agrupación que aún no está definida en su UX; la legibilidad con muchas categorías se evaluará después.

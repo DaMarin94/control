@@ -10,6 +10,8 @@
  * - Soft delete
  * - Contador de movimientos
  * - Aislamiento por userId
+ * - Color editable en create y update (Fase 1.1.2)
+ * - Validación de color contra COLOR_MATRIX
  */
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -19,6 +21,7 @@ import { CategoriesService } from '../../../src/categories/categories.service';
 import { CategoriesRepository, CategoryWithCount } from '../../../src/categories/categories.repository';
 import { ReactivableConflictException } from '../../../src/common/exceptions/reactivable-conflict.exception';
 import { normalizeName } from '../../../src/categories/categories.repository';
+import { isValidCategoryColor, COLOR_MATRIX } from '../../../src/categories/color-pool';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -116,6 +119,51 @@ describe('CategoriesService', () => {
       const original = 'Café con Leche';
       normalizeName(original);
       expect(original).toBe('Café con Leche');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // isValidCategoryColor (helper — tests directos)
+  // -------------------------------------------------------------------------
+
+  describe('isValidCategoryColor (COLOR_MATRIX)', () => {
+    it('acepta colores de la fila T4 (COLOR_POOL) en mayúsculas', () => {
+      expect(isValidCategoryColor('#4F86C6')).toBe(true);
+      expect(isValidCategoryColor('#E07B54')).toBe(true);
+      expect(isValidCategoryColor('#7DBF9E')).toBe(true);
+    });
+
+    it('acepta colores de otras filas de la matriz (T1, T7)', () => {
+      // T1 primer color
+      expect(isValidCategoryColor('#DCE7F4')).toBe(true);
+      // T7 último color
+      expect(isValidCategoryColor('#304E40')).toBe(true);
+    });
+
+    it('es case-insensitive: acepta minúsculas', () => {
+      expect(isValidCategoryColor('#4f86c6')).toBe(true);
+      expect(isValidCategoryColor('#dce7f4')).toBe(true);
+    });
+
+    it('rechaza un hex arbitrario no en la matriz', () => {
+      expect(isValidCategoryColor('#FF0000')).toBe(false);
+      expect(isValidCategoryColor('#123456')).toBe(false);
+    });
+
+    it('rechaza un string vacío', () => {
+      expect(isValidCategoryColor('')).toBe(false);
+    });
+
+    it('la matriz contiene exactamente 70 colores', () => {
+      const total = COLOR_MATRIX.flat().length;
+      expect(total).toBe(70);
+    });
+
+    it('la matriz tiene 7 filas de 10 columnas cada una', () => {
+      expect(COLOR_MATRIX.length).toBe(7);
+      for (const row of COLOR_MATRIX) {
+        expect(row.length).toBe(10);
+      }
     });
   });
 
@@ -279,17 +327,43 @@ describe('CategoriesService', () => {
       ).rejects.toThrow(ReactivableConflictException);
     });
 
-    it('asigna color del pool automáticamente (no toma color del body)', async () => {
+    it('sin color en DTO → asigna color del pool automáticamente', async () => {
       setupNoCollision();
-      const created = makeCategory({ color: '#4F86C6' });
-      mockRepo.create.mockResolvedValue(created);
-
-      await service.create(USER_A, { name: 'Nueva' });
-
-      // El color asignado viene del pool, no lo pone el usuario
-      expect(mockRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ color: expect.stringMatching(/^#[0-9A-F]{6}$/i) }),
+      mockRepo.create.mockImplementation((data: Record<string, unknown>) =>
+        Promise.resolve(makeCategory({ color: data['color'] as string })),
       );
+
+      const result = await service.create(USER_A, { name: 'Nueva' });
+
+      // Con todos los colores en 0, elige el primero del pool: #4F86C6
+      expect(result.color).toBe('#4F86C6');
+      // No llama a assignColor con color del DTO, usa el de pool
+      expect(mockRepo.countActiveByColor).toHaveBeenCalledWith(USER_A);
+    });
+
+    it('con color válido en DTO → usa ese color (no llama a assignColor)', async () => {
+      mockRepo.findByNormalizedName.mockResolvedValue({ active: null, deleted: null });
+      const chosenColor = '#84A9D6'; // T3, válido en la matriz
+      mockRepo.create.mockImplementation((data: Record<string, unknown>) =>
+        Promise.resolve(makeCategory({ color: data['color'] as string })),
+      );
+
+      const result = await service.create(USER_A, { name: 'Nueva', color: chosenColor });
+
+      expect(result.color).toBe('#84A9D6');
+      // No debe consultar el pool si viene color
+      expect(mockRepo.countActiveByColor).not.toHaveBeenCalled();
+    });
+
+    it('color en DTO en minúsculas → se normaliza a mayúsculas', async () => {
+      mockRepo.findByNormalizedName.mockResolvedValue({ active: null, deleted: null });
+      mockRepo.create.mockImplementation((data: Record<string, unknown>) =>
+        Promise.resolve(makeCategory({ color: data['color'] as string })),
+      );
+
+      const result = await service.create(USER_A, { name: 'Nueva', color: '#84a9d6' });
+
+      expect(result.color).toBe('#84A9D6');
     });
 
     it('aislamiento: llama a findByNormalizedName con el userId correcto', async () => {
@@ -352,15 +426,6 @@ describe('CategoriesService', () => {
 
     it('en empate elige el primero en orden del pool', async () => {
       setupNoCollision();
-      // #4F86C6 y #E07B54 tienen el mismo conteo mínimo
-      // Los otros colores del pool no están en el map → cuentan como 0
-      // (menos que #4F86C6 y #E07B54 que tienen 2)
-      // Para que el empate sea entre los primeros, necesitamos que todos
-      // los colores del pool sin mapear también estén en conteo alto.
-      // Mejor: todos tienen count=2 excepto los primeros dos que tienen count=2 también.
-      // En realidad los colores no en el map tienen count=0, que es menor.
-      // Usamos un map que cubre todos los colores del pool con igual conteo
-      // excepto un subconjunto donde los primeros dos están empatados en mínimo.
       const colorCount = new Map([
         ['#4F86C6', 2],
         ['#E07B54', 2],
@@ -382,6 +447,17 @@ describe('CategoriesService', () => {
 
       // #4F86C6 va primero en el pool y está empatado en mínimo (2) con #E07B54
       expect(result.color).toBe('#4F86C6');
+    });
+
+    it('cuando llega color en DTO, no consulta el pool (no asigna automáticamente)', async () => {
+      setupNoCollision();
+      mockRepo.create.mockImplementation((data: Record<string, unknown>) =>
+        Promise.resolve(makeCategory({ color: data['color'] as string })),
+      );
+
+      await service.create(USER_A, { name: 'Cat', color: '#B6CDE9' }); // T2
+
+      expect(mockRepo.countActiveByColor).not.toHaveBeenCalled();
     });
   });
 
@@ -495,6 +571,30 @@ describe('CategoriesService', () => {
       const result = await service.update(USER_A, 'cat-001', { scope: CategoryScope.EXPENSE });
 
       expect(result.scope).toBe(CategoryScope.EXPENSE);
+    });
+
+    it('actualiza color válido exitosamente', async () => {
+      const existing = makeCategory({ id: 'cat-001', color: '#4F86C6' });
+      mockRepo.findById.mockResolvedValue(existing);
+      const newColor = '#84A9D6'; // T3, válido
+      const updated = { ...existing, color: newColor };
+      mockRepo.update.mockResolvedValue(updated);
+
+      const result = await service.update(USER_A, 'cat-001', { color: newColor });
+
+      expect(result.color).toBe('#84A9D6');
+      expect(mockRepo.update).toHaveBeenCalledWith('cat-001', { color: '#84A9D6' });
+    });
+
+    it('actualiza color en minúsculas → se normaliza a mayúsculas en el update', async () => {
+      const existing = makeCategory({ id: 'cat-001', color: '#4F86C6' });
+      mockRepo.findById.mockResolvedValue(existing);
+      const updated = { ...existing, color: '#84A9D6' };
+      mockRepo.update.mockResolvedValue(updated);
+
+      await service.update(USER_A, 'cat-001', { color: '#84a9d6' });
+
+      expect(mockRepo.update).toHaveBeenCalledWith('cat-001', { color: '#84A9D6' });
     });
 
     it('colisión de nombre con otra activa → ConflictException (RN-014)', async () => {

@@ -4,7 +4,8 @@
  * Estrategia: mock de PrismaService (sin DB real en CI).
  * Cubre: sobre de respuesta, códigos HTTP, normalización RN-014,
  * flujo reactivable (shape exacto), aislamiento por userId,
- * soft delete, reactivate, edición con unicidad.
+ * soft delete, reactivate, edición con unicidad,
+ * color editable (Fase 1.1.2): crear con color válido/inválido, editar color.
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
@@ -47,6 +48,14 @@ const mockPrisma = {
     findMany: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+  },
+  // recurringSkip — necesario para RecurringModule (Fase 1.1.1)
+  recurringSkip: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    delete: jest.fn(),
+    deleteMany: jest.fn(),
   },
   // installmentGroup — necesario para InstallmentsModule (Fase 7 — registrado en AppModule)
   installmentGroup: {
@@ -128,7 +137,7 @@ describe('Categories (e2e)', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     mockPrisma.category.createMany.mockResolvedValue({ count: 0 });
   });
 
@@ -265,7 +274,72 @@ describe('Categories (e2e)', () => {
       expect(res.body.success).toBe(false);
     });
 
-    it('400 si se envía un campo no permitido (whitelist)', async () => {
+    it('400 si se envía campo desconocido (whitelist)', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/categories')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ name: 'Test', unknownField: 'oops' })
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+    });
+
+    // --- Color en POST (Fase 1.1.2) ---
+
+    it('201 con color válido de la matriz → se usa ese color', async () => {
+      mockPrisma.category.findMany
+        .mockResolvedValueOnce([]) // findByNormalizedName
+        .mockResolvedValueOnce([]); // countActiveByColor (no debería llamarse, pero por si acaso)
+      const colorElegido = '#84A9D6'; // T3, válido
+      const created = makeDbCategory({ name: 'Viajes', color: colorElegido });
+      mockPrisma.category.create.mockResolvedValue(created);
+
+      const res = await request(app.getHttpServer())
+        .post('/categories')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ name: 'Viajes', color: colorElegido })
+        .expect(201);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.color).toBe(colorElegido);
+    });
+
+    it('201 con color en minúsculas → se acepta (normalizado a mayúsculas)', async () => {
+      mockPrisma.category.findMany
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+      const created = makeDbCategory({ name: 'Test', color: '#84A9D6' });
+      mockPrisma.category.create.mockResolvedValue(created);
+
+      const res = await request(app.getHttpServer())
+        .post('/categories')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ name: 'Test', color: '#84a9d6' })
+        .expect(201);
+
+      expect(res.body.success).toBe(true);
+    });
+
+    it('400 si el color no pertenece a la matriz', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/categories')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ name: 'Test', color: '#FF0000' })
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(400);
+      // El mensaje de error menciona la paleta
+      const errorMessage: string =
+        typeof res.body.error.message === 'string'
+          ? res.body.error.message
+          : Array.isArray(res.body.error.message)
+            ? res.body.error.message.join(' ')
+            : '';
+      expect(errorMessage.toLowerCase()).toMatch(/paleta|color/i);
+    });
+
+    it('400 si el color es un hex arbitrario libre (no en la matriz)', async () => {
       const res = await request(app.getHttpServer())
         .post('/categories')
         .set('Authorization', `Bearer ${tokenA}`)
@@ -278,7 +352,7 @@ describe('Categories (e2e)', () => {
     it('colisión con activa → 409 con mensaje de duplicado (RN-008)', async () => {
       const activecat = makeDbCategory({ name: 'Consumibles' });
       // findByNormalizedName llama a findMany → retorna la activa
-      mockPrisma.category.findMany.mockResolvedValue([activecat]);
+      mockPrisma.category.findMany.mockResolvedValueOnce([activecat]);
 
       const res = await request(app.getHttpServer())
         .post('/categories')
@@ -444,11 +518,66 @@ describe('Categories (e2e)', () => {
       expect(res.body.data.name).toBe('Nuevo');
     });
 
-    it('400 si se intenta editar el color (whitelist)', async () => {
+    // --- Color en PATCH (Fase 1.1.2) ---
+
+    it('200 editando color a un valor válido de la matriz', async () => {
+      const existing = makeDbCategory({ id: 'cat-001', color: '#4F86C6' });
+      mockPrisma.category.findUnique.mockResolvedValue(existing);
+      const newColor = '#1F3551'; // T7, válido
+      const updated = { ...existing, color: newColor };
+      mockPrisma.category.update.mockResolvedValue(updated);
+
+      const res = await request(app.getHttpServer())
+        .patch('/categories/cat-001')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ color: newColor })
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.color).toBe(newColor);
+    });
+
+    it('200 editando color en minúsculas → aceptado (normalizado a mayúsculas)', async () => {
+      const existing = makeDbCategory({ id: 'cat-001', color: '#4F86C6' });
+      mockPrisma.category.findUnique.mockResolvedValue(existing);
+      const updated = { ...existing, color: '#1F3551' };
+      mockPrisma.category.update.mockResolvedValue(updated);
+
+      const res = await request(app.getHttpServer())
+        .patch('/categories/cat-001')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ color: '#1f3551' })
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+    });
+
+    it('400 si el color no pertenece a la matriz', async () => {
+      const res = await request(app.getHttpServer())
+        .patch('/categories/cat-001')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ color: '#FF0000' })
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(400);
+    });
+
+    it('400 si el color es un hex arbitrario libre', async () => {
       const res = await request(app.getHttpServer())
         .patch('/categories/cat-001')
         .set('Authorization', `Bearer ${tokenA}`)
         .send({ color: '#123456' })
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+    });
+
+    it('400 si se envía campo desconocido (whitelist)', async () => {
+      const res = await request(app.getHttpServer())
+        .patch('/categories/cat-001')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ unknownField: 'oops' })
         .expect(400);
 
       expect(res.body.success).toBe(false);

@@ -121,7 +121,8 @@ CRUD de categorías. Se accede desde el **link "Categorías" del sidebar** (RF-N
 
 Lista de categorías **activas**: por fila el color, el nombre, el scope legible (`AMBOS` / `GASTO` / `INGRESO`) y el contador `"N movimientos"`. Botón "Nueva categoría". Acciones por fila: **Editar**, **Eliminar**. Estados: Cargando, Con datos, Vacío.
 
-- **Modal único crear/editar:** "Nueva categoría" lo abre vacío; "Editar" lo abre pre-cargado. Campos: nombre y scope. El **color no se edita** (lo asigna el backend).
+- **Modal único crear/editar:** "Nueva categoría" lo abre vacío; "Editar" lo abre pre-cargado. Campos: nombre, scope y **color** (`ColorPicker`, fase 1.1.2).
+- **`ColorPicker` (grid 10×7).** Selector de color con la matriz de 70 colores, presente en crear y editar. En **crear** arranca con el **menos-usado** pre-seleccionado (`getLeastUsedBaseColor()`, replica el criterio de `assignColor` del backend sobre la fila base); en **editar**, con el color actual. Tiene botón **"aleatorio"**. El front siempre envía `color` al backend.
 - **Eliminar:** diálogo de confirmación antes del soft delete.
 
 ### Flujo de reactivación (409 reactivable)
@@ -136,6 +137,10 @@ Al crear, si el backend responde `409` con `error.data.reactivable`, el modal **
 - El **futuro selector de categorías** del formulario de movimientos **debe reusar `CATEGORIES_QUERY_KEY`** para compartir caché.
 
 > **Nota — `Select` primitivo:** el scope se elige con un `Select` que es un `<select>` **nativo** (no Radix). Es un primitivo mínimo, reemplazable a futuro en un solo lugar.
+
+### Paleta de colores — espejo del backend (gotcha)
+
+La matriz de colores vive como **constante propia del front** en `types/category.ts` (`CATEGORY_COLOR_PALETTE` = los 70; `CATEGORY_BASE_COLORS` = la fila base de 10). Es un **espejo de la matriz del backend** (`COLOR_MATRIX` / `COLOR_POOL` en `backend/src/categories/color-pool.ts`) — **no hay paquete compartido** (consistente con el patrón general del proyecto). **Gotcha:** si se cambia la paleta hay que actualizar **ambos lados**. Además, `getLeastUsedBaseColor()` **replica el criterio de `assignColor` del backend** (menos-usado sobre la fila base) para el default en crear; también vive en los dos lados.
 
 ### Uso dual de `CategoryFormModal` (standalone vs inline)
 

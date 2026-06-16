@@ -106,6 +106,7 @@ Re-estilado de todas las pantallas y modales con los tokens del DS y migración 
 - **`isReactivableError`** — type guard sobre el `ApiError` para discriminar el `409` reactivable (que ofrece Reactivar/Cancelar) del `409` de colisión-con-activa (error de duplicado común). El flujo de reactivación **ignora lo tipeado** en el form: la categoría vuelve con su scope y color originales.
 - **`CATEGORIES_QUERY_KEY = ["categories"]`.** Clave de React Query del hook `use-categories`; todas las mutaciones la invalidan. El **futuro selector de categorías** en el formulario de movimientos **DEBE reusar esta misma clave** para compartir caché — no crear una clave nueva.
 - **`Select` primitivo es `<select>` nativo (no Radix).** Mínimo, reemplazable a futuro en un solo lugar.
+- **Paleta de color espejada con el backend (fase 1.1.2).** La matriz vive en `types/category.ts` (`CATEGORY_COLOR_PALETTE` = 70; `CATEGORY_BASE_COLORS` = fila base de 10) como **espejo** de `COLOR_MATRIX` / `COLOR_POOL` del backend — **no hay paquete compartido**. **Gotcha:** si cambia la paleta, actualizar **ambos lados**. El `ColorPicker` (grid 10×7) del modal de categoría usa esta paleta; `getLeastUsedBaseColor()` **replica el criterio de `assignColor` del backend** (menos-usado sobre la fila base) para el default en crear. El front **siempre envía `color`** en POST/PATCH.
 
 ### Movimientos únicos (detalle en `docs/frontend.md`, sección Movimientos únicos)
 

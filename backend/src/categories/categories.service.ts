@@ -12,7 +12,7 @@ import {
 } from './categories.repository';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
-import { COLOR_POOL } from './color-pool';
+import { COLOR_POOL, normalizeColorHex } from './color-pool';
 import {
   ReactivableConflictException,
   ReactivablePayload,
@@ -93,8 +93,10 @@ export class CategoriesService {
       );
     }
 
-    // 4. Sin colisión → asignar color del pool y crear
-    const color = await this.assignColor(userId);
+    // 4. Sin colisión → usar color provisto o asignar del pool (RF-CAT-005)
+    const color = dto.color !== undefined
+      ? normalizeColorHex(dto.color)
+      : await this.assignColor(userId);
     const scope = dto.scope ?? CategoryScope.BOTH;
 
     const category = await this.repo.create({
@@ -191,6 +193,7 @@ export class CategoriesService {
     const updated = await this.repo.update(id, {
       ...(dto.name !== undefined && { name: dto.name }),
       ...(dto.scope !== undefined && { scope: dto.scope }),
+      ...(dto.color !== undefined && { color: normalizeColorHex(dto.color) }),
     });
 
     this.logger.log(

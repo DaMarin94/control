@@ -142,28 +142,112 @@ Foco visible del DS: anillo de 3px en `--accent-soft` (`shadow-[0_0_0_3px_var(--
 
 ---
 
-## Paleta de colores para categorías — RESUELTO (2026-06-14)
+## Paleta de colores para categorías — REABIERTO y RESUELTO (Fase 1.1.2, 2026-06-16)
 
-Las categorías **no tienen una paleta propia definida en el DS**: cada categoría trae **su color asignado por el backend** desde un pool fijo de 10 colores (RF-CAT-005 / RN-013), embebido en el dato como `category.color`. El DS **consume** ese color tal cual; no lo reasigna, no lo retiñe, no inventa swatches alternativos.
+> **Reabre la decisión de v1.0** (color de categoría no editable, pool fijo de 10 como única fuente). A partir de la Fase 1.1.2 el usuario **elige y edita** el color de una categoría —tanto al crear como al editar— desde una **matriz de colores tipo Office** (sin entrada de hex libre). La sección anterior ("color no editable, pool fijo es la fuente") queda **superada** por esta. El pool de 10 de `backend/src/categories/color-pool.ts` **no desaparece**: pasa a ser **una fila identificable de la matriz** (la fila base), para back-compat de las categorías ya pintadas.
 
-El pool es la fuente de verdad (`backend/src/categories/color-pool.ts`). Valores vigentes (no se cambian acá):
+### Regla dura que se mantiene
 
-| # | Hex | Nombre |
-|---|---|---|
-| 1 | `#4F86C6` | azul |
-| 2 | `#E07B54` | naranja |
-| 3 | `#6DBF67` | verde |
-| 4 | `#A98BD6` | violeta |
-| 5 | `#E8C84A` | amarillo |
-| 6 | `#5BC4B8` | turquesa |
-| 7 | `#E06B8B` | rosa |
-| 8 | `#8B9DBF` | azul grisáceo |
-| 9 | `#C47D3E` | marrón |
-| 10 | `#7DBF9E` | verde menta |
+El color de categoría sigue siendo **solo un identificador de categoría** (swatch en la lista, bandas del apilado de la Forma 2 del gráfico, swatch en leyendas). **Nunca** tiñe un monto ni comunica ingreso/gasto — eso lo siguen haciendo income/expense (regla dura 1). La matriz fue construida para **no chocar** con los semánticos ni con la marca: ningún hex de la matriz es el verde income (`#1f8a5b`), el rojo expense (`#c64637`) ni el índigo de acento.
 
-**Convivencia con las reglas duras:** el pool fue elegido para **no chocar** con los semánticos ni con la marca: ninguno es el verde income (`#1f8a5b`), el rojo expense (`#c64637`) ni el índigo de acento. El `#6DBF67` (verde) y el `#E07B54` (naranja) son tonos claramente distintos de los semánticos, por lo que se usan sin reserva como color de categoría. **Regla:** el color de categoría se usa **solo** como identificador de categoría (swatch en la lista, bandas del apilado de la Forma 2 del gráfico). Nunca se usa para teñir un monto ni para comunicar ingreso/gasto — eso lo siguen haciendo income/expense.
+### La matriz — fuente de verdad compartida (10 base × 7 tonalidades)
 
-**Dónde se consume hoy:** swatch de la fila de categoría (pantalla `/categorias`, 14px radio 5px) y bandas del gráfico anual Forma 2 (ver sección siguiente).
+La matriz es la **única fuente de verdad** del set de colores elegibles: el backend la usa para **validar** que el color recibido pertenezca a la matriz, y el frontend para **renderizar** el picker. Cualquier hex fuera de esta lista es inválido.
+
+- **Estructura:** 7 **filas** (T1 = más clara, arriba → T7 = más oscura, abajo) × 10 **columnas** (un hue por columna, en el **mismo orden del pool actual**: azul, naranja, verde, violeta, amarillo, turquesa, rosa, azul grisáceo, marrón, verde menta).
+- **Fila base = pool actual:** la fila **T4** es **exactamente** el pool de 10 colores vigente de `color-pool.ts`, en su orden original. Es la fila "media" de cada columna y la que hace back-compat: una categoría ya pintada con un color del pool cae sobre un swatch de T4, que el picker resalta como seleccionado.
+- **Total:** 70 swatches. Todos los hex son explícitos abajo (no se derivan en runtime: esta tabla **es** la fuente).
+- **Cálculo del "menos usado" (default al crear):** se mantiene tal cual hoy — sobre los **10 colores base de la fila T4** (no sobre los 70). El sistema preselecciona el color base menos usado entre las categorías activas; el usuario puede cambiarlo a cualquiera de los 70.
+
+**Orden de columnas (índice → hue, idéntico a `color-pool.ts`):**
+
+| Col | Hue |
+|---|---|
+| C1 | azul |
+| C2 | naranja |
+| C3 | verde |
+| C4 | violeta |
+| C5 | amarillo |
+| C6 | turquesa |
+| C7 | rosa |
+| C8 | azul grisáceo |
+| C9 | marrón |
+| C10 | verde menta |
+
+**Matriz de hex (filas T1→T7 de claro a oscuro; T4 es el pool actual, resaltada):**
+
+| Fila | C1 azul | C2 naranja | C3 verde | C4 violeta | C5 amarillo | C6 turquesa | C7 rosa | C8 azul gris | C9 marrón | C10 v. menta |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **T1** | `#DCE7F4` | `#F8E2D7` | `#E0F1DE` | `#ECE4F6` | `#FBF3D1` | `#D8F0ED` | `#F8DEE7` | `#E3E8F0` | `#F0E0CD` | `#DDF1E8` |
+| **T2** | `#B6CDE9` | `#F1C4AE` | `#C2E4BF` | `#D6C6ED` | `#F6E6A6` | `#B2E2DB` | `#F1BDCC` | `#C8D1E1` | `#E2C19C` | `#BCE4D2` |
+| **T3** | `#84A9D6` | `#E89E78` | `#97D08F` | `#BFA4E1` | `#EFD56F` | `#83D2C7` | `#E893AB` | `#A9B6CD` | `#D29F66` | `#9BD5B8` |
+| **T4** | `#4F86C6` | `#E07B54` | `#6DBF67` | `#A98BD6` | `#E8C84A` | `#5BC4B8` | `#E06B8B` | `#8B9DBF` | `#C47D3E` | `#7DBF9E` |
+| **T5** | `#3E6BA3` | `#BC6241` | `#54A04E` | `#8A6BB8` | `#C2A52E` | `#46A096` | `#BD5572` | `#71819F` | `#A2632C` | `#629E81` |
+| **T6** | `#2E5079` | `#8E4A30` | `#3E7739` | `#674F89` | `#917B1F` | `#33766F` | `#8C3F55` | `#546077` | `#794927` | `#497660` |
+| **T7** | `#1F3551` | `#5F311F` | `#284E25` | `#443458` | `#5F5113` | `#214E49` | `#5D2A39` | `#383F4F` | `#502F19` | `#304E40` |
+
+**Lista canónica ordenada (para backend/frontend) — recorrido por filas, de T1 a T7, cada fila C1→C10:**
+
+```
+T1: #DCE7F4 #F8E2D7 #E0F1DE #ECE4F6 #FBF3D1 #D8F0ED #F8DEE7 #E3E8F0 #F0E0CD #DDF1E8
+T2: #B6CDE9 #F1C4AE #C2E4BF #D6C6ED #F6E6A6 #B2E2DB #F1BDCC #C8D1E1 #E2C19C #BCE4D2
+T3: #84A9D6 #E89E78 #97D08F #BFA4E1 #EFD56F #83D2C7 #E893AB #A9B6CD #D29F66 #9BD5B8
+T4: #4F86C6 #E07B54 #6DBF67 #A98BD6 #E8C84A #5BC4B8 #E06B8B #8B9DBF #C47D3E #7DBF9E   ← pool actual (back-compat)
+T5: #3E6BA3 #BC6241 #54A04E #8A6BB8 #C2A52E #46A096 #BD5572 #71819F #A2632C #629E81
+T6: #2E5079 #8E4A30 #3E7739 #674F89 #917B1F #33766F #8C3F55 #546077 #794927 #497660
+T7: #1F3551 #5F311F #284E25 #443458 #5F5113 #214E49 #5D2A39 #383F4F #502F19 #304E40
+```
+
+Notas de construcción (para entender la matriz, no son reglas que el código deba recalcular):
+- Cada columna conserva el **hue del color base de T4**; lo que varía por fila es la claridad (y un leve ajuste de saturación: las T1–T2 son pasteles desaturados; las T6–T7, profundas). Esto da el patrón de "una familia por columna" típico de un picker tipo Office.
+- Las filas claras (T1–T3) son aptas como fondo de chip; las oscuras (T6–T7) garantizan contraste para swatches sobre panel blanco. Todas se usan **igual** como color de categoría (identificador), sin que la fila implique semántica.
+- Verde income y rojo expense quedan fuera de la matriz por construcción; los verdes (C3, C10) y el rojo/rosa (C7) de la matriz son hues claramente distintos de los semánticos.
+
+---
+
+## Picker de color de categoría — spec visual (Fase 1.1.2, 2026-06-16)
+
+> Spec del selector de color dentro del modal de categoría (`category-form-modal.tsx`, RF-CAT-002 / RF-CAT-003). Mismo picker en **crear** y **editar**. Reemplaza la "nota de color de solo lectura" que hoy aparece solo en editar, y agrega el color al modo crear (hoy ausente). No introduce tokens nuevos: todo se resuelve con los tokens/patrones vigentes del DS "Precise Ledger". El modal mantiene su `max-width` 380px, radio 18px, `shadow-lg`.
+
+### Ubicación dentro del form
+
+Un bloque nuevo "Color", **debajo del scope picker (Alcance)** y antes del footer. Es el último bloque del cuerpo del form en ambos modos. Respeta el ritmo del form: mismo `space-y-[14px]` entre bloques, mismo patrón de bloque (`flex flex-col gap-[7px]` con `Label` arriba). En **editar** este bloque **sustituye** a la nota read-only de color que hoy existe (`isEditing && (…)`): esa nota se elimina; en su lugar va el picker, igual que en crear.
+
+- **Label del bloque:** `Color`, con el estilo de label del form (`text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]`). No marcado `required` (siempre hay un color preseleccionado; el usuario no puede dejarlo vacío).
+- **Fila de cabecera del bloque (Label + acción "aleatorio"):** el `Label` y el botón "aleatorio" comparten una fila `flex items-center justify-between`. Label a la izquierda; botón "aleatorio" a la derecha (ver "Botón aleatorio").
+
+### Layout de la matriz (grid de swatches)
+
+- **Grid:** 10 columnas × 7 filas (`grid-template-columns: repeat(10, 1fr)`), una columna por hue, una fila por tonalidad, en el orden de la matriz (T1 arriba → T7 abajo; C1→C10 izq→der). El orden visual **es** el de la tabla de la matriz, para que se lea como familias verticales de color.
+- **Swatch:** cuadrado con `aspect-ratio: 1`, radio `--r-chip` (7px). Con 10 columnas dentro del ancho útil del modal (~336px: 380 − 2×22 de padding), cada swatch resulta ~**26–28px** de lado. No fijar px de lado: que el ancho lo reparta el grid (`1fr`) y la altura la dé `aspect-ratio: 1`.
+- **Gaps:** `gap` 6px entre swatches (fila y columna). Coherente con la escala de espaciado (6px existe en la escala).
+- **Alto total del grid:** el que resulte de 7 filas de ~26–28px + 6 gaps de 6px ≈ **220–240px**. No se fija alto rígido; el grid crece con su contenido. El modal sigue sin scroll propio en desktop (entra holgado bajo el `max-height` del diálogo).
+- **`margin-top` del grid respecto de su Label/fila de cabecera:** 7px (el `gap-[7px]` del bloque).
+
+### Estados del swatch
+
+Cada swatch es un `button type="button"` con el color de fondo (`background-color: <hex>`) y `aria-label` con el nombre legible si se tiene (ej. "azul claro"); si no, el hex. Tres estados:
+
+- **Reposo:** fondo = su hex. Borde sutil `1px` `--line` **solo** para los swatches muy claros (filas T1–T2), para que un pastel no se funda con el panel blanco; los demás sin borde (el color ya contrasta). Regla simple para el frontend: aplicar el borde `--line` a **todos** los swatches en reposo (1px, inset visualmente neutro) — uniforma la grilla y resuelve el caso de los claros sin lógica condicional. `cursor: pointer`.
+- **Hover:** el swatch **escala a 1.12** (`transform: scale(1.12)`, transición 0.14s, el hover estándar del DS) y eleva con `--shadow-sm`; el borde pasa a `--line-strong`. El escalado da feedback sin recolorear el swatch (no se puede oscurecer/aclarar el color porque alteraría su identidad). `z-index` elevado en hover para que el swatch agrandado no quede tapado por sus vecinos.
+- **Seleccionado (el color elegido):** el swatch lleva un **anillo de selección**: `box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--ink)`. Es decir, un primer halo de 2px del color del panel (separa el anillo del swatch) y un segundo anillo de 2px en `--ink` (el ring de selección, neutro fuerte). Se usa `--ink` —no el acento— porque el acento es solo marca y no debe teñir la selección de color de categoría; un ring neutro oscuro marca "este es el elegido" sin competir con los colores ni romper la regla del acento. El swatch seleccionado **no** escala (queda firme); el ring lo distingue. Además, ✓ opcional: un check `--panel` (blanco) de 14px centrado sobre swatches oscuros (T5–T7) y un check `--ink` sobre swatches claros (T1–T4) refuerza la selección — **opcional**, el ring es la señal canónica y suficiente; el check queda a criterio de implementación si mejora la lectura. (Si el frontend duda con la lógica claro/oscuro del check, omitirlo: el ring basta.)
+- **Focus (teclado):** mismo ring de foco del DS — `shadow-[0_0_0_3px_var(--accent-soft)]` — aplicado al swatch enfocado por teclado (`focus-visible`). Acá el `--accent-soft` es ring de interacción de UI (foco), no tiñe el color de categoría, así que es admisible (mismo criterio que el cursor de hover de los gráficos). El grid es navegable por teclado (cada swatch es un `button`).
+
+### Botón "aleatorio"
+
+- **Ubicación:** en la fila de cabecera del bloque Color, a la derecha del Label "Color" (`justify-between`).
+- **Estilo:** botón **ghost chico** del DS — patrón `.btn.ghost.sm`: sin fill, texto `--ink-2`, ícono a la izquierda, `hover:bg-panel-2 hover:text-ink`, radio `--r-ctl`, foco con `--accent-soft`. Texto: `Aleatorio`. Ícono lucide `Shuffle` 15px a la izquierda del texto (coherente con el tamaño de íconos de botones chicos del DS). Tamaño de texto 12.5–13px/600.
+- **Comportamiento visual:** al pulsarlo, selecciona **un swatch al azar de la matriz** (de los 70 — no un hex arbitrario; la aleatoriedad sale de la matriz, nunca fuera de ella) y mueve el estado "seleccionado" a ese swatch: el ring de selección salta al nuevo swatch, con la transición de 0.14s. No abre otro control ni cambia el layout. Es un atajo para elegir dentro de la misma matriz visible.
+
+### Presencia en crear y editar
+
+- **Crear:** el picker aparece con el color **menos usado** (cálculo sobre la fila T4 / pool actual, ver matriz) ya **seleccionado** (ring puesto). El usuario puede cambiarlo a cualquiera de los 70 o usar "Aleatorio".
+- **Editar:** el picker aparece con el **color actual de la categoría** ya **seleccionado** (ring puesto sobre su swatch). Por back-compat, los colores viejos viven en la fila T4, así que el ring cae sobre un swatch existente y visible. El usuario puede cambiarlo. **Desaparece** la nota "El color se asigna automáticamente y no se puede cambiar." (ya no es cierta).
+- En ambos modos el bloque es idéntico en layout, estados y posición (debajo de Alcance). La única diferencia es cuál swatch arranca seleccionado.
+
+### Convivencia con las reglas duras (recordatorio)
+
+El ring de selección usa `--ink` (neutro), no el acento (regla dura 2 intacta: el índigo sigue siendo solo marca). Ningún swatch del picker tiñe montos ni comunica ingreso/gasto (regla dura 1 intacta). Los colores elegidos se siguen consumiendo como identificador de categoría en `/categorias` (swatch 14px radio 5px) y en las bandas/leyendas del gráfico anual, sin cambios en esos consumos.
 
 ---
 

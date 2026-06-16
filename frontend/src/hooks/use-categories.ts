@@ -106,6 +106,7 @@ export function useCategories() {
 
   async function createCategory(data: CreateCategoryRequest): Promise<CreateCategoryResult> {
     try {
+      // color se incluye tal cual viene en data (el frontend siempre lo envía)
       const category = await createMutation.mutateAsync(data);
       return { success: true, category };
     } catch (err) {

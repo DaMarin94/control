@@ -10,7 +10,7 @@
 | Entidad | Descripción |
 |---------|-------------|
 | **Usuario** | Puede autenticarse por **Google** o por **email + contraseña** (dos métodos que coexisten en v1). El email identifica al usuario. Las cuentas con email + contraseña almacenan un hash de la contraseña (`passwordHash`); las cuentas creadas solo con Google pueden no tener contraseña. Se crea al hacer login con Google por primera vez o al registrarse con email + contraseña. Todos los demás recursos le pertenecen. Tiene un campo `timezone` (zona horaria default / "de casa"). |
-| **Categoría** | Clasifica los movimientos. Personalizable por usuario. Tiene un color asignado automáticamente desde un pool fijo de colores predefinidos (no editable por el usuario en v1). Se elimina con soft delete. |
+| **Categoría** | Clasifica los movimientos. Personalizable por usuario. Tiene un color que el usuario **elige y edita** desde una matriz de colores predefinidos (v1.1, fase 1.1.2; en v1.0 era no editable). Se elimina con soft delete. |
 | **Movimiento único** | Gasto o ingreso que ocurrió una sola vez en un instante específico (fecha y hora). Se guarda como timestamp UTC (`occurredAt`) más la zona horaria original del registro (`timezone`, nombre IANA). No es solo una fecha de calendario. |
 | **Movimiento fijo** | Plantilla recurrente activa desde un mes de inicio hasta que el usuario la elimina. Tiene una **frecuencia** (`frequency`) de un set cerrado —mensual (default), bimestral, trimestral, semestral, anual— que define en qué meses aparece, anclada al mes de inicio (Fase 1.1.1, RF-MF-006). |
 | **Anulación de fijo (RecurringSkip)** | Marca que **anula una aparición** de un movimiento fijo en un **mes puntual** (`(recurringId, month)`), sin eliminar el fijo. Reversible (toggle). El mes anulado se sigue mostrando pero no suma a los totales ni a la proyección anual. Cimiento de P1 (Fase 1.1.1, RF-MF-005). Distinta de `deletedFrom`. |
@@ -24,7 +24,7 @@
 - **Montos en centavos.** Todos los montos se guardan como enteros en centavos (ej: $1.500 → `150000`). Sin decimales flotantes.
 - **Soft delete en categorías.** Eliminar una categoría la marca como eliminada (`deletedAt`) pero no borra el registro. Los movimientos históricos conservan la referencia y siguen sumando en los totales del mes (el soft delete no excluye movimientos de los cálculos). Una categoría eliminada puede **reactivarse**: al crear una categoría cuyo nombre normalizado colisiona con una eliminada, el sistema propone reactivar la original en lugar de duplicarla (mismo `id`, scope y color); ver `requirements.md`, RF-CAT-002 / RF-CAT-004.
 - **Unicidad de nombre de categoría: app-level, no DB.** La unicidad de nombre entre categorías **activas** de un mismo usuario se valida en lógica de aplicación, no con un constraint `@@unique` de Prisma/DB. Motivo: la comparación es **normalizada** (trim + insensible a mayúsculas y acentos) y el flujo "crear-o-reactivar" frente a una categoría soft-deleted homónima no caben en un constraint de base de datos.
-- **Color de categoría asignado automáticamente.** Cada categoría tiene un color tomado de un **pool fijo de colores predefinidos**. El sistema lo asigna al crear la categoría (incluidas las categorías por defecto de la cuenta nueva); el usuario **no** elige ni edita el color en v1, ni al crear ni al editar. El color es solo presentación (identificar visualmente la categoría en la UI) y no afecta el cálculo de montos ni el scope.
+- **Color de categoría elegible por el usuario (v1.1, fase 1.1.2).** Cada categoría tiene un color tomado de una **matriz de colores predefinidos** (70 colores). El usuario lo **elige y edita** al crear y al editar la categoría; solo se aceptan colores de la matriz (sin hex libre). Al **crear**, el sistema **pre-selecciona** como default el color "menos usado" entre las categorías activas (sobre los 10 colores base de la matriz), pero el usuario puede cambiarlo. Las **categorías por defecto** de la cuenta nueva se asignan automáticamente. El color es solo presentación (identificar visualmente la categoría en la UI) y no afecta el cálculo de montos ni el scope. (En v1.0 el color era no editable; reabierto en la fase 1.1.2 — ver `requirements.md`, bitácora 2026-06-16.)
 - **Movimientos fijos: el pasado es inmutable.** Editar o eliminar un fijo no modifica los meses ya pasados. El fijo tiene un mes de inicio (`startMonth`) y opcionalmente un mes desde el cual deja de aparecer (`deletedFrom`, **exclusivo**: "mes desde el cual ya no aparece").
 - **El movimiento fijo se modela como una _cadena_ de filas `Recurring`, no una sola.** Un "fijo lógico" puede estar compuesto por varias filas en el tiempo. Cada edición que afecta meses ya corridos **cierra la fila vigente** (le setea `deletedFrom = mes actual`) y **abre una fila nueva** (`startMonth = mes actual`) con los valores nuevos; así los meses pasados conservan los valores viejos y el actual/futuro toman los nuevos, sin generar filas por instancia mensual. Si el fijo todavía no corrió ningún mes, la edición es en su lugar (no se parte la cadena). Esto materializa "el pasado es inmutable". Detalle de la mecánica (split al editar, boundary de eliminación) en `docs/backend.md`, sección Movimientos fijos.
 - **Frecuencia del movimiento fijo (Fase 1.1.1, RF-MF-006).** Cada fijo tiene un campo `frequency` (enum `RecurringFrequency`, default `MONTHLY`) de un **set cerrado**: `MONTHLY`, `BIMONTHLY`, `QUARTERLY`, `BIANNUAL`, `ANNUAL` (sin frecuencias libres ni custom). La frecuencia está **anclada al `startMonth`**: el fijo aparece en el mes `M` solo si `monthDiff(startMonth, M) % step(frequency) === 0`, donde el paso es 1 / 2 / 3 / 6 / 12 respectivamente (ver RN-016). Es **inmutable** (como `type`): no se acepta en PATCH; en el split de edición la fila nueva la hereda del original. **Back-compat:** la migración asigna `MONTHLY` por default, así que todos los fijos anteriores quedan mensuales. El cálculo sigue siendo on-the-fly (RN-006).
@@ -85,7 +85,7 @@ Categoria = {
   userId: string,
   name: string,                          // tal cual lo tipeó el usuario
   scope: "BOTH" | "EXPENSE" | "INCOME",
-  color: string,                         // "#hex" del pool, no editable
+  color: string,                         // "#HEX" de la matriz, en mayúsculas; editable (fase 1.1.2)
   deletedAt: null,                       // las respuestas solo traen activas
   createdAt: string,
   updatedAt: string,
@@ -94,6 +94,7 @@ Categoria = {
 ```
 
 - **`movementCount` — derivado de solo lectura.** Es la suma de las **tres relaciones de movimiento** que referencian la categoría: movimientos únicos + fijos + grupos de cuotas. No es un campo almacenado ni editable; el backend lo calcula al responder. Cero si la categoría no tiene movimientos. Alimenta el contador "N movimientos" de la pantalla de categorías (RF-CAT-006) y **no** se confunde con los totales de dinero del mes (ver `requirements.md`, RF-VM-002).
+- **`color` — editable, de la matriz (fase 1.1.2).** `POST /categories` y `PATCH /categories/:id` aceptan `color?: string` **opcional**. Validación: debe **pertenecer a la matriz de 70** (case-insensitive; se **almacena en mayúsculas**); un color fuera de la matriz → **`400`**. En `POST`, si **no** llega `color`, el backend asigna el "menos usado" como **red de seguridad** — pero el frontend **siempre lo envía**. Detalle de la validación en `docs/backend.md`, sección Pool de colores.
 
 ### Payload reactivable en errores (409)
 
@@ -108,9 +109,13 @@ error.data = {
 
 - Es el **único** caso en que el sobre de error lleva `data`; el resto de los errores no lo incluyen. El front usa `category.id` para ofrecer reactivar (`POST /categories/:id/reactivate`) sin un endpoint extra de búsqueda. La colisión con una categoría **activa** (RN-008) responde `409` **sin** `data`.
 
-### Pool de colores (dato del dominio)
+### Matriz de colores (dato del dominio)
 
-El color de categoría sale de un **pool fijo de 10 colores** predefinidos, único en el backend. El sistema asigna el **menos usado** entre las categorías activas del usuario al crear cada categoría (en empate, el primero del pool); las 4 por defecto toman los primeros 4 en orden. El color **no es editable** por el usuario (ni al crear ni al editar) y es solo presentación. Detalle de los 10 valores y la estrategia en `docs/backend.md`, sección Pool de colores.
+El set **elegible** por el usuario es una **matriz de 70 colores** (`COLOR_MATRIX`: 7 tonalidades × 10 hues, estilo Office), única en el backend. Desde la fase 1.1.2 el color **es editable** por el usuario, tanto al crear como al editar; solo se aceptan colores de la matriz (sin hex libre).
+
+- **Pool de 10 (fila base T4) conservado como base del "menos usado".** Los **10 colores base** son la fila T4 de la matriz —que coincide con el pool fijo de 10 de v1.0—. Al **crear**, el sistema pre-selecciona como default el color **menos usado** entre las categorías activas del usuario calculado **sobre esos 10 base** (en empate, el primero en orden); las categorías por defecto del alta toman los primeros 4 en orden. Es solo un default: el usuario puede elegir cualquiera de los 70.
+- **Back-compat:** los colores preexistentes son todos de T4 (los 10 de v1.0), que es un subconjunto de la matriz de 70 — ya pertenecen a ella, sin migración.
+- El color es solo presentación. Detalle de `COLOR_MATRIX` / `COLOR_POOL` (T4) y la estrategia en `docs/backend.md`, sección Pool de colores.
 
 ---
 

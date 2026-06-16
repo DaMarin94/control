@@ -392,7 +392,7 @@ Categoria = {
   id, userId,
   name,                              // string, almacenado tal cual lo tipeó el usuario
   scope: "BOTH" | "EXPENSE" | "INCOME",
-  color: "#hex",                     // del pool, no editable
+  color: "#HEX",                     // de la matriz, en mayúsculas; editable (fase 1.1.2)
   deletedAt: null,                   // siempre null en las respuestas (solo se devuelven activas)
   createdAt, updatedAt,
   movementCount: number              // derivado, solo lectura
@@ -406,26 +406,29 @@ Categoria = {
 | Endpoint | Body | Éxito | Errores |
 |----------|------|-------|---------|
 | `GET /categories` | — | `200` · `data: Categoria[]` | — |
-| `POST /categories` | `{ name, scope? }` | `201` · `data: Categoria` | `400` · `409` (dos casos, ver abajo) |
+| `POST /categories` | `{ name, scope?, color? }` | `201` · `data: Categoria` | `400` · `409` (dos casos, ver abajo) |
 | `POST /categories/:id/reactivate` | — (ignora el body) | `200` · `data: Categoria` | `404` · `409` |
-| `PATCH /categories/:id` | `{ name?, scope? }` | `200` · `data: Categoria` | `400` · `404` · `409` |
+| `PATCH /categories/:id` | `{ name?, scope?, color? }` | `200` · `data: Categoria` | `400` · `404` · `409` |
 | `DELETE /categories/:id` | — | `204 No Content` | `404` |
 
 - **`GET /categories`** — solo activas (`deletedAt` null), ordenadas por **nombre ascendente**, cada una con su `movementCount`.
-- **`POST /categories`** — `name` obligatorio y no vacío; `scope` opcional (default `BOTH`). El campo **`color` NO se acepta**: enviarlo es `400`. Dos casos de `409`:
+- **`POST /categories`** — `name` obligatorio y no vacío; `scope` opcional (default `BOTH`); **`color` opcional** (fase 1.1.2): debe pertenecer a la matriz de 70 (case-insensitive, se normaliza a mayúsculas). Si **no** llega `color`, el backend asigna el "menos usado" como red de seguridad (el front igualmente siempre lo envía). Dos casos de `409`:
   - **Colisión con una categoría activa** (RN-008): `error.message` = `"Ya existe una categoría activa..."`, **sin** `error.data`. Es un bloqueo duro de duplicado.
   - **Colisión con una categoría eliminada / reactivable** (RF-CAT-002, A3): `error.data = { reactivable: true, category: { id, name, scope, color } }`. El front usa ese `id` para ofrecer reactivar. Ver `ReactivableConflictException` abajo.
-  - `400`: nombre vacío o faltante, `scope` inválido, o campo no permitido (`color`).
+  - `400`: nombre vacío o faltante, `scope` inválido, o `color` fuera de la matriz.
 - **`POST /categories/:id/reactivate`** — reactiva una categoría soft-deleted. Vuelve **exactamente como estaba** (mismo `id`, `name`, `scope`, `color`); lo que el usuario haya tipeado en el form de alta **se ignora**. `404` si no existe o no es del usuario; `409` si ya está activa.
-- **`PATCH /categories/:id`** — `name` y/o `scope`. El **`color` NO es editable**: enviarlo es `400`. `409` si el nuevo nombre colisiona con otra categoría activa (RN-014). `404` si no existe, no es del usuario, o está eliminada.
+- **`PATCH /categories/:id`** — `name`, `scope` y/o **`color`** (fase 1.1.2: el color **es editable**; debe pertenecer a la matriz, case-insensitive, se almacena en mayúsculas — fuera de la matriz es `400`). `409` si el nuevo nombre colisiona con otra categoría activa (RN-014). `404` si no existe, no es del usuario, o está eliminada.
 - **`DELETE /categories/:id`** — soft delete (marca `deletedAt`). **`204` sin cuerpo.** **No es idempotente**: borrar una categoría **ya eliminada** devuelve `404` (no `204`). También `404` si no existe o no es del usuario.
 
 ### Pool de colores (RF-CAT-005)
 
-- **Única fuente:** `backend/src/categories/color-pool.ts`. 10 colores fijos:
+- **Única fuente:** `backend/src/categories/color-pool.ts`.
+- **`COLOR_MATRIX` — set elegible (70 colores, fase 1.1.2).** Matriz de 7 tonalidades × 10 hues (estilo Office). Es el conjunto de colores que el usuario puede elegir al crear/editar una categoría. La **fila T4** de la matriz es el pool de 10 base (ver `COLOR_POOL`).
+- **`COLOR_POOL` — pool de 10 (fila base T4), sin cambios.** Los 10 colores base:
   `#4F86C6`, `#E07B54`, `#6DBF67`, `#A98BD6`, `#E8C84A`, `#5BC4B8`, `#E06B8B`, `#8B9DBF`, `#C47D3E`, `#7DBF9E`.
-  Los primeros 4 son los que en Fase 2 eran "provisorios" para las categorías por defecto — ahora son parte del pool oficial. `AuthService` y `CategoriesService` importan el pool del mismo módulo; no hay colores hardcodeados sueltos.
-- **Asignación (determinística):** al crear una categoría se elige el color del pool **menos usado** entre las categorías **activas** del usuario; en empate gana el **primero en orden de definición**. Las 4 categorías por defecto del alta toman los primeros 4 colores en orden. El color no se reasigna al editar.
+  Los primeros 4 son los de las categorías por defecto. `AuthService` y `CategoriesService` importan del mismo módulo; no hay colores hardcodeados sueltos.
+- **Validación: `isValidCategoryColor()` / `normalizeColorHex()`.** El `color` recibido en `POST`/`PATCH` se **normaliza a mayúsculas** (`normalizeColorHex()`) y se **valida contra la matriz** (`isValidCategoryColor()`) en los DTOs vía el validador **`@IsColorInMatrix`**; un color fuera de la matriz es `400`. Solo colores de la matriz, sin hex libre.
+- **`assignColor()` — default "menos usado", sobre la fila base T4 (`COLOR_POOL`), sin cambios.** Cuando el `POST` no trae `color` (red de seguridad — el front siempre lo envía), se asigna el color de `COLOR_POOL` **menos usado** entre las categorías **activas** del usuario; en empate gana el **primero en orden de definición**. Las 4 categorías por defecto del alta toman los primeros 4 colores en orden. El cálculo del menos-usado se hace **sobre los 10 base**, no sobre los 70. El color no se reasigna al editar; el usuario lo cambia explícitamente.
 
 ### Normalización y unicidad (RN-014)
 

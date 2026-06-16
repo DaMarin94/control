@@ -18,6 +18,7 @@
 | Fijos extendidos — anular por mes (P1) + periodicidad (P2) | RF-MF-005..006, RN-016 | Implementado (fase 1.1.1) |
 | Movimiento en cuotas — crear, visualizar, editar, eliminar | RF-MC-001..003 | Implementado (solo Gasto en v1) |
 | Categorías — defaults + CRUD + soft delete | RF-CAT-001..006 | Implementado |
+| Color de categoría editable — matriz de 70 colores | RF-CAT-005, RN-013 | Implementado (fase 1.1.2) |
 | Vista del mes — lista + totales + navegación | RF-VM-001..004 | Implementado |
 | Navegación global — sidebar persistente | RF-NAV-001 | Implementado |
 | Crear categoría desde el formulario de movimiento | RF-MU-004 | Implementado (los tres tabs) |
@@ -42,7 +43,7 @@
 
 - **CRUD completo operativo** (backend NestJS + frontend Next.js), scopeado por `userId` del JWT: crear, editar, eliminar (soft delete) y listar con el contador "N movimientos" (RF-CAT-006).
 - **Flujo crear-o-reactivar:** crear con un nombre que colisiona con una categoría eliminada propone reactivar la original en vez de duplicar (RF-CAT-002 / RF-CAT-004). El backend lo señala con un `409` que adjunta `error.data` (ver `docs/backend.md` y `docs/data-model.md`).
-- **Color automático del pool:** pool fijo de 10 colores en el backend, asignación "menos usado" (RF-CAT-005). El usuario no elige ni edita el color.
+- **Color de categoría editable desde una matriz (RF-CAT-005):** **reabierto en la fase 1.1.2.** En Fase 3 el color era automático y no editable (pool fijo de 10, asignación "menos usado"). Desde 1.1.2 el usuario **elige y edita** el color, al crear y al editar, desde una **matriz de 70 colores** (7 tonalidades × 10 hues); **sin hex libre**. Default al crear: el color **"menos usado"** pre-seleccionado (calculado sobre los 10 colores base, que son la fila base de la matriz y coinciden con el pool de v1.0), más un botón **"aleatorio"**. Ver nota "Color de categoría editable" más abajo.
 - **Acceso a `/categorias`:** en Fase 3 era solo por URL (sin sidebar). El sidebar de navegación global (RF-NAV-001) **ya se implementó** post-Fase 7; ver nota "Navegación global" más abajo.
 
 ### Movimientos únicos (Fase 4)
@@ -116,6 +117,14 @@
 - **P2 — periodicidad (RF-MF-006):** el tab Fijo suma un selector de **frecuencia** (set cerrado: Mensual default, Bimestral, Trimestral, Semestral, Anual), **anclada al mes de inicio** e **inmutable** tras crearse (read-only en edición; en el split R2 la hereda). **Back-compat:** los fijos preexistentes quedan mensuales (default de migración). La nota de recurrencia del form se ajusta a la frecuencia elegida ("…cada mes / cada dos meses / …").
 - **Backend (`RecurringModule` + `MovementsModule`):** enum `RecurringFrequency` y campo `frequency` (default `MONTHLY`) en `Recurring`; tabla `RecurringSkip`. Endpoint nuevo **`POST /recurring/:id/skip`** (toggle, body `{ month }`, respuesta `{ skipped, month }`); `POST /recurring` acepta `frequency` opcional; PATCH no la acepta (inmutable). El `MovementItem` de `/movements` y la serie anual suman los campos `frequency` y `skipped`. La lógica "¿este fijo aparece en este mes?" se **centralizó** en los helpers `isOnFrequency` / `frequencyStep` de `movements.repository.ts` (antes duplicada en 4 lugares); los skips de la proyección anual se cargan como `Map<recurringId, Set<month>>` en una sola query (evita N+1). El backend valida del skip solo formato `YYYY-MM` y ownership, no que el mes sea una aparición real (eso es del frontend). Contratos en `docs/data-model.md` y `docs/backend.md`.
 - **Migración (Prisma 7 sin shadow DB):** generada con `prisma migrate diff`, aplicada con `prisma db push` y marcada con `prisma migrate resolve --applied` (patrón documentado en `docs/technical.md`, sección Migraciones).
+
+### Color de categoría editable — matriz de 70 colores (fase 1.1.2)
+
+- **Reabre una decisión cerrada de v1.0.** En v1.0 el color era auto-asignado y **no editable** (RF-CAT-005 original). v1.1 lo reabre: el usuario **elige y edita** el color, al crear y al editar la categoría, desde una **matriz fija de 70 colores** (7 tonalidades × 10 hues, estilo Office); **sin hex libre** —solo colores de la matriz—. RF-CAT-005 y RN-013 (vigentes) en `docs/requirements.md`; bitácora 2026-06-16; spec visual del picker en `docs/design.md`.
+- **Matriz como única fuente de verdad:** el backend la usa para **validar** (un color fuera de la matriz es `400`) y el frontend para **renderizar** el picker. La **fila base (T4)** son los 10 colores que coinciden con el pool fijo de v1.0; los colores preexistentes ya pertenecen a la matriz, **sin migración de datos**.
+- **Default al crear (RN-013):** el sistema **pre-selecciona** el color **"menos usado"** entre las categorías activas del usuario, calculado **sobre los 10 colores base** (no sobre los 70); las categorías por defecto del alta toman los primeros en orden. Es solo un default: el usuario puede dejarlo, elegir otro de la matriz o usar el botón **"aleatorio"** (que toma un color al azar de la matriz, nunca un hex arbitrario).
+- **Backend (`CategoriesModule`):** `POST` acepta `color` opcional (si falta, asigna el "menos usado" como red de seguridad; el front siempre lo envía) y `PATCH` ahora **acepta `color`** (en v1.0 no era editable). Ambos normalizan a mayúsculas y validan contra la matriz vía el validador `@IsColorInMatrix`. Contratos en `docs/backend.md` (sección Pool de colores) y `docs/data-model.md`.
+- **Frontend:** componente `ColorPicker` (grid 10×7) presente en crear y editar; en crear arranca con el menos-usado pre-seleccionado, en editar con el color actual. Detalle en `docs/frontend.md`.
 
 ### Preferencias de usuario — cimiento (fase 1.1.0)
 
