@@ -50,6 +50,7 @@ Lo visual se define **una sola vez**. Stack: **shadcn/ui + cva** sobre Tailwind 
 
 - **Las primitivas usan los tokens del design system "Precise Ledger"** (ver sección Design system). Detalle operativo del re-estilado (variantes de Button, patrones Tailwind v4, toast) en `.claude/agents/control-frontend.md`.
 - **Íconos: `lucide-react`** (no SVG inline). Es la librería de íconos del proyecto.
+- **`PeriodNav` (`components/ui/period-nav.tsx`)** — primitiva **genérica de navegación de período**: envuelve un contenido y le pone **flechas gigantes a los costados** (`‹ contenido ›`). Sirve para cualquier período (mes en `/mes`; **año** en reportes 1.1.5). No es específica del mes. El spec visual vive en `docs/design.md`. API y gotcha de uso en la sección Navegación de período (`PeriodNav`).
 - **`KebabMenu` (`components/ui/kebab-menu.tsx`)** — menú de tres puntos para las acciones de fila **editar / eliminar** en listas. Es el **componente estándar para esas acciones**: toda lista nueva que las necesite lo usa, en lugar de botones inline en la fila. Se renderiza **por portal a `document.body` con posición `fixed`** (coordenadas tomadas del trigger) porque las tarjetas de lista tienen `overflow-hidden` y el `transform` de los contenedores de página atraparía un `position: fixed` no portaleado — mismo motivo que los modales. Detalle operativo (API, comportamiento de apertura/cierre) en `.claude/agents/control-frontend.md`.
 
 ## Autenticación (Auth.js / NextAuth v5)
@@ -254,6 +255,46 @@ Carga, edición y eliminación de grupos de cuotas. Se crean desde el tab **Cuot
 
 > **Gotcha — `MovementItem.installment` es campo requerido del tipo.** En los `MovementItem` de únicos y fijos hay que poner `installment: null` explícito (el tipo no lo hace opcional).
 
+## Navegación de período (`PeriodNav`) — fase 1.1.3
+
+Componente reutilizable **`components/ui/period-nav.tsx`**: navegación genérica de período con **flechas gigantes a los costados** del contenido que envuelve (`‹ contenido ›`; ‹ = anterior, › = siguiente). Genérico por diseño — lo usa `/mes` para navegar el mes y lo reutilizará **reportes 1.1.5** para navegar el año. Spec visual en `docs/design.md`.
+
+### Props
+
+| Prop | Tipo | Descripción |
+| --- | --- | --- |
+| `children` | `ReactNode` | El contenido del período que envuelve. |
+| `prevLabel` / `nextLabel` | `string` | `aria-label` de cada flecha (en `/mes`: "Mes anterior" / "Mes siguiente"). |
+| `onPrev` / `onNext` | `() => void` | Handlers de navegación. |
+| `canGoPrev` / `canGoNext` | `boolean` (default `true`) | `false` → flecha `aria-disabled`, sin hover, no dispara el handler. En `/mes` siempre `true`; en reportes (1.1.5) se atan a `earliestYear` (atrás) y al año en curso (adelante). |
+
+### Estructura: grid de 3 columnas
+
+`PeriodNav` es un **grid de 3 columnas** con `mx-auto` dentro de `<main>` y `align-items: stretch`:
+
+| Columna | Ancho | Contenido |
+| --- | --- | --- |
+| Izquierda | `auto` | Flecha ‹ (anterior). |
+| Central | `minmax(0, 1120px)` | Contenido (`children`) con tope **1120px**, `px-10` interno y `min-width: 0`. |
+| Derecha | `auto` | Flecha › (siguiente). |
+
+- **`grid-template-columns: auto minmax(0, 1120px) auto`.** Las columnas laterales `auto` hacen las flechas simétricas respecto del contenido. El cap de 1120px + el `px-10` viven en la **columna central** del propio componente — el consumidor (`page.tsx`) ya **no** lleva `max-w-[1120px] mx-auto`.
+- **Flechas:** dentro de su propia celda, `sticky` con `top: 50vh` + `translateY(-50%)`. Tamaño único **48×48** (glifo 36px), sin variantes por breakpoint.
+
+### Dos regímenes
+
+| Ancho | Régimen |
+| --- | --- |
+| ≥941px | Grid de 3 columnas (flechas a los costados). |
+| ≤940px | Colapsa al **pill stepper** en el header (sin flechas laterales). |
+
+(Se eliminó el modo intermedio del enfoque anterior.)
+
+### Gotchas técnicos
+
+1. **`grid-template-columns` va por `style` inline, no como clase Tailwind.** `auto minmax(0, 1120px) auto` mezcla `auto` y `minmax()`, y Tailwind v4 no lo resuelve como utilidad `grid-cols-[...]`.
+2. **`min-width: 0` en la celda central es obligatorio.** Sin él, `minmax(0, 1120px)` no puede encoger por debajo del ancho intrínseco del contenido (gotcha estándar de grid).
+
 ## Vista del mes y Dashboard
 
 Las dos pantallas de visualización (Fase 5), sobre el endpoint unificado `GET /movements?month=YYYY-MM` (contrato en `docs/backend.md`, sección Movimientos del mes).
@@ -277,7 +318,7 @@ El dashboard vive en **`/`** (`src/app/page.tsx`). Antes era `/dashboard` — un
 ### Vista del mes (`/mes`)
 
 - Lee el mes de **`?month=YYYY-MM`** (default: mes actual en la zona del navegador, vía `getCurrentMonth`).
-- **Encabezado + navegación prev / next** que cambian `?month=` (con `prevMonth` / `nextMonth`); rótulo con `formatMonthLabel`.
+- **`month-view-client.tsx` envuelve su contenido en `PeriodNav`** (flechas gigantes ‹ ›, fase 1.1.3) para la navegación prev / next, que cambia `?month=` (con `prevMonth` / `nextMonth`). El rótulo del mes (`formatMonthLabel`) se promueve al **header `.phead`** en ≥941px; en ≤940px el header lleva un **stepper compacto** en lugar de las flechas. Ambos siempre `canGoPrev`/`canGoNext` (en `/mes` no hay topes de navegación). El cap de 1120px y el `px-10` los aporta el propio `PeriodNav` (columna central del grid); `page.tsx` no lleva `max-w-[1120px] mx-auto` (ver sección Navegación de período).
 - **Totales del mes** (de `data.totals`).
 - **Lista agrupada en secciones Únicos / Fijos / Cuotas.** Una sección **sin movimientos no se muestra**; los tres orígenes traen datos. Cada ítem (`movement-item-row`) muestra tipo, monto, categoría, descripción y badge de origen, con acciones **Editar** y **Eliminar** que abren el flujo según el origen: únicos → `TransactionModal` (`edit-single`) / `DeleteTransactionDialog`; fijos → `TransactionModal` (`edit-fixed`) / `delete-recurring-dialog`; cuotas → `TransactionModal` (`edit-installment`) / `delete-installment-dialog`.
 - **Se actualiza al mutar** (crear / editar / eliminar) por invalidación de la query del mes.

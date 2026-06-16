@@ -159,7 +159,8 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 ### Contenido
 
 - **Sidebar** con el link "Vista del mes" marcado como activo.
-- **Encabezado con el mes activo** (nombre del mes y año) y **controles de navegación** para ir al mes anterior y al mes siguiente (RF-VM-004).
+- **Header de la pantalla** con el rótulo del mes activo: eyebrow "Tu mes", título con el nombre del mes y año, y sub-línea de estado ("Mes en curso" / "Histórico"). El botón **"+ Nuevo movimiento"** vive en este header.
+- **Navegación de mes** para ir al mes anterior y al mes siguiente (RF-VM-004), resuelta como **flechas gigantes a los costados del contenido** (`‹ contenido ›`; ‹ = mes anterior, › = mes siguiente). En pantallas angostas/mobile el patrón **colapsa a un control compacto** (pill stepper) ubicado en el header. Es presentacional: la acción funcional (navegar ±1 mes) es la de RF-VM-004 y no cambia. El spec visual lo define `control-design` (ver `docs/design.md`).
 - **Totales del mes** (RF-VM-002): total de gastos, total de ingresos y balance (ingresos − gastos), con positivo y negativo diferenciables. Se actualizan al agregar, editar o eliminar un movimiento.
 - **Lista de movimientos agrupada por tipo** en tres secciones rotuladas, en este orden (RF-VM-001). Dentro de cada sección, los movimientos se ordenan por **monto descendente** (el monto más alto primero, por magnitud, sin distinguir gasto de ingreso), con el desempate por sección que define el contrato de `GET /movements` (ver `data-model.md`).
   1. **Únicos**.

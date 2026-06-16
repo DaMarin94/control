@@ -475,3 +475,109 @@ Solo los ítems con `origin: 'fijo'` suman esta acción; **únicos y cuotas no l
 - **Contenido de la caja read-only:** ícono `Repeat` (lucide, 15px, `--accent-ink` — mismo acento que la nota de recurrencia y coherente con que el `Repeat` es el indicador de "fijo") + la etiqueta capitalizada de la frecuencia (Mensual / Bimestral / Trimestral / Semestral / Anual, misma tabla de arriba).
 - **Ubicación en editar:** la misma posición relativa que en crear, salvo que en editar **no** existe el bloque "Mes de inicio" (ya está oculto en editar hoy). Queda entonces entre **Monto** y **Categoría**.
 - Coherente con cómo "Tipo" pasa de toggle (crear) a caja read-only con badge (editar). Frecuencia hace lo mismo: `Select` (crear) → caja read-only (editar).
+
+---
+
+## Navegación de período — flechas gigantes laterales (Fase 1.1.3, 2026-06-16; contenedor revisado 2026-06-16)
+
+> Spec del **patrón genérico de navegación de período**: dos flechas grandes a los costados del contenido — `‹ contenido ›` — donde **‹ va al período anterior y › al período siguiente**. "Período" es deliberadamente **abstracto**: en esta fase es el **mes** (se aplica a `/mes`), y el patrón queda **reutilizable** para el **año** en los reportes (Fase 1.1.5). El patrón unifica/reemplaza el `.stepper` de pill que `/mes` usa hoy. No introduce tokens nuevos: se resuelve con los tokens y patrones vigentes del DS "Precise Ledger".
+>
+> **Alcance de esta fase:** **solo `/mes`**. **NO** toca `/anual` ni su `.stepper` (esa pantalla adopta el patrón en 1.1.5). Lo que se define acá es el patrón completo (incluido el estado **disabled**, que en `/mes` hoy no se dispara pero 1.1.5 va a necesitar) para que 1.1.5 lo reuse sin redefinir nada.
+>
+> **Corrección de contenedor (2026-06-16):** la primera versión anclaba las flechas como **absolutas en el gutter** (`right:100%`/`left:100%` respecto del contenido de 1120px) con fallback por breakpoints. En la práctica salió mal: (1) el gutter izquierdo (sidebar↔contenido) y el derecho (contenido↔viewport) **no son iguales** —el contenido se centra dentro de `<main>`, que ya arranca corrido 248px—, así que las flechas ancladas al contenido quedaban **asimétricas**; (2) el umbral de "gutter amplio" era tan alto que casi ninguna pantalla real (1366–1440px) lo alcanzaba, y casi siempre caía en el modo donde las flechas se **montaban sobre el padding del contenido** como botones de carrusel flotantes (se veía mal); (3) el `sticky top-[50vh]` dentro de un `absolute` era frágil. **Se reemplaza por un layout real de 3 columnas** (abajo). La simetría pasa a ser del **contenido**, no del viewport.
+
+### Concepto y nombre del patrón
+
+`PeriodNav` — un patrón de **tres columnas** que flanquean el contenido de una vista de período: `[ ‹ ] [ contenido ] [ › ]`.
+
+1. **Columna de flecha anterior** (‹) — columna propia a la **izquierda** del contenido.
+2. **Columna de contenido** del período (la vista de `/mes`: header, totales, listas).
+3. **Columna de flecha siguiente** (›) — columna propia a la **derecha** del contenido.
+
+Más el **rótulo del período** (el "Junio 2026" + sub-línea), que vive en el header de la columna de contenido como título (ver "Rótulo del período").
+
+El patrón es **agnóstico del período**: recibe (conceptualmente) un rótulo de período, un handler "anterior", un handler "siguiente" y dos flags `canGoPrev` / `canGoNext`. En `/mes` el período es el mes y `canGoPrev`/`canGoNext` son siempre `true` (no hay tope); en reportes (1.1.5) el período es el año y esos flags se atan a `earliestYear` / año en curso. **Mismo componente, distinto período.**
+
+### Layout de 3 columnas (el contenedor)
+
+La corrección clave: las flechas no son hijas absolutas ancladas al contenido — son **columnas reales** del layout que **flanquean** la columna de contenido. Así la simetría es del contenido y no depende del tamaño del gutter ni de cálculos de viewport.
+
+- **Contenedor `PeriodNav`:** un **grid de 3 columnas**, `grid-template-columns: auto minmax(0, 1120px) auto`, `mx-auto` dentro del `<main>`, centrado en el área que `<main>` ya tiene (corrida 248px por el sidebar en ≥941px). Alineación vertical de las celdas: `align-items: stretch` (las columnas de flecha ocupan todo el alto del contenido, para poder hacer sticky adentro). `column-gap`: **0** (la separación flecha↔contenido la da el padding propio de la celda de flecha, ver abajo).
+  - **Columna central (contenido):** `minmax(0, 1120px)` — el contenido conserva su tope de **1120px** y su `px-10` (40px) interno **sin cambios**. El `minmax(0, …)` permite que la columna se encoja por debajo de 1120 sin desbordar cuando el ancho total aprieta.
+  - **Columnas laterales (flechas):** `auto` — toman exactamente el ancho de su contenido (el botón de flecha + su aire lateral). Ambas son `auto`, así que **se reservan el mismo ancho** a ambos lados → las flechas quedan **siempre simétricas respecto del contenido**. Las dos celdas comparten el sobrante por igual gracias al `mx-auto` del contenedor.
+  - **Aire flecha↔contenido:** cada celda de flecha lleva un **padding interno de 20px** hacia el lado del contenido (la izquierda `padding-right:20px`, la derecha `padding-left:20px`), de modo que el botón no toca el borde del contenido. Ese aire es el único separador; no hay `column-gap`. (Subió de 16px a 20px junto con el botón de 64px, para conservar la respiración flecha↔contenido del patrón.)
+- **Flex como alternativa equivalente:** si el frontend prefiere flex, el equivalente es un `flex items-stretch justify-center` con las dos celdas de flecha de ancho intrínseco (`flex: 0 0 auto`) y el contenido `flex: 0 1 1120px` (`max-width:1120px`, `min-width:0`). El resultado visual debe ser idéntico al grid; **preferencia: grid** por ser más directo el `minmax(0, 1120px)`. La geometría manda; la mecánica (grid/flex) es del frontend mientras respete: contenido centrado, columnas de flecha simétricas de ancho intrínseco, encogimiento parejo.
+- **Por qué esto corrige la asimetría:** como las flechas son columnas que abrazan el contenido (no posiciones ancladas a un viewport descentrado), el `‹ contenido ›` se lee simétrico **siempre**, sin importar que el `<main>` esté corrido por el sidebar. Las flechas ya no "saben" del viewport.
+
+### Centrado vertical de las flechas (sticky robusto)
+
+- Cada flecha vive **dentro de su columna lateral**, que por `align-items: stretch` es tan alta como la columna de contenido. El botón se centra verticalmente **dentro de su propia columna** con `position: sticky; top: 50vh; transform: translateY(-50%)` **sobre el botón mismo** (o un wrapper directo del botón dentro de la celda). Al ser sticky dentro de una columna que abarca todo el alto del contenido, la flecha **acompaña el scroll** y queda centrada en el viewport mientras el cursor recorre listas largas, sin volver al tope.
+- Esta es la técnica robusta que reemplaza al `sticky` anterior: el sticky vive **dentro de la celda de columna del grid** (un contexto de bloque limpio, tan alto como el contenido), no anidado dentro de un `absolute`. Sin `top:50%` sobre un contenedor `absolute top-0 bottom-0` frágil.
+- Si una vista fuera más corta que el viewport, el sticky simplemente no llega a despegarse y la flecha queda centrada en la columna corta — comportamiento correcto sin caso especial.
+
+### Dimensiones, glifo y color de las flechas
+
+Ahora que las flechas viven en columna propia (no flotan sobre el contenido), se define un **tamaño único** para todo el rango en que el patrón muestra flechas laterales (sin el salto 56→44 atado a un breakpoint irreal). El tamaño se elige para que en pantallas típicas (1366–1440px) ya se vea bien.
+
+Cada flecha es un `button` circular tipo "zona de toque generosa con glifo grande":
+
+| Propiedad | Valor | Notas |
+|---|---|---|
+| **Zona de toque (botón)** | **64 × 64 px**, círculo (`border-radius: 50%`) | Tamaño único en todo el rango con flechas laterales. Target cómodo; el "gigante" es el glifo |
+| **Glifo** | `ChevronLeft` / `ChevronRight` (lucide), **46px** | El glifo es el que se lee como "gigante" |
+| **Grosor del trazo del glifo** | `stroke-width: 1.75` | Coherente con el peso visual del DS (íconos del DS van 1.5–2; acá un pelo más fino que default lucide 2 para que un glifo grande no se vea tosco) |
+| **Fondo en reposo** | **transparente** (sin pill, sin fill) | Las flechas viven en su columna "al aire", no son un control con caja. El fondo de la columna es `--paper` |
+| **Color del glifo en reposo** | `--faint` | Presente pero discreto: no compite con el contenido ni con los montos |
+
+> El tamaño **64/46** (ajustado 2026-06-16, Fase 1.1.3) sube un escalón respecto del **48/36** previo: la flecha gana presencia perceptible —se lee más claramente como el "gigante" del patrón al costado del contenido— sin volverse desproporcionada, y sigue entrando cómoda en pantallas 1366–1440px gracias a vivir en columna propia. **Único escalón**: no hay segundo tamaño por breakpoint mientras se muestren flechas laterales; cuando el ancho ya no alcanza, se colapsa al `.stepper` (ver "Responsive y colapso"), no se achican las flechas.
+
+**Por qué sin fill en reposo:** el patrón es "flechas gigantes a los costados", no un par de botones con caja. Dejarlas sin fondo (solo glifo) hace que se lean como affordance de navegación lateral —como las flechas de un carrusel— sin agregar peso visual permanente al canvas. El fill aparece solo en hover (ver estados).
+
+### Estados de la flecha
+
+- **Reposo:** glifo `--faint`, fondo transparente. `cursor: pointer`.
+- **Hover:** el glifo sube a `--ink`; aparece un **fondo circular `--panel-2`** detrás del glifo (el botón "se materializa" como círculo al apuntarlo); transición 0.14s (hover estándar del DS). Sin desplazamiento ni escala del botón (queda firme en su lugar; lo que cambia es color + fondo).
+- **Active / pressed:** fondo `--panel-3`, glifo `--ink`. Feedback breve de pulsación.
+- **Focus (teclado):** anillo de foco del DS — `shadow-[0_0_0_3px_var(--accent-soft)]` — sobre el botón circular (`focus-visible`). El `--accent-soft` acá es ring de interacción de UI, no tiñe nada semántico (mismo criterio que el resto de focos del DS).
+- **Disabled (`canGoPrev`/`canGoNext` = false):** glifo `--faint` con `opacity: 0.4`, **sin** hover (no aparece el fondo circular), `cursor: default`, `aria-disabled`. **No se oculta** — se ve presente pero apagado, igual que el criterio ya fijado para los chevrons del stepper de `/anual`. En `/mes` este estado **no se dispara hoy** (el mes no tiene tope), pero queda definido para que 1.1.5 (año, con `earliestYear` y año en curso) lo use sin inventar nada.
+
+`aria-label` por flecha: en `/mes`, "Mes anterior" / "Mes siguiente" (los mismos labels que el stepper actual). El patrón genérico recibe el label según el período (en reportes serán "Año anterior" / "Año siguiente").
+
+### Rótulo del período: qué pasa con el "Junio 2026" + sub-línea
+
+Hoy el rótulo del período ("Junio 2026" + "Mes en curso" / "Histórico") vive **dentro** del pill `.stepper`. Al pasar las flechas a sus columnas laterales, el rótulo **se promueve al header de página** como título de la vista, con el patrón `.phead` del DS (que `/mes` hoy no usa pero el resto del producto sí):
+
+- **Se elimina el pill `.stepper` de `/mes`.** Las flechas laterales reemplazan por completo sus dos chevrons; el rótulo que llevaba en el centro se promueve al header.
+- **Header de `/mes` (nuevo `.phead`):** fila `flex items-end justify-between`, a la izquierda el bloque de título, a la derecha el botón "+ Nuevo movimiento" (ver "No-colisión").
+  - **Eyebrow** (rol *Eyebrow/labels*: 12px/600, `.1em`, uppercase, `--muted`): **"Tu mes"**. Da el contexto de la pantalla, paralelo al "Tu actividad" de `/anual`.
+  - **H1 del período** (rol *H1 página*: 32px/700, `-.02em`, `--ink`): **el rótulo del período**, p. ej. **"Junio 2026"**. Es el título grande de la pantalla. Va en texto UI (Space Grotesk) **no** en mono: "Junio 2026" es un rótulo, no una cifra de dinero (la regla dura 3 aplica a montos, no a títulos de período). El año puede ir teñido con `--accent-ink` siguiendo el patrón ya existente del DS (`.phead h1 .mo` tiñe parte del título con el acento — uso de marca, admisible), o todo en `--ink`; **preferencia: todo en `--ink`** para `/mes` (mantenerlo sobrio; el acento queda reservado para donde ya se usa).
+  - **Sub-línea de estado** ("Mes en curso" / "Histórico"): baja a **meta debajo del H1**, rol *Meta/subtítulos* (12.5px/500, `--muted`), o como segunda línea del bloque de título. Conserva exactamente la lógica actual (mes actual → "Mes en curso"; otro → "Histórico"). En reportes (1.1.5), esta sub-línea es el slot donde podría ir un estado análogo del año (o quedar vacía si no aplica); el patrón la contempla como **opcional**.
+- **Genérico para mes o año:** el bloque de título (eyebrow + H1 + sub-línea) muestra el **rótulo del período** sea mes ("Junio 2026") o año ("2026"). El patrón no asume formato: recibe el string ya formateado. Por eso sirve igual a `/mes` y a los reportes de 1.1.5.
+
+### No-colisión y jerarquía
+
+- **Las flechas no compiten con el contenido.** En reposo son glifos `--faint` al aire en su columna lateral, **fuera** de la columna de contenido: están **separadas físicamente** del canvas (su propia columna del grid), así que no pelean con el monto/totales ni con las cifras (que dominan por peso, tamaño y color semántico). El glifo `--faint` es el neutro más tenue de la escala: presente, no protagonista.
+- **Relación con "+ Nuevo movimiento":** ese botón es la **acción primaria** del header y **se mantiene en el header** (`.phead`, a la derecha), con su estilo actual (`.btn` primario índigo). Las flechas son **navegación**, no acción; viven en las **columnas laterales**, no en el header. Quedan en planos distintos —el botón en la barra superior del contenido, las flechas en las columnas a los costados— así que no colisionan ni en posición ni en jerarquía. El botón primario sigue siendo el único elemento de acento índigo "fuerte" del header; las flechas, al ser `--faint` sin fill, no le disputan atención.
+- **Una sola navegación de período por pantalla:** al eliminar el `.stepper`, las flechas laterales son el **único** control para cambiar de período en `/mes`. No conviven dos navegadores.
+
+### Responsive y colapso
+
+Con el layout de 3 columnas, el responsive se simplifica a **dos regímenes** (ya no hay un modo intermedio de "flechas pegadas al borde con fondo": ese era el síntoma del modelo viejo). Desktop-first, coherente con que el DS oculta la sidebar en ≤940px:
+
+- **Hay lugar para las columnas de flecha (≥941px, mientras las celdas laterales tengan ancho suficiente):** modo canónico. Layout `[ ‹ ] [ contenido ] [ › ]` con la columna central `minmax(0, 1120px)` y las dos celdas de flecha de ancho intrínseco. Botón 64px, glifo 46px, las dos flechas simétricas respecto del contenido. Al angostar el viewport dentro de este rango, **las dos columnas de flecha se encogen de forma pareja** (porque ambas son `auto` y comparten el sobrante por igual vía `mx-auto`): el contenido baja de 1120px hacia su mínimo y las flechas se acercan a él de manera simétrica, manteniendo el `‹ contenido ›` equilibrado. **Nunca se montan sobre el contenido**: viven en su columna; cuando esa columna ya no puede reservar el aire mínimo del botón + sus 20px, se pasa al colapso.
+  - *Umbral de colapso a criterio de implementación*, pero atado a un hecho concreto: el patrón muestra flechas laterales **mientras la celda de flecha pueda alojar el botón de 64px con su aire de 20px sin invadir el contenido**. Resuelto con breakpoint CSS o container query; **preferencia: breakpoint CSS** alineado al breakpoint de sidebar del DS (940px) — es decir, en `/mes`, con sidebar visible (≥941px) el contenido de 1120px + el sidebar de 248px todavía dejan margen para las columnas de flecha en las resoluciones objetivo, así que el régimen canónico cubre el desktop típico (1366–1440px) y el colapso coincide con la ocultación de la sidebar. Si en algún ancho intermedio las celdas de flecha no entran antes de los 940px, **colapsar directamente al `.stepper`** (no hay modo "flechas con fondo pegadas").
+
+- **Mobile / sidebar oculta (≤940px) — colapso al `.stepper`:** el DS ya oculta la sidebar; el contenido ocupa todo el ancho con `px-10`. Aquí no hay lugar para columnas laterales y las flechas gigantes se vuelven incómodas (chocan con el contenido y el thumb del pulgar). **El patrón colapsa al `.stepper` pill** —el mismo navegador compacto que `/mes` usa hoy— **integrado en el header**, debajo del H1 del período o reemplazando el bloque de título por el pill. Es decir: en ≤940px no se renderizan las columnas de flecha; en su lugar, un pill `.stepper` (chevron ‹ + rótulo + chevron ›) como control compacto. Esto garantiza que el patrón sea **usable en todo el rango** sin flechas gigantes donde no entran. (Esto quedó bien en la versión anterior y **no cambia**.)
+  - El `.stepper` de fallback usa el rótulo del período como su label central (el "Junio 2026"); la sub-línea de estado va en el `small` del stepper (como hoy). Reaprovecha el componente `.stepper` ya existente del DS — no se descarta, se reserva como el modo compacto del patrón en mobile.
+
+**Resumen del responsive en una línea:** hay lugar para las columnas laterales → flechas 48px simétricas que se encogen parejo; no hay lugar (≤940px) → colapsa al pill `.stepper` en el header. **No existe** el modo intermedio de "flechas con fondo pegadas al borde del contenido" — ese era el bug del modelo anterior.
+
+### Movimiento y prefers-reduced-motion
+
+- **Hover/active:** transición 0.14s en color y aparición del fondo circular (hover estándar del DS).
+- **Cambio de período:** la navegación dispara el re-render de la vista (en `/mes`, la entrada de pantalla `fade + translateY` de 0.32s ya existente). Las flechas no animan posición al cambiar de período (quedan fijas; lo que cambia es el contenido y el rótulo del H1).
+- **`prefers-reduced-motion`:** se respeta el DS (sin transición de hover ni fade de entrada). Regla obligatoria del DS.
+
+### Reutilización en reportes (1.1.5) — nota de continuidad
+
+Esta spec deja el patrón listo para que 1.1.5 lo monte sobre cada **card de reporte** (donde el período es el **año**) y sobre el **dashboard**. Lo que 1.1.5 hereda sin redefinir: dimensiones de flecha (48/36, escalón único), estados (incluido **disabled**, que allá sí se dispara con `earliestYear` / año en curso), el centrado vertical sticky, los **dos regímenes responsive** (columnas laterales / colapso al `.stepper`), y el rótulo de período como H1/título. Lo que 1.1.5 deberá especificar por su cuenta (fuera de esta spec): **si las flechas flanquean la card individual** (el roadmap dice que las flechas son "parte del propio widget", no chrome de la página) en vez de flanquear la columna entera — ese encuadre por-card (aplicar el mismo grid de 3 columnas a la card, o equivalente) lo resuelve 1.1.5; el **patrón visual de la flecha** (tamaño, color, estados, colapso) es el de esta sección.

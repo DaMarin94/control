@@ -245,7 +245,10 @@ describe("MonthViewClient", () => {
 
     it("muestra el mes activo en el encabezado", () => {
       renderMonthView("2026-06");
-      expect(screen.getByText(/junio/i)).toBeInTheDocument();
+      // El período aparece en el H1 (desktop) y en el stepper compacto (mobile).
+      // getAllByText acepta múltiples coincidencias; solo verificamos que al menos una exista.
+      const matches = screen.getAllByText(/junio/i);
+      expect(matches.length).toBeGreaterThan(0);
     });
 
     it("prev month navega al mes anterior (/mes?month=2026-05)", () => {
