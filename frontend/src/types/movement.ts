@@ -11,6 +11,7 @@
  */
 
 import type { CategoryScope } from "@/types/category";
+import type { RecurringFrequency } from "@/types/recurring";
 
 /** Discriminador de origen del movimiento */
 export type MovementOrigin = "unico" | "fijo" | "cuota";
@@ -40,9 +41,9 @@ export interface InstallmentInfo {
 
 /**
  * Ítem individual de movimiento tal como lo devuelve GET /movements.
- * Para "unico": todos los campos están presentes; installment=null.
- * Para "fijo": occurredAt y timezone son null; installment=null.
- * Para "cuota": occurredAt y timezone son null; installment tiene number/total/startMonth.
+ * Para "unico": todos los campos están presentes; installment=null; frequency=null; skipped=false.
+ * Para "fijo": occurredAt y timezone son null; installment=null; frequency=su frecuencia; skipped según el mes.
+ * Para "cuota": occurredAt y timezone son null; installment tiene number/total/startMonth; frequency=null; skipped=false.
  */
 export interface MovementItem {
   id: string;
@@ -65,6 +66,19 @@ export interface MovementItem {
    * Presente para origin==="cuota"; null para "unico" y "fijo".
    */
   installment: InstallmentInfo | null;
+  /**
+   * Frecuencia de recurrencia (P2 — Fase 1.1.1).
+   * Presente solo para origin==="fijo" (su frecuencia: MONTHLY, BIMONTHLY, etc.).
+   * null para "unico" y "cuota".
+   */
+  frequency: RecurringFrequency | null;
+  /**
+   * Indica si el fijo está anulado para el mes consultado (P1 — Fase 1.1.1).
+   * Solo puede ser true para origin==="fijo".
+   * Siempre false para "unico" y "cuota".
+   * Los ítems anulados se siguen mostrando en la lista pero NO suman a los totales.
+   */
+  skipped: boolean;
   category: MovementCategory;
 }
 

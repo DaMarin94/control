@@ -5,6 +5,7 @@ import {
   MovementItem,
   AnnualCategoryMeta,
   addMonths,
+  isOnFrequency,
 } from './movements.repository';
 
 /**
@@ -230,7 +231,11 @@ export class MovementsService {
 
     // -------------------------------------------------------------------------
     // 2. Fijos — traer todos y proyectar sobre los 12 meses del año
-    //    Condición de actividad: startMonth <= mes AND (deletedFrom IS NULL OR deletedFrom > mes)
+    //    Condición de actividad:
+    //      startMonth <= mes AND (deletedFrom IS NULL OR deletedFrom > mes)
+    //      AND isOnFrequency(startMonth, frequency, mes)   [P2 — Fase 1.1.1]
+    //    Los meses skippeados (P1 — Fase 1.1.1) NO suman a los totales:
+    //      mes en fijo.skippedMonths → excluir del cálculo.
     //    Comparación léxica YYYY-MM (RN-015, igual que el endpoint mensual).
     // -------------------------------------------------------------------------
     const fijos = await this.repo.getAllFijosForAnnual(userId);
@@ -238,12 +243,20 @@ export class MovementsService {
     for (const fijo of fijos) {
       for (let i = 0; i < 12; i++) {
         const mes = months12[i];
-        // Condición de actividad (léxica)
-        const isActive =
+
+        // Condición de actividad: rango léxico
+        const inRange =
           fijo.startMonth <= mes &&
           (fijo.deletedFrom === null || fijo.deletedFrom > mes);
 
-        if (!isActive) continue;
+        if (!inRange) continue;
+
+        // Condición de frecuencia (P2)
+        if (!isOnFrequency(fijo.startMonth, fijo.frequency, mes)) continue;
+
+        // Excluir meses skippeados de los totales (P1)
+        // (el ítem se muestra en la lista mensual con skipped=true, pero no suma al anual)
+        if (fijo.skippedMonths.has(mes)) continue;
 
         if (fijo.type === 'INCOME') {
           agg[i].incomeCents += fijo.amountCents;

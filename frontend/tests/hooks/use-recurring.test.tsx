@@ -33,6 +33,7 @@ const mockRecurring: Recurring = {
   description: "Alquiler",
   startMonth: "2026-06",
   deletedFrom: null,
+  frequency: "MONTHLY",
   createdAt: "2026-06-01T00:00:00.000Z",
   updatedAt: "2026-06-01T00:00:00.000Z",
   category: {

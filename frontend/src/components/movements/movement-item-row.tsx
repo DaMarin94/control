@@ -4,32 +4,57 @@
  * Fila de un movimiento en la lista del mes (RF-VM-001).
  *
  * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
+ * Actualizado en Fase 1.1.1: frecuencia dinámica, ítem anulado, acción toggle skip.
  *
  * Layout: grid 40px 1fr auto auto auto
  *   1. Ícono 40×40 tintado (expense-soft/expense-ink o income-soft/income-ink)
- *   2. Texto: nombre + sub-línea (categoría · tipo · [mensual para fijos])
+ *   2. Texto: nombre + sub-línea (categoría · tipo · [frecuencia para fijos])
  *   3. Fecha en mono (DD Mmm); en cuotas "Cuota X/N"; fijos: vacío
  *   4. Monto mono 15.5px (gastos con −$, ingresos con +$ en income-ink)
  *   5. KebabMenu de acciones (aparece en hover de la fila)
  *
  * Acciones editar/borrar: via KebabMenu (portal+fixed por overflow-hidden de la tarjeta).
+ * Fijos añaden "Anular este mes" / "Des-anular este mes" (toggle skip — P1, Fase 1.1.1).
+ *
+ * Ítem anulado (skipped=true):
+ *   - Contenido de la fila a opacity 0.55 (no el fondo ni el KebabMenu)
+ *   - Monto con line-through conservando color semántico
+ *   - Badge "Anulado" como primer segmento de la sublínea
  */
 
 import { type MovementItem } from "@/types/movement";
+import { type RecurringFrequency } from "@/types/recurring";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { ArrowDown, ArrowUp, Repeat, Pencil, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Repeat, Pencil, Trash2, CalendarOff, CalendarPlus } from "lucide-react";
 import { KebabMenu } from "@/components/ui/kebab-menu";
+import { useRecurring } from "@/hooks/use-recurring";
+import { useToast } from "@/hooks/use-toast";
+
+/** Etiqueta en minúscula por valor de frequency (para la sublínea del ítem) */
+const FREQUENCY_LABEL: Record<RecurringFrequency, string> = {
+  MONTHLY: "mensual",
+  BIMONTHLY: "bimestral",
+  QUARTERLY: "trimestral",
+  BIANNUAL: "semestral",
+  ANNUAL: "anual",
+};
 
 interface MovementItemRowProps {
   movement: MovementItem;
+  /** Mes que se está visualizando en formato YYYY-MM (necesario para el toggle de skip) */
+  viewMonth: string;
   onEdit: (movement: MovementItem) => void;
   onDelete: (movement: MovementItem) => void;
 }
 
-export function MovementItemRow({ movement, onEdit, onDelete }: MovementItemRowProps) {
+export function MovementItemRow({ movement, viewMonth, onEdit, onDelete }: MovementItemRowProps) {
+  const { skipRecurring } = useRecurring();
+  const { toast } = useToast();
+
   const isExpense = movement.type === "EXPENSE";
   const isFijo = movement.origin === "fijo";
   const isCuota = movement.origin === "cuota";
+  const isSkipped = movement.skipped;
 
   // Fecha formateada "02 Jun" (solo para únicos)
   const dateFormatted =
@@ -46,7 +71,7 @@ export function MovementItemRow({ movement, onEdit, onDelete }: MovementItemRowP
   const iconBg = isExpense ? "bg-expense-soft" : "bg-income-soft";
   const iconColor = isExpense ? "text-expense-ink" : "text-income-ink";
 
-  // Sublínea: "Categoría · tipo · [repeat mensual]"
+  // Sublínea: "Categoría · tipo · [repeat <frecuencia>]"
   const typeLabel = isExpense ? "gasto" : "ingreso";
   const categoryName = movement.category.name;
 
@@ -56,25 +81,79 @@ export function MovementItemRow({ movement, onEdit, onDelete }: MovementItemRowP
       ? `Cuota ${movement.installment.number}/${movement.installment.total}`
       : null;
 
+  // Etiqueta de frecuencia para fijos
+  const frequencyLabel =
+    isFijo && movement.frequency
+      ? (FREQUENCY_LABEL[movement.frequency] ?? "mensual")
+      : "mensual";
+
+  // Handler para el toggle de anular/des-anular
+  async function handleSkipToggle() {
+    const result = await skipRecurring(movement.id, viewMonth);
+    if (!result.success) {
+      toast.error(result.error ?? "No se pudo cambiar el estado del movimiento.");
+    }
+    // Si tiene éxito, React Query invalida la query del mes y la lista se refresca sola
+  }
+
+  // Ítems del KebabMenu — para fijos se añade el toggle skip entre Editar y Eliminar
+  const menuItems = [
+    {
+      label: "Editar",
+      icon: Pencil,
+      onSelect: () => onEdit(movement),
+    },
+    ...(isFijo
+      ? [
+          {
+            label: isSkipped ? "Des-anular este mes" : "Anular este mes",
+            icon: isSkipped ? CalendarPlus : CalendarOff,
+            onSelect: handleSkipToggle,
+          },
+        ]
+      : []),
+    {
+      label: "Eliminar",
+      icon: Trash2,
+      danger: true as const,
+      onSelect: () => onDelete(movement),
+    },
+  ];
+
   return (
     <div
       className="group relative grid items-center gap-[14px] px-[18px] cursor-pointer transition-colors duration-[120ms] hover:bg-panel-2 [&+&]:border-t [&+&]:border-hair"
       style={{ gridTemplateColumns: "40px 1fr auto auto auto", padding: `var(--row-pad) 18px` }}
     >
-      {/* Col 1: Ícono tintado */}
+      {/* Col 1: Ícono tintado — afectado por la opacidad del contenido si está anulado */}
       <span
-        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] ${iconBg} ${iconColor}`}
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] ${iconBg} ${iconColor} ${isSkipped ? "opacity-[0.55]" : ""}`}
         aria-hidden="true"
       >
         <IconComponent size={19} strokeWidth={2.2} />
       </span>
 
-      {/* Col 2: Nombre + sublínea */}
-      <div className="min-w-0">
+      {/* Col 2: Nombre + sublínea — atenuado si anulado */}
+      <div className={`min-w-0 ${isSkipped ? "opacity-[0.55]" : ""}`}>
         <b className="block text-[14.5px] font-semibold tracking-[-0.01em] text-ink leading-snug truncate">
           {movement.description ?? categoryName}
         </b>
         <span className="flex items-center gap-[7px] text-[12.5px] text-muted flex-wrap">
+          {/* Badge "Anulado" como primer segmento de la sublínea (solo si skipped) */}
+          {isSkipped && (
+            <>
+              <span
+                className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em]"
+                aria-label="Movimiento anulado para este mes"
+              >
+                Anulado
+              </span>
+              <span
+                className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
+                aria-hidden="true"
+              />
+            </>
+          )}
           <span>{categoryName}</span>
           <span
             className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
@@ -89,15 +168,15 @@ export function MovementItemRow({ movement, onEdit, onDelete }: MovementItemRowP
               />
               <span className="inline-flex items-center gap-[4px]">
                 <Repeat size={12} className="opacity-60" aria-hidden="true" />
-                mensual
+                {frequencyLabel}
               </span>
             </>
           )}
         </span>
       </div>
 
-      {/* Col 3: Fecha / cuota — fijos: vacío */}
-      <div className="text-right">
+      {/* Col 3: Fecha / cuota — fijos: vacío — atenuado si anulado */}
+      <div className={`text-right ${isSkipped ? "opacity-[0.55]" : ""}`}>
         {!isFijo && (
           <span className="block text-[12.5px] text-muted mono whitespace-nowrap">
             {isCuota ? (installmentLabel ?? "") : (dateFormatted ?? "")}
@@ -105,32 +184,21 @@ export function MovementItemRow({ movement, onEdit, onDelete }: MovementItemRowP
         )}
       </div>
 
-      {/* Col 4: Monto mono */}
+      {/* Col 4: Monto mono — tachado si anulado, conservando color semántico */}
       <span
         className={`text-[15.5px] font-semibold text-right min-w-[100px] mono ${
           isExpense ? "text-ink" : "text-income-ink"
-        }`}
+        } ${isSkipped ? "opacity-[0.55] line-through" : ""}`}
       >
         {amountDisplay}
       </span>
 
       {/* Col 5: KebabMenu de acciones (portal+fixed — ver CLAUDE.md) */}
+      {/* El KebabMenu va a opacidad plena incluso en ítems anulados (es la acción de des-anular) */}
       <KebabMenu
         ariaLabel={`Acciones de ${movement.description ?? categoryName}`}
         className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-        items={[
-          {
-            label: "Editar",
-            icon: Pencil,
-            onSelect: () => onEdit(movement),
-          },
-          {
-            label: "Eliminar",
-            icon: Trash2,
-            danger: true,
-            onSelect: () => onDelete(movement),
-          },
-        ]}
+        items={menuItems}
       />
     </div>
   );

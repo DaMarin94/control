@@ -96,6 +96,7 @@ const mockRecurring: Recurring = {
   description: "Alquiler",
   startMonth: "2026-01",
   deletedFrom: null,
+  frequency: "MONTHLY",
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
   category: {
@@ -146,9 +147,11 @@ beforeEach(() => {
     createRecurring: mockCreateRecurring,
     updateRecurring: mockUpdateRecurring,
     deleteRecurring: mockDeleteRecurring,
+    skipRecurring: vi.fn(),
     isCreating: false,
     isUpdating: false,
     isDeleting: false,
+    isSkipping: false,
   });
 
   mockUseRouter.mockReturnValue({ push: mockPush } as unknown as ReturnType<typeof useRouter>);
@@ -425,5 +428,120 @@ describe("RecurringForm — error del backend", () => {
 
     // Modal debe seguir abierto
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Tests: selector de frecuencia (P2 — Fase 1.1.1) ─────────────────────────
+
+describe("RecurringForm — selector de frecuencia (crear)", () => {
+  it("muestra el selector de frecuencia en modo crear", () => {
+    renderForm({});
+    expect(screen.getByLabelText(/frecuencia/i)).toBeInTheDocument();
+  });
+
+  it("el selector de frecuencia tiene 'Mensual' como valor por defecto", () => {
+    renderForm({});
+    const select = screen.getByLabelText(/frecuencia/i) as HTMLSelectElement;
+    expect(select.value).toBe("MONTHLY");
+  });
+
+  it("el selector de frecuencia tiene todas las opciones en orden correcto", () => {
+    renderForm({});
+    const select = screen.getByLabelText(/frecuencia/i);
+    expect(screen.getByRole("option", { name: "Mensual" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Bimestral" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Trimestral" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Semestral" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Anual" })).toBeInTheDocument();
+    // Verificar que el select existe
+    expect(select).toBeInTheDocument();
+  });
+
+  it("crear envía la frequency seleccionada al backend", async () => {
+    const user = userEvent.setup();
+    mockCreateRecurring.mockResolvedValue({ success: true, recurring: mockRecurring });
+
+    renderForm({});
+
+    const amountInput = screen.getByLabelText(/monto/i);
+    await user.type(amountInput, "1500");
+
+    // Seleccionar frecuencia BIMONTHLY
+    const freqSelect = screen.getByLabelText(/frecuencia/i);
+    await user.selectOptions(freqSelect, "BIMONTHLY");
+
+    const categorySelect = screen.getByLabelText(/categoría/i);
+    await user.selectOptions(categorySelect, "cat-expense");
+
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(mockCreateRecurring).toHaveBeenCalledWith(
+        expect.objectContaining({
+          frequency: "BIMONTHLY",
+        }),
+      );
+    });
+  });
+
+  it("la nota de recurrencia refleja 'Mensual' por defecto", () => {
+    renderForm({});
+    expect(screen.getByText(/cada mes a partir del mes de inicio/i)).toBeInTheDocument();
+  });
+
+  it("la nota de recurrencia cambia al seleccionar otra frecuencia", async () => {
+    const user = userEvent.setup();
+    renderForm({});
+
+    const freqSelect = screen.getByLabelText(/frecuencia/i);
+    await user.selectOptions(freqSelect, "ANNUAL");
+
+    await waitFor(() => {
+      expect(screen.getByText(/cada año a partir del mes de inicio/i)).toBeInTheDocument();
+    });
+  });
+});
+
+describe("RecurringForm — frecuencia read-only en edición (P2 — Fase 1.1.1)", () => {
+  it("muestra la frecuencia del fijo como campo read-only (no select) en edición", () => {
+    renderForm({ recurring: mockRecurring });
+
+    // El texto "Frecuencia" debe aparecer como label
+    expect(screen.getByText("Frecuencia")).toBeInTheDocument();
+    // El texto "Mensual" debe aparecer como display read-only
+    expect(screen.getByText("Mensual")).toBeInTheDocument();
+  });
+
+  it("NO muestra selector de frecuencia en modo edición (solo read-only)", () => {
+    renderForm({ recurring: mockRecurring });
+
+    // En edición hay solo un combobox (categoría) — la frecuencia es read-only
+    const selects = screen.getAllByRole("combobox");
+    // Debe haber exactamente 1 combobox: el de categoría
+    expect(selects).toHaveLength(1);
+  });
+
+  it("el PATCH no envía frequency (inmutable según contrato del backend)", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    mockUpdateRecurring.mockResolvedValue({
+      success: true,
+      recurring: mockRecurring,
+    });
+
+    renderForm({ recurring: mockRecurring, onClose });
+
+    const amountInput = screen.getByLabelText(/monto/i) as HTMLInputElement;
+    await user.clear(amountInput);
+    await user.type(amountInput, "2000");
+
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(mockUpdateRecurring).toHaveBeenCalled();
+      const [, updateBody] = mockUpdateRecurring.mock.calls[0] as [string, Record<string, unknown>];
+      // frequency NO debe estar en el body del PATCH
+      expect(updateBody).not.toHaveProperty("frequency");
+    });
   });
 });

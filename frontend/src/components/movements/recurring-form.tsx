@@ -18,6 +18,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Link from "next/link";
 import { AlertTriangle, Repeat, Check, ArrowDown, ArrowUp } from "lucide-react";
+import type { RecurringFrequency } from "@/types/recurring";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +39,24 @@ const logger = createLogger("RecurringForm");
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
+/** Opciones de frecuencia: valor → etiqueta capitalizada (para el select) */
+const FREQUENCY_OPTIONS: { value: RecurringFrequency; label: string }[] = [
+  { value: "MONTHLY", label: "Mensual" },
+  { value: "BIMONTHLY", label: "Bimestral" },
+  { value: "QUARTERLY", label: "Trimestral" },
+  { value: "BIANNUAL", label: "Semestral" },
+  { value: "ANNUAL", label: "Anual" },
+];
+
+/** Etiqueta en minúscula para la nota de recurrencia */
+const FREQUENCY_LABEL_LOWER: Record<RecurringFrequency, string> = {
+  MONTHLY: "cada mes",
+  BIMONTHLY: "cada dos meses",
+  QUARTERLY: "cada tres meses",
+  BIANNUAL: "cada seis meses",
+  ANNUAL: "cada año",
+};
+
 const recurringSchema = z.object({
   type: z.enum(["EXPENSE", "INCOME"]),
   amountInput: z
@@ -50,6 +69,12 @@ const recurringSchema = z.object({
     .string()
     .min(1, "El mes de inicio es requerido")
     .regex(/^\d{4}-\d{2}$/, "El mes debe tener formato YYYY-MM"),
+  /**
+   * Frecuencia — siempre presente en el schema.
+   * En edición se inicializa con el valor del fijo existente (o MONTHLY como fallback)
+   * para satisfacer el schema; NO se envía en el PATCH (el backend no permite cambiarla).
+   */
+  frequency: z.enum(["MONTHLY", "BIMONTHLY", "QUARTERLY", "BIANNUAL", "ANNUAL"]),
   categoryId: z.string().min(1, "La categoría es requerida"),
   description: z.string().optional(),
 });
@@ -95,6 +120,9 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
         type: recurring.type,
         amountInput: String(recurring.amountCents / 100).replace(".", ","),
         startMonth: getCurrentMonth(),
+        // frequency: se inicializa con el valor del fijo (o MONTHLY como fallback) para
+        // satisfacer la validación del schema en edición — NO se envía en el PATCH.
+        frequency: recurring.frequency ?? "MONTHLY",
         categoryId: recurring.categoryId,
         description: recurring.description ?? "",
       }
@@ -102,6 +130,7 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
         type: "EXPENSE",
         amountInput: "",
         startMonth: defaultMonth ?? getCurrentMonth(),
+        frequency: "MONTHLY",
         categoryId: "",
         description: "",
       };
@@ -125,6 +154,7 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
         type: recurring.type,
         amountInput: String(recurring.amountCents / 100).replace(".", ","),
         startMonth: getCurrentMonth(),
+        frequency: recurring.frequency ?? "MONTHLY",
         categoryId: recurring.categoryId,
         description: recurring.description ?? "",
       });
@@ -133,6 +163,7 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
 
   const selectedType = watch("type");
   const selectedCategoryId = watch("categoryId");
+  const selectedFrequency = watch("frequency");
 
   const availableCategories = filterCategoriesByType(
     (categories ?? []).map((c) => ({ id: c.id, name: c.name, scope: c.scope })),
@@ -175,6 +206,7 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
         amountCents,
         categoryId: data.categoryId,
         startMonth: data.startMonth,
+        frequency: data.frequency,
         description: data.description || undefined,
       });
 
@@ -306,6 +338,47 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
             </div>
           )}
 
+          {/* ── Frecuencia: selector en crear / read-only con badge en editar ── */}
+          {isEditing ? (
+            /* En editar: frecuencia inmutable — caja read-only (patrón igual a "Tipo") */
+            <div className="flex flex-col gap-[7px]">
+              <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+                Frecuencia
+              </Label>
+              <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px] text-[14px] font-semibold text-ink-2">
+                <Repeat size={15} className="text-accent-ink shrink-0" aria-hidden="true" />
+                {FREQUENCY_OPTIONS.find((o) => o.value === selectedFrequency)?.label ?? "Mensual"}
+              </div>
+              {/* Campo oculto para que RHF tenga el valor en el form state */}
+              <input type="hidden" {...register("frequency")} />
+            </div>
+          ) : (
+            /* En crear: selector editable — entre Mes de inicio y Categoría */
+            <div className="flex flex-col gap-[7px]">
+              <Label htmlFor="rec-frequency" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+                Frecuencia
+              </Label>
+              <Controller
+                name="frequency"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    id="rec-frequency"
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.frequency?.message}
+                  >
+                    {FREQUENCY_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              />
+            </div>
+          )}
+
           {/* ── Categoría ── */}
           <div className="flex flex-col gap-[7px]">
             <div className="flex items-center justify-between">
@@ -359,11 +432,11 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
             )}
           </div>
 
-          {/* ── Nota de recurrencia (solo en crear) ── */}
+          {/* ── Nota de recurrencia (solo en crear): copy dinámico según frecuencia ── */}
           {!isEditing && (
             <div className="flex items-center gap-[7px] pt-[2px] text-[12.5px] text-muted">
               <Repeat size={14} className="text-accent-ink shrink-0" aria-hidden="true" />
-              Se registra automáticamente cada mes a partir del mes de inicio.
+              Se registra automáticamente {FREQUENCY_LABEL_LOWER[selectedFrequency]} a partir del mes de inicio.
             </div>
           )}
 

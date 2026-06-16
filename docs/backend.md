@@ -248,8 +248,8 @@ El join de movimientos y el cálculo de totales **no filtran por `Category.delet
 `MovementsModule` puebla la lista `fijos` y suma los fijos activos a los totales del mes llamando a `RecurringService` (regla de propiedad de dominio: nunca toca la tabla `recurrings`).
 
 - **`findFijosByMonth` usa Prisma ORM normal** (no `$queryRaw`, no `AT TIME ZONE`): los fijos operan **a nivel mes**, sin día/hora/zona, así que no hay bucketeo por timezone que resolver.
-- **Condición de actividad en un mes:** `startMonth <= month AND (deletedFrom IS NULL OR deletedFrom > month)`. La comparación es **léxica de strings `YYYY-MM`** — válida porque ese formato ordena cronológicamente como texto (`"2026-02" < "2026-10"`). Se corresponde con RF-MF-002.
-- **Totales del mes ahora suman únicos + fijos activos** (antes solo únicos). El `MovementItem` de un fijo viene con `occurredAt` y `timezone` en `null` (ver shape en `docs/data-model.md`).
+- **Condición de actividad en un mes:** `startMonth <= month AND (deletedFrom IS NULL OR deletedFrom > month)` **más** la condición de frecuencia `isOnFrequency(startMonth, frequency, month)` (Fase 1.1.1, RN-016). El rango se compara **léxicamente sobre strings `YYYY-MM`** —válido porque ese formato ordena cronológicamente como texto (`"2026-02" < "2026-10"`)— y la frecuencia se aplica en JS (ver **Cálculo de aparición de fijos por mes**). Se corresponde con RF-MF-002 / RF-MF-006.
+- **Totales del mes ahora suman únicos + fijos activos** (antes solo únicos). El `MovementItem` de un fijo viene con `occurredAt` y `timezone` en `null`, y con `frequency` / `skipped` poblados (Fase 1.1.1; ver shape en `docs/data-model.md`). **Un fijo anulado para el mes (`skipped: true`, RF-MF-005) se incluye en la lista pero se excluye de los totales.**
 
 ### Integración de cuotas en `/movements` (Fase 7)
 
@@ -289,7 +289,7 @@ data = {
 - **Siempre 12 entradas**, de enero a diciembre del `year` pedido, en orden. Los meses sin datos (incluidos los meses **futuros** del año en curso) van con `incomeCents` y `expenseCents` en **cero** — nunca se omiten.
 - Cada `incomeCents` / `expenseCents` suma **únicos + fijos activos + cuotas activas** del mes con el **mismo criterio de bucketeo que `GET /movements` mensual** (reutiliza RN-015), sin regla de zona nueva:
   - **únicos** por `date_trunc('month', "occurredAt" AT TIME ZONE timezone)` (la zona propia del registro);
-  - **fijos** por `startMonth <= mes AND (deletedFrom IS NULL OR deletedFrom > mes)`;
+  - **fijos** por `startMonth <= mes AND (deletedFrom IS NULL OR deletedFrom > mes)` **más** `isOnFrequency(startMonth, frequency, mes)` (Fase 1.1.1), **excluyendo los meses anulados** (`skippedMonths.has(mes)` → no suma; RF-MF-005);
   - **cuotas** por `startMonth <= mes < addMonths(startMonth, totalInstallments)`.
 
 #### `categories` — solo EXPENSE, ordenadas por gasto anual
@@ -316,11 +316,14 @@ Gestión de movimientos fijos, **scopeada por `userId` del JWT**. El módulo exp
 
 | Endpoint | Entrada | Éxito | Errores |
 |----------|---------|-------|---------|
-| `POST /recurring` | `{ type, amountCents, categoryId, startMonth, description? }` | `201` · `data: Recurring` | `400` |
+| `POST /recurring` | `{ type, amountCents, categoryId, startMonth, frequency?, description? }` | `201` · `data: Recurring` | `400` |
 | `PATCH /recurring/:id` | `{ amountCents?, categoryId?, description?, currentMonth }` | `200` · `data: Recurring` | `400` · `404` |
+| `POST /recurring/:id/skip` | `{ month }` (`YYYY-MM`) | `200` · `data: { skipped, month }` | `400` · `404` |
 | `DELETE /recurring/:id` | query: `currentMonth`, `fromCurrentMonth` | `204 No Content` | `404` |
 
-- **`type` y `startMonth` no son editables** por PATCH: solo `amountCents`, `categoryId` y `description` (RF-MF-003). El `startMonth` del POST es el mes actual que envía el front.
+- **`type`, `startMonth` y `frequency` no son editables** por PATCH: solo `amountCents`, `categoryId` y `description` (RF-MF-003). El `startMonth` del POST es el mes actual que envía el front.
+- **`frequency` (P2 — Fase 1.1.1):** opcional en el `POST`, default **`MONTHLY`** si se omite. Set cerrado: `MONTHLY | BIMONTHLY | QUARTERLY | BIANNUAL | ANNUAL` (`400` si el valor no es del enum). Es **inmutable** (como `type`): no se acepta en PATCH; en el split (abajo) la fila nueva R2 la **hereda del original**. La respuesta del `POST` incluye `frequency`. Detalle del cálculo "¿este fijo aparece en este mes?" en **Cálculo de aparición de fijos por mes** (abajo).
+- **`POST /recurring/:id/skip` — toggle de anulación (P1 — Fase 1.1.1):** anula / des-anula la aparición de un fijo en un mes puntual (RF-MF-005). Body `{ month: "YYYY-MM" }`. Es un **toggle**: si ya existe el skip `(fijo, mes)` lo borra (`data: { skipped: false, month }`); si no existe lo crea (`data: { skipped: true, month }`). `404` si el fijo no existe o no es del usuario; `400` si el `month` no cumple `YYYY-MM`. **No valida** que el mes sea una aparición real del fijo según su frecuencia (solo formato y ownership) — esa validación semántica es del frontend, que ya tiene el ítem del mes. Un mes anulado **se sigue listando** en `GET /movements` con `skipped: true` pero **no suma** a los totales ni a la serie anual.
 - **Validación de categoría:** idéntica a la de movimientos únicos — categoría propia, activa y con scope compatible (RN-010); inexistente / ajena / eliminada / scope incompatible son todas `400` (ver `validateCategory` abajo).
 
 ### Inmutabilidad del pasado vía "split al editar"
@@ -331,6 +334,19 @@ Un **fijo lógico** es una **cadena de filas `Recurring`** en el tiempo, no una 
 - **`currentMonth <= R.startMonth`** (la fila no tiene pasado todavía) → se **edita en su lugar**, sin crear filas nuevas.
 
 Esto materializa "el pasado es inmutable" (RF-MF-003) sin generar filas por instancia mensual.
+
+### Cálculo de aparición de fijos por mes — frecuencia (P2) y skips (P1)
+
+La lógica "¿este fijo aparece en este mes?" está **centralizada en dos helpers exportados desde `movements.repository.ts`** y reutilizada por `findFijosByMonth`, la proyección anual y los tests:
+
+- **`frequencyStep(frequency)`** → paso en meses: `MONTHLY=1`, `BIMONTHLY=2`, `QUARTERLY=3`, `BIANNUAL=6`, `ANNUAL=12`.
+- **`isOnFrequency(startMonth, frequency, month)`** → `monthDiff(startMonth, month) % frequencyStep(frequency) === 0`. La frecuencia está **anclada al `startMonth`**.
+
+Un fijo aparece en `month` si: `startMonth <= month` **y** (`deletedFrom IS NULL OR deletedFrom > month`) **y** `isOnFrequency(startMonth, frequency, month)` (RN-016). El primer par de condiciones (rango de actividad) se filtra en Prisma por comparación léxica de `YYYY-MM`; la condición de frecuencia se aplica en JS sobre los candidatos. **Cualquier cambio al cálculo de fijos por mes debe pasar por estos helpers, no re-duplicarse.**
+
+**Skips (P1 — RF-MF-005):**
+- En `findFijosByMonth`, cada fijo incluye sus skips del mes consultado (`include: { skips: { where: { month } } }`); `skipped = skips.length > 0`. El fijo anulado **se incluye igual en la lista** con `skipped: true`; **excluirlo de los totales es responsabilidad del caller** (`MovementsService`).
+- En la **proyección anual**, los skips se cargan como **`Map<recurringId, Set<month>>` en una sola query** (`recurringSkip.findMany` por `recurring.userId`, en paralelo con los fijos) para evitar el N+1 que produciría un `include` anidado. Para cada mes del año se descarta el fijo si `skippedMonths.has(mes)` (no suma al anual), además de aplicar `isOnFrequency`.
 
 ### Eliminación (DELETE con `currentMonth` y `fromCurrentMonth`)
 

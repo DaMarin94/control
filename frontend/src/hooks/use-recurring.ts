@@ -21,6 +21,8 @@ import {
   type Recurring,
   type CreateRecurringRequest,
   type UpdateRecurringRequest,
+  type SkipRecurringRequest,
+  type SkipRecurringResponse,
 } from "@/types/recurring";
 import { createLogger } from "@/lib/logger";
 
@@ -45,6 +47,12 @@ export interface UpdateRecurringResult {
 
 export interface DeleteRecurringResult {
   success: boolean;
+  error?: string;
+}
+
+export interface SkipRecurringResult {
+  success: boolean;
+  skipped?: boolean;
   error?: string;
 }
 
@@ -203,12 +211,64 @@ export function useRecurring() {
     }
   }
 
+  // ─── Mutation: toggle anular/des-anular fijo (P1 — Fase 1.1.1) ───────────
+
+  const skipMutation = useMutation<
+    SkipRecurringResponse,
+    ApiError,
+    { id: string; data: SkipRecurringRequest }
+  >({
+    mutationFn: ({ id, data }) =>
+      api.post<SkipRecurringResponse>(`/recurring/${id}/skip`, data),
+    onSuccess: (res) => {
+      // Invalida toda la familia de queries de movimientos (todos los meses cacheados)
+      // porque el skip afecta el total del mes consultado.
+      void queryClient.invalidateQueries({ queryKey: MOVEMENTS_QUERY_PREFIX });
+      logger.info("Toggle skip de fijo", { skipped: res.skipped, month: res.month });
+    },
+    onError: (err) => {
+      if (err.isServerError()) {
+        logger.error("Error de servidor al toggle skip de fijo", { statusCode: err.statusCode });
+      }
+    },
+  });
+
+  async function skipRecurring(
+    id: string,
+    month: string,
+  ): Promise<SkipRecurringResult> {
+    try {
+      const res = await skipMutation.mutateAsync({ id, data: { month } });
+      return { success: true, skipped: res.skipped };
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.statusCode === 404) {
+          return { success: false, error: "El movimiento no existe o ya fue eliminado." };
+        }
+        if (err.statusCode === 400) {
+          return { success: false, error: err.message };
+        }
+        logger.error("Error al toggle skip de fijo", { statusCode: err.statusCode });
+        return {
+          success: false,
+          error: "Ocurrió un error al anular el movimiento. Intentalo de nuevo.",
+        };
+      }
+      logger.error("Error inesperado al toggle skip de fijo", {
+        error: err instanceof Error ? err.message : "desconocido",
+      });
+      return { success: false, error: "Ocurrió un error inesperado. Intentalo de nuevo." };
+    }
+  }
+
   return {
     createRecurring,
     updateRecurring,
     deleteRecurring,
+    skipRecurring,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
+    isSkipping: skipMutation.isPending,
   };
 }

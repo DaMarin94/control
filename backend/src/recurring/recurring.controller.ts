@@ -14,6 +14,7 @@ import {
 import { RecurringService } from './recurring.service';
 import { CreateRecurringDto } from './dto/create-recurring.dto';
 import { UpdateRecurringDto } from './dto/update-recurring.dto';
+import { ToggleSkipRecurringDto } from './dto/toggle-skip-recurring.dto';
 
 interface AuthRequest extends Request {
   user: { userId: string };
@@ -57,6 +58,29 @@ export class RecurringController {
     @Body() dto: UpdateRecurringDto,
   ) {
     return this.recurringService.update(req.user.userId, id, dto);
+  }
+
+  /**
+   * POST /recurring/:id/skip
+   * Toglea el skip de un fijo para un mes puntual (P1 — Fase 1.1.1).
+   *
+   * Body: { month: "YYYY-MM" }
+   *
+   * Respuesta 200 + sobre:
+   * { skipped: boolean, month: string }
+   * - skipped=true: el mes quedó anulado (no sumará a totales, aparece con skipped=true en /movements)
+   * - skipped=false: el mes fue des-anulado (vuelve a contar)
+   *
+   * 404 si el fijo no existe o no pertenece al usuario.
+   * 400 si month tiene formato inválido.
+   */
+  @Post(':id/skip')
+  toggleSkip(
+    @Request() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() dto: ToggleSkipRecurringDto,
+  ) {
+    return this.recurringService.toggleSkip(req.user.userId, id, dto.month);
   }
 
   /**

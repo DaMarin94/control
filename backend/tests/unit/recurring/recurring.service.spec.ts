@@ -16,7 +16,7 @@
  */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { CategoryScope, MovementType } from '@prisma/client';
+import { CategoryScope, MovementType, RecurringFrequency } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { RecurringService } from '../../../src/recurring/recurring.service';
 import {
@@ -34,6 +34,9 @@ const mockRepo = {
   findById: jest.fn(),
   update: jest.fn(),
   delete: jest.fn(),
+  findSkip: jest.fn(),
+  createSkip: jest.fn(),
+  deleteSkip: jest.fn(),
 };
 
 /**
@@ -73,6 +76,7 @@ function makeRecurring(
     description: null,
     startMonth: '2026-01',
     deletedFrom: null,
+    frequency: RecurringFrequency.MONTHLY,
     createdAt: new Date(),
     updatedAt: new Date(),
     category: {
@@ -758,6 +762,177 @@ describe('RecurringService', () => {
 
     it('rollover con padding: 2099-12 → 2100-01', () => {
       expect(service.nextMonth('2099-12')).toBe('2100-01');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // toggleSkip (P1 — Fase 1.1.1)
+  // -------------------------------------------------------------------------
+
+  describe('toggleSkip', () => {
+    it('anula un mes: crea el skip y devuelve { skipped: true, month }', async () => {
+      const rec = makeRecurring({ startMonth: '2026-01' });
+      mockRepo.findById.mockResolvedValue(rec);
+      mockRepo.findSkip.mockResolvedValue(false);
+      mockRepo.createSkip.mockResolvedValue(undefined);
+
+      const result = await service.toggleSkip(USER_A, 'rec-001', '2026-06');
+
+      expect(mockRepo.createSkip).toHaveBeenCalledWith('rec-001', '2026-06');
+      expect(mockRepo.deleteSkip).not.toHaveBeenCalled();
+      expect(result).toEqual({ skipped: true, month: '2026-06' });
+    });
+
+    it('des-anula un mes: borra el skip y devuelve { skipped: false, month }', async () => {
+      const rec = makeRecurring({ startMonth: '2026-01' });
+      mockRepo.findById.mockResolvedValue(rec);
+      mockRepo.findSkip.mockResolvedValue(true);
+      mockRepo.deleteSkip.mockResolvedValue(undefined);
+
+      const result = await service.toggleSkip(USER_A, 'rec-001', '2026-06');
+
+      expect(mockRepo.deleteSkip).toHaveBeenCalledWith('rec-001', '2026-06');
+      expect(mockRepo.createSkip).not.toHaveBeenCalled();
+      expect(result).toEqual({ skipped: false, month: '2026-06' });
+    });
+
+    it('idempotencia del toggle: anular dos veces des-anula', async () => {
+      const rec = makeRecurring({ startMonth: '2026-01' });
+      mockRepo.findById.mockResolvedValue(rec);
+      // Primera llamada: no estaba skippeado → lo anula
+      mockRepo.findSkip.mockResolvedValueOnce(false);
+      mockRepo.createSkip.mockResolvedValue(undefined);
+      const r1 = await service.toggleSkip(USER_A, 'rec-001', '2026-06');
+      expect(r1.skipped).toBe(true);
+
+      // Segunda llamada: ahora está skippeado → lo des-anula
+      mockRepo.findSkip.mockResolvedValueOnce(true);
+      mockRepo.deleteSkip.mockResolvedValue(undefined);
+      const r2 = await service.toggleSkip(USER_A, 'rec-001', '2026-06');
+      expect(r2.skipped).toBe(false);
+    });
+
+    it('404 si el fijo no existe', async () => {
+      mockRepo.findById.mockResolvedValue(null);
+
+      await expect(
+        service.toggleSkip(USER_A, 'no-existe', '2026-06'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockRepo.findSkip).not.toHaveBeenCalled();
+    });
+
+    it('aislamiento: 404 si el fijo pertenece a otro usuario (RN-003)', async () => {
+      const rec = makeRecurring({ userId: USER_B });
+      mockRepo.findById.mockResolvedValue(rec);
+
+      await expect(
+        service.toggleSkip(USER_A, 'rec-001', '2026-06'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockRepo.findSkip).not.toHaveBeenCalled();
+    });
+
+    it('400 si el mes tiene formato inválido', async () => {
+      await expect(
+        service.toggleSkip(USER_A, 'rec-001', '202606'),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockRepo.findById).not.toHaveBeenCalled();
+    });
+
+    it('400 si el mes tiene valor inválido (13)', async () => {
+      await expect(
+        service.toggleSkip(USER_A, 'rec-001', '2026-13'),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockRepo.findById).not.toHaveBeenCalled();
+    });
+
+    it('400 si el mes tiene valor inválido (00)', async () => {
+      await expect(
+        service.toggleSkip(USER_A, 'rec-001', '2026-00'),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockRepo.findById).not.toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // create con frequency (P2 — Fase 1.1.1)
+  // -------------------------------------------------------------------------
+
+  describe('create con frequency', () => {
+    it('persiste MONTHLY como default cuando no se pasa frequency', async () => {
+      mockRepo.create.mockResolvedValue(makeRecurring({ frequency: RecurringFrequency.MONTHLY }));
+
+      await service.create(USER_A, {
+        type: MovementType.EXPENSE,
+        amountCents: 5000,
+        categoryId: CAT_ID,
+        startMonth: '2026-06',
+        // sin frequency
+      });
+
+      expect(mockRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ frequency: RecurringFrequency.MONTHLY }),
+      );
+    });
+
+    it('persiste BIMONTHLY cuando se pasa', async () => {
+      mockRepo.create.mockResolvedValue(makeRecurring({ frequency: RecurringFrequency.BIMONTHLY }));
+
+      await service.create(USER_A, {
+        type: MovementType.EXPENSE,
+        amountCents: 5000,
+        categoryId: CAT_ID,
+        startMonth: '2026-06',
+        frequency: RecurringFrequency.BIMONTHLY,
+      });
+
+      expect(mockRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ frequency: RecurringFrequency.BIMONTHLY }),
+      );
+    });
+
+    it('persiste QUARTERLY cuando se pasa', async () => {
+      mockRepo.create.mockResolvedValue(makeRecurring({ frequency: RecurringFrequency.QUARTERLY }));
+
+      await service.create(USER_A, {
+        type: MovementType.EXPENSE,
+        amountCents: 5000,
+        categoryId: CAT_ID,
+        startMonth: '2026-06',
+        frequency: RecurringFrequency.QUARTERLY,
+      });
+
+      expect(mockRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ frequency: RecurringFrequency.QUARTERLY }),
+      );
+    });
+
+    it('split: R2 hereda frequency del original (no es editable)', async () => {
+      const existing = makeRecurring({
+        startMonth: '2026-01',
+        frequency: RecurringFrequency.BIMONTHLY,
+      });
+      mockRepo.findById.mockResolvedValue(existing);
+      const r2 = makeRecurring({
+        id: 'rec-002',
+        startMonth: '2026-06',
+        frequency: RecurringFrequency.BIMONTHLY,
+      });
+      mockRepo.update.mockResolvedValue({ ...existing, deletedFrom: '2026-06' });
+      mockRepo.create.mockResolvedValue(r2);
+
+      await service.update(USER_A, 'rec-001', {
+        amountCents: 9000,
+        currentMonth: '2026-06',
+      });
+
+      expect(mockRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ frequency: RecurringFrequency.BIMONTHLY }),
+      );
     });
   });
 });

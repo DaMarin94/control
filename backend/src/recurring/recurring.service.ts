@@ -3,12 +3,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { MovementType } from '@prisma/client';
+import { MovementType, RecurringFrequency } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { CategoryValidatorService } from '../categories/category-validator.service';
 import {
   RecurringRepository,
   RecurringWithCategory,
+  SkipToggleResult,
 } from './recurring.repository';
 import { CreateRecurringDto } from './dto/create-recurring.dto';
 import { UpdateRecurringDto } from './dto/update-recurring.dto';
@@ -41,6 +42,7 @@ export class RecurringService {
       type: dto.type,
       amountCents: dto.amountCents,
       startMonth: dto.startMonth,
+      frequency: dto.frequency ?? RecurringFrequency.MONTHLY,
       description: dto.description ?? null,
     });
 
@@ -92,10 +94,13 @@ export class RecurringService {
       await this.repo.update(id, { deletedFrom: dto.currentMonth });
 
       // 2. Crear la nueva fila R2 con los valores nuevos (type NO cambia)
+      // R2 hereda: type, frequency, deletedFrom del original.
+      // frequency no es editable (igual que type): hereda siempre del fijo original.
       result = await this.repo.create({
         user: { connect: { id: userId } },
         category: { connect: { id: dto.categoryId ?? existing.categoryId } },
         type: existing.type, // type es inmutable (RF-MF-003)
+        frequency: existing.frequency, // frequency es inmutable — hereda siempre
         amountCents: dto.amountCents ?? existing.amountCents,
         startMonth: dto.currentMonth,
         deletedFrom: existing.deletedFrom,
@@ -190,6 +195,64 @@ export class RecurringService {
         { userId, recurringId: id, boundary, deleteType: 'soft' },
         'Movimiento fijo eliminado (set deletedFrom)',
       );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // POST /recurring/:id/skip — toggle anular/des-anular (P1 — Fase 1.1.1)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Toglea el skip de un fijo para un mes puntual (P1).
+   *
+   * - Si (fijo, mes) ya está skippeado → lo des-anula (borra el skip).
+   * - Si no → lo anula (crea el skip).
+   * Devuelve { skipped, month } con el estado resultante.
+   *
+   * 404 si el fijo no existe o no pertenece al usuario (RN-003).
+   * 400 si el formato del mes es inválido.
+   *
+   * NOTA: no se valida que el mes sea una aparición válida según la frecuencia del fijo.
+   * Esa validación semántica es responsabilidad del frontend (que ya tiene el ítem
+   * del mes desde GET /movements). El backend solo valida formato y ownership.
+   */
+  async toggleSkip(
+    userId: string,
+    id: string,
+    month: string,
+  ): Promise<SkipToggleResult> {
+    // Validar formato y semántica del mes
+    this.validateMonthFormat(month);
+    this.validateMonthValue(month);
+
+    const existing = await this.repo.findById(id);
+
+    if (!existing || existing.userId !== userId) {
+      throw new NotFoundException('Movimiento fijo no encontrado');
+    }
+
+    const alreadySkipped = await this.repo.findSkip(id, month);
+
+    if (alreadySkipped) {
+      // Des-anular: eliminar el skip
+      await this.repo.deleteSkip(id, month);
+
+      this.logger.log(
+        { userId, recurringId: id, month, action: 'unskip' },
+        'Fijo des-anulado para el mes',
+      );
+
+      return { skipped: false, month };
+    } else {
+      // Anular: crear el skip
+      await this.repo.createSkip(id, month);
+
+      this.logger.log(
+        { userId, recurringId: id, month, action: 'skip' },
+        'Fijo anulado para el mes',
+      );
+
+      return { skipped: true, month };
     }
   }
 

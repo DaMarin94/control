@@ -307,3 +307,87 @@ En el Dashboard la navegación de año está **deshabilitada**: **no se renderiz
 - **Cambio de año (`/anual`):** al navegar con el control compartido, ambas tarjetas recalculan; las áreas/barras pueden reanimar su *grow* (~0.4s) sincronizadas, ya que comparten el año.
 - **Hover:** transición 0.14s (tooltip aparece, dot crece) — igual que el resto del DS.
 - **`prefers-reduced-motion`:** se **desactiva** la animación de entrada y la reanimación al cambiar de año (Recharts `isAnimationActive={false}`); la carga y el cambio de año son instantáneos. El tooltip sigue apareciendo pero sin transición. Regla obligatoria del DS (principios de jerarquía y layout).
+
+---
+
+## Fijos extendidos — spec visual (Fase 1.1.1, 2026-06-15)
+
+> Spec del lenguaje visual de la Fase 1.1.1 (P1 anular un fijo por mes, P2 periodicidad). Backend ya implementado; lo consume `control-frontend`. Toca dos lugares: el **ítem del fijo en `/mes`** (`movement-item-row.tsx`) y el **form de fijo del modal de carga** (`recurring-form.tsx`). No introduce tokens nuevos: todo se resuelve con los tokens y patrones ya vigentes.
+
+### 1. Frecuencia en la sublínea del ítem fijo (`/mes`)
+
+Hoy la sublínea del fijo es `Categoría · gasto · 🔁 mensual` con la palabra "mensual" hardcodeada y el ícono `Repeat` (lucide) a `12px` `opacity-60`. El backend ahora expone `frequency`. La frecuencia **reemplaza** ese texto fijo; **se conserva** el ícono `Repeat` y todo el tratamiento existente del segmento (mismo `12px`, mismo `opacity-60`, misma separación por bullet `--faint`). El ícono `Repeat` sigue significando "es un fijo / se repite"; lo único que cambia es la etiqueta que lo acompaña.
+
+**Etiquetas en español por valor de `frequency`** (minúscula, igual que "mensual" hoy):
+
+| `frequency` | Etiqueta sublínea |
+|---|---|
+| `MONTHLY` | mensual |
+| `BIMONTHLY` | bimestral |
+| `QUARTERLY` | trimestral |
+| `BIANNUAL` | semestral |
+| `ANNUAL` | anual |
+
+- Sin cambios de color, peso ni tamaño respecto del segmento actual: es texto `--muted` 12.5px dentro de la sublínea.
+- No se agrega ningún badge ni decoración extra por frecuencia: la periodicidad vive **solo** en este segmento de la sublínea. Un fijo "mensual" se sigue viendo exactamente como hoy.
+
+### 2. Ítem fijo ANULADO (skipped) en `/mes`
+
+El backend devuelve el ítem con `skipped: true` (solo posible en `origin: 'fijo'`). El ítem **se sigue mostrando** en la lista en su sección de Fijos, en su misma posición (sigue ordenado por monto descendente), pero está anulado para ese mes: **no suma a los totales**. La diferenciación tiene que leerse como "este mes no cuenta" sin que el ítem desaparezca ni pierda legibilidad.
+
+**Tratamiento visual del ítem anulado** (delta respecto del fijo activo; todo lo no listado queda igual):
+
+- **Atenuación general de la fila:** todo el contenido de la fila (ícono, nombre, sublínea, monto, columna de fecha) baja a **`opacity: 0.55`**. Suficiente para leerse como inactivo sin volverse ilegible. La atenuación se aplica al contenido, **no** al fondo de la fila ni al hover (ver hover abajo) ni al KebabMenu (el menú de acciones debe quedar plenamente usable).
+- **Monto tachado:** el monto lleva **`line-through`** (tachado) además de la atenuación. El tachado es el indicador inequívoco de "este importe no se computa". El monto **conserva su color semántico** (gasto `--ink`, ingreso `--income-ink`, igual que hoy) y su signo; el tachado va por encima. No se recolorea el monto a un neutro: mantenemos la semántica, solo lo anulamos visualmente con el tachado + la opacidad.
+- **Badge "Anulado":** un badge de estado se agrega en la **sublínea**, como **primer segmento**, antes de "Categoría". Estilo chip del DS:
+  - Texto `Anulado`, UI font, 11px, peso 600, `letter-spacing: .04em`.
+  - Fill `--panel-3`, texto `--muted`, radio `--r-chip` (7px), padding `1px 7px`.
+  - **Neutro a propósito** (no usa `--warning` ni un semántico): "anulado" es un estado de cómputo, no un error ni un gasto/ingreso. El neutro evita que compita con el verde/rojo del monto.
+  - El badge **no** se atenúa con el resto: vive dentro de la fila atenuada, así que hereda algo de la opacidad, lo cual es aceptable y deseado (refuerza el estado apagado). No se le da opacidad propia adicional.
+- **Ícono (columna 1):** se mantiene el ícono tintado por tipo (expense-soft/income-soft) tal cual, solo afectado por la opacidad general de la fila. No se cambia a un ícono distinto ni se vuelve gris: la atenuación + el tachado + el badge ya comunican el estado, y mantener el ícono conserva la lectura de "qué fijo es".
+
+**Hover del ítem anulado:** la fila **sigue siendo interactiva** (el usuario va a querer des-anularla). Se conserva el `hover:bg-panel-2` de la fila y la aparición del KebabMenu en hover. En hover, el contenido atenuado **no** vuelve a opacidad plena (seguiría leyéndose como anulado); la única señal de hover es el fondo `--panel-2` y el KebabMenu visible. El KebabMenu en sí nunca está atenuado (queda a opacidad 1 cuando aparece), para que "Des-anular" sea cómodo de accionar.
+
+**Resumen de la jerarquía del estado anulado:** badge "Anulado" (qué pasó) → opacidad 0.55 (está apagado) → tachado del monto (no se computa). Las tres señales juntas; ninguna sola alcanza.
+
+### 3. Acción Anular / Des-anular en el KebabMenu del ítem fijo
+
+Solo los ítems con `origin: 'fijo'` suman esta acción; **únicos y cuotas no la tienen** (su KebabMenu queda como está: Editar / Eliminar). En los fijos, la acción es un **toggle** y su label depende del estado `skipped`:
+
+| Estado del fijo | Label del ítem de menú | Ícono (lucide) |
+|---|---|---|
+| Activo (`skipped: false`) | **Anular este mes** | `CalendarOff` |
+| Anulado (`skipped: true`) | **Des-anular este mes** | `CalendarPlus` |
+
+- **Posición en el menú:** entre "Editar" y "Eliminar" (orden: Editar → Anular/Des-anular este mes → Eliminar). Queda agrupada con Editar como acción "no destructiva" y antes del separador conceptual con Eliminar.
+- **Tratamiento:** acción **neutra**, no `danger`. Anular es reversible (es un toggle), no destruye nada — no debe pintarse en rojo. Hereda el estilo neutro del `KebabMenuItem` (`text-ink hover:bg-panel-2`), con su ícono a 15px como el resto de los ítems del menú. El único ítem `danger` (rojo) del menú sigue siendo "Eliminar".
+- **Íconos:** `CalendarOff` (anular: un calendario con la barra de "off" comunica "esta fecha no cuenta") y `CalendarPlus` (des-anular: lo reintegra). Ambos de lucide, coherentes con el resto de íconos del menú. No reutilizamos `Repeat` acá para no confundir la acción con el indicador de recurrencia de la sublínea.
+
+### 4. Selector de frecuencia en el form de fijo (tab Fijo)
+
+**Control:** `Select` nativo del DS (el mismo componente `@/components/ui/select` que usa Categoría), **no** segmented ni toggle. Razón: son 5 opciones (demasiadas para un segmented cómodo en el ancho del modal) y un select nativo es el patrón ya establecido para elegir de un set cerrado en este form (Categoría). Coherencia sobre novedad.
+
+**Ubicación dentro del form (modo crear):** entre el bloque **Mes de inicio** y el bloque **Categoría**. La frecuencia está conceptualmente ligada al `startMonth` (la periodicidad se ancla al mes de inicio: un bimestral que arranca en marzo cae marzo/mayo/julio…), así que va inmediatamente después de él y antes de Categoría. Mismo `space-y-[14px]` del form, mismo patrón de bloque (`flex flex-col gap-[7px]` con `Label` arriba).
+
+**Label:** `Frecuencia`, con el estilo de label del form (`text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]`). Es requerido (siempre hay una frecuencia), marcado `required` como los demás campos obligatorios.
+
+**Opciones del select y etiquetas (capitalizadas, como van en un control de selección):**
+
+| `frequency` | Opción del select |
+|---|---|
+| `MONTHLY` | Mensual |
+| `BIMONTHLY` | Bimestral |
+| `QUARTERLY` | Trimestral |
+| `BIANNUAL` | Semestral |
+| `ANNUAL` | Anual |
+
+- **Default:** `MONTHLY` (Mensual) preseleccionado. A diferencia de Categoría, **no** lleva opción placeholder vacía ("Seleccioná…"): siempre arranca en Mensual, que es el caso por defecto y back-compat de los fijos existentes.
+- **Orden de las opciones:** de menor a mayor período (Mensual → Bimestral → Trimestral → Semestral → Anual).
+
+**Nota de recurrencia existente:** el form ya muestra (solo en crear) la línea `🔁 Se registra automáticamente cada mes a partir del mes de inicio.`. Como ahora la frecuencia es variable, esa frase fija ("cada mes") deja de ser siempre cierta. **Señal para el analista / orquestador:** el texto de esa nota debería contemplar la frecuencia elegida (ej. "cada N meses" / "según la frecuencia elegida, a partir del mes de inicio"). El redactado exacto es copy funcional, no lo cierra esta spec; lo marco como impacto a derivar. Visualmente la línea no cambia (mismo `.field-note` con ícono `Repeat` `--accent-ink`).
+
+**Modo editar — frecuencia inmutable:** el backend dejó la frecuencia **inmutable** en PATCH (igual que el `type`). En modo editar el selector **no** debe permitir cambiarla. Se muestra **read-only con badge, replicando exactamente el patrón ya usado para "Tipo" en edición** (bloque `Label` + caja `rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px] text-[14px] font-semibold text-ink-2`). Se elige read-only visible (no ocultarlo) por coherencia con "Tipo" y porque informar la frecuencia del fijo que se está editando es útil aunque no se pueda cambiar.
+
+- **Contenido de la caja read-only:** ícono `Repeat` (lucide, 15px, `--accent-ink` — mismo acento que la nota de recurrencia y coherente con que el `Repeat` es el indicador de "fijo") + la etiqueta capitalizada de la frecuencia (Mensual / Bimestral / Trimestral / Semestral / Anual, misma tabla de arriba).
+- **Ubicación en editar:** la misma posición relativa que en crear, salvo que en editar **no** existe el bloque "Mes de inicio" (ya está oculto en editar hoy). Queda entonces entre **Monto** y **Categoría**.
+- Coherente con cómo "Tipo" pasa de toggle (crear) a caja read-only con badge (editar). Frecuencia hace lo mismo: `Select` (crear) → caja read-only (editar).

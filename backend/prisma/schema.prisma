@@ -26,6 +26,23 @@ enum CategoryScope {
   INCOME
 }
 
+// Frecuencia de aparición de un movimiento fijo (P2 — Fase 1.1.1).
+// Set cerrado: no hay frecuencias libres ni custom.
+// La frecuencia está anclada al startMonth del fijo:
+//   - MONTHLY (step 1):   aparece cada mes a partir de startMonth
+//   - BIMONTHLY (step 2): cada 2 meses (ej: startMonth=marzo → mar, may, jul...)
+//   - QUARTERLY (step 3): cada 3 meses
+//   - BIANNUAL (step 6):  cada 6 meses
+//   - ANNUAL (step 12):   una vez por año
+// Back-compat: todos los fijos existentes quedan con MONTHLY (default de migración).
+enum RecurringFrequency {
+  MONTHLY
+  BIMONTHLY
+  QUARTERLY
+  BIANNUAL
+  ANNUAL
+}
+
 // ---------------------------------------------------------------------------
 // User
 // ---------------------------------------------------------------------------
@@ -162,13 +179,47 @@ model Recurring {
   // Formato "YYYY-MM"
   deletedFrom String?
 
+  // frequency: periodicidad del fijo (P2 — Fase 1.1.1).
+  // Default MONTHLY para back-compat con todos los fijos anteriores a 1.1.1.
+  // La frecuencia está anclada al startMonth: monthDiff(startMonth, mes) % step === 0
+  // determina si el fijo aparece en ese mes.
+  frequency RecurringFrequency @default(MONTHLY)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
+  // Meses salteados (P1 — Fase 1.1.1): cada fila representa una aparición anulada.
+  // onDelete: Cascade: si se borra el fijo, sus skips desaparecen.
+  skips RecurringSkip[]
+
   @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// RecurringSkip (meses salteados por fijo — P1, Fase 1.1.1)
+// ---------------------------------------------------------------------------
+
+// Modela "una aparición del fijo está anulada para ese mes puntual".
+// Es reversible: la acción es un toggle (anular / des-anular).
+// El mes anulado SE SIGUE MOSTRANDO en /movements marcado con skipped=true.
+// No suma a los totales del mes (se excluye del cálculo).
+// Solo tiene sentido para meses en los que el fijo efectivamente aparece según su frecuencia.
+model RecurringSkip {
+  id          String @id @default(cuid())
+  recurringId String
+  // month: mes anulado en formato "YYYY-MM"
+  month       String
+
+  createdAt DateTime @default(now())
+
+  recurring Recurring @relation(fields: [recurringId], references: [id], onDelete: Cascade)
+
+  // Restricción: solo puede haber un skip por (fijo, mes)
+  @@unique([recurringId, month])
+  @@index([recurringId])
 }
 
 // ---------------------------------------------------------------------------

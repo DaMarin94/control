@@ -62,9 +62,11 @@ vi.mock("@/hooks/use-recurring", () => ({
     createRecurring: vi.fn(),
     updateRecurring: vi.fn(),
     deleteRecurring: vi.fn(),
+    skipRecurring: vi.fn(),
     isCreating: false,
     isUpdating: false,
     isDeleting: false,
+    isSkipping: false,
   })),
 }));
 
@@ -125,6 +127,8 @@ const mockMovementExpense = {
   occurredAt: "2026-06-17T17:30:00.000Z",
   timezone: "America/Argentina/Buenos_Aires",
   installment: null,
+  frequency: null as null,
+  skipped: false,
   category: { id: "cat-1", name: "Alimentación", color: "#FF5733", scope: "BOTH" as const },
 };
 
@@ -137,6 +141,8 @@ const mockMovementIncome = {
   occurredAt: "2026-06-01T12:00:00.000Z",
   timezone: "America/Argentina/Buenos_Aires",
   installment: null,
+  frequency: null as null,
+  skipped: false,
   category: { id: "cat-2", name: "Sueldo", color: "#33FF57", scope: "INCOME" as const },
 };
 
@@ -150,6 +156,8 @@ const mockMovementFijo = {
   occurredAt: null,
   timezone: null,
   installment: null,
+  frequency: "MONTHLY" as const,
+  skipped: false,
   category: { id: "cat-3", name: "Servicios", color: "#5733FF", scope: "EXPENSE" as const },
 };
 
@@ -167,6 +175,8 @@ const mockMovementCuota = {
     total: 12,
     startMonth: "2026-01",
   },
+  frequency: null as null,
+  skipped: false,
   category: { id: "cat-4", name: "Tecnología", color: "#FF33AA", scope: "EXPENSE" as const },
 };
 

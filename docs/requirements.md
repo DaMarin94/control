@@ -37,6 +37,7 @@ Cubre exclusivamente la plataforma **web** de Control en su versión 1.0. La pla
 | Versión | Fecha | Descripción |
 |---|---|---|
 | 1.0 | 2026-06-03 | Versión inicial |
+| 1.1.1 | 2026-06-16 | Fijos extendidos: anulación por mes puntual (RF-MF-005) y periodicidad (RF-MF-006); nueva RN-016. Fase 1.1.1. |
 
 ---
 
@@ -536,10 +537,11 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 | **Precondiciones** | Existe al menos un movimiento fijo activo. |
 
 **Criterios de aceptación:**
-- [ ] Un fijo activo aparece en todos los meses desde `startMonth` inclusive.
+- [ ] Un fijo activo aparece en todos los meses desde `startMonth` inclusive **que caen en su frecuencia** (RF-MF-006 / RN-016). Un fijo mensual aparece en todos los meses del rango; uno de frecuencia mayor solo en los meses que dicta su paso anclado al `startMonth`.
 - [ ] Un fijo con `deletedFrom` definido no aparece en ese mes ni en los siguientes.
 - [ ] Si `deletedFrom` es el mes siguiente al actual, el fijo aún aparece en el mes actual.
 - [ ] El movimiento fijo se distingue visualmente como "fijo" en la lista del mes.
+- [ ] Un fijo **anulado** para el mes (RF-MF-005) se sigue mostrando con su diferenciación visual, pero no suma a los totales.
 
 ---
 
@@ -597,6 +599,68 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 - [ ] Si el mes visualizado es anterior o igual al mes de inicio del fijo, el fijo se elimina por completo.
 - [ ] En ningún caso se modifican los meses anteriores al mes visualizado.
 - [ ] Solo se pueden eliminar movimientos fijos propios.
+
+---
+
+#### RF-MF-005 — Anular un movimiento fijo en un mes puntual (skip)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El usuario puede **anular** la aparición de un movimiento fijo en un **mes puntual**, sin eliminar el fijo. Es una acción **reversible** (toggle anular / des-anular). El mes anulado se sigue mostrando en la lista, pero **no suma a los totales** de ese mes ni a la proyección anual. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El movimiento fijo existe, está activo, aparece en el mes visualizado según su frecuencia (RF-MF-006) y pertenece al usuario autenticado. |
+
+**Flujo principal:**
+1. El usuario, parado en un mes en la Vista del mes (`/mes`), abre el menú de acciones del ítem de un movimiento fijo.
+2. El usuario selecciona la acción **"Anular este mes"**.
+3. El sistema marca esa aparición del fijo como anulada para el mes visualizado.
+4. El ítem **se sigue mostrando** en la lista con su diferenciación visual de anulado, **deja de sumar** a los totales del mes y a la proyección anual.
+
+**Flujos alternativos:**
+- *A1 — Des-anular (toggle):* sobre un fijo ya anulado en ese mes, la acción se rotula **"Des-anular este mes"**; al activarla, la aparición vuelve a contar y el ítem pierde la diferenciación visual de anulado.
+
+**Criterios de aceptación:**
+- [ ] La acción de anular / des-anular está disponible **solo en los ítems fijos** de `/mes`; los movimientos únicos y las cuotas no la tienen.
+- [ ] La acción es un **toggle reversible**: anular crea la anulación del mes; des-anular la quita. Sobre el mismo fijo y mes se puede ir y volver indefinidamente.
+- [ ] El mes anulado se distingue de los demás (`deletedFrom`, RF-MF-004): anular **no** elimina el fijo ni afecta otros meses — solo esa única aparición. El fijo sigue vivo y aparece en las demás apariciones que dicta su frecuencia.
+- [ ] Un fijo anulado para un mes **se sigue mostrando** en la lista de ese mes, con diferenciación visual.
+- [ ] El monto de un fijo anulado **no suma** a los totales del mes (RF-VM-002, RF-DASH-002) **ni** a la proyección anual del gráfico (RF-GRA-001).
+- [ ] La anulación es por mes puntual: anular un mes no afecta los meses anteriores ni posteriores.
+- [ ] Solo se pueden anular movimientos fijos propios.
+
+**Notas:**
+- El detalle visual del ítem anulado y del control de la acción lo define `control-design` (`docs/design.md`).
+- La anulación se modela como un registro aparte `(fijo, mes)`, **distinto** de `deletedFrom`: `deletedFrom` significa "el fijo deja de existir de ahí en adelante"; la anulación significa "esta única aparición no cuenta, pero el fijo sigue vivo" (ver `docs/data-model.md`, entidad RecurringSkip, y RN-016).
+
+---
+
+#### RF-MF-006 — Periodicidad del movimiento fijo (frecuencia)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Al crear un movimiento fijo, el usuario elige su **frecuencia** de aparición de un set cerrado: **mensual (default), bimestral, trimestral, semestral, anual**. La frecuencia está **anclada al mes de inicio** y define en qué meses aparece el fijo. No se puede cambiar después de creado. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa. Existe al menos una categoría disponible. |
+
+**Flujo principal:**
+1. El usuario carga un movimiento fijo (RF-MF-001) y, además del mes de inicio, selecciona una **frecuencia**.
+2. El sistema crea el fijo con esa frecuencia.
+3. El fijo aparece en su mes de inicio y luego en cada mes que dicta la frecuencia, anclada al mes de inicio.
+
+**Criterios de aceptación:**
+- [ ] La frecuencia es un **set cerrado** de 5 valores: **mensual, bimestral, trimestral, semestral, anual**. No hay frecuencias libres ni personalizadas.
+- [ ] El **default** al crear es **mensual**.
+- [ ] La frecuencia está **anclada al mes de inicio**: un fijo bimestral que arranca en marzo aparece en marzo, mayo, julio, etc.; uno trimestral que arranca en enero aparece en enero, abril, julio, octubre; y así con los demás pasos (mensual = cada mes, bimestral = cada 2 meses, trimestral = cada 3, semestral = cada 6, anual = cada 12).
+- [ ] Un fijo aparece en un mes solo si, además de estar activo en el rango (RF-MF-002), ese mes cae en su frecuencia respecto del mes de inicio.
+- [ ] La frecuencia **no es editable** después de creado el fijo (igual que el tipo): el formulario de edición la muestra de solo lectura. Cambiar la cadencia de un fijo equivale a crear otro.
+- [ ] **Back-compat:** todos los movimientos fijos existentes antes de esta capacidad quedan como **mensuales**.
+- [ ] El cálculo de qué fijo cae en cada mes sigue siendo **on-the-fly** (RN-006): no se generan filas por instancia mensual.
+
+**Notas:**
+- El detalle visual del selector de frecuencia y de la etiqueta de frecuencia en el ítem del mes lo define `control-design` (`docs/design.md`).
+- La regla de cálculo de la frecuencia está formalizada en RN-016. La anulación de un mes puntual (RF-MF-005) opera sobre **una** de las apariciones que dicta la frecuencia.
 
 ---
 
@@ -1092,6 +1156,7 @@ El gráfico anual visualiza los movimientos del usuario a lo largo de un año, m
 | RN-013 | Cada categoría tiene un color asignado automáticamente desde un pool fijo de colores predefinidos. El color es de presentación únicamente; en v1 el usuario no lo elige ni lo edita. |
 | RN-014 | Para comparar nombres de categoría a efectos de unicidad, el nombre se **normaliza**: trim de espacios, insensible a mayúsculas/minúsculas e insensible a acentos/tildes. Ej: "comida", "Comida" y "Cómida" se consideran el mismo nombre. Esta normalización aplica tanto a la detección de duplicado contra categorías **activas** (bloqueo, RN-008) como contra categorías **eliminadas** (soft delete) para proponer reactivarla (RF-CAT-002). La regla se valida en **ambas capas** —backend como fuente de verdad y frontend para UX— y ambas deben mantenerse alineadas (ver `docs/technical.md`). |
 | RN-015 | Para la agregación anual del gráfico (RF-GRA-001), el mes al que se imputa cada movimiento se determina con el **mismo criterio ya definido** para la Vista del mes, sin introducir una regla de zona horaria nueva: para los movimientos **únicos**, el mes se calcula en la **zona horaria propia de cada registro** (RN-011, igual que el bucketeo de `GET /movements`); para los **fijos** y las **cuotas**, que operan a nivel mes (RN-006), el mes es el de su `startMonth` `YYYY-MM` (los fijos caen en cada mes donde están activos; las cuotas, en cada mes de su tramo). Un movimiento se imputa a un año determinado solo si su mes resuelto pertenece a ese año. |
+| RN-016 | **Frecuencia y anulación de movimientos fijos (RF-MF-005, RF-MF-006).** Un movimiento fijo con mes de inicio `S` y frecuencia `F` aparece en el mes `M` si y solo si: `S <= M` **y** (`deletedFrom` es null **o** `deletedFrom > M`) **y** `monthDiff(S, M) % step(F) === 0`, donde el paso por frecuencia es `MONTHLY=1`, `BIMONTHLY=2`, `QUARTERLY=3`, `BIANNUAL=6`, `ANNUAL=12`. La frecuencia está **anclada al mes de inicio** (no al mes consultado). Una **anulación** `(fijo, mes)` no cambia si el fijo aparece o no según esta regla: un fijo anulado para un mes **se sigue listando** en `GET /movements` con la marca de anulado, pero su monto **no suma** a los totales del mes ni a la proyección anual. La anulación es **reversible** (toggle) y solo tiene sentido sobre meses donde el fijo efectivamente aparece según `F`. El cálculo sigue siendo on-the-fly (RN-006): no se generan filas por instancia mensual. |
 
 ---
 
@@ -1137,10 +1202,12 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 
 | Término | Definición |
 |---|---|
+| Anulación (skip) de un fijo | Marca que cancela la aparición de un movimiento fijo en un **mes puntual**, sin eliminar el fijo. Reversible (toggle). El mes anulado se sigue mostrando pero no suma a los totales. Distinta de `deletedFrom`. Ver RF-MF-005, RN-016. |
 | Balance | Resultado de ingresos − gastos en un período. Puede ser positivo o negativo. |
 | Categoría | Clasificador asignado a cada movimiento. Personalizable por usuario. |
 | Cuota | Instancia mensual de un grupo de cuotas. Representa un pago parcial de una compra dividida. |
 | `deletedFrom` | Primer día del mes desde el cual un movimiento fijo deja de aparecer. Si es `null`, el fijo sigue activo. |
+| Frecuencia (de un fijo) | Periodicidad de aparición de un movimiento fijo, de un set cerrado: mensual, bimestral, trimestral, semestral, anual. Anclada al mes de inicio. Default mensual. No editable tras crearse. Ver RF-MF-006, RN-016. |
 | Gasto (`EXPENSE`) | Egreso de dinero. Reduce el balance del mes. |
 | Grupo de cuotas | Registro padre que define monto por cuota, cantidad total de cuotas y mes de inicio. |
 | Ingreso (`INCOME`) | Entrada de dinero. Aumenta el balance del mes. |
@@ -1209,6 +1276,14 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 3. **Límites de navegación de año.** Hacia atrás, **sin tope artificial**, pero el control ‹ se **deshabilita antes del primer año con movimientos** del usuario (no se navega a años previos al primer dato). Hacia adelante, **los años futuros quedan bloqueados**: el máximo navegable es el **año en curso**.
 4. **Meses sin datos: los 12 meses siempre presentes, en cero.** El eje X muestra siempre los 12 meses; un mes sin datos se grafica en **cero** (sin huecos ni omisiones). Los meses futuros del año en curso también van en cero, salvo lo que proyecten los fijos activos y las cuotas en tramo (RN-006). La representación visual concreta de un mes en cero la define `control-design`.
 5. **Drill-down (clic en un mes → Vista del mes): fuera de v1.** No se implementa en v1 la navegación desde el gráfico a la Vista del mes; queda como candidato post-v1 (ya anotado en el roadmap, sección 6).
+
+**2026-06-16 — Fijos extendidos: anulación por mes puntual (P1) y periodicidad (P2) — Fase 1.1.1 (RF-MF-005, RF-MF-006, RN-016).** Se extiende el módulo de movimientos fijos con dos capacidades **nuevas** (no reabre ninguna decisión cerrada de v1.0; las reaperturas son las fases 1.1.2 y 1.1.5):
+
+1. **Anular un fijo en un mes puntual (P1 → RF-MF-005).** Desde el ítem del fijo en `/mes`, el usuario puede **anular** (y des-anular) la aparición del fijo en el mes visualizado mediante un **toggle reversible**. El mes anulado **se sigue mostrando** en la lista con diferenciación visual, pero **no suma** a los totales del mes (RF-VM-002, RF-DASH-002) ni a la proyección anual (RF-GRA-001). Se modela como un registro aparte `(fijo, mes)` (entidad **`RecurringSkip`**), **distinto de `deletedFrom`**: `deletedFrom` = "el fijo deja de existir de ahí en adelante"; la anulación = "esta única aparición no cuenta, pero el fijo sigue vivo". La acción es exclusiva de los fijos (únicos y cuotas no la tienen).
+
+2. **Periodicidad del fijo (P2 → RF-MF-006).** Al crear un fijo, el usuario elige su **frecuencia** de un **set cerrado** de 5 valores: **mensual (default), bimestral, trimestral, semestral, anual** (sin frecuencias libres ni custom). La frecuencia está **anclada al mes de inicio** (un bimestral que arranca en marzo cae en marzo, mayo, julio…) y **no es editable** tras crearse (igual que el tipo); en el split de edición, la fila nueva hereda la frecuencia del original. **Back-compat:** todos los fijos preexistentes quedan **mensuales**. El cálculo sigue siendo **on-the-fly** (RN-006), sin generar filas por instancia.
+
+La regla de cálculo de ambos puntos se formaliza en **RN-016**. Impacta el módulo 3.4 (nuevos RF-MF-005 y RF-MF-006, criterios agregados en RF-MF-002), la sección 4 (nueva RN-016), el glosario, `docs/data-model.md` (enum `RecurringFrequency`, campo `frequency`, entidad `RecurringSkip`, contratos de movimientos del mes y serie anual), `docs/backend.md` (RecurringModule + cálculo de fijos por mes), `docs/screens.md` (form tab Fijo y Vista del mes) y `docs/features.md`. Motivo: el usuario necesita fijos que no son siempre mensuales (seguros, impuestos, suscripciones anuales) y poder saltear una aparición puntual (un mes que no se paga) sin matar el fijo ni perder su historial.
 
 Impacta RF-GRA-001 (criterio de los 12 meses en cero), RF-GRA-003 (criterios de ruta, link, forma por defecto y límites de año), RF-NAV-001 (link "Anual" en el orden del sidebar) y `docs/screens.md` (pantallas 7 y 8). **No** impacta `docs/backend.md` ni `docs/data-model.md`. Motivo: el usuario confirmó los valores recomendados; cerrar estas decisiones desbloquea la implementación sin ambigüedades.
 

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { MovementType, Prisma } from '@prisma/client';
+import { MovementType, RecurringFrequency, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -15,6 +15,7 @@ export interface EmbeddedCategory {
 
 /**
  * Shape completo de un fijo con categoría embebida.
+ * Incluye frequency (P2 — Fase 1.1.1) y skippedMonths (P1).
  */
 export interface RecurringWithCategory {
   id: string;
@@ -25,9 +26,20 @@ export interface RecurringWithCategory {
   description: string | null;
   startMonth: string;
   deletedFrom: string | null;
+  frequency: RecurringFrequency;
   createdAt: Date;
   updatedAt: Date;
   category: EmbeddedCategory;
+}
+
+/**
+ * Resultado del toggle de skip (P1 — Fase 1.1.1).
+ * - skipped: true si el mes quedó anulado (se creó el skip); false si fue des-anulado (se borró).
+ * - month: mes que fue toggleado.
+ */
+export interface SkipToggleResult {
+  skipped: boolean;
+  month: string;
 }
 
 // Include para todas las queries de Recurring
@@ -57,6 +69,7 @@ function mapToRecurringWithCategory(
     description: r.description,
     startMonth: r.startMonth,
     deletedFrom: r.deletedFrom,
+    frequency: r.frequency,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     category: {
@@ -117,5 +130,80 @@ export class RecurringRepository {
    */
   async delete(id: string): Promise<void> {
     await this.prisma.recurring.delete({ where: { id } });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Skips (P1 — Fase 1.1.1)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Verifica si existe un skip para (recurringId, month).
+   */
+  async findSkip(
+    recurringId: string,
+    month: string,
+  ): Promise<boolean> {
+    const skip = await this.prisma.recurringSkip.findUnique({
+      where: { recurringId_month: { recurringId, month } },
+    });
+    return skip !== null;
+  }
+
+  /**
+   * Crea un skip para (recurringId, month).
+   */
+  async createSkip(recurringId: string, month: string): Promise<void> {
+    await this.prisma.recurringSkip.create({
+      data: { recurringId, month },
+    });
+  }
+
+  /**
+   * Elimina un skip para (recurringId, month).
+   */
+  async deleteSkip(recurringId: string, month: string): Promise<void> {
+    await this.prisma.recurringSkip.delete({
+      where: { recurringId_month: { recurringId, month } },
+    });
+  }
+
+  /**
+   * Devuelve el set de meses salteados de un fijo dado como Set<string>.
+   * Útil para las queries del mes y del año donde ya se tiene el recurringId.
+   */
+  async findSkipsForRecurring(recurringId: string): Promise<Set<string>> {
+    const skips = await this.prisma.recurringSkip.findMany({
+      where: { recurringId },
+      select: { month: true },
+    });
+    return new Set(skips.map((s) => s.month));
+  }
+
+  /**
+   * Devuelve el set de meses salteados de TODOS los fijos del usuario como Map<recurringId, Set<month>>.
+   * Usada en las queries de proyección mensual/anual para aplicar skips en memoria.
+   */
+  async findAllSkipsForUser(
+    userId: string,
+  ): Promise<Map<string, Set<string>>> {
+    // Traer todos los skips de fijos del usuario (join vía Recurring.userId)
+    const skips = await this.prisma.recurringSkip.findMany({
+      where: {
+        recurring: { userId },
+      },
+      select: {
+        recurringId: true,
+        month: true,
+      },
+    });
+
+    const result = new Map<string, Set<string>>();
+    for (const s of skips) {
+      if (!result.has(s.recurringId)) {
+        result.set(s.recurringId, new Set<string>());
+      }
+      result.get(s.recurringId)!.add(s.month);
+    }
+    return result;
   }
 }

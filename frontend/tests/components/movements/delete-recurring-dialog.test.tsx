@@ -45,6 +45,8 @@ const mockFijoMovement: MovementItem = {
   occurredAt: null,
   timezone: null,
   installment: null,
+  frequency: "MONTHLY",
+  skipped: false,
   category: {
     id: "cat-1",
     name: "Servicios",
@@ -80,9 +82,11 @@ beforeEach(() => {
     createRecurring: vi.fn(),
     updateRecurring: vi.fn(),
     deleteRecurring: mockDeleteRecurring,
+    skipRecurring: vi.fn(),
     isCreating: false,
     isUpdating: false,
     isDeleting: false,
+    isSkipping: false,
   });
 });
 

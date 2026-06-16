@@ -67,8 +67,9 @@ function movementItemToRecurring(item: MovementItem): Recurring {
     type: item.type,
     amountCents: item.amountCents,
     description: item.description,
-    startMonth: "",
+    startMonth: getCurrentMonth(), // Relleno válido para el schema (no se envía en PATCH)
     deletedFrom: null,
+    frequency: item.frequency ?? "MONTHLY",
     createdAt: "",
     updatedAt: "",
     category: item.category,
@@ -298,6 +299,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                     <MovementItemRow
                       key={item.id}
                       movement={item}
+                      viewMonth={month}
                       onEdit={handleEdit}
                       onDelete={handleDelete}
                     />
@@ -329,6 +331,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                     <MovementItemRow
                       key={item.id}
                       movement={item}
+                      viewMonth={month}
                       onEdit={handleEdit}
                       onDelete={handleDelete}
                     />
@@ -360,6 +363,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                     <MovementItemRow
                       key={item.id}
                       movement={item}
+                      viewMonth={month}
                       onEdit={handleEdit}
                       onDelete={handleDelete}
                     />

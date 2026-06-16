@@ -7,7 +7,7 @@ import {
   Matches,
   Min,
 } from 'class-validator';
-import { MovementType } from '@prisma/client';
+import { MovementType, RecurringFrequency } from '@prisma/client';
 
 /**
  * DTO para crear un movimiento fijo (POST /recurring).
@@ -18,6 +18,10 @@ import { MovementType } from '@prisma/client';
  * - categoryId: string no vacío, obligatorio
  * - startMonth: mes en formato YYYY-MM (obligatorio). El front lo calcula con browser tz;
  *   el backend es tz-agnóstico (D2).
+ * - frequency: enum RecurringFrequency (P2 — Fase 1.1.1), opcional — default MONTHLY.
+ *   Set cerrado: MONTHLY | BIMONTHLY | QUARTERLY | BIANNUAL | ANNUAL.
+ *   La frecuencia está anclada al startMonth: un fijo BIMONTHLY que arranca en marzo
+ *   aparece en marzo, mayo, julio, etc.
  * - description: texto libre, opcional
  *
  * El userId NO se acepta en el body — se toma siempre de request.user.userId.
@@ -42,6 +46,12 @@ export class CreateRecurringDto {
     message: 'startMonth debe tener formato YYYY-MM (ej: 2026-06)',
   })
   startMonth!: string;
+
+  @IsOptional()
+  @IsEnum(RecurringFrequency, {
+    message: 'La frecuencia debe ser MONTHLY, BIMONTHLY, QUARTERLY, BIANNUAL o ANNUAL',
+  })
+  frequency?: RecurringFrequency;
 
   @IsOptional()
   @IsString()

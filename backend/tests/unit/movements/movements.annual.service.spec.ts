@@ -16,6 +16,7 @@
  * - Cuotas: cálculo on-the-fly correcto
  */
 import { Test, TestingModule } from '@nestjs/testing';
+import { RecurringFrequency } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { MovementsService } from '../../../src/movements/movements.service';
 import {
@@ -109,6 +110,8 @@ function makeFijo(overrides: Partial<RecurringForAnnual> = {}): RecurringForAnnu
     amountCents: 5000,
     startMonth: '2026-01',
     deletedFrom: null,
+    frequency: RecurringFrequency.MONTHLY,
+    skippedMonths: new Set<string>(),
     categoryId: CAT_A,
     categoryName: 'Servicios',
     categoryColor: '#6DBF67',

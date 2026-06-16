@@ -150,7 +150,7 @@ No muestra lista de movimientos (decisión 2026-06-03, ex RF-DASH-004 fuera de a
 
 ## 4. Vista del mes (`/mes`)
 
-**RF relacionados:** RF-VM-001, RF-VM-002, RF-VM-003, RF-VM-004
+**RF relacionados:** RF-VM-001, RF-VM-002, RF-VM-003, RF-VM-004, RF-MF-005, RF-MF-006
 
 ### Propósito
 
@@ -165,7 +165,7 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
   1. **Únicos**.
   2. **Fijos** — sin día específico.
   3. **Cuotas** — sin día específico; cada cuota muestra su número y total (ej: "3/12").
-  - Cada ítem muestra: tipo (gasto/ingreso), monto, categoría, descripción (si la tiene) y su origen (único / fijo / cuota X/N).
+  - Cada ítem muestra: tipo (gasto/ingreso), monto, categoría, descripción (si la tiene) y su origen (único / fijo / cuota X/N). Los **fijos** muestran además su **frecuencia** (Mensual / Bimestral / Trimestral / Semestral / Anual, RF-MF-006) en vez de fecha; un fijo **anulado** para el mes (RF-MF-005) se sigue mostrando con una **diferenciación visual** de anulado (detalle en `docs/design.md`).
   - Una sección sin movimientos en el mes no se muestra (no aparece su rótulo vacío).
 
 ### Acciones disponibles
@@ -173,6 +173,7 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 - **Navegar al mes anterior / siguiente** — actualiza lista y totales (RF-VM-004).
 - **Editar** un ítem — abre el modal de carga en modo edición, en el tipo del movimiento (RF-VM-003 → RF-MU-002, RF-MF-003 o RF-MC-003 según el tipo). Al editar un **fijo**, el cambio se aplica **desde el mes activo (el mes que se está visualizando) en adelante**, preservando los meses anteriores: el mes activo es el pivote del split, no el mes actual real (RF-MF-003, RN-005; ver bitácora 2026-06-13).
 - **Eliminar** un ítem — dispara el flujo de eliminación correspondiente al tipo (RF-MU-003 único, RF-MF-004 fijo, RF-MC-002 grupo de cuotas), con su confirmación específica. Al eliminar un **fijo**, la confirmación **no ofrece opciones** (ya no existe el checkbox "Eliminar también desde este mes"): la eliminación aplica siempre **desde el mes activo (el mes visualizado) inclusive en adelante**, preservando los meses anteriores — mismo pivote que la edición de fijos (RF-MF-004, RN-005; ver bitácora 2026-06-13). Si el mes activo es anterior o igual al mes de inicio del fijo, este se elimina por completo.
+- **Anular / Des-anular este mes** (solo en ítems **fijos**, RF-MF-005) — en el menú de acciones del ítem fijo, además de Editar y Eliminar, una acción **toggle**: **"Anular este mes"** cancela esa aparición del fijo en el mes visualizado; sobre un fijo ya anulado se rotula **"Des-anular este mes"** y la revierte. El ítem anulado **se sigue mostrando** (no desaparece), deja de sumar a los totales del mes y tiene diferenciación visual. Los movimientos **únicos** y las **cuotas** no tienen esta acción. La anulación es por mes puntual y no afecta otros meses (a diferencia de Eliminar, que corta desde el mes inclusive en adelante).
 - **Nuevo movimiento** — abre el modal de carga (pantalla 5). Al abrirlo desde `/mes`, el **mes activo** se propaga al modal como **mes contexto**: es el default del "mes de inicio" en los tabs Fijo y Cuotas. No afecta al tab Único (ver pantalla 5).
 - Acciones globales del sidebar.
 
@@ -185,7 +186,7 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 ### Estados
 
 - **Cargando:** mientras se obtienen movimientos y totales del mes activo.
-- **Con datos:** secciones pobladas según el contenido del mes (solo se muestran las secciones con movimientos).
+- **Con datos:** secciones pobladas según el contenido del mes (solo se muestran las secciones con movimientos). Un fijo **anulado** para el mes (RF-MF-005) se muestra con su diferenciación visual de anulado y no suma a los totales.
 - **Vacío (sin movimientos en el mes):** la lista se muestra con un mensaje de estado vacío, sin error. Los totales se muestran en cero.
 - **Error:** si falla la carga del mes, se informa el error sin romper la pantalla.
 
@@ -193,7 +194,7 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 
 ## 5. Formulario de carga de movimiento (modal)
 
-**RF relacionados:** RF-CM-001, RF-MU-001, RF-MU-002, RF-MU-004, RF-MF-001, RF-MF-003, RF-MC-001, RF-MC-003, RF-CAT-002; RNF-008
+**RF relacionados:** RF-CM-001, RF-MU-001, RF-MU-002, RF-MU-004, RF-MF-001, RF-MF-003, RF-MF-006, RF-MC-001, RF-MC-003, RF-CAT-002; RNF-008
 
 ### Propósito
 
@@ -207,7 +208,7 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 - Dentro del tipo seleccionado, el tipo de movimiento **Gasto** está seleccionado por defecto (frente a Ingreso).
 - Campos según el tab activo:
   - **Único** (RF-MU-001): tipo (Gasto/Ingreso), monto, categoría, fecha y hora (default: el momento actual — fecha de hoy y hora actual al abrir el formulario en modo creación), descripción (opcional). El mes contexto **no** aplica al único: su default es siempre hoy/ahora, sin importar desde dónde se abra el modal.
-  - **Fijo** (RF-MF-001): tipo (Gasto/Ingreso), monto, categoría, mes de inicio, descripción (opcional). Sin fecha de día. El mes de inicio tiene como default el **mes contexto** si el modal se abrió desde la Vista del mes (`/mes`), o el **mes actual** en cualquier otro origen (dashboard, sidebar). Es editable y admite meses pasados.
+  - **Fijo** (RF-MF-001, RF-MF-006): tipo (Gasto/Ingreso), monto, mes de inicio, **frecuencia**, categoría, descripción (opcional). Sin fecha de día. El mes de inicio tiene como default el **mes contexto** si el modal se abrió desde la Vista del mes (`/mes`), o el **mes actual** en cualquier otro origen (dashboard, sidebar). Es editable y admite meses pasados. La **frecuencia** es un selector con un set cerrado de 5 valores —**Mensual** (default), Bimestral, Trimestral, Semestral, Anual (RF-MF-006)— y debajo una nota de recurrencia que se ajusta a la frecuencia elegida (ver "Estados"; el detalle visual está en `docs/design.md`).
   - **Cuotas** (RF-MC-001): tipo (Gasto/Ingreso), monto por cuota, cantidad de cuotas, mes de inicio, categoría, descripción (opcional). El mes de inicio tiene como default el **mes contexto** si el modal se abrió desde la Vista del mes (`/mes`), o el **mes actual** en cualquier otro origen. Es editable y admite meses pasados.
 - El selector de categorías se filtra según el tipo: para Gasto se muestran categorías con scope `EXPENSE` o `BOTH`; para Ingreso, scope `INCOME` o `BOTH` (RN-010). Las categorías con soft delete no aparecen.
 - **Botón "+ Nueva" junto al selector de categoría** (RF-MU-004): abre el modal de creación de categoría (pantalla 6, RF-CAT-002) por encima del formulario, sin cerrar el formulario ni perder los datos ya cargados. Presente en los tres tabs (el campo categoría existe en todos). Ver "Acciones disponibles".
@@ -217,7 +218,7 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 - **No muestra los tabs de selección de tipo.** Abre directamente en el tipo del movimiento editado y solo expone los campos de ese tipo.
 - Campos pre-cargados con los valores actuales del movimiento.
   - Único (RF-MU-002): todos los campos editables.
-  - Fijo (RF-MF-003): monto, categoría, descripción. La edición aplica **desde el mes desde el que se abrió** (el mes activo de la Vista del mes) en adelante, sin tocar los meses anteriores a él (ver bitácora 2026-06-13).
+  - Fijo (RF-MF-003): monto, categoría, descripción. La edición aplica **desde el mes desde el que se abrió** (el mes activo de la Vista del mes) en adelante, sin tocar los meses anteriores a él (ver bitácora 2026-06-13). La **frecuencia** se muestra de **solo lectura**: no es editable tras crear el fijo (RF-MF-006).
   - Cuotas (RF-MC-003): monto por cuota, cantidad de cuotas, mes de inicio, categoría, descripción. La edición aplica al grupo completo.
 
 ### Acciones disponibles
@@ -237,7 +238,8 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 ### Estados
 
 - **Creación inicial:** tab Único activo, tipo Gasto, fecha y hora en el momento actual, resto vacío.
-- **Edición:** sin tabs, campos pre-cargados con los valores actuales.
+- **Tab Fijo, nota de recurrencia (solo en creación):** debajo de la categoría, una nota se ajusta a la frecuencia elegida — *"Se registra automáticamente {cada mes / cada dos meses / cada tres meses / cada seis meses / cada año} a partir del mes de inicio."* (antes el texto era fijo "cada mes"; ahora contempla la frecuencia, RF-MF-006).
+- **Edición:** sin tabs, campos pre-cargados con los valores actuales. En el tab Fijo, la **frecuencia** aparece de solo lectura.
 - **Validación con error:** monto en cero/negativo/no numérico, cantidad de cuotas en cero/negativa, o categoría no seleccionada — se muestra el error y no se guarda.
 - **Sin categorías disponibles:** estado de bloqueo con enlace a `/categorias`.
 - **Modal de categoría superpuesto (RF-MU-004):** el modal de creación de categoría (pantalla 6) se muestra por encima del formulario de carga, que permanece montado y con sus datos intactos por debajo. Al cerrarse (por crear, reactivar o cancelar), el formulario vuelve a primer plano.

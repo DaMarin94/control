@@ -39,6 +39,8 @@ const mockCuotaMovement: MovementItem = {
     total: 12,
     startMonth: "2026-01",
   },
+  frequency: null,
+  skipped: false,
   category: {
     id: "cat-1",
     name: "Tecnología",

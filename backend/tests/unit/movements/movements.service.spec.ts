@@ -14,7 +14,7 @@
  */
 import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { CategoryScope, MovementType } from '@prisma/client';
+import { CategoryScope, MovementType, RecurringFrequency } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { MovementsService } from '../../../src/movements/movements.service';
 import {
@@ -67,6 +67,8 @@ function makeUnicoItem(overrides: Partial<MovementItem> = {}): MovementItem {
       scope: CategoryScope.EXPENSE,
     },
     installment: null,
+    frequency: null,
+    skipped: false,
     ...overrides,
   };
 }
@@ -87,6 +89,8 @@ function makeFijoItem(overrides: Partial<MovementItem> = {}): MovementItem {
       scope: CategoryScope.EXPENSE,
     },
     installment: null,
+    frequency: RecurringFrequency.MONTHLY,
+    skipped: false,
     ...overrides,
   };
 }
@@ -111,6 +115,8 @@ function makeCuotaItem(overrides: Partial<MovementItem> = {}): MovementItem {
       total: 12,
       startMonth: '2026-04',
     },
+    frequency: null,
+    skipped: false,
     ...overrides,
   };
 }

@@ -225,6 +225,23 @@ El proyecto usa **Prisma 7**, que mueve la configuración de conexión fuera del
 - **Nunca se edita una migración ya aplicada.** Si algo está mal, se crea una nueva que corrige.
 - **Nombres descriptivos** por lo que hace cada migración (ej: `add_movement_timezone`, `create_categories`).
 
+#### Generar migraciones sin shadow database (Prisma 7 en este proyecto)
+
+`prisma migrate dev` necesita crear una **shadow database** temporal para diff-ear el schema; en este entorno el rol de Postgres **no tiene permiso** para crearla, así que `migrate dev` falla. El **patrón a seguir** para generar una migración nueva (probado en la Fase 1.1.1) es, todo desde `backend/`:
+
+1. **Generar el SQL** con `prisma migrate diff` (compara el estado de las migraciones aplicadas contra el `schema.prisma` actual y escribe el `migration.sql`):
+   ```
+   prisma migrate diff \
+     --from-migrations ./prisma/migrations \
+     --to-schema-datamodel ./prisma/schema.prisma \
+     --script > prisma/migrations/<timestamp>_<nombre>/migration.sql
+   ```
+2. **Aplicar el cambio a la DB** con `prisma db push` (sincroniza el schema sin pasar por el motor de migraciones).
+3. **Marcar la migración como aplicada** en el historial con `prisma migrate resolve --applied <timestamp>_<nombre>`, para que `migrate deploy` (prod/CI) no intente reaplicarla.
+4. **Regenerar el client** con `prisma generate` y revisar el `migration.sql` a mano antes de commitearlo (se commitea como cualquier otra migración).
+
+No usar `migrate dev` mientras no haya permisos de shadow DB. La migración resultante es un archivo SQL normal en `prisma/migrations/` y `migrate deploy` la aplica determinísticamente en producción.
+
 ### Seed de desarrollo
 
 - Hay un **seed de desarrollo** (`prisma/seed.ts`) que puebla la DB con datos de prueba (un usuario dummy con movimientos de ejemplo) para no programar contra una base vacía.

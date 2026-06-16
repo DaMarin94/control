@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { CategoryScope, MovementType } from '@prisma/client';
+import { CategoryScope, MovementType, RecurringFrequency } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 // ---------------------------------------------------------------------------
@@ -24,6 +24,7 @@ interface RawAnnualUnicoRow {
 
 /**
  * Shape de una fila de Recurring para la proyección anual.
+ * Incluye frequency (P2) y skippedMonths (P1) — Fase 1.1.1.
  */
 export interface RecurringForAnnual {
   id: string;
@@ -31,6 +32,9 @@ export interface RecurringForAnnual {
   amountCents: number;
   startMonth: string;
   deletedFrom: string | null;
+  frequency: RecurringFrequency;
+  /** Set de meses salteados (YYYY-MM) — vacío si no tiene skips */
+  skippedMonths: Set<string>;
   categoryId: string;
   categoryName: string;
   categoryColor: string;
@@ -113,6 +117,14 @@ export interface InstallmentInfo {
  * D1 — campo installment:
  * - Cuotas: { number, total, startMonth }
  * - Únicos y fijos: null / ausente
+ *
+ * P2 (Fase 1.1.1) — campo frequency:
+ * - Fijos: la frecuencia del fijo (RecurringFrequency)
+ * - Únicos y cuotas: null (no aplica)
+ *
+ * P1 (Fase 1.1.1) — campo skipped:
+ * - Fijos: true si el fijo está anulado para este mes puntual (no suma a totales)
+ * - Únicos y cuotas: false siempre (no tienen skip)
  */
 export interface MovementItem {
   id: string;
@@ -124,6 +136,10 @@ export interface MovementItem {
   timezone: string | null;
   category: MovementEmbeddedCategory;
   installment: InstallmentInfo | null;
+  /** Frecuencia del fijo. null para únicos y cuotas. */
+  frequency: RecurringFrequency | null;
+  /** true si el fijo está anulado para este mes. Siempre false para únicos y cuotas. */
+  skipped: boolean;
 }
 
 /**
@@ -239,25 +255,28 @@ export class MovementsRepository {
   }
 
   /**
-   * Lista los movimientos fijos (Recurring) activos en el mes YYYY-MM.
+   * Lista los movimientos fijos (Recurring) que aparecen en el mes YYYY-MM.
    *
    * Condición de actividad (comparación léxica de strings YYYY-MM):
    *   startMonth <= month AND (deletedFrom IS NULL OR deletedFrom > month)
+   *   AND monthDiff(startMonth, month) % frequencyStep(frequency) === 0
    *
    * Los fijos son a nivel mes, sin día ni hora: no requieren SQL raw ni AT TIME ZONE.
-   * La comparación léxica de strings YYYY-MM es correcta porque ese formato
-   * ordena lexicográficamente igual que cronológicamente.
    *
-   * La categoría se incluye AUNQUE esté soft-deleted (RF-CAT-004):
-   * un fijo histórico sigue mostrando su categoría aunque haya sido eliminada.
+   * Skips (P1 — Fase 1.1.1):
+   * - Los fijos skippeados SE INCLUYEN en la lista pero con skipped=true.
+   * - El caller (service) es responsable de excluirlos de los totales.
+   * - Primero se filtra por rango/frecuencia en DB; luego se aplica frecuencia en JS.
    *
-   * Los fijos no tienen occurredAt ni timezone (D3): ambos se mapean a null.
-   * El campo installment es null para fijos.
+   * La categoría se incluye AUNQUE esté soft-deleted (RF-CAT-004).
+   * occurredAt y timezone son null (D3). installment es null para fijos.
+   * frequency y skipped se exponen como campos del MovementItem (P1/P2 — 1.1.1).
    */
   async findFijosByMonth(
     userId: string,
     month: string,
   ): Promise<MovementItem[]> {
+    // Traer candidatos activos en el rango (la frecuencia se aplica en JS)
     const recurrings = await this.prisma.recurring.findMany({
       where: {
         userId,
@@ -280,25 +299,45 @@ export class MovementsRepository {
             scope: true,
           },
         },
+        skips: {
+          where: { month },
+          select: { month: true },
+        },
       },
     });
 
-    return recurrings.map((r) => ({
-      id: r.id,
-      origin: 'fijo' as const,
-      type: r.type,
-      amountCents: r.amountCents,
-      description: r.description,
-      occurredAt: null,
-      timezone: null,
-      category: {
-        id: r.category.id,
-        name: r.category.name,
-        color: r.category.color,
-        scope: r.category.scope as CategoryScope,
-      },
-      installment: null,
-    }));
+    const result: MovementItem[] = [];
+
+    for (const r of recurrings) {
+      // Aplicar condición de frecuencia (P2)
+      if (!isOnFrequency(r.startMonth, r.frequency, month)) {
+        continue;
+      }
+
+      // El fijo aparece en este mes (puede estar skippeado)
+      const skipped = r.skips.length > 0;
+
+      result.push({
+        id: r.id,
+        origin: 'fijo' as const,
+        type: r.type,
+        amountCents: r.amountCents,
+        description: r.description,
+        occurredAt: null,
+        timezone: null,
+        category: {
+          id: r.category.id,
+          name: r.category.name,
+          color: r.category.color,
+          scope: r.category.scope as CategoryScope,
+        },
+        installment: null,
+        frequency: r.frequency,
+        skipped,
+      });
+    }
+
+    return result;
   }
 
   /**
@@ -378,6 +417,8 @@ export class MovementsRepository {
           total: g.totalInstallments,
           startMonth: g.startMonth,
         },
+        frequency: null,
+        skipped: false,
       });
     }
 
@@ -429,6 +470,10 @@ export class MovementsRepository {
    * Calcula los totales de los movimientos fijos activos en el mes.
    *
    * Condición de actividad: misma que findFijosByMonth (comparación léxica de YYYY-MM).
+   * Aplica la condición de frecuencia (P2 — Fase 1.1.1) en JS.
+   * Excluye los fijos skippeados (P1 — Fase 1.1.1): si (fijo, month) está en RecurringSkip,
+   * no suma a los totales.
+   *
    * Usa Prisma ORM normal (no SQL raw) — los fijos no necesitan AT TIME ZONE.
    */
   async getFijosTotalsByMonth(
@@ -447,6 +492,12 @@ export class MovementsRepository {
       select: {
         type: true,
         amountCents: true,
+        startMonth: true,
+        frequency: true,
+        skips: {
+          where: { month },
+          select: { month: true },
+        },
       },
     });
 
@@ -454,6 +505,16 @@ export class MovementsRepository {
     let incomeCents = 0;
 
     for (const r of recurrings) {
+      // Aplicar condición de frecuencia (P2)
+      if (!isOnFrequency(r.startMonth, r.frequency, month)) {
+        continue;
+      }
+
+      // Excluir fijos skippeados (P1): no suman a los totales
+      if (r.skips.length > 0) {
+        continue;
+      }
+
       if (r.type === MovementType.EXPENSE) {
         expenseCents += r.amountCents;
       } else {
@@ -564,28 +625,51 @@ export class MovementsRepository {
 
   /**
    * Devuelve todos los movimientos fijos del usuario para la proyección anual.
+   * Incluye frequency (P2) y skippedMonths (P1) — Fase 1.1.1.
    * Incluye categoría aunque esté soft-deleted (RF-CAT-004).
    * La proyección sobre los 12 meses se hace en JS en el service.
+   *
+   * Los skips se cargan en una query separada y se agrupan por recurringId
+   * para evitar un N+1 con el include anidado de skips (que traería todas las filas
+   * de RecurringSkip de todos los fijos del año en un solo JOIN).
    */
   async getAllFijosForAnnual(userId: string): Promise<RecurringForAnnual[]> {
-    const rows = await this.prisma.recurring.findMany({
-      where: { userId },
-      select: {
-        id: true,
-        type: true,
-        amountCents: true,
-        startMonth: true,
-        deletedFrom: true,
-        categoryId: true,
-        category: {
-          select: {
-            name: true,
-            color: true,
-            scope: true,
+    // Cargar fijos y skips en paralelo
+    const [rows, allSkips] = await Promise.all([
+      this.prisma.recurring.findMany({
+        where: { userId },
+        select: {
+          id: true,
+          type: true,
+          amountCents: true,
+          startMonth: true,
+          deletedFrom: true,
+          frequency: true,
+          categoryId: true,
+          category: {
+            select: {
+              name: true,
+              color: true,
+              scope: true,
+            },
           },
         },
-      },
-    });
+      }),
+      // Todos los skips del usuario (join por recurring.userId)
+      this.prisma.recurringSkip.findMany({
+        where: { recurring: { userId } },
+        select: { recurringId: true, month: true },
+      }),
+    ]);
+
+    // Construir mapa recurringId → Set<month>
+    const skipMap = new Map<string, Set<string>>();
+    for (const s of allSkips) {
+      if (!skipMap.has(s.recurringId)) {
+        skipMap.set(s.recurringId, new Set<string>());
+      }
+      skipMap.get(s.recurringId)!.add(s.month);
+    }
 
     return rows.map((r) => ({
       id: r.id,
@@ -593,6 +677,8 @@ export class MovementsRepository {
       amountCents: r.amountCents,
       startMonth: r.startMonth,
       deletedFrom: r.deletedFrom,
+      frequency: r.frequency,
+      skippedMonths: skipMap.get(r.id) ?? new Set<string>(),
       categoryId: r.categoryId,
       categoryName: r.category.name,
       categoryColor: r.category.color,
@@ -705,6 +791,8 @@ export class MovementsRepository {
         scope: row.categoryScope as CategoryScope,
       },
       installment: null,
+      frequency: null,
+      skipped: false,
     };
   }
 }
@@ -712,6 +800,49 @@ export class MovementsRepository {
 // ---------------------------------------------------------------------------
 // Helpers de cálculo de mes (YYYY-MM) — exportados para uso en tests
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Helper de frecuencia (P2 — Fase 1.1.1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Devuelve el step (en meses) correspondiente a cada RecurringFrequency.
+ *
+ * MONTHLY=1, BIMONTHLY=2, QUARTERLY=3, BIANNUAL=6, ANNUAL=12.
+ *
+ * Un fijo con frecuencia F aparece en el mes M si:
+ *   startMonth <= M AND (deletedFrom IS NULL OR deletedFrom > M)
+ *   AND monthDiff(startMonth, M) % frequencyStep(F) === 0
+ */
+export function frequencyStep(frequency: RecurringFrequency): number {
+  switch (frequency) {
+    case RecurringFrequency.MONTHLY:    return 1;
+    case RecurringFrequency.BIMONTHLY:  return 2;
+    case RecurringFrequency.QUARTERLY:  return 3;
+    case RecurringFrequency.BIANNUAL:   return 6;
+    case RecurringFrequency.ANNUAL:     return 12;
+  }
+}
+
+/**
+ * Devuelve true si el fijo (definido por startMonth y frequency) aparece en el mes dado.
+ * Precondición: startMonth <= month (el caller ya verificó el rango y deletedFrom).
+ *
+ * La condición de frecuencia: monthDiff(startMonth, month) % step === 0
+ * Ejemplos:
+ *   startMonth='2026-03', BIMONTHLY, month='2026-05' → diff=2, 2%2=0 → true
+ *   startMonth='2026-03', BIMONTHLY, month='2026-04' → diff=1, 1%2=1 → false
+ *   startMonth='2026-01', QUARTERLY, month='2026-04' → diff=3, 3%3=0 → true
+ */
+export function isOnFrequency(
+  startMonth: string,
+  frequency: RecurringFrequency,
+  month: string,
+): boolean {
+  const diff = monthDiff(startMonth, month);
+  const step = frequencyStep(frequency);
+  return diff % step === 0;
+}
 
 /**
  * Suma N meses a un string YYYY-MM con rollover de año correcto.
