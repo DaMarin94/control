@@ -130,25 +130,7 @@ Lectura y escritura del blob JSON de preferencias del usuario autenticado. El `P
 
 ## Movimientos únicos (TransactionsModule)
 
-CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca movimientos de otro). Todas las respuestas exitosas devuelven el shape de Transaction, con la **categoría embebida**.
-
-### Shape de Transaction
-
-```
-Transaction = {
-  id, userId,
-  categoryId,
-  type: "EXPENSE" | "INCOME",
-  amountCents: int,                  // entero en centavos, siempre > 0 (RN-002)
-  description: string | null,
-  occurredAt: string,                // ISO 8601 en UTC (instante, no fecha de calendario)
-  timezone: string,                  // IANA del registro (ej. "America/Argentina/Buenos_Aires"), RN-004
-  createdAt, updatedAt,
-  category: { id, name, color, scope }  // embebida en toda respuesta
-}
-```
-
-- **La categoría viene embebida** (`{ id, name, color, scope }`) en toda respuesta exitosa — el front no necesita un GET extra de categorías para mostrar nombre y color del movimiento.
+CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca movimientos de otro). Todas las respuestas exitosas devuelven el shape de Transaction, con la **categoría embebida**. Shape en `docs/data-model.md`, §Contrato de movimiento único.
 
 ### Endpoints
 
@@ -182,47 +164,7 @@ Endpoint unificado que devuelve **todos los movimientos del mes más los totales
 
 - **`month` (`YYYY-MM`) es el único query param y es obligatorio:** si falta o tiene formato inválido, `400`. **No recibe `timezone`** (a diferencia del endpoint eliminado): el mes de cada movimiento se calcula con la zona propia del registro (ver Bucketeo abajo).
 
-```
-data = {
-  month: "YYYY-MM",
-  totals: {
-    expenseCents: int,   // suma de gastos del mes
-    incomeCents: int,    // suma de ingresos del mes
-    balanceCents: int    // incomeCents - expenseCents (puede ser negativo)
-  },
-  movements: {
-    unicos: [MovementItem],   // ordenados por amountCents DESC (desempate: occurredAt DESC)
-    fijos:  [MovementItem],   // ordenados por amountCents DESC (desempate: createdAt DESC)
-    cuotas: [MovementItem]    // ordenados por amountCents DESC (desempate: id ASC)
-  }
-}
-```
-
-### Orden de las listas — por `amountCents` DESC
-
-Los tres grupos (`unicos`, `fijos`, `cuotas`) vienen ordenados por **`amountCents` descendente** (monto más alto primero). Como `amountCents` es siempre positivo, el orden es por **magnitud**, sin distinguir `EXPENSE` de `INCOME`. El desempate estable, cuando los montos son iguales, es por grupo:
-
-- **`unicos`** — `occurredAt` DESC (más reciente primero).
-- **`fijos`** — `createdAt` DESC.
-- **`cuotas`** — `id` ascendente (CUID, determinístico).
-
-```
-MovementItem = {
-  id: string,
-  origin: "unico" | "fijo" | "cuota",        // discriminador del tipo de movimiento
-  type: "EXPENSE" | "INCOME",
-  amountCents: int,
-  description: string | null,
-  occurredAt: string | null,                 // ISO 8601 en UTC; null en fijos y cuotas
-  timezone: string | null,                   // IANA del registro; null en fijos y cuotas
-  installment: {                             // presente solo en cuotas; null en únicos y fijos
-    number: int,                             //   nro de cuota del mes (1-based)
-    total: int,                              //   totalInstallments del grupo
-    startMonth: "YYYY-MM"                    //   mes de inicio del grupo
-  } | null,
-  category: { id, name, color, scope }       // embebida; puede estar soft-deleted (ver abajo)
-}
-```
+> Shape de la respuesta (`data`, `totals`, `MovementItem`) y reglas de orden / nullabilidad / `skipped` en `docs/data-model.md`, §Contrato de movimientos del mes. Abajo solo lo propio de la implementación backend (bucketeo SQL, totales, integración de orígenes).
 
 ### Bucketeo por mes (definitivo) — por la zona propia de cada registro
 
@@ -266,47 +208,16 @@ Endpoint **agregado** para el gráfico anual (RF-GRA-001/002/003), scopeado por 
 
 - **`year` (`YYYY`) es el único query param y es obligatorio:** exactamente **4 dígitos**, rango **1900–2200**. Si falta, no tiene 4 dígitos o cae fuera de rango → `400`. `401` global por JWT inválido/ausente.
 
-```
-data = {
-  year: number,                     // el año pedido
-  months: [                         // SIEMPRE 12 entradas, ene→dic, en orden
-    { month: "YYYY-MM", incomeCents: number, expenseCents: number }
-  ],
-  categories: [                     // solo categorías con gasto EXPENSE en el año
-    {
-      categoryId: string,
-      name: string,
-      color: string,                // "#rrggbb"
-      monthlyExpenseCents: number[] // EXACTAMENTE 12 valores, ene→dic, 0 donde no hay gasto
-    }
-  ],
-  earliestYear: number | null       // año más antiguo con algún movimiento del usuario; null si no tiene ninguno
-}
-```
+> Shape de la respuesta (`AnnualMovementsResponse` / `AnnualMonth` / `AnnualCategory`), invariante de consistencia y reglas de `months` / `categories` / `earliestYear` en `docs/data-model.md`, §Contrato de serie anual. Abajo solo cómo se calcula cada parte en el backend.
 
-#### `months` — 12 meses, mismo bucketeo que el mensual (RN-015)
+#### Cómo se computa cada parte (bucketeo, mismo criterio que el mensual — RN-015)
 
-- **Siempre 12 entradas**, de enero a diciembre del `year` pedido, en orden. Los meses sin datos (incluidos los meses **futuros** del año en curso) van con `incomeCents` y `expenseCents` en **cero** — nunca se omiten.
-- Cada `incomeCents` / `expenseCents` suma **únicos + fijos activos + cuotas activas** del mes con el **mismo criterio de bucketeo que `GET /movements` mensual** (reutiliza RN-015), sin regla de zona nueva:
+- **`months[*]` (12 meses).** Cada `incomeCents` / `expenseCents` suma **únicos + fijos activos + cuotas activas** con el mismo bucketeo que `GET /movements` mensual, sin regla de zona nueva:
   - **únicos** por `date_trunc('month', "occurredAt" AT TIME ZONE timezone)` (la zona propia del registro);
   - **fijos** por `startMonth <= mes AND (deletedFrom IS NULL OR deletedFrom > mes)` **más** `isOnFrequency(startMonth, frequency, mes)` (Fase 1.1.1), **excluyendo los meses anulados** (`skippedMonths.has(mes)` → no suma; RF-MF-005);
   - **cuotas** por `startMonth <= mes < addMonths(startMonth, totalInstallments)`.
-
-#### `categories` — solo EXPENSE, ordenadas por gasto anual
-
-- **Solo gasto (`EXPENSE`).** Los ingresos **no** se desglosan por categoría: aparecen únicamente agregados en `months[*].incomeCents`.
-- Una categoría aparece **si tuvo gasto en algún mes del año**. Incluye categorías **soft-deleted** con gasto histórico (RF-CAT-004): el desglose no filtra por `Category.deletedAt`, igual que el mensual.
-- **`monthlyExpenseCents` tiene exactamente 12 valores**, ene→dic, con `0` en los meses sin gasto de esa categoría.
-- **Orden:** por **gasto anual total DESC** (la categoría con más gasto en el año primero); desempate por `categoryId` **ASC**.
-
-#### Invariante de consistencia (garantizado por el backend)
-
-- Para cada mes `i`, la suma de `categories[*].monthlyExpenseCents[i]` **es igual a** `months[i].expenseCents`. El front puede confiar en que las bandas de gasto apiladas por categoría suman exactamente el total de gastos del mes, sin recalcular.
-
-#### `earliestYear` — primer año con datos
-
-- Es el año más antiguo con **algún** movimiento del usuario: el mínimo entre el año del mes local de cualquier único (`AT TIME ZONE`) y el año del `startMonth` de cualquier fijo o cuota. Es **`null`** si el usuario no tiene ningún movimiento.
-- Lo usa el front para **deshabilitar la navegación ‹** antes del primer año con datos (RF-GRA-003).
+- **`categories[*]`.** El desglose por categoría **no filtra por `Category.deletedAt`** (incluye soft-deleted con gasto histórico, igual que el mensual). Orden por gasto anual total DESC, desempate por `categoryId` ASC.
+- **`earliestYear`.** Mínimo entre el año del mes local de cualquier único (`AT TIME ZONE`) y el año del `startMonth` de cualquier fijo o cuota; `null` si el usuario no tiene movimientos.
 
 ## Movimientos fijos (RecurringModule)
 
@@ -383,23 +294,7 @@ La validación de categoría (existencia + pertenece al `userId` + activa + scop
 
 ## Categorías (CategoriesModule)
 
-CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca categorías de otro). Todas las respuestas exitosas devuelven el shape de categoría.
-
-### Shape de categoría
-
-```
-Categoria = {
-  id, userId,
-  name,                              // string, almacenado tal cual lo tipeó el usuario
-  scope: "BOTH" | "EXPENSE" | "INCOME",
-  color: "#HEX",                     // de la matriz, en mayúsculas; editable (fase 1.1.2)
-  deletedAt: null,                   // siempre null en las respuestas (solo se devuelven activas)
-  createdAt, updatedAt,
-  movementCount: number              // derivado, solo lectura
-}
-```
-
-- **`movementCount`** = suma de las filas de `transactions` + `recurrings` + `installmentGroups` que referencian la categoría (las 3 relaciones de movimiento). Es un dato calculado de solo lectura; el usuario no lo edita. Cero si no tiene movimientos. (Independiente de los totales de dinero del mes — ver RF-CAT-006 / RF-VM-002.)
+CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca categorías de otro). Todas las respuestas exitosas devuelven el shape de categoría. Shape y `movementCount` en `docs/data-model.md`, §Contrato de categoría.
 
 ### Endpoints
 
@@ -436,21 +331,11 @@ Categoria = {
 
 ### Manejo de errores — extensión del filter
 
-- **`ReactivableConflictException`** (409): el único error que adjunta `error.data` estructurado (`{ reactivable, category }`). Para soportarlo, el Global Exception Filter se extendió de forma **mínima** con un campo `data` **opcional** en el sobre de error: solo lo lleva este caso; el resto de los errores no incluyen `data`. Permite al front ofrecer Reactivar/Cancelar sin un endpoint extra de búsqueda.
+- **`ReactivableConflictException`** (409): el único error que adjunta `error.data` estructurado. Para soportarlo, el Global Exception Filter se extendió de forma **mínima** con un campo `data` **opcional** en el sobre de error: solo lo lleva este caso; el resto de los errores no incluyen `data`. Shape de `error.data` en `docs/data-model.md`, §Payload reactivable en errores (409).
 
 ## Preferencias de usuario (PreferencesModule)
 
-Lectura y escritura del blob JSON de preferencias, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca preferencias de otro). Es el **cimiento de la fase 1.1.0**: no tiene UI de producto propia; lo consumen fases posteriores (1.1.4 secciones colapsadas/orden, 1.1.5 reportes, 1.1.6 filtro por categoría). El blob es **abierto/extensible** — las claves las definen las fases consumidoras, no este módulo. Modelo y contrato en `docs/data-model.md` (entidad y "Contrato de preferencias de usuario").
-
-### Endpoints
-
-| Endpoint | Body | Éxito | Errores |
-|----------|------|-------|---------|
-| `GET /preferences` | — | `200` · `data: <blob>` (`{}` si no hay fila) | `401` |
-| `PUT /preferences` | `{ data: <objeto plano> }` | `200` · `data: <blob persistido>` | `400` · `401` |
-
-- **`GET /preferences`** — devuelve el blob del usuario, o **`{}` sin crear la fila** si no existe.
-- **`PUT /preferences`** — **upsert** (crea la fila si no existía). **Reemplazo completo, no merge:** persiste el `data` recibido tal cual; el frontend manda el blob entero. `400` si `data` falta o **no es un objeto** (validación de DTO).
+Lectura y escritura del blob JSON de preferencias, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca preferencias de otro). Es el **cimiento de la fase 1.1.0**: no tiene UI de producto propia; lo consumen fases posteriores (1.1.4 secciones colapsadas/orden, 1.1.5 reportes, 1.1.6 filtro por categoría). El blob es **abierto/extensible** — las claves las definen las fases consumidoras, no este módulo. Endpoints, semántica de reemplazo completo (no merge) y modelo en `docs/data-model.md`, §Contrato de preferencias de usuario y entidad `UserPreferences`. Abajo, lo propio de la implementación backend.
 
 ### Back-compat de usuarios sin fila (no se crea en lectura)
 
