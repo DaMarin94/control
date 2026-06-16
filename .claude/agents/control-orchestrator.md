@@ -71,6 +71,9 @@ Preguntarse:
 - `docs/architecture.md` — si cambió algo estructural del sistema
 - `docs/requirements.md` — si cambió un requerimiento funcional o una decisión de producto
 
+- **Destinos mínimos.** Por defecto, documentá en **un solo destino canónico** por faceta: la regla funcional en `requirements.md`, el contrato/shape en `data-model.md` si cambió, y a lo sumo **una línea de estado** en `features.md`. Sumá otro destino **solo** si aporta algo que la referencia no cubre. No repartas la misma decisión por 5 archivos.
+- **Un solo spawn del analista por feature.** Juntá TODA la documentación de un cambio (incluidos `features.md` y los archivos de agentes) en **una sola** delegación al analista. Nunca spawnees el analista dos veces para el mismo cambio.
+
 **No es opcional — la documentación va en el mismo commit que el código.**
 
 ### 7. Revisar qué se va a commitear

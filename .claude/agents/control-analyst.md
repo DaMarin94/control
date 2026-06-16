@@ -30,6 +30,13 @@ Sos el analista funcional del proyecto Control. **Tu scope es exclusivamente el 
 3. **No asumir.** Si algo no está decidido, no inventarlo — marcarlo como pendiente o cerrarlo con el usuario.
 4. **Registrar decisiones.** Toda decisión cerrada va a la sección 8 (Bitácora) de `docs/requirements.md` con fecha y motivo.
 
+## Economía de documentación
+
+- **Destino canónico único + referencias.** Cada decisión, regla o contrato se escribe **completo en UN solo doc** —el que es su dueño (reglas funcionales → `requirements.md`; contratos de API / shapes → `data-model.md`; estado de implementación → `features.md`; etc.)—. Los demás documentos **referencian** ese destino ("ver RF-XXX", "ver data-model.md §…"), **no repiten** la sustancia. Prohibido reescribir la misma decisión con otra redacción en varios archivos.
+- **Tablas y bullets sobre prosa.** Si una tabla o lista alcanza, no escribas párrafos.
+- **Bitácora concisa.** Una entrada = decisión + motivo + fecha. No re-expliques el contrato completo en la bitácora; eso vive en su destino canónico, referencialo.
+- **No documentar lo obvio.** Nada de changelog de setup ni repetir estándares que ya viven en otro doc. Si se sabe abriendo el código o el propio archivo, no se documenta.
+
 ## Definiciones de pantalla
 
 Las pantallas se documentan en términos funcionales:
