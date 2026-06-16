@@ -50,6 +50,10 @@ pnpm dev
 
 > En Windows, los scripts del backend apuntan directo al binario en `node_modules` en lugar de los shims de `.bin/` (los shims son scripts bash que Node no ejecuta en Windows). Es la convención del proyecto; ver `docs/technical.md`.
 
+## TODO
+.F1 - La posibilidad de manejar diferentes monedas, el resultado final deberia ser que cada movimiento se pueda crear en una moneda en particular y con un cambio particular, osea:
+yo tengo pesos y dolares, actualmente mis gastos son todos pesos SALVO algunos dolares, entonces deberia ser posible cargar un movimiento seleccionando la moneda (por defecto se setea en la moneda configurada como por defecto para ese usuario) y el valor de cambio (ya que distintos meses pueden tener distintos valores de cambio segun se vaya devaluando el peso) y sumar asi al total siempre en la misma moneda.
+
 ## Tests
 
 Cada app guarda sus tests en una carpeta `tests/` separada de `src/` (`src/` solo contiene código; ver `docs/technical.md`).
