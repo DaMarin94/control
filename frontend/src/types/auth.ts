@@ -13,12 +13,32 @@ export interface AuthUser {
 }
 
 /**
+ * Clave de sección de la vista del mes.
+ * Fase 1.1.4: las 3 secciones son reordenables y colapsables.
+ */
+export type MonthSectionKey = "unicos" | "fijos" | "cuotas";
+
+/**
+ * Preferencias de la vista del mes (Fase 1.1.4).
+ * - order: orden de las 3 secciones
+ * - collapsed: claves de las secciones actualmente colapsadas
+ */
+export interface MonthSectionsPreferences {
+  order: MonthSectionKey[];
+  collapsed: MonthSectionKey[];
+}
+
+/**
  * Blob de preferencias del usuario.
  * Es un objeto abierto/extensible: en Fase 1.1.0 está vacío ({}).
  * Cada fase posterior agrega sus claves sin cambiar el tipo base.
  * El backend usa semántica de reemplazo completo (PUT sobreescribe, no merge).
  */
-export type UserPreferences = Record<string, unknown>;
+export interface UserPreferences {
+  /** Fase 1.1.4: orden y estado de colapso de secciones en /mes */
+  monthSections?: MonthSectionsPreferences;
+  [key: string]: unknown;
+}
 
 /** Respuesta de /auth/login, /auth/register y /auth/google */
 export interface AuthResponse {

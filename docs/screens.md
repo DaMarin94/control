@@ -150,7 +150,7 @@ No muestra lista de movimientos (decisión 2026-06-03, ex RF-DASH-004 fuera de a
 
 ## 4. Vista del mes (`/mes`)
 
-**RF relacionados:** RF-VM-001, RF-VM-002, RF-VM-003, RF-VM-004, RF-MF-005, RF-MF-006
+**RF relacionados:** RF-VM-001, RF-VM-002, RF-VM-003, RF-VM-004, RF-VM-005, RF-MF-005, RF-MF-006
 
 ### Propósito
 
@@ -159,15 +159,13 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 ### Contenido
 
 - **Sidebar** con el link "Vista del mes" marcado como activo.
-- **Header de la pantalla** con el rótulo del mes activo: eyebrow "Tu mes", título con el nombre del mes y año, y sub-línea de estado ("Mes en curso" / "Histórico"). El botón **"+ Nuevo movimiento"** vive en este header.
+- **Header de la pantalla** con el rótulo del mes activo: eyebrow "Tu mes", título con el nombre del mes y año, y sub-línea de estado ("Mes en curso" / "Histórico"). El botón **"+ Nuevo movimiento"** vive en este header, junto al botón **"Ordenar secciones"** que activa el modo orden (RF-VM-005; ver "Acciones disponibles").
 - **Navegación de mes** para ir al mes anterior y al mes siguiente (RF-VM-004), resuelta como **flechas gigantes a los costados del contenido** (`‹ contenido ›`; ‹ = mes anterior, › = mes siguiente). En pantallas angostas/mobile el patrón **colapsa a un control compacto** (pill stepper) ubicado en el header. Es presentacional: la acción funcional (navegar ±1 mes) es la de RF-VM-004 y no cambia. El spec visual lo define `control-design` (ver `docs/design.md`).
 - **Totales del mes** (RF-VM-002): total de gastos, total de ingresos y balance (ingresos − gastos), con positivo y negativo diferenciables. Se actualizan al agregar, editar o eliminar un movimiento.
-- **Lista de movimientos agrupada por tipo** en tres secciones rotuladas, en este orden (RF-VM-001). Dentro de cada sección, los movimientos se ordenan por **monto descendente** (el monto más alto primero, por magnitud, sin distinguir gasto de ingreso), con el desempate por sección que define el contrato de `GET /movements` (ver `data-model.md`).
-  1. **Únicos**.
-  2. **Fijos** — sin día específico.
-  3. **Cuotas** — sin día específico; cada cuota muestra su número y total (ej: "3/12").
+- **Lista de movimientos agrupada por tipo** en **tres secciones colapsables** (acordeón) rotuladas — **Únicos**, **Fijos**, **Cuotas** (RF-VM-001, RF-VM-005). El orden de las secciones es el default salvo que el usuario lo haya reordenado (RF-VM-005). Dentro de cada sección, los movimientos se ordenan por **monto descendente** (el monto más alto primero, por magnitud, sin distinguir gasto de ingreso), con el desempate por sección que define el contrato de `GET /movements` (ver `data-model.md`); ese orden de ítems **no** es alterable por el usuario.
+  - **Las tres secciones se muestran siempre**, aunque estén vacías (cambio respecto de v1.0). Cada sección expone una **cabecera de grupo** (rótulo, contador de ítems, subtotal) que actúa como **disclosure**: clic en la cabecera expande/colapsa esa sección. Las **Cuotas** muestran, por ítem, su número y total (ej: "3/12"); los **Fijos**, sin día específico.
   - Cada ítem muestra: tipo (gasto/ingreso), monto, categoría, descripción (si la tiene) y su origen (único / fijo / cuota X/N). Los **fijos** muestran además su **frecuencia** (Mensual / Bimestral / Trimestral / Semestral / Anual, RF-MF-006) en vez de fecha; un fijo **anulado** para el mes (RF-MF-005) se sigue mostrando con una **diferenciación visual** de anulado (detalle en `docs/design.md`).
-  - Una sección sin movimientos en el mes no se muestra (no aparece su rótulo vacío).
+  - **Sección vacía:** muestra la cabecera completa (contador en 0, subtotal en $0) y un **mensaje de estado vacío inline propio** ("Sin movimientos únicos" / "Sin fijos" / "Sin cuotas"). No hay un mensaje de estado vacío global de la pantalla (ver "Estados"). El detalle visual del acordeón, las cabeceras y el modo orden lo define `control-design` (ver `docs/design.md`).
 
 ### Acciones disponibles
 
@@ -175,7 +173,9 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 - **Editar** un ítem — abre el modal de carga en modo edición, en el tipo del movimiento (RF-VM-003 → RF-MU-002, RF-MF-003 o RF-MC-003 según el tipo). Al editar un **fijo**, el cambio se aplica desde el **mes activo (el mes que se está visualizando) inclusive en adelante**, preservando los meses anteriores (pivote = mes visualizado, RF-MF-003 / RN-005).
 - **Eliminar** un ítem — dispara el flujo de eliminación correspondiente al tipo (RF-MU-003 único, RF-MF-004 fijo, RF-MC-002 grupo de cuotas), con su confirmación específica. Al eliminar un **fijo**, la confirmación **no ofrece opciones** y la eliminación aplica desde el **mes activo (el mes visualizado) inclusive en adelante**, mismo pivote que la edición (RF-MF-004 / RN-005).
 - **Anular / Des-anular este mes** (solo en ítems **fijos**, RF-MF-005) — en el menú de acciones del ítem fijo, además de Editar y Eliminar, una acción **toggle**: **"Anular este mes"** cancela esa aparición del fijo en el mes visualizado; sobre un fijo ya anulado se rotula **"Des-anular este mes"** y la revierte. El ítem anulado **se sigue mostrando** (no desaparece), deja de sumar a los totales del mes y tiene diferenciación visual. Los movimientos **únicos** y las **cuotas** no tienen esta acción. La anulación es por mes puntual y no afecta otros meses, a diferencia de Eliminar (RF-MF-005 / RN-016).
-- **Nuevo movimiento** — abre el modal de carga (pantalla 5). Al abrirlo desde `/mes`, el **mes activo** se propaga al modal como **mes contexto**: es el default del "mes de inicio" en los tabs Fijo y Cuotas. No afecta al tab Único (ver pantalla 5).
+- **Nuevo movimiento** — abre el modal de carga (pantalla 5). Al abrirlo desde `/mes`, el **mes activo** se propaga al modal como **mes contexto**: es el default del "mes de inicio" en los tabs Fijo y Cuotas. No afecta al tab Único (ver pantalla 5). **En modo orden este botón se deshabilita** (RF-VM-005).
+- **Colapsar / expandir una sección** (RF-VM-005) — clic en la cabecera de cualquiera de las tres secciones la expande o colapsa de forma individual. El estado se **persiste por usuario** (preferencias 1.1.0). Fuera del modo orden.
+- **Ordenar secciones** (RF-VM-005) — un botón del header ("Ordenar secciones" / "Listo") activa/desactiva el **modo orden**. En modo orden el usuario **arrastra las secciones para reordenarlas entre sí** (no los ítems internos); el colapsar/expandir queda suspendido (la cabecera arrastra) y "+ Nuevo movimiento" se deshabilita. El orden se **aplica en vivo** y se **persiste por usuario**; no hay acción de cancelar. El shape de la preferencia (`monthSections`) está en `data-model.md`.
 - Acciones globales del sidebar.
 
 ### Navegación
@@ -187,8 +187,9 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 ### Estados
 
 - **Cargando:** mientras se obtienen movimientos y totales del mes activo.
-- **Con datos:** secciones pobladas según el contenido del mes (solo se muestran las secciones con movimientos). Un fijo **anulado** para el mes (RF-MF-005) se muestra con su diferenciación visual de anulado y no suma a los totales.
-- **Vacío (sin movimientos en el mes):** la lista se muestra con un mensaje de estado vacío, sin error. Los totales se muestran en cero.
+- **Con datos:** las **tres secciones siempre presentes** (RF-VM-005); las que tienen movimientos los listan, las vacías muestran su empty inline propio. Cada sección puede estar expandida o colapsada según la preferencia persistida del usuario. Un fijo **anulado** para el mes (RF-MF-005) se muestra con su diferenciación visual de anulado y no suma a los totales.
+- **Modo orden activo (RF-VM-005):** las secciones se pueden arrastrar para reordenarlas; el colapsar/expandir queda suspendido y "+ Nuevo movimiento" deshabilitado. El orden se aplica en vivo y se persiste.
+- **Vacío (sin movimientos en el mes):** **no hay un mensaje de estado vacío global** (eliminado en la fase 1.1.4). Las tres secciones aparecen vacías, cada una con su empty inline propio ("Sin movimientos únicos" / "Sin fijos" / "Sin cuotas"), y los totales del mes en cero, sin error.
 - **Error:** si falla la carga del mes, se informa el error sin romper la pantalla.
 
 ---

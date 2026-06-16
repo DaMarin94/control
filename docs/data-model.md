@@ -73,6 +73,28 @@ Endpoints de lectura y escritura del blob de preferencias del usuario autenticad
 - **`PUT /preferences`** — body `{ data: <objeto plano> }`. El `data` de la respuesta es el blob **persistido**. Hace **upsert** (crea la fila si no existía). `400` si `data` falta o **no es un objeto**.
 - **Semántica de reemplazo completo (no merge).** El server **NO** mergea: guarda el `data` recibido **tal cual**, reemplazando el blob entero. **El frontend manda el blob completo** en cada `PUT` — para cambiar una sola clave, el llamador parte del blob actual y reescribe todo (`{ ...preferences, clave: valor }`). Consecuencia: omitir una clave en el `PUT` la **borra**.
 
+### Claves del blob
+
+El blob es un objeto **abierto/extensible**: cada fase consumidora agrega su(s) propia(s) clave(s) sin tocar la DB (ver decisión "Preferencias de usuario como blob JSON"). Las claves vivas hoy:
+
+#### `monthSections` — estado de las secciones de la Vista del mes (Fase 1.1.4, RF-VM-005)
+
+Primer consumidor real del blob. Persiste el estado colapsado/expandido y el orden de las tres secciones de `/mes`.
+
+```
+monthSections: {
+  order: MonthSectionKey[],        // p.ej. ["unicos","fijos","cuotas"]
+  collapsed: MonthSectionKey[]     // claves de las secciones colapsadas
+}
+
+MonthSectionKey = "unicos" | "fijos" | "cuotas"
+```
+
+- **`order`** — orden en que se muestran las tres secciones (RF-VM-005). Default `["unicos","fijos","cuotas"]`.
+- **`collapsed`** — claves de las secciones actualmente colapsadas. Default `[]` (todas expandidas).
+- **Back-compat / normalización.** Si `monthSections` **no existe** en el blob → se usa el default (`order: ["unicos","fijos","cuotas"]`, `collapsed: []`). Si `order` trae **claves desconocidas o le faltan**, se **normaliza**: se filtran las desconocidas y se agregan al final las faltantes, preservando el orden válido recibido. Así un blob viejo o parcial nunca rompe la pantalla.
+- **El back NO valida ni conoce esta clave:** `PUT /preferences` guarda el blob tal cual (reemplazo total). La normalización y los defaults son responsabilidad del frontend consumidor (ver `docs/frontend.md`, §Vista del mes).
+
 ---
 
 ## Contrato de categoría (respuesta de la API)

@@ -6,6 +6,12 @@
  * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
  * Fase 1.1.3 (revisado 2026-06-16): PeriodNav es el grid de 3 columnas;
  * flechas gigantes laterales en ≥941px; pill stepper compacto en ≤940px.
+ * Fase 1.1.4 (2026-06-16): P5 acordeón + P6 reordenar secciones.
+ *   - Las 3 secciones (Únicos / Fijos / Cuotas) se muestran SIEMPRE.
+ *   - Cada sección es colapsable/expandible individualmente (acordeón).
+ *   - El orden de secciones es configurable por drag (modo orden con dnd-kit).
+ *   - Estado persistido en preferences.monthSections (blob de preferencias).
+ *   - Cambios aplicados optimistamente; persistencia en background.
  *
  * Layout:
  *   - PeriodNav (grid 3 col: auto | minmax(0,1120px) | auto):
@@ -14,18 +20,37 @@
  *   - Header dentro de la columna central (.phead en ≥941px / stepper en ≤940px):
  *       Desktop: eyebrow "Tu mes" + H1 período "Junio 2026" + sub-línea estado.
  *       Mobile:  pill stepper compacto (‹ rótulo ›).
- *       Siempre: botón "+ Nuevo movimiento" a la derecha.
+ *       Siempre: botón "Ordenar secciones" / "Listo" + botón "+ Nuevo movimiento" a la derecha.
  *   - Totales: grid 1fr 1fr 1.1fr (Gastos / Ingresos / mini-balance).
- *   - Grupos Únicos / Fijos / Cuotas: .ghead + lista.
+ *   - Grupos Únicos / Fijos / Cuotas: AccordionSection + SortableSection.
  *   - Filas: .mov (ícono, nombre, fecha, monto).
  *
- * Lógica preservada intacta (hooks, router, mappers, handlers).
+ * Lógica preservada intacta (hooks, router, mappers, handlers de editar/eliminar).
  */
 
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowUpDown, Check } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+} from "@dnd-kit/core";
+import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
 import { useMovements } from "@/hooks/use-movements";
+import { usePreferences } from "@/hooks/use-preferences";
+import { SortableSection } from "@/components/ui/sortable-section";
+import { AccordionSection } from "@/components/ui/accordion-section";
 import { MovementItemRow } from "@/components/movements/movement-item-row";
 import { TransactionModal } from "@/components/movements/transaction-modal";
 import { DeleteTransactionDialog } from "@/components/movements/delete-transaction-dialog";
@@ -44,6 +69,58 @@ import type { MovementItem } from "@/types/movement";
 import type { Transaction } from "@/types/transaction";
 import type { Recurring } from "@/types/recurring";
 import type { InstallmentGroup } from "@/types/installment";
+import type { MonthSectionKey, MonthSectionsPreferences } from "@/types/auth";
+
+// ─── Constantes de sección ────────────────────────────────────────────────────
+
+const ALL_SECTION_KEYS: MonthSectionKey[] = ["unicos", "fijos", "cuotas"];
+
+const SECTION_LABELS: Record<MonthSectionKey, string> = {
+  unicos: "Únicos",
+  fijos: "Fijos",
+  cuotas: "Cuotas",
+};
+
+const SECTION_EMPTY_COPY: Record<MonthSectionKey, string> = {
+  unicos: "Sin movimientos únicos",
+  fijos: "Sin fijos",
+  cuotas: "Sin cuotas",
+};
+
+// ─── Normalización de preferencias (back-compat) ─────────────────────────────
+
+/**
+ * Normaliza el objeto monthSections de preferencias para garantizar back-compat.
+ * - Si no existe, devuelve defaults.
+ * - Si order tiene claves desconocidas o faltantes, normaliza contra ALL_SECTION_KEYS.
+ * - Si collapsed tiene claves desconocidas, las filtra.
+ */
+function normalizeMonthSections(
+  raw: MonthSectionsPreferences | undefined,
+): { order: MonthSectionKey[]; collapsed: MonthSectionKey[] } {
+  const defaultOrder: MonthSectionKey[] = ["unicos", "fijos", "cuotas"];
+  const defaultCollapsed: MonthSectionKey[] = [];
+
+  if (!raw) {
+    return { order: defaultOrder, collapsed: defaultCollapsed };
+  }
+
+  // Normalizar order: mantener las conocidas en el orden dado, agregar las faltantes al final
+  const knownSet = new Set<MonthSectionKey>(ALL_SECTION_KEYS);
+  const filteredOrder = (raw.order ?? []).filter((k): k is MonthSectionKey =>
+    knownSet.has(k as MonthSectionKey),
+  );
+  const inOrder = new Set(filteredOrder);
+  const missingKeys = ALL_SECTION_KEYS.filter((k) => !inOrder.has(k));
+  const order: MonthSectionKey[] = [...filteredOrder, ...missingKeys];
+
+  // Normalizar collapsed: solo claves conocidas
+  const collapsed = (raw.collapsed ?? []).filter((k): k is MonthSectionKey =>
+    knownSet.has(k as MonthSectionKey),
+  );
+
+  return { order, collapsed };
+}
 
 // ─── Mapeo MovementItem → Transaction (únicos) ─────────────────────────────────
 
@@ -114,6 +191,7 @@ interface MonthViewClientProps {
 export function MonthViewClient({ month }: MonthViewClientProps) {
   const router = useRouter();
   const { data, isLoading, isError } = useMovements(month);
+  const { preferences, setPreferences } = usePreferences();
 
   // Estado de modales para únicos
   const [editingUnico, setEditingUnico] = useState<MovementItem | null>(null);
@@ -127,13 +205,61 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   const [editingCuota, setEditingCuota] = useState<MovementItem | null>(null);
   const [deletingCuota, setDeletingCuota] = useState<MovementItem | null>(null);
 
+  // ── Estado de acordeón y orden (Fase 1.1.4) ───────────────────────────────
+
+  // Normalizar desde preferencias (back-compat)
+  const savedSections = normalizeMonthSections(
+    preferences.monthSections as MonthSectionsPreferences | undefined,
+  );
+
+  // Estado local optimista: se actualiza inmediatamente, persiste en background
+  const [sectionOrder, setSectionOrder] = useState<MonthSectionKey[]>(
+    savedSections.order,
+  );
+  const [collapsedSections, setCollapsedSections] = useState<
+    Set<MonthSectionKey>
+  >(new Set(savedSections.collapsed));
+
+  // Modo orden (drag activo)
+  const [isOrderMode, setIsOrderMode] = useState(false);
+
+  // Id de la sección que se está arrastrando (para el DragOverlay)
+  const [activeId, setActiveId] = useState<MonthSectionKey | null>(null);
+
+  // Sincronizar con preferencias cuando lleguen del servidor (primer mount / refetch)
+  // Solo sincronizamos si el usuario no está en modo orden (para no interrumpir el drag)
+  const [hasSynced, setHasSynced] = useState(false);
+  useEffect(() => {
+    if (!hasSynced && preferences.monthSections !== undefined) {
+      const normalized = normalizeMonthSections(
+        preferences.monthSections as MonthSectionsPreferences | undefined,
+      );
+      setSectionOrder(normalized.order);
+      setCollapsedSections(new Set(normalized.collapsed));
+      setHasSynced(true);
+    }
+  }, [preferences.monthSections, hasSynced]);
+
+  // ── Configuración de sensores dnd-kit ────────────────────────────────────
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      // Activar drag solo tras 8px de movimiento (evita confundir click con drag)
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  // ── Datos de movimientos ──────────────────────────────────────────────────
+
   const totals = data?.totals;
   const unicos = data?.movements.unicos ?? [];
   const fijos = data?.movements.fijos ?? [];
   const cuotas = data?.movements.cuotas ?? [];
 
   const monthLabel = formatMonthLabel(month);
-  // Separar "junio 2026" en partes para mostrar
   const labelParts = monthLabel.split(" ");
   const mesName = labelParts[0]
     ? labelParts[0].charAt(0).toUpperCase() + labelParts[0].slice(1)
@@ -142,6 +268,8 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
 
   const isCurrentMonth = month === getCurrentMonth();
 
+  // ── Navegación ────────────────────────────────────────────────────────────
+
   function goToPrevMonth() {
     router.push(`/mes?month=${prevMonth(month)}`);
   }
@@ -149,6 +277,8 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   function goToNextMonth() {
     router.push(`/mes?month=${nextMonth(month)}`);
   }
+
+  // ── Handlers editar/eliminar ──────────────────────────────────────────────
 
   function handleEdit(movement: MovementItem) {
     if (movement.origin === "fijo") {
@@ -170,7 +300,8 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
     }
   }
 
-  // Subtotales por grupo (en centavos, con signo)
+  // ── Subtotales por grupo ──────────────────────────────────────────────────
+
   function groupSubtotal(items: MovementItem[]): number {
     return items.reduce((acc, m) => {
       return acc + (m.type === "EXPENSE" ? -m.amountCents : m.amountCents);
@@ -184,21 +315,126 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
     return abs;
   }
 
+  // ── Mapa de ítems por sección ─────────────────────────────────────────────
+
+  const sectionItems: Record<MonthSectionKey, MovementItem[]> = {
+    unicos,
+    fijos,
+    cuotas,
+  };
+
+  // ── Toggle colapso (Fase 1.1.4 P5) ───────────────────────────────────────
+
+  const handleToggleCollapse = useCallback(
+    (key: MonthSectionKey) => {
+      setCollapsedSections((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
+        // Persistir en background (merge manual)
+        const collapsed = Array.from(next);
+        void setPreferences({
+          ...preferences,
+          monthSections: { order: sectionOrder, collapsed },
+        });
+        return next;
+      });
+    },
+    [preferences, sectionOrder, setPreferences],
+  );
+
+  // ── Modo orden (Fase 1.1.4 P6) ───────────────────────────────────────────
+
+  function handleEnterOrderMode() {
+    setIsOrderMode(true);
+  }
+
+  function handleExitOrderMode() {
+    setIsOrderMode(false);
+  }
+
+  // ── Handlers drag dnd-kit ─────────────────────────────────────────────────
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveId(event.active.id as MonthSectionKey);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (!over || active.id === over.id) return;
+
+    setSectionOrder((prev) => {
+      const oldIndex = prev.indexOf(active.id as MonthSectionKey);
+      const newIndex = prev.indexOf(over.id as MonthSectionKey);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+
+      const next = arrayMove(prev, oldIndex, newIndex);
+
+      // Persistir en background (merge manual)
+      const collapsed = Array.from(collapsedSections);
+      void setPreferences({
+        ...preferences,
+        monthSections: { order: next, collapsed },
+      });
+
+      return next;
+    });
+  }
+
+  // ── Totales ───────────────────────────────────────────────────────────────
+
   const expenseCents = totals?.expenseCents ?? 0;
   const incomeCents = totals?.incomeCents ?? 0;
   const balanceCents = totals?.balanceCents ?? 0;
 
-  // ── Rótulo del período formateado (para H1 y stepper) ─────────────────────
   const periodLabel = `${mesName} ${yearName}`;
   const statusLabel = isCurrentMonth ? "Mes en curso" : "Histórico";
 
+  // ── Render de la sección activa en el DragOverlay ─────────────────────────
+
+  function renderOverlay(id: MonthSectionKey) {
+    const items = sectionItems[id];
+    const isCollapsed = collapsedSections.has(id);
+    const label = SECTION_LABELS[id];
+
+    return (
+      <div
+        style={{
+          transform: "scale(1.02)",
+          opacity: 0.95,
+          boxShadow: "var(--shadow-lg)",
+          borderRadius: "var(--r-card)",
+          background: "var(--panel)",
+        }}
+      >
+        <AccordionSection
+          id={`overlay-${id}`}
+          label={label}
+          count={items.length}
+          subtotal={formatSubtotal(groupSubtotal(items))}
+          isCollapsed={isCollapsed}
+          onToggle={() => {}}
+          isOrderMode={true}
+          showGripHandle={true}
+        >
+          {items.length === 0 ? (
+            <SectionEmpty sectionKey={id} />
+          ) : (
+            <SectionList items={items} viewMonth={month} onEdit={handleEdit} onDelete={handleDelete} />
+          )}
+        </AccordionSection>
+      </div>
+    );
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
-    /*
-     * PeriodNav es el grid de 3 columnas: [‹][contenido][›].
-     * Las flechas viven en sus celdas laterales (visibles en ≥941px).
-     * canGoPrev/canGoNext = true siempre en /mes (sin tope; los flags los necesita
-     * la Fase 1.1.5 para años con earliestYear).
-     */
     <PeriodNav
       prevLabel="Mes anterior"
       nextLabel="Mes siguiente"
@@ -207,32 +443,18 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
       canGoPrev={true}
       canGoNext={true}
     >
-      {/*
-       * Contenido de la columna central del grid PeriodNav.
-       * El ancho máximo (1120px) lo controla el grid con minmax(0,1120px).
-       * El px-10 vive aquí: es el aire interno del contenido, no del grid.
-       */}
       <div className="px-10 space-y-0">
         {/* ── Header ──────────────────────────────────────────────── */}
         <div className="flex items-end justify-between gap-5 mb-6 flex-wrap">
 
-          {/*
-           * DESKTOP (≥941px): bloque .phead — eyebrow + H1 + sub-línea.
-           * MOBILE (≤940px): pill stepper compacto (‹ rótulo sub ›).
-           * El botón "+ Nuevo movimiento" está siempre a la derecha.
-           */}
-
           {/* Bloque de título — desktop (≥941px) */}
           <div className="hidden [@media(min-width:941px)]:flex flex-col gap-0">
-            {/* Eyebrow */}
             <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
               Tu mes
             </span>
-            {/* H1 del período */}
             <h1 className="text-[32px] font-bold tracking-[-0.02em] leading-none text-ink mt-0.5 mb-1">
               {periodLabel}
             </h1>
-            {/* Sub-línea de estado */}
             <span className="text-[12.5px] font-medium text-muted">
               {statusLabel}
             </span>
@@ -271,8 +493,54 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
             </button>
           </div>
 
-          {/* Botón "+ Nuevo movimiento" — siempre presente */}
-          <NewTransactionButton label="+ Nuevo movimiento" defaultMonth={month} />
+          {/* Acciones del header: "Ordenar secciones" / "Listo" + "+ Nuevo movimiento" */}
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Botón Ordenar secciones / Listo */}
+            {isOrderMode ? (
+              <button
+                type="button"
+                onClick={handleExitOrderMode}
+                className={[
+                  // Primario índigo (señala modo activo)
+                  "inline-flex items-center gap-1.5 px-3 py-2",
+                  "text-[13px] font-semibold text-white",
+                  "rounded-[var(--r-ctl)]",
+                  "bg-accent hover:bg-accent-press",
+                  "transition-colors duration-[140ms]",
+                  "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+                  "shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0_/_0.2)]",
+                  "hover:shadow-[var(--shadow-md)]",
+                ].join(" ")}
+              >
+                <Check size={15} aria-hidden="true" />
+                Listo
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleEnterOrderMode}
+                className={[
+                  // Ghost del DS
+                  "inline-flex items-center gap-1.5 px-3 py-2",
+                  "text-[13px] font-semibold text-ink-2",
+                  "rounded-[var(--r-ctl)]",
+                  "bg-panel border border-line",
+                  "hover:bg-panel-2 hover:text-ink",
+                  "transition-colors duration-[140ms]",
+                  "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+                ].join(" ")}
+                aria-label="Ordenar secciones"
+              >
+                <ArrowUpDown size={15} aria-hidden="true" />
+                Ordenar secciones
+              </button>
+            )}
+
+            {/* Botón "+ Nuevo movimiento" — deshabilitado en modo orden */}
+            <div className={isOrderMode ? "opacity-45 pointer-events-none cursor-default" : ""}>
+              <NewTransactionButton label="+ Nuevo movimiento" defaultMonth={month} />
+            </div>
+          </div>
         </div>
 
         {/* ── Totales / error / loading ── */}
@@ -335,118 +603,59 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
               </div>
             </div>
 
-            {/* ── Lista agrupada por origen ── */}
-            <div className="space-y-[30px] mt-1">
-              {/* Únicos */}
-              {unicos.length > 0 && (
-                <section aria-labelledby="section-unicos">
-                  {/* Cabecera del grupo */}
-                  <div className="flex items-center gap-3 px-1 pb-[10px]">
-                    <span
-                      id="section-unicos"
-                      className="text-[13px] font-bold uppercase tracking-[0.1em] text-ink-2"
-                    >
-                      Únicos
-                    </span>
-                    <span className="text-[11.5px] font-semibold text-muted bg-panel-3 rounded-pill px-[9px] py-[1px]">
-                      {unicos.length}
-                    </span>
-                    <span className="flex-1 h-px bg-hair" aria-hidden="true" />
-                    <span className="text-[13px] font-semibold text-muted mono">
-                      {formatSubtotal(groupSubtotal(unicos))}
-                    </span>
-                  </div>
-                  {/* Lista */}
-                  <div className="bg-panel border border-line rounded-card overflow-hidden shadow-[var(--shadow-sm)]">
-                    {unicos.map((item) => (
-                      <MovementItemRow
-                        key={item.id}
-                        movement={item}
-                        viewMonth={month}
-                        onEdit={handleEdit}
-                        onDelete={handleDelete}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
+            {/* ── Lista agrupada por origen — con acordeón y reordenamiento ── */}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={sectionOrder}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-[30px] mt-1">
+                  {sectionOrder.map((key) => {
+                    const items = sectionItems[key];
+                    const label = SECTION_LABELS[key];
+                    const isCollapsed = collapsedSections.has(key);
 
-              {/* Fijos */}
-              {fijos.length > 0 && (
-                <section aria-labelledby="section-fijos">
-                  <div className="flex items-center gap-3 px-1 pb-[10px]">
-                    <span
-                      id="section-fijos"
-                      className="text-[13px] font-bold uppercase tracking-[0.1em] text-ink-2"
-                    >
-                      Fijos
-                    </span>
-                    <span className="text-[11.5px] font-semibold text-muted bg-panel-3 rounded-pill px-[9px] py-[1px]">
-                      {fijos.length}
-                    </span>
-                    <span className="flex-1 h-px bg-hair" aria-hidden="true" />
-                    <span className="text-[13px] font-semibold text-muted mono">
-                      {formatSubtotal(groupSubtotal(fijos))}
-                    </span>
-                  </div>
-                  <div className="bg-panel border border-line rounded-card overflow-hidden shadow-[var(--shadow-sm)]">
-                    {fijos.map((item) => (
-                      <MovementItemRow
-                        key={item.id}
-                        movement={item}
-                        viewMonth={month}
-                        onEdit={handleEdit}
-                        onDelete={handleDelete}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* Cuotas */}
-              {cuotas.length > 0 && (
-                <section aria-labelledby="section-cuotas">
-                  <div className="flex items-center gap-3 px-1 pb-[10px]">
-                    <span
-                      id="section-cuotas"
-                      className="text-[13px] font-bold uppercase tracking-[0.1em] text-ink-2"
-                    >
-                      Cuotas
-                    </span>
-                    <span className="text-[11.5px] font-semibold text-muted bg-panel-3 rounded-pill px-[9px] py-[1px]">
-                      {cuotas.length}
-                    </span>
-                    <span className="flex-1 h-px bg-hair" aria-hidden="true" />
-                    <span className="text-[13px] font-semibold text-muted mono">
-                      {formatSubtotal(groupSubtotal(cuotas))}
-                    </span>
-                  </div>
-                  <div className="bg-panel border border-line rounded-card overflow-hidden shadow-[var(--shadow-sm)]">
-                    {cuotas.map((item) => (
-                      <MovementItemRow
-                        key={item.id}
-                        movement={item}
-                        viewMonth={month}
-                        onEdit={handleEdit}
-                        onDelete={handleDelete}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* Estado vacío (sin movimientos en ninguna sección) */}
-              {unicos.length === 0 && fijos.length === 0 && cuotas.length === 0 && (
-                <div className="rounded-card border border-dashed border-line bg-panel-2 px-6 py-8 text-center">
-                  <p className="text-[15px] font-semibold text-ink">
-                    No hay movimientos en {mesName.toLowerCase()} {yearName}
-                  </p>
-                  <p className="mt-1 text-[13px] text-muted">
-                    Los movimientos que cargues aparecerán aquí.
-                  </p>
+                    return (
+                      <SortableSection
+                        key={key}
+                        id={key}
+                        label={label}
+                        count={items.length}
+                        subtotal={formatSubtotal(groupSubtotal(items))}
+                        isCollapsed={isCollapsed}
+                        onToggle={() => handleToggleCollapse(key)}
+                        isOrderMode={isOrderMode}
+                      >
+                        {/* Contenido de la sección: lista o empty inline */}
+                        {items.length === 0 ? (
+                          <SectionEmpty sectionKey={key} />
+                        ) : (
+                          // Atenuación opcional del contenido en modo orden
+                          <div className={isOrderMode ? "opacity-70" : ""}>
+                            <SectionList
+                              items={items}
+                              viewMonth={month}
+                              onEdit={handleEdit}
+                              onDelete={handleDelete}
+                            />
+                          </div>
+                        )}
+                      </SortableSection>
+                    );
+                  })}
                 </div>
-              )}
-            </div>
+              </SortableContext>
+
+              {/* DragOverlay — ítem levantado con sombra de elevación */}
+              <DragOverlay>
+                {activeId ? renderOverlay(activeId) : null}
+              </DragOverlay>
+            </DndContext>
           </>
         )}
       </div>
@@ -504,5 +713,42 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
         />
       )}
     </PeriodNav>
+  );
+}
+
+// ─── Sub-componentes auxiliares ───────────────────────────────────────────────
+
+/** Estado vacío inline de una sección (Fase 1.1.4 D) */
+function SectionEmpty({ sectionKey }: { sectionKey: MonthSectionKey }) {
+  return (
+    <div className="rounded-card border border-dashed border-line bg-panel-2 px-6 py-6 text-center">
+      <p className="text-[12.5px] font-medium text-muted">
+        {SECTION_EMPTY_COPY[sectionKey]}
+      </p>
+    </div>
+  );
+}
+
+/** Lista de ítems de una sección */
+interface SectionListProps {
+  items: MovementItem[];
+  viewMonth: string;
+  onEdit: (m: MovementItem) => void;
+  onDelete: (m: MovementItem) => void;
+}
+
+function SectionList({ items, viewMonth, onEdit, onDelete }: SectionListProps) {
+  return (
+    <div className="bg-panel border border-line rounded-card overflow-hidden shadow-[var(--shadow-sm)]">
+      {items.map((item) => (
+        <MovementItemRow
+          key={item.id}
+          movement={item}
+          viewMonth={viewMonth}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      ))}
+    </div>
   );
 }

@@ -39,6 +39,7 @@ Cubre exclusivamente la plataforma **web** de Control en su versión 1.0. La pla
 | 1.0 | 2026-06-03 | Versión inicial |
 | 1.1.1 | 2026-06-16 | Fijos extendidos: anulación por mes puntual (RF-MF-005) y periodicidad (RF-MF-006); nueva RN-016. Fase 1.1.1. |
 | 1.1.2 | 2026-06-16 | Color de categoría editable: el usuario elige/edita el color desde una matriz de 70 colores (reabre RF-CAT-005, RN-013; ajusta RF-CAT-002/003). Fase 1.1.2. |
+| 1.1.4 | 2026-06-16 | Vista del mes: secciones colapsables + reordenables, persistidas por usuario; las 3 secciones siempre visibles con empty inline (nuevo RF-VM-005; ajusta RF-VM-001). Fase 1.1.4. |
 
 ---
 
@@ -947,9 +948,9 @@ La vista del mes muestra todos los movimientos del mes seleccionado (únicos, fi
 - [ ] Se listan los fijos donde `startMonth <= mesActivo` y (`deletedFrom` es null o `deletedFrom > mesActivo`).
 - [ ] Se listan las cuotas donde `startMonth <= mesActivo < startMonth + totalInstallments meses`.
 - [ ] Cada ítem muestra: tipo (gasto/ingreso), monto, categoría, descripción (si la tiene) y su origen (único / fijo / cuota X/N).
-- [ ] La lista está agrupada por tipo en tres secciones separadas y rotuladas, en este orden: **Únicos**, **Fijos**, **Cuotas**. Dentro de cada sección, los movimientos se ordenan por **monto descendente** (`amountCents` DESC: el monto más alto primero, por magnitud, sin distinguir gasto de ingreso). Ante montos iguales, el desempate estable es por sección: Únicos por instante (fecha y hora) descendente; Fijos por fecha de creación descendente; Cuotas por identificador ascendente.
-- [ ] Una sección sin movimientos en el mes no se muestra (no aparece su rótulo vacío).
-- [ ] Si no hay movimientos en el mes, la lista se muestra vacía sin mostrar error.
+- [ ] La lista está agrupada por tipo en tres secciones separadas y rotuladas, **Únicos**, **Fijos**, **Cuotas** (orden default; reordenable por el usuario, RF-VM-005). Dentro de cada sección, los movimientos se ordenan por **monto descendente** (`amountCents` DESC: el monto más alto primero, por magnitud, sin distinguir gasto de ingreso). Ante montos iguales, el desempate estable es por sección: Únicos por instante (fecha y hora) descendente; Fijos por fecha de creación descendente; Cuotas por identificador ascendente. El reordenamiento aplica **solo a las secciones entre sí**, nunca a los ítems dentro de una sección (RF-VM-005).
+- [ ] Las **tres secciones se muestran siempre**, aunque estén vacías (cambio respecto de v1.0 — ver bitácora 2026-06-16). Una sección sin movimientos muestra su cabecera completa (rótulo, contador en 0, subtotal en $0) y un mensaje de estado vacío inline propio ("Sin movimientos únicos" / "Sin fijos" / "Sin cuotas").
+- [ ] Si no hay movimientos en el mes, no se muestra un mensaje de estado vacío global: las tres secciones aparecen vacías con su empty inline propio y los totales del mes en cero, sin error.
 
 ---
 
@@ -1005,6 +1006,29 @@ La vista del mes muestra todos los movimientos del mes seleccionado (únicos, fi
 - [ ] Existen controles para avanzar al mes siguiente y retroceder al mes anterior.
 - [ ] La lista y los totales se actualizan para reflejar el mes seleccionado.
 - [ ] Se muestra el nombre del mes y el año del mes activo.
+
+---
+
+#### RF-VM-005 — Colapsar y reordenar las secciones de la vista del mes
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Las tres secciones de la vista del mes (Únicos, Fijos, Cuotas) son colapsables tipo acordeón y reordenables entre sí. El estado colapsado/expandido y el orden de las secciones se persisten por usuario. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario está en la vista del mes. |
+
+**Flujo principal:**
+1. Cada sección puede expandirse o colapsarse individualmente (acordeón): toda la cabecera de grupo actúa como disclosure.
+2. El usuario activa el **"modo orden"** desde el header ("Ordenar secciones"); en ese modo arrastra las secciones para reordenarlas entre sí.
+3. El usuario sale del modo orden ("Listo"). El nuevo orden ya quedó aplicado en vivo.
+
+**Criterios de aceptación:**
+- [ ] Cada sección expande/colapsa de forma individual; la cabecera completa de la sección es el control de disclosure.
+- [ ] El usuario puede reordenar **solo las secciones entre sí** mediante drag, dentro de un **modo orden** explícito que se activa/desactiva con un botón del header ("Ordenar secciones" / "Listo").
+- [ ] Los ítems **dentro** de cada sección NO se reordenan: siguen el orden por monto descendente de RF-VM-001.
+- [ ] El estado colapsado/expandido de cada sección y el orden de las secciones se **persisten por usuario** vía las preferencias (1.1.0); sobreviven a la navegación y al cierre de sesión. Shape de la clave de preferencias en `docs/data-model.md` (`monthSections`).
+- [ ] En modo orden, el botón "+ Nuevo movimiento" se deshabilita y el colapsar/expandir queda suspendido (la cabecera arrastra en lugar de colapsar). No hay acción de "cancelar": el orden se aplica en vivo.
 
 ---
 
@@ -1315,6 +1339,8 @@ Impacta RF-GRA-001 (criterio de los 12 meses en cero), RF-GRA-003 (criterios de 
 **2026-06-08 — Orden de listado de categorías: nombre ascendente (Fase 3).** `GET /categories` devuelve las categorías activas ordenadas por **nombre ascendente**. Impacta `docs/backend.md`. Motivo: orden estable y predecible para la pantalla de gestión, independiente de la fecha de creación.
 
 **2026-06-08 — Alcance: `/categorias` sin sidebar (opción B, Fase 3).** El CRUD de categorías se entrega como pantalla accesible **por URL** (`/categorias`), **sin** construir el sidebar/nav todavía. El sidebar de navegación global (RF-NAV-001) queda para una fase posterior. Impacta `docs/frontend.md`, `docs/features.md`. Motivo: acotar la Fase 3 al módulo de Categorías sin acoplar la entrega a la navegación global, que tiene su propio alcance.
+
+**2026-06-16 — Vista del mes: secciones colapsables + reordenables, las 3 siempre visibles — Fase 1.1.4 (RF-VM-005).** Las tres secciones de `/mes` (Únicos / Fijos / Cuotas) pasan a ser **colapsables tipo acordeón** (expandir/colapsar individual; la cabecera completa es el disclosure) y **reordenables solo entre sí** mediante drag dentro de un **"modo orden"** explícito (botón "Ordenar secciones" / "Listo" en el header). Los ítems **dentro** de cada sección no se reordenan: siguen por monto descendente (RF-VM-001). Tanto el **estado colapsado/expandido** como el **orden de secciones** se **persisten por usuario** vía las preferencias (1.1.0) — es el **primer consumidor real del blob** (clave `monthSections`; shape en `docs/data-model.md`). **Cambio de comportamiento respecto de v1.0:** (1) las **3 secciones se muestran siempre**, aunque estén vacías (antes una sección sin movimientos se ocultaba) — una sección vacía muestra cabecera completa (contador 0, subtotal $0) + un empty inline propio ("Sin movimientos únicos" / "Sin fijos" / "Sin cuotas"); (2) se **elimina el empty global** de `/mes` ("No hay movimientos en {mes}" con CTA, que aparecía con las 3 secciones vacías): con las 3 secciones siempre visibles y su empty propio, quedaba redundante. En modo orden, "+ Nuevo movimiento" se deshabilita y el colapsar/expandir queda suspendido; no hay "cancelar" (el orden se aplica en vivo). **Solo frontend:** no toca el backend ni el contrato de API; consume el cimiento de preferencias (1.1.0). Impacta RF-VM-001 (empties) y el nuevo RF-VM-005, `docs/screens.md` (pantalla 4), `docs/data-model.md` (clave `monthSections`), `docs/frontend.md` y `docs/features.md`. Motivo: el usuario quiere plegar las secciones que no le interesan en un mes y ordenarlas a su gusto, con esa preferencia persistida entre sesiones.
 
 **2026-06-08 — Bucketeo por mes de movimientos con la timezone del query param (deuda técnica, Fase 4).** `GET /transactions` filtra el mes por un **rango UTC calculado con la `timezone` enviada en el query param** (`?month=YYYY-MM&timezone=IANA`), **no** con la `timezone` propia de cada registro. **Ambos params son obligatorios:** el backend **no asume "mes actual"** (no conoce la zona del usuario en ese punto) y devuelve `400` si falta `month`. **Limitación conocida:** un movimiento cargado en una zona distinta a la del query puede caer en el mes "equivocado" según este criterio. La alternativa correcta —bucketear por la zona de cada registro vía SQL `AT TIME ZONE`— requiere SQL crudo, no idiomático en Prisma 7; se **difiere a Fase 5** (Vista del mes). Impacta `docs/backend.md`. Motivo: entregar el filtrado por mes sin trabarse en SQL crudo, asumiendo conscientemente la limitación hasta que la Vista del mes lo resuelva bien.
 

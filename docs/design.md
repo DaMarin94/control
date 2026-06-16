@@ -581,3 +581,126 @@ Con el layout de 3 columnas, el responsive se simplifica a **dos regímenes** (y
 ### Reutilización en reportes (1.1.5) — nota de continuidad
 
 Esta spec deja el patrón listo para que 1.1.5 lo monte sobre cada **card de reporte** (donde el período es el **año**) y sobre el **dashboard**. Lo que 1.1.5 hereda sin redefinir: dimensiones de flecha (48/36, escalón único), estados (incluido **disabled**, que allá sí se dispara con `earliestYear` / año en curso), el centrado vertical sticky, los **dos regímenes responsive** (columnas laterales / colapso al `.stepper`), y el rótulo de período como H1/título. Lo que 1.1.5 deberá especificar por su cuenta (fuera de esta spec): **si las flechas flanquean la card individual** (el roadmap dice que las flechas son "parte del propio widget", no chrome de la página) en vez de flanquear la columna entera — ese encuadre por-card (aplicar el mismo grid de 3 columnas a la card, o equivalente) lo resuelve 1.1.5; el **patrón visual de la flecha** (tamaño, color, estados, colapso) es el de esta sección.
+
+---
+
+## Vista del mes — secciones colapsables + reordenables (Fase 1.1.4, 2026-06-16)
+
+> Spec del lenguaje visual de la Fase 1.1.4 sobre `/mes` (`month-view-client.tsx`): **P5 — acordeón** (las 3 secciones Únicos / Fijos / Cuotas se colapsan/expanden individualmente) y **P6 — reordenar** (el usuario reordena las secciones entre sí por drag; los ítems **dentro** de cada sección no se reordenan, siguen por monto descendente). **No introduce tokens nuevos:** todo se resuelve con los tokens y patrones vigentes del DS "Precise Ledger".
+>
+> **Restricción dura de esta fase: el look ACTUAL de `/mes` se mantiene.** El acordeón y el modo orden se construyen **SOBRE** el aspecto actual de la `.ghead` (cabecera de grupo) y de la tarjeta-lista, no lo reemplazan. La cabecera de grupo de hoy —rótulo uppercase con tracking (`--ink-2`), pill contador (`--panel-3`), línea `flex-1 h-px bg-hair`, subtotal mono (`--muted`) a la derecha— se conserva **idéntica**; lo que esta spec agrega son: el affordance de colapso, el estado colapsado, la sección vacía y el modo orden. Cualquier elemento no mencionado abajo queda exactamente como está.
+>
+> **Decisiones de producto ya cerradas con el usuario que esta spec respeta:** (1) se muestran **siempre las 3 secciones**, aunque estén vacías (hoy se ocultan las vacías); por eso se define el estado de sección vacía. (2) El motor de drag será **dnd-kit** y el acordeón se piensa como **patrón reutilizable** en el resto de la app — por eso el spec describe la cabecera colapsable y la fila reordenable de forma **genérica** (una "sección de acordeón" / un "ítem reordenable"), no atada a que sean exactamente 3 ni a que sean Únicos/Fijos/Cuotas.
+>
+> **Lo que NO es de esta spec (se deriva):** la **persistencia** del estado colapsado/expandido y del orden de secciones (por usuario) es comportamiento funcional/técnico — esta spec define cómo se **ve** cada estado, no dónde ni cómo se guarda. Si el frontend necesita el contrato de persistencia, lo pide al analista vía orquestador.
+
+### A. Anatomía: la "sección de acordeón" (patrón genérico reutilizable)
+
+Una sección de acordeón es el par **cabecera (`.ghead`) + cuerpo (tarjeta-lista)** que `/mes` ya tiene hoy por grupo. Se generaliza así para que el patrón sirva en otras pantallas:
+
+- **Cabecera de acordeón** = la `.ghead` actual, vuelta clickable (botón de disclosure). Lleva: glifo de colapso (chevron), rótulo, pill contador, línea divisoria `flex-1 h-px bg-hair`, valor a la derecha (en `/mes`: el subtotal mono). El look es el de hoy; lo único nuevo es el chevron y que toda la cabecera es accionable.
+- **Cuerpo de acordeón** = la tarjeta-lista de hoy (`bg-panel border border-line rounded-card shadow-sm`, con sus filas). Es lo que colapsa/expande.
+- En `/mes`, el patrón se instancia 3 veces (Únicos / Fijos / Cuotas). En otra pantalla, N veces con otro rótulo/valor. El espaciado entre secciones se mantiene el actual (`space-y-[30px]`).
+
+### B. Cabecera colapsable (P5) — affordance, área clickeable, estados
+
+**La `.ghead` se vuelve un disclosure sin perder su look.** Toda la fila de cabecera pasa a ser el control que colapsa/expande su cuerpo. No se la convierte en una caja con fondo ni borde: sigue siendo la misma fila al aire que es hoy. Solo se le agrega el chevron y el comportamiento de botón.
+
+**Chevron de colapso:**
+
+- **Glifo:** `ChevronRight` (lucide), **16px**, `stroke-width` 2 (default lucide; coherente con los chevrons chicos del DS). Se usa `ChevronRight` como glifo base y se **rota** para indicar estado (ver abajo) — un único glifo que gira, no dos íconos distintos.
+- **Ubicación:** **primer elemento de la fila**, a la izquierda del rótulo, antes de "Únicos/Fijos/Cuotas". Empuja el resto de la fila; el `gap-3` actual entre elementos de la `.ghead` se mantiene (el chevron entra como nuevo primer hijo con el mismo `gap`). El rótulo, el pill, la línea y el subtotal conservan su orden y estilo.
+- **Color:** `--muted` en reposo (terciario, coherente con que la `.ghead` es meta, no protagonista; el chevron no debe competir con el rótulo `--ink-2`). Pasa a `--ink-2` en hover de la cabecera (ver estados).
+- **Rotación según estado:** **expandida** → chevron apuntando **hacia abajo** (rotación `90deg` desde el `ChevronRight` base, es decir apunta ▼). **Colapsada** → chevron en su orientación base apuntando **a la derecha** (▶, `0deg`). Convención estándar de acordeón: apunta abajo cuando está abierto, a la derecha cuando está cerrado. La rotación **anima** (ver "Animación").
+- **No se agrega un segundo control:** el chevron es indicador, no un botón separado; el área accionable es toda la cabecera (abajo).
+
+**Área clickeable:**
+
+- **Toda la cabecera** (`.ghead` completa: chevron + rótulo + pill + línea + subtotal) es el área que dispara el colapso/expansión. Es un único control de disclosure que ocupa el ancho de la fila. Se prefiere cabecera-entera-clickable (no solo el chevron) por superficie de click generosa, coherente con el resto del DS.
+- **Semántica:** la cabecera es el disclosure trigger (`button`, `aria-expanded`, `aria-controls` apuntando al cuerpo). El cuerpo es la región controlada. El frontend resuelve el marcado accesible; lo visual es: la fila entera responde al hover/focus/click como un solo control.
+- **Cursor:** `pointer` sobre toda la cabecera.
+
+**Estados de la cabecera (disclosure):**
+
+- **Reposo:** idéntico a la `.ghead` de hoy + chevron `--muted`. Sin fondo, sin borde.
+- **Hover:** señal **sobria**, porque la `.ghead` no es una caja. El **chevron sube a `--ink-2`** y el **rótulo sube de `--ink-2` a `--ink`** (refuerzo de "esto es accionable"). **No** se pinta un fondo `--panel-2` en toda la fila (rompería el look "al aire" de la cabecera) — la única señal de hover es el oscurecimiento del chevron + rótulo. Transición **0.14s** (hover estándar del DS) en `color`. El pill, la línea y el subtotal no cambian en hover.
+- **Focus (teclado):** anillo de foco del DS — `shadow-[0_0_0_3px_var(--accent-soft)]` — sobre la fila de cabecera (`focus-visible`), con un radio suave (`--r-chip`, 7px) para que el ring no quede con esquinas vivas sobre una fila sin caja. El `--accent-soft` acá es ring de interacción de UI, no tiñe nada semántico (mismo criterio que los demás focos del DS).
+- **Active/pressed:** sin tratamiento extra (la acción es instantánea; el feedback es la propia animación de colapso). 
+
+**Comportamiento del subtotal y el contador al colapsar:**
+
+- El **pill contador** y el **subtotal mono** de la cabecera **permanecen visibles en estado colapsado** — son justamente la información de resumen que el usuario quiere ver cuando la sección está cerrada ("Fijos · 4 · −$120.000" de un vistazo sin abrir). No se ocultan ni se atenúan al colapsar. Conservan su estilo actual.
+- Lo único que cambia al colapsar es: el cuerpo (tarjeta-lista) se oculta y el chevron rota a ▶. La cabecera con su resumen queda como única línea visible de la sección.
+
+### C. Animación de colapso / expansión
+
+- **Qué anima:** (1) la **altura** del cuerpo (tarjeta-lista) entre 0 y su alto natural, con `overflow: hidden` durante la transición para que las filas no se desborden; (2) un **fade** del cuerpo (`opacity` 0↔1) acompañando la altura, para que el contenido no aparezca/desaparezca de golpe; (3) la **rotación** del chevron (▶↔▼).
+- **Duración:** **0.22s** — el mismo tiempo del `pop` de modal del DS; suficiente para leerse como un despliegue suave sin demorar la interacción. (Entre el hover de 0.14s y la entrada de pantalla de 0.32s; un colapso es una transición de tamaño media.)
+- **Easing:** `ease-out` (el contenido entra rápido y desacelera), coherente con el movimiento sobrio del DS.
+- **Chevron:** la rotación usa la misma duración (0.22s) y easing, para que glifo y cuerpo se muevan en conjunto.
+- **`prefers-reduced-motion`:** se **desactiva** la transición de altura, fade y rotación. El colapso/expansión es **instantáneo** (el cuerpo aparece/desaparece sin animar; el chevron salta a su orientación final). Regla obligatoria del DS.
+- **Nota de implementación (no normativa):** animar `height:auto` requiere medir el alto natural (técnica de grid `1fr`/`0fr` o medición JS); el frontend elige la técnica mientras el resultado sea: despliegue suave de 0.22s ease-out con fade, y respeto a `prefers-reduced-motion`.
+
+### D. Sección vacía (decisión de producto: se muestran siempre las 3)
+
+A diferencia de hoy (que oculta una sección sin movimientos), las 3 secciones **se renderizan siempre**. Una sección sin ítems se ve así, manteniendo el look actual:
+
+- **Cabecera:** presente y **completa**, con su chevron, rótulo, pill contador y subtotal. El **pill contador muestra `0`** (mismo estilo `--panel-3` / `--muted`). El **subtotal muestra el cero formateado** según el formateador actual (sin signo, p. ej. el `formatCurrency(0)` que el componente ya usa) en mono `--muted`. La cabecera de una sección vacía no se atenúa: se lee igual que una con contenido, solo que su contador es 0.
+- **Cuerpo (cuando está expandida):** en vez de la tarjeta-lista con filas, un **estado vacío inline** dentro de la misma caja de tarjeta, reutilizando el patrón de empty ya presente en `/mes`:
+  - Caja `rounded-card border border-dashed border-line bg-panel-2`, con padding interior generoso (`px-6 py-6`, un punto más compacto que el empty global de la pantalla que usa `py-8`, porque acá es el empty de **una** sección, no de toda la vista). El borde **dashed** la distingue de una tarjeta-lista con contenido (que lleva borde sólido) y comunica "acá todavía no hay nada".
+  - **Texto:** una sola línea, centrada, rol *Meta/subtítulos* (12.5–13px, `--muted`): por sección, **"Sin movimientos únicos" / "Sin fijos" / "Sin cuotas"** (copy breve; el redactado exacto es copy funcional — si el analista define otro, se respeta; lo visual es: una línea `--muted` centrada). Sin ilustración, sin botón. Sobrio.
+- **Cuerpo (cuando está colapsada):** igual que cualquier sección colapsada — el cuerpo (incluido el empty inline) se oculta; queda solo la cabecera con su contador en 0. Una sección vacía **se puede colapsar igual** que una con contenido (no hay caso especial).
+- **El empty global de la pantalla** (el bloque "No hay movimientos en {mes}" que hoy aparece cuando las 3 están vacías) — **señal a derivar:** con la decisión de mostrar siempre las 3 cabeceras, hay que definir funcionalmente si ese empty global **convive** con las 3 secciones vacías o se **reemplaza** por ellas. Esto es comportamiento de pantalla (qué se muestra cuándo), no lenguaje visual: lo marco como **impacto a derivar al analista** (`docs/screens.md`). Visualmente, si el analista decide conservar el empty global, su estilo no cambia; si decide que las 3 secciones vacías lo sustituyen, esta spec ya cubre cómo se ve cada sección vacía.
+
+### E. Modo orden / edición (P6) — disparador, entrada, drag y salida
+
+Reordenar las secciones es una acción **deliberada y poco frecuente**, no algo que el usuario hace en cada visita. Por eso **no** se muestran handles de drag permanentemente (ensuciarían el look actual que al usuario le gusta): se entra a un **modo orden** explícito, se reordena, y se sale. El drag está disponible **solo dentro de ese modo**.
+
+**Disparador — botón "Ordenar secciones":**
+
+- **Ubicación:** en el **header de página (`.phead`)**, en la fila del título, **a la izquierda del botón "+ Nuevo movimiento"** (ambos a la derecha del bloque de título, con el `gap-5` que el header ya tiene entre sus elementos de la derecha). Queda en el mismo plano que la acción primaria pero claramente subordinado a ella por estilo.
+- **Estilo:** botón **ghost del DS** (`.btn.ghost`): sin fill, texto `--ink-2`, ícono a la izquierda, `hover:bg-panel-2 hover:text-ink`, radio `--r-ctl` (10px), foco `--accent-soft`. **No** es primario índigo — el primario del header sigue siendo, único, "+ Nuevo movimiento" (no se le disputa el acento). Tamaño de texto 13px/600.
+- **Ícono:** lucide `ArrowUpDown` (15px, a la izquierda del texto) — comunica "reordenar verticalmente" sin ambigüedad. Rótulo: **"Ordenar secciones"**.
+- **Visibilidad:** solo se renderiza cuando hay **al menos 2 secciones con contenido** que tenga sentido reordenar — aunque, dado que ahora las 3 cabeceras están siempre, el botón está siempre disponible (siempre hay 3 secciones que reordenar). Se mantiene visible en todo momento en `/mes`.
+
+**Entrada al modo orden — cómo cambia la página:**
+
+Al activar "Ordenar secciones", la página entra en estado editable. El cambio es **acotado a las secciones**; el header, los totales y el resto no se alteran (salvo el botón disparador, que cambia a "Listo", abajo). Cambios visuales:
+
+- **El botón disparador se transforma en "Listo":** mismo lugar, pasa de ghost a **botón primario índigo** (`.btn` primario) con rótulo **"Listo"** (sin ícono, o con `Check` 15px a la izquierda). Señala inequívocamente que se está en modo orden y cómo salir. (Es el único momento en que aparece un segundo botón primario en el header; mientras dura el modo orden, "+ Nuevo movimiento" se atenúa/deshabilita — ver abajo — así que no compiten dos primarios activos.)
+- **"+ Nuevo movimiento" se deshabilita** mientras dura el modo orden: pasa a estado disabled del DS (opacidad reducida ~0.45, `cursor: default`, sin hover). Cargar un movimiento nuevo en pleno reordenamiento no tiene sentido; al salir vuelve a su estado normal. (Decisión visual coherente con "el modo orden es un estado modal-lite de la lista".)
+- **Cada cabecera de sección gana un handle de drag:** un glifo lucide `GripVertical` (16px, `--muted`) aparece **a la izquierda del chevron** (nuevo primer elemento de la `.ghead` durante el modo orden), con `cursor: grab` (`grabbing` mientras se arrastra). El handle es el asidero de dnd-kit. El resto de la cabecera mantiene su contenido.
+- **La cabecera deja de funcionar como disclosure mientras dura el modo orden** (ver "Colapsar durante el modo orden", abajo): el click/tap sobre la cabecera no colapsa; la interacción de la cabecera es **arrastrar**. El chevron se mantiene visible (indica el estado colapsado/expandido que tenía cada sección) pero **no responde al click**; su hover de disclosure se suspende.
+- **Affordance de "esto se puede mover":** cada sección entera (cabecera + cuerpo) se vuelve una **tarjeta arrastrable**. Para comunicarlo sin recolorear, se aplica a cada sección un sutil realce de contenedor: la sección se envuelve visualmente como un bloque con `--shadow-sm` y un borde `--line` apenas perceptible alrededor del conjunto cabecera+cuerpo (o, más simple y preferido: **no** se agrega caja nueva; el handle `GripVertical` + el cursor `grab` + la sombra que aparece al levantar ya comunican el affordance). **Preferencia: mínima intervención** — handle visible + cursor grab, sin cajas nuevas alrededor de la sección, para no romper el look. El realce fuerte se reserva para el ítem **levantado** (abajo).
+- **Atenuación de foco:** opcionalmente, el contenido **dentro** de las tarjetas-lista (las filas de movimiento) puede bajar levemente a `opacity: 0.7` durante el modo orden, para que la atención vaya a la estructura (las secciones como bloques movibles) y no a las filas individuales. Es **opcional** y sutil; si genera dudas de implementación, omitirlo — el handle + el botón "Listo" ya señalan el modo. Las cabeceras (lo que se arrastra) **no** se atenúan: son el sujeto de la acción.
+
+**Feedback durante el arrastre (dnd-kit):**
+
+- **Ítem levantado (drag overlay):** la sección que se arrastra se "levanta" del plano: gana `--shadow-lg` (la sombra de elevación máxima del DS, la de modales/panel), un leve `scale(1.02)` y `opacity` ~0.95, y sigue al cursor. Conserva su contenido (cabecera + cuerpo, o cabecera sola si estaba colapsada) para que el usuario vea qué está moviendo. El `cursor` es `grabbing`.
+- **Placeholder / hueco destino:** en la posición original (y desplazándose a la posición destino mientras se arrastra) queda un **hueco** que marca dónde caería la sección: un bloque del alto de la sección arrastrada con `rounded-card`, fondo `--panel-2`, **borde `dashed` `--line`** (mismo lenguaje "dashed = espacio reservado / sin contenido fijo" que la sección vacía). Las demás secciones se **desplazan suavemente** (transición de 0.14–0.22s, el movimiento de reordenamiento de dnd-kit) para abrir el hueco. 
+- **Indicador de inserción (alternativa equivalente):** si el frontend prefiere, en vez de un hueco con dashed puede usar una **línea de inserción** de 2px `--accent` entre secciones marcando dónde caerá — el `--accent` acá es indicador de interacción de UI (dónde suelto), no tiñe montos, admisible. **Preferencia: el hueco dashed** por ser más claro a nivel de "bloque que entra en este lugar"; la línea de inserción es aceptable si el hueco complica la implementación con dnd-kit.
+- **Solo se reordenan secciones, no ítems:** dentro de una tarjeta-lista, las filas **no** muestran handles ni son arrastrables. El único elemento arrastrable es la sección (vía su cabecera/handle). Visualmente: ninguna fila de movimiento gana `GripVertical` ni cursor grab. Esto refuerza que lo que se mueve son bloques, no filas.
+
+**Colapsar durante el modo orden — deshabilitado:**
+
+- Mientras dura el modo orden, **colapsar/expandir queda deshabilitado**. Razón: la cabecera está dedicada a arrastrar; mezclar "click colapsa" con "drag mueve" sobre el mismo elemento es ambiguo y propenso a accidentes (un drag corto se leería como click). El chevron se ve (refleja el estado actual de cada sección) pero **no es accionable**: sin hover de disclosure, sin cambio de cursor a pointer sobre el chevron (el cursor de la cabecera es `grab`). Cada sección se arrastra en el estado (colapsada/expandida) en que esté; arrastrar una sección colapsada mueve solo su cabecera (más compacta, lo cual de hecho facilita reordenar muchas secciones).
+- Al **salir** del modo orden, el chevron vuelve a ser accionable y el colapsar/expandir se rehabilita; cada sección conserva el estado colapsado/expandido que tenía.
+
+**Salida del modo orden:**
+
+- **Botón "Listo"** (el disparador transformado) — al pulsarlo, la página vuelve al estado normal: desaparecen los handles `GripVertical`, las cabeceras vuelven a ser disclosures, "+ Nuevo movimiento" se rehabilita, y "Listo" vuelve a ser "Ordenar secciones" (ghost). El nuevo orden queda aplicado.
+- **No hay "cancelar" en v1:** el reordenamiento se aplica en vivo (cada drop reordena); "Listo" solo cierra el modo, no confirma/descarta (no hay un estado pendiente que descartar). Coherente con que el orden se persiste a medida que se reordena. (Si producto quisiera un cancelar, sería alcance nuevo — no se asume.)
+- La transición de entrada/salida del modo orden (aparición/desaparición de handles, cambio del botón) usa la duración de hover del DS (0.14s) para los cambios de color/opacidad; no requiere animación elaborada.
+
+### F. Responsive (≥941px vs ≤940px)
+
+- **≥941px (desktop, sidebar visible):** todo lo anterior aplica tal cual. El botón "Ordenar secciones" / "Listo" vive en el `.phead` junto a "+ Nuevo movimiento". El drag es por mouse (handle `GripVertical`). El acordeón funciona con click en la cabecera.
+- **≤940px (sidebar oculta, header compacto con stepper):** 
+  - **Acordeón:** funciona igual (cabeceras clickables, chevron, colapso). El tap sobre la cabecera colapsa/expande. Sin cambios de tamaño en el chevron.
+  - **Botón "Ordenar secciones":** en ≤940px el header ya está más apretado (stepper compacto + "+ Nuevo movimiento"). El botón disparador se mantiene en el header; si el espacio no alcanza, el header **envuelve** (`flex-wrap`, que el header ya usa) y el botón "Ordenar secciones" baja a una segunda fila junto a "+ Nuevo movimiento". No se oculta ni se mueve a otro lugar (mantener un único punto de entrada al modo orden).
+  - **Drag táctil:** el handle `GripVertical` es el asidero también en touch (dnd-kit soporta pointer/touch). El target del handle debe ser cómodo al dedo: aunque el glifo es 16px, su zona de toque efectiva conviene que sea ≥40px (padding alrededor del handle), sin agrandar el glifo. El feedback (ítem levantado con `--shadow-lg`, hueco dashed) es idéntico al de desktop.
+  - Ninguna parte del modo orden scrollea horizontal; las secciones ocupan el ancho del contenido como hoy.
+
+### G. Convivencia con las reglas duras (recordatorio)
+
+- El chevron, el handle `GripVertical`, el ring de foco (`--accent-soft`) y el eventual indicador de inserción (`--accent`) son **cromo de interacción de UI** (navegación/affordance), **no** montos ni cifras de dinero: no tocan la regla dura 2 (el acento sigue siendo solo marca/interacción, nunca tiñe un monto). Ningún elemento de esta spec recolorea un subtotal ni un monto: el subtotal de la cabecera conserva su `mono --muted` y su signo (+/−) actuales; los montos de las filas, su color semántico income/expense intacto (reglas duras 1 y 3). El modo orden y el colapso **no alteran** ninguna cifra: solo muestran/ocultan y reordenan bloques.

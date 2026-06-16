@@ -54,6 +54,8 @@ pnpm dev
 .F1 - La posibilidad de manejar diferentes monedas, el resultado final deberia ser que cada movimiento se pueda crear en una moneda en particular y con un cambio particular, osea:
 yo tengo pesos y dolares, actualmente mis gastos son todos pesos SALVO algunos dolares, entonces deberia ser posible cargar un movimiento seleccionando la moneda (por defecto se setea en la moneda configurada como por defecto para ese usuario) y el valor de cambio (ya que distintos meses pueden tener distintos valores de cambio segun se vaya devaluando el peso) y sumar asi al total siempre en la misma moneda.
 
+.F2 - Una convencion global de "ordering" en los query params del API, para que los listados se puedan pedir ya ordenados desde el backend. Hoy no hace falta para el orden de secciones de `/mes` (Fase 1.1.4) porque las preferencias del usuario ya viajan en la sesion y el orden se resuelve en el front sin round trip, pero un listado paginado o grande a futuro si se beneficiaria de ordenar server-side (no se puede reordenar en el cliente lo que no se trajo); se diseñaria cuando aparezca el primer listado que lo justifique, definiendo formato de los params, campos ordenables y direccion, de forma reutilizable entre endpoints.
+
 ## Tests
 
 Cada app guarda sus tests en una carpeta `tests/` separada de `src/` (`src/` solo contiene código; ver `docs/technical.md`).
