@@ -1,10 +1,12 @@
 /**
- * Tests del hook useReports (Fase 1.1.5).
+ * Tests del hook useReports (Fase 1.1.5 / Fase 1.1.6).
  *
  * Verifica:
  * - REPORTS_QUERY_KEY genera la query key correcta (varía por año y por categoriesKey)
+ * - Fase 1.1.6: distingue null (todas), "" (ninguna), string (subconjunto) en la key
  * - useReports llama a GET /movements/reports?year=YYYY (sin filtro)
  * - useReports incluye categories= en la URL cuando hay filtro
+ * - Fase 1.1.6: categoryIds=[] manda &categories= vacío (= ninguna)
  * - Estados isLoading/data/isError
  * - enabled: isAuthenticated (no dispara sin autenticación)
  * - El contrato de la respuesta (months × 12, categories con monthlyExpenseCents × 12)
@@ -99,6 +101,11 @@ describe("REPORTS_QUERY_KEY", () => {
     expect(REPORTS_QUERY_KEY(2026, "cat-1")).not.toEqual(REPORTS_QUERY_KEY(2026, "cat-1,cat-2"));
   });
 
+  it("null y '' (ninguna) producen query keys distintas — Fase 1.1.6", () => {
+    // Crítico: React Query necesita distinguir "todas" de "ninguna"
+    expect(REPORTS_QUERY_KEY(2026, null)).not.toEqual(REPORTS_QUERY_KEY(2026, ""));
+  });
+
   it("el primer elemento siempre es 'reports'", () => {
     expect(REPORTS_QUERY_KEY(2024, null)[0]).toBe("reports");
   });
@@ -178,6 +185,22 @@ describe("useReports", () => {
 
     const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
     expect(callUrl).not.toContain("categories=");
+  });
+
+  it("manda &categories= vacío cuando categoryIds es [] (= ninguna) — Fase 1.1.6", async () => {
+    mockApiGet.mockResolvedValue(mockReportsResponse);
+
+    const { result } = renderHook(() => useReports(2026, []), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
+    // Debe mandar el param presente y vacío
+    expect(callUrl).toBe("/movements/reports?year=2026&categories=");
   });
 
   it("ordena los categoryIds antes de serializarlos (key estable)", async () => {

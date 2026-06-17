@@ -1,10 +1,12 @@
 /**
- * Tests del hook useMovements.
+ * Tests del hook useMovements (Fase 1.1.6).
  *
  * Verifica:
- * - MOVEMENTS_QUERY_KEY genera la query key correcta
+ * - MOVEMENTS_QUERY_KEY genera la query key correcta (varía por mes y filtro)
  * - useMovements llama a GET /movements?month=YYYY-MM
+ * - Filtro de 3 estados: null (omite param), [] (param vacío), lista (ids)
  * - Los estados isLoading/data/isError funcionan correctamente
+ * - enabled: isAuthenticated (no dispara sin autenticación)
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -78,8 +80,20 @@ function createWrapper() {
 // ─── Tests MOVEMENTS_QUERY_KEY ────────────────────────────────────────────────
 
 describe("MOVEMENTS_QUERY_KEY", () => {
-  it("genera la query key correcta para un mes", () => {
-    expect(MOVEMENTS_QUERY_KEY("2026-06")).toEqual(["movements", "2026-06"]);
+  it("genera la query key correcta para un mes (sin filtro = null)", () => {
+    expect(MOVEMENTS_QUERY_KEY("2026-06")).toEqual(["movements", "2026-06", null]);
+  });
+
+  it("genera la query key correcta con filtro vacío [] (ninguna)", () => {
+    expect(MOVEMENTS_QUERY_KEY("2026-06", "")).toEqual(["movements", "2026-06", ""]);
+  });
+
+  it("genera la query key correcta con subconjunto de categorías", () => {
+    expect(MOVEMENTS_QUERY_KEY("2026-06", "cat-1,cat-2")).toEqual([
+      "movements",
+      "2026-06",
+      "cat-1,cat-2",
+    ]);
   });
 
   it("query keys de meses distintos son distintas", () => {
@@ -88,10 +102,22 @@ describe("MOVEMENTS_QUERY_KEY", () => {
     expect(key1).not.toEqual(key2);
   });
 
+  it("null y [] (ninguna) producen query keys distintas (para que React Query refetche)", () => {
+    expect(MOVEMENTS_QUERY_KEY("2026-06", null)).not.toEqual(
+      MOVEMENTS_QUERY_KEY("2026-06", "")
+    );
+  });
+
   it("incluye el mes como segundo elemento", () => {
     const key = MOVEMENTS_QUERY_KEY("2025-12");
     expect(key[0]).toBe("movements");
     expect(key[1]).toBe("2025-12");
+  });
+
+  it("incluye el filtro como tercer elemento", () => {
+    expect(MOVEMENTS_QUERY_KEY("2026-06", "cat-1")[2]).toBe("cat-1");
+    expect(MOVEMENTS_QUERY_KEY("2026-06", null)[2]).toBeNull();
+    expect(MOVEMENTS_QUERY_KEY("2026-06", "")[2]).toBe("");
   });
 });
 
@@ -111,10 +137,11 @@ describe("useMovements", () => {
         put: vi.fn(),
       },
       token: "test-token",
+      isAuthenticated: true,
     });
   });
 
-  it("llama a GET /movements?month=YYYY-MM con el mes correcto", async () => {
+  it("llama a GET /movements?month=YYYY-MM con el mes correcto (sin filtro)", async () => {
     mockApiGet.mockResolvedValue(mockMonthMovements);
 
     const { result } = renderHook(() => useMovements("2026-06"), {
@@ -126,6 +153,66 @@ describe("useMovements", () => {
     });
 
     expect(mockApiGet).toHaveBeenCalledWith("/movements?month=2026-06");
+  });
+
+  it("NO incluye categories= cuando categoryIds es null (= todas)", async () => {
+    mockApiGet.mockResolvedValue(mockMonthMovements);
+
+    const { result } = renderHook(() => useMovements("2026-06", null), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
+    expect(callUrl).not.toContain("categories");
+  });
+
+  it("incluye &categories= vacío cuando categoryIds es [] (= ninguna)", async () => {
+    mockApiGet.mockResolvedValue(mockMonthMovements);
+
+    const { result } = renderHook(() => useMovements("2026-06", []), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
+    expect(callUrl).toBe("/movements?month=2026-06&categories=");
+  });
+
+  it("incluye &categories=id1,id2 cuando categoryIds es una lista", async () => {
+    mockApiGet.mockResolvedValue(mockMonthMovements);
+
+    const { result } = renderHook(() => useMovements("2026-06", ["cat-1", "cat-2"]), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
+    expect(callUrl).toContain("categories=cat-1,cat-2");
+  });
+
+  it("ordena los categoryIds antes de serializarlos (key estable)", async () => {
+    mockApiGet.mockResolvedValue(mockMonthMovements);
+
+    const { result } = renderHook(() => useMovements("2026-06", ["cat-2", "cat-1"]), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
+    expect(callUrl).toContain("categories=cat-1,cat-2");
   });
 
   it("expone los datos del mes tras la carga exitosa", async () => {
@@ -172,6 +259,26 @@ describe("useMovements", () => {
     mockApiGet.mockResolvedValue(mockMonthMovements);
 
     renderHook(() => useMovements(""), {
+      wrapper: createWrapper(),
+    });
+
+    expect(mockApiGet).not.toHaveBeenCalled();
+  });
+
+  it("no realiza la query si isAuthenticated es false", () => {
+    mockUseApi.mockReturnValue({
+      api: {
+        get: mockApiGet,
+        post: vi.fn(),
+        patch: vi.fn(),
+        delete: vi.fn(),
+        put: vi.fn(),
+      },
+      token: undefined,
+      isAuthenticated: false,
+    });
+
+    renderHook(() => useMovements("2026-06"), {
       wrapper: createWrapper(),
     });
 

@@ -171,7 +171,12 @@ Re-estilado de todas las pantallas y modales con los tokens del DS y migración 
   - **Alto por prop, no CSS var:** Recharts necesita el alto como valor numérico en `height`. Resuelto con dos `<div>` + media queries de Tailwind v4 (`[@media(max-width:940px)]:hidden` / `[@media(min-width:941px)]:hidden`).
   - **`prefers-reduced-motion`:** las tarjetas detectan reduced-motion; jsdom no implementa `window.matchMedia` → hay un **mock global de `matchMedia` en `tests/setup.ts`**. Necesario para cualquier componente futuro que detecte reduced-motion.
 
-## Al terminar
+### Filtro por categoría — Vista del mes + unificación (detalle de contrato en `docs/data-model.md`, §Filtro de categorías) — Fase 1.1.6, RF-VM-006
+
+- **Control de filtro compartido en `src/components/ui/category-filter.tsx`** (exporta `CategoryFilterPopover` y `FilterButton`). Lo usan **tanto `/mes`** (`month-view-client.tsx`) **como `/reportes`** (`report-card.tsx`). Antes vivía dentro de `report-card.tsx` — se extrajo. Reusar este componente, no duplicar el popover.
+- **Serialización de los 3 estados centralizada en `serializeCategoryFilter()`**, idéntica en `use-reports.ts` y `use-movements.ts`: **`null` → omitir el param** (todas); **`[]` → `&categories=`** (vacío explícito = ninguna); **lista → `&categories=id1,id2`** (coma literal, NO `URLSearchParams` — encodearía la coma). La **query key debe distinguir los 3 estados** (`null` vs `""` vs `"id1,id2"`) o React Query no refetchea al pasar de "todas" a "ninguna".
+- **`MOVEMENTS_QUERY_KEY` cambió de aridad:** ahora `(month, categoriesKey = null) => ["movements", month, categoriesKey]`. Las **invalidaciones por prefijo `["movements"]`** (use-recurring, use-installments) **siguen funcionando** — no las rompas al tocar la key.
+- **Persistencia del filtro de `/mes` vía `usePreferences`, clave `monthCategoryFilter`** (mismo patrón optimista que `monthSections`: estado local inmediato + `setPreferences` en background, mandar el blob completo). Es **por pantalla, no por mes**: la selección se conserva al navegar de mes. Default todas (`null`). El filtro del dashboard es **efímero** (estado local, no toca esta clave); el de reportes vive en `reports`.
 
 ### 1. Build
 Correr el build del frontend y corregir cualquier error de TypeScript antes de reportar listo.

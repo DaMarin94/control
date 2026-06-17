@@ -21,6 +21,7 @@
 | Color de categoría editable — matriz de 70 colores | RF-CAT-005, RN-013 | Implementado (fase 1.1.2) |
 | Vista del mes — lista + totales + navegación | RF-VM-001..004 | Implementado |
 | Vista del mes — secciones colapsables + reordenables (persistidas) | RF-VM-005 | Implementado (fase 1.1.4) |
+| Vista del mes — filtro por categoría (por pantalla, persistido) | RF-VM-006 | Implementado (fase 1.1.6) |
 | Navegación global — sidebar persistente | RF-NAV-001 | Implementado |
 | Crear categoría desde el formulario de movimiento | RF-MU-004 | Implementado (los tres tabs) |
 | Reportes — pantalla configurable por cards + widget en dashboard | RF-REP-001..005 | Implementado (fase 1.1.5) |

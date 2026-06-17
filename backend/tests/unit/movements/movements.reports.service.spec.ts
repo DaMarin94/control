@@ -15,12 +15,12 @@
  *   el service recibe el año ya como número
  * - Fijos: condición de actividad correcta (startMonth/deletedFrom)
  * - Cuotas: cálculo on-the-fly correcto
- * - Filtro de categorías (Fase 1.1.5):
- *   - Sin filtro = todas las categorías (comportamiento anterior)
- *   - Con filtro: solo las categorías del set cuentan en totales y desglose
+ * - Filtro de categorías (Fase 1.1.5/1.1.6 — semántica de 3 estados):
+ *   - null/undefined (ausente) = todas las categorías
+ *   - [] (vacío explícito) = NINGUNA categoría → resultado vacío/cero
+ *   - ["id1","id2",...] = solo esas categorías
  *   - earliestYear SIEMPRE ignora el filtro (límites de navegación estables)
  *   - Ids desconocidos/no existentes → simplemente no matchean (no es error)
- *   - categoryIds vacío/null → sin filtro (igual que omitido)
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { RecurringFrequency } from '@prisma/client';
@@ -754,7 +754,7 @@ describe('MovementsService — getReportsMovements', () => {
       expect(result.months[5].expenseCents).toBe(1000);
     });
 
-    it('categoryIds vacío ([]) → sin filtro, igual que null', async () => {
+    it('categoryIds vacío ([]) → NINGUNA categoría: resultado vacío/cero (Fase 1.1.6)', async () => {
       mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
         makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_A, totalCents: BigInt(1000) }),
         makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6', totalCents: BigInt(2000) }),
@@ -765,9 +765,25 @@ describe('MovementsService — getReportsMovements', () => {
 
       const result = await service.getReportsMovements(USER_A, 2026, []);
 
-      // Vacío = sin filtro → ambas categorías
-      expect(result.months[5].expenseCents).toBe(3000);
-      expect(result.categories).toHaveLength(2);
+      // [] = ninguna → todos los totales en cero, categories vacío
+      result.months.forEach((m) => {
+        expect(m.expenseCents).toBe(0);
+        expect(m.incomeCents).toBe(0);
+      });
+      expect(result.categories).toHaveLength(0);
+    });
+
+    it('categoryIds vacío ([]) → earliestYear NO se ve afectado (igual que cualquier filtro)', async () => {
+      setupEmptyUnicosMock();
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2023);
+
+      const result = await service.getReportsMovements(USER_A, 2026, []);
+
+      // earliestYear se calcula sobre TODOS los movimientos sin importar el filtro
+      expect(result.earliestYear).toBe(2023);
+      expect(mockRepo.getEarliestYear).toHaveBeenCalledWith(USER_A);
     });
 
     it('filtro con solo CAT_A → solo movimientos de CAT_A cuentan en totales y desglose', async () => {

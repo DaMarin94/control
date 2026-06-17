@@ -573,10 +573,9 @@ describe('Recurring (e2e)', () => {
 
   describe('GET /movements — con fijos', () => {
     it('200 + fijos en movements.fijos con shape de MovementItem', async () => {
-      // $queryRaw: únicos vacíos, totales cero
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])                        // findUnicosByMonth
-        .mockResolvedValueOnce([makeRawTotalsRow(0n, 0n)]); // getTotalsByMonth
+      // $queryRaw: únicos vacíos (findUnicosByMonth).
+      // getTotalsByMonth ya NO se llama: el service calcula totales desde las listas.
+      mockPrisma.$queryRaw.mockResolvedValueOnce([]); // findUnicosByMonth
 
       // Prisma ORM: fijo activo en el mes
       const fijo = makeDbRecurring({
@@ -627,9 +626,8 @@ describe('Recurring (e2e)', () => {
         categoryColor: '#4F86C6',
         categoryScope: 'EXPENSE',
       };
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([rawRow])                             // findUnicosByMonth
-        .mockResolvedValueOnce([makeRawTotalsRow(1500n, 0n)]);       // getTotalsByMonth
+      // $queryRaw: una llamada para findUnicosByMonth. Totales se calculan desde listas.
+      mockPrisma.$queryRaw.mockResolvedValueOnce([rawRow]); // findUnicosByMonth
 
       // Fijo EXPENSE 5000
       const fijo = makeDbRecurring({
@@ -658,9 +656,7 @@ describe('Recurring (e2e)', () => {
     });
 
     it('200 + fijo con categoría soft-deleted sigue en totales (RF-CAT-004)', async () => {
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([makeRawTotalsRow(0n, 0n)]);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([]); // findUnicosByMonth (sin únicos)
 
       // Fijo cuya categoría está eliminada (el campo deletedAt no importa en el join de movimientos)
       const fijo = makeDbRecurring({
@@ -688,9 +684,7 @@ describe('Recurring (e2e)', () => {
     });
 
     it('200 + mes sin fijos → movements.fijos vacío', async () => {
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([makeRawTotalsRow(0n, 0n)]);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([]); // findUnicosByMonth
 
       mockPrisma.recurring.findMany.mockResolvedValue([]);
 
@@ -704,9 +698,7 @@ describe('Recurring (e2e)', () => {
     });
 
     it('aislamiento: fijos filtrados por userId del JWT (RN-003)', async () => {
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([makeRawTotalsRow(0n, 0n)]);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([]); // findUnicosByMonth
 
       mockPrisma.recurring.findMany.mockResolvedValue([]);
 

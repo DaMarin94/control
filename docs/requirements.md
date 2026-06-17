@@ -41,6 +41,7 @@ Cubre exclusivamente la plataforma **web** de Control en su versión 1.0. La pla
 | 1.1.2 | 2026-06-16 | Color de categoría editable: el usuario elige/edita el color desde una matriz de 70 colores (reabre RF-CAT-005, RN-013; ajusta RF-CAT-002/003). Fase 1.1.2. |
 | 1.1.4 | 2026-06-16 | Vista del mes: secciones colapsables + reordenables, persistidas por usuario; las 3 secciones siempre visibles con empty inline (nuevo RF-VM-005; ajusta RF-VM-001). Fase 1.1.4. |
 | 1.1.5 | 2026-06-16 | Reportes configurables: módulo "Gráfico anual" → "Reportes" (RF-GRA-001/002/003 → RF-REP-001..005); pantalla `/reportes` configurable por cards; widget de reporte autónomo con año y filtro de categorías embebidos; reapertura de la navegación del dashboard (ajusta RF-DASH-001/002, RF-NAV-001, RN-015). Fase 1.1.5. |
+| 1.1.6 | 2026-06-17 | Filtro por categoría en la Vista del mes: control por pantalla, persistido por usuario, default todas, tres estados (nuevo RF-VM-006). Unifica el estado "ninguna" del filtro: destildar todas = lista/serie en cero, en `/mes` y en `/reportes` (ajusta RF-REP-002/005). Fase 1.1.6. |
 
 ---
 
@@ -1035,6 +1036,36 @@ La vista del mes muestra todos los movimientos del mes seleccionado (únicos, fi
 
 ---
 
+#### RF-VM-006 — Filtro por categoría de la vista del mes
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | La vista del mes ofrece un filtro por categoría que restringe la lista y los totales del mes a las categorías seleccionadas. Es un control **por pantalla** (no por mes): la selección se mantiene al navegar entre meses y se persiste por usuario. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario está en la vista del mes. |
+
+**Flujo principal:**
+1. La vista del mes expone un control de filtro de categorías (mismo control que el widget de reporte, RF-REP-002).
+2. El usuario abre el filtro y selecciona el subconjunto de categorías que quiere ver.
+3. La lista y los totales del mes se recalculan al instante para reflejar solo las categorías seleccionadas.
+
+**Tres estados del filtro:**
+- **Todas** (default): sin filtro; se muestran todos los movimientos del mes.
+- **Subconjunto:** solo se muestran (y suman a los totales) los movimientos de las categorías tildadas.
+- **Ninguna** (todas destildadas): la lista queda **vacía** y los totales en **cero**.
+
+**Criterios de aceptación:**
+- [ ] El filtro afecta **tanto la lista como los totales** del mes: ambos se recalculan según la selección.
+- [ ] El default es **todas las categorías** (sin filtro).
+- [ ] La selección **se mantiene al navegar entre meses** (es por pantalla, no por mes) y se **persiste por usuario** vía las preferencias (1.1.0), clave `monthCategoryFilter` (shape en `docs/data-model.md`); sobrevive a la navegación y al cierre de sesión.
+- [ ] El estado **"ninguna"** (todas destildadas) deja la **lista vacía y los totales en cero** (igual que el filtro de `/reportes`, RF-REP-002).
+- [ ] Con "todas" (sin filtro) se siguen mostrando movimientos cuya categoría fue eliminada (soft delete, RF-CAT-004 / RF-VM-002); con un subconjunto, solo entran las categorías seleccionadas.
+- [ ] El filtro **no es global:** no afecta a otras pantallas (dashboard ni reportes tienen su propio estado de filtro, independiente de este).
+- [ ] El filtro reutiliza el control de categorías del widget de reporte (RF-REP-002), sin un control visual nuevo.
+
+---
+
 ### 3.8 Módulo: Navegación
 
 La navegación global de la app se resuelve con un **sidebar lateral** persistente, presente en todas las pantallas autenticadas. Centraliza el acceso a las secciones principales, la acción primaria de carga y el menú de usuario.
@@ -1132,7 +1163,7 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 
 - **Tipo de reporte.** `income-expense` (Forma 1) o `by-category` (Forma 2). Define qué visualización monta la instancia.
 - **Año a mostrar.** Define el año cuyos 12 meses se grafican. La navegación de año (flechas de 1.1.3, embebidas en el widget) está **siempre activa** e **independiente por instancia**: cambiar el año de un widget no afecta a ningún otro. Límites de navegación: hacia atrás el control ‹ se deshabilita antes del **primer año con CUALQUIER movimiento del usuario** (`earliestYear`, no afectado por el filtro de categorías — ver RF-REP-005); hacia adelante se **bloquean los años futuros** (máximo navegable: el año en curso).
-- **Categorías seleccionadas (filtro).** Subconjunto de categorías del usuario que el reporte considera; default **todas**. El checklist ofrece el **universo de categorías del usuario** (no solo las que tienen gasto), porque el filtro aplica también a la Forma 1 (a qué categorías cuentan los totales de ingresos y de gastos). En la Forma 2 además determina qué bandas se apilan.
+- **Categorías seleccionadas (filtro).** Subconjunto de categorías del usuario que el reporte considera; default **todas**. El checklist ofrece el **universo de categorías del usuario** (no solo las que tienen gasto), porque el filtro aplica también a la Forma 1 (a qué categorías cuentan los totales de ingresos y de gastos). En la Forma 2 además determina qué bandas se apilan. El filtro tiene **tres estados**: **todas** (default, sin filtro), **subconjunto** (solo las tildadas) y **ninguna** (todas destildadas) → la serie se grafica en **cero** (igual que el filtro de `/mes`, RF-VM-006). *(Ajuste 1.1.6: hasta 1.1.5 destildar todas se colapsaba a "sin filtro" y mostraba todas; ahora "ninguna" muestra la serie en cero — ver bitácora 2026-06-17.)*
 - **Persistencia (modo).** Define qué hace la instancia con sus cambios de año y de filtro:
   - **Persistida** — en `/reportes`: cada cambio de año y de filtro de la card se persiste en la clave `reports` de preferencias (RF-REP-004).
   - **Efímera** — en el dashboard: el año y el filtro son de sesión; **no** se persisten (al recargar, el widget vuelve a su estado inicial — año en curso, todas las categorías). Ver RF-DASH-001/002.
@@ -1207,7 +1238,7 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 
 **Criterios de aceptación:**
 - [ ] El endpoint es `GET /movements/reports` (renombre de `GET /movements/annual`); la mecánica de agregación anual no cambia.
-- [ ] Acepta el año y un **filtro de categorías** como query param; **omitir el filtro = todas las categorías** (contrato exacto en `docs/data-model.md`).
+- [ ] Acepta el año y un **filtro de categorías** como query param que distingue **tres estados**: **ausente = todas**, **presente y vacío = ninguna** (serie en cero), **lista = subconjunto** (contrato exacto en `docs/data-model.md`). *(Ajuste 1.1.6: el estado "presente y vacío = ninguna" reemplaza el colapso previo de vacío → todas — ver bitácora 2026-06-17.)*
 - [ ] El filtro afecta a **ambas formas**: en la Forma 1, qué categorías cuentan en los totales de ingresos y de gastos por mes; en la Forma 2, qué bandas por categoría se incluyen.
 - [ ] El campo **`earliestYear` NO se ve afectado por el filtro**: siempre refleja el primer año con CUALQUIER movimiento del usuario, para que los límites de navegación de año (RF-REP-002) no salten al filtrar.
 - [ ] La respuesta mantiene el shape `{ year, months, categories, earliestYear }`, con `months` y `categories` filtrados al set pedido (`earliestYear` no).
@@ -1377,6 +1408,15 @@ Impacta RF-GRA-001 (criterio de los 12 meses en cero), RF-GRA-003 (criterios de 
 6. **Backend (RF-REP-005).** Se renombra `GET /movements/annual` → `GET /movements/reports`, que acepta el año más un **filtro por categorías** (query param). Sin el param = todas. Devuelve los mismos `months`/`categories`/`earliestYear`, filtrados. Detalle del contrato en data-model.md.
 
 Impacta el módulo 3.9 (renombrado a "Reportes": RF-GRA-001/002/003 → RF-REP-001..005), RF-DASH-001/002, RF-NAV-001 (link "Reportes"), RN-015, la sección 6, el glosario, `docs/screens.md` (pantallas 3, 7 y 8) y `docs/data-model.md` (clave de preferencias `reports`, contrato `GET /movements/reports`). Motivo: el usuario quiere armar su propia vista de reportes con las visualizaciones que le interesan, cada una navegando su año y filtrando sus categorías de forma independiente, y traer ese mismo widget interactivo al dashboard sin contaminar el resumen mensual fijo.
+
+**2026-06-17 — Filtro por categoría en la Vista del mes + unificación del estado "ninguna" — Fase 1.1.6 (RF-VM-006, ajusta RF-REP-002/005).** Se agrega un **filtro por categoría a `/mes`** y se **unifica** el comportamiento del estado "ninguna" entre `/mes` y `/reportes`. Cierres:
+
+1. **Filtro de `/mes` (RF-VM-006).** Control **por pantalla** (no por mes): la selección se mantiene al navegar entre meses. **Persistido por usuario** (preferencias 1.1.0, clave nueva `monthCategoryFilter`). **Default: todas.** Afecta **lista y totales** del mes (recalcula ambos). **No es global:** dashboard y reportes tienen su propio estado de filtro. Reutiliza el control visual de categorías de 1.1.5 (mismo popover/botón) — sin spec de diseño nuevo.
+2. **Tres estados del filtro** (válidos para `/mes` y `/reportes`): **todas** (default, sin filtro), **subconjunto** (solo las tildadas), **ninguna** (todas destildadas) → **lista vacía y totales/serie en cero**.
+3. **Cambio de comportamiento en `/reportes` (reabre 1.1.5, RF-REP-002/005).** Hasta 1.1.5 destildar todas las categorías se colapsaba a "sin filtro" y mostraba **todas**; ahora destildar todas muestra **ninguna** (serie en cero), igual que `/mes`. Excepción intacta: el límite de navegación de año en reportes (`earliestYear`) **ignora el filtro siempre**.
+4. **Contrato del param `categories` (ambos endpoints, `GET /movements` y `GET /movements/reports`).** Distingue **ausente** (todas) de **presente y vacío** (`categories=`, ninguna) de **lista** (`categories=id1,id2`, subconjunto). Detalle en `docs/data-model.md`. Nueva clave de preferencias `monthCategoryFilter` (`null`/ausente = todas, `[]` = ninguna, lista = subconjunto), set único por `/mes`.
+
+Impacta el nuevo RF-VM-006, RF-REP-002/005, `docs/screens.md` (pantallas 4 y 8), `docs/data-model.md` (param `categories` en `GET /movements`, clave `monthCategoryFilter`), `docs/features.md` y los gotchas de los agentes back/front. **No** introduce reglas de zona ni cambia el cálculo de totales/serie más allá del filtrado. Motivo: el usuario quiere filtrar la Vista del mes por categoría con la preferencia persistida, y que destildar todo signifique "nada" de forma consistente en toda la app.
 
 **2026-06-08 — NestJS como emisor del JWT (Fase 2).** El backend es la autoridad de identidad y **emite** el JWT (HS256, claim `sub = userId`, `exp` 30 días). NextAuth (frontend) **no emite un token de identidad propio**: orquesta el login y guarda el JWT de NestJS dentro de su sesión (un JWE separado) para reenviarlo como `Authorization: Bearer` en cada request, que el backend valida con un guard global. Hay **un solo `userId`** (cuid de Postgres) compartido por front y back. Esto reemplaza la idea previa (entrada 2026-06-03) de que Auth.js firmaba el JWT. Impacta `docs/architecture.md`, `docs/backend.md`, `docs/frontend.md` y `docs/data-model.md`. Motivo: que la identidad viva en el backend deja la puerta abierta a mobile u otros clientes, que se autentican contra los mismos endpoints sin depender de Auth.js.
 

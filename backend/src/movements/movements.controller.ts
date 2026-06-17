@@ -28,13 +28,17 @@ export class MovementsController {
   constructor(private readonly movementsService: MovementsService) {}
 
   /**
-   * GET /movements?month=YYYY-MM
+   * GET /movements?month=YYYY-MM[&categories=<id1,id2,...>]
    *
    * Devuelve los movimientos del mes agrupados por origen (unicos/fijos/cuotas)
    * más los totales del mes (RF-VM-001, RF-VM-002, RF-DASH-002).
    *
    * Parámetros:
    * - month (obligatorio): mes en formato YYYY-MM
+   * - categories (opcional): filtro de categorías.
+   *   - Ausente (undefined) → todas las categorías (sin filtro).
+   *   - Presente y vacío ("categories=") → ninguna categoría → listas vacías y totales en cero.
+   *   - "id1,id2,..." → solo esas categorías.
    *
    * El bucketeo se hace por la timezone PROPIA de cada registro (AT TIME ZONE t.timezone),
    * no por una timezone de query. Ver MovementsService / MovementsRepository.
@@ -53,13 +57,33 @@ export class MovementsController {
   getMonth(
     @Request() req: AuthRequest,
     @Query('month') month: string | undefined,
+    @Query('categories') categoriesParam: string | undefined,
   ) {
     if (!month) {
       throw new BadRequestException(
         'El parámetro "month" es obligatorio (formato YYYY-MM)',
       );
     }
-    return this.movementsService.getMonthMovements(req.user.userId, month);
+
+    // Parseo de categorías con semántica de 3 estados:
+    // - undefined (ausente) → null = todas las categorías
+    // - "" (presente y vacío) → [] = ninguna categoría
+    // - "id1,id2,..." → ["id1","id2"] = subconjunto
+    const categoryIds: string[] | null =
+      categoriesParam === undefined
+        ? null
+        : categoriesParam.trim().length === 0
+          ? []
+          : categoriesParam
+              .split(',')
+              .map((id) => id.trim())
+              .filter((id) => id.length > 0);
+
+    return this.movementsService.getMonthMovements(
+      req.user.userId,
+      month,
+      categoryIds,
+    );
   }
 
   /**
@@ -103,16 +127,20 @@ export class MovementsController {
       );
     }
 
-    // Parsear el filtro de categorías.
-    // categoriesParam es una string "id1,id2,..." o undefined.
-    // Ids vacíos (ej: ",,") se filtran — no son ids válidos.
+    // Parseo de categorías con semántica de 3 estados:
+    // - undefined (ausente) → null = todas las categorías
+    // - "" (presente y vacío) → [] = ninguna categoría
+    // - "id1,id2,..." → ["id1","id2"] = subconjunto
+    // Ids vacíos intermedios (ej: ",,") se filtran — no son ids válidos.
     const categoryIds: string[] | null =
-      categoriesParam && categoriesParam.trim().length > 0
-        ? categoriesParam
-            .split(',')
-            .map((id) => id.trim())
-            .filter((id) => id.length > 0)
-        : null;
+      categoriesParam === undefined
+        ? null
+        : categoriesParam.trim().length === 0
+          ? []
+          : categoriesParam
+              .split(',')
+              .map((id) => id.trim())
+              .filter((id) => id.length > 0);
 
     return this.movementsService.getReportsMovements(
       req.user.userId,

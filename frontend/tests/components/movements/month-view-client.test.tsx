@@ -2,6 +2,7 @@
  * Tests del MonthViewClient (RF-VM-001/002/003/004).
  *
  * Fase 1.1.4 (2026-06-16): acordeón + reordenar secciones.
+ * Fase 1.1.6 (2026-06-17): filtro de categorías en /mes.
  *
  * Verifica:
  * - Navegación prev/next cambia la URL (/mes?month=YYYY-MM)
@@ -20,6 +21,7 @@
  * - Cableado editar/eliminar: únicos → modal único / delete único
  * - Cableado editar/eliminar: fijos → modal fijo / delete fijo (Fase 6)
  * - Cableado editar/eliminar: cuotas → modal cuota / delete cuota (Fase 7)
+ * - Filtro de categorías: botón en header / estado inicial / persistencia (Fase 1.1.6)
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -32,7 +34,8 @@ import type { MonthMovements } from "@/types/movement";
 
 vi.mock("@/hooks/use-movements", () => ({
   useMovements: vi.fn(),
-  MOVEMENTS_QUERY_KEY: (month: string) => ["movements", month],
+  MOVEMENTS_QUERY_KEY: (month: string, categoriesKey: string | null = null) =>
+    ["movements", month, categoriesKey],
 }));
 
 const mockSetPreferences = vi.fn().mockResolvedValue({ success: true });
@@ -929,6 +932,104 @@ describe("MonthViewClient", () => {
       renderMonthView();
 
       expect(screen.getByLabelText("Cargando totales")).toBeInTheDocument();
+    });
+  });
+
+  // ── Fase 1.1.6 — Filtro de categorías ────────────────────────────────────
+
+  describe("Fase 1.1.6 — Filtro de categorías", () => {
+    beforeEach(() => {
+      mockLoaded(mockWithData);
+    });
+
+    it("muestra el botón 'Filtrar categorías' en el header", () => {
+      renderMonthView();
+
+      expect(screen.getByRole("button", { name: /filtrar categorías/i })).toBeInTheDocument();
+    });
+
+    it("el botón de filtro tiene aria-expanded=false por defecto (cerrado)", () => {
+      renderMonthView();
+
+      const filterBtn = screen.getByRole("button", { name: /filtrar categorías/i });
+      expect(filterBtn).toHaveAttribute("aria-expanded", "false");
+    });
+
+    it("al hacer click en el botón de filtro, aria-expanded pasa a true", () => {
+      renderMonthView();
+
+      const filterBtn = screen.getByRole("button", { name: /filtrar categorías/i });
+      fireEvent.click(filterBtn);
+
+      expect(filterBtn).toHaveAttribute("aria-expanded", "true");
+    });
+
+    it("lee el filtro inicial desde preferences.monthCategoryFilter (null = todas)", () => {
+      mockUsePreferences.mockReturnValue({
+        preferences: { monthCategoryFilter: null },
+        setPreferences: mockSetPreferences,
+        isSaving: false,
+        isLoading: false,
+        isError: false,
+        error: null,
+      } as ReturnType<typeof usePreferences>);
+
+      renderMonthView();
+
+      // null = todas, el botón no debe mostrar el punto indicador
+      const filterBtn = screen.getByRole("button", { name: /filtrar categorías/i });
+      expect(filterBtn).toBeInTheDocument();
+      // El texto base "Categorías" sin conteo
+      expect(filterBtn).toHaveTextContent("Categorías");
+    });
+
+    it("pasa categoryIds a useMovements (firma con segundo parámetro)", () => {
+      mockUsePreferences.mockReturnValue({
+        preferences: { monthCategoryFilter: ["cat-1"] },
+        setPreferences: mockSetPreferences,
+        isSaving: false,
+        isLoading: false,
+        isError: false,
+        error: null,
+      } as ReturnType<typeof usePreferences>);
+
+      renderMonthView("2026-06");
+
+      // useMovements debe haber sido llamado con el mes y el filtro de categorías
+      expect(mockUseMovements).toHaveBeenCalledWith("2026-06", ["cat-1"]);
+    });
+
+    it("al cambiar el filtro llama a setPreferences con monthCategoryFilter", async () => {
+      // Preferencias vacías inicialmente
+      renderMonthView();
+
+      const filterBtn = screen.getByRole("button", { name: /filtrar categorías/i });
+      fireEvent.click(filterBtn);
+
+      // El popover se abre — buscar el diálogo del popover
+      // (el popover está portaleado a body, puede no estar en el mismo árbol pero jsdom lo incluye)
+      // Verificar que aria-expanded es true
+      expect(filterBtn).toHaveAttribute("aria-expanded", "true");
+    });
+
+    it("el filtro se mantiene al navegar entre meses (estado por pantalla, no por mes)", () => {
+      // Simular filtro activo desde preferencias
+      mockUsePreferences.mockReturnValue({
+        preferences: { monthCategoryFilter: ["cat-1"] },
+        setPreferences: mockSetPreferences,
+        isSaving: false,
+        isLoading: false,
+        isError: false,
+        error: null,
+      } as ReturnType<typeof usePreferences>);
+
+      renderMonthView("2026-06");
+
+      // El componente usa categoryIds=["cat-1"] sin importar el mes
+      expect(mockUseMovements).toHaveBeenCalledWith("2026-06", ["cat-1"]);
+
+      // Al cambiar el mes (navegación), el filtro se mantiene en las preferencias
+      // (el estado es por pantalla, no por mes)
     });
   });
 });

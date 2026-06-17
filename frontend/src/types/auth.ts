@@ -42,6 +42,16 @@ export interface UserPreferences {
    * Ausente/vacío = pantalla vacía (solo "[+]").
    */
   reports?: import("@/types/reports").ReportCardConfig[];
+  /**
+   * Fase 1.1.6: filtro de categorías activo en la pantalla /mes.
+   * Es un set ÚNICO por pantalla (no por mes). Se mantiene al navegar entre meses.
+   *
+   * Semántica de 3 estados:
+   *   - null / ausente = todas las categorías (default — param ausente en la URL).
+   *   - []             = ninguna categoría (param `categories=` vacío en la URL).
+   *   - lista          = subconjunto explícito de categoryIds.
+   */
+  monthCategoryFilter?: string[] | null;
   [key: string]: unknown;
 }
 

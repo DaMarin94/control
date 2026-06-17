@@ -147,6 +147,14 @@ Detalle de contrato en `docs/backend.md` (RecurringModule, secciones **Cálculo 
 - **Skips del anual sin N+1.** En la proyección anual los skips se cargan como **`Map<recurringId, Set<month>>` en una sola query** (`recurringSkip.findMany` por `recurring.userId`, en paralelo con los fijos), NO con un `include` anidado por fijo. Para cada mes se descarta el fijo si `skippedMonths.has(mes)`, además de aplicar `isOnFrequency`.
 - **Migraciones sin shadow DB (Prisma 7 en este entorno).** `prisma migrate dev` falla (el rol no puede crear shadow databases). Patrón a seguir (todo desde `backend/`): generar el SQL con `prisma migrate diff --from-migrations ./prisma/migrations --to-schema-datamodel ./prisma/schema.prisma --script`, aplicar con `prisma db push`, marcar con `prisma migrate resolve --applied <migracion>` y `prisma generate`. Detalle en `docs/technical.md`, sección Migraciones.
 
+## Filtro por categoría — gotchas y decisiones (Fase 1.1.6)
+
+Contrato del param `categories` (3 estados: ausente/vacío/lista) en `docs/data-model.md`, §Filtro de categorías. Aplica a `GET /movements` y `GET /movements/reports`. Para agentes que toquen el backend:
+
+- **Totales del mes en `GET /movements` se RECOMPUTAN en el service desde las listas ya filtradas**, NO con `getTotalsByMonth` / `getFijosTotalsByMonth` / `getCuotasTotalsByMonth` del repo. Esos métodos **quedan en el código** pero el service del mes **ya no los llama** (disponibles para tests directos del repo o uso futuro). Al recomputar desde las listas filtradas, **respetar la regla de skips**: un fijo skippeado (P1) se lista pero **no** suma a totales (`skipped && type === 'EXPENSE'`), y la frecuencia (P2) define qué fijo cae en el mes. No romper esto al tocar la lógica.
+- **Estado "ninguna" (`categoryIds === []`) tiene atajo temprano:** listas vacías + totales en cero **sin consultar el repo**. Distinguir de "ausente" (todas, sin filtro): es la diferencia "ausente vs presente y vacío" del contrato.
+- **Gotcha de tests — `jest.clearAllMocks()` NO limpia `mockResolvedValueOnce` no consumidos** (solo `resetAllMocks` lo hace). Los mocks de `$queryRaw` en los e2e de `/movements` deben tener **exactamente tantos `mockResolvedValueOnce` como llamadas reales** hace el service. El service del mes ahora hace **MENOS llamadas** (ya no llama a los métodos de totales del repo): ajustar el conteo de mocks o los `Once` sobrantes se filtran al siguiente test.
+
 ## Contratos con el frontend
 
 Si modificás el shape de un endpoint o agregás uno nuevo: reportarlo al orquestador con el detalle exacto antes de que el frontend implemente algo que lo consuma.

@@ -14,6 +14,7 @@
  * - Aislamiento por userId (RN-003)
  * - Mes vacío → totales en cero, listas vacías
  * - 401 sin JWT
+ * - Filtro de categorías (Fase 1.1.6): 3 estados en /movements y /reports
  *
  * Nota sobre el bucketeo por zona propia:
  * El SQL real (AT TIME ZONE t.timezone) corre en Postgres. En los tests e2e
@@ -197,10 +198,9 @@ describe('Movements (e2e)', () => {
   describe('GET /movements — casos felices', () => {
     it('200 + sobre con shape completo (month, totals, movements)', async () => {
       const row = makeRawTransactionRow();
-      // $queryRaw se llama 2 veces: una para findUnicosByMonth, otra para getTotalsByMonth
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([row])
-        .mockResolvedValueOnce([makeRawTotalsRow(1500n, 0n)]);
+      // $queryRaw se llama 1 vez: findUnicosByMonth.
+      // getTotalsByMonth ya NO se llama: el service calcula totales desde las listas.
+      mockPrisma.$queryRaw.mockResolvedValueOnce([row]);
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')
@@ -216,7 +216,7 @@ describe('Movements (e2e)', () => {
       expect(data).toHaveProperty('totals');
       expect(data).toHaveProperty('movements');
 
-      // Totales
+      // Totales (calculados desde la lista filtrada)
       expect(data.totals).toHaveProperty('expenseCents', 1500);
       expect(data.totals).toHaveProperty('incomeCents', 0);
       expect(data.totals).toHaveProperty('balanceCents', -1500);
@@ -239,9 +239,7 @@ describe('Movements (e2e)', () => {
         occurredAt: new Date('2026-06-08T17:30:00Z'),
         timezone: 'America/Argentina/Buenos_Aires',
       });
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([row])
-        .mockResolvedValueOnce([makeRawTotalsRow(1500n, 0n)]);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([row]);
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')
@@ -267,9 +265,7 @@ describe('Movements (e2e)', () => {
     it('200 + totales correctos con expense e income distintos', async () => {
       const rowExpense = makeRawTransactionRow({ id: 'tx-01', type: 'EXPENSE', amountCents: 3000 });
       const rowIncome = makeRawTransactionRow({ id: 'tx-02', type: 'INCOME', amountCents: 8000 });
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([rowExpense, rowIncome])
-        .mockResolvedValueOnce([makeRawTotalsRow(3000n, 8000n)]);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([rowExpense, rowIncome]);
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')
@@ -282,9 +278,7 @@ describe('Movements (e2e)', () => {
     });
 
     it('200 + mes vacío → totales cero y listas vacías', async () => {
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([makeRawTotalsRow(0n, 0n)]);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([]);
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')
@@ -306,9 +300,7 @@ describe('Movements (e2e)', () => {
         categoryColor: '#AAAAAA',
         categoryScope: 'BOTH',
       });
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([rowWithDeletedCat])
-        .mockResolvedValueOnce([makeRawTotalsRow(1500n, 0n)]);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([rowWithDeletedCat]);
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')
@@ -334,9 +326,7 @@ describe('Movements (e2e)', () => {
         amountCents: 1000,
         occurredAt: new Date('2026-06-15T00:00:00Z'),
       });
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([row1, row2])
-        .mockResolvedValueOnce([makeRawTotalsRow(6000n, 0n)]);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([row1, row2]);
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')
@@ -365,9 +355,7 @@ describe('Movements (e2e)', () => {
     it('borde timezone: movimiento en hora local de mayo no aparece en junio (SQL devuelve vacío)', async () => {
       // El SQL bucketeó correctamente y excluyó el movimiento de mayo;
       // nuestro mock simula ese resultado.
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])                        // sin movimientos en junio
-        .mockResolvedValueOnce([makeRawTotalsRow(0n, 0n)]); // totales en cero
+      mockPrisma.$queryRaw.mockResolvedValueOnce([]); // sin movimientos en junio
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')
@@ -397,9 +385,7 @@ describe('Movements (e2e)', () => {
         occurredAt: new Date('2026-07-01T00:30:00Z'),
         timezone: 'America/Argentina/Buenos_Aires',
       });
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([row])
-        .mockResolvedValueOnce([makeRawTotalsRow(1500n, 0n)]);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([row]);
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')
@@ -468,9 +454,7 @@ describe('Movements (e2e)', () => {
     it('NO acepta timezone como query param (campo ignorado o no afecta el resultado)', async () => {
       // Verificar que timezone en query NO se requiere ni se usa
       // (el endpoint solo requiere month; timezone en query es ignorado)
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([makeRawTotalsRow(0n, 0n)]);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([]);
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06&timezone=America%2FArgentina%2FBuenos_Aires')
@@ -488,9 +472,7 @@ describe('Movements (e2e)', () => {
 
   describe('GET /movements — aislamiento por userId', () => {
     it('usa el userId del JWT (no del query), aislamiento RN-003', async () => {
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([makeRawTotalsRow(0n, 0n)]);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([]);
 
       await request(app.getHttpServer())
         .get('/movements?month=2026-06')
@@ -546,15 +528,11 @@ describe('Movements (e2e)', () => {
         amountCents: 5000,
       });
       // findMany de installmentGroup: devuelve el grupo (startMonth '2026-01' <= '2026-06')
-      // Se llama 2 veces: findCuotasByMonth y getCuotasTotalsByMonth
-      mockPrisma.installmentGroup.findMany
-        .mockResolvedValueOnce([group])  // findCuotasByMonth
-        .mockResolvedValueOnce([group]); // getCuotasTotalsByMonth
+      // Se llama 1 vez: findCuotasByMonth. getCuotasTotalsByMonth ya NO se llama (totales por lista).
+      mockPrisma.installmentGroup.findMany.mockResolvedValueOnce([group]);
 
-      // $queryRaw (únicos): sin únicos este mes
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])                        // findUnicosByMonth
-        .mockResolvedValueOnce([makeRawTotalsRow(0n, 0n)]); // getTotalsByMonth
+      // $queryRaw (únicos): sin únicos este mes. Solo 1 llamada (findUnicosByMonth).
+      mockPrisma.$queryRaw.mockResolvedValueOnce([]);
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')
@@ -586,13 +564,8 @@ describe('Movements (e2e)', () => {
 
     it('cuota suma al total expenseCents', async () => {
       const group = makeDbInstallmentGroup({ amountCents: 3000, totalInstallments: 6, startMonth: '2026-01' });
-      mockPrisma.installmentGroup.findMany
-        .mockResolvedValueOnce([group])
-        .mockResolvedValueOnce([group]);
-
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([makeRawTotalsRow(0n, 0n)]);
+      mockPrisma.installmentGroup.findMany.mockResolvedValueOnce([group]);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([]);
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')
@@ -606,15 +579,11 @@ describe('Movements (e2e)', () => {
 
     it('cuota más único: totales combinados correctos', async () => {
       const group = makeDbInstallmentGroup({ amountCents: 2000, totalInstallments: 3, startMonth: '2026-05' });
-      mockPrisma.installmentGroup.findMany
-        .mockResolvedValueOnce([group])
-        .mockResolvedValueOnce([group]);
+      mockPrisma.installmentGroup.findMany.mockResolvedValueOnce([group]);
 
       // Un único de 1000 en el mes
       const row = makeRawTransactionRow({ amountCents: 1000 });
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([row])
-        .mockResolvedValueOnce([makeRawTotalsRow(1000n, 0n)]);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([row]);
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')
@@ -631,13 +600,8 @@ describe('Movements (e2e)', () => {
       // Grupo de 3 cuotas desde 2026-01: termina en 2026-03 (última cuota).
       // En 2026-06 ya no está activo.
       const group = makeDbInstallmentGroup({ startMonth: '2026-01', totalInstallments: 3 });
-      mockPrisma.installmentGroup.findMany
-        .mockResolvedValueOnce([group])
-        .mockResolvedValueOnce([group]);
-
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([makeRawTotalsRow(0n, 0n)]);
+      mockPrisma.installmentGroup.findMany.mockResolvedValueOnce([group]);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([]);
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')
@@ -652,13 +616,8 @@ describe('Movements (e2e)', () => {
     it('primera cuota: number = 1 cuando month === startMonth', async () => {
       // Grupo desde '2026-06': la primera cuota cae en 2026-06
       const group = makeDbInstallmentGroup({ startMonth: '2026-06', totalInstallments: 6 });
-      mockPrisma.installmentGroup.findMany
-        .mockResolvedValueOnce([group])
-        .mockResolvedValueOnce([group]);
-
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([makeRawTotalsRow(0n, 0n)]);
+      mockPrisma.installmentGroup.findMany.mockResolvedValueOnce([group]);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([]);
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')
@@ -668,6 +627,125 @@ describe('Movements (e2e)', () => {
       const cuota = res.body.data.movements.cuotas[0];
       expect(cuota.installment.number).toBe(1);
       expect(cuota.installment.total).toBe(6);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Filtro de categorías en GET /movements (Fase 1.1.6) — 3 estados
+  // -------------------------------------------------------------------------
+
+  describe('GET /movements — filtro de categorías (Fase 1.1.6)', () => {
+    const CAT_A_MES = 'cat-mes-a';
+    const CAT_B_MES = 'cat-mes-b';
+
+    function makeRowForCat(catId: string, amountCents: number) {
+      return makeRawTransactionRow({
+        id: `tx-${catId}`,
+        amountCents,
+        categoryId: catId,
+        categoryName: catId === CAT_A_MES ? 'Cat A' : 'Cat B',
+      });
+    }
+
+    it('sin param categories → todas las categorías (comportamiento base)', async () => {
+      // $queryRaw: findUnicosByMonth devuelve 2 únicos de cat distinta
+      mockPrisma.$queryRaw.mockResolvedValueOnce([
+        makeRowForCat(CAT_A_MES, 1000),
+        makeRowForCat(CAT_B_MES, 2000),
+      ]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements?month=2026-06')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.movements.unicos).toHaveLength(2);
+      expect(res.body.data.totals.expenseCents).toBe(3000);
+    });
+
+    it('categories= (vacío) → ninguna: listas vacías y totales en cero, SIN llamar al repo', async () => {
+      // Cuando categories está presente y vacío, el service atajar antes de consultar el repo
+      const res = await request(app.getHttpServer())
+        .get('/movements?month=2026-06&categories=')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.movements.unicos).toEqual([]);
+      expect(res.body.data.movements.fijos).toEqual([]);
+      expect(res.body.data.movements.cuotas).toEqual([]);
+      expect(res.body.data.totals).toEqual({ expenseCents: 0, incomeCents: 0, balanceCents: 0 });
+      // El repo no fue consultado (atajo temprano)
+      expect(mockPrisma.$queryRaw).not.toHaveBeenCalled();
+    });
+
+    it('categories=<catId> → solo esa categoría aparece en la respuesta', async () => {
+      // El repo devuelve 2 únicos; el filtro debe dejar pasar solo el de CAT_A_MES
+      mockPrisma.$queryRaw.mockResolvedValueOnce([
+        makeRowForCat(CAT_A_MES, 1000),
+        makeRowForCat(CAT_B_MES, 2000),
+      ]);
+
+      const res = await request(app.getHttpServer())
+        .get(`/movements?month=2026-06&categories=${CAT_A_MES}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.movements.unicos).toHaveLength(1);
+      expect(res.body.data.movements.unicos[0].category.id).toBe(CAT_A_MES);
+      expect(res.body.data.totals.expenseCents).toBe(1000);
+    });
+
+    it('fijo skippeado con filtro: aparece en lista (skipped=true) pero NO suma totales', async () => {
+      // Un fijo de CAT_A_MES skippeado + un fijo normal de CAT_A_MES
+      const fijoSkipped = {
+        id: 'fijo-skip',
+        userId: USER_A_ID,
+        categoryId: CAT_A_MES,
+        type: 'EXPENSE',
+        amountCents: 5000,
+        startMonth: '2026-01',
+        deletedFrom: null,
+        description: null,
+        frequency: 'MONTHLY',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        category: { id: CAT_A_MES, name: 'Cat A', color: '#aaa', scope: 'EXPENSE' },
+        skips: [{ month: '2026-06' }], // skippeado este mes
+      };
+      const fijoNormal = {
+        id: 'fijo-normal',
+        userId: USER_A_ID,
+        categoryId: CAT_A_MES,
+        type: 'EXPENSE',
+        amountCents: 2000,
+        startMonth: '2026-01',
+        deletedFrom: null,
+        description: null,
+        frequency: 'MONTHLY',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        category: { id: CAT_A_MES, name: 'Cat A', color: '#aaa', scope: 'EXPENSE' },
+        skips: [],
+      };
+
+      mockPrisma.recurring.findMany.mockResolvedValue([fijoSkipped, fijoNormal]);
+      // Sin únicos
+      mockPrisma.$queryRaw.mockResolvedValueOnce([]);
+
+      const res = await request(app.getHttpServer())
+        .get(`/movements?month=2026-06&categories=${CAT_A_MES}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const fijos = res.body.data.movements.fijos;
+      // Ambos fijos de CAT_A aparecen (filtro pasa CAT_A)
+      expect(fijos).toHaveLength(2);
+      // El skippeado tiene skipped=true
+      const skip = fijos.find((f: { id: string }) => f.id === 'fijo-skip');
+      expect(skip).toBeDefined();
+      expect(skip.skipped).toBe(true);
+      // Totales: solo el normal suma (2000); el skippeado no
+      expect(res.body.data.totals.expenseCents).toBe(2000);
     });
   });
 
@@ -855,7 +933,7 @@ describe('Movements (e2e)', () => {
     });
   });
 
-  describe('GET /movements/reports — filtro de categorías (Fase 1.1.5)', () => {
+  describe('GET /movements/reports — filtro de categorías (Fase 1.1.5/1.1.6)', () => {
     const CAT_A_ID = 'cat-reports-a';
     const CAT_B_ID = 'cat-reports-b';
 
@@ -876,7 +954,7 @@ describe('Movements (e2e)', () => {
       mockPrisma.installmentGroup.findMany.mockResolvedValue([]);
     });
 
-    it('sin param categories → todas las categorías (comportamiento base)', async () => {
+    it('sin param categories (ausente) → todas las categorías (estado "todas")', async () => {
       mockPrisma.$queryRaw
         .mockResolvedValueOnce([
           makeAnnualRow(CAT_A_ID, '2026-06', 1000),
@@ -894,7 +972,46 @@ describe('Movements (e2e)', () => {
       expect(res.body.data.categories).toHaveLength(2);
     });
 
-    it('categories=<id> → solo esa categoría cuenta en totales y desglose', async () => {
+    it('categories= (vacío) → NINGUNA categoría: meses en cero, categories vacío (estado "ninguna")', async () => {
+      // Con categories=vacío el service pasa [] y el filterSet es un Set vacío.
+      // Ningún movimiento pasa el filtro → todo en cero.
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([
+          makeAnnualRow(CAT_A_ID, '2026-06', 1000),
+          makeAnnualRow(CAT_B_ID, '2026-06', 2000),
+        ])
+        .mockResolvedValueOnce([{ earliestYear: BigInt(2026) }]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=2026&categories=')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      // Ninguna categoría pasa el filtro vacío → todo en cero
+      res.body.data.months.forEach((m: { expenseCents: number; incomeCents: number }) => {
+        expect(m.expenseCents).toBe(0);
+        expect(m.incomeCents).toBe(0);
+      });
+      expect(res.body.data.categories).toHaveLength(0);
+    });
+
+    it('categories= (vacío) → earliestYear NO se ve afectado (sigue calculándose sobre todos)', async () => {
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([
+          makeAnnualRow(CAT_A_ID, '2026-06', 1000),
+        ])
+        .mockResolvedValueOnce([{ earliestYear: BigInt(2023) }]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=2026&categories=')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.months[5].expenseCents).toBe(0); // filtrado
+      expect(res.body.data.earliestYear).toBe(2023); // sin filtrar
+    });
+
+    it('categories=<id> → solo esa categoría cuenta en totales y desglose (estado "subconjunto")', async () => {
       mockPrisma.$queryRaw
         .mockResolvedValueOnce([
           makeAnnualRow(CAT_A_ID, '2026-06', 1000),
@@ -948,7 +1065,7 @@ describe('Movements (e2e)', () => {
       expect(res.body.data.categories).toHaveLength(0);
     });
 
-    it('earliestYear NO cambia al filtrar por categorías', async () => {
+    it('earliestYear NO cambia al filtrar por categorías (estado "subconjunto")', async () => {
       // Todos los movimientos son de CAT_B, pero filtramos por CAT_A
       // El earliestYear debe ser el año más antiguo de TODOS los movimientos
       mockPrisma.$queryRaw

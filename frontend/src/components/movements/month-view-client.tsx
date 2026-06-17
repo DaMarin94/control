@@ -28,7 +28,7 @@
  * Lógica preservada intacta (hooks, router, mappers, handlers de editar/eliminar).
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, ArrowUpDown, Check } from "lucide-react";
 import {
@@ -49,6 +49,8 @@ import {
 } from "@dnd-kit/sortable";
 import { useMovements } from "@/hooks/use-movements";
 import { usePreferences } from "@/hooks/use-preferences";
+import { useCategories } from "@/hooks/use-categories";
+import { FilterButton, CategoryFilterPopover } from "@/components/ui/category-filter";
 import { SortableSection } from "@/components/ui/sortable-section";
 import { AccordionSection } from "@/components/ui/accordion-section";
 import { MovementItemRow } from "@/components/movements/movement-item-row";
@@ -190,8 +192,35 @@ interface MonthViewClientProps {
 
 export function MonthViewClient({ month }: MonthViewClientProps) {
   const router = useRouter();
-  const { data, isLoading, isError } = useMovements(month);
   const { preferences, setPreferences } = usePreferences();
+  const { categories: allCategories } = useCategories();
+
+  // ── Estado de filtro de categorías (Fase 1.1.6) ──────────────────────────
+  // Leer valor inicial desde preferencias (back-compat: si no existe → null = todas)
+  const savedCategoryFilter =
+    (preferences.monthCategoryFilter as string[] | null | undefined) ?? null;
+
+  // Estado local optimista: responde inmediato, persiste en background
+  const [categoryIds, setCategoryIds] = useState<string[] | null>(savedCategoryFilter);
+
+  // Sincronizar con preferencias cuando lleguen del servidor (solo en primer mount)
+  const [hasSyncedFilter, setHasSyncedFilter] = useState(false);
+  useEffect(() => {
+    if (!hasSyncedFilter && preferences.monthCategoryFilter !== undefined) {
+      setCategoryIds((preferences.monthCategoryFilter as string[] | null | undefined) ?? null);
+      setHasSyncedFilter(true);
+    }
+  }, [preferences.monthCategoryFilter, hasSyncedFilter]);
+
+  // Estado del popover de filtro
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Conteo total de categorías activas (para el badge del FilterButton)
+  const totalCategories = allCategories?.length ?? 0;
+
+  // Hook de datos: pasa el filtro activo
+  const { data, isLoading, isError } = useMovements(month, categoryIds);
 
   // Estado de modales para únicos
   const [editingUnico, setEditingUnico] = useState<MovementItem | null>(null);
@@ -346,6 +375,17 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
     [preferences, sectionOrder, setPreferences],
   );
 
+  // ── Handler filtro de categorías (Fase 1.1.6) ────────────────────────────
+
+  const handleCategoryChange = useCallback(
+    (ids: string[] | null) => {
+      setCategoryIds(ids);
+      // Persistir en background (merge manual con el resto de preferencias)
+      void setPreferences({ ...preferences, monthCategoryFilter: ids });
+    },
+    [preferences, setPreferences],
+  );
+
   // ── Modo orden (Fase 1.1.4 P6) ───────────────────────────────────────────
 
   function handleEnterOrderMode() {
@@ -493,8 +533,17 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
             </button>
           </div>
 
-          {/* Acciones del header: "Ordenar secciones" / "Listo" + "+ Nuevo movimiento" */}
+          {/* Acciones del header: filtro + "Ordenar secciones" / "Listo" + "+ Nuevo movimiento" */}
           <div className="flex items-center gap-3 flex-wrap">
+            {/* Botón filtro de categorías */}
+            <FilterButton
+              selectedIds={categoryIds}
+              totalCategories={totalCategories}
+              isOpen={filterOpen}
+              buttonRef={filterButtonRef}
+              onClick={() => setFilterOpen((o) => !o)}
+            />
+
             {/* Botón Ordenar secciones / Listo */}
             {isOrderMode ? (
               <button
@@ -710,6 +759,16 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
         <DeleteInstallmentDialog
           movement={deletingCuota}
           onClose={() => setDeletingCuota(null)}
+        />
+      )}
+
+      {/* ── Popover de filtro de categorías (portaleado a body) ── */}
+      {filterOpen && (
+        <CategoryFilterPopover
+          selectedIds={categoryIds}
+          onSelectionChange={handleCategoryChange}
+          onClose={() => setFilterOpen(false)}
+          anchorRef={filterButtonRef}
         />
       )}
     </PeriodNav>

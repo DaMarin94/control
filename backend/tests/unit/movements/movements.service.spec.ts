@@ -11,6 +11,9 @@
  * - Orden de únicos: amountCents DESC (desempate occurredAt DESC — lo hace el repositorio/SQL)
  * - D3: fijos y cuotas con occurredAt=null, timezone=null
  * - D1: cuotas con campo installment { number, total, startMonth }
+ * - Filtro de categorías (Fase 1.1.6): 3 estados (null=todas, []=ninguna, [ids]=subconjunto)
+ * - Fijo skippeado: aparece en lista pero NO suma totales bajo filtro
+ * - Frecuencia respetada: el repositorio decide qué fijos caen; el service filtra por categoría
  */
 import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -24,12 +27,16 @@ import {
 
 // ---------------------------------------------------------------------------
 // Mocks
+// El service ya no llama a getTotalsByMonth/getFijosTotalsByMonth/getCuotasTotalsByMonth:
+// recomputa los totales desde las listas filtradas.
 // ---------------------------------------------------------------------------
 
 const mockRepo = {
   findUnicosByMonth: jest.fn(),
   findFijosByMonth: jest.fn(),
   findCuotasByMonth: jest.fn(),
+  // Los métodos de totales son del repo pero el service NO los usa desde Fase 1.1.6.
+  // Se mantienen en el mock por compatibilidad pero no se asertan sobre ellos.
   getTotalsByMonth: jest.fn(),
   getFijosTotalsByMonth: jest.fn(),
   getCuotasTotalsByMonth: jest.fn(),
@@ -49,7 +56,8 @@ const mockLogger = {
 
 const USER_A = 'user-a-movements';
 const USER_B = 'user-b-movements';
-const CAT_ID = 'cat-id-001';
+const CAT_A = 'cat-id-001';
+const CAT_B = 'cat-id-002';
 
 function makeUnicoItem(overrides: Partial<MovementItem> = {}): MovementItem {
   return {
@@ -61,7 +69,7 @@ function makeUnicoItem(overrides: Partial<MovementItem> = {}): MovementItem {
     occurredAt: new Date('2026-06-08T17:30:00Z'),
     timezone: 'America/Argentina/Buenos_Aires',
     category: {
-      id: CAT_ID,
+      id: CAT_A,
       name: 'Consumibles',
       color: '#4F86C6',
       scope: CategoryScope.EXPENSE,
@@ -83,7 +91,7 @@ function makeFijoItem(overrides: Partial<MovementItem> = {}): MovementItem {
     occurredAt: null,   // D3: fijos no tienen instante
     timezone: null,     // D3: fijos no tienen timezone
     category: {
-      id: CAT_ID,
+      id: CAT_A,
       name: 'Servicios',
       color: '#4F86C6',
       scope: CategoryScope.EXPENSE,
@@ -105,7 +113,7 @@ function makeCuotaItem(overrides: Partial<MovementItem> = {}): MovementItem {
     occurredAt: null,   // D1/D3: cuotas no tienen instante
     timezone: null,     // D1/D3: cuotas no tienen timezone
     category: {
-      id: CAT_ID,
+      id: CAT_A,
       name: 'Tecnología',
       color: '#4F86C6',
       scope: CategoryScope.EXPENSE,
@@ -126,6 +134,7 @@ function setupEmptyMocks() {
   mockRepo.findUnicosByMonth.mockResolvedValue([]);
   mockRepo.findFijosByMonth.mockResolvedValue([]);
   mockRepo.findCuotasByMonth.mockResolvedValue([]);
+  // Los de totales ya no son llamados por el service, pero los dejamos por compatibilidad
   mockRepo.getTotalsByMonth.mockResolvedValue({ expenseCents: 0, incomeCents: 0 });
   mockRepo.getFijosTotalsByMonth.mockResolvedValue({ expenseCents: 0, incomeCents: 0 });
   mockRepo.getCuotasTotalsByMonth.mockResolvedValue({ expenseCents: 0, incomeCents: 0 });
@@ -153,19 +162,16 @@ describe('MovementsService', () => {
   });
 
   // -------------------------------------------------------------------------
-  // getMonthMovements — casos felices
+  // getMonthMovements — casos felices (sin filtro)
   // -------------------------------------------------------------------------
 
-  describe('getMonthMovements', () => {
+  describe('getMonthMovements (sin filtro)', () => {
     it('devuelve la estructura correcta con mes, totales y movimientos', async () => {
       const tx1 = makeUnicoItem({ type: MovementType.EXPENSE, amountCents: 1000 });
       const tx2 = makeUnicoItem({ id: 'tx-002', type: MovementType.INCOME, amountCents: 5000 });
       mockRepo.findUnicosByMonth.mockResolvedValue([tx1, tx2]);
       mockRepo.findFijosByMonth.mockResolvedValue([]);
       mockRepo.findCuotasByMonth.mockResolvedValue([]);
-      mockRepo.getTotalsByMonth.mockResolvedValue({ expenseCents: 1000, incomeCents: 5000 });
-      mockRepo.getFijosTotalsByMonth.mockResolvedValue({ expenseCents: 0, incomeCents: 0 });
-      mockRepo.getCuotasTotalsByMonth.mockResolvedValue({ expenseCents: 0, incomeCents: 0 });
 
       const result = await service.getMonthMovements(USER_A, '2026-06');
 
@@ -191,9 +197,6 @@ describe('MovementsService', () => {
       mockRepo.findCuotasByMonth.mockResolvedValue([
         makeCuotaItem({ amountCents: 2000 }),
       ]);
-      mockRepo.getTotalsByMonth.mockResolvedValue({ expenseCents: 1000, incomeCents: 0 });
-      mockRepo.getFijosTotalsByMonth.mockResolvedValue({ expenseCents: 3000, incomeCents: 0 });
-      mockRepo.getCuotasTotalsByMonth.mockResolvedValue({ expenseCents: 2000, incomeCents: 0 });
 
       const result = await service.getMonthMovements(USER_A, '2026-06');
 
@@ -210,9 +213,6 @@ describe('MovementsService', () => {
         makeFijoItem({ type: MovementType.EXPENSE, amountCents: 3000 }),
       ]);
       mockRepo.findCuotasByMonth.mockResolvedValue([]);
-      mockRepo.getTotalsByMonth.mockResolvedValue({ expenseCents: 1000, incomeCents: 0 });
-      mockRepo.getFijosTotalsByMonth.mockResolvedValue({ expenseCents: 3000, incomeCents: 0 });
-      mockRepo.getCuotasTotalsByMonth.mockResolvedValue({ expenseCents: 0, incomeCents: 0 });
 
       const result = await service.getMonthMovements(USER_A, '2026-06');
 
@@ -227,9 +227,6 @@ describe('MovementsService', () => {
         makeFijoItem({ type: MovementType.INCOME, amountCents: 80000 }),
       ]);
       mockRepo.findCuotasByMonth.mockResolvedValue([]);
-      mockRepo.getTotalsByMonth.mockResolvedValue({ expenseCents: 0, incomeCents: 0 });
-      mockRepo.getFijosTotalsByMonth.mockResolvedValue({ expenseCents: 0, incomeCents: 80000 });
-      mockRepo.getCuotasTotalsByMonth.mockResolvedValue({ expenseCents: 0, incomeCents: 0 });
 
       const result = await service.getMonthMovements(USER_A, '2026-06');
 
@@ -238,8 +235,12 @@ describe('MovementsService', () => {
     });
 
     it('calcula balanceCents correctamente (income − expense)', async () => {
-      setupEmptyMocks();
-      mockRepo.getTotalsByMonth.mockResolvedValue({ expenseCents: 3000, incomeCents: 1000 });
+      mockRepo.findUnicosByMonth.mockResolvedValue([
+        makeUnicoItem({ type: MovementType.EXPENSE, amountCents: 3000 }),
+        makeUnicoItem({ id: 'tx-inc', type: MovementType.INCOME, amountCents: 1000 }),
+      ]);
+      mockRepo.findFijosByMonth.mockResolvedValue([]);
+      mockRepo.findCuotasByMonth.mockResolvedValue([]);
 
       const result = await service.getMonthMovements(USER_A, '2026-06');
 
@@ -266,10 +267,11 @@ describe('MovementsService', () => {
           color: '#000000',
           scope: CategoryScope.BOTH,
         },
+        amountCents: 1500,
+        type: MovementType.EXPENSE,
       });
       setupEmptyMocks();
       mockRepo.findUnicosByMonth.mockResolvedValue([itemWithDeletedCat]);
-      mockRepo.getTotalsByMonth.mockResolvedValue({ expenseCents: 1500, incomeCents: 0 });
 
       const result = await service.getMonthMovements(USER_A, '2026-06');
 
@@ -286,10 +288,11 @@ describe('MovementsService', () => {
           color: '#000000',
           scope: CategoryScope.BOTH,
         },
+        amountCents: 5000,
+        skipped: false,
       });
       setupEmptyMocks();
       mockRepo.findFijosByMonth.mockResolvedValue([fijoWithDeletedCat]);
-      mockRepo.getFijosTotalsByMonth.mockResolvedValue({ expenseCents: 5000, incomeCents: 0 });
 
       const result = await service.getMonthMovements(USER_A, '2026-06');
 
@@ -306,10 +309,10 @@ describe('MovementsService', () => {
           color: '#000000',
           scope: CategoryScope.BOTH,
         },
+        amountCents: 2000,
       });
       setupEmptyMocks();
       mockRepo.findCuotasByMonth.mockResolvedValue([cuotaWithDeletedCat]);
-      mockRepo.getCuotasTotalsByMonth.mockResolvedValue({ expenseCents: 2000, incomeCents: 0 });
 
       const result = await service.getMonthMovements(USER_A, '2026-06');
 
@@ -326,7 +329,6 @@ describe('MovementsService', () => {
       ];
       setupEmptyMocks();
       mockRepo.findUnicosByMonth.mockResolvedValue(items);
-      mockRepo.getTotalsByMonth.mockResolvedValue({ expenseCents: 6000, incomeCents: 0 });
 
       const result = await service.getMonthMovements(USER_A, '2026-06');
 
@@ -342,12 +344,9 @@ describe('MovementsService', () => {
       expect(mockRepo.findUnicosByMonth).toHaveBeenCalledWith(USER_B, '2026-06');
       expect(mockRepo.findFijosByMonth).toHaveBeenCalledWith(USER_B, '2026-06');
       expect(mockRepo.findCuotasByMonth).toHaveBeenCalledWith(USER_B, '2026-06');
-      expect(mockRepo.getTotalsByMonth).toHaveBeenCalledWith(USER_B, '2026-06');
-      expect(mockRepo.getFijosTotalsByMonth).toHaveBeenCalledWith(USER_B, '2026-06');
-      expect(mockRepo.getCuotasTotalsByMonth).toHaveBeenCalledWith(USER_B, '2026-06');
     });
 
-    it('lanza las queries al repositorio en paralelo (6 llamadas)', async () => {
+    it('lanza las queries al repositorio en paralelo (3 llamadas a find*)', async () => {
       setupEmptyMocks();
 
       await service.getMonthMovements(USER_A, '2026-06');
@@ -355,9 +354,183 @@ describe('MovementsService', () => {
       expect(mockRepo.findUnicosByMonth).toHaveBeenCalledTimes(1);
       expect(mockRepo.findFijosByMonth).toHaveBeenCalledTimes(1);
       expect(mockRepo.findCuotasByMonth).toHaveBeenCalledTimes(1);
-      expect(mockRepo.getTotalsByMonth).toHaveBeenCalledTimes(1);
-      expect(mockRepo.getFijosTotalsByMonth).toHaveBeenCalledTimes(1);
-      expect(mockRepo.getCuotasTotalsByMonth).toHaveBeenCalledTimes(1);
+    });
+
+    it('fijo skippeado aparece en la lista con skipped=true pero NO suma a los totales', async () => {
+      const fijoSkipped = makeFijoItem({
+        amountCents: 5000,
+        type: MovementType.EXPENSE,
+        skipped: true,
+      });
+      setupEmptyMocks();
+      mockRepo.findFijosByMonth.mockResolvedValue([fijoSkipped]);
+
+      const result = await service.getMonthMovements(USER_A, '2026-06');
+
+      // El fijo aparece en la lista
+      expect(result.movements.fijos).toHaveLength(1);
+      expect(result.movements.fijos[0].skipped).toBe(true);
+      // Pero NO suma a los totales
+      expect(result.totals.expenseCents).toBe(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Filtro de categorías (Fase 1.1.6) — 3 estados
+  // -------------------------------------------------------------------------
+
+  describe('getMonthMovements — filtro de categorías (Fase 1.1.6)', () => {
+    it('null (todas): sin filtro, devuelve todos los movimientos', async () => {
+      const unicos = [
+        makeUnicoItem({ id: 'u1', category: { id: CAT_A, name: 'A', color: '#aaa', scope: CategoryScope.EXPENSE }, amountCents: 1000 }),
+        makeUnicoItem({ id: 'u2', category: { id: CAT_B, name: 'B', color: '#bbb', scope: CategoryScope.EXPENSE }, amountCents: 2000 }),
+      ];
+      mockRepo.findUnicosByMonth.mockResolvedValue(unicos);
+      mockRepo.findFijosByMonth.mockResolvedValue([]);
+      mockRepo.findCuotasByMonth.mockResolvedValue([]);
+
+      const result = await service.getMonthMovements(USER_A, '2026-06', null);
+
+      expect(result.movements.unicos).toHaveLength(2);
+      expect(result.totals.expenseCents).toBe(3000);
+    });
+
+    it('[] (ninguna): retorna listas vacías y totales en cero sin consultar el repo', async () => {
+      // Con categoryIds=[], el service debe atajar antes de llamar al repo
+      const result = await service.getMonthMovements(USER_A, '2026-06', []);
+
+      expect(result.movements.unicos).toEqual([]);
+      expect(result.movements.fijos).toEqual([]);
+      expect(result.movements.cuotas).toEqual([]);
+      expect(result.totals).toEqual({ expenseCents: 0, incomeCents: 0, balanceCents: 0 });
+
+      // El repo NO debe ser llamado (atajo temprano)
+      expect(mockRepo.findUnicosByMonth).not.toHaveBeenCalled();
+      expect(mockRepo.findFijosByMonth).not.toHaveBeenCalled();
+      expect(mockRepo.findCuotasByMonth).not.toHaveBeenCalled();
+    });
+
+    it('[CAT_A]: solo movimientos de CAT_A aparecen; CAT_B excluido', async () => {
+      const unicos = [
+        makeUnicoItem({ id: 'u1', category: { id: CAT_A, name: 'A', color: '#aaa', scope: CategoryScope.EXPENSE }, amountCents: 1000 }),
+        makeUnicoItem({ id: 'u2', category: { id: CAT_B, name: 'B', color: '#bbb', scope: CategoryScope.EXPENSE }, amountCents: 2000 }),
+      ];
+      mockRepo.findUnicosByMonth.mockResolvedValue(unicos);
+      mockRepo.findFijosByMonth.mockResolvedValue([]);
+      mockRepo.findCuotasByMonth.mockResolvedValue([]);
+
+      const result = await service.getMonthMovements(USER_A, '2026-06', [CAT_A]);
+
+      expect(result.movements.unicos).toHaveLength(1);
+      expect(result.movements.unicos[0].id).toBe('u1');
+      expect(result.totals.expenseCents).toBe(1000); // solo CAT_A
+    });
+
+    it('filtro afecta fijos y cuotas también', async () => {
+      const fijos = [
+        makeFijoItem({ id: 'f1', category: { id: CAT_A, name: 'A', color: '#aaa', scope: CategoryScope.EXPENSE }, amountCents: 3000 }),
+        makeFijoItem({ id: 'f2', category: { id: CAT_B, name: 'B', color: '#bbb', scope: CategoryScope.EXPENSE }, amountCents: 5000 }),
+      ];
+      const cuotas = [
+        makeCuotaItem({ id: 'c1', category: { id: CAT_B, name: 'B', color: '#bbb', scope: CategoryScope.EXPENSE }, amountCents: 1000 }),
+      ];
+      mockRepo.findUnicosByMonth.mockResolvedValue([]);
+      mockRepo.findFijosByMonth.mockResolvedValue(fijos);
+      mockRepo.findCuotasByMonth.mockResolvedValue(cuotas);
+
+      const result = await service.getMonthMovements(USER_A, '2026-06', [CAT_A]);
+
+      expect(result.movements.fijos).toHaveLength(1);
+      expect(result.movements.fijos[0].id).toBe('f1');
+      expect(result.movements.cuotas).toHaveLength(0); // CAT_B excluido
+      expect(result.totals.expenseCents).toBe(3000); // solo fijo de CAT_A
+    });
+
+    it('fijo skippeado de CAT_A: aparece en lista con skipped=true pero NO suma a totales bajo filtro', async () => {
+      // GOTCHA OBLIGATORIO: un fijo skipped se INCLUYE en la lista pero NO suma a totales.
+      // Esto debe respetarse incluso cuando hay filtro activo.
+      const fijoSkippedCatA = makeFijoItem({
+        id: 'f-skip',
+        category: { id: CAT_A, name: 'A', color: '#aaa', scope: CategoryScope.EXPENSE },
+        amountCents: 5000,
+        skipped: true,
+      });
+      const fijoNormalCatA = makeFijoItem({
+        id: 'f-normal',
+        category: { id: CAT_A, name: 'A', color: '#aaa', scope: CategoryScope.EXPENSE },
+        amountCents: 2000,
+        skipped: false,
+      });
+      mockRepo.findUnicosByMonth.mockResolvedValue([]);
+      mockRepo.findFijosByMonth.mockResolvedValue([fijoSkippedCatA, fijoNormalCatA]);
+      mockRepo.findCuotasByMonth.mockResolvedValue([]);
+
+      const result = await service.getMonthMovements(USER_A, '2026-06', [CAT_A]);
+
+      // Ambos fijos de CAT_A aparecen en la lista
+      expect(result.movements.fijos).toHaveLength(2);
+      // El skippeado está en la lista con skipped=true
+      const skip = result.movements.fijos.find((f) => f.id === 'f-skip');
+      expect(skip).toBeDefined();
+      expect(skip!.skipped).toBe(true);
+      // El skippeado NO suma a los totales; solo el normal suma
+      expect(result.totals.expenseCents).toBe(2000);
+    });
+
+    it('fijo de CAT_B skippeado fuera del filtro: excluido de lista y totales', async () => {
+      const fijoSkippedCatB = makeFijoItem({
+        id: 'f-skip-b',
+        category: { id: CAT_B, name: 'B', color: '#bbb', scope: CategoryScope.EXPENSE },
+        amountCents: 5000,
+        skipped: true,
+      });
+      mockRepo.findUnicosByMonth.mockResolvedValue([]);
+      mockRepo.findFijosByMonth.mockResolvedValue([fijoSkippedCatB]);
+      mockRepo.findCuotasByMonth.mockResolvedValue([]);
+
+      const result = await service.getMonthMovements(USER_A, '2026-06', [CAT_A]);
+
+      // CAT_B excluido del filtro → no aparece ni en lista ni en totales
+      expect(result.movements.fijos).toHaveLength(0);
+      expect(result.totals.expenseCents).toBe(0);
+    });
+
+    it('id desconocido en filtro → ningún movimiento pasa, totales en cero', async () => {
+      setupEmptyMocks();
+      mockRepo.findUnicosByMonth.mockResolvedValue([
+        makeUnicoItem({ amountCents: 5000 }),
+      ]);
+
+      const result = await service.getMonthMovements(USER_A, '2026-06', ['id-inexistente']);
+
+      expect(result.movements.unicos).toHaveLength(0);
+      expect(result.totals.expenseCents).toBe(0);
+    });
+
+    it('filtro incluye INCOME también (EXPENSE e INCOME ambos filtrados por categoría)', async () => {
+      const incomeItem = makeUnicoItem({
+        id: 'u-income',
+        type: MovementType.INCOME,
+        amountCents: 10000,
+        category: { id: CAT_A, name: 'A', color: '#aaa', scope: CategoryScope.INCOME },
+      });
+      const expenseItem = makeUnicoItem({
+        id: 'u-expense-b',
+        type: MovementType.EXPENSE,
+        amountCents: 3000,
+        category: { id: CAT_B, name: 'B', color: '#bbb', scope: CategoryScope.EXPENSE },
+      });
+      mockRepo.findUnicosByMonth.mockResolvedValue([incomeItem, expenseItem]);
+      mockRepo.findFijosByMonth.mockResolvedValue([]);
+      mockRepo.findCuotasByMonth.mockResolvedValue([]);
+
+      // Filtrar solo por CAT_A (INCOME)
+      const result = await service.getMonthMovements(USER_A, '2026-06', [CAT_A]);
+
+      expect(result.movements.unicos).toHaveLength(1);
+      expect(result.movements.unicos[0].id).toBe('u-income');
+      expect(result.totals.incomeCents).toBe(10000);
+      expect(result.totals.expenseCents).toBe(0);
     });
   });
 
@@ -432,7 +605,6 @@ describe('MovementsService', () => {
       const item = makeUnicoItem({ origin: 'unico' });
       setupEmptyMocks();
       mockRepo.findUnicosByMonth.mockResolvedValue([item]);
-      mockRepo.getTotalsByMonth.mockResolvedValue({ expenseCents: 1500, incomeCents: 0 });
 
       const result = await service.getMonthMovements(USER_A, '2026-06');
 
@@ -444,7 +616,6 @@ describe('MovementsService', () => {
       const item = makeFijoItem();
       setupEmptyMocks();
       mockRepo.findFijosByMonth.mockResolvedValue([item]);
-      mockRepo.getFijosTotalsByMonth.mockResolvedValue({ expenseCents: 5000, incomeCents: 0 });
 
       const result = await service.getMonthMovements(USER_A, '2026-06');
 
@@ -460,7 +631,6 @@ describe('MovementsService', () => {
       });
       setupEmptyMocks();
       mockRepo.findCuotasByMonth.mockResolvedValue([item]);
-      mockRepo.getCuotasTotalsByMonth.mockResolvedValue({ expenseCents: 2000, incomeCents: 0 });
 
       const result = await service.getMonthMovements(USER_A, '2026-06');
 
@@ -478,7 +648,6 @@ describe('MovementsService', () => {
       const item = makeUnicoItem();
       setupEmptyMocks();
       mockRepo.findUnicosByMonth.mockResolvedValue([item]);
-      mockRepo.getTotalsByMonth.mockResolvedValue({ expenseCents: 1500, incomeCents: 0 });
 
       const result = await service.getMonthMovements(USER_A, '2026-06');
 
@@ -493,7 +662,6 @@ describe('MovementsService', () => {
       const cuota = makeCuotaItem();
       setupEmptyMocks();
       mockRepo.findCuotasByMonth.mockResolvedValue([cuota]);
-      mockRepo.getCuotasTotalsByMonth.mockResolvedValue({ expenseCents: 2000, incomeCents: 0 });
 
       const result = await service.getMonthMovements(USER_A, '2026-06');
 

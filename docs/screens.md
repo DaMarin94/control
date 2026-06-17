@@ -150,7 +150,7 @@ No muestra lista de movimientos (decisión 2026-06-03, ex RF-DASH-004 fuera de a
 
 ## 4. Vista del mes (`/mes`)
 
-**RF relacionados:** RF-VM-001, RF-VM-002, RF-VM-003, RF-VM-004, RF-VM-005, RF-MF-005, RF-MF-006
+**RF relacionados:** RF-VM-001, RF-VM-002, RF-VM-003, RF-VM-004, RF-VM-005, RF-VM-006, RF-MF-005, RF-MF-006
 
 ### Propósito
 
@@ -161,7 +161,8 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 - **Sidebar** con el link "Vista del mes" marcado como activo.
 - **Header de la pantalla** con el rótulo del mes activo: eyebrow "Tu mes", título con el nombre del mes y año, y sub-línea de estado ("Mes en curso" / "Histórico"). El botón **"+ Nuevo movimiento"** vive en este header, junto al botón **"Ordenar secciones"** que activa el modo orden (RF-VM-005; ver "Acciones disponibles").
 - **Navegación de mes** para ir al mes anterior y al mes siguiente (RF-VM-004), resuelta como **flechas gigantes a los costados del contenido** (`‹ contenido ›`; ‹ = mes anterior, › = mes siguiente). En pantallas angostas/mobile el patrón **colapsa a un control compacto** (pill stepper) ubicado en el header. Es presentacional: la acción funcional (navegar ±1 mes) es la de RF-VM-004 y no cambia. El spec visual lo define `control-design` (ver `docs/design.md`).
-- **Totales del mes** (RF-VM-002): total de gastos, total de ingresos y balance (ingresos − gastos), con positivo y negativo diferenciables. Se actualizan al agregar, editar o eliminar un movimiento.
+- **Totales del mes** (RF-VM-002): total de gastos, total de ingresos y balance (ingresos − gastos), con positivo y negativo diferenciables. Se actualizan al agregar, editar o eliminar un movimiento **y al cambiar el filtro por categoría** (RF-VM-006).
+- **Filtro por categoría** (RF-VM-006): un control (mismo popover/botón de categorías que el widget de reporte, pantalla 8) que restringe **lista y totales** del mes a las categorías seleccionadas. Default **todas**. La selección **se mantiene al navegar entre meses** (es por pantalla, no por mes) y se **persiste por usuario** (clave `monthCategoryFilter`, ver `data-model.md`). No es global: dashboard y reportes tienen su propio filtro. Ver "Acciones disponibles" y "Estados".
 - **Lista de movimientos agrupada por tipo** en **tres secciones colapsables** (acordeón) rotuladas — **Únicos**, **Fijos**, **Cuotas** (RF-VM-001, RF-VM-005). El orden de las secciones es el default salvo que el usuario lo haya reordenado (RF-VM-005). Dentro de cada sección, los movimientos se ordenan por **monto descendente** (el monto más alto primero, por magnitud, sin distinguir gasto de ingreso), con el desempate por sección que define el contrato de `GET /movements` (ver `data-model.md`); ese orden de ítems **no** es alterable por el usuario.
   - **Las tres secciones se muestran siempre**, aunque estén vacías (cambio respecto de v1.0). Cada sección expone una **cabecera de grupo** (rótulo, contador de ítems, subtotal) que actúa como **disclosure**: clic en la cabecera expande/colapsa esa sección. Las **Cuotas** muestran, por ítem, su número y total (ej: "3/12"); los **Fijos**, sin día específico.
   - Cada ítem muestra: tipo (gasto/ingreso), monto, categoría, descripción (si la tiene) y su origen (único / fijo / cuota X/N). Los **fijos** muestran además su **frecuencia** (Mensual / Bimestral / Trimestral / Semestral / Anual, RF-MF-006) en vez de fecha; un fijo **anulado** para el mes (RF-MF-005) se sigue mostrando con una **diferenciación visual** de anulado (detalle en `docs/design.md`).
@@ -176,6 +177,7 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 - **Nuevo movimiento** — abre el modal de carga (pantalla 5). Al abrirlo desde `/mes`, el **mes activo** se propaga al modal como **mes contexto**: es el default del "mes de inicio" en los tabs Fijo y Cuotas. No afecta al tab Único (ver pantalla 5). **En modo orden este botón se deshabilita** (RF-VM-005).
 - **Colapsar / expandir una sección** (RF-VM-005) — clic en la cabecera de cualquiera de las tres secciones la expande o colapsa de forma individual. El estado se **persiste por usuario** (preferencias 1.1.0). Fuera del modo orden.
 - **Ordenar secciones** (RF-VM-005) — un botón del header ("Ordenar secciones" / "Listo") activa/desactiva el **modo orden**. En modo orden el usuario **arrastra las secciones para reordenarlas entre sí** (no los ítems internos); el colapsar/expandir queda suspendido (la cabecera arrastra) y "+ Nuevo movimiento" se deshabilita. El orden se **aplica en vivo** y se **persiste por usuario**; no hay acción de cancelar. El shape de la preferencia (`monthSections`) está en `data-model.md`.
+- **Filtrar por categoría** (RF-VM-006) — abre el control de filtro y tilda/destilda categorías; lista y totales se recalculan al instante. **Tres estados:** todas (default, sin filtro), subconjunto (solo las tildadas) y **ninguna** (todas destildadas → lista vacía y totales en cero). La selección persiste por usuario (clave `monthCategoryFilter`) y se conserva al navegar de mes.
 - Acciones globales del sidebar.
 
 ### Navegación
@@ -190,6 +192,7 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 - **Con datos:** las **tres secciones siempre presentes** (RF-VM-005); las que tienen movimientos los listan, las vacías muestran su empty inline propio. Cada sección puede estar expandida o colapsada según la preferencia persistida del usuario. Un fijo **anulado** para el mes (RF-MF-005) se muestra con su diferenciación visual de anulado y no suma a los totales.
 - **Modo orden activo (RF-VM-005):** las secciones se pueden arrastrar para reordenarlas; el colapsar/expandir queda suspendido y "+ Nuevo movimiento" deshabilitado. El orden se aplica en vivo y se persiste.
 - **Vacío (sin movimientos en el mes):** **no hay un mensaje de estado vacío global** (eliminado en la fase 1.1.4). Las tres secciones aparecen vacías, cada una con su empty inline propio ("Sin movimientos únicos" / "Sin fijos" / "Sin cuotas"), y los totales del mes en cero, sin error.
+- **Filtro por categoría aplicado (RF-VM-006):** lista y totales reflejan solo las categorías seleccionadas. Si las categorías filtradas no tienen movimientos en el mes, las secciones quedan vacías y los totales en cero (sin error). El estado **"ninguna"** (todas destildadas) deja la **lista vacía y los totales en cero**.
 - **Error:** si falla la carga del mes, se informa el error sin romper la pantalla.
 
 ---
@@ -354,7 +357,7 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 
 - **Tipo de reporte** — `income-expense` (Forma 1) o `by-category` (Forma 2). Define qué visualización monta la instancia (RF-REP-001).
 - **Año a mostrar** — el año cuyos 12 meses se grafican. La navegación de año está **siempre embebida y activa** (flechas de 1.1.3), **independiente por instancia**.
-- **Categorías seleccionadas (filtro)** — subconjunto de categorías; default **todas**. El checklist embebido ofrece el **universo de categorías del usuario** (no solo las que tienen gasto), porque el filtro aplica también a la Forma 1.
+- **Categorías seleccionadas (filtro)** — subconjunto de categorías; default **todas**. El checklist embebido ofrece el **universo de categorías del usuario** (no solo las que tienen gasto), porque el filtro aplica también a la Forma 1. **Tres estados** (igual que el filtro de `/mes`, RF-VM-006): todas (default), subconjunto y **ninguna** (todas destildadas → serie en cero). *(Desde 1.1.6 destildar todas grafica la serie en cero; antes se colapsaba a "sin filtro".)*
 - **Modo de persistencia** — **persistido** (en `/reportes`: año y filtro se guardan en la clave `reports`, RF-REP-004) o **efímero** (en el Dashboard: año y filtro son de sesión, no se persisten — al recargar vuelve a año en curso + todas las categorías).
 
 ### Contenido
@@ -380,6 +383,6 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 - **Cargando:** mientras se obtienen los datos del año (filtrados al set de categorías seleccionado).
 - **Con datos:** recuadro poblado con los 12 meses presentes.
 - **Año sin movimientos (vacío):** los 12 meses se muestran en cero; puede acompañarse de un mensaje de estado vacío, sin error. La representación visual concreta la define `control-design`.
-- **Filtro que vacía el reporte:** si las categorías seleccionadas no tienen movimientos en el año, los 12 meses se grafican en **cero** (sin error); los límites de navegación de año **no** cambian (siguen basados en `earliestYear`, no en el filtro).
+- **Filtro que vacía el reporte:** si las categorías seleccionadas no tienen movimientos en el año, **o** si el estado es **"ninguna"** (todas destildadas, desde 1.1.6), los 12 meses se grafican en **cero** (sin error); los límites de navegación de año **no** cambian (siguen basados en `earliestYear`, no en el filtro).
 - **Meses sin datos dentro del año:** los meses sin movimientos se grafican en **cero** (sin huecos ni omisiones). Aplica tanto a meses futuros del año en curso como a meses pasados; los meses futuros pueden tener datos proyectados por fijos/cuotas (RN-006).
 - **Error:** si falla la carga, se informa el error sin romper la pantalla anfitriona.

@@ -88,42 +88,88 @@ export class MovementsService {
    *
    * Totales: suman movimientos únicos + fijos activos + cuotas activas del mes.
    *
-   * @param userId  userId del JWT (RN-003: aislamiento por usuario)
-   * @param month   Mes en formato YYYY-MM
+   * Filtro de categorías (Fase 1.1.6):
+   * - categoryIds === null: sin filtro, todas las categorías (comportamiento por defecto).
+   * - categoryIds === []: ninguna categoría → listas vacías y totales en cero.
+   * - categoryIds = ["id1","id2"]: solo esas categorías.
+   *
+   * @param userId      userId del JWT (RN-003: aislamiento por usuario)
+   * @param month       Mes en formato YYYY-MM
+   * @param categoryIds Filtro de categorías (3 estados: null=todas, []=ninguna, [ids]=subconjunto)
    */
   async getMonthMovements(
     userId: string,
     month: string,
+    categoryIds: string[] | null = null,
   ): Promise<MonthMovementsResponse> {
     // Validar formato y semántica del mes
     this.validateMonth(month);
 
+    // Estado "ninguna": atajar antes de cualquier consulta al repositorio
+    if (categoryIds !== null && categoryIds.length === 0) {
+      this.logger.debug(
+        { userId, month, filter: 'ninguna' },
+        'Movimientos del mes: filtro vacío → resultado vacío',
+      );
+      return {
+        month,
+        totals: { expenseCents: 0, incomeCents: 0, balanceCents: 0 },
+        movements: { unicos: [], fijos: [], cuotas: [] },
+      };
+    }
+
     // Obtener movimientos y totales en paralelo para eficiencia
-    const [
-      unicos,
-      fijos,
-      cuotas,
-      rawTotalsUnicos,
-      rawTotalsFijos,
-      rawTotalsCuotas,
-    ] = await Promise.all([
+    const [unicos, fijos, cuotas] = await Promise.all([
       this.repo.findUnicosByMonth(userId, month),
       this.repo.findFijosByMonth(userId, month),
       this.repo.findCuotasByMonth(userId, month),
-      this.repo.getTotalsByMonth(userId, month),
-      this.repo.getFijosTotalsByMonth(userId, month),
-      this.repo.getCuotasTotalsByMonth(userId, month),
     ]);
 
-    // Combinar totales de únicos + fijos + cuotas
-    const expenseCents =
-      rawTotalsUnicos.expenseCents +
-      rawTotalsFijos.expenseCents +
-      rawTotalsCuotas.expenseCents;
-    const incomeCents =
-      rawTotalsUnicos.incomeCents +
-      rawTotalsFijos.incomeCents +
-      rawTotalsCuotas.incomeCents;
+    // Aplicar filtro de categorías a las listas (null = sin filtro)
+    const filterSet = categoryIds !== null ? new Set(categoryIds) : null;
+
+    const unicosFiltrados =
+      filterSet !== null
+        ? unicos.filter((u) => filterSet.has(u.category.id))
+        : unicos;
+
+    const fijosFiltrados =
+      filterSet !== null
+        ? fijos.filter((f) => filterSet.has(f.category.id))
+        : fijos;
+
+    const cuotasFiltradas =
+      filterSet !== null
+        ? cuotas.filter((c) => filterSet.has(c.category.id))
+        : cuotas;
+
+    // Calcular totales desde las listas filtradas.
+    // CRÍTICO: fijos skippeados (skipped=true) se INCLUYEN en la lista pero NO suman
+    // a los totales (igual que el comportamiento original del repositorio).
+    // Los únicos y cuotas filtrados siempre suman (no tienen skip).
+    const unicosExpense = unicosFiltrados
+      .filter((u) => u.type === 'EXPENSE')
+      .reduce((sum, u) => sum + u.amountCents, 0);
+    const unicosIncome = unicosFiltrados
+      .filter((u) => u.type === 'INCOME')
+      .reduce((sum, u) => sum + u.amountCents, 0);
+
+    const fijosExpense = fijosFiltrados
+      .filter((f) => !f.skipped && f.type === 'EXPENSE')
+      .reduce((sum, f) => sum + f.amountCents, 0);
+    const fijosIncome = fijosFiltrados
+      .filter((f) => !f.skipped && f.type === 'INCOME')
+      .reduce((sum, f) => sum + f.amountCents, 0);
+
+    const cuotasExpense = cuotasFiltradas
+      .filter((c) => c.type === 'EXPENSE')
+      .reduce((sum, c) => sum + c.amountCents, 0);
+    const cuotasIncome = cuotasFiltradas
+      .filter((c) => c.type === 'INCOME')
+      .reduce((sum, c) => sum + c.amountCents, 0);
+
+    const expenseCents = unicosExpense + fijosExpense + cuotasExpense;
+    const incomeCents = unicosIncome + fijosIncome + cuotasIncome;
 
     const totals: MonthTotals = {
       expenseCents,
@@ -135,9 +181,10 @@ export class MovementsService {
       {
         userId,
         month,
-        unicosCount: unicos.length,
-        fijosCount: fijos.length,
-        cuotasCount: cuotas.length,
+        filterCount: filterSet?.size ?? null,
+        unicosCount: unicosFiltrados.length,
+        fijosCount: fijosFiltrados.length,
+        cuotasCount: cuotasFiltradas.length,
         totals,
       },
       'Movimientos del mes listados',
@@ -147,9 +194,9 @@ export class MovementsService {
       month,
       totals,
       movements: {
-        unicos,
-        fijos,
-        cuotas,
+        unicos: unicosFiltrados,
+        fijos: fijosFiltrados,
+        cuotas: cuotasFiltradas,
       },
     };
   }
@@ -171,7 +218,10 @@ export class MovementsService {
    *
    * @param userId     userId del JWT (RN-003)
    * @param year       Año en formato YYYY
-   * @param categoryIds Lista de categoryIds a filtrar. null/undefined/vacío = sin filtro.
+   * @param categoryIds Filtro de categorías (3 estados — Fase 1.1.6):
+   *   null/undefined = todas las categorías (sin filtro).
+   *   [] (array vacío) = ninguna categoría (resultado vacío/cero).
+   *   ["id1","id2",...] = solo esas categorías.
    */
   async getReportsMovements(
     userId: string,
@@ -181,13 +231,20 @@ export class MovementsService {
     // Validación ya ejecutada en el controller; el service recibe el número directamente.
     // (La validación de formato YYYY se hace en el controller antes de llamar acá.)
 
-    // Normalizar el filtro de categorías:
-    // null/undefined/vacío = sin filtro (todas las categorías).
-    // Un Set vacío actúa como "sin filtro" → usar null para indicar "todas".
+    // Normalizar el filtro de categorías (semántica de 3 estados — Fase 1.1.6):
+    // - null/undefined → filterSet = null = sin filtro (todas las categorías).
+    // - [] (array vacío explícito) → filterSet = EMPTY_SET = "ninguna" (filtro vacío).
+    //   Ningún movimiento pasará el filtro y los totales quedan en cero.
+    // - ["id1","id2",...] → filterSet con los ids dados.
+    //
+    // CRÍTICO: no colapsar [] a null. [] debe producir "ninguna".
+    const EMPTY_SET = new Set<string>(); // set vacío: ningún id pasa el filtro
     const filterSet: Set<string> | null =
-      categoryIds && categoryIds.length > 0
-        ? new Set(categoryIds)
-        : null;
+      categoryIds === null || categoryIds === undefined
+        ? null
+        : categoryIds.length === 0
+          ? EMPTY_SET
+          : new Set(categoryIds);
 
     // Los 12 meses del año como strings "YYYY-MM"
     const yearStr = String(year).padStart(4, '0');

@@ -118,6 +118,10 @@ ReportCardConfig = {
 - **Back-compat / normalización.** Un blob previo **sin** `reports` se interpreta como `[]` (pantalla vacía). La normalización (entradas malformadas, `type` desconocido, `categoryIds` que apunten a categorías inexistentes/eliminadas) es responsabilidad del front; un blob viejo o parcial nunca rompe la pantalla.
 - **El back NO valida ni conoce esta clave** (igual que `monthSections`): `PUT /preferences` guarda el blob tal cual. La normalización y los defaults son del frontend consumidor.
 
+#### `monthCategoryFilter` — filtro de categorías de la Vista del mes (Fase 1.1.6, RF-VM-006)
+
+Filtro por categoría de `/mes`, persistido por usuario. Shape, semántica de los tres estados y back-compat en §Filtro de categorías → `monthCategoryFilter` (más abajo).
+
 ---
 
 ## Contrato de categoría (respuesta de la API)
@@ -194,6 +198,11 @@ Transaction = {
 
 `GET /movements?month=YYYY-MM` devuelve, dentro del sobre `{ success, statusCode, data }`, los movimientos del mes agrupados por origen **más los totales**. Es el endpoint unificado de la Vista del mes y el Dashboard (detalle de implementación en `docs/backend.md`, sección Movimientos del mes).
 
+**Query params:**
+
+- **`month`** (requerido) — el mes a listar, `YYYY-MM`.
+- **`categories`** (opcional, Fase 1.1.6) — filtro por categoría. Lista de `categoryId`s **separados por comas, sin URL-encode** (ej. `categories=abc,def`). **Distingue "ausente" de "presente y vacío"** (ver tabla del filtro de categorías más abajo): ausente = todas; `categories=` (vacío) = ninguna (listas vacías + totales en cero); lista = solo esas categorías. Afecta **gastos e ingresos** y recalcula **listas y totales**. Lo alimenta el filtro de `/mes` (RF-VM-006), derivado de la preferencia `monthCategoryFilter`.
+
 ```
 data = {
   month: "YYYY-MM",
@@ -252,7 +261,7 @@ donde `RecurringFrequency = "MONTHLY" | "BIMONTHLY" | "QUARTERLY" | "BIANNUAL" |
 **Query params:**
 
 - **`year`** (requerido) — el año a graficar.
-- **`categories`** (opcional) — lista de `categoryId`s **separados por comas** (ej. `categories=abc,def`). **Omitido = todas las categorías** (sin filtro). El front lo deriva del `categoryIds` de la card (`null` → omite el param; lista → la serializa). El filtro afecta **ambas formas**: en la Forma 1, qué categorías cuentan en `incomeCents`/`expenseCents` por mes; en la Forma 2, qué categorías se desglosan.
+- **`categories`** (opcional) — filtro por categoría, **tres estados** (ver tabla "Filtro de categorías" más abajo, compartida con `GET /movements`): **ausente = todas**, **`categories=` (presente y vacío) = ninguna** (serie en cero), **lista `id1,id2` = subconjunto**. Lista de `categoryId`s **separados por comas, sin URL-encode** (ej. `categories=abc,def`). El front lo deriva del `categoryIds` de la card (`null` → omite el param; `[]` → `categories=` vacío; lista → la serializa). El filtro afecta **ambas formas**: en la Forma 1, qué categorías cuentan en `incomeCents`/`expenseCents` por mes; en la Forma 2, qué categorías se desglosan. *(Ajuste 1.1.6: el estado "presente y vacío = ninguna" reemplaza el colapso previo de vacío → todas; ver `requirements.md`, bitácora 2026-06-17.)*
 
 ```
 ReportsMovementsResponse = {
@@ -280,3 +289,35 @@ ReportCategory = {
 - **`categories` — solo gasto (`EXPENSE`), dentro del filtro.** Los ingresos **no** se desglosan por categoría; solo aparecen agregados en `months[*].incomeCents`. Una categoría aparece si tuvo gasto en algún mes del año, **está dentro del set pedido** (si hay filtro) e **incluye categorías soft-deleted** con gasto histórico (RF-CAT-004; el desglose no filtra por `deletedAt`). Orden: por **gasto anual total DESC**, desempate por `categoryId` ASC.
 - **Invariante de consistencia.** Para cada mes `i`, la suma de `categories[*].monthlyExpenseCents[i]` **es igual a** `months[i].expenseCents`. El front puede confiar en que las bandas de gasto apiladas por categoría suman exactamente el total de gastos del mes (dentro del set filtrado).
 - **`earliestYear` — NO afectado por el filtro.** Año más antiguo con **cualquier** movimiento del usuario (mínimo entre el año del mes local de cualquier único y el año del `startMonth` de cualquier fijo/cuota), **calculado sobre todos los movimientos, ignorando el filtro `categories`**; `null` si el usuario no tiene ningún movimiento. El front lo usa para deshabilitar la navegación ‹ antes del primer año con datos (RF-REP-002); que sea independiente del filtro evita que los límites de navegación salten al filtrar categorías.
+
+---
+
+## Filtro de categorías — query param `categories` (Fase 1.1.6)
+
+> Destino canónico del contrato del param `categories`. Aplica **igual** a `GET /movements?month=YYYY-MM` (filtro de `/mes`, RF-VM-006) y a `GET /movements/reports?year=YYYY` (filtro de reportes, RF-REP-002). Los dos endpoints lo referencian.
+
+El param distingue **tres estados** —y, en particular, distingue **"ausente" de "presente y vacío"**:
+
+| Estado | URL | Resultado |
+|---|---|---|
+| **Todas** (default) | `categories` **ausente** | sin filtro |
+| **Ninguna** | `categories=` (**presente, vacío**) | resultado vacío: listas vacías + totales/serie en **cero** |
+| **Subconjunto** | `categories=id1,id2` (comas **sin URL-encode**) | solo esas categorías |
+
+- El filtro afecta **gastos e ingresos** (ambos tienen categoría).
+- Con **"todas"** (ausente) se siguen incluyendo movimientos cuya categoría está **soft-deleted** (RF-CAT-004). Con **subconjunto**, solo entran los `id`s del set.
+- En reportes, **`earliestYear` ignora el filtro siempre** (ver §Contrato de serie de reportes).
+- Front: los tres estados derivan de la preferencia/`categoryIds` correspondiente — **`null`/ausente → omitir el param**, **`[]` → `categories=`**, **lista → `categories=id1,id2`**. La coma va **literal** (no `URLSearchParams`).
+
+### Preferencia `monthCategoryFilter` — filtro de la Vista del mes (Fase 1.1.6, RF-VM-006)
+
+Clave nueva del blob `UserPreferences` (ver §Contrato de preferencias → Claves del blob). Persiste el filtro de categorías de `/mes`, **set único por esa pantalla** (no por mes).
+
+```
+monthCategoryFilter: string[] | null
+```
+
+- **`null` / ausente = todas** (default, sin filtro). **`[]` = ninguna** (lista/totales en cero). **lista = subconjunto** de `categoryId`s.
+- Mapea 1:1 a los tres estados del param `categories` de `GET /movements` (tabla de arriba).
+- Es **independiente** del filtro de reportes (clave `reports`) y del filtro efímero del dashboard: no se contaminan entre pantallas.
+- **El back NO valida ni conoce esta clave** (igual que `monthSections` / `reports`): `PUT /preferences` guarda el blob tal cual. La normalización y los defaults son del frontend consumidor.
