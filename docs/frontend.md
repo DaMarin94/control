@@ -351,7 +351,7 @@ La navegación entre `/`, `/mes` y `/categorias` se hace por el **sidebar global
 
 ## Navegación global (sidebar — RF-NAV-001)
 
-Feature 100% frontend, construida **fuera de la secuencia de fases** (post-Fase 7). Resuelve la navegación entre secciones, la acción primaria de nuevo movimiento y el menú de usuario, persistente en pantallas autenticadas. Ver bitácora 2026-06-10 en `docs/requirements.md`.
+Feature 100% frontend, construida **fuera de la secuencia de fases** (post-Fase 7). Resuelve la navegación entre secciones, la acción primaria de nuevo movimiento y el menú de usuario, persistente en pantallas autenticadas. Ver bitácora 2026-06-10 en `docs/decisions.md`.
 
 ### Punto único de montaje: route group `app/(app)/`
 

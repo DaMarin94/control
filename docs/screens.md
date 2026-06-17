@@ -22,7 +22,7 @@
 ## Convenciones
 
 - El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Reportes, Categorías) y **no** se muestra en las pantallas no autenticadas (Login, Registro). Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo. Orden de los links: Dashboard → Vista del mes → Reportes → Categorías.
-  - **Estado de implementación: implementado.** El sidebar (RF-NAV-001) **ya está implementado** (ver `features.md` y bitácora de `requirements.md`). Los accesos definidos en cada pantalla (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL directa) se conservan y conviven con el sidebar.
+  - **Estado de implementación: implementado.** El sidebar (RF-NAV-001) **ya está implementado** (ver `features.md` y `docs/decisions.md`). Los accesos definidos en cada pantalla (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL directa) se conservan y conviven con el sidebar.
 - El **formulario de carga** (pantalla 5) es un modal sin ruta propia. Se invoca desde el sidebar y desde el dashboard, y se superpone a la pantalla actual.
 
 ---
@@ -309,7 +309,7 @@ Pantalla dedicada para administrar las categorías del usuario: listar, crear, e
 
 **RF relacionados:** RF-REP-001, RF-REP-002, RF-REP-003, RF-REP-004, RF-NAV-001
 
-> **Ruta:** `/reportes`. **Link en el sidebar:** rótulo **"Reportes"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Reportes → Categorías). Renombre del "Gráfico anual" (`/anual`) de v1.0 — ver bitácora 2026-06-16 en `requirements.md`.
+> **Ruta:** `/reportes`. **Link en el sidebar:** rótulo **"Reportes"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Reportes → Categorías). Renombre del "Gráfico anual" (`/anual`) de v1.0 — ver bitácora 2026-06-16 en `docs/decisions.md`.
 
 ### Propósito
 

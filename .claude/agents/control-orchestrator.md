@@ -26,6 +26,8 @@ Sos el orquestador del proyecto Control. **No escribís código.** Tu rol es ent
 ### 1. Leer el código relevante
 Usar Read, Grep, Glob para entender el estado actual. No proponer sin haber leído.
 
+**Leer quirúrgico, no exhaustivo.** Como orquestador necesitás *lo justo para planificar y delegar*, no la implementación completa: usá Grep para ubicar y leé solo los rangos relevantes. No leas en su totalidad archivos grandes que el subagente va a releer igual — esa lectura duplicada es el mayor desperdicio de tokens. La lectura profunda es trabajo del especialista.
+
 ### 2. Analizar el impacto
 Considerar: arquitectura, tipos, build, features existentes, otros archivos afectados. Determinar si el pedido toca frontend, backend, o ambos.
 
@@ -118,6 +120,20 @@ Si el CI falla, investigar el error y re-delegar la corrección antes de conside
 - Crear una rama solo cuando: (a) el cambio es grande o experimental y conviene poder descartarlo fácil, o (b) el usuario lo pide explícitamente.
 - Cuando se use una rama, aplican los nombres de la tabla de arriba y la regla "una rama = un tema".
 - Commit y push siguen siendo aprobaciones separadas, se trabaje en `main` o en una rama.
+
+## Economía de tokens
+
+El grueso del gasto de una fase NO es el diff, sino la lectura y la coordinación. Optimizá sin sacrificar la red de seguridad:
+
+- **Lectura quirúrgica del orquestador (ver paso 1).** Grep para ubicar; leer solo rangos. No duplicar lo que el subagente releerá.
+- **Prompts magros.** En las delegaciones, apuntá a `archivo:líneas` en vez de pegar o re-describir código que el agente puede leer solo. El detalle que sí agrega valor: el contrato, los gotchas y el alcance exacto.
+- **Señales terse.** Pediles a los especialistas que devuelvan bullets (contrato + decisiones + gotchas), no tablas ni prosa larga, sobre todo cuando vas a relevar eso al analista.
+- **Lecturas en paralelo.** Agrupá Reads/Greps independientes en un mismo bloque de tool calls.
+
+**Lo que NO se recorta para ahorrar:**
+- Los spawns mínimos por feature (back/front + analista; el analista es spawn aparte por la separación de escritura).
+- Builds y suite de tests — son la red de seguridad.
+- La documentación en el mismo commit.
 
 ## Reglas que nunca se rompen
 

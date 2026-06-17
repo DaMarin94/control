@@ -261,7 +261,7 @@ donde `RecurringFrequency = "MONTHLY" | "BIMONTHLY" | "QUARTERLY" | "BIANNUAL" |
 **Query params:**
 
 - **`year`** (requerido) — el año a graficar.
-- **`categories`** (opcional) — filtro por categoría, **tres estados** (ver tabla "Filtro de categorías" más abajo, compartida con `GET /movements`): **ausente = todas**, **`categories=` (presente y vacío) = ninguna** (serie en cero), **lista `id1,id2` = subconjunto**. Lista de `categoryId`s **separados por comas, sin URL-encode** (ej. `categories=abc,def`). El front lo deriva del `categoryIds` de la card (`null` → omite el param; `[]` → `categories=` vacío; lista → la serializa). El filtro afecta **ambas formas**: en la Forma 1, qué categorías cuentan en `incomeCents`/`expenseCents` por mes; en la Forma 2, qué categorías se desglosan. *(Ajuste 1.1.6: el estado "presente y vacío = ninguna" reemplaza el colapso previo de vacío → todas; ver `requirements.md`, bitácora 2026-06-17.)*
+- **`categories`** (opcional) — filtro por categoría, **tres estados** (ver tabla "Filtro de categorías" más abajo, compartida con `GET /movements`): **ausente = todas**, **`categories=` (presente y vacío) = ninguna** (serie en cero), **lista `id1,id2` = subconjunto**. Lista de `categoryId`s **separados por comas, sin URL-encode** (ej. `categories=abc,def`). El front lo deriva del `categoryIds` de la card (`null` → omite el param; `[]` → `categories=` vacío; lista → la serializa). El filtro afecta **ambas formas**: en la Forma 1, qué categorías cuentan en `incomeCents`/`expenseCents` por mes; en la Forma 2, qué categorías se desglosan. *(Ajuste 1.1.6: el estado "presente y vacío = ninguna" reemplaza el colapso previo de vacío → todas; ver `docs/decisions.md`, bitácora 2026-06-17.)*
 
 ```
 ReportsMovementsResponse = {
