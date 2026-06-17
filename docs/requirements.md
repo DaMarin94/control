@@ -40,6 +40,7 @@ Cubre exclusivamente la plataforma **web** de Control en su versión 1.0. La pla
 | 1.1.1 | 2026-06-16 | Fijos extendidos: anulación por mes puntual (RF-MF-005) y periodicidad (RF-MF-006); nueva RN-016. Fase 1.1.1. |
 | 1.1.2 | 2026-06-16 | Color de categoría editable: el usuario elige/edita el color desde una matriz de 70 colores (reabre RF-CAT-005, RN-013; ajusta RF-CAT-002/003). Fase 1.1.2. |
 | 1.1.4 | 2026-06-16 | Vista del mes: secciones colapsables + reordenables, persistidas por usuario; las 3 secciones siempre visibles con empty inline (nuevo RF-VM-005; ajusta RF-VM-001). Fase 1.1.4. |
+| 1.1.5 | 2026-06-16 | Reportes configurables: módulo "Gráfico anual" → "Reportes" (RF-GRA-001/002/003 → RF-REP-001..005); pantalla `/reportes` configurable por cards; widget de reporte autónomo con año y filtro de categorías embebidos; reapertura de la navegación del dashboard (ajusta RF-DASH-001/002, RF-NAV-001, RN-015). Fase 1.1.5. |
 
 ---
 
@@ -264,7 +265,8 @@ La recuperación de contraseña ("olvidé mi contraseña"), la verificación de 
 
 **Criterios de aceptación:**
 - [ ] Al iniciar sesión, el sistema redirige automáticamente al dashboard.
-- [ ] El dashboard muestra siempre el mes actual — no tiene navegación entre meses.
+- [ ] El **resumen financiero del dashboard** (tarjetas Gastos/Ingresos + balance, RF-DASH-002) muestra **siempre el mes actual** — no tiene navegación entre meses.
+- [ ] La **única navegación de período del dashboard** vive en el **widget de reporte Ingresos vs. Gastos** que monta (RF-REP-002): ese widget navega **año** de forma independiente y activa, sin afectar el resumen mensual, que sigue fijo en el mes en curso. (Reabre la decisión de v1.0 "el dashboard no navega" — ver bitácora 2026-06-16.)
 - [ ] El dashboard contiene acceso directo para cargar un nuevo movimiento (RF-DASH-003).
 - [ ] El dashboard incluye acceso a la vista del mes completa (RF-DASH-005).
 
@@ -285,6 +287,7 @@ La recuperación de contraseña ("olvidé mi contraseña"), la verificación de 
 - [ ] Se muestra el balance del mes (ingresos − gastos).
 - [ ] Los totales incluyen movimientos únicos, fijos activos en el mes y cuotas que caen en el mes.
 - [ ] Si no hay movimientos, los totales se muestran en cero.
+- [ ] El resumen mensual **permanece fijo en el mes en curso** aun cuando el usuario navegue años en el widget de reporte del dashboard (RF-REP-002): la navegación del widget es por **año** y **no** mueve estas tarjetas (ver bitácora 2026-06-16).
 
 ---
 
@@ -627,7 +630,7 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 - [ ] La acción es un **toggle reversible**: anular crea la anulación del mes; des-anular la quita. Sobre el mismo fijo y mes se puede ir y volver indefinidamente.
 - [ ] El mes anulado se distingue de los demás (`deletedFrom`, RF-MF-004): anular **no** elimina el fijo ni afecta otros meses — solo esa única aparición. El fijo sigue vivo y aparece en las demás apariciones que dicta su frecuencia.
 - [ ] Un fijo anulado para un mes **se sigue mostrando** en la lista de ese mes, con diferenciación visual.
-- [ ] El monto de un fijo anulado **no suma** a los totales del mes (RF-VM-002, RF-DASH-002) **ni** a la proyección anual del gráfico (RF-GRA-001).
+- [ ] El monto de un fijo anulado **no suma** a los totales del mes (RF-VM-002, RF-DASH-002) **ni** a la serie anual de los reportes (RF-REP-001).
 - [ ] La anulación es por mes puntual: anular un mes no afecta los meses anteriores ni posteriores.
 - [ ] Solo se pueden anular movimientos fijos propios.
 
@@ -1053,7 +1056,7 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 - **Links de navegación** (en este orden):
   - **Dashboard** — lleva al dashboard (RF-DASH-001).
   - **Vista del mes** — lleva a la vista del mes (RF-VM-001), abierta en el mes actual.
-  - **Anual** — lleva a la pantalla dedicada del gráfico anual (`/anual`, RF-GRA-003).
+  - **Reportes** — lleva a la pantalla de reportes configurable (`/reportes`, RF-REP-003).
   - **Categorías** — lleva a la gestión de categorías (módulo 3.6).
 - **Botón "Nuevo movimiento"** (acción primaria): abre el formulario de carga de movimiento (RF-CM-001).
 - **Menú de usuario** (parte inferior): representado por el avatar del usuario. Al activarlo, despliega la opción **"Cerrar sesión"** (RF-AUTH-004).
@@ -1062,9 +1065,9 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 - [ ] El sidebar está presente en todas las pantallas accesibles con sesión activa.
 - [ ] El sidebar no se muestra en la pantalla de login ni en otras pantallas no autenticadas.
 - [ ] El logo/nombre "Control" lleva al dashboard.
-- [ ] Los links Dashboard, Vista del mes, Anual y Categorías navegan a sus respectivas pantallas, en ese orden.
+- [ ] Los links Dashboard, Vista del mes, Reportes y Categorías navegan a sus respectivas pantallas, en ese orden.
 - [ ] El link "Vista del mes" abre la vista en el mes actual.
-- [ ] El link "Anual" lleva a `/anual` (RF-GRA-003) y se ubica entre "Vista del mes" y "Categorías".
+- [ ] El link "Reportes" lleva a `/reportes` (RF-REP-003) y se ubica entre "Vista del mes" y "Categorías".
 - [ ] El botón "Nuevo movimiento" abre el formulario de carga (RF-CM-001) desde cualquier pantalla, cumpliendo el límite de 2 interacciones (RNF-003).
 - [ ] El sidebar indica visualmente cuál es la sección activa.
 - [ ] El menú de usuario se ubica en la parte inferior del sidebar y muestra el avatar del usuario.
@@ -1075,96 +1078,140 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 
 ---
 
-### 3.9 Módulo: Gráfico anual
+### 3.9 Módulo: Reportes
 
-El gráfico anual visualiza los movimientos del usuario a lo largo de un año, mes a mes. El eje X son los 12 meses del año; el eje Y es el monto. Ofrece **dos visualizaciones** —ingresos vs. gastos por mes, y gastos por categoría apilados— que se presentan en **recuadros (paneles) separados, ambos visibles simultáneamente** (no hay toggle ni alternancia entre ellas). Cada visualización es un **componente reutilizable, configurable por props** (año y navegabilidad). En la **pantalla dedicada** se montan las dos visualizaciones apiladas con un control de año compartido; en el **dashboard** se monta solo la de ingresos vs. gastos, con año fijo.
+El módulo de Reportes visualiza los movimientos del usuario a lo largo de un año, mes a mes. El eje X son los 12 meses del año; el eje Y es el monto. Ofrece **dos tipos de reporte** —ingresos vs. gastos por mes, y gastos por categoría apilados— implementados como un **widget de reporte autónomo, configurable por props**, que lleva embebidos su propia navegación de año y su propio filtro de categorías. La pantalla `/reportes` es **configurable**: el usuario arma su vista agregando y quitando **cards de reporte**; el dashboard monta una sola instancia del widget (ver RF-DASH-001/002).
 
-> **Alcance v1:** solo las dos visualizaciones descritas en RF-GRA-001 (área ingresos/gastos y apilado por categoría de gastos). Otros tipos de gráfico (torta, barras, línea) quedan fuera de alcance v1 (ver sección 6) y se evalúan en una iteración futura.
+> **Nota de renombre (fase 1.1.5):** este módulo era "Gráfico anual" (RF-GRA-001/002/003) en v1.0. Se renombró a "Reportes" (RF-REP-001..005) y la pantalla dedicada `/anual` pasó a ser la pantalla configurable `/reportes`. La **mecánica de datos no cambió** (serie de 12 meses de un año, Forma 1 = ingresos vs. gastos, Forma 2 = gastos por categoría apilado). Las bitácoras 2026-06-14 y 2026-06-15 que mencionan RF-GRA / `/anual` son registro histórico de v1.0; el estado vigente es el de esta sección. Ver bitácora 2026-06-16.
+
+> **Alcance v1.1:** solo los dos tipos de reporte descritos en RF-REP-001 (ingresos/gastos y apilado por categoría de gastos). Otros tipos de reporte/gráfico (torta, barras, línea) quedan fuera de alcance (ver sección 6) y se evalúan como mini-fase futura.
 
 ---
 
-#### RF-GRA-001 — Gráfico anual de movimientos (widget)
+#### RF-REP-001 — Tipos de reporte disponibles
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El sistema ofrece un gráfico que muestra, por cada uno de los 12 meses de un año, los movimientos del usuario (eje X: los meses del año; eje Y: monto). Tiene dos visualizaciones: (Forma 1) ingresos vs. gastos por mes, y (Forma 2) gastos del mes descompuestos por categoría. Las dos se presentan en **recuadros separados, ambos visibles a la vez** (sin toggle). Cada visualización es un componente reutilizable, configurable por props; aparecen en el dashboard (solo Forma 1) y en una pantalla dedicada (las dos, apiladas). |
+| **Descripción** | El módulo ofrece **dos tipos de reporte** sobre los 12 meses de un año (eje X: los meses del año; eje Y: monto): (Forma 1) ingresos vs. gastos por mes, y (Forma 2) gastos del mes descompuestos por categoría. Son los únicos tipos de v1.1; sumar tipos nuevos es una mini-fase futura, fuera de alcance. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | El usuario tiene sesión activa. |
 
-**Formas de visualización:**
+**Tipos de reporte:**
 
-- **Forma 1 — Ingresos vs. Gastos.** Dos series por mes a lo largo del año: el **total de ingresos** del mes y el **total de gastos** del mes. Cada mes del eje X tiene su par de valores (ingresos, gastos). Los totales por mes suman los tres tipos de movimiento que caen en el mes (únicos + fijos activos + cuotas), con el mismo criterio que los totales de la Vista del mes (RF-VM-002) y el Dashboard (RF-DASH-002).
-- **Forma 2 — Gastos por categoría (apilado).** Toma el **total de gastos** de cada mes y lo descompone en bandas apiladas, una por **categoría**, cada una con el **color propio de su categoría** (RF-CAT-005 / RN-013). Las bandas de un mes se apilan y suman exactamente el total de gastos de ese mes (el mismo valor que la serie "gastos" de la Forma 1). **La Forma 2 es solo de gastos** (`EXPENSE`): los ingresos no se descomponen por categoría en este gráfico; viven únicamente en la Forma 1.
-
-**Presentación y comportamiento de año:**
-
-1. Las dos visualizaciones (Forma 1 y Forma 2) se presentan en **recuadros separados, ambos visibles al mismo tiempo**. No hay toggle ni alternancia: no se "switchea" de una a otra ni existe una "forma por defecto".
-2. En el **dashboard** se monta **solo la Forma 1** (ingresos vs. gastos); la Forma 2 no aparece en el dashboard. En la **pantalla dedicada** se montan las **dos visualizaciones apiladas** (arriba la Forma 1, debajo la Forma 2).
-3. Cada visualización grafica el año configurado por props. Si está montada con **navegación de año habilitada** (pantalla dedicada), el usuario puede ir al **año anterior / siguiente** con un control ‹ ›; el gráfico se recalcula para el año seleccionado. En la pantalla dedicada el control de año es **compartido** entre los dos recuadros: mueve a ambos al mismo año a la vez (ver RF-GRA-003). Si la navegación está **deshabilitada** (dashboard), el año es fijo y no se muestra el control de año.
+- **Forma 1 — Ingresos vs. Gastos** (`income-expense`). Dos series por mes a lo largo del año: el **total de ingresos** del mes y el **total de gastos** del mes. Cada mes del eje X tiene su par de valores (ingresos, gastos). Los totales por mes suman los tres tipos de movimiento que caen en el mes (únicos + fijos activos + cuotas), con el mismo criterio que los totales de la Vista del mes (RF-VM-002) y el Dashboard (RF-DASH-002).
+- **Forma 2 — Gastos por categoría (apilado)** (`by-category`). Toma el **total de gastos** de cada mes y lo descompone en bandas apiladas, una por **categoría**, cada una con el **color propio de su categoría** (RF-CAT-005 / RN-013). Las bandas de un mes se apilan y suman exactamente el total de gastos de ese mes (el mismo valor que la serie "gastos" de la Forma 1). **La Forma 2 es solo de gastos** (`EXPENSE`): los ingresos no se descomponen por categoría en este reporte; viven únicamente en la Forma 1.
 
 **Criterios de aceptación:**
+- [ ] El módulo ofrece exactamente **dos tipos de reporte**: `income-expense` (Forma 1) y `by-category` (Forma 2). No hay tipos adicionales en v1.1.
 - [ ] El eje X representa los 12 meses del año configurado; el eje Y representa el monto.
 - [ ] Los **12 meses están siempre presentes** en el eje X; un mes sin datos se grafica en **cero** (no se omite ni deja hueco). Esto incluye los meses futuros del año en curso, que también se muestran en cero salvo lo que proyecten los fijos activos y las cuotas en tramo (RN-006). La representación visual concreta de un mes en cero la define `control-design`.
 - [ ] La Forma 1 muestra, por mes, el total de ingresos y el total de gastos del mes; ambos totales suman únicos + fijos activos + cuotas del mes (mismo criterio que RF-VM-002).
 - [ ] La Forma 2 muestra, por mes, el total de gastos del mes descompuesto en bandas apiladas por categoría, cada banda con el color de su categoría; la suma de las bandas de un mes iguala el total de gastos de ese mes.
 - [ ] La Forma 2 considera **solo gastos** (`EXPENSE`); los ingresos no aparecen descompuestos por categoría.
-- [ ] En v1 la Forma 2 muestra **una banda por cada categoría con gasto, sin agrupar ni colapsar** ninguna en una banda "Otras"; no hay tope de categorías visibles (ver bitácora 2026-06-15). La agrupación "Otras" para la cola de categorías queda como candidato post-v1.
-- [ ] Los colores de las bandas de la Forma 2 son los colores ya asignados a cada categoría (RF-CAT-005); el gráfico no inventa ni reasigna colores.
-- [ ] Las dos visualizaciones se presentan en **recuadros separados, ambos visibles a la vez**; no hay toggle, alternancia ni "forma por defecto".
+- [ ] En v1.1 la Forma 2 muestra **una banda por cada categoría con gasto, sin agrupar ni colapsar** ninguna en una banda "Otras"; no hay tope de categorías visibles. La agrupación "Otras" para la cola de categorías queda como candidato futuro.
+- [ ] Los colores de las bandas de la Forma 2 son los colores ya asignados a cada categoría (RF-CAT-005); el reporte no inventa ni reasigna colores.
 - [ ] El mes al que pertenece cada movimiento, para la agregación anual, se determina con el mismo criterio de zona horaria ya definido (RN-015): la zona propia de cada registro para los únicos, y el `startMonth` `YYYY-MM` para fijos y cuotas.
-- [ ] Cada visualización es **configurable por props** que controlan el año a mostrar y si la navegación de año está habilitada (ver RF-GRA-002).
 - [ ] Un movimiento cuya categoría fue eliminada (soft delete) sigue contando en los totales y, en la Forma 2, sigue apareciendo bajo su categoría con su color (consistente con RF-CAT-004 / RF-VM-002).
 
 **Notas:**
-- Las decisiones de presentación visual del gráfico (tipo de trazo, relleno de áreas, leyenda, ejes, interacción de hover/tooltip, comportamiento responsivo) son responsabilidad de `control-design` (`docs/design.md`), no de este RF.
+- Las decisiones de presentación visual del reporte (tipo de trazo, relleno de áreas, leyenda, ejes, interacción de hover/tooltip, comportamiento responsivo) son responsabilidad de `control-design` (`docs/design.md`), no de este RF.
 
 ---
 
-#### RF-GRA-002 — Widget reutilizable y sus puntos de uso
+#### RF-REP-002 — Widget de reporte autónomo
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | Las visualizaciones del gráfico anual (RF-GRA-001) se implementan como componentes reutilizables, configurables por props, que se inyectan en distintas pantallas. En el dashboard se monta solo la visualización de ingresos vs. gastos (Forma 1) con año fijo; en la pantalla dedicada se montan las dos visualizaciones, apiladas, con un control de año compartido. |
+| **Descripción** | Cada reporte (RF-REP-001) se implementa como un **widget de reporte autónomo**: un componente reutilizable, configurable por props, que lleva **embebidos** su propia **navegación de año** (independiente por instancia) y su propio **filtro de categorías**. Se inyecta tanto en cada card de `/reportes` (RF-REP-003) como en el dashboard (RF-DASH-001/002). No hay control de año ni filtro compartidos entre instancias: cada widget gobierna su propio año y su propio set de categorías. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | El usuario tiene sesión activa. |
 
 **Props funcionales:**
 
-- **Año a mostrar.** Define el año cuyos 12 meses se grafican.
-- **Navegación de año (habilitada / deshabilitada).** Controla si se expone el control ‹ › para cambiar de año. Deshabilitada: el año es fijo. Habilitada: el usuario navega entre años (con los límites de RF-GRA-003).
-
-**Puntos de uso en v1:**
-
-- **Dashboard (`/`):** se monta **solo la visualización de ingresos vs. gastos (Forma 1)**, con el **año actual** y la **navegación de año deshabilitada** (año fijo). La visualización de gastos por categoría (Forma 2) **no** aparece en el dashboard. El dashboard siempre muestra el año en curso, consistente con que tampoco navega entre meses (RF-DASH-001).
-- **Pantalla dedicada (RF-GRA-003):** se montan las **dos visualizaciones apiladas** (arriba Forma 1, debajo Forma 2), con la **navegación de año habilitada** mediante un **control de año compartido**; el año inicial es el año actual y el usuario puede moverse a otros años, moviendo ambos recuadros a la vez.
+- **Tipo de reporte.** `income-expense` (Forma 1) o `by-category` (Forma 2). Define qué visualización monta la instancia.
+- **Año a mostrar.** Define el año cuyos 12 meses se grafican. La navegación de año (flechas de 1.1.3, embebidas en el widget) está **siempre activa** e **independiente por instancia**: cambiar el año de un widget no afecta a ningún otro. Límites de navegación: hacia atrás el control ‹ se deshabilita antes del **primer año con CUALQUIER movimiento del usuario** (`earliestYear`, no afectado por el filtro de categorías — ver RF-REP-005); hacia adelante se **bloquean los años futuros** (máximo navegable: el año en curso).
+- **Categorías seleccionadas (filtro).** Subconjunto de categorías del usuario que el reporte considera; default **todas**. El checklist ofrece el **universo de categorías del usuario** (no solo las que tienen gasto), porque el filtro aplica también a la Forma 1 (a qué categorías cuentan los totales de ingresos y de gastos). En la Forma 2 además determina qué bandas se apilan.
+- **Persistencia (modo).** Define qué hace la instancia con sus cambios de año y de filtro:
+  - **Persistida** — en `/reportes`: cada cambio de año y de filtro de la card se persiste en la clave `reports` de preferencias (RF-REP-004).
+  - **Efímera** — en el dashboard: el año y el filtro son de sesión; **no** se persisten (al recargar, el widget vuelve a su estado inicial — año en curso, todas las categorías). Ver RF-DASH-001/002.
 
 **Criterios de aceptación:**
-- [ ] Cada visualización es un componente reutilizable; su año y su navegabilidad se controlan por props, no por lógica interna distinta en cada pantalla.
-- [ ] En el dashboard se monta **solo** la visualización de ingresos vs. gastos (Forma 1), con el año actual y sin control de navegación de año.
-- [ ] En la pantalla dedicada se montan las **dos** visualizaciones, apiladas y ambas visibles, con el control de navegación de año habilitado y **compartido** entre las dos.
-- [ ] No existe un toggle entre Forma 1 y Forma 2 en ningún punto de uso: las dos visualizaciones son recuadros separados; en el dashboard se monta una sola y en la pantalla dedicada conviven ambas.
+- [ ] El widget es un componente reutilizable; tipo, año, categorías seleccionadas y modo de persistencia se controlan por props, no por lógica interna distinta en cada pantalla.
+- [ ] La navegación de año está **embebida en el widget** y es **independiente por instancia**: mover el año de una instancia no mueve el de ninguna otra (no hay control de año compartido).
+- [ ] El filtro de categorías está **embebido en el widget** y ofrece el **universo de categorías del usuario** (no solo las que tienen gasto); el default es **todas seleccionadas**.
+- [ ] El filtro aplica a ambos tipos: en `income-expense` restringe qué categorías cuentan en los totales de ingresos y de gastos; en `by-category` restringe qué bandas se apilan (ver contrato del endpoint en data-model.md).
+- [ ] Los límites de navegación de año respetan `earliestYear` (primer año con cualquier movimiento del usuario, **independiente del filtro**) hacia atrás y el año en curso hacia adelante.
+- [ ] En modo **persistido** (cards de `/reportes`), los cambios de año y de filtro de la instancia se persisten vía clave `reports` (RF-REP-004).
+- [ ] En modo **efímero** (dashboard), los cambios de año y de filtro de la instancia **no** se persisten: al recargar vuelve al año en curso con todas las categorías.
 
 ---
 
-#### RF-GRA-003 — Pantalla dedicada del gráfico anual
+#### RF-REP-003 — Pantalla de reportes configurable
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | Una pantalla dedicada cuyo contenido central son las dos visualizaciones del gráfico anual (RF-GRA-001) presentadas en **recuadros apilados, ambos visibles a la vez** (arriba ingresos vs. gastos, debajo gastos por categoría), con un **control de año ‹ › compartido**. Es el lugar donde el usuario explora sus movimientos a lo largo de los años. |
+| **Descripción** | La pantalla `/reportes` es **configurable por el usuario**: arma su propia vista agregando y quitando **cards de reporte**, cada una de las cuales monta un widget de reporte autónomo (RF-REP-002). La pantalla siempre expone un recuadro **"[+]"** para agregar una card nueva. La **primera vez la pantalla está vacía** (solo el "[+]"); la configuración persistida (clave `reports`, RF-REP-004) **es** su pantalla. Es el lugar donde el usuario explora sus movimientos a lo largo de los años con las visualizaciones que le interesan. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | El usuario tiene sesión activa. |
 
+**Flujo principal:**
+1. El usuario abre `/reportes`. El sistema lee la clave `reports` de preferencias (RF-REP-004) y monta una card por cada entrada, en el orden del array.
+2. Si no hay cards (clave ausente o array vacío), la pantalla muestra solo el recuadro **"[+]"** (estado vacío inicial).
+3. El usuario activa el **"[+]"** para agregar una card; elige el tipo de reporte (RF-REP-001). El sistema agrega la card al final con su tipo, el **año en curso** y **todas las categorías** por defecto, y persiste el cambio (RF-REP-004).
+4. Cada card monta un widget autónomo (RF-REP-002): navega su propio año y filtra sus propias categorías; cada cambio se persiste.
+5. El usuario puede **quitar** una card; el sistema la elimina de la vista y de la clave `reports`.
+
 **Criterios de aceptación:**
-- [ ] La pantalla monta las **dos visualizaciones del gráfico anual apiladas** (arriba la Forma 1 — ingresos vs. gastos; debajo la Forma 2 — gastos por categoría), **ambas visibles simultáneamente**, sin toggle (RF-GRA-001, RF-GRA-002).
-- [ ] La ruta de la pantalla es **`/anual`** y su link en el sidebar se rotula **"Anual"**.
-- [ ] Al abrir, la pantalla muestra el **año actual** en ambos recuadros.
-- [ ] El control de año ‹ › es **único y compartido**: al cambiar de año mueve a los dos recuadros a la vez, de modo que ambos muestran siempre el mismo año.
-- [ ] El usuario puede navegar a otros años con el control ‹ › compartido, dentro de los límites de navegación: hacia atrás **sin tope artificial**, pero el control ‹ se deshabilita antes del **primer año con movimientos del usuario**; hacia adelante se **bloquean los años futuros** (el máximo navegable es el año en curso).
-- [ ] La pantalla es accesible desde el sidebar (RF-NAV-001) con el link **"Anual"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Anual → Categorías).
-- [ ] La definición funcional completa (contenido, acciones, navegación y estados) vive en `docs/screens.md`.
+- [ ] La ruta de la pantalla es **`/reportes`** y su link en el sidebar se rotula **"Reportes"**.
+- [ ] La pantalla siempre expone un recuadro **"[+]"** para agregar una card de reporte.
+- [ ] Al agregar una card, el usuario elige el **tipo de reporte** (RF-REP-001); la card nace con el año en curso y todas las categorías seleccionadas.
+- [ ] El usuario puede **quitar** cualquier card; quitarla la elimina de la vista y de la persistencia (RF-REP-004).
+- [ ] Cada card monta un **widget de reporte autónomo** (RF-REP-002) en **modo persistido**: navega su año y filtra sus categorías de forma independiente, y persiste cada cambio.
+- [ ] El **orden de las cards** en pantalla es el orden del array `reports` (RF-REP-004).
+- [ ] **Estado vacío inicial:** la primera vez (clave ausente o array vacío), la pantalla muestra solo el "[+]".
+- [ ] La pantalla es accesible desde el sidebar (RF-NAV-001) con el link **"Reportes"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Reportes → Categorías).
+- [ ] La definición funcional completa (contenido, acciones, navegación y estados) vive en `docs/screens.md`. El detalle visual (layout, tamaños, colores, comportamiento de las flechas embebidas) lo define `control-design`.
+
+---
+
+#### RF-REP-004 — Persistencia de las cards de reporte
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | La configuración de las cards de `/reportes` se persiste por usuario mediante el mecanismo de preferencias (fase 1.1.0), en una clave nueva `reports`. Cada card persiste su **tipo + año + categorías seleccionadas**; el **orden del array es el orden de despliegue**. La normalización y el shape concreto los define el front (igual que `monthSections`): el backend no conoce ni valida esta clave. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa. El mecanismo de preferencias (1.1.0) está disponible. |
+
+**Criterios de aceptación:**
+- [ ] La clave es `reports`, un array de configuraciones de card (shape concreto en `docs/data-model.md`).
+- [ ] Cada entrada persiste **tipo de reporte, año y categorías seleccionadas**; "todas las categorías" se representa como `categoryIds: null` (ver data-model.md).
+- [ ] El **orden del array = orden de despliegue** de las cards.
+- [ ] **Array vacío o clave ausente = pantalla vacía** (solo "[+]"). Un blob de preferencias previo sin la clave `reports` se interpreta como vacío (back-compat).
+- [ ] La persistencia aplica **solo** a las cards de `/reportes` (modo persistido). El widget del dashboard es **efímero** y no toca esta clave (RF-DASH-001/002).
+- [ ] El backend **no** valida ni conoce la clave `reports`; la normalización es responsabilidad del front, igual que con `monthSections`.
+
+---
+
+#### RF-REP-005 — Endpoint de datos de reporte
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El backend expone los datos de reporte mediante `GET /movements/reports` (renombre de `GET /movements/annual`). Acepta el **año** más un **filtro de categorías** opcional por query param; devuelve la serie de 12 meses del año, filtrada al set de categorías pedido. El shape de respuesta no cambia respecto del endpoint anterior. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa (JWT válido). |
+
+**Criterios de aceptación:**
+- [ ] El endpoint es `GET /movements/reports` (renombre de `GET /movements/annual`); la mecánica de agregación anual no cambia.
+- [ ] Acepta el año y un **filtro de categorías** como query param; **omitir el filtro = todas las categorías** (contrato exacto en `docs/data-model.md`).
+- [ ] El filtro afecta a **ambas formas**: en la Forma 1, qué categorías cuentan en los totales de ingresos y de gastos por mes; en la Forma 2, qué bandas por categoría se incluyen.
+- [ ] El campo **`earliestYear` NO se ve afectado por el filtro**: siempre refleja el primer año con CUALQUIER movimiento del usuario, para que los límites de navegación de año (RF-REP-002) no salten al filtrar.
+- [ ] La respuesta mantiene el shape `{ year, months, categories, earliestYear }`, con `months` y `categories` filtrados al set pedido (`earliestYear` no).
+- [ ] El endpoint filtra siempre por el `userId` del JWT (RNF-002).
 
 ---
 
@@ -1186,8 +1233,8 @@ El gráfico anual visualiza los movimientos del usuario a lo largo de un año, m
 | RN-012 | Las contraseñas de las cuentas con email + contraseña se almacenan siempre **hasheadas** (bcrypt/argon2), nunca en texto plano. El hash y la verificación ocurren en el backend; el frontend nunca almacena ni compara contraseñas. Las cuentas creadas solo con Google pueden no tener contraseña. |
 | RN-013 | Cada categoría tiene un color tomado de una **matriz de colores predefinidos** (70 colores). Desde v1.1 (fase 1.1.2) el usuario lo **elige y edita** al crear o editar la categoría; solo se aceptan colores de la matriz (sin hex libre). Al **crear**, el sistema pre-selecciona como default el color "menos usado" entre las categorías activas del usuario, calculado sobre los **10 colores base** (la fila base de la matriz). Las categorías por defecto del alta se asignan automáticamente. El color es de presentación únicamente: no afecta montos, scope ni ninguna regla de negocio. (En v1.0 el color era no editable; reabierto en la fase 1.1.2 — ver bitácora 2026-06-16.) |
 | RN-014 | Para comparar nombres de categoría a efectos de unicidad, el nombre se **normaliza**: trim de espacios, insensible a mayúsculas/minúsculas e insensible a acentos/tildes. Ej: "comida", "Comida" y "Cómida" se consideran el mismo nombre. Esta normalización aplica tanto a la detección de duplicado contra categorías **activas** (bloqueo, RN-008) como contra categorías **eliminadas** (soft delete) para proponer reactivarla (RF-CAT-002). La regla se valida en **ambas capas** —backend como fuente de verdad y frontend para UX— y ambas deben mantenerse alineadas (ver `docs/technical.md`). |
-| RN-015 | Para la agregación anual del gráfico (RF-GRA-001), el mes al que se imputa cada movimiento se determina con el **mismo criterio ya definido** para la Vista del mes, sin introducir una regla de zona horaria nueva: para los movimientos **únicos**, el mes se calcula en la **zona horaria propia de cada registro** (RN-011, igual que el bucketeo de `GET /movements`); para los **fijos** y las **cuotas**, que operan a nivel mes (RN-006), el mes es el de su `startMonth` `YYYY-MM` (los fijos caen en cada mes donde están activos; las cuotas, en cada mes de su tramo). Un movimiento se imputa a un año determinado solo si su mes resuelto pertenece a ese año. |
-| RN-016 | **Frecuencia y anulación de movimientos fijos (RF-MF-005, RF-MF-006).** Un movimiento fijo con mes de inicio `S` y frecuencia `F` aparece en el mes `M` si y solo si: `S <= M` **y** (`deletedFrom` es null **o** `deletedFrom > M`) **y** `monthDiff(S, M) % step(F) === 0`, donde el paso por frecuencia es `MONTHLY=1`, `BIMONTHLY=2`, `QUARTERLY=3`, `BIANNUAL=6`, `ANNUAL=12`. La frecuencia está **anclada al mes de inicio** (no al mes consultado). Una **anulación** `(fijo, mes)` no cambia si el fijo aparece o no según esta regla: un fijo anulado para un mes **se sigue listando** en `GET /movements` con la marca de anulado, pero su monto **no suma** a los totales del mes ni a la proyección anual. La anulación es **reversible** (toggle) y solo tiene sentido sobre meses donde el fijo efectivamente aparece según `F`. El cálculo sigue siendo on-the-fly (RN-006): no se generan filas por instancia mensual. |
+| RN-015 | Para la agregación anual de los reportes (RF-REP-001), el mes al que se imputa cada movimiento se determina con el **mismo criterio ya definido** para la Vista del mes, sin introducir una regla de zona horaria nueva: para los movimientos **únicos**, el mes se calcula en la **zona horaria propia de cada registro** (RN-011, igual que el bucketeo de `GET /movements`); para los **fijos** y las **cuotas**, que operan a nivel mes (RN-006), el mes es el de su `startMonth` `YYYY-MM` (los fijos caen en cada mes donde están activos; las cuotas, en cada mes de su tramo). Un movimiento se imputa a un año determinado solo si su mes resuelto pertenece a ese año. |
+| RN-016 | **Frecuencia y anulación de movimientos fijos (RF-MF-005, RF-MF-006).** Un movimiento fijo con mes de inicio `S` y frecuencia `F` aparece en el mes `M` si y solo si: `S <= M` **y** (`deletedFrom` es null **o** `deletedFrom > M`) **y** `monthDiff(S, M) % step(F) === 0`, donde el paso por frecuencia es `MONTHLY=1`, `BIMONTHLY=2`, `QUARTERLY=3`, `BIANNUAL=6`, `ANNUAL=12`. La frecuencia está **anclada al mes de inicio** (no al mes consultado). Una **anulación** `(fijo, mes)` no cambia si el fijo aparece o no según esta regla: un fijo anulado para un mes **se sigue listando** en `GET /movements` con la marca de anulado, pero su monto **no suma** a los totales del mes ni a la serie anual de los reportes. La anulación es **reversible** (toggle) y solo tiene sentido sobre meses donde el fijo efectivamente aparece según `F`. El cálculo sigue siendo on-the-fly (RN-006): no se generan filas por instancia mensual. |
 
 ---
 
@@ -1212,7 +1259,7 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 
 | Feature | Motivo de exclusión |
 |---|---|
-| Gráficos: otros tipos (torta, barras de comparación, etc.) | El gráfico anual con sus dos visualizaciones (área ingresos/gastos y apilado por categoría de gastos) **sí** entra en v1 (RF-GRA-001, ver bitácora 2026-06-14 y 2026-06-15). Los demás tipos de gráfico siguen fuera de alcance: requieren definición de UX y no son bloqueantes |
+| Reportes: otros tipos (torta, barras de comparación, etc.) | Los dos tipos de reporte (ingresos/gastos y apilado por categoría de gastos) **sí** entran (RF-REP-001). Sumar nuevos tipos de reporte queda fuera de alcance: es una mini-fase futura que requiere definición de UX y no es bloqueante |
 | Tarjetas con fecha de corte | Requiere flujo propio; demasiado complejo para v1 |
 | Edición retroactiva de mes pasado de un fijo | Complejidad en el modelo de datos |
 | Cancelación parcial de cuotas restantes | Pendiente de definición |
@@ -1319,6 +1366,17 @@ La regla de cálculo de ambos puntos se formaliza en **RN-016**. Impacta el mód
 Impacta RF-GRA-001 (criterio de los 12 meses en cero), RF-GRA-003 (criterios de ruta, link, forma por defecto y límites de año), RF-NAV-001 (link "Anual" en el orden del sidebar) y `docs/screens.md` (pantallas 7 y 8). **No** impacta `docs/backend.md` ni `docs/data-model.md`. Motivo: el usuario confirmó los valores recomendados; cerrar estas decisiones desbloquea la implementación sin ambigüedades.
 
 **2026-06-15 — Las dos visualizaciones del gráfico anual pasan de "toggle alternable" a "dos recuadros separados que coexisten" (RF-GRA-001..003).** Cambio de **presentación** (cómo se muestran las visualizaciones), no de datos. **Antes:** un único widget con dos formas alternables mediante un **toggle** ("Ingresos y gastos" / "Por categoría"), abriendo en la Forma 1 **por defecto**. **Ahora:** las dos visualizaciones son **dos recuadros (paneles) separados, ambos visibles al mismo tiempo** — se elimina el toggle, no se "switchea", y deja de existir la noción de "forma por defecto". Concretamente: (a) en la **pantalla dedicada `/anual`** los dos recuadros se muestran **apilados** (arriba Ingresos vs. Gastos, debajo Gastos por categoría), ambos siempre visibles, con un **único control de año ‹ › compartido** que mueve a los dos al mismo año a la vez; (b) en el **dashboard (`/`)** se muestra **solo el recuadro de Ingresos vs. Gastos** (año fijo, sin navegación) — el recuadro de gastos por categoría **no** aparece en el dashboard y vive solo en `/anual`. El **contenido de cada visualización no cambia** (Forma 1 = ingresos vs. gastos por mes; Forma 2 = gastos por categoría apilados, solo `EXPENSE`, con el color propio de cada categoría) y todos los criterios sobre los datos se conservan (12 meses siempre presentes y en cero, invariante de suma de bandas, criterio de zona horaria RN-015, sin "Otras", colores de RF-CAT-005). **No impacta el backend ni el contrato de datos:** el endpoint ya devuelve ambos conjuntos de datos (totales mensuales de ingresos/gastos y desglose de gastos por categoría por mes); no cambia `docs/backend.md` ni `docs/data-model.md`. Impacta RF-GRA-001, RF-GRA-002 y RF-GRA-003 y `docs/screens.md` (pantallas 3, 7 y 8). Motivo: decisión del usuario — prefiere ver las dos visualizaciones a la vez en vez de alternarlas con un toggle, y reservar el desglose por categoría a la pantalla de exploración.
+
+**2026-06-16 — Reportes configurables: renombre del módulo "anual" → "reportes" y reapertura de la navegación del dashboard — Fase 1.1.5 (RF-REP-001..005, RF-DASH-001/002, RF-NAV-001).** La pantalla `/anual` de v1.0 se convierte en una pantalla de **reportes configurable** y el módulo entero (3.9) se renombra **"Gráfico anual" → "Reportes"**. La mecánica de datos (agregación anual / serie de 12 meses de un año, Forma 1 y Forma 2) **no cambia**; lo que se renombra es el módulo/pantalla/feature y todo lo que lo refiere (ruta `/anual`→`/reportes`, link del sidebar "Anual"→"Reportes", endpoint `GET /movements/annual`→`GET /movements/reports`, hooks/tipos/componentes/query keys del lado de implementación). Cierres:
+
+1. **Pantalla configurable por cards (RF-REP-003).** El usuario arma su propia vista de `/reportes` agregando **cards de reporte** mediante un recuadro **"[+]"** y quitándolas. La **primera vez la pantalla está vacía** (solo el "[+]"); la configuración persistida (preferencias 1.1.0, clave `reports`) **es** su pantalla.
+2. **Dos tipos de reporte (RF-REP-001).** Los 2 de v1.0: **Ingresos vs. Gastos** (Forma 1) y **Gastos por categoría apilado** (Forma 2). Sumar tipos nuevos es una mini-fase futura, fuera de alcance de 1.1.5.
+3. **Widget de reporte autónomo (RF-REP-002).** Cada card es un widget autónomo que lleva **embebidos** la navegación de año (flechas de 1.1.3, independiente por card — no chrome de página, no control compartido) y el **filtro de categorías** (check/destildar). El checklist ofrece el **universo de categorías del usuario** (no solo las que tienen gasto), porque aplica también a Forma 1.
+4. **Persistencia por card (RF-REP-004).** Cada card persiste **tipo + año + categorías seleccionadas** (default: todas), vía la clave `reports` de preferencias (1.1.0). Representación de "todas las categorías": ver criterio en data-model.md (`categoryIds: null` = todas; lista = subconjunto explícito).
+5. **Reapertura del dashboard (RF-DASH-001/002).** El dashboard monta el widget **Ingresos vs. Gastos** con **navegación de año ACTIVA** (independiente, como las cards) y filtro de categorías, pero su selección de categorías es **efímera: NO se persiste** (al recargar vuelve a "todas"). El **resumen mensual del dashboard** (tarjetas Gastos/Ingresos + balance, RF-DASH-002) **sigue fijo en el mes en curso** — NO navega meses; lo único que gana navegación es el widget de reporte (por año). Esto **concreta la reapertura** anunciada en el roadmap v1.1; v1.0 definía el dashboard sin navegación alguna.
+6. **Backend (RF-REP-005).** Se renombra `GET /movements/annual` → `GET /movements/reports`, que acepta el año más un **filtro por categorías** (query param). Sin el param = todas. Devuelve los mismos `months`/`categories`/`earliestYear`, filtrados. Detalle del contrato en data-model.md.
+
+Impacta el módulo 3.9 (renombrado a "Reportes": RF-GRA-001/002/003 → RF-REP-001..005), RF-DASH-001/002, RF-NAV-001 (link "Reportes"), RN-015, la sección 6, el glosario, `docs/screens.md` (pantallas 3, 7 y 8) y `docs/data-model.md` (clave de preferencias `reports`, contrato `GET /movements/reports`). Motivo: el usuario quiere armar su propia vista de reportes con las visualizaciones que le interesan, cada una navegando su año y filtrando sus categorías de forma independiente, y traer ese mismo widget interactivo al dashboard sin contaminar el resumen mensual fijo.
 
 **2026-06-08 — NestJS como emisor del JWT (Fase 2).** El backend es la autoridad de identidad y **emite** el JWT (HS256, claim `sub = userId`, `exp` 30 días). NextAuth (frontend) **no emite un token de identidad propio**: orquesta el login y guarda el JWT de NestJS dentro de su sesión (un JWE separado) para reenviarlo como `Authorization: Bearer` en cada request, que el backend valida con un guard global. Hay **un solo `userId`** (cuid de Postgres) compartido por front y back. Esto reemplaza la idea previa (entrada 2026-06-03) de que Auth.js firmaba el JWT. Impacta `docs/architecture.md`, `docs/backend.md`, `docs/frontend.md` y `docs/data-model.md`. Motivo: que la identidad viva en el backend deja la puerta abierta a mobile u otros clientes, que se autentican contra los mismos endpoints sin depender de Auth.js.
 

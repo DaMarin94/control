@@ -1,13 +1,14 @@
 /**
  * Tests del AppSidebar (RF-NAV-001).
+ * Fase 1.1.5: renombre /anual → /reportes, "Anual" → "Reportes".
  *
  * Verifica:
  * - Renderiza el logo "Control" con link al dashboard.
- * - Renderiza los cuatro links de navegación (Dashboard, Vista del mes, Anual, Categorías).
+ * - Renderiza los cuatro links de navegación (Dashboard, Vista del mes, Reportes, Categorías).
  * - El link activo tiene aria-current="page" (marca la sección activa).
- * - Dashboard activo solo en "/" exacto (no en /mes ni /categorias ni /anual).
- * - El link "Anual" se ubica entre "Vista del mes" y "Categorías" (RF-NAV-001).
- * - En /anual el link "Anual" tiene aria-current="page".
+ * - Dashboard activo solo en "/" exacto (no en /mes ni /categorias ni /reportes).
+ * - El link "Reportes" se ubica entre "Vista del mes" y "Categorías" (RF-NAV-001).
+ * - En /reportes el link "Reportes" tiene aria-current="page".
  * - El botón hamburguesa aparece (accesible por aria-label).
  * - Renderiza el botón "Nuevo movimiento".
  * - Renderiza el UserMenu con el email recibido.
@@ -72,22 +73,22 @@ describe("AppSidebar", () => {
     expect(logo).toHaveAttribute("href", "/");
   });
 
-  it("renderiza los cuatro links de navegación (con Anual)", () => {
+  it("renderiza los cuatro links de navegación (con Reportes)", () => {
     mockUsePathname.mockReturnValue("/");
     renderSidebar();
 
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Vista del mes" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Anual" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Reportes" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Categorías" })).toBeInTheDocument();
   });
 
-  it("el link 'Anual' apunta a /anual", () => {
+  it("el link 'Reportes' apunta a /reportes", () => {
     mockUsePathname.mockReturnValue("/");
     renderSidebar();
 
-    const link = screen.getByRole("link", { name: "Anual" });
-    expect(link).toHaveAttribute("href", "/anual");
+    const link = screen.getByRole("link", { name: "Reportes" });
+    expect(link).toHaveAttribute("href", "/reportes");
   });
 
   it("el link 'Vista del mes' apunta a /mes (sin query)", () => {
@@ -127,11 +128,11 @@ describe("AppSidebar", () => {
     expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
   });
 
-  it("en /anual el link 'Anual' tiene aria-current='page' y Dashboard NO", () => {
-    mockUsePathname.mockReturnValue("/anual");
+  it("en /reportes el link 'Reportes' tiene aria-current='page' y Dashboard NO", () => {
+    mockUsePathname.mockReturnValue("/reportes");
     renderSidebar();
 
-    expect(screen.getByRole("link", { name: "Anual" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Reportes" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
     expect(screen.getByRole("link", { name: "Vista del mes" })).not.toHaveAttribute("aria-current");
     expect(screen.getByRole("link", { name: "Categorías" })).not.toHaveAttribute("aria-current");

@@ -14,15 +14,15 @@
 4. [Vista del mes (`/mes`)](#4-vista-del-mes-mes)
 5. [Formulario de carga de movimiento (modal)](#5-formulario-de-carga-de-movimiento-modal)
 6. [Gestión de categorías (`/categorias`)](#6-gestión-de-categorías-categorias)
-7. [Gráfico anual (pantalla dedicada)](#7-gráfico-anual-pantalla-dedicada)
-8. [Widget de gráfico anual (componente reutilizable)](#8-widget-de-gráfico-anual-componente-reutilizable)
+7. [Reportes (pantalla configurable)](#7-reportes-pantalla-configurable)
+8. [Widget de reporte autónomo (componente reutilizable)](#8-widget-de-reporte-autónomo-componente-reutilizable)
 
 ---
 
 ## Convenciones
 
-- El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Anual, Categorías) y **no** se muestra en las pantallas no autenticadas (Login, Registro). Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo. Orden de los links: Dashboard → Vista del mes → Anual → Categorías.
-  - **Estado de implementación: implementado.** El sidebar (RF-NAV-001) **ya está implementado** (ver `features.md` y bitácora de `requirements.md`). Los accesos definidos en cada pantalla (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL directa) se conservan y conviven con el sidebar. El link "Anual" del sidebar apunta a una pantalla aún no implementada.
+- El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Reportes, Categorías) y **no** se muestra en las pantallas no autenticadas (Login, Registro). Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo. Orden de los links: Dashboard → Vista del mes → Reportes → Categorías.
+  - **Estado de implementación: implementado.** El sidebar (RF-NAV-001) **ya está implementado** (ver `features.md` y bitácora de `requirements.md`). Los accesos definidos en cada pantalla (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL directa) se conservan y conviven con el sidebar.
 - El **formulario de carga** (pantalla 5) es un modal sin ruta propia. Se invoca desde el sidebar y desde el dashboard, y se superpone a la pantalla actual.
 
 ---
@@ -108,7 +108,7 @@ No muestra el sidebar.
 
 ## 3. Dashboard (`/`)
 
-**RF relacionados:** RF-DASH-001, RF-DASH-002, RF-DASH-003, RF-DASH-005
+**RF relacionados:** RF-DASH-001, RF-DASH-002, RF-DASH-003, RF-DASH-005, RF-REP-001, RF-REP-002
 
 ### Propósito
 
@@ -124,7 +124,7 @@ Pantalla de inicio tras autenticarse. Da el panorama financiero del mes actual y
   - Balance del mes (ingresos − gastos), con el positivo y el negativo diferenciables.
   - Los totales incluyen movimientos únicos, fijos activos en el mes y cuotas que caen en el mes.
 - **Enlace "Ver todos"** (o equivalente) hacia la vista del mes (RF-DASH-005).
-- **Recuadro de gráfico anual — Ingresos vs. Gastos** (pantalla 8, RF-GRA-001/RF-GRA-002), montado con el **año actual** y la **navegación de año deshabilitada** (año fijo). Muestra, por mes del año en curso, el total de ingresos y el total de gastos. **No** muestra el control ‹ › de cambio de año. El recuadro de gastos por categoría (Forma 2) **no** aparece en el dashboard; vive solo en la pantalla `/anual` (pantalla 7).
+- **Widget de reporte — Ingresos vs. Gastos** (pantalla 8, RF-REP-001/RF-REP-002), montado en **modo efímero** (RF-DASH-001): abre en el **año en curso** con la **navegación de año ACTIVA** e independiente (flechas embebidas) y el **filtro de categorías** activo. La selección de categorías y el año del widget **no se persisten** — al recargar vuelve a año en curso + todas las categorías. Muestra, por mes del año seleccionado, el total de ingresos y el total de gastos. El tipo Gastos por categoría (Forma 2) **no** aparece en el dashboard; vive solo en la pantalla `/reportes` (pantalla 7). Navegar el año o filtrar categorías en este widget **no afecta** el resumen financiero mensual de arriba, que sigue fijo en el mes en curso (RF-DASH-002).
 
 No muestra lista de movimientos (decisión 2026-06-03, ex RF-DASH-004 fuera de alcance).
 
@@ -302,83 +302,84 @@ Pantalla dedicada para administrar las categorías del usuario: listar, crear, e
 
 ---
 
-## 7. Gráfico anual (pantalla dedicada)
+## 7. Reportes (pantalla configurable)
 
-**RF relacionados:** RF-GRA-001, RF-GRA-002, RF-GRA-003, RF-NAV-001
+**RF relacionados:** RF-REP-001, RF-REP-002, RF-REP-003, RF-REP-004, RF-NAV-001
 
-> **Ruta:** `/anual`. **Link en el sidebar:** rótulo **"Anual"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Anual → Categorías). Decisiones cerradas el 2026-06-14 (ver bitácora `requirements.md`).
+> **Ruta:** `/reportes`. **Link en el sidebar:** rótulo **"Reportes"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Reportes → Categorías). Renombre del "Gráfico anual" (`/anual`) de v1.0 — ver bitácora 2026-06-16 en `requirements.md`.
 
 ### Propósito
 
-Pantalla dedicada a explorar los movimientos del usuario a lo largo de los años. Su contenido central son las **dos visualizaciones del gráfico anual** (pantalla 8) presentadas en **recuadros apilados, ambos visibles a la vez**, con la **navegación de año habilitada** mediante un **control ‹ › compartido**. A diferencia del dashboard —que muestra solo el recuadro de ingresos/gastos del año actual fijo—, esta pantalla muestra las dos visualizaciones juntas y deja al usuario moverse entre años para analizar tendencias.
+Pantalla **configurable** donde el usuario arma su propia vista de reportes a lo largo de los años. Agrega y quita **cards de reporte** (cada una es un widget de reporte autónomo, pantalla 8) mediante un recuadro **"[+]"**; cada card navega su propio año y filtra sus propias categorías de forma **independiente** y **persistida**. La **primera vez la pantalla está vacía** (solo el "[+]"): la configuración que el usuario va armando (clave `reports`, RF-REP-004) **es** su pantalla.
 
 ### Contenido
 
-- **Sidebar** con el link **"Anual"** marcado como activo.
-- **Encabezado con el año visualizado.**
-- **Control de año ‹ › compartido** para ir al año anterior / siguiente, dentro de los límites de navegación (ver "Acciones disponibles"). Mueve a los dos recuadros al mismo año a la vez.
-- **Dos recuadros de gráfico anual apilados, ambos siempre visibles** (pantalla 8, RF-GRA-001), montados con **navegación de año habilitada** y compartiendo el año del control:
-  - **Recuadro superior — Ingresos vs. Gastos (Forma 1):** eje X los 12 meses del año seleccionado (siempre los 12, los meses sin datos en cero), eje Y monto; dos series por mes (total de ingresos y total de gastos del mes).
-  - **Recuadro inferior — Gastos por categoría, apilado (Forma 2):** el total de gastos de cada mes descompuesto en bandas por categoría, cada una con el color de su categoría (RF-CAT-005). Solo gastos.
-- **Sin toggle:** no se alterna entre las dos visualizaciones; conviven en pantalla.
+- **Sidebar** con el link **"Reportes"** marcado como activo.
+- **Recuadro "[+]"** — siempre presente; agrega una card de reporte nueva.
+- **Cards de reporte** — una por cada entrada de la clave `reports`, en el orden del array. Cada card monta un **widget de reporte autónomo** (pantalla 8) en **modo persistido**, con sus flechas de año y su filtro de categorías embebidos. Una card es de tipo `income-expense` (Ingresos vs. Gastos) o `by-category` (Gastos por categoría apilado), según RF-REP-001.
+- El layout, tamaños y disposición de las cards y del "[+]" los define `control-design`.
 
 ### Acciones disponibles
 
-- **Navegar al año anterior / siguiente** — con el control ‹ › compartido; recalcula **ambos recuadros** para el año seleccionado (RF-GRA-002, RF-GRA-003), dentro de los límites de navegación: hacia atrás **sin tope artificial**, pero el control ‹ se **deshabilita antes del primer año con movimientos** del usuario; hacia adelante **los años futuros quedan bloqueados** (el máximo navegable es el año en curso).
+- **Agregar card** — desde el "[+]": el usuario elige el tipo de reporte (RF-REP-001); la card nace con el **año en curso** y **todas las categorías**, se agrega al final y se persiste (RF-REP-004).
+- **Quitar card** — elimina la card de la vista y de la persistencia.
+- **Navegar el año de una card** y **filtrar sus categorías** — embebidos en cada card (widget autónomo, pantalla 8); cada cambio se persiste. Son **independientes por card**: no hay control de año ni filtro compartidos.
 - Acciones globales del sidebar.
 
 ### Navegación
 
-- **Llega desde:** link **"Anual"** del sidebar (RF-NAV-001); acceso directo a `/anual`.
-- **Lleva a:** permanece en la pantalla al cambiar de año. (No abre el modal de carga ni navega a la Vista del mes desde el gráfico en v1; el drill-down clic-en-mes → Vista del mes queda **fuera de alcance v1**, candidato post-v1.)
-- **Año de apertura:** al entrar, ambos recuadros abren en el **año actual**.
+- **Llega desde:** link **"Reportes"** del sidebar (RF-NAV-001); acceso directo a `/reportes`.
+- **Lleva a:** permanece en la pantalla al agregar/quitar cards o cambiar año/filtro. (No abre el modal de carga ni navega a la Vista del mes desde un reporte; el drill-down clic-en-mes → Vista del mes queda **fuera de alcance**, candidato futuro.)
 
 ### Estados
 
-- **Cargando:** mientras se obtienen los datos del año (totales mensuales de ingresos/gastos y el desglose de gastos por categoría por mes).
-- **Con datos:** los dos recuadros poblados con los 12 meses del año seleccionado.
-- **Año sin movimientos (vacío):** el año no tiene ningún movimiento. Los 12 meses se muestran en cero (sin huecos); puede acompañarse de un mensaje de estado vacío, sin error. La representación visual concreta del año en cero la define `control-design`.
-- **Año en curso con meses futuros sin datos:** los meses del año seleccionado que todavía no ocurrieron (posteriores al mes actual) no tienen movimientos cargados. Conviven en el mismo año meses con datos y meses futuros; el gráfico abarca los 12 meses igualmente, con los meses sin datos en **cero**. Nota: los fijos activos y las cuotas en tramo **sí** se proyectan a meses futuros del año por su naturaleza (RN-006), por lo que un mes futuro puede tener datos de fijos/cuotas aunque no tenga únicos.
-- **Error:** si falla la carga de los datos del año, se informa el error sin romper la pantalla.
+- **Vacío inicial:** clave `reports` ausente o array vacío → la pantalla muestra **solo el "[+]"**. Es el estado de la primera visita.
+- **Con cards:** una o más cards montadas, cada una en su año y con su filtro persistidos.
+- **Cargando (por card):** mientras cada widget obtiene los datos de su año (ver pantalla 8).
+- **Error (por card):** si falla la carga de una card, se informa el error en esa card sin romper el resto de la pantalla.
 
 ---
 
-## 8. Widget de gráfico anual (componente reutilizable)
+## 8. Widget de reporte autónomo (componente reutilizable)
 
-**RF relacionados:** RF-GRA-001, RF-GRA-002
+**RF relacionados:** RF-REP-001, RF-REP-002
 
-> No es una pantalla con ruta propia: son **recuadros (paneles) reutilizables** que se inyectan dentro de otras pantallas. Se documentan acá por ser unidades funcionales con contenido, acciones y estados propios. Hay **dos visualizaciones** que son **recuadros separados** (no un único widget con toggle interno): en el Dashboard (pantalla 3) se monta solo el de Ingresos vs. Gastos; en la pantalla dedicada (pantalla 7) se montan los dos, apilados y ambos visibles.
+> No es una pantalla con ruta propia: es un **recuadro (panel) reutilizable** que se inyecta dentro de otras pantallas (cada card de `/reportes`, pantalla 7, y el Dashboard, pantalla 3). Se documenta acá por ser una unidad funcional con contenido, acciones y estados propios. Cada instancia es **autónoma**: gobierna su propio año y su propio filtro de categorías; no hay control de año ni filtro compartidos entre instancias.
 
 ### Propósito
 
-Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: los 12 meses; eje Y: monto). Son dos visualizaciones —Ingresos vs. Gastos y Gastos por categoría— en **recuadros separados, sin toggle entre ellas**; cada recuadro es configurable por props para adaptarse a cada pantalla anfitriona.
+Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: los 12 meses; eje Y: monto), con **navegación de año** y **filtro de categorías** embebidos en el propio recuadro. El tipo de reporte (Ingresos vs. Gastos o Gastos por categoría) se elige por props.
 
-### Props funcionales (de cada recuadro)
+### Props funcionales
 
-- **Año a mostrar** — el año cuyos 12 meses se grafican.
-- **Navegación de año (habilitada / deshabilitada)** — si está habilitada, se ofrece un control ‹ › para cambiar de año; si está deshabilitada, el año es fijo y no se muestra ese control. En la pantalla dedicada, el control de año es **compartido** entre los dos recuadros (mueve a ambos al mismo año a la vez).
+- **Tipo de reporte** — `income-expense` (Forma 1) o `by-category` (Forma 2). Define qué visualización monta la instancia (RF-REP-001).
+- **Año a mostrar** — el año cuyos 12 meses se grafican. La navegación de año está **siempre embebida y activa** (flechas de 1.1.3), **independiente por instancia**.
+- **Categorías seleccionadas (filtro)** — subconjunto de categorías; default **todas**. El checklist embebido ofrece el **universo de categorías del usuario** (no solo las que tienen gasto), porque el filtro aplica también a la Forma 1.
+- **Modo de persistencia** — **persistido** (en `/reportes`: año y filtro se guardan en la clave `reports`, RF-REP-004) o **efímero** (en el Dashboard: año y filtro son de sesión, no se persisten — al recargar vuelve a año en curso + todas las categorías).
 
 ### Contenido
 
 - **Eje X:** los 12 meses del año configurado. **Eje Y:** monto.
-- **Recuadro Ingresos vs. Gastos (Forma 1):** por cada mes, el total de ingresos y el total de gastos (cada total suma únicos + fijos activos + cuotas del mes, igual que RF-VM-002).
-- **Recuadro Gastos por categoría, apilado (Forma 2):** por cada mes, el total de gastos descompuesto en bandas apiladas por categoría, cada banda con el color propio de su categoría (RF-CAT-005). La suma de las bandas de un mes iguala el total de gastos de ese mes. Solo gastos; los ingresos no se descomponen acá.
-- **Control de año ‹ ›** — presente solo si la navegación de año está habilitada por props (en la pantalla dedicada es compartido por los dos recuadros).
-- **Sin toggle de forma:** las dos visualizaciones no se alternan; son recuadros distintos.
+- **Tipo Ingresos vs. Gastos (Forma 1):** por cada mes, el total de ingresos y el total de gastos (cada total suma únicos + fijos activos + cuotas del mes, igual que RF-VM-002), **restringido a las categorías seleccionadas**.
+- **Tipo Gastos por categoría, apilado (Forma 2):** por cada mes, el total de gastos descompuesto en bandas apiladas por categoría —**solo las seleccionadas**—, cada banda con el color propio de su categoría (RF-CAT-005). Solo gastos; los ingresos no se descomponen acá.
+- **Flechas de navegación de año** ‹ › embebidas en el recuadro.
+- **Filtro de categorías** embebido (checklist del universo de categorías del usuario; check/destildar).
 
 ### Acciones disponibles
 
-- **Navegar de año** (solo si la navegación está habilitada) — recalcula el/los recuadro(s) para el año seleccionado, dentro de los límites de la pantalla dedicada: hacia atrás sin tope artificial pero el control ‹ se deshabilita antes del primer año con movimientos del usuario; hacia adelante los años futuros quedan bloqueados (máximo navegable = año en curso).
+- **Navegar de año** — recalcula el recuadro para el año seleccionado, dentro de los límites: hacia atrás el control ‹ se deshabilita antes del **primer año con CUALQUIER movimiento del usuario** (`earliestYear`, no afectado por el filtro); hacia adelante los años futuros quedan bloqueados (máximo navegable = año en curso).
+- **Filtrar categorías** — checkear/destildar categorías recalcula el recuadro. En modo persistido, año y filtro se guardan (RF-REP-004); en modo efímero, no.
 
 ### Puntos de uso
 
-- **Dashboard (`/`):** se monta **solo el recuadro de Ingresos vs. Gastos**, año actual fijo, navegación de año **deshabilitada**. El recuadro de Gastos por categoría no aparece acá.
-- **Pantalla dedicada (pantalla 7):** se montan los **dos recuadros apilados** (arriba Ingresos vs. Gastos, debajo Gastos por categoría), ambos visibles, con navegación de año **habilitada** mediante un control compartido; abren en el año actual.
+- **Dashboard (`/`):** se monta **solo el tipo Ingresos vs. Gastos**, en **modo efímero** — navegación de año **activa** e independiente, filtro de categorías activo pero **no persistido** (al recargar vuelve a año en curso + todas). El resumen mensual del dashboard (pantalla 3) **no** se ve afectado por este widget.
+- **Cards de `/reportes` (pantalla 7):** cada card monta una instancia en **modo persistido**; el tipo, el año y el filtro vienen de su entrada en `reports` y cada cambio se persiste.
 
 ### Estados
 
-- **Cargando:** mientras se obtienen los datos del año.
-- **Con datos:** recuadro(s) poblado(s) con los 12 meses presentes.
+- **Cargando:** mientras se obtienen los datos del año (filtrados al set de categorías seleccionado).
+- **Con datos:** recuadro poblado con los 12 meses presentes.
 - **Año sin movimientos (vacío):** los 12 meses se muestran en cero; puede acompañarse de un mensaje de estado vacío, sin error. La representación visual concreta la define `control-design`.
-- **Meses sin datos dentro del año:** los meses sin movimientos se grafican en **cero** (sin huecos ni omisiones). Aplica tanto a meses futuros del año en curso como a meses pasados sin movimientos; los meses futuros pueden tener datos proyectados por fijos/cuotas (RN-006).
+- **Filtro que vacía el reporte:** si las categorías seleccionadas no tienen movimientos en el año, los 12 meses se grafican en **cero** (sin error); los límites de navegación de año **no** cambian (siguen basados en `earliestYear`, no en el filtro).
+- **Meses sin datos dentro del año:** los meses sin movimientos se grafican en **cero** (sin huecos ni omisiones). Aplica tanto a meses futuros del año en curso como a meses pasados; los meses futuros pueden tener datos proyectados por fijos/cuotas (RN-006).
 - **Error:** si falla la carga, se informa el error sin romper la pantalla anfitriona.

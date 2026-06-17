@@ -86,7 +86,7 @@ La fuente de verdad de tipos, campos y constraints es `backend/prisma/schema.pri
 
 | Módulo | Ruta base | Descripción |
 |--------|-----------|-------------|
-| `movements` | `GET /movements`, `GET /movements/annual` | Lista unificada del mes + serie anual agregada (transacciones + recurrentes + cuotas) |
+| `movements` | `GET /movements`, `GET /movements/reports` | Lista unificada del mes + serie de reportes agregada (transacciones + recurrentes + cuotas) |
 | `transactions` | `/transactions` | Movimientos únicos (CRUD) |
 | `recurring` | `/recurring` | Movimientos fijos (crear, editar, eliminar) |
 | `installments` | `/installments` | Grupos de cuotas (crear, editar, eliminar) |
@@ -110,8 +110,8 @@ Los cuatro DELETE (`DELETE /categories/:id`, `/transactions/:id`, `/recurring/:i
 ### `GET /movements?month=YYYY-MM`
 Devuelve todos los movimientos del mes **más los totales**: transacciones únicas, recurrentes activos y cuotas que caen en el mes. Los recurrentes y cuotas se calculan on-the-fly — no hay filas generadas por instancia mensual. Contrato completo en la sección **Movimientos del mes (MovementsModule)**.
 
-### `GET /movements/annual?year=YYYY`
-Devuelve la serie **anual agregada** del usuario para el gráfico anual (RF-GRA-001/002/003): ingreso/gasto por cada uno de los 12 meses y el gasto mensual desglosado por categoría. No devuelve movimientos individuales. Contrato completo en la sección **Movimientos del mes (MovementsModule)**.
+### `GET /movements/reports?year=YYYY&categories=`
+Devuelve la serie **anual agregada** del usuario para los reportes (RF-REP-001/002/005): ingreso/gasto por cada uno de los 12 meses y el gasto mensual desglosado por categoría. Acepta un **filtro de categorías** opcional (`categories`, lista separada por comas; omitido = todas). No devuelve movimientos individuales. **Renombre de `GET /movements/annual`** (RF-REP-005). Contrato completo en la sección **Movimientos del mes (MovementsModule)**.
 
 ### `POST /transactions` · `PATCH /transactions/:id` · `DELETE /transactions/:id`
 CRUD de movimientos únicos. El monto siempre en centavos (entero > 0). El instante se guarda en UTC más la zona original del registro (ver fechas/timezone en `docs/technical.md`).
@@ -202,13 +202,14 @@ El join de movimientos y el cálculo de totales **no filtran por `Category.delet
 - **Helpers `addMonths` / `monthDiff`** exportados desde `movements.repository.ts` — reusarlos, no reimplementar aritmética de meses.
 - **Totales del mes ahora suman únicos + fijos + cuotas.**
 
-### Serie anual (`GET /movements/annual?year=YYYY`)
+### Serie de reportes (`GET /movements/reports?year=YYYY&categories=`)
 
-Endpoint **agregado** para el gráfico anual (RF-GRA-001/002/003), scopeado por `userId` del JWT (RN-003). Devuelve totales por mes y el gasto mensual desglosado por categoría para un año — **no** devuelve movimientos individuales. **No modifica `GET /movements` mensual**: es un endpoint nuevo y aparte, que reutiliza el mismo criterio de bucketeo (RN-015) sin introducir reglas de zona nuevas.
+Endpoint **agregado** para los reportes (RF-REP-001/002/005), scopeado por `userId` del JWT (RN-003). Devuelve totales por mes y el gasto mensual desglosado por categoría para un año — **no** devuelve movimientos individuales. **No modifica `GET /movements` mensual**: es un endpoint aparte, que reutiliza el mismo criterio de bucketeo (RN-015) sin introducir reglas de zona nuevas. **Renombre de `GET /movements/annual`** (RF-REP-005): la mecánica de agregación no cambió; se sumó el filtro de categorías.
 
-- **`year` (`YYYY`) es el único query param y es obligatorio:** exactamente **4 dígitos**, rango **1900–2200**. Si falta, no tiene 4 dígitos o cae fuera de rango → `400`. `401` global por JWT inválido/ausente.
+- **`year` (`YYYY`) obligatorio:** exactamente **4 dígitos**, rango **1900–2200**. Si falta, no tiene 4 dígitos o cae fuera de rango → `400`. `401` global por JWT inválido/ausente.
+- **`categories` (lista de `categoryId`s separados por comas) opcional:** **omitido = todas las categorías** (sin filtro). El front lo manda con la **coma literal** (`categories=id1,id2`).
 
-> Shape de la respuesta (`AnnualMovementsResponse` / `AnnualMonth` / `AnnualCategory`), invariante de consistencia y reglas de `months` / `categories` / `earliestYear` en `docs/data-model.md`, §Contrato de serie anual. Abajo solo cómo se calcula cada parte en el backend.
+> Shape de la respuesta (`ReportMovementsResponse` / `ReportMonth` / `ReportCategory`), invariante de consistencia y reglas de `months` / `categories` / `earliestYear` en `docs/data-model.md`, §Contrato de serie de reportes. Abajo solo cómo se calcula cada parte en el backend.
 
 #### Cómo se computa cada parte (bucketeo, mismo criterio que el mensual — RN-015)
 
@@ -218,6 +219,12 @@ Endpoint **agregado** para el gráfico anual (RF-GRA-001/002/003), scopeado por 
   - **cuotas** por `startMonth <= mes < addMonths(startMonth, totalInstallments)`.
 - **`categories[*]`.** El desglose por categoría **no filtra por `Category.deletedAt`** (incluye soft-deleted con gasto histórico, igual que el mensual). Orden por gasto anual total DESC, desempate por `categoryId` ASC.
 - **`earliestYear`.** Mínimo entre el año del mes local de cualquier único (`AT TIME ZONE`) y el año del `startMonth` de cualquier fijo o cuota; `null` si el usuario no tiene movimientos.
+
+#### Filtro de categorías (RF-REP-005)
+
+- **Afecta Forma 1 y Forma 2.** El filtro restringe qué movimientos cuentan: en `months[*]` (Forma 1: `incomeCents`/`expenseCents`) **y** en `categories[*]` (Forma 2: las bandas apiladas). Una categoría omitida no aparece en ninguna de las dos.
+- **`earliestYear` IGNORA el filtro** — se calcula sobre **todos** los movimientos del usuario, para que los límites de navegación de año (RF-REP-002) no salten al cambiar el filtro.
+- **Filtrado in-memory, NO en SQL/ORM:** se trae el universo de movimientos del año y se filtra en JS con un **`Set` de `categoryId`s** pedidos (omitido = sin filtrar). El invariante `SUM(bandas por categoría) == expenseCents del mes` **se mantiene con el filtro activo** (ambos lados se computan sobre el mismo conjunto filtrado).
 
 ## Movimientos fijos (RecurringModule)
 

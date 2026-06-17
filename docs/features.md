@@ -23,7 +23,7 @@
 | Vista del mes — secciones colapsables + reordenables (persistidas) | RF-VM-005 | Implementado (fase 1.1.4) |
 | Navegación global — sidebar persistente | RF-NAV-001 | Implementado |
 | Crear categoría desde el formulario de movimiento | RF-MU-004 | Implementado (los tres tabs) |
-| Gráfico anual — widget reutilizable + pantalla dedicada | RF-GRA-001..003 | Implementado |
+| Reportes — pantalla configurable por cards + widget en dashboard | RF-REP-001..005 | Implementado (fase 1.1.5) |
 | Preferencias de usuario — cimiento (blob JSON + sesión) | — (fase 1.1.0, ST1) | Implementado (sin UI de producto) |
 
 ---
@@ -105,11 +105,13 @@
 - **Detalles de implementación no obvios** (uso dual de `CategoryFormModal`, apilado de modales/z-index) en `docs/frontend.md`, sección Crear categoría desde el formulario de movimiento.
 - **Caso borde resuelto (scope incompatible):** el conflicto de crear una categoría con scope incompatible con el tipo del movimiento se previene en origen restringiendo las opciones de scope en modo inline (el modal ofrece solo el tipo del movimiento + "Ambos", oculta el tipo opuesto y preselecciona el tipo exacto), por lo que nunca se crea una categoría incompatible. Desde `/categorias` el modal sigue mostrando las tres opciones (Gasto / Ingreso / Ambos). Resuelto el 2026-06-13; ver detalle en RF-MU-004 (`docs/requirements.md`).
 
-### Gráfico anual — widget reutilizable (implementado)
+### Reportes — pantalla configurable + widget (fase 1.1.5)
 
-- **Estado:** implementado end-to-end (front + back). Regla funcional y las 5 decisiones de producto en RF-GRA-001..003 + bitácora 2026-06-14 (`docs/requirements.md`); pantallas 7 y 8 en `docs/screens.md`; spec visual en `docs/design.md`.
-- **Backend:** endpoint `GET /movements/annual?year=`. Contrato en `docs/data-model.md`, §Contrato de serie anual; implementación en `docs/backend.md`, §Serie anual.
-- **Frontend (arquitectura en dos capas):** primitiva de charting `components/ui/chart.tsx` + dos tarjetas autónomas en `components/charts/annual-chart-widget.tsx`, hook `useAnnual`. Detalles y gotchas técnicos en `docs/frontend.md`, §Gráfico anual.
+- **Estado:** implementado end-to-end (front + back). **Renombra el módulo "Gráfico anual" → "Reportes"** (ruta `/anual` → `/reportes`, endpoint `GET /movements/annual` → `GET /movements/reports`, link sidebar "Anual" → "Reportes"); el legado "anual" se eliminó por completo (sin redirect ni componentes duplicados). Regla funcional en RF-REP-001..005 + bitácora 2026-06-16 (`docs/requirements.md`); pantallas en `docs/screens.md`; spec visual en `docs/design.md`.
+- **Pantalla `/reportes` configurable por cards:** vacía al inicio (solo "[+]"); el usuario agrega cards (de los 2 tipos: Ingresos vs. Gastos / Por categoría) y las quita. Cada card es un **widget de reporte autónomo** con navegación de año independiente + filtro de categorías, y persiste tipo+año+categorías en la clave `reports` de preferencias (RF-REP-003/004).
+- **Widget en el dashboard:** monta el reporte Ingresos vs. Gastos con navegación de año **activa** y filtro de categorías **efímero** (no persiste); el resumen mensual sigue fijo en el mes en curso (RF-DASH-001/002, RF-REP-002).
+- **Backend:** `GET /movements/reports?year=&categories=` (filtro de categorías opcional, omitido = todas). Contrato en `docs/data-model.md`, §Contrato de serie de reportes; implementación en `docs/backend.md`, §Serie de reportes.
+- **Frontend (arquitectura en dos capas, heredada del anual):** primitiva de charting `components/ui/chart.tsx` + tarjetas autónomas en `components/charts/report-card.tsx`, hook `useReports`. Detalles y gotchas en `docs/frontend.md`, §Reportes.
 
 ### Fijos extendidos — anular por mes + periodicidad (fase 1.1.1)
 
@@ -136,9 +138,9 @@
 
 | Feature | Notas |
 |---------|-------|
-| Gráficos: otros tipos (torta, barras de comparación) | El gráfico anual (área ingresos/gastos + apilado por categoría) entra en v1 — RF-GRA-001, bitácora 2026-06-14. Los demás tipos quedan post-v1, requieren definición de UX |
-| Drill-down desde el gráfico anual (clic en un mes → Vista del mes) | Fuera de alcance v1; candidato post-v1 |
-| Agrupar la cola de categorías en una banda "Otras" en la Forma 2 del gráfico anual | En v1 la Forma 2 muestra todas las categorías con gasto sin agrupar (RF-GRA-001, bitácora 2026-06-15). El colapso "Otras" por legibilidad con muchas categorías queda post-v1, requiere definición de UX |
+| Reportes: otros tipos (torta, barras de comparación) | Los dos tipos (ingresos/gastos + apilado por categoría) entran en v1 — RF-REP-001. Los demás tipos quedan post-v1, requieren definición de UX |
+| Drill-down desde un reporte (clic en un mes → Vista del mes) | Fuera de alcance v1; candidato post-v1 |
+| Agrupar la cola de categorías en una banda "Otras" en la Forma 2 (Por categoría) | En v1 la Forma 2 muestra todas las categorías con gasto sin agrupar (RF-REP-001). El colapso "Otras" por legibilidad con muchas categorías queda post-v1, requiere definición de UX |
 | Tarjetas con fecha de corte | Requiere flujo propio |
 | Multi-moneda | Diseñado para venir después |
 | Importación desde extracto bancario | Sin decisión |

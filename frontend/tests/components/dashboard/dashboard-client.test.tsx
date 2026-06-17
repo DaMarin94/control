@@ -7,7 +7,7 @@
  * - Estado vacío: totales en cero + CTA "Cargá tu primer movimiento"
  * - Estado de error: mensaje sin romper la pantalla
  * - Enlace "Ver todos" apunta al mes actual (/mes?month=YYYY-MM)
- * - El widget de gráfico anual se monta con navigable=false (RF-GRA-002)
+ * - El widget ReportCard (income-expense) se monta en el dashboard (RF-GRA-002)
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -24,19 +24,14 @@ vi.mock("@/hooks/use-movements", () => ({
   MOVEMENTS_QUERY_KEY: (month: string) => ["movements", month],
 }));
 
-// Mock de IncomeExpenseCard — evita cargar Recharts en los tests del dashboard
-vi.mock("@/components/charts/annual-chart-widget", () => ({
-  IncomeExpenseCard: ({ year, showYearInHeader }: { year: number; showYearInHeader?: boolean }) => (
+// Mock de ReportCard — evita cargar Recharts en los tests del dashboard
+// Fase 1.1.5: el dashboard ahora importa de @/components/charts/report-card
+vi.mock("@/components/charts/report-card", () => ({
+  ReportCard: ({ year, type }: { year: number; type: string }) => (
     <div
       data-testid="income-expense-card"
       data-year={year}
-      data-show-year={String(showYearInHeader ?? false)}
-    />
-  ),
-  ByCategoryCard: ({ year }: { year: number }) => (
-    <div
-      data-testid="by-category-card"
-      data-year={year}
+      data-type={type}
     />
   ),
 }));
@@ -213,26 +208,21 @@ describe("DashboardClient", () => {
       expect(screen.queryByText(/cargá tu primer movimiento/i)).not.toBeInTheDocument();
     });
 
-    it("monta la tarjeta IncomeExpenseCard (solo Ingresos y gastos, RF-GRA-002)", () => {
+    it("monta el widget ReportCard de tipo income-expense (solo Ingresos y gastos, RF-DASH-001)", () => {
       renderDashboard();
       const card = screen.getByTestId("income-expense-card");
       expect(card).toBeInTheDocument();
+      expect(card).toHaveAttribute("data-type", "income-expense");
     });
 
-    it("la tarjeta IncomeExpenseCard recibe el año actual", () => {
+    it("el widget ReportCard recibe el año actual", () => {
       renderDashboard();
       const card = screen.getByTestId("income-expense-card");
       // El año viene de getCurrentMonth mockeado como "2026-06" → año 2026
       expect(card).toHaveAttribute("data-year", "2026");
     });
 
-    it("la tarjeta IncomeExpenseCard tiene showYearInHeader=true (año en cabecera, sin control externo)", () => {
-      renderDashboard();
-      const card = screen.getByTestId("income-expense-card");
-      expect(card).toHaveAttribute("data-show-year", "true");
-    });
-
-    it("NO monta la tarjeta ByCategoryCard en el dashboard", () => {
+    it("NO monta la tarjeta ByCategoryCard en el dashboard (solo en /reportes)", () => {
       renderDashboard();
       expect(screen.queryByTestId("by-category-card")).not.toBeInTheDocument();
     });

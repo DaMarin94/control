@@ -1,5 +1,6 @@
 /**
- * Tests unitarios de MovementsService — método getAnnualMovements.
+ * Tests unitarios de MovementsService — método getReportsMovements.
+ * (antes getAnnualMovements; renombrado en Fase 1.1.5)
  *
  * Cubre:
  * - Respuesta tiene siempre 12 entradas en months (ene→dic), con cero donde no hay datos
@@ -14,6 +15,12 @@
  *   el service recibe el año ya como número
  * - Fijos: condición de actividad correcta (startMonth/deletedFrom)
  * - Cuotas: cálculo on-the-fly correcto
+ * - Filtro de categorías (Fase 1.1.5):
+ *   - Sin filtro = todas las categorías (comportamiento anterior)
+ *   - Con filtro: solo las categorías del set cuentan en totales y desglose
+ *   - earliestYear SIEMPRE ignora el filtro (límites de navegación estables)
+ *   - Ids desconocidos/no existentes → simplemente no matchean (no es error)
+ *   - categoryIds vacío/null → sin filtro (igual que omitido)
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { RecurringFrequency } from '@prisma/client';
@@ -37,7 +44,7 @@ const mockRepo = {
   getTotalsByMonth: jest.fn(),
   getFijosTotalsByMonth: jest.fn(),
   getCuotasTotalsByMonth: jest.fn(),
-  // Nuevos métodos anuales
+  // Métodos de reportes
   getAnnualUnicosAggregated: jest.fn(),
   getAllFijosForAnnual: jest.fn(),
   getAllCuotasForAnnual: jest.fn(),
@@ -56,8 +63,8 @@ const mockLogger = {
 // Helpers de fixtures
 // ---------------------------------------------------------------------------
 
-const USER_A = 'user-a-annual';
-const USER_B = 'user-b-annual';
+const USER_A = 'user-a-reports';
+const USER_B = 'user-b-reports';
 
 const CAT_A = 'cat-a-id';
 const CAT_B = 'cat-b-id';
@@ -139,7 +146,7 @@ function makeCuota(overrides: Partial<InstallmentGroupForAnnual> = {}): Installm
 // Suite
 // ---------------------------------------------------------------------------
 
-describe('MovementsService — getAnnualMovements', () => {
+describe('MovementsService — getReportsMovements', () => {
   let service: MovementsService;
 
   beforeEach(async () => {
@@ -164,7 +171,7 @@ describe('MovementsService — getAnnualMovements', () => {
     it('año vacío → 12 meses en cero, categories vacío, earliestYear null', async () => {
       setupEmptyMocks();
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       expect(result.year).toBe(2026);
       expect(result.months).toHaveLength(12);
@@ -179,7 +186,7 @@ describe('MovementsService — getAnnualMovements', () => {
     it('months siempre tiene 12 entradas de enero a diciembre con formato YYYY-MM', async () => {
       setupEmptyMocks();
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       expect(result.months[0].month).toBe('2026-01');
       expect(result.months[6].month).toBe('2026-07');
@@ -189,7 +196,7 @@ describe('MovementsService — getAnnualMovements', () => {
     it('devuelve el year correcto en la respuesta', async () => {
       setupEmptyMocks();
 
-      const result = await service.getAnnualMovements(USER_A, 2025);
+      const result = await service.getReportsMovements(USER_A, 2025);
       expect(result.year).toBe(2025);
     });
   });
@@ -208,7 +215,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       const jun = result.months[5]; // índice 5 = junio
       expect(jun.month).toBe('2026-06');
@@ -224,7 +231,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       const mar = result.months[2]; // índice 2 = marzo
       expect(mar.incomeCents).toBe(50000);
@@ -239,7 +246,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       expect(typeof result.months[0].expenseCents).toBe('number');
       expect(result.months[0].expenseCents).toBe(999999999);
@@ -259,7 +266,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       expect(result.months[5].expenseCents).toBe(3000);
       // Debe aparecer en categories
@@ -278,7 +285,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       expect(result.months[5].expenseCents).toBe(3000); // 1000 + 2000
     });
@@ -297,7 +304,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       result.months.forEach((m) => {
         expect(m.expenseCents).toBe(1000);
@@ -312,7 +319,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       // Enero a junio (índice 0..5): 0
       result.months.slice(0, 6).forEach((m) => {
@@ -332,7 +339,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       // Enero a junio (índice 0..5): 3000 (activo porque deletedFrom='2026-07' > mes)
       result.months.slice(0, 6).forEach((m) => {
@@ -352,7 +359,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       result.months.forEach((m) => {
         expect(m.incomeCents).toBe(80000);
@@ -368,7 +375,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       expect(result.categories).toHaveLength(0);
     });
@@ -387,7 +394,7 @@ describe('MovementsService — getAnnualMovements', () => {
       ]);
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       result.months.forEach((m) => {
         expect(m.expenseCents).toBe(1500);
@@ -402,7 +409,7 @@ describe('MovementsService — getAnnualMovements', () => {
       ]);
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       // Enero a mayo (índice 0..4): 0
       result.months.slice(0, 5).forEach((m) => {
@@ -427,7 +434,7 @@ describe('MovementsService — getAnnualMovements', () => {
       ]);
       mockRepo.getEarliestYear.mockResolvedValue(2025);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       // Todos los 12 meses de 2026 están dentro del rango (2025-07 .. 2027-01 exclusivo)
       result.months.forEach((m) => {
@@ -445,7 +452,7 @@ describe('MovementsService — getAnnualMovements', () => {
       ]);
       mockRepo.getEarliestYear.mockResolvedValue(2025);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       result.months.forEach((m) => {
         expect(m.expenseCents).toBe(0);
@@ -466,7 +473,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       expect(result.categories).toHaveLength(1);
       expect(result.categories[0].categoryId).toBe(CAT_A);
@@ -487,7 +494,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       expect(result.categories).toHaveLength(0);
     });
@@ -503,7 +510,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       // Verificar invariante para cada mes
       result.months.forEach((monthEntry, i) => {
@@ -525,7 +532,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       expect(result.categories[0].categoryId).toBe(CAT_B); // 5000 > 1000
       expect(result.categories[1].categoryId).toBe(CAT_A);
@@ -542,7 +549,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       // Mismo gasto total → ordenar por categoryId ASC
       expect(result.categories[0].categoryId).toBe(CAT_A);
@@ -563,7 +570,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       // Fijo activo desde junio (6 meses: jun..dic = 7 meses)
       const cat = result.categories.find((c) => c.categoryId === CAT_A);
@@ -588,7 +595,7 @@ describe('MovementsService — getAnnualMovements', () => {
       ]);
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       const cat = result.categories.find((c) => c.categoryId === CAT_B);
       expect(cat).toBeDefined();
@@ -609,7 +616,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       const cat = result.categories.find((c) => c.categoryId === CAT_A);
       expect(cat).toBeDefined();
@@ -630,7 +637,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyMocks();
       mockRepo.getEarliestYear.mockResolvedValue(2024);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       expect(result.earliestYear).toBe(2024);
     });
@@ -639,7 +646,7 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyMocks();
       mockRepo.getEarliestYear.mockResolvedValue(null);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       expect(result.earliestYear).toBeNull();
     });
@@ -653,7 +660,7 @@ describe('MovementsService — getAnnualMovements', () => {
     it('pasa el userId correcto a todos los métodos del repositorio', async () => {
       setupEmptyMocks();
 
-      await service.getAnnualMovements(USER_B, 2026);
+      await service.getReportsMovements(USER_B, 2026);
 
       expect(mockRepo.getAnnualUnicosAggregated).toHaveBeenCalledWith(USER_B, 2026);
       expect(mockRepo.getAllFijosForAnnual).toHaveBeenCalledWith(USER_B);
@@ -664,7 +671,7 @@ describe('MovementsService — getAnnualMovements', () => {
     it('no mezcla datos de usuarios distintos (cada llamada usa el userId propio)', async () => {
       setupEmptyMocks();
 
-      await service.getAnnualMovements(USER_A, 2026);
+      await service.getReportsMovements(USER_A, 2026);
       // Verificar que USER_B nunca fue llamado
       expect(mockRepo.getAnnualUnicosAggregated).not.toHaveBeenCalledWith(
         USER_B,
@@ -691,7 +698,7 @@ describe('MovementsService — getAnnualMovements', () => {
       ]);
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       expect(result.months[0].expenseCents).toBe(6000); // 1000 + 3000 + 2000
     });
@@ -707,10 +714,200 @@ describe('MovementsService — getAnnualMovements', () => {
       setupEmptyCuotasMock();
       mockRepo.getEarliestYear.mockResolvedValue(2026);
 
-      const result = await service.getAnnualMovements(USER_A, 2026);
+      const result = await service.getReportsMovements(USER_A, 2026);
 
       expect(result.months[0].incomeCents).toBe(100000);
       expect(result.months[0].expenseCents).toBe(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Filtro de categorías (Fase 1.1.5, RF-REP-005)
+  // -------------------------------------------------------------------------
+
+  describe('filtro de categorías', () => {
+    it('sin filtro (null) → misma respuesta que antes, todas las categorías', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_A, totalCents: BigInt(1000) }),
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6', totalCents: BigInt(2000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null);
+
+      expect(result.months[5].expenseCents).toBe(3000); // CAT_A + CAT_B
+      expect(result.categories).toHaveLength(2);
+    });
+
+    it('sin filtro (undefined) → misma respuesta que antes, todas las categorías', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_A, totalCents: BigInt(1000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, undefined);
+
+      expect(result.months[5].expenseCents).toBe(1000);
+    });
+
+    it('categoryIds vacío ([]) → sin filtro, igual que null', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_A, totalCents: BigInt(1000) }),
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6', totalCents: BigInt(2000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, []);
+
+      // Vacío = sin filtro → ambas categorías
+      expect(result.months[5].expenseCents).toBe(3000);
+      expect(result.categories).toHaveLength(2);
+    });
+
+    it('filtro con solo CAT_A → solo movimientos de CAT_A cuentan en totales y desglose', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_A, totalCents: BigInt(1000) }),
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6', totalCents: BigInt(2000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, [CAT_A]);
+
+      // Solo CAT_A (1000); CAT_B queda fuera
+      expect(result.months[5].expenseCents).toBe(1000);
+      expect(result.categories).toHaveLength(1);
+      expect(result.categories[0].categoryId).toBe(CAT_A);
+    });
+
+    it('filtro afecta fijos: fijo de CAT_B queda fuera cuando se filtra por CAT_A', async () => {
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 3000, startMonth: '2026-01', deletedFrom: null, categoryId: CAT_A, type: 'EXPENSE' as any }),
+        makeFijo({ id: 'fijo-002', amountCents: 5000, startMonth: '2026-01', deletedFrom: null, categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6', type: 'EXPENSE' as any }),
+      ]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, [CAT_A]);
+
+      // Solo CAT_A (3000 por mes); CAT_B queda fuera
+      result.months.forEach((m) => {
+        expect(m.expenseCents).toBe(3000);
+      });
+      expect(result.categories).toHaveLength(1);
+      expect(result.categories[0].categoryId).toBe(CAT_A);
+    });
+
+    it('filtro afecta cuotas: cuota de CAT_B queda fuera cuando se filtra por CAT_A', async () => {
+      setupEmptyUnicosMock();
+      setupEmptyFijosMock();
+      mockRepo.getAllCuotasForAnnual.mockResolvedValue([
+        makeCuota({ amountCents: 1000, totalInstallments: 6, startMonth: '2026-01', categoryId: CAT_A, type: 'EXPENSE' as any }),
+        makeCuota({ id: 'grupo-002', amountCents: 4000, totalInstallments: 6, startMonth: '2026-01', categoryId: CAT_B, type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, [CAT_A]);
+
+      // Solo cuotas de CAT_A (1000) en los primeros 6 meses
+      result.months.slice(0, 6).forEach((m) => {
+        expect(m.expenseCents).toBe(1000);
+      });
+      result.months.slice(6).forEach((m) => {
+        expect(m.expenseCents).toBe(0);
+      });
+    });
+
+    it('invariante se mantiene con filtro activo: SUM(categories[i].monthlyExpenseCents[m]) == months[m].expenseCents', async () => {
+      // Tres categorías; se filtra solo CAT_A y CAT_B (no CAT_C)
+      const CAT_C = 'cat-c-id';
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', categoryId: CAT_A, totalCents: BigInt(1000) }),
+        makeUnicoRow({ monthKey: '2026-01', categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6', totalCents: BigInt(2000) }),
+        makeUnicoRow({ monthKey: '2026-01', categoryId: CAT_C, categoryName: 'Otro', categoryColor: '#FF0000', totalCents: BigInt(9999) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, [CAT_A, CAT_B]);
+
+      // CAT_C no debe aparecer en categories ni en totales
+      expect(result.categories.find((c) => c.categoryId === CAT_C)).toBeUndefined();
+      expect(result.months[0].expenseCents).toBe(3000); // solo CAT_A + CAT_B
+
+      // Invariante: para cada mes, suma de categories == expenseCents del mes
+      result.months.forEach((monthEntry, i) => {
+        const sumFromCategories = result.categories.reduce(
+          (sum, cat) => sum + cat.monthlyExpenseCents[i],
+          0,
+        );
+        expect(sumFromCategories).toBe(monthEntry.expenseCents);
+      });
+    });
+
+    it('id desconocido en el filtro → no matchea nada, totales en cero (no es error)', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_A, totalCents: BigInt(5000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, ['id-inexistente']);
+
+      // El id no existe → ningún movimiento matchea → todo en cero
+      result.months.forEach((m) => {
+        expect(m.expenseCents).toBe(0);
+        expect(m.incomeCents).toBe(0);
+      });
+      expect(result.categories).toHaveLength(0);
+    });
+
+    // -------------------------------------------------------------------------
+    // CRÍTICO: earliestYear IGNORA el filtro
+    // -------------------------------------------------------------------------
+
+    it('earliestYear NO se ve afectado por el filtro de categorías (límites estables)', async () => {
+      // Solo hay movimientos de CAT_A en el año 2026.
+      // Con filtro de CAT_B (sin datos), earliestYear debe seguir siendo 2024
+      // porque se calcula sobre TODOS los movimientos, no solo los filtrados.
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_A, totalCents: BigInt(1000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      // getEarliestYear retorna 2024 (ignorando el filtro — se lo pregunta al repositorio directamente)
+      mockRepo.getEarliestYear.mockResolvedValue(2024);
+
+      // Filtrar solo por CAT_B (que no tiene datos)
+      const result = await service.getReportsMovements(USER_A, 2026, [CAT_B]);
+
+      // Los totales del mes filtrado son 0 (CAT_B no tiene datos)
+      expect(result.months[5].expenseCents).toBe(0);
+      // Pero earliestYear es 2024 (calculado sobre todos los movimientos)
+      expect(result.earliestYear).toBe(2024);
+      // Verificar que getEarliestYear fue llamado con el userId correcto
+      expect(mockRepo.getEarliestYear).toHaveBeenCalledWith(USER_A);
+    });
+
+    it('earliestYear: el repositorio siempre recibe el userId, independiente del filtro', async () => {
+      setupEmptyMocks();
+      mockRepo.getEarliestYear.mockResolvedValue(null);
+
+      await service.getReportsMovements(USER_A, 2026, [CAT_A]);
+
+      // getEarliestYear debe llamarse con userId, no con categoryIds
+      expect(mockRepo.getEarliestYear).toHaveBeenCalledWith(USER_A);
+      expect(mockRepo.getEarliestYear).toHaveBeenCalledTimes(1);
     });
   });
 });

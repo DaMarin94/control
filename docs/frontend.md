@@ -50,7 +50,7 @@ Lo visual se define **una sola vez**. Stack: **shadcn/ui + cva** sobre Tailwind 
 
 - **Las primitivas usan los tokens del design system "Precise Ledger"** (ver sección Design system). Detalle operativo del re-estilado (variantes de Button, patrones Tailwind v4, toast) en `.claude/agents/control-frontend.md`.
 - **Íconos: `lucide-react`** (no SVG inline). Es la librería de íconos del proyecto.
-- **`PeriodNav` (`components/ui/period-nav.tsx`)** — primitiva **genérica de navegación de período**: envuelve un contenido y le pone **flechas gigantes a los costados** (`‹ contenido ›`). Sirve para cualquier período (mes en `/mes`; **año** en reportes 1.1.5). No es específica del mes. El spec visual vive en `docs/design.md`. API y gotcha de uso en la sección Navegación de período (`PeriodNav`).
+- **`PeriodNav` (`components/ui/period-nav.tsx`)** — primitiva **genérica de navegación de período**: envuelve un contenido y le pone **flechas gigantes a los costados** (`‹ contenido ›`). La usa **`/mes`** para navegar el mes. (Reportes **no** la usa: navega el año con un stepper pill embebido per-card — ver sección Reportes.) El spec visual vive en `docs/design.md`. API y gotcha de uso en la sección Navegación de período (`PeriodNav`).
 - **`KebabMenu` (`components/ui/kebab-menu.tsx`)** — menú de tres puntos para las acciones de fila **editar / eliminar** en listas. Es el **componente estándar para esas acciones**: toda lista nueva que las necesite lo usa, en lugar de botones inline en la fila. Se renderiza **por portal a `document.body` con posición `fixed`** (coordenadas tomadas del trigger) porque las tarjetas de lista tienen `overflow-hidden` y el `transform` de los contenedores de página atraparía un `position: fixed` no portaleado — mismo motivo que los modales. Detalle operativo (API, comportamiento de apertura/cierre) en `.claude/agents/control-frontend.md`.
 - **`AccordionSection` (`components/ui/accordion-section.tsx`)** — sección de acordeón **genérica** (fase 1.1.4): cabecera-disclosure (`aria-expanded` / `aria-controls`, chevron rotatorio), **handle de drag opcional** y cuerpo colapsable animado. Reutilizable en cualquier pantalla con secciones plegables (se prevén más acordeones en la app). **Animación sin JS** (ver gotcha grid-rows abajo). Primer uso: las secciones de `/mes` (RF-VM-005).
 - **`SortableSection` (`components/ui/sortable-section.tsx`)** — envuelve `AccordionSection` con `useSortable` de **dnd-kit**; el sortable se activa **solo en modo orden**. Es el patrón estándar para "lista de bloques reordenables por drag" de acá en más.
@@ -260,7 +260,7 @@ Carga, edición y eliminación de grupos de cuotas. Se crean desde el tab **Cuot
 
 ## Navegación de período (`PeriodNav`) — fase 1.1.3
 
-Componente reutilizable **`components/ui/period-nav.tsx`**: navegación genérica de período con **flechas gigantes a los costados** del contenido que envuelve (`‹ contenido ›`; ‹ = anterior, › = siguiente). Genérico por diseño — lo usa `/mes` para navegar el mes y lo reutilizará **reportes 1.1.5** para navegar el año. Spec visual en `docs/design.md`.
+Componente reutilizable **`components/ui/period-nav.tsx`**: navegación genérica de período con **flechas gigantes a los costados** del contenido que envuelve (`‹ contenido ›`; ‹ = anterior, › = siguiente). Genérico por diseño; hoy lo usa **`/mes`** para navegar el mes. **Reportes no lo reutiliza**: navega el año con un stepper pill embebido en cada card (ver sección Reportes). Spec visual en `docs/design.md`.
 
 ### Props
 
@@ -269,7 +269,7 @@ Componente reutilizable **`components/ui/period-nav.tsx`**: navegación genéric
 | `children` | `ReactNode` | El contenido del período que envuelve. |
 | `prevLabel` / `nextLabel` | `string` | `aria-label` de cada flecha (en `/mes`: "Mes anterior" / "Mes siguiente"). |
 | `onPrev` / `onNext` | `() => void` | Handlers de navegación. |
-| `canGoPrev` / `canGoNext` | `boolean` (default `true`) | `false` → flecha `aria-disabled`, sin hover, no dispara el handler. En `/mes` siempre `true`; en reportes (1.1.5) se atan a `earliestYear` (atrás) y al año en curso (adelante). |
+| `canGoPrev` / `canGoNext` | `boolean` (default `true`) | `false` → flecha `aria-disabled`, sin hover, no dispara el handler. En `/mes` siempre `true` (no hay topes de navegación). |
 
 ### Estructura: grid de 3 columnas
 
@@ -381,34 +381,33 @@ Logo/nombre "Control" → `/`; links **Dashboard** (`/`), **Vista del mes** (`/m
 - **Sección activa — match EXACTO para `/`:** el link Dashboard compara `pathname === "/"`. Con `startsWith("/")` quedaría activo en **todas** las rutas. Los links `/mes` y `/categorias` usan `startsWith` (no hay subrutas que colisionen).
 - **`<Suspense>` en `(app)/mes/page.tsx`:** se mantiene envolviendo `MonthViewWrapper` (que usa `useSearchParams()`); sin él el build de Next 15 falla. El cambio de carpeta al route group no lo altera (ver gotcha de `<Suspense>` en la sección Vista del mes).
 
-## Gráfico anual (RF-GRA-001..003)
+## Reportes (RF-REP-001..005)
 
-Visualización anual de ingresos/gastos. El spec visual completo (color, alturas, jerarquía, comportamiento de transición) vive en `docs/design.md` — acá se documenta solo la arquitectura y los gotchas técnicos.
+Visualización de reportes de ingresos/gastos. **Renombra el módulo "Gráfico anual"** (ruta `/anual` → `/reportes`, endpoint `/movements/annual` → `/movements/reports`, hook `use-annual` → `use-reports`, tipos `annual.ts` → `reports.ts`, widget `annual-chart-widget.tsx` → `report-card.tsx`); el legado "anual" se eliminó por completo. El spec visual (color, alturas, jerarquía, transición) vive en `docs/design.md` — acá solo arquitectura y gotchas técnicos.
 
 ### Arquitectura en dos capas (enfoque shadcn charts)
 
 El gráfico se separa en una **primitiva reutilizable** (motor de charting, agnóstica de la feature) y **tarjetas de feature** que la componen. Cualquier gráfico futuro reusa la primitiva.
 
-- **Primitiva `components/ui/chart.tsx`** — primitiva estilo shadcn charts sobre **Recharts v3** (el motor; instalado con `pnpm add`, no npm), themeada con los tokens del DS (CSS vars `oklch`). Es una **primitiva nueva de `components/ui/`**, pensada para reusarse en futuros gráficos, no solo en el anual. Exporta:
-  - **`ChartContainer`** — wrapper de `ResponsiveContainer` de Recharts + theming del DS.
-  - **`ChartTooltipContent`** — tooltip themeado con el DS.
-  - **`ChartLegend`** — leyenda themeada con el DS.
-- **Dos tarjetas autónomas en `components/charts/annual-chart-widget.tsx`** — el módulo ya **no** exporta un widget único con toggle interno; exporta **dos tarjetas independientes**, cada una con su propia cabecera, gráfico, leyenda, tooltip y estados (skeleton / con datos / vacío / meses futuros / error), y cada una consume `useAnnual(year)` por su cuenta:
-  - **`IncomeExpenseCard`** (Forma 1) — `AreaChart` con ingresos y gastos superpuestos. Props: **`year`** (number), **`chartHeight`** (number), **`showYearInHeader`** (boolean — muestra el año fijo en la cabecera de la tarjeta cuando no hay control externo de año).
-  - **`ByCategoryCard`** (Forma 2) — `BarChart` apilado por categoría, usando `category.color` de cada categoría. Props: **`year`** (number), **`chartHeight`** (number).
-  - **El control de año NO vive en las tarjetas.** Cambiar de año es responsabilidad de la página anfitriona (ver Puntos de uso).
+- **Primitiva `components/ui/chart.tsx`** — primitiva estilo shadcn charts sobre **Recharts v3** (el motor; instalado con `pnpm add`, no npm), themeada con los tokens del DS (CSS vars `oklch`). Pensada para reusarse en futuros gráficos. Exporta `ChartContainer` (wrapper de `ResponsiveContainer` + theming), `ChartTooltipContent` y `ChartLegend`.
+- **Dos tarjetas autónomas en `components/charts/report-card.tsx`** — único dueño del código de charting Forma 1 / Forma 2. Exporta **dos tarjetas independientes**, cada una con su cabecera, gráfico, leyenda, tooltip y estados (skeleton / con datos / vacío / meses futuros / error):
+  - **`IncomeExpenseCard`** (Forma 1) — `AreaChart` con ingresos y gastos superpuestos.
+  - **`ByCategoryCard`** (Forma 2) — `BarChart` apilado por categoría, usando `category.color` de cada una.
+  - **Navegación de año y filtro de categorías embebidos (RF-REP-002).** A diferencia del módulo anual (donde el año vivía en la página anfitriona), cada tarjeta lleva **embebidos** el stepper de año (pill `‹ año ›`) y el filtro de categorías (popover checklist de categorías **activas**). El componente recibe el estado (`year`, `categoryIds`) y los callbacks de cambio por props, y deja que el anfitrión decida si ese estado es **persistido** (cards de `/reportes`) o **efímero** (dashboard).
 
-### Datos (`use-annual`)
+### Datos (`use-reports`)
 
-- Hook **`useAnnual(year)`** sobre `GET /movements/annual?year=`. **Query key como función:** **`ANNUAL_QUERY_KEY(year) = ["annual", year]`** — varía por año. Sin mutaciones (es solo lectura).
-- Aplica el patrón obligatorio **`enabled: isAuthenticated`** (igual que `useMovements` / `useCategories`; ver Queries de lectura gate-adas en la sección Autenticación).
-- Tipos del contrato en **`types/annual.ts`**: `AnnualMovementsResponse` / `AnnualMonth` / `AnnualCategory`.
+- Hook **`useReports(year, categoryIds)`** sobre `GET /movements/reports?year=&categories=`. Sin mutaciones (solo lectura). Aplica el patrón obligatorio **`enabled: isAuthenticated`** (ver Queries de lectura gate-adas en Autenticación).
+- **Query key varía por año Y por filtro de categorías:** `["reports", year, categoriesKey]`, donde `categoriesKey` es la serialización del filtro (`null` → todas; lista ordenada → subconjunto). Sin incluir el filtro en la key, React Query no refetchearía al cambiar el checklist.
+- **GOTCHA — el query param `categories` se construye por concatenación de string, NO con `URLSearchParams`.** El backend espera la coma **literal** (`categories=id1,id2,id3`); `URLSearchParams` encodea la coma a `%2C` y el filtro deja de matchear. Patrón reusable para **cualquier endpoint que acepte listas separadas por coma**: armar el query string a mano, no con `URLSearchParams`.
+- Tipos del contrato en **`types/reports.ts`**: `ReportMovementsResponse` / `ReportMonth` / `ReportCategory`.
 
 ### Puntos de uso
 
-- **Pantalla dedicada `app/(app)/anual/page.tsx`** (dentro del route group `(app)`, hereda el sidebar). Monta **`IncomeExpenseCard` + `ByCategoryCard` apiladas**, ambas con el mismo `year`. **El año es estado local de la página** (no de las tarjetas): el control de año `‹ ›` (`YearStepper`) vive en el **`.phead`**, a la derecha del H1 "Anual", y gobierna ambas tarjetas a la vez. La página también lee `earliestYear` (vía `useAnnual`) para deshabilitar el retroceso antes del primer año con movimientos. **El año NO va en la URL** → esta pantalla **no usa `useSearchParams()` ni necesita `<Suspense>`** (a diferencia de `/mes`, que sí lee `?month=`).
-- **Dashboard (`dashboard-client.tsx`)** — monta **solo `IncomeExpenseCard`** con **`showYearInHeader=true`** y año fijo (el año en curso), sin control externo de año, ubicado **tras el balance hero y antes del footer**.
-- **Sidebar** — link **"Anual"** (`/anual`), activo por `startsWith("/anual")`. Orden de links: Dashboard → Vista del mes → Anual → Categorías.
+- **Pantalla `/reportes` configurable por cards — `app/(app)/reportes/page.tsx`** (bajo el route group `(app)`, hereda el sidebar). Arranca **vacía** (solo el recuadro "[+]"); el usuario agrega cards eligiendo el tipo (popover-menú con los 2 tipos) y las quita. Cada card monta una tarjeta de reporte cuyo año y filtro de categorías son **estado persistido** en preferencias (ver abajo). El orden de las cards es el orden del array. **El año NO va en la URL** → la pantalla **no usa `useSearchParams()` ni `<Suspense>`** (a diferencia de `/mes`).
+  - **Persistencia vía clave `reports` de preferencias** (patrón **read-modify-write del blob**, idéntico a `monthSections`): agregar/quitar una card, navegar su año o cambiar su filtro parte del blob actual y manda el objeto completo (`setPreferences({ ...preferences, reports: ... })`), porque la semántica del backend es reemplazo total (ver §Preferencias de usuario). Shape de la clave (`ReportCardConfig[]`, `categoryIds: null = todas`) y la regla de normalización/back-compat en `docs/data-model.md`, §`reports`; replicarla en el consumidor, no inventar otra.
+- **Dashboard (`dashboard-client.tsx`)** — monta **solo `IncomeExpenseCard`** con navegación de año **activa** y filtro de categorías **efímero**: año y `categoryIds` son **estado local de React** que **NO persiste** (no toca la clave `reports`). El resumen mensual sigue fijo en el mes en curso. Contraste clave: mismo widget, estado **persistido** en `/reportes` vs. **efímero** en el dashboard.
+- **Sidebar** — link **"Reportes"** (`/reportes`), activo por `startsWith("/reportes")`, entre "Vista del mes" y "Categorías".
 
 ### Gotchas técnicos (Recharts v3 + Tailwind v4 + DS)
 
@@ -417,9 +416,9 @@ Para que un agente futuro que toque gráficos no los re-tropiece:
 - **CSS vars `oklch` directas en el SVG de Recharts:** se pueden pasar `var(--token)` directo en props de color (`stroke`, `fill`, y `stopColor` de `<stop>` dentro de `<defs>`). **No** hace falta `getComputedStyle` en runtime para resolver el token.
 - **Cifras tabulares (`tnum`):** la propiedad `fontFeatureSettings` **no existe** en el tipo de tick SVG de Recharts; el `tnum` se delega a la CSS var **`--mono`** (IBM Plex Mono ya trae `tnum`). No intentar setear `fontFeatureSettings` en el tick.
 - **Recharts 3.x + TypeScript strict:** `TooltipPayload` es **`readonly`** → el componente custom de tooltip requiere un **doble cast** (`as unknown as Array<...>`). El prop `label` del tooltip es `string | number | undefined` (no solo `string`).
-- **Alto responsive — por prop `height`, no CSS var:** Recharts necesita el alto como **valor numérico en el prop `height`** (no acepta una CSS var de altura). Se resuelve con **dos `<div>` + media queries de Tailwind v4** (`[@media(max-width:940px)]:hidden` / `[@media(min-width:941px)]:hidden`): uno con el alto desktop (el `chartHeight` que pasa la página: **280** en dashboard, **340** en `/anual`) y otro con **220** en ≤940px.
+- **Alto responsive — por prop `height`, no CSS var:** Recharts necesita el alto como **valor numérico en el prop `height`** (no acepta una CSS var de altura). Se resuelve con **dos `<div>` + media queries de Tailwind v4** (`[@media(max-width:940px)]:hidden` / `[@media(min-width:941px)]:hidden`).
 - **`prefers-reduced-motion`:** las tarjetas usan un detector interno de reduced-motion. **jsdom no implementa `window.matchMedia`**, así que se agregó un **mock global de `matchMedia` en `tests/setup.ts`** — necesario para cualquier componente futuro que detecte reduced-motion.
-- **Dedupe de `useAnnual` por query key — no es doble fetch:** en `/anual`, `useAnnual(year)` se invoca **varias veces a la vez** (cada tarjeta por su cuenta, más la página para leer `earliestYear`). React Query lo resuelve como **una sola request** porque todos comparten la misma key `["annual", year]` (dedupe por key). No es N peticiones simultáneas; que no sorprenda al próximo que vea varios `useAnnual` en el mismo árbol.
+- **Dedupe de `useReports` por query key — no es doble fetch:** cuando `useReports(year, categoryIds)` se invoca **varias veces a la vez** con los mismos argumentos, React Query lo resuelve como **una sola request** por compartir la misma key (dedupe por key). No es N peticiones simultáneas.
 
 ## Design system "Precise Ledger" — tokens (Fase 1)
 

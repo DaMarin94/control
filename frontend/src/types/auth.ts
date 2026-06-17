@@ -37,6 +37,11 @@ export interface MonthSectionsPreferences {
 export interface UserPreferences {
   /** Fase 1.1.4: orden y estado de colapso de secciones en /mes */
   monthSections?: MonthSectionsPreferences;
+  /**
+   * Fase 1.1.5: config de las cards de la pantalla /reportes.
+   * Ausente/vacío = pantalla vacía (solo "[+]").
+   */
+  reports?: import("@/types/reports").ReportCardConfig[];
   [key: string]: unknown;
 }
 

@@ -74,6 +74,13 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  // recurringSkip.findMany se usa en getAllFijosForAnnual (Fase 1.1.5)
+  recurringSkip: {
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    delete: jest.fn(),
+    findUnique: jest.fn(),
+  },
   // installmentGroup.findMany se usa para cuotas (Fase 7 — findCuotasByMonth / getCuotasTotalsByMonth)
   installmentGroup: {
     create: jest.fn(),
@@ -179,6 +186,8 @@ describe('Movements (e2e)', () => {
     mockPrisma.recurring.findMany.mockResolvedValue([]);
     // Default: sin cuotas activas (Fase 7). Los tests de cuotas lo sobreescriben.
     mockPrisma.installmentGroup.findMany.mockResolvedValue([]);
+    // Default: sin skips (Fase 1.1.1). Usado por getAllFijosForAnnual en /reports.
+    mockPrisma.recurringSkip.findMany.mockResolvedValue([]);
   });
 
   // -------------------------------------------------------------------------
@@ -670,6 +679,300 @@ describe('Movements (e2e)', () => {
     it('401 sin JWT', async () => {
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')
+        .expect(401);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(401);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /movements/reports?year=YYYY[&categories=...] (Fase 1.1.5)
+  //
+  // Nota sobre la estrategia de mock:
+  // El endpoint de reportes llama a 4 métodos del repositorio que envuelven
+  // prisma directamente (no $queryRaw para fijos/cuotas). Para los tests e2e
+  // mockeamos las tablas de Prisma de forma similar a los tests del mes.
+  // -------------------------------------------------------------------------
+
+  describe('GET /movements/reports — casos felices', () => {
+    /**
+     * Helper: crea una fila agregada de únicos (como la devuelve $queryRaw
+     * en getAnnualUnicosAggregated).
+     */
+    function makeAnnualUnicoRow(overrides: Record<string, unknown> = {}) {
+      return {
+        monthKey: '2026-06',
+        categoryId: CAT_ID,
+        categoryName: 'Consumibles',
+        categoryColor: '#4F86C6',
+        categoryScope: 'EXPENSE',
+        type: 'EXPENSE',
+        totalCents: BigInt(1500),
+        ...overrides,
+      };
+    }
+
+    beforeEach(() => {
+      // Por defecto, sin fijos ni cuotas en estos tests (se sobreescriben si necesario)
+      mockPrisma.recurring.findMany.mockResolvedValue([]);
+      mockPrisma.installmentGroup.findMany.mockResolvedValue([]);
+    });
+
+    it('200 + shape completo de ReportsMovementsResponse', async () => {
+      // $queryRaw se llama 2 veces en reports:
+      //   1. getAnnualUnicosAggregated
+      //   2. getEarliestYear
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([makeAnnualUnicoRow()])   // getAnnualUnicosAggregated
+        .mockResolvedValueOnce([{ earliestYear: BigInt(2026) }]); // getEarliestYear
+      // getAllFijosForAnnual y getAllCuotasForAnnual usan prisma.recurring/installmentGroup
+      mockPrisma.recurring.findMany.mockResolvedValue([]);
+      mockPrisma.installmentGroup.findMany.mockResolvedValue([]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=2026')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.statusCode).toBe(200);
+
+      const data = res.body.data;
+      expect(data).toHaveProperty('year', 2026);
+      expect(data).toHaveProperty('months');
+      expect(data).toHaveProperty('categories');
+      expect(data).toHaveProperty('earliestYear', 2026);
+
+      // months: siempre 12 entradas
+      expect(Array.isArray(data.months)).toBe(true);
+      expect(data.months).toHaveLength(12);
+      // El primer mes es enero
+      expect(data.months[0].month).toBe('2026-01');
+      // El último mes es diciembre
+      expect(data.months[11].month).toBe('2026-12');
+      // Junio (índice 5) tiene el gasto del único
+      expect(data.months[5].expenseCents).toBe(1500);
+
+      // categories
+      expect(Array.isArray(data.categories)).toBe(true);
+      expect(data.categories).toHaveLength(1);
+      expect(data.categories[0].categoryId).toBe(CAT_ID);
+      expect(data.categories[0].monthlyExpenseCents).toHaveLength(12);
+      expect(data.categories[0].monthlyExpenseCents[5]).toBe(1500); // junio
+    });
+
+    it('200 + año vacío → 12 meses en cero, categories vacío, earliestYear null', async () => {
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([])                                   // getAnnualUnicosAggregated
+        .mockResolvedValueOnce([{ earliestYear: null }]);            // getEarliestYear
+      mockPrisma.recurring.findMany.mockResolvedValue([]);
+      mockPrisma.installmentGroup.findMany.mockResolvedValue([]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=2026')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const data = res.body.data;
+      expect(data.year).toBe(2026);
+      expect(data.months).toHaveLength(12);
+      data.months.forEach((m: { incomeCents: number; expenseCents: number }) => {
+        expect(m.incomeCents).toBe(0);
+        expect(m.expenseCents).toBe(0);
+      });
+      expect(data.categories).toEqual([]);
+      expect(data.earliestYear).toBeNull();
+    });
+
+    it('200 + INCOME no aparece en categories, solo en months[*].incomeCents', async () => {
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([
+          makeAnnualUnicoRow({ type: 'INCOME', totalCents: BigInt(50000) }),
+        ])
+        .mockResolvedValueOnce([{ earliestYear: BigInt(2026) }]);
+      mockPrisma.recurring.findMany.mockResolvedValue([]);
+      mockPrisma.installmentGroup.findMany.mockResolvedValue([]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=2026')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const data = res.body.data;
+      expect(data.months[5].incomeCents).toBe(50000);
+      expect(data.months[5].expenseCents).toBe(0);
+      // No hay categorías (solo aparecen las de EXPENSE)
+      expect(data.categories).toHaveLength(0);
+    });
+  });
+
+  describe('GET /movements/reports — validaciones', () => {
+    it('400 si falta el parámetro year', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(400);
+    });
+
+    it('400 si year tiene menos de 4 dígitos (202)', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=202')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+    });
+
+    it('400 si year tiene más de 4 dígitos (20260)', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=20260')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+    });
+
+    it('400 si year no es un número (abcd)', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=abcd')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+    });
+
+    it('400 si year está fuera de rango (1800)', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=1800')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+    });
+  });
+
+  describe('GET /movements/reports — filtro de categorías (Fase 1.1.5)', () => {
+    const CAT_A_ID = 'cat-reports-a';
+    const CAT_B_ID = 'cat-reports-b';
+
+    function makeAnnualRow(categoryId: string, monthKey: string, totalCents: number) {
+      return {
+        monthKey,
+        categoryId,
+        categoryName: categoryId === CAT_A_ID ? 'Cat A' : 'Cat B',
+        categoryColor: '#4F86C6',
+        categoryScope: 'EXPENSE',
+        type: 'EXPENSE',
+        totalCents: BigInt(totalCents),
+      };
+    }
+
+    beforeEach(() => {
+      mockPrisma.recurring.findMany.mockResolvedValue([]);
+      mockPrisma.installmentGroup.findMany.mockResolvedValue([]);
+    });
+
+    it('sin param categories → todas las categorías (comportamiento base)', async () => {
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([
+          makeAnnualRow(CAT_A_ID, '2026-06', 1000),
+          makeAnnualRow(CAT_B_ID, '2026-06', 2000),
+        ])
+        .mockResolvedValueOnce([{ earliestYear: BigInt(2026) }]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=2026')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      // Sin filtro: CAT_A + CAT_B = 3000
+      expect(res.body.data.months[5].expenseCents).toBe(3000);
+      expect(res.body.data.categories).toHaveLength(2);
+    });
+
+    it('categories=<id> → solo esa categoría cuenta en totales y desglose', async () => {
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([
+          makeAnnualRow(CAT_A_ID, '2026-06', 1000),
+          makeAnnualRow(CAT_B_ID, '2026-06', 2000),
+        ])
+        .mockResolvedValueOnce([{ earliestYear: BigInt(2026) }]);
+
+      const res = await request(app.getHttpServer())
+        .get(`/movements/reports?year=2026&categories=${CAT_A_ID}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      // Solo CAT_A (1000); CAT_B queda fuera
+      expect(res.body.data.months[5].expenseCents).toBe(1000);
+      expect(res.body.data.categories).toHaveLength(1);
+      expect(res.body.data.categories[0].categoryId).toBe(CAT_A_ID);
+    });
+
+    it('categories=<id1,id2> → ambas categorías cuentan', async () => {
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([
+          makeAnnualRow(CAT_A_ID, '2026-06', 1000),
+          makeAnnualRow(CAT_B_ID, '2026-06', 2000),
+        ])
+        .mockResolvedValueOnce([{ earliestYear: BigInt(2026) }]);
+
+      const res = await request(app.getHttpServer())
+        .get(`/movements/reports?year=2026&categories=${CAT_A_ID},${CAT_B_ID}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      // Ambas → 3000
+      expect(res.body.data.months[5].expenseCents).toBe(3000);
+      expect(res.body.data.categories).toHaveLength(2);
+    });
+
+    it('id desconocido en categories → no matchea nada, no es 400', async () => {
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([
+          makeAnnualRow(CAT_A_ID, '2026-06', 1000),
+        ])
+        .mockResolvedValueOnce([{ earliestYear: BigInt(2026) }]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=2026&categories=id-inexistente')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      // El id no existe → nada matchea → totales en cero
+      expect(res.body.data.months[5].expenseCents).toBe(0);
+      expect(res.body.data.categories).toHaveLength(0);
+    });
+
+    it('earliestYear NO cambia al filtrar por categorías', async () => {
+      // Todos los movimientos son de CAT_B, pero filtramos por CAT_A
+      // El earliestYear debe ser el año más antiguo de TODOS los movimientos
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([
+          makeAnnualRow(CAT_B_ID, '2026-06', 5000),
+        ])
+        .mockResolvedValueOnce([{ earliestYear: BigInt(2023) }]); // año más antiguo = 2023
+
+      const res = await request(app.getHttpServer())
+        .get(`/movements/reports?year=2026&categories=${CAT_A_ID}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      // Totales en cero (CAT_A no tiene datos)
+      expect(res.body.data.months[5].expenseCents).toBe(0);
+      // Pero earliestYear sigue siendo 2023 (ignora el filtro)
+      expect(res.body.data.earliestYear).toBe(2023);
+    });
+  });
+
+  describe('GET /movements/reports — autenticación', () => {
+    it('401 sin JWT', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=2026')
         .expect(401);
 
       expect(res.body.success).toBe(false);

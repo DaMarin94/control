@@ -36,19 +36,21 @@ export interface MonthMovementsResponse {
 }
 
 /**
- * Shape de una entrada mensual en la respuesta anual.
+ * Shape de una entrada mensual en la respuesta de reportes.
+ * (RF-REP-001/002 — antes AnnualMonthEntry, renombrado en Fase 1.1.5)
  */
-export interface AnnualMonthEntry {
+export interface ReportMonth {
   month: string; // YYYY-MM
   incomeCents: number;
   expenseCents: number;
 }
 
 /**
- * Shape de una categoría con gasto en la respuesta anual.
+ * Shape de una categoría con gasto en la respuesta de reportes.
  * monthlyExpenseCents tiene exactamente 12 posiciones (ene→dic).
+ * (antes AnnualCategoryEntry, renombrado en Fase 1.1.5)
  */
-export interface AnnualCategoryEntry {
+export interface ReportCategory {
   categoryId: string;
   name: string;
   color: string;
@@ -56,12 +58,13 @@ export interface AnnualCategoryEntry {
 }
 
 /**
- * Shape completo de la respuesta de GET /movements/annual.
+ * Shape completo de la respuesta de GET /movements/reports.
+ * (antes AnnualMovementsResponse, renombrado en Fase 1.1.5)
  */
-export interface AnnualMovementsResponse {
+export interface ReportsMovementsResponse {
   year: number;
-  months: AnnualMonthEntry[];
-  categories: AnnualCategoryEntry[];
+  months: ReportMonth[];
+  categories: ReportCategory[];
   earliestYear: number | null;
 }
 
@@ -152,24 +155,39 @@ export class MovementsService {
   }
 
   /**
-   * Devuelve la agregación anual de movimientos del usuario para el año dado.
+   * Devuelve la serie de reportes anual de movimientos del usuario para el año dado.
    *
    * Criterio de imputación por mes (RN-015):
    * - Únicos: mes calculado con AT TIME ZONE propia de cada registro (igual que /movements).
    * - Fijos: activos en cada mes del año según startMonth y deletedFrom (comparación léxica YYYY-MM).
    * - Cuotas: activas en cada mes del año según startMonth y totalInstallments (on-the-fly).
    *
+   * Filtro de categorías (Fase 1.1.5, RF-REP-005):
+   * - categoryIds: lista de IDs a filtrar. null/vacío = todas las categorías.
+   * - Afecta los totales mensuales (Forma 1) y el desglose (Forma 2).
+   * - CRÍTICO: earliestYear IGNORA el filtro (siempre sobre todos los movimientos).
+   *
    * Validación: year obligatorio, exactamente 4 dígitos YYYY, valor entre 1900 y 2200.
    *
-   * @param userId userId del JWT (RN-003)
-   * @param year   Año en formato YYYY
+   * @param userId     userId del JWT (RN-003)
+   * @param year       Año en formato YYYY
+   * @param categoryIds Lista de categoryIds a filtrar. null/undefined/vacío = sin filtro.
    */
-  async getAnnualMovements(
+  async getReportsMovements(
     userId: string,
     year: number,
-  ): Promise<AnnualMovementsResponse> {
+    categoryIds?: string[] | null,
+  ): Promise<ReportsMovementsResponse> {
     // Validación ya ejecutada en el controller; el service recibe el número directamente.
     // (La validación de formato YYYY se hace en el controller antes de llamar acá.)
+
+    // Normalizar el filtro de categorías:
+    // null/undefined/vacío = sin filtro (todas las categorías).
+    // Un Set vacío actúa como "sin filtro" → usar null para indicar "todas".
+    const filterSet: Set<string> | null =
+      categoryIds && categoryIds.length > 0
+        ? new Set(categoryIds)
+        : null;
 
     // Los 12 meses del año como strings "YYYY-MM"
     const yearStr = String(year).padStart(4, '0');
@@ -204,6 +222,9 @@ export class MovementsService {
     const unicosRows = await this.repo.getAnnualUnicosAggregated(userId, year);
 
     for (const row of unicosRows) {
+      // Aplicar filtro de categorías (Fase 1.1.5)
+      if (filterSet !== null && !filterSet.has(row.categoryId)) continue;
+
       const idx = monthIndex(row.monthKey);
       if (idx < 0 || idx > 11) continue; // no debería pasar, pero por robustez
 
@@ -241,6 +262,9 @@ export class MovementsService {
     const fijos = await this.repo.getAllFijosForAnnual(userId);
 
     for (const fijo of fijos) {
+      // Aplicar filtro de categorías (Fase 1.1.5)
+      if (filterSet !== null && !filterSet.has(fijo.categoryId)) continue;
+
       for (let i = 0; i < 12; i++) {
         const mes = months12[i];
 
@@ -284,6 +308,9 @@ export class MovementsService {
     const cuotas = await this.repo.getAllCuotasForAnnual(userId);
 
     for (const grupo of cuotas) {
+      // Aplicar filtro de categorías (Fase 1.1.5)
+      if (filterSet !== null && !filterSet.has(grupo.categoryId)) continue;
+
       const endMonth = addMonths(grupo.startMonth, grupo.totalInstallments);
 
       for (let i = 0; i < 12; i++) {
@@ -315,7 +342,7 @@ export class MovementsService {
     // -------------------------------------------------------------------------
     // 4. Armar el array months (siempre 12 entradas)
     // -------------------------------------------------------------------------
-    const monthsResult: AnnualMonthEntry[] = months12.map((month, i) => ({
+    const monthsResult: ReportMonth[] = months12.map((month, i) => ({
       month,
       incomeCents: agg[i].incomeCents,
       expenseCents: agg[i].expenseCents,
@@ -331,7 +358,7 @@ export class MovementsService {
     //    para todo mes m. Se cumple porque tanto monthsResult como categoryExpense
     //    acumulan los mismos valores en los mismos buckets.
     // -------------------------------------------------------------------------
-    const categoriesResult: AnnualCategoryEntry[] = [];
+    const categoriesResult: ReportCategory[] = [];
 
     for (const [catId, meta] of catMeta) {
       // Verificar que tiene al menos algún gasto en el año
@@ -360,7 +387,10 @@ export class MovementsService {
     });
 
     // -------------------------------------------------------------------------
-    // 6. Año más antiguo con movimientos del usuario
+    // 6. Año más antiguo con movimientos del usuario.
+    //    CRÍTICO: se calcula SIEMPRE sobre todos los movimientos, sin aplicar
+    //    el filtro de categorías (Fase 1.1.5). Así los límites de navegación
+    //    de año no cambian al filtrar.
     // -------------------------------------------------------------------------
     const earliestYear = await this.repo.getEarliestYear(userId);
 
@@ -368,13 +398,14 @@ export class MovementsService {
       {
         userId,
         year,
+        filterCount: filterSet?.size ?? null,
         monthsWithData: monthsResult.filter(
           (m) => m.incomeCents > 0 || m.expenseCents > 0,
         ).length,
         categoriesCount: categoriesResult.length,
         earliestYear,
       },
-      'Agregación anual de movimientos calculada',
+      'Serie de reportes de movimientos calculada',
     );
 
     return {

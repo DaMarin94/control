@@ -18,7 +18,7 @@ import { useMovements } from "@/hooks/use-movements";
 import { getCurrentMonth, formatMonthLabel, formatCurrency } from "@/lib/format";
 import { NewTransactionButton } from "@/components/movements/new-transaction-button";
 import { TransactionModal } from "@/components/movements/transaction-modal";
-import { IncomeExpenseCard } from "@/components/charts/annual-chart-widget";
+import { ReportCard } from "@/components/charts/report-card";
 
 /** Deriva el año actual del helper getCurrentMonth para no usar new Date() directamente. */
 function getCurrentYear(): number {
@@ -33,6 +33,10 @@ export function DashboardClient() {
 
   // Estado para el CTA "Cargá tu primer movimiento" del estado vacío
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
+
+  // Estado efímero del widget de reporte (no se persiste — RF-DASH-001)
+  const [reportYear, setReportYear] = useState(currentYear);
+  const [reportCategoryIds, setReportCategoryIds] = useState<string[] | null>(null);
 
   const totals = data?.totals;
   const unicos = data?.movements.unicos ?? [];
@@ -225,14 +229,19 @@ export function DashboardClient() {
             </div>
           )}
 
-          {/* ── Tarjeta Ingresos y gastos (RF-GRA-002) ──
-              Ubicación: después del balance hero y ANTES del footer "Ver todos".
-              Año actual fijo, sin control de año (RF-GRA-002). */}
+          {/* ── Widget Ingresos y gastos (RF-DASH-001, RF-REP-001/002) ──
+              Modo efímero: navegación de año activa, filtro de categorías activo,
+              pero el estado NO se persiste — al recargar vuelve a año en curso + todas.
+              Ubicación: después del balance hero y ANTES del footer "Ver todos". */}
           <div className="mt-[var(--gap)]">
-            <IncomeExpenseCard
-              year={currentYear}
+            <ReportCard
+              type="income-expense"
+              year={reportYear}
+              categoryIds={reportCategoryIds}
               chartHeight={280}
-              showYearInHeader={true}
+              onYearChange={setReportYear}
+              onCategoryIdsChange={setReportCategoryIds}
+              removable={false}
             />
           </div>
 

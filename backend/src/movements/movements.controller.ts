@@ -45,8 +45,8 @@ export class MovementsController {
    * 200 + sobre con MonthMovementsResponse.
    * 400 si "month" falta o tiene formato inválido.
    *
-   * IMPORTANTE: este handler debe registrarse DESPUÉS de /annual para que NestJS
-   * no intente matchear "annual" como valor del query param "month".
+   * IMPORTANTE: este handler debe registrarse DESPUÉS de /reports para que NestJS
+   * no intente matchear "reports" como valor del query param "month".
    * (No hay problema porque ambos usan query params distintos, no path params.)
    */
   @Get()
@@ -63,26 +63,30 @@ export class MovementsController {
   }
 
   /**
-   * GET /movements/annual?year=YYYY
+   * GET /movements/reports?year=YYYY&categories=<id1,id2,...>
    *
-   * Devuelve la agregación anual de movimientos del usuario (RF-GRA-001/002/003).
+   * Devuelve la serie anual de reportes de movimientos del usuario (RF-REP-001/002/005).
    * Responde con los 12 meses del año (siempre presentes, en cero si no hay datos),
    * el desglose de gastos por categoría y el año más antiguo con datos.
    *
    * Parámetros:
    * - year (obligatorio): año en formato YYYY (4 dígitos exactos)
+   * - categories (opcional): lista de categoryIds separados por comas.
+   *   Omitido o vacío = todas las categorías. El filtro afecta ambas formas
+   *   (totales mensuales y desglose por categoría). earliestYear IGNORA el filtro.
    *
    * Criterio de imputación por mes (RN-015):
    * - Únicos: mes local (AT TIME ZONE propia del registro)
    * - Fijos y cuotas: por startMonth (comparación léxica YYYY-MM)
    *
-   * 200 + sobre con AnnualMovementsResponse.
+   * 200 + sobre con ReportsMovementsResponse.
    * 400 si "year" falta, no es exactamente 4 dígitos, o no es un año razonable.
    */
-  @Get('annual')
-  getAnnual(
+  @Get('reports')
+  getReports(
     @Request() req: AuthRequest,
     @Query('year') yearParam: string | undefined,
+    @Query('categories') categoriesParam: string | undefined,
   ) {
     // Validar presencia y formato exacto YYYY
     if (!yearParam || !/^\d{4}$/.test(yearParam)) {
@@ -99,6 +103,21 @@ export class MovementsController {
       );
     }
 
-    return this.movementsService.getAnnualMovements(req.user.userId, year);
+    // Parsear el filtro de categorías.
+    // categoriesParam es una string "id1,id2,..." o undefined.
+    // Ids vacíos (ej: ",,") se filtran — no son ids válidos.
+    const categoryIds: string[] | null =
+      categoriesParam && categoriesParam.trim().length > 0
+        ? categoriesParam
+            .split(',')
+            .map((id) => id.trim())
+            .filter((id) => id.length > 0)
+        : null;
+
+    return this.movementsService.getReportsMovements(
+      req.user.userId,
+      year,
+      categoryIds,
+    );
   }
 }

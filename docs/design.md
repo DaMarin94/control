@@ -704,3 +704,177 @@ Al activar "Ordenar secciones", la página entra en estado editable. El cambio e
 ### G. Convivencia con las reglas duras (recordatorio)
 
 - El chevron, el handle `GripVertical`, el ring de foco (`--accent-soft`) y el eventual indicador de inserción (`--accent`) son **cromo de interacción de UI** (navegación/affordance), **no** montos ni cifras de dinero: no tocan la regla dura 2 (el acento sigue siendo solo marca/interacción, nunca tiñe un monto). Ningún elemento de esta spec recolorea un subtotal ni un monto: el subtotal de la cabecera conserva su `mono --muted` y su signo (+/−) actuales; los montos de las filas, su color semántico income/expense intacto (reglas duras 1 y 3). El modo orden y el colapso **no alteran** ninguna cifra: solo muestran/ocultan y reordenan bloques.
+
+---
+
+## Reportes configurables — spec visual (Fase 1.1.5, 2026-06-17)
+
+> Spec del lenguaje visual de la Fase 1.1.5: el **renombre de `/anual` → `/reportes`** como pantalla **configurable por cards** y el **widget de reporte autónomo** que cada card monta (pantallas 7 y 8 de `screens.md`; RF-REP-001..005). Las **dos visualizaciones** (Forma 1 — Ingresos vs. Gastos; Forma 2 — Gastos por categoría apilado) **no cambian su gráfica**: el área, las barras apiladas, los ejes, la leyenda y el tooltip ya definidos en "Gráfico anual — spec visual del widget" **siguen vigentes tal cual** y se reutilizan sin tocar. Lo que esta fase agrega/cambia es el **encuadre**: cada visualización deja de ser un recuadro de año compartido y pasa a ser un **widget autónomo** que lleva **embebidos** (a) su propia navegación de año independiente y (b) su propio filtro de categorías; y la pantalla anfitriona deja de ser un par fijo de tarjetas para volverse una **grilla configurable de cards** que el usuario arma con un **"[+]"**.
+>
+> **No introduce tokens nuevos:** todo se resuelve con los tokens y patrones vigentes del DS "Precise Ledger" y con el patrón `PeriodNav` de la Fase 1.1.3.
+>
+> **Qué de "Gráfico anual — spec visual del widget" queda superado por esta sección** (y solo eso): (1) el **"Control de año ‹ › compartido (`/anual`)"** que vivía en el `.phead` y gobernaba las dos tarjetas a la vez — **eliminado**: ya no hay control compartido; cada card navega su año con el control embebido que se define abajo. (2) El **año mono suelto en la cabecera de la tarjeta del Dashboard** (zona derecha, sin navegación) — **superado**: el Dashboard ahora monta el widget con navegación **activa** (mismo control embebido). (3) La idea de "dos tarjetas apiladas fijas en `/anual`" — **superada** por la grilla configurable. Todo lo demás de esa sección (gráficas, ejes, leyenda, tooltip, estados de carga/vacío/error del área de gráfico, alto de canvas, mapeos de color, reglas duras) **se conserva**.
+
+### A. Anatomía de una card de reporte (widget autónomo)
+
+Una **card de reporte** es la unidad que `/reportes` apila y que el Dashboard monta una sola vez. Es la **tarjeta `.card` de gráfico ya existente** (panel blanco, `--line`, `--r-card` 14px, `--shadow-sm`, padding interior `--card-pad` 22px) **más** dos controles embebidos nuevos y una affordance de quitar. De arriba hacia abajo, la estructura interna de la card es:
+
+1. **Barra de cabecera de la card** — fila flex `space-between`, `align-items: center`, `margin-bottom` 18px (`--gap`). Reemplaza la cabecera de la "Gráfico anual" en lo que toca a la zona derecha:
+   - **Izquierda — identidad de la card:** igual que hoy. Eyebrow uppercase (rol *Eyebrow/labels*: 12px/600, `.1em`, uppercase, `--muted`) + **título de la card** debajo (UI font 16px/600 `--ink`):
+     - Card `income-expense` (Forma 1) → eyebrow **"Reporte"**, título **"Ingresos y gastos"**.
+     - Card `by-category` (Forma 2) → eyebrow **"Reporte"**, título **"Por categoría"**.
+     (El eyebrow pasa de "Resumen anual"/"Tu actividad" a **"Reporte"** porque la card ya no vive bajo un H1 "Anual" que dé ese contexto; cada card se autodescribe. En el Dashboard la card de Forma 1 usa el mismo eyebrow "Reporte" — ver sección F.)
+   - **Derecha — barra de controles de la card:** una fila flex `items-center` con `gap` 8px que aloja, en este orden de izquierda a derecha: **el control de año embebido** (A.1), **el botón de filtro de categorías** (A.2) y, **solo en `/reportes`**, la **affordance de quitar** la card (A.3). El año mono suelto de la cabecera del Dashboard **desaparece** (lo reemplaza el control de año activo). Si el contenido no entra en una fila junto al título, la cabecera envuelve (ver responsive, sección G).
+2. **Área del gráfico** — el chart ya definido (Forma 1 área / Forma 2 barras apiladas), con sus ejes, gridlines y estados. Sin cambios.
+3. **Leyenda** — debajo del área, sin cambios respecto de la spec del gráfico.
+
+> **Nota sobre el alto del canvas:** las cards de `/reportes` usan el alto de **300px** en desktop (el ya definido para `/anual`, por tarjeta) y **220px** en ≤940px. La card del Dashboard conserva su **280px** (desktop) / 220px (≤940px), como ya estaba. Estos altos no cambian.
+
+### A.1. Control de año embebido per-card — LA decisión central de la fase
+
+El patrón de **flechas gigantes laterales** de la Fase 1.1.3 (`PeriodNav`, `‹ contenido ›`, botón 64px / glifo 46px, sticky centrado vertical, columnas que flanquean **toda la columna de contenido de la página**) fue diseñado para **una sola vista de período a ancho completo** (`/mes`) y para un control **único por pantalla**. En `/reportes` hay **varias cards apiladas** y **cada una navega su propio año**: flanquear la página entera con flechas gigantes ya **no aplica** (no se sabría a qué card pertenecen, y habría una sola pareja para muchas cards). Por eso el control de año de 1.1.5 **NO** usa las flechas laterales gigantes a nivel de página. Se resuelve así:
+
+**El control de año vive DENTRO de la cabecera de cada card, como un `.stepper` pill embebido** — exactamente el **mismo control compacto** que el patrón `PeriodNav` de 1.1.3 ya define como su **modo de colapso** (el `.stepper` pill que `/mes` usa en ≤940px). Es decir: 1.1.5 adopta el patrón de 1.1.3, pero **siempre en su forma compacta `.stepper`**, montada en la barra de controles de la card (A.1, zona derecha de la cabecera), no en columnas laterales de página. Justificación de coherencia: el `.stepper` **es parte del mismo patrón `PeriodNav`** (su modo compacto canónico), así que usarlo per-card no inventa un control nuevo — reusa el que el patrón ya reserva para "cuando no hay lugar para flechas laterales", que es exactamente el caso de varias cards apiladas con navegación propia.
+
+**Especificación del `.stepper` de año embebido:**
+
+- **Forma:** pill `.stepper` del DS — `--r-pill`, fondo `--panel`, borde `--line`, `--shadow-sm`, padding 4px. Dos botones circulares **32px** (chevron-left / chevron-right, glifo `ChevronLeft`/`ChevronRight` lucide a 18px, `--ink-2` que pasa a `--ink` sobre fondo `--panel-2` en hover) y, en el centro, el **año** como label **mono tabular** (es un número → regla dura 3), **14.5px/600**, `--ink`, `min-width` ~52px centrado (un año son 4 dígitos; 52px alcanza). Es el mismo `.stepper` que ya existe, sin la sub-línea "Mes en curso" (acá no aplica un estado de período análogo).
+- **Glifo de los chevrons:** `ChevronLeft` / `ChevronRight` a **18px** (no 46px — esto **no** es la flecha gigante lateral; es el chevron compacto del `.stepper`). El "gigante" del patrón 1.1.3 se reserva para `/mes`; en cards embebidas el control es compacto por necesidad de layout.
+- **Estados de los chevrons — límites de navegación (RF-REP-002):** se hereda **exactamente** el estado **disabled** ya definido en `PeriodNav` (Fase 1.1.3) y en el control de año del gráfico:
+  - **‹ deshabilitado** cuando el año mostrado es `earliestYear` (primer año con CUALQUIER movimiento del usuario, **no** afectado por el filtro de categorías — RF-REP-005): chevron `--faint`, `opacity` 0.4, `cursor: default`, sin hover, `aria-disabled`. No se oculta.
+  - **› deshabilitado** cuando el año mostrado es el año en curso (no se navega al futuro): mismo tratamiento apagado.
+  - Reposo, hover, active y focus de los chevrons: los del `.stepper` del DS (hover `--panel-2`, focus ring `--accent-soft` 3px). Sin novedad.
+- **`aria-label` de los chevrons:** "Año anterior" / "Año siguiente" (el patrón `PeriodNav` ya contempla recibir el label según el período).
+- **Ubicación:** primer elemento de la barra de controles de la cabecera (A, punto 1, zona derecha), a la izquierda del botón de filtro. Alineado al centro vertical de la fila de cabecera.
+
+**Por qué NO las flechas gigantes laterales acá (registro de la decisión):** (1) son **un control por página**, no por card; con N cards no hay forma de que una sola pareja de flechas laterales navegue años independientes. (2) Viven en **columnas que flanquean los 1120px de contenido**; meterlas por-card obligaría a un grid de 3 columnas por cada card y a flechas gigantes pegadas a cada tarjeta — visualmente ruidoso y ambiguo cuando hay varias cards. (3) El propio patrón 1.1.3 ya previó este caso y **dejó el `.stepper` como su modo compacto reutilizable**. Adoptarlo es la lectura fiel de la nota de continuidad de 1.1.3 ("si las flechas flanquean la card individual… ese encuadre por-card lo resuelve 1.1.5"): **lo resolvemos optando por el modo `.stepper` del patrón, no por flechas gigantes per-card.** El lenguaje visual de la flecha (chevron, estados, disabled) es el mismo del patrón; solo cambia el encuadre (pill embebido en la cabecera, en vez de columnas laterales).
+
+### A.2. Filtro de categorías embebido (checklist en popover)
+
+Cada card filtra **su propio** subconjunto de categorías (default: todas). El filtro debe (a) ofrecer el **universo de categorías del usuario** (no solo las con gasto, porque aplica también a Forma 1), (b) **no tapar el gráfico** y (c) caber en una cabecera junto al año. Se resuelve como **botón disparador + popover con checklist**, no como fila de chips permanente (una fila de chips de todas las categorías ocuparía demasiado alto fijo y competiría con el gráfico).
+
+**A.2.1 — Botón disparador del filtro (en la cabecera):**
+
+- **Estilo:** botón **ghost chico** del DS (patrón `.btn.ghost.sm`): sin fill en reposo, texto `--ink-2`, ícono a la izquierda, `hover:bg-panel-2 hover:text-ink`, radio `--r-ctl` (10px), foco `--accent-soft` 3px. Texto 12.5–13px/600.
+- **Ícono:** lucide `SlidersHorizontal` (15px, a la izquierda del texto) — comunica "filtrar/ajustar". (Se elige `SlidersHorizontal` sobre `Filter` para no chocar con ningún otro uso; cualquiera de los dos es admisible, **preferencia `SlidersHorizontal`**.)
+- **Rótulo y estado (el texto refleja la selección):**
+  - **Todas seleccionadas (default):** rótulo **"Categorías"** (sin contador). Estado neutro: el filtro está "en su default", nada que destacar.
+  - **Subconjunto (algunas destildadas, ≥1 seleccionada):** rótulo **"Categorías · N"** donde **N = cantidad seleccionada**, con el "· N" en mono tabular (es un número) `--ink`. Además, para señalar "hay un filtro activo" sin recolorear el botón, el ícono y el texto del botón suben a `--ink` (no `--ink-2`) y el botón gana un **punto indicador** de 6px `--accent` (`•`) inmediatamente a la derecha del rótulo. El `--accent` acá es **cromo de interacción de UI** (marca "filtro activo"), **no** tiñe ningún monto → regla dura 2 intacta. Es el único uso de acento del control, y es admisible por ser indicador de estado de UI, no cifra.
+  - **Ninguna seleccionada:** rótulo **"Categorías · 0"**, mismo tratamiento de "filtro activo" (ink + punto acento). Es un estado válido (el gráfico se grafica en cero, ver A.2.4); el botón no se pinta de error.
+- **Estado abierto (popover desplegado):** el botón queda en estado "activo" visual — fondo `--panel-2`, texto `--ink` — mientras el popover está abierto, para anclar visualmente el origen del popover.
+
+**A.2.2 — Popover del checklist:**
+
+- **Tipo:** **popover** anclado al botón disparador, que **se despliega hacia abajo** desde la cabecera, **por encima** del área de gráfico (overlay, no empuja el layout) y **alineado a la derecha** del botón (su borde derecho coincide con el del botón, para no salirse de la card). Al abrirse **flota sobre el gráfico** sin desplazarlo; al cerrarse, el gráfico queda intacto. Esto resuelve "no tapar el gráfico de forma permanente": el gráfico solo queda cubierto **mientras** el popover está abierto, que es justo cuando el usuario está eligiendo categorías y no mirando el gráfico.
+- **Caja:** panel `--panel`, borde `--line`, radio `--r-ctl` (10px), `--shadow-lg` (la sombra de elevación de popovers/menús del DS), padding 0 (el padding lo dan las zonas internas, abajo). **Ancho** fijo **260px**. **Alto máximo** ~320px con **scroll vertical interno** (`overflow-y: auto`) cuando hay muchas categorías; el header y el footer del popover (abajo) quedan **fijos** (sticky) y solo scrollea la lista. `margin-top` 6px respecto del botón (aire disparador↔popover).
+- **Header del popover (fijo arriba):** una fila `space-between` con padding `10px 12px`, borde inferior `--hair`:
+  - Izquierda: label **"Mostrar categorías"** (rol *Eyebrow/labels* atenuado: UI 12px/600, `.1em`, uppercase, `--muted`).
+  - Derecha: una acción de texto **toggle "Todas" / "Ninguna"** — link-button ghost muy chico (UI 12px/600, `--accent-ink`, hover subraya). Muestra **"Todas"** cuando hay ≥1 destildada (la acción selecciona todas); muestra **"Ninguna"** cuando están todas tildadas (la acción destilda todas). Es el atajo de seleccionar/deseleccionar en bloque. El `--accent-ink` acá es color de **acción de UI** (un link), no un monto → admisible.
+- **Lista de categorías (scrollable):** una fila por categoría del **universo del usuario** (todas las activas; el orden = el de `/categorias`, alfabético o el que ya use esa pantalla — el front reutiliza el mismo orden de categorías que ya muestra). Cada fila:
+  - `flex items-center gap-[10px]`, padding `8px 12px`, `cursor: pointer`, toda la fila es el target del toggle (no solo el checkbox). Hover de fila: fondo `--panel-2`.
+  - **Checkbox** del DS a la izquierda (el componente checkbox ya existente; marcado = `--accent` con check `--panel`, desmarcado = borde `--line-strong` sobre `--panel`). El `--accent` del check es cromo de control de formulario, admisible (no es monto).
+  - **Swatch de color de la categoría** 10px, radio 3px (el mismo swatch chico de la leyenda del gráfico), con el `category.color`. Va **entre** el checkbox y el nombre, para que el usuario asocie la categoría a su color (clave en Forma 2, donde el color es la banda).
+  - **Nombre** de la categoría: UI 13px/500 `--ink` (tildada) / `--ink-2` (destildada, leve atenuación para reforzar "no cuenta"). Sin contador de movimientos acá (no es `/categorias`): solo color + nombre.
+  - Si una categoría está **soft-deleted pero todavía aparece con gasto en algún año** (RF-CAT-004): **no** se lista en el universo del filtro (el universo son las **activas**); el gráfico igual la dibuja con su color en los años donde tiene gasto (eso lo maneja el dato, no el filtro). El filtro opera sobre categorías activas; no agrega filas para categorías eliminadas. *(Si esto resultara ambiguo funcionalmente — ver "Dudas para el orquestador".)*
+  - **Empty del universo:** si el usuario no tiene ninguna categoría activa (caso límite: las eliminó todas), el popover muestra, en lugar de la lista, una línea centrada UI 12.5px `--muted` "No tenés categorías." con padding `16px 12px`. Sin acción.
+- **Footer del popover (fijo abajo) — opcional:** no se agrega footer con botones de "Aplicar/Cancelar": el filtro es **en vivo** (cada check/destilde recalcula el gráfico al instante, como el resto de los filtros del producto). El popover se cierra por: clic fuera, `Esc`, o re-clic en el disparador. No hay confirmación. (Coherente con "el filtro aplica en vivo" de los RF.)
+
+**A.2.3 — Comportamiento de selección:**
+
+- **Default = todas tildadas.** Visualmente, todas las filas con checkbox marcado; el botón disparador en su estado neutro "Categorías".
+- **Destildar** una o más → el gráfico recalcula en vivo; el botón pasa a "Categorías · N" con el indicador de filtro activo (A.2.1).
+- **Todas / Ninguna** desde el header del popover → marca/desmarca en bloque, recalcula en vivo.
+- En modo **persistido** (cards de `/reportes`) cada cambio de selección se persiste (RF-REP-004); en modo **efímero** (Dashboard) no. Esto es funcional, no cambia la presentación; visualmente el control se ve y se comporta igual en ambos modos.
+
+**A.2.4 — Filtro que vacía el reporte:** si la selección no tiene movimientos en el año (o "Ninguna"), el área de gráfico muestra los **12 meses en cero** con el **mensaje de estado vacío** ya definido en la spec del gráfico ("Sin movimientos…"), **sin error**. Los límites de navegación de año **no** cambian (siguen atados a `earliestYear`, independiente del filtro). El botón de filtro queda en su estado "activo" (· N o · 0). No se introduce un empty distinto para "el filtro vació el reporte": reusa el empty de año-sin-movimientos del gráfico.
+
+### B. Affordance de quitar una card (A.3, solo en `/reportes`)
+
+La card de `/reportes` se puede **quitar**; la del Dashboard **no** (es fija). La affordance de quitar:
+
+- **Control:** un botón **icon-only** ghost chico al final de la barra de controles de la cabecera (zona derecha, después del filtro). Glifo lucide **`X`** (16px), `--muted` en reposo, `--ink` en hover con fondo `--panel-2`, radio `--r-ctl`, zona de toque ~32×32px, foco `--accent-soft`. `aria-label` "Quitar reporte".
+- **Confirmación:** quitar es **reversible en el sentido de que el usuario puede volver a agregar la card**, pero **pierde la configuración** (año + filtro) de esa card. Para evitar un borrado accidental de una card configurada, el clic en `X` abre una **confirmación inline ligera**, no un modal completo: un **popover de confirmación** anclado al botón `X` (mismo lenguaje de popover que el filtro: `--panel`, `--line`, `--r-ctl`, `--shadow-lg`, padding `12px 14px`, ancho ~220px), con el texto UI 13px `--ink` "¿Quitar este reporte?" y, debajo, dos botones en fila: **"Quitar"** (`.btn.sm` con tratamiento **danger** del DS — el rojo `--expense` reservado para acciones destructivas de UI; acá "Quitar" es destructivo de configuración, admisible como acción danger, no como monto) y **"Cancelar"** (`.btn.ghost.sm`). Clic fuera o `Esc` cancela.
+  - *Alternativa aceptable si el front prefiere consistencia con el resto de las confirmaciones del producto:* reutilizar el **modal de confirmación** estándar del DS (el mismo de "Eliminar categoría"/"Eliminar movimiento": diálogo radio 18px, `shadow-lg`, título 18px/700, botón danger + cancelar). **Preferencia: el popover inline** por ser una acción de configuración liviana (no toca datos, solo la vista), pero el modal estándar es válido si unifica el patrón de confirmación. Cualquiera de los dos; no inventar un tercer mecanismo.
+- **Ubicación del `X`:** es el **último** elemento de la barra de controles. Para que no quede pegado al filtro, lleva un `margin-left` extra de 4px o un mini-divisor `--hair` vertical (1px, alto ~16px) entre el filtro y el `X`, separando "controles del reporte" (año, filtro) de "acción sobre la card" (quitar). **Preferencia: el divisor `--hair`** (lee mejor la separación conceptual).
+
+### C. Recuadro "[+]" para agregar card y elección de tipo
+
+El **"[+]"** está **siempre presente** en `/reportes` (con cards o sin ellas) y es el único punto de alta de cards.
+
+**C.1 — El recuadro "[+]" (la card placeholder de alta):**
+
+- **Forma:** un recuadro del **mismo footprint que una card de reporte** (mismo ancho de columna; ver grilla, sección E), pero con tratamiento de **placeholder / dropzone**: fondo `--panel-2`, **borde `dashed` `--line`** (el mismo lenguaje "dashed = espacio para agregar / sin contenido fijo" que ya usa el empty de sección de `/mes` y el hueco de drag), radio `--r-card` (14px), **sin** `--shadow-sm` (no es una superficie elevada; es una invitación). Alto: en estado vacío inicial (sin cards), un alto generoso para presidir la pantalla (ver D); cuando ya hay cards, un alto **compacto** (~120px) suficiente para alojar el ícono + label, para que el "[+]" no compita con las cards reales.
+- **Contenido (centrado, vertical):** ícono lucide **`Plus`** (28px, `--muted`) dentro de un círculo sutil (`--panel-3`, 48px, sin borde) y, debajo, label UI 13px/600 `--muted` **"Agregar reporte"**.
+- **Estados:** reposo como arriba. **Hover:** el borde dashed pasa a `--line-strong`, el ícono y el label suben a `--ink-2`, fondo a `--panel-3`; `cursor: pointer`; transición 0.14s. **Focus (teclado):** ring `--accent-soft` 3px sobre el recuadro. Es un único control accionable (un `button` que ocupa todo el recuadro).
+- **Ubicación:** **al final** de la grilla de cards (después de la última card), siempre visible. En estado vacío inicial es lo único en pantalla y se centra (ver D).
+
+**C.2 — Elección del tipo de reporte al agregar (el mecanismo de interacción):**
+
+Al activar el "[+]", el usuario debe elegir **Forma 1 (Ingresos vs. Gastos)** o **Forma 2 (Gastos por categoría)** antes de que la card se cree. Mecanismo elegido: **un popover-menú de 2 opciones anclado al "[+]"** (no un modal, no una card placeholder a configurar después — la elección es binaria y trivial, no amerita un modal ni un paso de configuración intermedio).
+
+- **Popover-menú:** anclado al recuadro "[+]", se despliega hacia abajo (o hacia arriba si no hay espacio; el front decide el flip). Mismo lenguaje de popover del DS: `--panel`, `--line`, `--r-ctl`, `--shadow-lg`, padding 6px, ancho ~240px. `margin` 6px respecto del "[+]".
+- **Dos ítems de menú** (cada uno una fila `flex items-center gap-[10px]`, padding `10px 12px`, radio `--r-ctl`, hover `--panel-2`, `cursor: pointer`):
+  - **Ítem 1 — "Ingresos y gastos":** a la izquierda un **mini-glifo de previsualización** que insinúa la Forma 1 (dos líneas/áreas superpuestas) — puede ser un ícono lucide `AreaChart` o `TrendingUp` (16px, `--ink-2`), o un mini-swatch doble (un cuadradito `--income` + uno `--expense` de 8px). **Preferencia: el ícono `AreaChart`** por simplicidad y para no recargar el menú con semánticos. Nombre: UI 13px/600 `--ink`. Debajo, meta opcional UI 11.5px `--muted` "Ingresos vs. gastos por mes".
+  - **Ítem 2 — "Por categoría":** a la izquierda ícono lucide `BarChart3` (16px, `--ink-2`) que insinúa las barras apiladas. Nombre: UI 13px/600 `--ink`. Debajo, meta opcional UI 11.5px `--muted` "Gastos por categoría, apilado".
+- **Al elegir un ítem:** el popover se cierra, la card nueva se **agrega al final** (antes del "[+]", que se recoloca después de la nueva card) con su tipo, **año en curso** y **todas las categorías** (RF-REP-003), y la card aparece con la **animación de entrada de card** (sección H). No hay paso de configuración intermedio: la card nace lista y el usuario ajusta año/filtro con sus controles embebidos.
+- **Cierre sin elegir:** clic fuera o `Esc` cierra el popover sin crear nada.
+
+### D. Estado vacío inicial de `/reportes` (solo "[+]")
+
+La primera visita (clave `reports` ausente o array vacío, RF-REP-003/004) muestra **solo el "[+]"**, centrado y en versión "presidiendo la pantalla":
+
+- **Layout:** el contenido de la pantalla (header `.phead` + zona de cards) ocupa el `max-width` 1120px habitual. Bajo el `.phead`, en lugar de la grilla de cards, **un único recuadro "[+]" centrado**:
+  - **Header `.phead` igual que siempre:** eyebrow (rol *Eyebrow/labels*, `--muted`) **"Tu actividad"** + H1 (rol *H1 página*, 32px/700, `--ink`) **"Reportes"**. (El H1 cambia de "Anual" a "Reportes", coherente con el renombre.) La zona derecha del `.phead` queda **vacía** (ya no hay control de año compartido). 
+  - **El recuadro "[+]" en versión grande:** mismo recuadro dashed de C.1 pero con alto generoso (**~280px**, el alto de un área de gráfico, para que se sienta "del tamaño de un reporte que todavía no existe") y centrado horizontalmente, con un ancho acotado (~**480px**, no a ancho completo: una invitación, no una card real estirada). Dentro, el contenido se enriquece respecto del "[+]" compacto:
+    - Ícono `Plus` 32px `--muted` en círculo `--panel-3` 56px.
+    - Título UI 15px/600 `--ink-2` **"Armá tu primer reporte"**.
+    - Línea de ayuda UI 12.5px/500 `--muted`, centrada, máx ~2 líneas: **"Agregá un reporte de ingresos y gastos o de gastos por categoría. Cada uno navega su propio año y filtra sus categorías."** (copy de invitación; si el analista define otro redactado, se respeta — lo visual es: título + una línea de ayuda `--muted` centrada).
+  - Sin ilustración, sin segundo CTA. Sobrio, coherente con los empties del DS.
+- **Interacción:** el recuadro grande es el mismo disparador del popover-menú de tipo (C.2). Al agregar la primera card, la pantalla pasa al estado "con cards" (E): la card creada se monta arriba y el "[+]" se **encoge a su versión compacta** (C.1) al final de la grilla.
+
+### E. Grilla de cards en `/reportes` (estado con cards)
+
+- **Disposición:** **una sola columna** de cards apiladas verticalmente, a ancho del contenido (`max-width` 1120px), **separadas por `--gap` (18px)** vertical — el mismo aire que ya separaba las dos tarjetas de `/anual`. No se introduce un grid multi-columna en v1.1: las cards de gráfico necesitan ancho para leer 12 meses, y una columna mantiene la coherencia con el `/anual` actual y con el resto del DS (desktop-first, contenido a 1120px). El **orden** de las cards = el orden del array `reports` (RF-REP-004); el front no reordena.
+- **El "[+]" compacto** (C.1) va **al final**, después de la última card, separado de ella por el mismo `--gap` (18px). Siempre visible, siempre el último elemento de la columna.
+- **Sin reordenamiento de cards en v1.1:** la pantalla **no** ofrece arrastrar/reordenar cards (no está en el alcance cerrado de 1.1.5; el orden es el del array, y el alta agrega al final). No se agregan handles de drag. *(Si producto quisiera reordenar cards, sería alcance nuevo — no se asume.)*
+- **Estados por card:** cada card resuelve **su propio** cargando / con datos / vacío / error, con los tratamientos ya definidos en la spec del gráfico (skeleton del alto del canvas, empty "Sin movimientos en {año}", error con `alert-triangle` + "Reintentar"). Una card en error **no** rompe el resto de la columna ni el "[+]". El control de año y el botón de filtro de la cabecera **siguen presentes y usables** aunque el área de gráfico esté en error o cargando (la cabecera no se tapa con el skeleton; solo el área de gráfico).
+
+### F. Dashboard (pantalla 3) — convivencia de resumen fijo + widget con navegación activa
+
+El Dashboard monta **una sola** card de reporte, de tipo `income-expense` (Forma 1), en **modo efímero**, con **navegación de año activa** y **filtro de categorías** — el **mismo widget** y los **mismos controles embebidos** (A.1 control de año `.stepper`, A.2 filtro popover) que las cards de `/reportes`. La card del Dashboard **no** lleva la affordance de quitar (B) — es fija. El reto visual es que el **resumen mensual** del Dashboard (stats + balance hero) es **fijo en el mes en curso y NO navega**, mientras la card **sí** navega año: hay que evitar que el usuario crea que navegar el año de la card mueve el resumen.
+
+**Tratamiento para que no se confundan:**
+
+- **Orden y separación (sin cambios respecto de la spec del gráfico):** de arriba hacia abajo en la columna del Dashboard: bloque de **resumen mensual** (stats + balance hero, con su encabezado de **mes** "Junio 2026") → **card de reporte Ingresos y gastos** → footer "Ver todos los movimientos →". La card va separada del resumen por `--gap` (18px). Son **dos bloques visualmente distintos**: el resumen es un bloque de stats + hero (sin `.card` de gráfico); la card es una `.card` de gráfico con su cabecera. Esa diferencia de forma ya ayuda a separarlos.
+- **Anclas temporales explícitas y distintas:**
+  - El **resumen mensual** conserva su **encabezado de mes** ("Junio 2026", rol H1 de la pantalla / el que ya use el Dashboard) — deja claro que el resumen es **del mes en curso**. Ese encabezado **no** tiene control de navegación (el Dashboard no navega meses): se ve como un rótulo fijo, igual que hoy.
+  - La **card** muestra su **año** en su propio `.stepper` embebido (A.1) dentro de la cabecera de la card — un **control de año**, visiblemente navegable (chevrons), claramente **scoped a la card**. La distinción "mes fijo arriba (rótulo) vs. año navegable abajo (stepper dentro de la card)" es la señal principal: distinto **grano temporal** (mes vs. año) y distinta **forma** (rótulo vs. stepper interactivo).
+- **Micro-rótulo de aclaración en la card (refuerzo):** para blindar el caso, la cabecera de la card del Dashboard usa el eyebrow **"Reporte"** (igual que en `/reportes`) y, dado que el grano es anual, el control de año habla por sí mismo. **No** se agrega texto extra del tipo "no afecta el resumen" (sería ruido); la separación de bloques + el distinto grano temporal + el stepper scoped a la card alcanzan. Si tras implementar se viera ambigüedad real, evaluar un eyebrow más explícito ("Reporte anual") — pero **no** se especifica copy adicional ahora (evitar inventar texto).
+- **Filtro efímero:** el botón de filtro de la card del Dashboard se ve y se comporta **idéntico** al de `/reportes` (A.2); la única diferencia es que su estado **no se persiste** (al recargar vuelve a "todas"). Visualmente no hay diferencia entre efímero y persistido — el usuario no necesita verlo; es comportamiento, no presentación.
+- **La card del Dashboard NO es removible:** no se renderiza el `X` de quitar (B). El usuario no puede sacar el reporte del Dashboard (es parte fija de la pantalla, RF-DASH-001). En `/reportes`, sí.
+
+### G. Responsive (desktop-first)
+
+- **Desktop (>940px):** la cabecera de cada card en **una fila** — título a la izquierda; barra de controles (año `.stepper` + filtro + [quitar]) a la derecha. La columna de cards a 1120px; el "[+]" compacto al final. El popover de filtro y el menú de tipo se anclan a su disparador como se definió.
+- **≤940px (sidebar oculta):**
+  - **Cabecera de la card:** si los controles (stepper de año + botón de filtro + eventual X) no entran en la misma fila que el título, la cabecera **envuelve en dos filas** (`flex-wrap`): título arriba; barra de controles debajo, alineada al inicio (izquierda). El `.stepper` de año conserva su forma compacta (ya es compacto). El botón de filtro mantiene su rótulo; si aprieta, puede colapsar a **icon-only** (solo `SlidersHorizontal` + el punto acento si hay filtro activo, sin el texto "Categorías · N") — **preferencia: conservar el rótulo** mientras entre; icon-only solo si no entra.
+  - **Popover de filtro:** en pantallas muy angostas, el popover anclado de 260px podría desbordar; si no entra alineado a la derecha del botón, se ancla al **borde derecho de la card** con un pequeño margen, o pasa a ocupar casi todo el ancho de la card (con el mismo `max-height` + scroll). El front resuelve el anclaje; el contenido del popover no cambia.
+  - **Grilla:** sigue siendo una columna (ya lo era); el área de gráfico de cada card baja a **220px** (ya definido). El "[+]" compacto al final, a ancho de la card.
+  - **Empty inicial:** el recuadro "[+]" grande (D) reduce su ancho acotado al ancho disponible de la card (con un margen), conservando el centrado y el copy.
+- Ninguna card scrollea horizontal; el contenido encaja al ancho del contenedor (igual que la spec del gráfico).
+
+### H. Movimiento y `prefers-reduced-motion`
+
+- **Alta de card:** la card nueva entra con la **animación de entrada de pantalla del DS** (fade + `translateY`, 0.32s) — aparece desde abajo con un leve desplazamiento, y el "[+]" se recoloca debajo de ella. Las áreas/barras del gráfico de la card hacen su *grow* de entrada (~0.4s) ya definido en la spec del gráfico.
+- **Quitar card:** la card sale con un **fade-out + colapso de altura** (0.22s, el tiempo del `pop`/colapso del DS) y las cards de abajo (y el "[+]") **suben suavemente** para cerrar el hueco (transición 0.22s ease-out).
+- **Apertura/cierre de popovers** (filtro, menú de tipo, confirmación de quitar): el `pop` de overlay del DS (scale .98→1, 0.22s) que ya usan los menús/modales.
+- **Cambio de año de una card:** solo recalcula y reanima el *grow* de **esa** card (~0.4s); las demás cards no se tocan (son independientes). 
+- **Cambio de filtro:** el gráfico de la card recalcula; las áreas/barras pueden reanimar el *grow* (~0.4s) o transicionar suavemente sus valores — preferencia: reanimar el *grow*, coherente con el cambio de año.
+- **`prefers-reduced-motion`:** se **desactiva** la animación de entrada/salida de cards, el *grow* de gráficos (`isAnimationActive={false}`, ya en la spec del gráfico) y el `pop` de popovers; las transiciones de color/hover de los controles también se desactivan. Las cards aparecen/desaparecen y los gráficos cargan **instantáneamente**. Regla obligatoria del DS.
+
+### I. Convivencia con las reglas duras (recordatorio)
+
+- **Año en mono tabular** (regla dura 3): el año del `.stepper` embebido es un número → mono `tnum`, como ya estaba el año del control de gráfico.
+- **El acento solo como cromo de UI** (regla dura 2): los únicos usos de `--accent`/`--accent-ink`/`--accent-soft` en esta spec son **indicadores de interacción** — el punto "filtro activo" del botón de filtro, el link "Todas/Ninguna" del popover, el check de los checkboxes, los focus rings. **Ninguno tiñe un monto ni una cifra de dinero.** El acento sigue siendo solo marca/interacción.
+- **Semánticos income/expense intactos** (regla dura 1): el verde/rojo solo aparece donde la spec del gráfico ya lo define (serie de ingresos / gastos de la Forma 1, montos del tooltip). El filtro, el `.stepper`, el "[+]", el menú de tipo y la confirmación de quitar **no** usan income/expense salvo: (a) el opcional mini-swatch doble del ítem "Ingresos y gastos" del menú de tipo, que es **previsualización del propio reporte** (admisible, comunica qué es la Forma 1), y (b) el botón "Quitar" en tratamiento **danger** (`--expense` como rojo de acción destructiva de UI, no como monto — uso ya establecido del DS para acciones destructivas). Los **colores de categoría** del checklist y de las bandas son **identificador de categoría**, nunca tiñen montos (regla de la matriz de colores intacta).
+- Ningún control de esta fase recolorea ni altera una cifra de dinero: el filtro **cambia qué datos entran** al gráfico, pero la presentación de cada monto (color semántico, mono tabular) la sigue gobernando la spec del gráfico sin cambios.
