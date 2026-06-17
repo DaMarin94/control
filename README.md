@@ -56,6 +56,9 @@ yo tengo pesos y dolares, actualmente mis gastos son todos pesos SALVO algunos d
 
 .F2 - Una convencion global de "ordering" en los query params del API, para que los listados se puedan pedir ya ordenados desde el backend. Hoy no hace falta para el orden de secciones de `/mes` (Fase 1.1.4) porque las preferencias del usuario ya viajan en la sesion y el orden se resuelve en el front sin round trip, pero un listado paginado o grande a futuro si se beneficiaria de ordenar server-side (no se puede reordenar en el cliente lo que no se trajo); se diseñaria cuando aparezca el primer listado que lo justifique, definiendo formato de los params, campos ordenables y direccion, de forma reutilizable entre endpoints.
 
+. 1.1.3 - fix - que las flechas meses sean estaticas en eje vertical centradas como cuando el listado ocupa todo el largo.
+. 1.1.4 - fix - el reordenamiento tiene que colapsar todas las columnas. El reordenamiento tiene que mantener los items en el box, no deberian flotar con el mouse, solo subir o bajar.
+
 ## Tests
 
 Cada app guarda sus tests en una carpeta `tests/` separada de `src/` (`src/` solo contiene código; ver `docs/technical.md`).
