@@ -237,6 +237,33 @@ Carga, edición y eliminación de movimientos fijos. Se crean desde el tab **Fij
   - En `updateRecurring`, para **limpiar** la descripción se envía `description: null` **explícito** (no `undefined`, que el backend interpretaría como "no cambiar").
   - El mapeo `MovementItem → Recurring` para precargar el form de edición sigue el mismo patrón que el de únicos (el ítem no trae todos los campos del recurso).
 
+## Movimientos calculados (fase 1.1.7)
+
+Un calculado es un fijo cuyo monto/tipo se derivan; el front solo construye la fórmula y muestra el resultado derivado que ya viene en el `MovementItem` (`calculated` / `hasCalculated` / `amountCents` con signo). Contrato en `docs/data-model.md`, §Contrato de movimientos calculados; reglas en RF-MCALC-001..007. Lo no obvio:
+
+### Creación — solo desde un fijo
+
+- **No hay tab "calculado"** en el modal de carga (RF-MCALC-001). El único disparador es la acción **"crear movimiento desde este"** del kebab de un ítem **fijo** en `/mes` (ícono `Calculator`). `movement-item-row.tsx` la ofrece **solo** en fijos **no** calculados (`isFijo && !movement.calculated`).
+
+### `calculated-form.tsx`
+
+- **Sin selector Gasto/Ingreso:** el tipo se **deriva** del signo+monto final (`final > 0 → INCOME`, `≤ 0 → EXPENSE`). El form tiene segmented de **operador** (`+ − × ÷ %`), input de **operando** con affordance (`$` para ADD/SUB, `%` para PCT, factor para MUL/DIV), segmented de **signo** (Positivo/Negativo), y un **preview en vivo**: expresión legible + cifra + **badge de tipo derivado**.
+- **Escalado del operando:** el form escala el float del usuario al entero que espera el backend según el operador (ADD/SUB `×100`, MUL/DIV `×1_000_000`, PCT `×100`) y desescala al editar. Misma escala que `docs/data-model.md`, §Escalado del operando.
+- **Modo edición — preview con `sourceAmountCents`:** el preview usa `movement.calculated.sourceAmountCents` (monto del origen en el mes) como base; si viene `null`, muestra `—` sin romper.
+- **Operando 0 con DIV/PCT** se bloquea en el front (deshabilita submit + error) además de la validación del backend (RN-017).
+- **Categorías filtradas por el tipo derivado** en vivo (cambia al cambiar signo/fórmula).
+
+### Indicación padre/hijo (RF-MCALC-007)
+
+- En `movement-item-row.tsx`: si el ítem **es** calculado → chip **"Calculado"** (`Link2`) + segmento **"desde {Origen}"** (de `calculated.sourceDescription`); si **es padre** (`hasCalculated`) → ícono `GitBranch`.
+- **Borrado:** `delete-recurring-dialog.tsx` muestra un **callout de advertencia** cuando `movement.hasCalculated` (los calculados asociados también se eliminarán — cascada del backend, RF-MCALC-005).
+
+### Datos (`use-calculated`)
+
+- Mutaciones `createCalculated(sourceId, data)` (`POST /recurring/:id/calculated`) y `updateCalculated(id, data)` (`PATCH /recurring/:id/calculated`). El **borrado reutiliza `deleteRecurring`** de `use-recurring` (mismo `DELETE /recurring/:id`).
+- Invalida toda la familia `["movements"]` por prefijo (un calculado afecta muchos meses, igual que un fijo).
+- **`type` NO se envía** en ningún body (lo deriva el backend). Editar un calculado va **siempre** por este hook: `PATCH /recurring/:id` rechaza calculados con `400`.
+
 ## Movimientos en cuotas
 
 Carga, edición y eliminación de grupos de cuotas. Se crean desde el tab **Cuotas** del modal de carga; editar y eliminar se cablean desde la Vista del mes, igual que únicos y fijos. **Solo Gasto en v1.**

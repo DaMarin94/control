@@ -126,6 +126,12 @@
 - **Backend (`CategoriesModule`):** `POST`/`PATCH` aceptan `color` con validación contra la matriz vía `@IsColorInMatrix`; detalle en `docs/backend.md`, §Pool de colores.
 - **Frontend:** componente `ColorPicker` (grid 10×7) en crear/editar; detalle en `docs/frontend.md`.
 
+### Movimientos calculados (fase 1.1.7)
+
+- **Estado:** implementado end-to-end (front + back). Fijo cuyo monto/tipo se **derivan al vuelo** del monto de otro fijo de origen vía fórmula (RF-MCALC-001..007, RN-017/018/019). Reglas funcionales en `docs/requirements.md`, submódulo 3.4.b; conceptos de datos en `docs/data-model.md`, §Identidad de cadena estable y §Movimiento calculado; bitácoras 2026-06-17 y 2026-06-18 (`docs/decisions.md`); spec visual en `docs/design/specs-archive.md`.
+- **Backend (`RecurringModule` + `MovementsModule`):** endpoints nuevos `POST /recurring/:id/calculated` y `PATCH /recurring/:id/calculated`; `chainId` estable que sobrevive a los splits; derivación on-the-fly del monto/tipo en `findFijosByMonth`; cascada de eliminación a calculados. Contrato en `docs/data-model.md`; mecánica en `docs/backend.md`, §Movimientos calculados.
+- **Frontend:** creación solo vía acción "crear movimiento desde este" (kebab) sobre un fijo; `CalculatedForm` sin selector de tipo (derivado del signo) con preview en vivo; hook `useCalculated`. Detalle y gotchas en `docs/frontend.md`, §Movimientos calculados.
+
 ### Preferencias de usuario — cimiento (fase 1.1.0)
 
 - **Estado:** implementado, **sin UI de producto**. Cimiento que persiste preferencias del usuario (sobrevive a navegación y cierre de sesión); lo consumen 1.1.4 / 1.1.5 / 1.1.6. Ver bitácora 2026-06-15.

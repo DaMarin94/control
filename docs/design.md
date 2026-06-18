@@ -54,6 +54,10 @@ Verde = ingreso, Rojo = gasto. Reservados estrictos.
 
 **`warning` (ámbar, hue 75)** — token semántico agregado a la implementación porque el DS original no tenía ámbar: `--warning` `oklch(0.72 0.15 75)`, `-soft` `oklch(0.95 0.05 75)`, `-ink` `oklch(0.52 0.12 75)`. Sigue la misma dualidad `@theme`/`:root` que income/expense.
 
+**El color de un monto lo da el TIPO (ingreso/gasto), no el signo del valor.** Desde la Fase 1.1.7 existen montos **negativos o cero** (solo en movimientos calculados, RN-018). El signo se comunica con el **prefijo `−`** (signo menos `U+2212`) delante de la cifra (`−$1.234,56`); el cero es `$0,00`. **Nunca** se recolorea un monto por ser negativo: un gasto con monto negativo sigue en color de gasto. Recolorear por signo rompería la regla dura 1.
+
+**Tipo derivado del signo (movimientos calculados, RF-MCALC-003).** En el **calculado**, el tipo **no se elige**: se **deriva del signo del monto final** — positivo → **Ingreso** (verde), negativo → **Gasto** (rojo), cero → **Gasto** (convención de borde). Por eso el form del calculado **no tiene control "Tipo"**: el tipo se **comunica como lectura** dentro del bloque "Resultado" (cifra con su color por tipo + **badge de tipo** tintado: "Gasto" `--expense-ink`/`--expense-soft`, "Ingreso" `--income-ink`/`--income-soft`), recalculado en vivo. El **control de signo** se mantiene **neutro** (segmented sin color semántico): el verde/rojo va sobre la **lectura del tipo** (cifra + badge), nunca sobre el control. Esto es consistente con la regla anterior — el color sigue al tipo, y en el calculado el tipo sigue al signo.
+
 ### Neutros
 
 | Token | Light | Uso |
@@ -300,6 +304,17 @@ Selector del color de categoría en el modal de categoría (crear y editar), que
 
 > Detalle verbatim: *Picker de color de categoría — spec visual (Fase 1.1.2)* en `docs/design/specs-archive.md`.
 
+### Metadatos de relación en la sublínea del ítem de `/mes` (calculados)
+
+La **sublínea** del ítem de `/mes` es el lugar canónico de los metadatos del movimiento (categoría, tipo, frecuencia, estado anulado). La relación **padre/hijo** de los movimientos calculados (Fase 1.1.7) se señala ahí, con **chips/segmentos neutros**, sin recolorear el ítem ni el monto:
+
+- **Hijo (es un calculado):** chip neutro **"Calculado"** (mismo estilo que el chip "Anulado": `--panel-3` / `--muted` / `--r-chip` / 11px·600·`.04em`) con mini-glifo `Link2` (11px), como **primer** segmento de la sublínea; y un segmento final **"desde {Origen}"** (`--muted`, nombre en `--ink-2`, sin mono). Orden si además está anulado: `[Anulado] [Calculado] Categoría · …`.
+- **Padre (tiene calculados derivados):** segmento final con glifo `GitBranch` (13px, `--muted`) + contador mono tabular si hay más de uno, y `title` nativo "Tiene N calculado(s)". Señal más liviana que la del hijo (es info secundaria).
+- El ítem calculado es un **fijo** a todo otro efecto visual (ícono por tipo, sublínea, estado anulado de 1.1.1). El **monto** puede ser negativo/cero (ver *Paleta y uso de tokens* → regla del signo).
+- **Aviso de borrado en cascada (modal de eliminar fijo):** cuando el fijo a eliminar es **padre** (`hasCalculated === true`), el modal de confirmación suma un **callout de advertencia** como **último bloque del cuerpo, antes del footer**, avisando que al borrar el fijo también se borran sus calculados. Es **advertencia (ámbar `--warning`), no error**: el borrado es lo pedido, el callout informa el efecto colateral. Banda `--r-ctl`, fondo `--warning-soft`, borde `--warning`, `AlertTriangle` (lucide, 16px, `--warning-ink`) + texto 13px/500 `--warning-ink`. El botón "Eliminar" del footer **sigue siendo `danger`** (rojo): advertencia ámbar y acción destructiva roja conviven. Solo aparece si `hasCalculated`; si es `false`, el modal queda igual. Wording vigente: *"Este movimiento fijo tiene movimientos calculados que dependen de él. Si lo eliminás, esos calculados también se eliminarán."* (genérico — el front solo tiene el booleano, no nombra ni cuenta los hijos).
+
+> Detalle verbatim: *Movimientos calculados — spec visual (Fase 1.1.7)* en `docs/design/specs-archive.md`.
+
 ---
 
 ## Índice de specs archivadas
@@ -314,3 +329,4 @@ Las specs visuales puntuales de cada fase ya implementada se conservan **verbati
 | Navegación de período — flechas laterales | 1.1.3 | Vigente | *PeriodNav* |
 | Vista del mes — secciones colapsables + reordenables | 1.1.4 | Vigente | *Acordeón* |
 | Reportes configurables | 1.1.5 | Vigente | *Card de reporte*, *Filtro de categorías embebido*, control de año embebido (forma compacta de *PeriodNav*) |
+| Movimientos calculados | 1.1.7 | Vigente | *Metadatos de relación en la sublínea del ítem de `/mes`* (chips padre/hijo); regla del **signo del monto** (negativo/cero, en *Paleta y uso de tokens*); form de calculado y acción del kebab (específicos de fase, no transversales) |

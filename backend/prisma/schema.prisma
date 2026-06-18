@@ -43,6 +43,21 @@ enum RecurringFrequency {
   ANNUAL
 }
 
+// Operadores de la fórmula de un movimiento calculado (Fase 1.1.7).
+// El monto del calculado es: sign × round(operator(sourceAmount, operand))
+//   ADD:  sourceAmount + operand           (operand en centavos)
+//   SUB:  sourceAmount - operand           (operand en centavos)
+//   MUL:  sourceAmount × operand           (operand es factor crudo, ej. 1.5)
+//   DIV:  sourceAmount ÷ operand           (operand es divisor; ≠ 0)
+//   PCT:  sourceAmount × operand ÷ 100     (operand es porcentaje; ≠ 0)
+enum FormulaOperator {
+  ADD
+  SUB
+  MUL
+  DIV
+  PCT
+}
+
 // ---------------------------------------------------------------------------
 // User
 // ---------------------------------------------------------------------------
@@ -185,6 +200,39 @@ model Recurring {
   // determina si el fijo aparece en ese mes.
   frequency RecurringFrequency @default(MONTHLY)
 
+  // ---------------------------------------------------------------------------
+  // Identidad de cadena estable (Fase 1.1.7)
+  // chainId: identificador que persiste a través de todos los splits del fijo.
+  // Cuando PATCH hace un split (cierra R1 y abre R2), R2 hereda el chainId de R1.
+  // Así el vínculo de los calculados al origen no se rompe al editar el origen.
+  // Asignado en creación (cuid()) y nunca modificado después.
+  // No es un FK — es un tag compartido por la cadena lógica.
+  // ---------------------------------------------------------------------------
+  chainId String @default(cuid())
+
+  // ---------------------------------------------------------------------------
+  // Movimiento calculado (Fase 1.1.7) — campos opcionales:
+  // Solo presentes si esta fila ES un calculado (sourceChainId != null).
+  // Un fijo normal deja todos estos campos en null.
+  // ---------------------------------------------------------------------------
+
+  // sourceChainId: chainId del fijo de origen. Nunca puede ser el propio chainId
+  // (sin encadenamiento). FK lógica — no hay FK de DB (la cadena puede tener
+  // varias filas con distintos ids).
+  sourceChainId String?
+
+  // formulaOperator: operador de la fórmula (ADD/SUB/MUL/DIV/PCT).
+  formulaOperator FormulaOperator?
+
+  // formulaOperand: operando de la fórmula.
+  // Para ADD/SUB: centavos (Int × 100). Para MUL/DIV: factor crudo × 1000000 (6 decimales).
+  // Para PCT: porcentaje × 100 (ej. 10% → 1000, 1.5% → 150).
+  // Se almacena como Int para precisión entera.
+  formulaOperand Int?
+
+  // formulaSign: signo del resultado. 1 = positivo, -1 = negativo.
+  formulaSign Int?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -196,6 +244,8 @@ model Recurring {
   skips RecurringSkip[]
 
   @@index([userId])
+  @@index([chainId])
+  @@index([sourceChainId])
 }
 
 // ---------------------------------------------------------------------------

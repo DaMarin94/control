@@ -123,6 +123,11 @@ function makeFijo(overrides: Partial<RecurringForAnnual> = {}): RecurringForAnnu
     categoryName: 'Servicios',
     categoryColor: '#6DBF67',
     categoryScope: 'EXPENSE',
+    chainId: 'chain-fijo-001',
+    sourceChainId: null,
+    formulaOperator: null,
+    formulaOperand: null,
+    formulaSign: null,
     ...overrides,
   };
 }

@@ -7,6 +7,8 @@
  * - Acción "Anular este mes" en el KebabMenu de fijos activos (P1 — Fase 1.1.1).
  * - Acción "Des-anular este mes" en el KebabMenu de fijos anulados (P1 — Fase 1.1.1).
  * - Únicos y cuotas NO tienen la acción de anular en su KebabMenu.
+ * - Fase 1.1.7: chip "Calculado" para hijos, indicador GitBranch para padres,
+ *   monto negativo/cero, acción "Crear movimiento desde este".
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -61,6 +63,8 @@ const fijoActivo: MovementItem = {
   frequency: "MONTHLY",
   skipped: false,
   category: baseCategory,
+  calculated: null,
+  hasCalculated: false,
 };
 
 const fijoAnulado: MovementItem = {
@@ -104,6 +108,8 @@ const unico: MovementItem = {
   frequency: null,
   skipped: false,
   category: { id: "cat-2", name: "Alimentación", color: "#00FF00", scope: "BOTH" },
+  calculated: null,
+  hasCalculated: false,
 };
 
 const cuota: MovementItem = {
@@ -118,6 +124,52 @@ const cuota: MovementItem = {
   frequency: null,
   skipped: false,
   category: { id: "cat-3", name: "Tecnología", color: "#0000FF", scope: "EXPENSE" },
+  calculated: null,
+  hasCalculated: false,
+};
+
+/** Fijo calculado (hijo) */
+const fijoCalculado: MovementItem = {
+  ...fijoActivo,
+  id: "calc-1",
+  description: "Ahorro",
+  amountCents: 15000,
+  calculated: {
+    sourceChainId: "chain-orig",
+    sourceId: "rec-1",
+    sourceDescription: "Sueldo",
+    formulaOperator: "PCT",
+    formulaOperand: 1000, // 10% (10 × 100)
+    formulaSign: 1,
+    sourceAmountCents: 150000,
+  },
+  hasCalculated: false,
+};
+
+/** Fijo calculado con monto negativo */
+const fijoCalculadoNegativo: MovementItem = {
+  ...fijoCalculado,
+  id: "calc-neg",
+  amountCents: -5000,
+  calculated: {
+    ...fijoCalculado.calculated!,
+    formulaSign: -1,
+  },
+};
+
+/** Fijo calculado con monto cero */
+const fijoCalculadoCero: MovementItem = {
+  ...fijoCalculado,
+  id: "calc-zero",
+  amountCents: 0,
+};
+
+/** Fijo padre (tiene calculados derivados) */
+const fijoPadre: MovementItem = {
+  ...fijoActivo,
+  id: "padre-1",
+  description: "Sueldo",
+  hasCalculated: true,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -355,5 +407,113 @@ describe("MovementItemRow — semántica del KebabMenu", () => {
 
     expect(eliminarItem).toBeInTheDocument();
     expect(anularItem).toBeInTheDocument();
+  });
+});
+
+// ─── Tests: Fase 1.1.7 — calculados / padre/hijo / monto negativo ────────────
+
+describe("MovementItemRow — Fase 1.1.7: indicadores calculado/padre", () => {
+  it("ítem calculado muestra el chip 'Calculado' en la sublínea", () => {
+    renderRow(fijoCalculado);
+    expect(screen.getByText("Calculado")).toBeInTheDocument();
+  });
+
+  it("ítem calculado muestra 'desde Sueldo' en la sublínea", () => {
+    renderRow(fijoCalculado);
+    expect(screen.getByText("Sueldo")).toBeInTheDocument();
+    expect(screen.getByText("desde")).toBeInTheDocument();
+  });
+
+  it("ítem no calculado NO muestra el chip 'Calculado'", () => {
+    renderRow(fijoActivo);
+    expect(screen.queryByText("Calculado")).not.toBeInTheDocument();
+  });
+
+  it("ítem padre con hasCalculated=true no muestra chip 'Calculado'", () => {
+    renderRow(fijoPadre);
+    expect(screen.queryByText("Calculado")).not.toBeInTheDocument();
+  });
+
+  it("ítem calculado NO tiene la acción 'Crear movimiento desde este' en el KebabMenu", () => {
+    const onCreateCalculated = vi.fn();
+    render(
+      <MovementItemRow
+        movement={fijoCalculado}
+        viewMonth="2026-06"
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onCreateCalculated={onCreateCalculated}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    const trigger = screen.getByRole("button", { name: /acciones de ahorro/i });
+    fireEvent.click(trigger);
+
+    expect(
+      screen.queryByRole("menuitem", { name: /crear movimiento desde este/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("ítem fijo NO calculado con onCreateCalculated tiene la acción en el KebabMenu", () => {
+    const onCreateCalculated = vi.fn();
+    render(
+      <MovementItemRow
+        movement={fijoActivo}
+        viewMonth="2026-06"
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onCreateCalculated={onCreateCalculated}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    const trigger = screen.getByRole("button", { name: /acciones de alquiler/i });
+    fireEvent.click(trigger);
+
+    expect(
+      screen.getByRole("menuitem", { name: /crear movimiento desde este/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("click en 'Crear movimiento desde este' llama al handler con el movement", () => {
+    const onCreateCalculated = vi.fn();
+    render(
+      <MovementItemRow
+        movement={fijoActivo}
+        viewMonth="2026-06"
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onCreateCalculated={onCreateCalculated}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    const trigger = screen.getByRole("button", { name: /acciones de alquiler/i });
+    fireEvent.click(trigger);
+
+    const crearItem = screen.getByRole("menuitem", { name: /crear movimiento desde este/i });
+    fireEvent.click(crearItem);
+
+    expect(onCreateCalculated).toHaveBeenCalledWith(fijoActivo);
+  });
+});
+
+describe("MovementItemRow — Fase 1.1.7: monto negativo/cero", () => {
+  it("monto negativo en calculado muestra prefijo −", () => {
+    renderRow(fijoCalculadoNegativo);
+    // amountCents = -5000 → "−$50,00"
+    expect(screen.getByText("−$50,00")).toBeInTheDocument();
+  });
+
+  it("monto cero en calculado muestra '$0,00' sin prefijo", () => {
+    renderRow(fijoCalculadoCero);
+    expect(screen.getByText("$0,00")).toBeInTheDocument();
+  });
+
+  it("monto de gasto calculado positivo no muestra prefijo + ni −$", () => {
+    renderRow(fijoCalculado);
+    // amountCents = 15000 → "$150,00" (sin prefijo +/−)
+    expect(screen.getByText("$150,00")).toBeInTheDocument();
   });
 });

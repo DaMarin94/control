@@ -116,8 +116,8 @@ Devuelve la serie **anual agregada** del usuario para los reportes (RF-REP-001/0
 ### `POST /transactions` · `PATCH /transactions/:id` · `DELETE /transactions/:id`
 CRUD de movimientos únicos. El monto siempre en centavos (entero > 0). El instante se guarda en UTC más la zona original del registro (ver fechas/timezone en `docs/technical.md`).
 
-### `POST /recurring` · `PATCH /recurring/:id` · `DELETE /recurring/:id`
-Gestión de movimientos fijos. El PATCH y el DELETE reciben el mes actual (`currentMonth`) para resolver la inmutabilidad del pasado; el DELETE además usa `fromCurrentMonth` (query) para controlar desde cuándo deja de aparecer el fijo. Contrato completo en la sección **Movimientos fijos (RecurringModule)**. **No hay `GET /recurring/:id`.**
+### `POST /recurring` · `PATCH /recurring/:id` · `DELETE /recurring/:id` · `POST|PATCH /recurring/:id/calculated`
+Gestión de movimientos fijos y calculados. El PATCH y el DELETE reciben el mes actual (`currentMonth`) para resolver la inmutabilidad del pasado; el DELETE además usa `fromCurrentMonth` (query) para controlar desde cuándo deja de aparecer el fijo. Los **calculados** (Fase 1.1.7) usan endpoints propios `POST|PATCH /recurring/:id/calculated`. Contrato completo en la sección **Movimientos fijos (RecurringModule)** y **Movimientos calculados**. **No hay `GET /recurring/:id`.**
 
 ### `POST /installments` · `PATCH /installments/:id` · `DELETE /installments/:id`
 Gestión de grupos de cuotas. **Solo `EXPENSE` en v1** (rechaza `INCOME` con `400`). El PATCH edita el grupo completo in-place (RF-MC-003). El DELETE es **hard delete del grupo entero** (todas las cuotas, pasadas y futuras). **No hay `GET /installments/:id`**: el front prefilea desde el `MovementItem` de `/movements`. Contrato completo en la sección **Movimientos en cuotas (InstallmentsModule)**.
@@ -237,6 +237,8 @@ Gestión de movimientos fijos, **scopeada por `userId` del JWT**. El módulo exp
 | `POST /recurring` | `{ type, amountCents, categoryId, startMonth, frequency?, description? }` | `201` · `data: Recurring` | `400` |
 | `PATCH /recurring/:id` | `{ amountCents?, categoryId?, description?, currentMonth }` | `200` · `data: Recurring` | `400` · `404` |
 | `POST /recurring/:id/skip` | `{ month }` (`YYYY-MM`) | `200` · `data: { skipped, month }` | `400` · `404` |
+| `POST /recurring/:id/calculated` | calculado desde el fijo `:id` (1.1.7) | `201` · `data: Recurring` | `400` · `404` |
+| `PATCH /recurring/:id/calculated` | edita el calculado `:id` (1.1.7) | `200` · `data: Recurring` | `400` · `404` |
 | `DELETE /recurring/:id` | query: `currentMonth`, `fromCurrentMonth` | `204 No Content` | `404` |
 
 - **`type`, `startMonth` y `frequency` no son editables** por PATCH: solo `amountCents`, `categoryId` y `description` (RF-MF-003). El `startMonth` del POST es el mes actual que envía el front.
@@ -275,6 +277,39 @@ Un fijo aparece en `month` si: `startMonth <= month` **y** (`deletedFrom IS NULL
 
 - **`fromCurrentMonth` llega como string** (`"true"` / `"false"`) en los query params; NestJS **no lo castea a boolean**. Hay que parsearlo explícitamente.
 - **Validación de categoría consolidada (Fase 7):** la lógica que en Fases 4/6 estaba duplicada entre `TransactionsService` y `RecurringService` se extrajo a **`CategoryValidatorService`** (módulo `categories`). Los tres módulos de movimientos lo inyectan. Ver sección **Movimientos en cuotas** abajo.
+
+## Movimientos calculados (Fase 1.1.7)
+
+Un **calculado es un fijo** cuyo `amountCents` y `type` **no se ingresan ni se persisten**: se **derivan al vuelo** en lectura del monto de otro fijo de origen vía fórmula. Vive en el mismo `RecurringModule`. Endpoints y shape en `docs/data-model.md`, §Contrato de movimientos calculados; reglas en RF-MCALC-001..007 / RN-017/018/019. Lo no obvio:
+
+### `chainId` — identidad de cadena estable
+
+- Todo `Recurring` tiene un **`chainId`** (`@default(cuid())`). Un "fijo lógico" es una **cadena de filas** con el mismo `chainId`; en el **split** de edición (cierra R1, abre R2), **R2 hereda el `chainId` de R1** — el `id` de fila cambia, el `chainId` no.
+- El calculado **vincula al origen por `sourceChainId` = `chainId` del origen** (NO un `Recurring.id` de fila). Así el vínculo **sobrevive a los splits** del origen (RF-MCALC-004). El calculado tiene además su **propia** `chainId` nueva (es su propia cadena, independiente).
+- **Limitación conocida/aceptada:** las cadenas partidas por splits **anteriores** a la migración de `chainId` quedaron con `chainId`s separados (no se reagruparon retroactivamente).
+
+### Derivación on-the-fly (Forma 2, no persistida)
+
+Análogo a RN-006 (fijos/cuotas no generan filas por mes). En `findFijosByMonth` (y en `getFijosTotalsByMonth`):
+
+- La fila del calculado persiste **placeholders** (`amountCents = 0`, `type = EXPENSE`) que **NUNCA** se usan para mostrar.
+- Se arma un mapa `chainId → { amountCents, skipped, ... }` de los **fijos normales** activos en el mes. Para cada calculado, `amountCents = applyFormula(montoOrigen, operator, operand, sign)` y `type` se **deriva del signo**: `> 0 → INCOME`, `≤ 0 → EXPENSE` (default `0 = EXPENSE`).
+- **Presencia gobernada SOLO por el origen.** Un calculado aparece en el mes **sii el origen tiene fila activa en ese mes** (está en el mapa). **No** se le aplica `isOnFrequency` con su **propio** `startMonth` — hacerlo desalinea con el origen cuando la frecuencia tiene step > 1 y los `startMonth` no coinciden. *(Causa raíz de un bug ya corregido: el gating del calculado es el origen, no su propia frecuencia.)* El calculado **hereda** del origen frecuencia, actividad y **skip** (si el origen está skippeado, el calculado se marca `skipped`).
+- **Orden de la lista de fijos por `Math.abs(amountCents)` DESC**, porque un calculado puede ser negativo y no debe quedar relegado al final.
+
+### Imputación a totales (RN-019)
+
+Cada calculado suma `|final|` al bucket de su **type derivado** (`getFijosTotalsByMonth` y la proyección anual). El balance `ingresos − gastos` queda intacto; nunca hay restas a un bucket. Un calculado skippeado (por el origen) no suma.
+
+### Eliminación con cascada (RF-MCALC-005)
+
+`remove()` aplica `applyBoundaryToChain(chainId, boundary)` a **toda** la cadena del fijo clickeado (por fila: `boundary <= startMonth` → hard delete; si no → set `deletedFrom = boundary`). Si el fijo es **origen** (`sourceChainId === null`), además llama `cascadeDeleteCalculados(chainId, boundary)`, que aplica el **mismo** boundary, fila por fila, a cada cadena de calculado vinculada (`sourceChainId = chainId del origen`). Eliminar un **calculado** no dispara la cascada (no afecta al origen).
+
+### Gotchas
+
+- **`validateCategory` con `skipScopeCheck = true`** para calculados: como el `type` es derivado y varía mes a mes, no hay un type fijo contra el cual validar el scope; se acepta cualquier categoría compatible con `BOTH`.
+- **`PATCH /recurring/:id` y `PATCH /recurring/:id/calculated` se excluyen mutuamente:** el primero rechaza `400` si el `:id` es calculado; el segundo, `400` si no lo es. En el split del calculado, R2 hereda `chainId`, `sourceChainId` y la fórmula del original.
+- **Nunca persistir el monto/tipo derivado.** Si se agrega lógica que escribe `amountCents`/`type` de un calculado, es un bug: esos campos son placeholders.
 
 ## Movimientos en cuotas (InstallmentsModule)
 

@@ -234,6 +234,10 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   const [editingCuota, setEditingCuota] = useState<MovementItem | null>(null);
   const [deletingCuota, setDeletingCuota] = useState<MovementItem | null>(null);
 
+  // Estado de modales para calculados (Fase 1.1.7)
+  const [creatingCalculated, setCreatingCalculated] = useState<MovementItem | null>(null);
+  const [editingCalculated, setEditingCalculated] = useState<MovementItem | null>(null);
+
   // ── Estado de acordeón y orden (Fase 1.1.4) ───────────────────────────────
 
   // Normalizar desde preferencias (back-compat)
@@ -311,12 +315,23 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
 
   function handleEdit(movement: MovementItem) {
     if (movement.origin === "fijo") {
-      setEditingFijo(movement);
+      // Si es un calculado → abrir modal de edición de calculado (PATCH /calculated)
+      // Si es un fijo normal → abrir modal de edición de fijo
+      if (movement.calculated) {
+        setEditingCalculated(movement);
+      } else {
+        setEditingFijo(movement);
+      }
     } else if (movement.origin === "cuota") {
       setEditingCuota(movement);
     } else {
       setEditingUnico(movement);
     }
+  }
+
+  /** Abre el form de "crear calculado" con el ítem fijo seleccionado como origen */
+  function handleCreateCalculated(movement: MovementItem) {
+    setCreatingCalculated(movement);
   }
 
   function handleDelete(movement: MovementItem) {
@@ -465,7 +480,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
           {items.length === 0 ? (
             <SectionEmpty sectionKey={id} />
           ) : (
-            <SectionList items={items} viewMonth={month} onEdit={handleEdit} onDelete={handleDelete} />
+            <SectionList items={items} viewMonth={month} onEdit={handleEdit} onDelete={handleDelete} onCreateCalculated={handleCreateCalculated} />
           )}
         </AccordionSection>
       </div>
@@ -691,6 +706,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                               viewMonth={month}
                               onEdit={handleEdit}
                               onDelete={handleDelete}
+                              onCreateCalculated={handleCreateCalculated}
                             />
                           </div>
                         )}
@@ -762,6 +778,26 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
         />
       )}
 
+      {/* ── Modal crear calculado (Fase 1.1.7 — RF-MCALC-001) ── */}
+      {creatingCalculated && (
+        <TransactionModal
+          mode="create-calculated"
+          calculated={creatingCalculated}
+          onClose={() => setCreatingCalculated(null)}
+          viewMonth={month}
+        />
+      )}
+
+      {/* ── Modal editar calculado (Fase 1.1.7 — RF-MCALC-006) ── */}
+      {editingCalculated && (
+        <TransactionModal
+          mode="edit-calculated"
+          calculated={editingCalculated}
+          onClose={() => setEditingCalculated(null)}
+          viewMonth={month}
+        />
+      )}
+
       {/* ── Popover de filtro de categorías (portaleado a body) ── */}
       {filterOpen && (
         <CategoryFilterPopover
@@ -794,9 +830,11 @@ interface SectionListProps {
   viewMonth: string;
   onEdit: (m: MovementItem) => void;
   onDelete: (m: MovementItem) => void;
+  /** Handler para "Crear movimiento desde este" (solo para fijos NO calculados) */
+  onCreateCalculated?: (m: MovementItem) => void;
 }
 
-function SectionList({ items, viewMonth, onEdit, onDelete }: SectionListProps) {
+function SectionList({ items, viewMonth, onEdit, onDelete, onCreateCalculated }: SectionListProps) {
   return (
     <div className="bg-panel border border-line rounded-card overflow-hidden shadow-[var(--shadow-sm)]">
       {items.map((item) => (
@@ -806,6 +844,7 @@ function SectionList({ items, viewMonth, onEdit, onDelete }: SectionListProps) {
           viewMonth={viewMonth}
           onEdit={onEdit}
           onDelete={onDelete}
+          onCreateCalculated={onCreateCalculated}
         />
       ))}
     </div>

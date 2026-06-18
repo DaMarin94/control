@@ -699,3 +699,207 @@ El Dashboard monta **una sola** card de reporte, de tipo `income-expense` (Forma
 - **El acento solo como cromo de UI** (regla dura 2): los únicos usos de `--accent`/`--accent-ink`/`--accent-soft` en esta spec son **indicadores de interacción** — el punto "filtro activo" del botón de filtro, el link "Todas/Ninguna" del popover, el check de los checkboxes, los focus rings. **Ninguno tiñe un monto ni una cifra de dinero.** El acento sigue siendo solo marca/interacción.
 - **Semánticos income/expense intactos** (regla dura 1): el verde/rojo solo aparece donde la spec del gráfico ya lo define (serie de ingresos / gastos de la Forma 1, montos del tooltip). El filtro, el `.stepper`, el "[+]", el menú de tipo y la confirmación de quitar **no** usan income/expense salvo: (a) el opcional mini-swatch doble del ítem "Ingresos y gastos" del menú de tipo, que es **previsualización del propio reporte** (admisible, comunica qué es la Forma 1), y (b) el botón "Quitar" en tratamiento **danger** (`--expense` como rojo de acción destructiva de UI, no como monto — uso ya establecido del DS para acciones destructivas). Los **colores de categoría** del checklist y de las bandas son **identificador de categoría**, nunca tiñen montos (regla de la matriz de colores intacta).
 - Ningún control de esta fase recolorea ni altera una cifra de dinero: el filtro **cambia qué datos entran** al gráfico, pero la presentación de cada monto (color semántico, mono tabular) la sigue gobernando la spec del gráfico sin cambios.
+
+---
+
+## Movimientos calculados — spec visual (Fase 1.1.7, 2026-06-17)
+
+> Spec del lenguaje visual de la Fase 1.1.7 (submódulo 3.4.b de `requirements.md`, RF-MCALC-001..007). Un **movimiento calculado** es un **fijo** cuyo monto **no se ingresa**: se deriva en vivo del monto de **otro fijo de origen** vía una **fórmula** (operador + operando) y un **switch de signo**, mes a mes. Toca **tres** lugares: (1) el **ítem de `/mes`** (`movement-item-row.tsx`) — indicación padre/hijo + montos negativos/cero; (2) el **KebabMenu del ítem fijo** — la acción "crear movimiento desde este"; (3) el **modal de carga** — un nuevo **form de calculado** (operador + operando + signo + origen read-only + resultado derivado). **No introduce tokens nuevos:** todo se resuelve con los tokens y patrones vigentes del DS "Precise Ledger".
+>
+> **Restricción dura:** el look actual del ítem de `/mes` y del modal de carga **se mantiene**; esta spec **agrega** (no reemplaza) los indicadores padre/hijo, la presentación de monto negativo, la tercera acción del kebab y el form de calculado. Todo lo no mencionado queda como está.
+>
+> **Coherencia con specs previas:** el ítem calculado es un **fijo** a todos los efectos visuales — hereda **íntegro** el tratamiento del fijo de la Fase 1.1.1 (ícono tintado por tipo, sublínea `Categoría · gasto/ingreso · 🔁 frecuencia`, estado anulado con opacidad 0.55 + tachado + badge "Anulado"). El form de calculado **reusa** el patrón de bloques del modal (`space-y-[14px]`, bloque `flex flex-col gap-[7px]` con `Label` arriba) y el patrón "toggle en crear / caja read-only en editar" de Tipo y Frecuencia (Fase 1.1.1).
+>
+> **Lo que NO es de esta spec (se deriva):** la mecánica de split del pasado, el recálculo en vivo, la persistencia, el contrato de datos (qué flags expone el backend para "tiene hijos" / "es hijo de", el nombre del origen, la fórmula). Esta spec define **cómo se ve** cada cosa, no cómo se computa ni qué shape tiene el dato. Si el front necesita el contrato, lo pide al analista vía orquestador.
+
+### 1. Indicación visual padre/hijo en `/mes` (RF-MCALC-007)
+
+Hay **dos** relaciones a señalar, **ortogonales** (un fijo puede ser padre, hijo, ambos no — un calculado nunca es padre, RF-MCALC-001) y que **conviven** con el estado anulado de la Fase 1.1.1. El criterio rector: **señales livianas en la sublínea**, sin agregar peso visual ni competir con el monto. Ni el padre ni el hijo cambian de ícono ni de color de monto; la relación se comunica con **chips/segmentos de sublínea** neutros y un **ícono de vínculo**.
+
+**1.a — Ítem HIJO (es un calculado de un fijo de origen):**
+
+El ítem hijo es un fijo normal en su columna de ícono, nombre y monto. Lo que lo distingue:
+
+- **Chip "Calculado" en la sublínea**, como **primer segmento** de la sublínea (antes de "Categoría"), con el **mismo estilo de chip neutro** que el badge "Anulado" de la Fase 1.1.1: UI font 11px, peso 600, `letter-spacing: .04em`, fill `--panel-3`, texto `--muted`, radio `--r-chip` (7px), padding `1px 7px`. Texto: **"Calculado"**. Lleva, a su izquierda dentro del chip, un mini-glifo lucide **`Link2`** (11px, `--muted`, mismo color que el texto del chip) que comunica "deriva de otro". El chip es **neutro a propósito** (no semántico, no acento): "es calculado" es un rasgo estructural del movimiento, no un estado de error ni una cifra.
+- **Referencia al origen en la sublínea:** inmediatamente después de la cadena habitual de la sublínea (`Categoría · gasto · 🔁 mensual`), se agrega un segmento más, separado por el mismo bullet `--faint`: **"desde {Nombre del origen}"**, texto `--muted` 12.5px (rol *Meta/subtítulos*), con **"desde"** en `--muted` normal y el **nombre del origen** en `--ink-2` (levemente más firme, para que se lea cuál es el padre) — sin mono (es un nombre, no una cifra). Si el nombre es largo, el segmento trunca con elipsis (`text-overflow: ellipsis`) sin romper la fila. *El nombre del origen es dato que provee el backend; si no estuviera disponible, el chip "Calculado" solo ya cumple RF-MCALC-007 — ver "Dudas para el orquestador".*
+- **Orden final de la sublínea del hijo:** `[chip Calculado] Categoría · gasto · 🔁 mensual · desde Sueldo`. (Si además está anulado, el chip "Anulado" va **primero**, antes del chip "Calculado": `[Anulado] [Calculado] Categoría · …`.)
+- **El monto del hijo** se presenta según la regla de monto negativo/cero de la sección 1.c (puede ser ≤ 0). Lo demás del ítem (ícono tintado por tipo, nombre, hover, kebab) **no cambia**.
+
+**1.b — Ítem PADRE (un fijo que tiene al menos un calculado derivado):**
+
+El padre es un fijo común; la señal de "tiene hijos" debe ser **aún más liviana** que la del hijo (es información secundaria: lo importante del padre es que es un fijo normal; el dato "alguien deriva de mí" es contextual).
+
+- **Ícono indicador de "tiene derivados"** al final de la **sublínea** (último segmento, separado por el bullet `--faint`): glifo lucide **`GitBranch`** (13px, `--muted`) seguido —si hay más de uno— de un contador **mono tabular** chiquito: **`GitBranch 2`** cuando tiene 2 derivados, solo el glifo cuando tiene 1. El glifo `GitBranch` comunica "de esto se ramifica algo". El contador, cuando aparece, va en mono tabular (es un número) `--muted` 12px, pegado al glifo. *(Alternativa de glifo: `CornerDownRight`; **preferencia `GitBranch`** por leer mejor "tiene ramificaciones/derivados".)*
+- **`title`/tooltip nativo del segmento** (accesible, no es un popover): "Tiene N movimiento(s) calculado(s)". No se abre panel ni se listan los hijos en el ítem padre (eso no lo pide el RF; los hijos se ven como sus propias filas en la lista).
+- **No se cambia** el chip de tipo, el ícono ni el color del monto del padre. La única adición es ese segmento de sublínea con `GitBranch`.
+- **Orden final de la sublínea del padre:** `Categoría · gasto · 🔁 mensual · ⎇ GitBranch 2`. (El indicador de derivados va **al final**, después de la frecuencia.)
+
+**Por qué sublínea y no badge grande ni recoloreo:** la sublínea ya es el lugar donde el producto pone metadatos del movimiento (categoría, tipo, frecuencia, anulado). Sumar la relación padre/hijo ahí mantiene la jerarquía: el **monto y el nombre dominan**; la relación es metadato terciario en `--muted`. Recolorear el ítem o el monto rompería la regla dura 1 (color = ingreso/gasto) y agregaría ruido. Los chips/íconos neutros (`--muted` / `--panel-3`) comunican la estructura sin pelear con la semántica del monto.
+
+**Convivencia con el estado anulado (Fase 1.1.1):** un calculado puede estar anulado el mes (si su origen está anulado, RF-MCALC-005). En ese caso aplican **ambos** tratamientos: opacidad 0.55 + tachado del monto + chip "Anulado" (de 1.1.1) **y** el chip "Calculado" + referencia al origen (de acá). Los chips conviven en la sublínea (Anulado primero, Calculado después). El chip "Calculado" hereda la opacidad de la fila como el "Anulado" (refuerza el apagado, aceptable).
+
+### 1.c — Presentación del monto negativo o cero (RN-018) — solo calculados
+
+Por RN-018 un calculado **puede tener monto negativo o cero** (excepción única a "monto > 0"; ningún otro movimiento llega acá). Hay que presentar un monto **negativo** y un monto **cero** sin romper la regla dura 1 (verde=ingreso, rojo=gasto) ni la lectura del balance.
+
+> **Decisión clave:** el **color del monto sigue gobernado por el TIPO del movimiento** (gasto → rojo `--expense`/`--ink` según convención vigente; ingreso → verde `--income-ink`), **no por el signo del valor**. El signo se comunica con el **prefijo `−`** delante de la cifra, no recoloreando. Es decir: un calculado de tipo **gasto** con monto negativo **no** se vuelve verde — sigue siendo un gasto (rojo), solo que su valor es negativo. Esto preserva la regla dura 1 (el color comunica ingreso/gasto, que es un atributo del movimiento, no del signo del número) y evita la ambigüedad de "un gasto que parece ingreso".
+
+- **Monto negativo:** la cifra se renderiza con **prefijo `−`** (signo menos real `U+2212`, no guion) **antes** del símbolo de moneda: **`−$1.234,56`**. Mono tabular (regla dura 3), mismo tamaño/peso que cualquier monto en fila (rol *Monto en fila*: 15.5px/600). El **color lo da el tipo** (no el signo): gasto → el rojo/ink de gasto vigente; ingreso → el verde de ingreso vigente. El `−` hereda el color del monto. **No** se recolorea por el signo; **no** se usa el rojo `--expense` para "negativo" (el rojo está reservado a "es un gasto", no a "es negativo").
+- **Monto cero:** **`$0,00`** (sin signo). Mono tabular. El color lo da el tipo igual que cualquier otro. No hay tratamiento especial de "cero" (no se atenúa ni se marca distinto): es un monto válido que simplemente no suma. *(Si el origen está anulado y por eso el calculado no computa, eso lo señala el estado anulado de 1.1.1, no el valor cero.)*
+- **Imputación a totales/subtotales (RN-019):** la presentación de los **totales del mes** y **subtotales de sección** **no cambia** su lenguaje visual — siguen siendo mono tabular con su color/signo habitual; lo que cambia es **qué suma** (un gasto negativo resta del total de gastos, etc., según RN-019), que es cómputo, no presentación. **Esta spec no redefine** cómo se ven los totales; solo confirma que un monto de fila negativo se muestra con `−$…` y color por tipo. *(Si RN-019 implicara un total de sección que pueda volverse negativo y haya que decidir su presentación visual, eso excede esta fila — ver "Dudas para el orquestador".)*
+- **Por qué el `−` y no paréntesis ni recoloreo:** el `−$` es la convención más directa y legible en es-AR, consistente con cómo ya se muestran montos negativos en el balance (ingresos − gastos puede dar negativo y se muestra con signo). Paréntesis contables `($1.234)` serían un lenguaje nuevo ajeno al producto (Control es un diario, no un sistema contable). Recolorear por signo chocaría con la regla dura 1.
+
+### 2. Acción "crear movimiento desde este" en el KebabMenu del ítem fijo (RF-MCALC-001)
+
+Es la **tercera** acción del menú de acciones (kebab) de un ítem, **solo en fijos**, junto a Editar y Eliminar. **Únicos y cuotas NO la tienen.** Además, **no se ofrece sobre un ítem que ya es un calculado** (sin encadenamiento, RF-MCALC-001): un ítem hijo tiene el kebab de fijo **sin** esta acción (solo Editar / Anular-Desanular / Eliminar).
+
+| Condición del ítem | ¿Aparece "Crear movimiento desde este"? |
+|---|---|
+| Fijo NO calculado (origen potencial) | **Sí** |
+| Fijo que ES calculado (hijo) | **No** (no encadena) |
+| Único | **No** |
+| Cuota | **No** |
+
+- **Label del ítem de menú:** **"Crear movimiento desde este"** (coherente con el RF). Si el ancho del menú aprieta, **preferencia: mantener el label completo**; no abreviar a "Crear desde este" salvo que no entre.
+- **Ícono (lucide):** **`Calculator`** (15px, como el resto de los íconos del menú) — comunica "este nuevo movimiento se calcula a partir de otro". *(Alternativas evaluadas: `GitBranch` —se reserva para el indicador de "tiene derivados" en la sublínea del padre, sección 1.b, para no duplicar significado— y `Sigma`/`Plus`. **Preferencia `Calculator`**: es el más claro para "movimiento calculado" y no colisiona con `GitBranch`.)*
+- **Tratamiento:** acción **neutra**, **no** `danger`. Crear no destruye nada. Hereda el estilo neutro del `KebabMenuItem` (`text-ink hover:bg-panel-2`), ícono 15px `--ink-2`. El único ítem `danger` (rojo) del menú sigue siendo "Eliminar".
+- **Posición en el menú:** **última de las acciones no destructivas, antes de "Eliminar"**. Orden del kebab de un fijo: **Editar → Anular/Des-anular este mes → Crear movimiento desde este → Eliminar**. Va agrupada con las acciones constructivas/neutras y antes del separador conceptual con Eliminar. (Si el front usa un separador visual `--hair` antes de "Eliminar", esta acción queda del lado de arriba con Editar y Anular.)
+- **Al accionarla:** abre el **modal de carga en el form de calculado** (sección 3) con el origen ya fijado al ítem desde el que se disparó. No navega; el modal se superpone como cualquier otra invocación del modal de carga.
+
+### 3. Form del movimiento calculado en el modal de carga (RF-MCALC-001/002/003)
+
+El calculado **no es un tab nuevo** del modal de carga (RF-MCALC-001: no hay tab "calculado" en creación normal). Su **único punto de creación** es la acción del kebab (sección 2). Por eso el form de calculado se abre en un **modo propio del modal** (como el modo edición: sin tabs de tipo de movimiento), titulado para el contexto. Reusa el **chrome del modal de carga** vigente (radio 18px, `--shadow-lg`, header con título 18px/700, footer con Guardar/Cancelar, patrón de bloques `space-y-[14px]`).
+
+**3.0 — Encabezado y estructura del form:**
+
+- **Título del diálogo** (rol *Título de diálogo*: 18px/700, `-.01em`, `--ink`): **"Nuevo movimiento calculado"** (crear) / **"Editar movimiento calculado"** (editar, RF-MCALC-006). Sin tabs de tipo de movimiento (igual que el modo edición).
+- **Orden de bloques del form** (de arriba hacia abajo, mismo `space-y-[14px]`):
+  1. **Origen** (read-only, 3.1)
+  2. **Fórmula** = **Operador** + **Operando** (3.2)
+  3. **Signo del resultado** (3.3)
+  4. **Resultado derivado** (preview read-only, con la cifra **y el tipo derivado**, 3.4)
+  5. **Categoría** (el selector del DS, con su "+ Nueva")
+  6. **Descripción** (opcional)
+  - **No hay bloque "Tipo" (Gasto/Ingreso)** — el tipo **no se elige**: se **deriva en vivo del signo del monto final** (RF-MCALC-003 reescrito / RN-018): monto negativo → **Gasto (`EXPENSE`)**, positivo → **Ingreso (`INCOME`)**, cero → **Gasto** (convención de borde). El tipo derivado se **comunica dentro del bloque "Resultado"** (3.4), no como campo editable.
+  - **No hay bloque "Monto"** — el monto no se ingresa (RF-MCALC-001/RN-017); lo reemplaza el bloque "Resultado derivado" read-only (3.4). **No hay bloque "Mes de inicio" ni "Frecuencia"** propios: el calculado hereda la presencia/cadena del origen (RF-MCALC-004); no son campos del form. *(Si producto quisiera mostrar la frecuencia heredada del origen como dato read-only, sería una adición — no se asume; ver "Dudas".)*
+
+**3.1 — Bloque "Origen" (read-only):**
+
+El origen está **fijado** (viene del ítem desde el que se disparó) y **no es editable** en este form (RF-MCALC-006: el vínculo al origen no se cambia editando). Se muestra como **caja read-only**, mismo patrón que "Tipo"/"Frecuencia" en edición (Fase 1.1.1): `Label` "Origen" arriba (estilo label del form: `text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]`), debajo una caja `rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px]`.
+
+- **Contenido de la caja:** ícono lucide **`Repeat`** (15px, `--accent-ink` — el mismo indicador de "es un fijo" que usa la frecuencia read-only de 1.1.1) + el **nombre del fijo de origen** (UI 14px/600 `--ink-2`) + a la derecha, en `--muted` 12.5px, su tipo y frecuencia (ej. **"gasto · mensual"**), para dar contexto de qué se está derivando. El **monto actual del origen en el mes contexto** puede mostrarse como cifra mono tabular `--muted` a la derecha (ej. `$120.000,00`) para que el usuario entienda sobre qué número opera la fórmula — *preferencia: mostrarlo*, ayuda a leer el resultado derivado del bloque 3.4; si el dato no está disponible, se omite sin romper el bloque.
+- **Nota bajo la caja (solo crear):** una `.field-note` (el mismo estilo de nota del form, ícono lucide `Info` o `Repeat` 14px `--accent-ink` + texto `--muted` 12.5px): **"El monto se calcula a partir de este movimiento, mes a mes."** (copy de orientación; el redactado exacto es copy funcional — si el analista define otro, se respeta; lo visual es: `.field-note` con ícono acento + texto `--muted`).
+
+**3.2 — Fórmula: selector de operador + campo de operando (RF-MCALC-002):**
+
+La fórmula es **un operador + un operando**. Se presenta como **una sola fila** bajo un único `Label` **"Fórmula"**, leída como una operación: `[origen] [operador] [operando]`.
+
+- **Label del bloque:** "Fórmula" (estilo label del form), `required`.
+- **Layout de la fila:** `flex items-center gap-[8px]`. De izquierda a derecha:
+  1. **Prefijo contextual read-only** (opcional, recomendado): un mini-rótulo `--muted` 12.5px **"Origen"** o el `Repeat` chico, para anclar que la operación es `origen ⊕ operando`. **Preferencia: un chip `--panel-3` "Origen"** (mismo estilo de chip neutro) que represente el operando izquierdo implícito de la fórmula. Si recarga visualmente, puede omitirse y dejar solo operador+operando con la explicación en la nota; **preferencia: incluir el chip "Origen"** para que la fórmula se lea sola.
+  2. **Selector de operador** (ver abajo).
+  3. **Campo de operando** numérico (ver abajo).
+- **Selector de operador — segmented control de 5 opciones:** los cinco operadores `+ − × ÷ %` como un **segmented control** del DS (toggle de varios segmentos, mismo lenguaje que el toggle Gasto/Ingreso del DS pero con 5 celdas). Cada celda muestra el **glifo del operador** centrado, UI/mono 15px/600. Símbolos: **`+`** (suma), **`−`** (`U+2212`, resta), **`×`** (`U+00D7`, multiplicación), **`÷`** (`U+00F7`, división), **`%`** (porcentaje). Estados de celda: reposo `--ink-2` sobre `--panel`; **seleccionada** = fondo `--panel` elevado con `--shadow-sm` y texto `--ink` (el "thumb" del segmented del DS) — **sin** acento de color (el operador no es una cifra ni marca; el segmented del DS ya distingue el seleccionado por el thumb elevado, no por color). Hover de celda no seleccionada: `--panel-2`. Focus: ring `--accent-soft` 3px sobre el control. *Razón del segmented (no un select): son solo 5 símbolos, visualmente compactos, y el segmented los muestra todos de un vistazo, más rápido que abrir un dropdown. Coherente con que el toggle Gasto/Ingreso ya es segmented.*
+  - **Default del operador (crear):** **`%`** preseleccionado *(preferencia: el caso de uso más típico de "derivar un movimiento de otro" es un porcentaje —ej. ahorro = 10% del sueldo—; si producto prefiere otro default, se ajusta — ver "Dudas").* En **editar** arranca en el operador guardado.
+- **Campo de operando — input numérico:** input del DS (mismo estilo que el campo Monto: `rounded-ctl border border-line-strong bg-panel px-[13px] py-[11px] text-[14px]`), **alineado a la derecha** y en **mono tabular** (es un número → regla dura 3 aplica a montos; el operando es un número que opera sobre dinero, va en mono por coherencia). Placeholder `--faint` que insinúa el formato según operador (ver abajo). `inputmode="decimal"`. Acepta decimales con coma es-AR (ej. `1,5`).
+  - **Sufijo/affordance contextual según operador:** cuando el operador es **`%`**, el campo muestra un **sufijo `%`** dentro del input (a la derecha, `--muted`), y el placeholder sugiere `10`. Cuando es **`×`/`÷`**, placeholder `2` o `1,5` (factor). Cuando es **`+`/`−`**, el campo es un **monto** y muestra el **prefijo `$`** (a la izquierda, `--muted`), placeholder `5.000` — porque sumar/restar opera en pesos, mientras multiplicar/dividir/porcentaje opera con un factor adimensional. El affordance ($ vs. %) ayuda a leer qué significa el operando según el operador elegido.
+  - **Ancho:** el operando no necesita todo el ancho de la fila; **preferencia: el operador toma su ancho intrínseco (5 celdas) y el operando ocupa el resto de la fila** (`flex-1`), para que el número tenga lugar.
+
+**3.3 — Switch de signo del resultado (RF-MCALC-003):**
+
+Un control que fuerza el resultado final a **positivo** o **negativo** (×+1 / ×−1). Es un campo **propio** y editable.
+
+- **Label del bloque:** "Signo del resultado" (estilo label del form), `required`.
+- **Control:** **segmented de 2 opciones** (mismo lenguaje que el toggle Gasto/Ingreso), con dos celdas:
+  - **"Positivo"** — glifo lucide `Plus` (14px) + texto "Positivo" (o solo **`+`** grande si se prefiere compacto; **preferencia: glifo + texto** para que sea inequívoco).
+  - **"Negativo"** — glifo lucide `Minus` (14px) + texto "Negativo" (o **`−`**).
+  - Celda seleccionada = thumb elevado del segmented (`--panel` + `--shadow-sm` + texto `--ink`), **sin** color semántico: aunque el signo ahora **determina el tipo derivado** (positivo → ingreso, negativo → gasto, RF-MCALC-003), el control de signo **no** se pinta verde/rojo. El **segmented de signo es neutro**; quien comunica el tipo resultante (con su color verde/gasto-rojo) es el **bloque "Resultado"** (3.4). Pintar la celda "Negativo" de rojo aquí duplicaría la señal del tipo y arriesgaría confundir "signo del número" con "es un gasto"; la regla dura 1 quiere el color **sobre la cifra**, no sobre el control. El segmented neutro evita esa lectura.
+- **Default (crear):** **"Positivo"**. En editar, el signo guardado.
+- **Nota aclaratoria (opcional, `.field-note` `--muted`):** "El signo define el tipo: positivo = ingreso, negativo = gasto. Un calculado puede dar un monto negativo." — orienta sobre la regla del tipo derivado (RF-MCALC-003) y la excepción de RN-018. Copy funcional; el redactado lo afina el analista si hace falta.
+
+**3.4 — Resultado derivado (preview read-only) — el monto NO se ingresa y el tipo se deriva:**
+
+El monto **no se ingresa**: se **deriva**. El **tipo tampoco se elige**: se deriva del **signo del monto final** (RF-MCALC-003 / RN-018). Para que el usuario vea **qué va a valer** el calculado y **qué tipo va a tener** antes de confirmar, el form muestra un bloque **read-only de resultado**, calculado en vivo a partir de origen (mes contexto) ⊕ operador ⊕ operando × signo.
+
+- **Label del bloque:** "Resultado" (estilo label del form). **No** es `required` ni editable (es derivado).
+- **Caja read-only:** `rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px]`, con:
+  - A la izquierda, una **expresión legible** de la fórmula en `--muted` 12.5px mono tabular: ej. **`$120.000,00 × 10% × (−1)`** o, más simple, **`10% de $120.000,00, negativo`** — *preferencia: la forma legible "`{operando}{%/×/…} de/sobre {monto del origen}`" + ", negativo" si aplica*, para que se entienda el cálculo sin parsear símbolos. (El redactado de la expresión es semi-copy; lo visual es: línea `--muted` mono que muestra el cómputo.)
+  - A la derecha, una **columna con dos piezas apiladas y alineadas a la derecha** (`flex flex-col items-end gap-[5px]`):
+    1. El **resultado** como **cifra mono tabular** grande (rol *Monto en fila* o algo mayor: 16–18px/600), con su **color por tipo** (gasto/ingreso, igual que en la fila de `/mes`) y su **signo** (`−$…` si es negativo, `$0,00` si es cero) — exactamente la presentación de la sección 1.c. Es el preview de cómo se verá el monto del calculado.
+    2. **Debajo de la cifra, el badge de tipo derivado** (ver bullet siguiente), alineado a la derecha bajo el monto. La cifra **domina** (es lo grande); el badge es la lectura secundaria que confirma "esto va a ser un gasto / un ingreso".
+
+- **Badge de tipo derivado (NUEVO — reemplaza al ex bloque "Tipo"):** una **etiqueta de tipo** que se recalcula en vivo y comunica el tipo que tendrá el calculado según el signo del monto final. Reglas:
+  - **Forma:** chip/pill, mismo lenguaje del **chip neutro de sublínea** (UI font 11px, peso 600, `letter-spacing: .04em`, radio `--r-chip` 7px, padding `1px 7px`), pero **tintado por tipo** (no neutro): es la única pieza del form que lleva el color semántico de gasto/ingreso, coherente con que el color del tipo va **sobre la lectura del tipo**, no sobre el control de signo.
+  - **Color/token — Gasto:** texto `--expense-ink` sobre fill `--expense-soft` (el rojo de gasto del DS, en su variante de chip suave — el mismo registro con el que el producto ya marca "gasto" en chips/sublíneas). Texto del chip: **"Gasto"**.
+  - **Color/token — Ingreso:** texto `--income-ink` sobre fill `--income-soft` (el verde de ingreso del DS). Texto del chip: **"Ingreso"**. *(Si el DS no expone un par `*-soft` para income/expense que el front ya use en chips, se usa el mismo par con el que hoy se tintan los chips de tipo en la sublínea del ítem `/mes` —Fase 1.1.1—; no se inventan tokens nuevos. Si hubiera duda sobre qué token de fill suave corresponde, FRENAR y preguntar antes de elegir uno.)*
+  - **Glifo (opcional, preferencia incluir):** un mini-glifo lucide a la izquierda del texto del chip (11px, mismo color que el texto): `ArrowDownRight` para Gasto / `ArrowUpRight` para Ingreso —o el par de flechas de tipo que el DS ya use en `/mes`—, para reforzar la dirección. Si el DS no tiene un glifo de tipo establecido, el chip de solo texto basta.
+  - **Caso borde `final == 0`:** el monto es `$0,00` y el tipo derivado por convención es **Gasto** (RN-018). El badge muestra **"Gasto"** igual (con su color de gasto). No hay tratamiento "neutro" para el cero: el badge sigue la convención de borde. *(Es solo visual; un monto 0 no aporta a totales, RN-019.)*
+  - **Recálculo en vivo:** el badge cambia de "Gasto" a "Ingreso" (y de color) **en el mismo instante** que el signo o la fórmula hacen cruzar el resultado por cero — junto con el cambio de color de la cifra de arriba. Cifra y badge siempre concuerdan (mismo color, mismo tipo): nunca se ve una cifra con color de gasto y un badge "Ingreso".
+  - **Estado de error (operando inválido, 3.5):** cuando el resultado no se puede computar (operando 0 con `÷`/`%`), **no se muestra badge de tipo** (no hay tipo si no hay monto); la caja muestra el estado de error de 3.5 en vez de cifra + badge.
+
+- **Recalcula en vivo** a medida que el usuario cambia operador, operando o signo (sin botón) — tanto la **cifra** como el **badge de tipo**. Si el origen tiene distinto monto en distintos meses (su cadena), el preview muestra el del **mes contexto** (el mes desde el que se disparó), con una nota `--muted` "para {Mes Año}" si ayuda a aclarar que el valor varía mes a mes. *(El que varíe mes a mes es comportamiento de RF-MCALC-004; el preview solo muestra el del mes contexto.)*
+
+**3.5 — Estados de validación del form:**
+
+- **Operando vacío / no numérico:** el campo de operando es `required`; vacío bloquea Guardar con el tratamiento de error del DS (borde del input a `--expense`/`--line` de error, focus ring `--expense-soft` 3px, mensaje de error bajo el campo en `--expense-ink` 12px). Mensaje: "Ingresá un operando." (copy funcional).
+- **Operando 0 con operador `÷` o `%` (RN-017 — división por cero):** **error específico.** Cuando el operador seleccionado es **`÷`** o **`%`** y el operando es **0** (o se vacía a 0), el campo de operando entra en **estado de error**: borde a color de error (`--expense` con `--line` de error), focus ring `--expense-soft` 3px, y **mensaje** bajo el campo en `--expense-ink` 12px: **"No se puede dividir por cero."** (para `÷`) / **"El porcentaje no puede ser 0."** (para `%`) — *o un mensaje único "El operando no puede ser 0 con este operador."*; copy funcional, lo afina el analista. Mientras dure el error: **Guardar deshabilitado** y el **bloque "Resultado" (3.4) muestra el estado de error** en vez de una cifra **y sin badge de tipo** (no hay monto → no hay tipo derivado) — texto `--expense-ink` 12.5px "Operando inválido" (no muestra `$NaN` ni `∞`). El uso de `--expense` acá es **color de error de UI** (validación), no monto ni "es un gasto" — admisible, es el rojo de error que el DS ya usa en inputs inválidos (no recolorea ninguna cifra de dinero).
+  - Con operador `+`, `−` o `×`, el operando **0 es válido** (RN-017) y **no** dispara error (sumar/restar 0, o multiplicar por 0 → resultado 0, que es un monto cero válido por RN-018). El error de "0" es **exclusivo** de `÷` y `%`.
+  - **Al cambiar el operador** de `÷`/`%` a otro con el operando en 0, el error **se limpia** en vivo (el 0 pasa a ser válido). Al revés, si el operando es 0 y el usuario cambia a `÷`/`%`, el error **aparece** en vivo.
+- **Categoría sin elegir:** mismo tratamiento que el resto del modal (la categoría es `required`); sin novedad.
+- **Error del backend al guardar (RNF-008):** el modal permanece abierto y conserva todo lo ingresado, igual que el resto del modal de carga. Sin novedad.
+
+**3.6 — Modo editar (RF-MCALC-006):**
+
+- **Origen read-only** (3.1): igual, pero el bloque deja explícito que **no se puede cambiar el origen** desde acá (la caja read-only ya lo comunica; sin control para editarlo). Para derivar de otro fijo se crea un calculado nuevo.
+- **Editables:** Operador, Operando, Signo, Categoría, Descripción — todos con su control de creación (segmented / input / select), precargados con los valores guardados. **El "Tipo" NO es un campo** (ni en crear ni en editar): se deriva del signo del monto final (RF-MCALC-003) y se muestra como badge en el bloque Resultado (3.4). El **monto sigue sin ingresarse** (se deriva); el bloque Resultado (3.4) muestra el valor derivado actual y su tipo derivado.
+- **Split del pasado:** la edición aplica desde el mes visualizado en adelante (RN-005), igual que cualquier fijo — eso es comportamiento; visualmente el form no agrega un control de "desde cuándo" (sigue el patrón de edición de fijos vigente, sin selector de pivote en el form).
+
+### 4. Convivencia con las reglas duras (recordatorio)
+
+- **Regla dura 1 (verde=ingreso / rojo=gasto):** el color del monto del calculado lo da **siempre el tipo** (gasto/ingreso), **nunca el signo** — y el tipo, en el calculado, ahora **se deriva del signo del monto final** (RF-MCALC-003): positivo = ingreso (verde), negativo = gasto (rojo), cero = gasto. El color semántico aparece **sobre la cifra del resultado** (3.4) y sobre el **badge de tipo derivado** (3.4) — las únicas dos piezas del form que lo llevan. Un monto negativo se marca con el **prefijo `−`**, no recoloreando por signo. Los segmented de operador y de signo son **neutros** (thumb elevado, sin color semántico): el verde/rojo no se pinta en el control de signo, solo en la lectura del tipo. El rojo `--expense` aparece además como **color de error de UI** (validación del operando 0, borde de input inválido) y como **danger** de "Eliminar".
+- **Regla dura 2 (acento solo marca/UI):** el índigo aparece solo como cromo de interacción — focus rings (`--accent-soft`), el `Repeat`/`Info` `--accent-ink` de las notas y de la caja de origen, el check de los checkboxes/selects del DS. **Ningún monto, operando ni resultado se tiñe de acento.**
+- **Regla dura 3 (dinero en mono tabular):** el operando, el monto del origen, el resultado derivado y cualquier cifra de los chips/sublíneas que sea numérica (contador de derivados) van en **mono tabular** (`tnum`). Los símbolos de operador (`+ − × ÷ %`) y el signo (`+`/`−` del switch) son glifos de control, no cifras de dinero; van en el tipo del control (admisible).
+
+### 6. Aviso de borrado en cascada en el modal de eliminar fijo (UX nueva, 2026-06-18)
+
+Cuando el usuario va a eliminar un **fijo que es padre** (tiene ≥1 calculado activo derivado de él), el modal de confirmación de borrado (`delete-recurring-dialog.tsx`) debe **advertir** que, al eliminar el fijo, **también se eliminarán los movimientos calculados que dependen de él**. Hoy el modal no lo avisa y el efecto colateral sorprende.
+
+**Dato disponible (contrato):** el front sabe que el fijo es padre vía `MovementItem.hasCalculated: boolean` (true ⇔ tiene ≥1 calculado activo en el mes). **No** hay nombre ni cantidad de los hijos — solo el booleano. Por eso el aviso es **genérico**: no nombra al/los calculado(s) ni los cuenta.
+
+**Condición de aparición:** el aviso aparece **solo si `hasCalculated === true`**. Si es `false`, el modal queda **exactamente igual que hoy** (sin aviso, sin cambios de layout ni de espaciado).
+
+**Tono y token — advertencia (ámbar), NO error (rojo):** eliminar el fijo es **lo que el usuario pidió**; lo que hay que comunicar es un **efecto colateral** ("además se borra algo"), no un error ni una acción destructiva extra. Eso es semánticamente una **advertencia** → token `--warning` (ámbar, hue 75), no `--expense`. Esto es coherente con el uso vigente de `--warning` en el producto (toast tipo `warning`, error de carga del gráfico con `AlertTriangle` + `--warning-ink`). El rojo `--expense` sigue reservado para el botón **danger** "Eliminar" del footer (acción destructiva de UI) — no se usa en el aviso, para no duplicar el rojo ni leer el aviso como "otro error". **No introduce tokens nuevos.**
+
+**Forma — callout de advertencia (banda):**
+
+- **Tipo:** una caja-callout (no un toast, no un texto suelto): bloque con fondo suave de advertencia + ícono + texto, alineado al ancho del cuerpo del modal.
+- **Contenedor:** `rounded-ctl` (`--r-ctl` 10px, mismo radio de la caja de detalle existente del modal), fondo **`--warning-soft`** (ámbar muy claro), borde 1px **`--warning`** (a `~0.35` de opacidad si el front lo prefiere más sutil; preferencia: borde `--warning` pleno fino, el `-soft` ya baja el peso). Padding interno `px-3 py-2.5` (12 / 10px), coherente con la densidad de la caja de detalle del modal (`px-4 py-3`), un punto más compacto por ser secundario.
+- **Layout interno:** `flex items-start gap-2.5` — ícono a la izquierda, texto a la derecha (el texto puede ocupar 2 líneas; `items-start` alinea el ícono con la primera línea).
+- **Ícono:** lucide **`AlertTriangle`** (16px, `strokeWidth` 2), color **`--warning-ink`** (ámbar oscuro, para contraste sobre `--warning-soft`). Es el glifo de advertencia ya establecido en el producto (toast warning, error de gráfico). `aria-hidden` (el texto ya comunica; el rol lo da el contenedor, ver accesibilidad).
+- **Texto:** rol *Meta/subtítulos* del DS — **13px**, peso 500, color **`--warning-ink`** (no `--muted`: la advertencia debe leerse como tal, el ámbar oscuro le da presencia sin gritar). Sin mono (no es cifra). Line-height cómodo (`leading-snug`).
+
+**Ubicación dentro del modal:** el callout va en el **cuerpo del modal**, como **último bloque del cuerpo**, **inmediatamente después** del párrafo de cierre existente ("El fijo dejará de aparecer desde este mes en adelante. Los meses anteriores no se modifican.") y **antes del footer** (los botones Cancelar / Eliminar). Es lo **último que el usuario lee antes de decidir**. Se inserta como un ítem más del `space-y-[14px]` del cuerpo (hereda esa separación vertical respecto del párrafo anterior). No se mete dentro de la caja de detalle del movimiento ni reemplaza ningún texto existente — **se agrega**.
+
+**Wording exacto (es-AR, voz del producto):**
+
+> **Este movimiento fijo tiene movimientos calculados que dependen de él. Si lo eliminás, esos calculados también se eliminarán.**
+
+- Genérico a propósito (no nombra ni cuenta los hijos — solo hay el booleano). Funciona igual para 1 o N calculados.
+- Coherente con la voz del producto (segunda persona "vos": "eliminás"), igual que el resto del modal ("¿Estás seguro de que querés eliminar…?").
+- Es **copy** además de visual: si el analista afina el redactado, se respeta el texto; lo **visual** es: callout ámbar (`--warning-soft` / borde `--warning`), ícono `AlertTriangle` `--warning-ink` 16px a la izquierda, texto 13px/500 `--warning-ink`, como último bloque del cuerpo antes del footer, solo si `hasCalculated`.
+
+**Accesibilidad:** el callout es contenido informativo dentro de un diálogo de confirmación ya rotulado (`role="dialog"`, `aria-modal`). El aviso forma parte del cuerpo que el usuario lee; **no** necesita `role="alert"` (no es un cambio dinámico que interrumpa: está presente desde que el modal abre). El ícono va `aria-hidden`; el texto se lee tal cual.
+
+**Lo que NO cambia:** el resto del modal (título, párrafo de confirmación, caja de detalle del movimiento, párrafo de cierre, footer con Cancelar/Eliminar) queda **idéntico**. El botón "Eliminar" **sigue siendo `danger`** (rojo) — el callout ámbar **no** lo reemplaza ni lo recolorea: advertencia (ámbar, informa) y acción destructiva (rojo, el botón) son dos cosas distintas y conviven. No se agrega ningún checkbox de confirmación extra ni se cambia el comportamiento de borrado (sigue desde el mes visualizado en adelante).
+
+**Por qué advertencia ámbar y no error rojo, ni tinte de todo el modal:** el rojo del DS comunica "gasto" (regla dura 1) o "acción destructiva" (el botón Eliminar). El efecto colateral del borrado no es ninguna de esas dos: es información que el usuario necesita **antes** de confirmar. El ámbar (`--warning`) es el registro correcto —"ojo, esto arrastra algo más"— sin escalar a error ni teñir todo el diálogo. Que sea una **banda contenida** (no texto suelto) la separa visualmente del párrafo neutro de cierre y la jerarquiza como la pieza de información más fuerte del cuerpo, justo antes de los botones.
+
+### 5. Dudas para el orquestador (frená si alguna bloquea al front)
+
+Ninguna bloquea la implementación visual del grueso del spec, pero conviene confirmar:
+
+1. **Nombre del origen en la sublínea del hijo (1.a) y en la caja de origen (3.1):** ¿el backend expone el **nombre/descripción del fijo de origen** en el ítem y al abrir el form? Si **no**, el chip "Calculado" solo ya cumple RF-MCALC-007 y la caja de origen mostraría solo tipo/frecuencia. Diseñé asumiendo que el nombre está disponible (mejor UX); confirmar el contrato.
+2. **Monto del origen en el mes contexto (3.1 y 3.4):** ¿el form recibe el **monto actual del origen** para mostrar la expresión y el resultado derivado en vivo? El preview del resultado (3.4) depende de ese dato. Si no estuviera, el preview no se puede mostrar y habría que decidir un fallback (ej. "se calcula al guardar"). Confirmar.
+3. **Default del operador (3.2):** propuse **`%`** como default (caso de uso típico). Si producto prefiere otro (ej. `×`), se ajusta — es una preferencia de diseño, no una regla.
+4. **Total de sección que pueda volverse negativo (1.c / RN-019):** si por RN-019 un **subtotal de sección o un total del mes** puede dar negativo y eso necesita una decisión visual propia (cómo se presenta un subtotal de Fijos negativo), excede esta fila y habría que speccearlo aparte. Esta spec resuelve el **monto de fila** negativo; los totales conservan su lenguaje actual salvo aviso.
+5. **Frecuencia heredada como dato en el form (3.0):** no agregué un bloque "Frecuencia" read-only en el form del calculado (la hereda del origen y no es editable). Si producto lo quiere visible, es una adición menor — no la asumí.

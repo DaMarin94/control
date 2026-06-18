@@ -15,6 +15,8 @@ import { RecurringService } from './recurring.service';
 import { CreateRecurringDto } from './dto/create-recurring.dto';
 import { UpdateRecurringDto } from './dto/update-recurring.dto';
 import { ToggleSkipRecurringDto } from './dto/toggle-skip-recurring.dto';
+import { CreateCalculatedRecurringDto } from './dto/create-calculated-recurring.dto';
+import { UpdateCalculatedRecurringDto } from './dto/update-calculated-recurring.dto';
 
 interface AuthRequest extends Request {
   user: { userId: string };
@@ -45,10 +47,41 @@ export class RecurringController {
   }
 
   /**
+   * POST /recurring/:id/calculated
+   * Crea un movimiento calculado derivado del fijo con id = :id (RF-MCALC-001).
+   *
+   * El fijo con :id es el "origen". El calculado es un fijo nuevo cuyo monto
+   * se deriva on-the-fly en GET /movements via la fórmula (operador + operando + signo).
+   *
+   * 201 + sobre con Recurring del calculado (incluye sourceChainId, formulaOperator,
+   *   formulaOperand, formulaSign y categoría embebida).
+   * 400 si el origen es a su vez un calculado (sin encadenamiento).
+   * 400 si operando=0 para DIV o PCT.
+   * 400 si la categoría es inválida (inexistente/ajena/eliminada/scope incompatible).
+   * 404 si el fijo de origen no existe o no es del usuario.
+   *
+   * Nota: no existe un tab "calculado" en el formulario de carga; este endpoint
+   * es el único punto de creación (RF-MCALC-001).
+   */
+  @Post(':id/calculated')
+  @HttpCode(HttpStatus.CREATED)
+  createCalculated(
+    @Request() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() dto: CreateCalculatedRecurringDto,
+  ) {
+    return this.recurringService.createCalculated(req.user.userId, id, dto);
+  }
+
+  /**
    * PATCH /recurring/:id
-   * Edita un fijo con lógica de split (RF-MF-003, D1).
+   * Edita un fijo NORMAL con lógica de split (RF-MF-003, D1).
+   * Solo aplica a fijos normales (sourceChainId = null).
+   * Para editar un calculado usar PATCH /recurring/:id/calculated.
+   *
    * Body incluye currentMonth (REQUERIDO) + campos opcionales amountCents/categoryId/description.
    * 200 + sobre con Recurring (fila resultante — R2 en split, R actualizado in-place).
+   * 400 si el fijo es un calculado (usar el endpoint específico).
    * 404 si no existe o no es del usuario.
    */
   @Patch(':id')
@@ -58,6 +91,30 @@ export class RecurringController {
     @Body() dto: UpdateRecurringDto,
   ) {
     return this.recurringService.update(req.user.userId, id, dto);
+  }
+
+  /**
+   * PATCH /recurring/:id/calculated
+   * Edita un movimiento calculado (RF-MCALC-006).
+   *
+   * Campos editables: type, categoryId, description, formulaOperator, formulaOperand, formulaSign.
+   * El vínculo al origen (sourceChainId) NO es editable.
+   *
+   * Sigue la misma mecánica de split que PATCH /recurring/:id (preserva el pasado).
+   * currentMonth es REQUERIDO.
+   *
+   * 200 + sobre con Recurring del calculado resultante.
+   * 400 si el fijo no es un calculado.
+   * 400 si operando=0 para DIV/PCT.
+   * 404 si no existe o no es del usuario.
+   */
+  @Patch(':id/calculated')
+  updateCalculated(
+    @Request() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() dto: UpdateCalculatedRecurringDto,
+  ) {
+    return this.recurringService.updateCalculated(req.user.userId, id, dto);
   }
 
   /**
@@ -85,7 +142,7 @@ export class RecurringController {
 
   /**
    * DELETE /recurring/:id
-   * Elimina un fijo (RF-MF-004).
+   * Elimina un fijo (RF-MF-004) o un calculado (RF-MCALC-006).
    *
    * Query params:
    * - currentMonth (YYYY-MM, requerido): el mes actual desde el front (D2)
@@ -96,6 +153,9 @@ export class RecurringController {
    * - boundary = fromCurrentMonth ? currentMonth : nextMonth(currentMonth)
    * - Si boundary <= R.startMonth → hard delete
    * - Si no → set R.deletedFrom = boundary
+   *
+   * Si es un fijo de ORIGEN (no calculado), la eliminación se propaga (RF-MCALC-005)
+   * a todos los calculados de su cadena con el mismo boundary.
    *
    * 204 No Content. 404 si no existe o no es del usuario.
    */

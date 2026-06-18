@@ -47,6 +47,8 @@ const mockCuotaMovement: MovementItem = {
     color: "#FF5733",
     scope: "EXPENSE",
   },
+  calculated: null,
+  hasCalculated: false,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

@@ -53,6 +53,8 @@ const mockFijoMovement: MovementItem = {
     color: "#FF5733",
     scope: "EXPENSE",
   },
+  calculated: null,
+  hasCalculated: false,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -110,6 +112,32 @@ describe("DeleteRecurringDialog", () => {
   it("no renderiza ningún checkbox (la confirmación no ofrece opciones — RF-MF-004)", () => {
     renderDialog({});
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  // ── Callout de advertencia (hasCalculated) ───────────────────────────────────
+
+  it("NO muestra el callout de advertencia cuando hasCalculated === false", () => {
+    renderDialog({});
+    expect(
+      screen.queryByText(/movimientos calculados que dependen de él/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("muestra el callout de advertencia cuando hasCalculated === true", () => {
+    const movementWithCalculated: MovementItem = { ...mockFijoMovement, hasCalculated: true };
+    renderDialog({ movement: movementWithCalculated });
+    expect(
+      screen.getByText(/Este movimiento fijo tiene movimientos calculados que dependen de él/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Si lo eliminás, esos calculados también se eliminarán/i),
+    ).toBeInTheDocument();
+  });
+
+  it("el callout no tiene role='alert' (es contenido estático del diálogo)", () => {
+    const movementWithCalculated: MovementItem = { ...mockFijoMovement, hasCalculated: true };
+    renderDialog({ movement: movementWithCalculated });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("informa que el fijo dejará de aparecer desde este mes en adelante", () => {

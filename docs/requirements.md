@@ -42,6 +42,7 @@ Cubre exclusivamente la plataforma **web** de Control en su versión 1.0. La pla
 | 1.1.4 | 2026-06-16 | Vista del mes: secciones colapsables + reordenables, persistidas por usuario; las 3 secciones siempre visibles con empty inline (nuevo RF-VM-005; ajusta RF-VM-001). Fase 1.1.4. |
 | 1.1.5 | 2026-06-16 | Reportes configurables: módulo "Gráfico anual" → "Reportes" (RF-GRA-001/002/003 → RF-REP-001..005); pantalla `/reportes` configurable por cards; widget de reporte autónomo con año y filtro de categorías embebidos; reapertura de la navegación del dashboard (ajusta RF-DASH-001/002, RF-NAV-001, RN-015). Fase 1.1.5. |
 | 1.1.6 | 2026-06-17 | Filtro por categoría en la Vista del mes: control por pantalla, persistido por usuario, default todas, tres estados (nuevo RF-VM-006). Unifica el estado "ninguna" del filtro: destildar todas = lista/serie en cero, en `/mes` y en `/reportes` (ajusta RF-REP-002/005). Fase 1.1.6. |
+| 1.1.7 | 2026-06-17 | Movimientos calculados: fijo cuyo monto se deriva en vivo de otro fijo de origen vía fórmula (submódulo 3.4.b, RF-MCALC-001..007). Nuevas RN-017 (fórmula + redondeo), RN-018 (signo; monto ≤ 0 como excepción a RN-001) y RN-019 (imputación con signo a totales/reportes). Fase 1.1.7. |
 
 ---
 
@@ -670,6 +671,156 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 
 ---
 
+### 3.4.b Submódulo: Movimientos calculados (Fase 1.1.7)
+
+Un **movimiento calculado** es un movimiento **fijo** cuyo monto **no se ingresa**: se **deriva** del monto de **otro fijo de origen** mediante una **fórmula**, mes a mes y **en vivo**. Tiene categoría y descripción **propias**; su **tipo** (Gasto/Ingreso) **no se elige**: se **deriva** del signo del monto resultante (RF-MCALC-003). Lo único que toma del origen es el **monto**. Es un fijo a todos los demás efectos (aparece en la lista del mes según la frecuencia del origen, sigue el modelo de cadena de los fijos, se edita y elimina con la misma mecánica de split). No es un tipo nuevo en el formulario de carga: su **único** punto de creación es la acción "crear movimiento desde este" sobre un fijo en `/mes` (RF-MCALC-001).
+
+---
+
+#### RF-MCALC-001 — Crear movimiento calculado desde un fijo
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Desde la Vista del mes (`/mes`), un ítem **fijo** ofrece —además de editar y eliminar— la acción **"crear movimiento desde este"**. Es la **única** forma de crear un movimiento calculado: define el fijo de origen, su categoría/descripción propias y la fórmula (con su signo) que deriva el monto; el **tipo** queda determinado por el signo del resultado (RF-MCALC-003). |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | Existe un movimiento **fijo** en el mes visualizado, propio del usuario. El origen **no** es a su vez un movimiento calculado (sin encadenamiento). |
+
+**Flujo principal:**
+1. El usuario, parado en un mes en `/mes`, abre el menú de acciones de un ítem **fijo** y elige **"crear movimiento desde este"**.
+2. El sistema abre el formulario del calculado, con el fijo de origen ya fijado (el ítem desde el que se disparó).
+3. El usuario elige **categoría** y **descripción** propias del calculado (independientes del origen). **No** elige tipo: se deriva del signo del resultado (RF-MCALC-003).
+4. El usuario define la **fórmula**: un **operador** (`+`, `−`, `×`, `÷`, `%`) y un **operando** numérico común (RN-017).
+5. El usuario elige el **signo del resultado** (positivo o negativo) mediante el switch de signo (RN-018).
+6. El usuario confirma. El sistema crea el movimiento calculado como un fijo vinculado a la **cadena** del origen (RF-MCALC-004), con su monto ya derivado para cada mes en que el origen aparece y su **tipo derivado** del signo de ese monto.
+
+**Flujos alternativos:**
+- *A1 — El usuario cancela:* no se crea nada.
+
+**Criterios de aceptación:**
+- [ ] La acción **"crear movimiento desde este"** está disponible **solo en los ítems fijos** de `/mes`. Los movimientos **únicos** y las **cuotas** no la tienen.
+- [ ] El origen es **siempre un fijo**. Un movimiento **calculado no puede ser origen** de otro calculado (sin encadenamiento): la acción no se ofrece sobre un ítem que ya es calculado.
+- [ ] Un mismo fijo de origen puede tener **varios** movimientos calculados derivados.
+- [ ] El calculado se crea como un **fijo** (es a la vez fijo y calculado): aparece en `/mes` con la misma mecánica de listado de los fijos.
+- [ ] La categoría y la descripción del calculado son **propias** y se eligen al crearlo; pueden diferir del origen. El **tipo no se elige**: se deriva del signo del monto resultante (RF-MCALC-003), de modo que un calculado puede tener distinto tipo que el origen (ej.: origen = sueldo/Ingreso; "ahorro = 10% del sueldo" con signo `−` → monto negativo → tipo derivado **Gasto**).
+- [ ] La fórmula (operador + operando) y el signo son obligatorios; el **monto no se ingresa** (se deriva — RN-017) y el **tipo tampoco** (se deriva — RF-MCALC-003).
+- [ ] No existe un tab "calculado" en el formulario de carga (RF-CM-001): el único punto de creación es esta acción.
+
+---
+
+#### RF-MCALC-002 — Fórmula del movimiento calculado
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El monto del calculado se obtiene aplicando una **fórmula** —un operador y un operando numérico— sobre el monto del fijo de origen **en ese mes**. Operadores soportados: suma, resta, multiplicación, división y porcentaje. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El calculado está en creación o edición (RF-MCALC-001 / RF-MCALC-006). |
+
+**Operadores (los cinco):**
+- **Suma (`+`)** — `origen + operando`.
+- **Resta (`−`)** — `origen − operando`.
+- **Multiplicación (`×`)** — `origen × operando`.
+- **División (`÷`)** — `origen ÷ operando` (operando ≠ 0).
+- **Porcentaje (`%`)** — `origen × operando ÷ 100` (ej.: operando `10` = 10% del origen).
+
+**Criterios de aceptación:**
+- [ ] La fórmula es **una sola operación**: un operador de los cinco más un **operando** numérico común (se ingresa como número, ej. `5000`, `1.5`, `10`).
+- [ ] El operando se valida según RN-017: **división y porcentaje con operando 0 no se permiten** (división por cero); el resto acepta cualquier operando numérico.
+- [ ] El resultado de la fórmula se aplica sobre el monto del origen **del mes en cuestión** y se **redondea a centavos enteros** (RN-017): no se persiste precisión sub-centavo.
+- [ ] El signo final del resultado lo determina el switch de signo (RN-018), no la fórmula.
+
+---
+
+#### RF-MCALC-003 — Signo del resultado y tipo derivado
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El movimiento calculado tiene un **switch de signo** que fuerza el resultado final a **positivo** o **negativo**. A diferencia del resto de los movimientos (monto siempre > 0), el monto de un calculado **puede ser negativo o cero** (RN-018). El **tipo** (Gasto/Ingreso) **no se elige**: se **deriva del signo del monto resultante** —monto negativo → **Gasto (`EXPENSE`)**; monto positivo → **Ingreso (`INCOME`)**—, de modo que signo y tipo quedan siempre consistentes (positivo = ingreso, negativo = gasto). |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El calculado está en creación o edición. |
+
+**Criterios de aceptación:**
+- [ ] Hay un control de signo (positivo / negativo) que multiplica el resultado de la fórmula por `+1` o `−1`. **No** hay selector de tipo en el calculado.
+- [ ] El monto resultante del calculado **puede ser negativo o cero** — excepción explícita a la regla de monto > 0 (RN-001), válida **solo** para movimientos calculados (RN-018).
+- [ ] El **tipo se deriva del signo del monto final**: `final < 0` → **Gasto (`EXPENSE`)**; `final > 0` → **Ingreso (`INCOME`)**.
+- [ ] **Caso borde `final == 0`:** se **permite guardar**; el tipo derivado por defecto es **Gasto (`EXPENSE`)**. Es solo una convención de borde: un monto 0 no aporta a ningún bucket de totales (RN-019), así que el tipo asignado no altera totales ni balance.
+- [ ] El signo es un campo **propio** del calculado, editable como la fórmula (RF-MCALC-006). El tipo se recalcula al cambiar el signo o la fórmula (cambia el signo del resultado).
+- [ ] La imputación del monto (con signo) a los totales del mes y a los reportes sigue RN-019: la **magnitud** del monto suma al bucket del tipo derivado.
+
+---
+
+#### RF-MCALC-004 — Vínculo vivo con el origen y monto sincronizado
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El vínculo con el origen es **vivo**: el monto del calculado **no se persiste**, se **deriva al vuelo** del monto del origen en cada lectura (on-the-fly, RN-006, igual que fijos y cuotas). El calculado **espeja la estructura de cadena del origen** mes a mes: si el origen vale distinto en distintos meses (por su cadena de fijo), el monto del calculado sigue esa variación automáticamente, sin re-guardar nada. **No** es un valor congelado. |
+| **Actor** | Sistema |
+| **Prioridad** | Media |
+| **Precondiciones** | Existe un movimiento calculado vinculado a un fijo de origen. |
+
+**Criterios de aceptación:**
+- [ ] El monto del calculado en un mes es `signo × redondear(fórmula(montoDelOrigenEseMes))` (RN-017 / RN-018).
+- [ ] El vínculo es a la **identidad de cadena** del origen, no a una fila puntual (`docs/data-model.md`, §Identidad de cadena estable): sobrevive a los splits del origen.
+- [ ] Si el monto del origen cambia (edición del origen, o variación mes a mes propia de su cadena), el monto del calculado **refleja el nuevo valor** en la próxima lectura, sin re-guardar nada ni acción del usuario (se deriva al vuelo).
+- [ ] El calculado aparece **en cada mes donde aparece el origen** según la frecuencia del origen (RN-016), y solo en esos meses.
+- [ ] **No congelado:** se descarta cualquier interpretación de monto estático fijado al crear.
+
+---
+
+#### RF-MCALC-005 — Ciclo de vida atado al origen
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El movimiento calculado sigue el **ciclo de vida del origen**: nace, aparece y desaparece con él. |
+| **Actor** | Sistema |
+| **Prioridad** | Media |
+| **Precondiciones** | Existe un movimiento calculado vinculado a un fijo de origen. |
+
+**Criterios de aceptación:**
+- [ ] Si el origen se **elimina** (RF-MF-004), el calculado **se elimina** (con la misma semántica de pivote/split del fijo: desaparece desde el mes en que desaparece el origen, preservando el pasado).
+- [ ] Si el origen se **anula en un mes puntual** (skip, RF-MF-005), el calculado **se anula ese mes**: se sigue listando pero no suma a los totales ni a la serie anual, igual que el origen.
+- [ ] Si el origen cambia de **frecuencia** —que en el modelo equivale a recrearlo (RF-MF-006)— el calculado **matchea la presencia** del origen vigente.
+- [ ] El calculado nunca aparece en un mes donde el origen no aparece.
+
+---
+
+#### RF-MCALC-006 — Editar y eliminar un movimiento calculado
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El movimiento calculado se edita y elimina **por su cuenta**, como cualquier fijo: categoría, descripción, fórmula y signo son editables; el **tipo no es editable** (se deriva del signo del resultado, RF-MCALC-003). La eliminación es independiente de la del origen. La edición y la eliminación usan la **misma mecánica de split del pasado** que los fijos (RF-MF-003 / RF-MF-004, RN-005). |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El movimiento calculado existe y pertenece al usuario. |
+
+**Criterios de aceptación:**
+- [ ] Son editables: **categoría, descripción, fórmula (operador + operando) y signo**. El **tipo no es editable** (se deriva del signo del resultado). El vínculo al origen (la cadena origen) **no** se cambia editando: para derivar de otro fijo se crea un calculado nuevo.
+- [ ] La edición aplica **desde el mes visualizado inclusive en adelante** (split de fijos, RN-005); el pasado del calculado es inmutable.
+- [ ] La eliminación del calculado es **independiente** de la del origen: borrar el calculado no toca el origen ni a otros calculados del mismo origen, y aplica desde el mes visualizado (RF-MF-004).
+- [ ] Eliminar el **origen** sí arrastra al calculado (RF-MCALC-005); eliminar el **calculado** no arrastra al origen.
+
+---
+
+#### RF-MCALC-007 — Indicación visual de la relación padre/hijo
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | En `/mes` se distingue cuándo un movimiento **tiene** un calculado derivado (es origen/padre) y cuándo un movimiento **es** un calculado de otro (es hijo). |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Baja |
+| **Precondiciones** | El usuario está en la Vista del mes. |
+
+**Criterios de aceptación:**
+- [ ] En `/mes` se ve que un ítem fijo **tiene al menos un calculado derivado** (es padre).
+- [ ] En `/mes` se ve que un ítem **es un calculado** de un fijo de origen (es hijo).
+
+**Notas:**
+- El **detalle visual** de esta indicación (cómo se representa la relación padre/hijo, ubicación, jerarquía) lo define `control-design` (`docs/design.md`). Este RF fija únicamente el requerimiento funcional de que la relación sea visible.
+
+---
+
 ### 3.5 Módulo: Movimientos en cuotas
 
 Una compra o cobro dividido en N pagos mensuales iguales. El usuario ingresa el monto de cada cuota, la cantidad de cuotas y el mes de inicio.
@@ -1266,6 +1417,9 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 | RN-014 | Para comparar nombres de categoría a efectos de unicidad, el nombre se **normaliza**: trim de espacios, insensible a mayúsculas/minúsculas e insensible a acentos/tildes. Ej: "comida", "Comida" y "Cómida" se consideran el mismo nombre. Esta normalización aplica tanto a la detección de duplicado contra categorías **activas** (bloqueo, RN-008) como contra categorías **eliminadas** (soft delete) para proponer reactivarla (RF-CAT-002). La regla se valida en **ambas capas** —backend como fuente de verdad y frontend para UX— y ambas deben mantenerse alineadas (ver `docs/technical.md`). |
 | RN-015 | Para la agregación anual de los reportes (RF-REP-001), el mes al que se imputa cada movimiento se determina con el **mismo criterio ya definido** para la Vista del mes, sin introducir una regla de zona horaria nueva: para los movimientos **únicos**, el mes se calcula en la **zona horaria propia de cada registro** (RN-011, igual que el bucketeo de `GET /movements`); para los **fijos** y las **cuotas**, que operan a nivel mes (RN-006), el mes es el de su `startMonth` `YYYY-MM` (los fijos caen en cada mes donde están activos; las cuotas, en cada mes de su tramo). Un movimiento se imputa a un año determinado solo si su mes resuelto pertenece a ese año. |
 | RN-016 | **Frecuencia y anulación de movimientos fijos (RF-MF-005, RF-MF-006).** Un movimiento fijo con mes de inicio `S` y frecuencia `F` aparece en el mes `M` si y solo si: `S <= M` **y** (`deletedFrom` es null **o** `deletedFrom > M`) **y** `monthDiff(S, M) % step(F) === 0`, donde el paso por frecuencia es `MONTHLY=1`, `BIMONTHLY=2`, `QUARTERLY=3`, `BIANNUAL=6`, `ANNUAL=12`. La frecuencia está **anclada al mes de inicio** (no al mes consultado). Una **anulación** `(fijo, mes)` no cambia si el fijo aparece o no según esta regla: un fijo anulado para un mes **se sigue listando** en `GET /movements` con la marca de anulado, pero su monto **no suma** a los totales del mes ni a la serie anual de los reportes. La anulación es **reversible** (toggle) y solo tiene sentido sobre meses donde el fijo efectivamente aparece según `F`. El cálculo sigue siendo on-the-fly (RN-006): no se generan filas por instancia mensual. |
+| RN-017 | **Fórmula y redondeo del movimiento calculado (RF-MCALC-002).** El monto de un movimiento calculado se deriva del monto del fijo de origen **del mes en cuestión** aplicando **una** operación: un operador de `{ +, −, ×, ÷, % }` y un **operando** numérico común. El cálculo por operador es: `+` → `origen + operando`; `−` → `origen − operando`; `×` → `origen × operando`; `÷` → `origen ÷ operando`; `%` → `origen × operando ÷ 100`. El **operando 0 no se acepta** en `÷` ni en `%` (división por cero); el resto acepta cualquier operando numérico. El resultado se **redondea a centavos enteros** (`round`, mantiene RN-002): **no** se persiste ni propaga precisión sub-centavo. La presentación siempre muestra 2 decimales. El signo final lo aplica RN-018, no la fórmula. El cálculo es **on-the-fly por mes** (RN-006): el monto **no se persiste**, se deriva al vuelo del origen en cada lectura, así que sigue automáticamente cualquier cambio del origen (RF-MCALC-004). |
+| RN-018 | **Signo, monto y tipo derivado del movimiento calculado — excepción a RN-001 (RF-MCALC-003).** El movimiento calculado tiene un **switch de signo** que multiplica el resultado de la fórmula por `+1` o `−1`. Por eso su `amountCents` **puede ser negativo o cero**, a diferencia de todo otro movimiento (RN-001, monto > 0). Esta excepción aplica **únicamente** a movimientos calculados; únicos, fijos "normales" y cuotas siguen exigiendo monto > 0. El `type` (`EXPENSE`/`INCOME`) **no se elige**: se **deriva del signo del monto final** —`final < 0` → `EXPENSE`; `final > 0` → `INCOME`; `final == 0` → `EXPENSE` por convención de borde (no afecta totales, RN-019)—. Así signo y tipo son siempre consistentes (positivo = ingreso, negativo = gasto). |
+| RN-019 | **Imputación a totales y reportes por el tipo derivado (RF-MCALC-003).** Cada movimiento suma su **magnitud** (`\|amountCents\|`) al bucket que le corresponde **según su `type`**: un `INCOME` suma a `incomeCents`; un `EXPENSE`, a `expenseCents`. Para movimientos normales el `type` es fijo y `amountCents > 0`. Para un **calculado**, como el `type` se deriva del signo del monto (RN-018), la imputación queda siempre consistente: un calculado de monto `−2000` es `EXPENSE` (tipo derivado) y suma **2000** a `expenseCents`; uno de `+2000` es `INCOME` y suma **2000** a `incomeCents`; un monto 0 no aporta a ningún bucket. No hay restas a un bucket ni reasignación: signo y tipo nunca se contradicen. El balance del mes (`incomeCents − expenseCents`, RF-VM-002 / RF-DASH-002) y la serie anual de reportes (RF-REP-001, ambas formas) se calculan con esta suma de magnitudes, sin lógica especial. En la Forma 2 de reportes (gastos apilados por categoría) la banda de la categoría de un calculado `EXPENSE` suma su magnitud, preservando la invariante "suma de bandas del mes = `expenseCents` del mes" (`docs/data-model.md`, §Contrato de serie de reportes). |
 
 ---
 
@@ -1322,6 +1476,8 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 | Ingreso (`INCOME`) | Entrada de dinero. Aumenta el balance del mes. |
 | Mes activo | Mes actualmente visualizado en la vista del mes. Por defecto, el mes corriente. |
 | Movimiento | Registro de una transacción económica. Puede ser único, fijo o una cuota. |
+| Movimiento calculado | Movimiento **fijo** cuyo monto no se ingresa: se deriva al vuelo del monto de otro fijo de origen mediante una fórmula (operador + operando) con signo, mes a mes. Tiene categoría y descripción propias; su **tipo (Gasto/Ingreso) se deriva del signo del monto** (negativo → Gasto, positivo → Ingreso). Puede tener monto negativo o cero. Sigue el ciclo de vida del origen. Ver submódulo 3.4.b (RF-MCALC-001..007), RN-017/018/019. |
+| Identidad de cadena de un fijo | Identificador estable, compartido por todas las filas `Recurring` de un mismo fijo lógico, que sobrevive a los splits del pasado. Es a lo que se vincula un movimiento calculado (no a una fila puntual). Ver `docs/data-model.md`, §Identidad de cadena estable. |
 | Movimiento fijo | Plantilla recurrente mensual activa hasta que el usuario la elimina. Sin día específico dentro del mes. |
 | Movimiento único | Movimiento que ocurrió en un instante específico (fecha y hora), una sola vez. Se almacena en UTC junto con su zona horaria original; ver RN-011. |
 | Scope de categoría | Indica a qué tipo de movimiento aplica la categoría: `BOTH`, `EXPENSE`, o `INCOME`. |

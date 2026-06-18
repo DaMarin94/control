@@ -46,6 +46,7 @@ Ver descripción funcional en `docs/requirements.md`. Los contratos técnicos (D
 | `GET` | `/movements?month=YYYY-MM` | Lista unificada del mes |
 | `POST/PATCH/DELETE` | `/transactions` | Movimientos únicos |
 | `POST/PATCH/DELETE` | `/recurring` | Movimientos fijos |
+| `POST/PATCH` | `/recurring/:id/calculated` | Movimientos calculados (1.1.7) |
 | `POST/PATCH/DELETE` | `/installments` | Grupos de cuotas |
 | `GET/POST/PATCH/DELETE` | `/categories` | Categorías |
 
@@ -147,6 +148,16 @@ Detalle de contrato en `docs/backend.md` (RecurringModule, secciones **Cálculo 
 - **Fijo anulado: se lista, no suma.** En `findFijosByMonth` el fijo con skip del mes se **incluye igual** en la lista con `skipped: true`; **excluirlo de los totales es responsabilidad del caller** (`MovementsService`). El `MovementItem` suma los campos `frequency` (fijos: su frecuencia; únicos/cuotas: `null`) y `skipped` (fijos: bool; únicos/cuotas: `false`).
 - **Skips del anual sin N+1.** En la proyección anual los skips se cargan como **`Map<recurringId, Set<month>>` en una sola query** (`recurringSkip.findMany` por `recurring.userId`, en paralelo con los fijos), NO con un `include` anidado por fijo. Para cada mes se descarta el fijo si `skippedMonths.has(mes)`, además de aplicar `isOnFrequency`.
 - **Migraciones sin shadow DB (Prisma 7 en este entorno).** `prisma migrate dev` falla (el rol no puede crear shadow databases). Patrón a seguir (todo desde `backend/`): generar el SQL con `prisma migrate diff --from-migrations ./prisma/migrations --to-schema-datamodel ./prisma/schema.prisma --script`, aplicar con `prisma db push`, marcar con `prisma migrate resolve --applied <migracion>` y `prisma generate`. Detalle en `docs/technical.md`, sección Migraciones.
+
+## Movimientos calculados (recurring) — gotchas y decisiones (Fase 1.1.7)
+
+Detalle en `docs/backend.md`, §Movimientos calculados; contrato en `docs/data-model.md`, §Contrato de movimientos calculados. Para agentes que toquen el backend:
+
+- **Un calculado es un fijo con monto/tipo derivados on-the-fly — NUNCA persistir el monto ni el tipo derivado.** La fila persiste placeholders (`amountCents = 0`, `type = EXPENSE`) que jamás se usan para mostrar; el monto real (`signo × round(fórmula(montoOrigen))`) y el tipo (signo: `>0 INCOME`, `≤0 EXPENSE`) se derivan en `findFijosByMonth` / totales. Si escribís el `amountCents`/`type` real de un calculado, es un bug.
+- **Presencia gobernada por el ORIGEN, no por la frecuencia propia del calculado.** El calculado aparece sii el origen tiene fila activa en el mes; **NO** aplicarle `isOnFrequency` con su propio `startMonth` (desalinea con step > 1 — fue causa de un bug). Hereda del origen frecuencia, actividad y skip.
+- **Vínculo por `sourceChainId` = `chainId` del origen** (cadena estable que sobrevive a splits), no por `Recurring.id`. El split de un fijo/calculado **preserva el `chainId`** (R2 lo hereda de R1).
+- **DELETE / skip / frecuencia del origen se propagan al calculado.** `remove()` aplica el boundary a toda la cadena y, si es origen, **cascadea** a las cadenas de sus calculados (`cascadeDeleteCalculados`). Eliminar un calculado NO toca el origen.
+- **Endpoints propios:** `POST|PATCH /recurring/:id/calculated`. `PATCH /recurring/:id` (fijo normal) rechaza `400` si el id es calculado, y viceversa. Sin encadenamiento (origen no puede ser calculado → `400`); `formulaOperand = 0` con `DIV`/`PCT` → `400`. Categoría se valida con `skipScopeCheck` (tipo derivado, no fijo). El body **no** acepta `type`.
 
 ## Filtro por categoría — gotchas y decisiones (Fase 1.1.6)
 

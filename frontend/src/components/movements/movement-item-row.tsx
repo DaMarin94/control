@@ -25,7 +25,7 @@
 import { type MovementItem } from "@/types/movement";
 import { type RecurringFrequency } from "@/types/recurring";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { ArrowDown, ArrowUp, Repeat, Pencil, Trash2, CalendarOff, CalendarPlus } from "lucide-react";
+import { ArrowDown, ArrowUp, Repeat, Pencil, Trash2, CalendarOff, CalendarPlus, Link2, GitBranch, Calculator } from "lucide-react";
 import { KebabMenu } from "@/components/ui/kebab-menu";
 import { useRecurring } from "@/hooks/use-recurring";
 import { useToast } from "@/hooks/use-toast";
@@ -45,9 +45,11 @@ interface MovementItemRowProps {
   viewMonth: string;
   onEdit: (movement: MovementItem) => void;
   onDelete: (movement: MovementItem) => void;
+  /** Handler para "Crear movimiento desde este" — solo para fijos NO calculados */
+  onCreateCalculated?: (movement: MovementItem) => void;
 }
 
-export function MovementItemRow({ movement, viewMonth, onEdit, onDelete }: MovementItemRowProps) {
+export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreateCalculated }: MovementItemRowProps) {
   const { skipRecurring } = useRecurring();
   const { toast } = useToast();
 
@@ -56,15 +58,32 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete }: Movem
   const isCuota = movement.origin === "cuota";
   const isSkipped = movement.skipped;
 
+  // Fase 1.1.7 — calculado / padre
+  const isCalculated = Boolean(movement.calculated);
+  const isParent = isFijo && !isCalculated && movement.hasCalculated;
+
   // Fecha formateada "02 Jun" (solo para únicos)
   const dateFormatted =
     !isFijo && !isCuota && movement.occurredAt && movement.timezone
       ? formatDate(movement.occurredAt, movement.timezone)
       : null;
 
-  // Monto: gastos con −$, ingresos con +$
-  const amountFormatted = formatCurrency(movement.amountCents);
-  const amountDisplay = isExpense ? `−${amountFormatted}` : `+${amountFormatted}`;
+  // Monto: para calculados puede ser negativo o cero (RN-018, spec 1.c).
+  // Color siempre por TIPO (no por signo). Prefijo − si negativo.
+  // Para no calculados: gastos con −$, ingresos con +$.
+  function buildAmountDisplay(): string {
+    if (isCalculated) {
+      // Monto calculado puede ser negativo, cero o positivo
+      const cents = movement.amountCents;
+      if (cents === 0) return formatCurrency(0); // "$0,00" sin signo
+      if (cents < 0) return `−${formatCurrency(Math.abs(cents))}`; // "−$1.234,56"
+      return formatCurrency(cents); // positivo sin prefijo (es el valor derivado)
+    }
+    // Movimiento normal: gastos con −$, ingresos con +$
+    const amountFormatted = formatCurrency(movement.amountCents);
+    return isExpense ? `−${amountFormatted}` : `+${amountFormatted}`;
+  }
+  const amountDisplay = buildAmountDisplay();
 
   // Ícono y clases de color por tipo
   const IconComponent = isExpense ? ArrowDown : ArrowUp;
@@ -96,7 +115,8 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete }: Movem
     // Si tiene éxito, React Query invalida la query del mes y la lista se refresca sola
   }
 
-  // Ítems del KebabMenu — para fijos se añade el toggle skip entre Editar y Eliminar
+  // Ítems del KebabMenu — para fijos se añade el toggle skip entre Editar y Eliminar.
+  // "Crear movimiento desde este" solo en fijos NO calculados (spec sección 2).
   const menuItems = [
     {
       label: "Editar",
@@ -109,6 +129,16 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete }: Movem
             label: isSkipped ? "Des-anular este mes" : "Anular este mes",
             icon: isSkipped ? CalendarPlus : CalendarOff,
             onSelect: handleSkipToggle,
+          },
+        ]
+      : []),
+    // "Crear movimiento desde este" — solo en fijos NO calculados (RF-MCALC-001)
+    ...(isFijo && !isCalculated && onCreateCalculated
+      ? [
+          {
+            label: "Crear movimiento desde este",
+            icon: Calculator,
+            onSelect: () => onCreateCalculated(movement),
           },
         ]
       : []),
@@ -139,7 +169,7 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete }: Movem
           {movement.description ?? categoryName}
         </b>
         <span className="flex items-center gap-[7px] text-[12.5px] text-muted flex-wrap">
-          {/* Badge "Anulado" como primer segmento de la sublínea (solo si skipped) */}
+          {/* Badge "Anulado" — primer segmento (spec 1.1.1 / 1.1.7 orden: Anulado primero) */}
           {isSkipped && (
             <>
               <span
@@ -147,6 +177,21 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete }: Movem
                 aria-label="Movimiento anulado para este mes"
               >
                 Anulado
+              </span>
+              <span
+                className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
+                aria-hidden="true"
+              />
+            </>
+          )}
+          {/* Chip "Calculado" — segundo segmento si es calculado (spec 1.a Fase 1.1.7) */}
+          {isCalculated && (
+            <>
+              <span
+                className="inline-flex items-center gap-[3px] rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em]"
+              >
+                <Link2 size={11} aria-hidden="true" />
+                Calculado
               </span>
               <span
                 className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
@@ -169,6 +214,37 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete }: Movem
               <span className="inline-flex items-center gap-[4px]">
                 <Repeat size={12} className="opacity-60" aria-hidden="true" />
                 {frequencyLabel}
+              </span>
+            </>
+          )}
+          {/* "desde {Origen}" — solo si es calculado y el origen tiene nombre (spec 1.a) */}
+          {isCalculated && movement.calculated?.sourceDescription && (
+            <>
+              <span
+                className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
+                aria-hidden="true"
+              />
+              <span className="text-[12.5px]">
+                <span className="text-muted">desde </span>
+                <span className="text-ink-2">{movement.calculated.sourceDescription}</span>
+              </span>
+            </>
+          )}
+          {/* Indicador padre: GitBranch + contador (spec 1.b) — último segmento */}
+          {isParent && (
+            <>
+              <span
+                className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
+                aria-hidden="true"
+              />
+              {/* No tenemos conteo de derivados en el ítem; hasCalculated es bool.
+                  Mostramos solo el ícono (no podemos saber cuántos hay sin el conteo).
+                  Si el backend expone el conteo en el futuro, agregar el número aquí. */}
+              <span
+                className="inline-flex items-center gap-[3px] text-muted"
+                title="Tiene movimiento(s) calculado(s)"
+              >
+                <GitBranch size={13} aria-hidden="true" />
               </span>
             </>
           )}

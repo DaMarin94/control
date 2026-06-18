@@ -54,6 +54,8 @@ const mockMonthMovements: MonthMovements = {
           color: "#FF5733",
           scope: "BOTH",
         },
+        calculated: null,
+        hasCalculated: false,
       },
     ],
     fijos: [],

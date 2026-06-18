@@ -19,9 +19,11 @@ import { cn } from "@/lib/utils";
 import { TransactionForm } from "@/components/movements/transaction-form";
 import { RecurringForm } from "@/components/movements/recurring-form";
 import { InstallmentForm } from "@/components/movements/installment-form";
+import { CalculatedForm } from "@/components/movements/calculated-form";
 import { type Transaction } from "@/types/transaction";
 import { type Recurring } from "@/types/recurring";
 import { type InstallmentGroup } from "@/types/installment";
+import { type MovementItem } from "@/types/movement";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +48,7 @@ export type TransactionModalProps =
       transaction?: null;
       recurring?: null;
       installment?: null;
+      calculated?: null;
       onClose: () => void;
       defaultMonth?: string;
     }
@@ -54,6 +57,7 @@ export type TransactionModalProps =
       transaction: Transaction;
       recurring?: null;
       installment?: null;
+      calculated?: null;
       onClose: () => void;
     }
   | {
@@ -61,6 +65,7 @@ export type TransactionModalProps =
       transaction?: null;
       recurring: Recurring;
       installment?: null;
+      calculated?: null;
       onClose: () => void;
       viewMonth?: string;
     }
@@ -69,7 +74,34 @@ export type TransactionModalProps =
       transaction?: null;
       recurring?: null;
       installment: InstallmentGroup;
+      calculated?: null;
       onClose: () => void;
+    }
+  | {
+      /**
+       * Crear un movimiento calculado derivado de un fijo de origen.
+       * `calculated` es el MovementItem del fijo ORIGEN (desde el que se crea).
+       */
+      mode: "create-calculated";
+      transaction?: null;
+      recurring?: null;
+      installment?: null;
+      calculated: MovementItem;
+      onClose: () => void;
+      viewMonth?: string;
+    }
+  | {
+      /**
+       * Editar un movimiento calculado existente.
+       * `calculated` es el MovementItem del calculado (ya es un fijo calculado).
+       */
+      mode: "edit-calculated";
+      transaction?: null;
+      recurring?: null;
+      installment?: null;
+      calculated: MovementItem;
+      onClose: () => void;
+      viewMonth?: string;
     };
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -77,6 +109,7 @@ export type TransactionModalProps =
 export function TransactionModal(props: TransactionModalProps) {
   const { mode, onClose } = props;
   const isEditing = mode !== "create";
+  const isCalculatedMode = mode === "create-calculated" || mode === "edit-calculated";
   const defaultMonth = mode === "create" ? props.defaultMonth : undefined;
 
   const [activeTab, setActiveTab] = useState<TabId>("single");
@@ -104,6 +137,8 @@ export function TransactionModal(props: TransactionModalProps) {
   if (mode === "edit-single") title = "Editar movimiento";
   else if (mode === "edit-fixed") title = "Editar · Fijo";
   else if (mode === "edit-installment") title = "Editar · Cuotas";
+  else if (mode === "create-calculated") title = "Nuevo movimiento calculado";
+  else if (mode === "edit-calculated") title = "Editar movimiento calculado";
 
   if (!mounted) return null;
 
@@ -141,8 +176,8 @@ export function TransactionModal(props: TransactionModalProps) {
           </button>
         </div>
 
-        {/* ── Tabs .dtabs (solo en modo crear) ── */}
-        {!isEditing && (
+        {/* ── Tabs .dtabs (solo en modo crear normal, no en calculado) ── */}
+        {!isEditing && !isCalculatedMode && (
           <div
             className="flex gap-1 mx-[22px] mb-4 p-1 rounded-ctl bg-panel-3"
             role="tablist"
@@ -172,7 +207,19 @@ export function TransactionModal(props: TransactionModalProps) {
         )}
 
         {/* ── Contenido ── */}
-        {isEditing ? (
+        {isCalculatedMode ? (
+          /* Modos de calculado: create-calculated / edit-calculated */
+          <CalculatedForm
+            mode={mode === "edit-calculated" ? "edit" : "create"}
+            movement={props.calculated}
+            onClose={onClose}
+            viewMonth={
+              mode === "create-calculated" || mode === "edit-calculated"
+                ? props.viewMonth
+                : undefined
+            }
+          />
+        ) : isEditing ? (
           <div>
             {mode === "edit-single" ? (
               <TransactionForm transaction={props.transaction} onClose={onClose} />

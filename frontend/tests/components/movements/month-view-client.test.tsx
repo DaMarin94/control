@@ -164,6 +164,8 @@ const mockMovementExpense = {
   frequency: null as null,
   skipped: false,
   category: { id: "cat-1", name: "Alimentación", color: "#FF5733", scope: "BOTH" as const },
+  calculated: null,
+  hasCalculated: false,
 };
 
 const mockMovementIncome = {
@@ -178,6 +180,8 @@ const mockMovementIncome = {
   frequency: null as null,
   skipped: false,
   category: { id: "cat-2", name: "Sueldo", color: "#33FF57", scope: "INCOME" as const },
+  calculated: null,
+  hasCalculated: false,
 };
 
 const mockMovementFijo = {
@@ -192,6 +196,8 @@ const mockMovementFijo = {
   frequency: "MONTHLY" as const,
   skipped: false,
   category: { id: "cat-3", name: "Servicios", color: "#5733FF", scope: "EXPENSE" as const },
+  calculated: null,
+  hasCalculated: false,
 };
 
 const mockMovementCuota = {
@@ -210,6 +216,8 @@ const mockMovementCuota = {
   frequency: null as null,
   skipped: false,
   category: { id: "cat-4", name: "Tecnología", color: "#FF33AA", scope: "EXPENSE" as const },
+  calculated: null,
+  hasCalculated: false,
 };
 
 const mockWithData: MonthMovements = {

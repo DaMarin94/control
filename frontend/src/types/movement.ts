@@ -1,11 +1,13 @@
 /**
  * Tipos del dominio de movimientos — endpoint unificado GET /movements.
- * Reflejan el contrato de la API del backend (Fase 5–7).
+ * Reflejan el contrato de la API del backend (Fase 5–7, Fase 1.1.7).
  *
  * MovementItem es el ítem individual que puede ser "unico", "fijo" o "cuota".
  * - "unico": occurredAt/timezone presentes; installment=null.
  * - "fijo":  occurredAt/timezone=null; installment=null.
  * - "cuota": occurredAt/timezone=null; installment presente con number/total/startMonth.
+ *
+ * Fase 1.1.7: se agregan `calculated` y `hasCalculated` para movimientos calculados.
  *
  * MonthMovements es la respuesta completa de GET /movements?month=YYYY-MM.
  */
@@ -15,6 +17,47 @@ import type { RecurringFrequency } from "@/types/recurring";
 
 /** Discriminador de origen del movimiento */
 export type MovementOrigin = "unico" | "fijo" | "cuota";
+
+/**
+ * Operador de fórmula para movimientos calculados (RF-MCALC-002).
+ * ADD: origen + operando
+ * SUB: origen - operando
+ * MUL: origen × operando
+ * DIV: origen ÷ operando (operando ≠ 0)
+ * PCT: origen × operando ÷ 100
+ */
+export type FormulaOperator = "ADD" | "SUB" | "MUL" | "DIV" | "PCT";
+
+/**
+ * Datos del calculado embebidos en MovementItem cuando el ítem es un movimiento calculado.
+ * Presente solo si el ítem es un fijo calculado; null en todos los demás casos.
+ * (Fase 1.1.7 — RF-MCALC-001..007)
+ */
+export interface CalculatedInfo {
+  /** Id estable de la cadena del origen (identidad de cadena del fijo origen) */
+  sourceChainId: string;
+  /** Id de la fila activa del origen en ese mes */
+  sourceId: string;
+  /** Descripción/nombre del fijo de origen (null si no tiene) */
+  sourceDescription: string | null;
+  /** Operador de la fórmula */
+  formulaOperator: FormulaOperator;
+  /**
+   * Operando escalado (entero):
+   * - ADD/SUB: centavos (ej. $500 → 50000)
+   * - MUL/DIV: factor × 1.000.000 (ej. 1.5 → 1500000)
+   * - PCT: porcentaje × 100 (ej. 10% → 1000)
+   */
+  formulaOperand: number;
+  /** Signo del resultado: +1 o -1 */
+  formulaSign: 1 | -1;
+  /**
+   * Monto del fijo de origen en el mes consultado (entero positivo en centavos).
+   * Presente en modo edición para habilitar el preview en vivo del resultado.
+   * null/ausente para no-calculados o cuando no está disponible.
+   */
+  sourceAmountCents: number | null;
+}
 
 /** Tipo de movimiento */
 export type MovementType = "EXPENSE" | "INCOME";
@@ -80,6 +123,18 @@ export interface MovementItem {
    */
   skipped: boolean;
   category: MovementCategory;
+  /**
+   * Datos del calculado — Fase 1.1.7 (RF-MCALC-001..007).
+   * Presente solo si este ítem es un movimiento calculado (fijo cuyo monto se deriva).
+   * null si no es calculado.
+   */
+  calculated: CalculatedInfo | null;
+  /**
+   * Indica si este ítem fijo tiene al menos un movimiento calculado derivado en el mes.
+   * Solo relevante para origin==="fijo" y calculated===null (los "padres").
+   * En ítems que son calculados: false (no pueden ser padres, RF-MCALC-001).
+   */
+  hasCalculated: boolean;
 }
 
 /** Totales del mes */

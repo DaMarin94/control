@@ -12,6 +12,7 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useRecurring } from "@/hooks/use-recurring";
@@ -96,6 +97,22 @@ export function DeleteRecurringDialog({ movement, onClose, viewMonth }: DeleteRe
           <p className="text-[13px] text-muted">
             El fijo dejará de aparecer desde este mes en adelante. Los meses anteriores no se modifican.
           </p>
+          {movement.hasCalculated && (
+            <div
+              className="rounded-ctl px-3 py-2.5 flex items-start gap-2.5"
+              style={{ background: "var(--warning-soft)", border: "1px solid var(--warning)" }}
+            >
+              <AlertTriangle
+                size={16}
+                strokeWidth={2}
+                aria-hidden="true"
+                style={{ color: "var(--warning-ink)", flexShrink: 0, marginTop: "1px" }}
+              />
+              <p className="text-[13px] font-medium leading-snug m-0" style={{ color: "var(--warning-ink)" }}>
+                Este movimiento fijo tiene movimientos calculados que dependen de él. Si lo eliminás, esos calculados también se eliminarán.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

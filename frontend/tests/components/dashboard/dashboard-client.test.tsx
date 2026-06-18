@@ -117,6 +117,8 @@ const mockWithMovements: MonthMovements = {
         frequency: null,
         skipped: false,
         category: { id: "cat-1", name: "Alimentación", color: "#FF5733", scope: "BOTH" },
+        calculated: null,
+        hasCalculated: false,
       },
     ],
     fijos: [],

@@ -37,6 +37,12 @@ const mockRepo = {
   findSkip: jest.fn(),
   createSkip: jest.fn(),
   deleteSkip: jest.fn(),
+  // Fase 1.1.7 — métodos de calculados y cadena
+  findChainRows: jest.fn().mockResolvedValue([]),
+  findCalculadosBySourceChain: jest.fn().mockResolvedValue([]),
+  findActiveRowByChainId: jest.fn().mockResolvedValue(null),
+  deleteByChainId: jest.fn().mockResolvedValue(undefined),
+  setDeletedFromByChainId: jest.fn().mockResolvedValue(undefined),
 };
 
 /**
@@ -77,6 +83,11 @@ function makeRecurring(
     startMonth: '2026-01',
     deletedFrom: null,
     frequency: RecurringFrequency.MONTHLY,
+    chainId: 'chain-001',
+    sourceChainId: null,
+    formulaOperator: null,
+    formulaOperand: null,
+    formulaSign: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     category: {
@@ -640,26 +651,34 @@ describe('RecurringService', () => {
   // -------------------------------------------------------------------------
 
   describe('remove', () => {
-    it('fromCurrentMonth=false → boundary = nextMonth → set deletedFrom', async () => {
+    it('fromCurrentMonth=false → boundary = nextMonth → set deletedFrom en la cadena', async () => {
       // startMonth='2026-01', currentMonth='2026-06', fromCurrentMonth=false
-      // boundary = '2026-07' > '2026-01' → soft delete
+      // boundary = '2026-07' > '2026-01' → soft delete de la fila
       const existing = makeRecurring({ startMonth: '2026-01' });
       mockRepo.findById.mockResolvedValue(existing);
+      // La cadena tiene solo una fila (la clickeada, sin splits)
+      mockRepo.findChainRows.mockResolvedValue([
+        { id: 'rec-001', startMonth: '2026-01', deletedFrom: null },
+      ]);
       mockRepo.update.mockResolvedValue({ ...existing, deletedFrom: '2026-07' });
 
       await service.remove(USER_A, 'rec-001', '2026-06', false);
 
+      // applyBoundaryToChain: boundary='2026-07' > startMonth='2026-01', deletedFrom=null → update
       expect(mockRepo.update).toHaveBeenCalledWith('rec-001', {
         deletedFrom: '2026-07',
       });
       expect(mockRepo.delete).not.toHaveBeenCalled();
     });
 
-    it('fromCurrentMonth=true → boundary = currentMonth → set deletedFrom', async () => {
+    it('fromCurrentMonth=true → boundary = currentMonth → set deletedFrom en la cadena', async () => {
       // startMonth='2026-01', currentMonth='2026-06', fromCurrentMonth=true
-      // boundary = '2026-06' > '2026-01' → soft delete
+      // boundary = '2026-06' > '2026-01' → soft delete de la fila
       const existing = makeRecurring({ startMonth: '2026-01' });
       mockRepo.findById.mockResolvedValue(existing);
+      mockRepo.findChainRows.mockResolvedValue([
+        { id: 'rec-001', startMonth: '2026-01', deletedFrom: null },
+      ]);
       mockRepo.update.mockResolvedValue({ ...existing, deletedFrom: '2026-06' });
 
       await service.remove(USER_A, 'rec-001', '2026-06', true);
@@ -675,6 +694,9 @@ describe('RecurringService', () => {
       // boundary = '2026-06' <= startMonth='2026-06' → hard delete
       const existing = makeRecurring({ startMonth: '2026-06' });
       mockRepo.findById.mockResolvedValue(existing);
+      mockRepo.findChainRows.mockResolvedValue([
+        { id: 'rec-001', startMonth: '2026-06', deletedFrom: null },
+      ]);
       mockRepo.delete.mockResolvedValue(undefined);
 
       await service.remove(USER_A, 'rec-001', '2026-06', true);
@@ -688,12 +710,83 @@ describe('RecurringService', () => {
       // boundary = nextMonth('2026-06') = '2026-07' <= startMonth='2026-07' → hard delete
       const existing = makeRecurring({ startMonth: '2026-07' });
       mockRepo.findById.mockResolvedValue(existing);
+      mockRepo.findChainRows.mockResolvedValue([
+        { id: 'rec-001', startMonth: '2026-07', deletedFrom: null },
+      ]);
       mockRepo.delete.mockResolvedValue(undefined);
 
       await service.remove(USER_A, 'rec-001', '2026-06', false);
 
       expect(mockRepo.delete).toHaveBeenCalledWith('rec-001');
       expect(mockRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('cadena con split: boundary=m1 → hard delete de R1 y R2 (escenario del bug)', async () => {
+      // Escenario del bug: R1 startMonth='2026-01', R2 startMonth='2026-03'
+      // boundary='2026-01' (fromCurrentMonth=true, currentMonth='2026-01')
+      // boundary <= R1.startMonth → hard delete R1
+      // boundary <= R2.startMonth → hard delete R2
+      const r1 = makeRecurring({ id: 'rec-001', startMonth: '2026-01', chainId: 'chain-abc' });
+      mockRepo.findById.mockResolvedValue(r1);
+      // La cadena tiene dos filas (R1 y R2 del split)
+      mockRepo.findChainRows.mockResolvedValue([
+        { id: 'rec-001', startMonth: '2026-01', deletedFrom: '2026-03' },
+        { id: 'rec-002', startMonth: '2026-03', deletedFrom: null },
+      ]);
+      mockRepo.delete.mockResolvedValue(undefined);
+
+      await service.remove(USER_A, 'rec-001', '2026-01', true);
+
+      // Ambas filas deben ser hard-deleted porque boundary='2026-01' <= startMonth de ambas
+      expect(mockRepo.delete).toHaveBeenCalledWith('rec-001');
+      expect(mockRepo.delete).toHaveBeenCalledWith('rec-002');
+      expect(mockRepo.delete).toHaveBeenCalledTimes(2);
+      expect(mockRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('cadena con split: boundary=m2 → R1 truncado, R2 hard-deleted', async () => {
+      // Escenario: R1 startMonth='2026-01', R2 startMonth='2026-03'
+      // boundary='2026-02' (fromCurrentMonth=true, currentMonth='2026-02')
+      // boundary > R1.startMonth y deletedFrom='2026-03' > '2026-02' → truncar R1 a '2026-02'
+      // boundary <= R2.startMonth ('2026-02' <= '2026-03') → hard delete R2
+      const r1 = makeRecurring({ id: 'rec-001', startMonth: '2026-01', chainId: 'chain-abc' });
+      mockRepo.findById.mockResolvedValue(r1);
+      mockRepo.findChainRows.mockResolvedValue([
+        { id: 'rec-001', startMonth: '2026-01', deletedFrom: '2026-03' },
+        { id: 'rec-002', startMonth: '2026-03', deletedFrom: null },
+      ]);
+      mockRepo.delete.mockResolvedValue(undefined);
+      mockRepo.update.mockResolvedValue({});
+
+      await service.remove(USER_A, 'rec-001', '2026-02', true);
+
+      // R1: boundary='2026-02' > startMonth='2026-01', deletedFrom='2026-03' > '2026-02' → update
+      expect(mockRepo.update).toHaveBeenCalledWith('rec-001', { deletedFrom: '2026-02' });
+      // R2: boundary='2026-02' <= startMonth='2026-03' → hard delete
+      expect(mockRepo.delete).toHaveBeenCalledWith('rec-002');
+      expect(mockRepo.delete).toHaveBeenCalledTimes(1);
+    });
+
+    it('cadena con split: fila pasada no se toca (pasado inmutable)', async () => {
+      // R1: startMonth='2026-01', deletedFrom='2026-03' (ya cerrada ANTES del boundary)
+      // R2: startMonth='2026-03', deletedFrom=null
+      // boundary='2026-05' → R1 ya tiene deletedFrom='2026-03' <= '2026-05' → no tocar
+      //                     → R2: deletedFrom=null > '2026-05' → update a '2026-05'
+      const r1 = makeRecurring({ id: 'rec-001', startMonth: '2026-01', chainId: 'chain-abc' });
+      mockRepo.findById.mockResolvedValue(r1);
+      mockRepo.findChainRows.mockResolvedValue([
+        { id: 'rec-001', startMonth: '2026-01', deletedFrom: '2026-03' },
+        { id: 'rec-002', startMonth: '2026-03', deletedFrom: null },
+      ]);
+      mockRepo.update.mockResolvedValue({});
+
+      await service.remove(USER_A, 'rec-001', '2026-05', true);
+
+      // R1: deletedFrom='2026-03' <= boundary='2026-05' → NO tocar
+      // R2: deletedFrom=null → update a '2026-05'
+      expect(mockRepo.update).toHaveBeenCalledTimes(1);
+      expect(mockRepo.update).toHaveBeenCalledWith('rec-002', { deletedFrom: '2026-05' });
+      expect(mockRepo.delete).not.toHaveBeenCalled();
     });
 
     it('404 si el fijo no existe', async () => {

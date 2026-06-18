@@ -28,6 +28,10 @@ export class CategoryValidatorService {
    * 2. Pertenezca al userId (RN-003, aislamiento)
    * 3. Esté activa (deletedAt null)
    * 4. Su scope sea compatible con el type del movimiento (RN-010)
+   *    — EXCEPTO si skipScopeCheck=true, en cuyo caso se omite la validación de scope.
+   *    Esto se usa para movimientos calculados, cuyo type se deriva on-the-fly del
+   *    signo del monto y puede variar mes a mes (RF-MCALC-003); la categoría es válida
+   *    con cualquier scope en ese caso.
    *
    * @throws BadRequestException en cualquier caso de fallo.
    */
@@ -35,6 +39,7 @@ export class CategoryValidatorService {
     userId: string,
     categoryId: string,
     type: MovementType,
+    skipScopeCheck = false,
   ): Promise<void> {
     const category = await this.prisma.category.findUnique({
       where: { id: categoryId },
@@ -52,7 +57,7 @@ export class CategoryValidatorService {
       throw new BadRequestException('La categoría está eliminada');
     }
 
-    if (!this.isScopeCompatible(category.scope, type)) {
+    if (!skipScopeCheck && !this.isScopeCompatible(category.scope, type)) {
       throw new BadRequestException(
         `La categoría no es compatible con el tipo "${type}". ` +
           `Su scope es "${category.scope}" y solo acepta movimientos de tipo ` +

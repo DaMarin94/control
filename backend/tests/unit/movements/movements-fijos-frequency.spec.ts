@@ -28,6 +28,11 @@ type RecurringRow = {
   startMonth: string;
   deletedFrom: string | null;
   frequency: RecurringFrequency;
+  chainId: string;
+  sourceChainId: string | null;
+  formulaOperator: null;
+  formulaOperand: null;
+  formulaSign: null;
   createdAt: Date;
   updatedAt: Date;
   category: {
@@ -44,6 +49,11 @@ type RecurringTotalsRow = {
   amountCents: number;
   startMonth: string;
   frequency: RecurringFrequency;
+  chainId: string;
+  sourceChainId: string | null;
+  formulaOperator: null;
+  formulaOperand: null;
+  formulaSign: null;
   skips: { month: string }[];
 };
 
@@ -80,6 +90,11 @@ function makeRecurringRow(overrides: Partial<RecurringRow> = {}): RecurringRow {
     startMonth: '2026-01',
     deletedFrom: null,
     frequency: RecurringFrequency.MONTHLY,
+    chainId: 'chain-001',
+    sourceChainId: null,
+    formulaOperator: null,
+    formulaOperand: null,
+    formulaSign: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     category: {
@@ -99,6 +114,11 @@ function makeTotalsRow(overrides: Partial<RecurringTotalsRow> = {}): RecurringTo
     amountCents: 5000,
     startMonth: '2026-01',
     frequency: RecurringFrequency.MONTHLY,
+    chainId: 'chain-001',
+    sourceChainId: null,
+    formulaOperator: null,
+    formulaOperand: null,
+    formulaSign: null,
     skips: [],
     ...overrides,
   };

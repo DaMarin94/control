@@ -58,6 +58,8 @@ yo tengo pesos y dolares, actualmente mis gastos son todos pesos SALVO algunos d
 
 .F3 - el reporte de gastos contra ingresos deberia tener un modo para que se vean por separado los datos segun las categorias
 
+.F4 en la vista de mes, que se pueda filtrar por gastos (imagino un triple switch o similar) y que esto se pueda aplicar en cada tipo de listado junto con el filtro de categorias (que tambien deberia pasar a ser por listado)
+
 . 1.1.3 - fix - que las flechas meses sean estaticas en eje vertical centradas como cuando el listado ocupa todo el largo.
 . 1.1.4 - fix - el reordenamiento tiene que colapsar todas las columnas. El reordenamiento tiene que mantener los items en el box, no deberian flotar con el mouse, solo subir o bajar.
 

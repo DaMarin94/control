@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { MovementType, RecurringFrequency, Prisma } from '@prisma/client';
+import { FormulaOperator, MovementType, RecurringFrequency, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -15,7 +15,7 @@ export interface EmbeddedCategory {
 
 /**
  * Shape completo de un fijo con categoría embebida.
- * Incluye frequency (P2 — Fase 1.1.1) y skippedMonths (P1).
+ * Incluye frequency (P2 — Fase 1.1.1), campos de calculado (Fase 1.1.7) y chainId.
  */
 export interface RecurringWithCategory {
   id: string;
@@ -27,6 +27,19 @@ export interface RecurringWithCategory {
   startMonth: string;
   deletedFrom: string | null;
   frequency: RecurringFrequency;
+  chainId: string;
+  /** null en fijos normales; chainId del origen en calculados */
+  sourceChainId: string | null;
+  formulaOperator: FormulaOperator | null;
+  /**
+   * Operando almacenado como entero escalado:
+   * ADD/SUB: centavos × 100 (mismo que amountCents)
+   * MUL/DIV: factor × 1_000_000 (6 decimales)
+   * PCT:     porcentaje × 100 (ej. 10% → 1000, 1.5% → 150)
+   */
+  formulaOperand: number | null;
+  /** 1 (positivo) o -1 (negativo) */
+  formulaSign: number | null;
   createdAt: Date;
   updatedAt: Date;
   category: EmbeddedCategory;
@@ -40,6 +53,18 @@ export interface RecurringWithCategory {
 export interface SkipToggleResult {
   skipped: boolean;
   month: string;
+}
+
+/**
+ * Fila mínima de Recurring para localizar el monto del origen de un calculado.
+ * Usada en la derivación on-the-fly del monto del calculado.
+ */
+export interface RecurringSourceRow {
+  id: string;
+  chainId: string;
+  amountCents: number;
+  startMonth: string;
+  deletedFrom: string | null;
 }
 
 // Include para todas las queries de Recurring
@@ -70,6 +95,11 @@ function mapToRecurringWithCategory(
     startMonth: r.startMonth,
     deletedFrom: r.deletedFrom,
     frequency: r.frequency,
+    chainId: r.chainId,
+    sourceChainId: r.sourceChainId,
+    formulaOperator: r.formulaOperator,
+    formulaOperand: r.formulaOperand,
+    formulaSign: r.formulaSign,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     category: {
@@ -130,6 +160,107 @@ export class RecurringRepository {
    */
   async delete(id: string): Promise<void> {
     await this.prisma.recurring.delete({ where: { id } });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Calculados (Fase 1.1.7) — búsquedas por chainId
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Busca la fila activa (la más reciente en la cadena) de un fijo para un mes dado.
+   * Un fijo lógico es una cadena de filas con el mismo chainId: la fila activa en el mes M
+   * es la que tiene startMonth <= M AND (deletedFrom IS NULL OR deletedFrom > M).
+   *
+   * Se usa para derivar el monto del origen de un calculado on-the-fly.
+   *
+   * NOTA: puede devolver null si el origen no tiene fila activa en ese mes (el origen
+   * está eliminado o su rango de actividad no cubre el mes).
+   */
+  async findActiveRowByChainId(
+    chainId: string,
+    month: string,
+  ): Promise<RecurringSourceRow | null> {
+    // Busca la fila de la cadena activa en el mes pedido.
+    // Si hay varias (no debería por la invariante del split), toma la de startMonth más alto.
+    const r = await this.prisma.recurring.findFirst({
+      where: {
+        chainId,
+        startMonth: { lte: month },
+        OR: [
+          { deletedFrom: null },
+          { deletedFrom: { gt: month } },
+        ],
+      },
+      orderBy: { startMonth: 'desc' },
+      select: {
+        id: true,
+        chainId: true,
+        amountCents: true,
+        startMonth: true,
+        deletedFrom: true,
+      },
+    });
+    return r;
+  }
+
+  /**
+   * Busca todas las filas de una cadena (chainId) con sus campos esenciales.
+   * Se usa en el borrado de cadena completa para iterar y aplicar boundary por fila.
+   */
+  async findChainRows(
+    chainId: string,
+  ): Promise<Array<{ id: string; startMonth: string; deletedFrom: string | null }>> {
+    return this.prisma.recurring.findMany({
+      where: { chainId },
+      select: { id: true, startMonth: true, deletedFrom: true },
+    });
+  }
+
+  /**
+   * Busca todos los calculados (sourceChainId != null) de una cadena origen dada.
+   * Se usa al eliminar el origen para cascadar la eliminación a los calculados.
+   * Devuelve todas las filas (incluidas las ya terminadas) para identificar las cadenas
+   * del calculado y operar sobre ellas.
+   */
+  async findCalculadosBySourceChain(
+    sourceChainId: string,
+  ): Promise<Array<{ id: string; chainId: string; startMonth: string; deletedFrom: string | null }>> {
+    return this.prisma.recurring.findMany({
+      where: { sourceChainId },
+      select: { id: true, chainId: true, startMonth: true, deletedFrom: true },
+    });
+  }
+
+  /**
+   * Elimina físicamente todas las filas de un chainId dado.
+   * Solo se llama cuando se hace hard-delete de todos los calculados de una cadena.
+   */
+  async deleteByChainId(chainId: string): Promise<void> {
+    await this.prisma.recurring.deleteMany({ where: { chainId } });
+  }
+
+  /**
+   * Establece deletedFrom en todas las filas activas de un chainId cuyo startMonth
+   * es posterior al boundary (es decir, las que vivirían "después" del boundary).
+   * Se usa al eliminar un origen para cascadar deletedFrom a los calculados.
+   */
+  async setDeletedFromByChainId(
+    chainId: string,
+    boundary: string,
+  ): Promise<void> {
+    // Solo aplica a las filas de la cadena que todavía no estaban terminadas antes del boundary.
+    // Si boundary <= startMonth: hard-delete (se llama deleteByChainId).
+    // Si no: actualizar deletedFrom a boundary (si no tenía deletedFrom o el que tenía era mayor).
+    await this.prisma.recurring.updateMany({
+      where: {
+        chainId,
+        OR: [
+          { deletedFrom: null },
+          { deletedFrom: { gt: boundary } },
+        ],
+      },
+      data: { deletedFrom: boundary },
+    });
   }
 
   // ---------------------------------------------------------------------------

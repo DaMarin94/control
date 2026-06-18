@@ -77,6 +77,8 @@ function makeUnicoItem(overrides: Partial<MovementItem> = {}): MovementItem {
     installment: null,
     frequency: null,
     skipped: false,
+    calculated: null,
+    hasCalculated: false,
     ...overrides,
   };
 }
@@ -99,6 +101,8 @@ function makeFijoItem(overrides: Partial<MovementItem> = {}): MovementItem {
     installment: null,
     frequency: RecurringFrequency.MONTHLY,
     skipped: false,
+    calculated: null,
+    hasCalculated: false,
     ...overrides,
   };
 }
@@ -125,6 +129,8 @@ function makeCuotaItem(overrides: Partial<MovementItem> = {}): MovementItem {
     },
     frequency: null,
     skipped: false,
+    calculated: null,
+    hasCalculated: false,
     ...overrides,
   };
 }
