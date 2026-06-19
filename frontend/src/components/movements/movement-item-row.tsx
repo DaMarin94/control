@@ -15,6 +15,8 @@
  *
  * Acciones editar/borrar: via KebabMenu (portal+fixed por overflow-hidden de la tarjeta).
  * Fijos añaden "Anular este mes" / "Des-anular este mes" (toggle skip — P1, Fase 1.1.1).
+ * Fase 1.1.8: "Crear movimiento desde este" habilitado también en únicos y cuotas.
+ *   Marca padre (GitBranch) ya no restringida a fijos — aplica a cualquier origen con hasCalculated.
  *
  * Ítem anulado (skipped=true):
  *   - Contenido de la fila a opacity 0.55 (no el fondo ni el KebabMenu)
@@ -45,7 +47,7 @@ interface MovementItemRowProps {
   viewMonth: string;
   onEdit: (movement: MovementItem) => void;
   onDelete: (movement: MovementItem) => void;
-  /** Handler para "Crear movimiento desde este" — solo para fijos NO calculados */
+  /** Handler para "Crear movimiento desde este" — para cualquier ítem NO calculado (Fase 1.1.8) */
   onCreateCalculated?: (movement: MovementItem) => void;
 }
 
@@ -58,9 +60,11 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
   const isCuota = movement.origin === "cuota";
   const isSkipped = movement.skipped;
 
-  // Fase 1.1.7 — calculado / padre
+  // Fase 1.1.7/1.1.8 — calculado / padre
   const isCalculated = Boolean(movement.calculated);
-  const isParent = isFijo && !isCalculated && movement.hasCalculated;
+  // La marca padre aplica a cualquier origen (fijo, único o cuota) — Fase 1.1.8
+  // Un calculado nunca puede ser padre (RF-MCALC-001), por eso !isCalculated
+  const isParent = !isCalculated && movement.hasCalculated;
 
   // Fecha formateada "02 Jun" (solo para únicos)
   const dateFormatted =
@@ -132,8 +136,9 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
           },
         ]
       : []),
-    // "Crear movimiento desde este" — solo en fijos NO calculados (RF-MCALC-001)
-    ...(isFijo && !isCalculated && onCreateCalculated
+    // "Crear movimiento desde este" — en cualquier ítem NO calculado (Fase 1.1.8)
+    // Un calculado no puede ser origen de otro calculado (RF-MCALC-001)
+    ...(!isCalculated && onCreateCalculated
       ? [
           {
             label: "Crear movimiento desde este",

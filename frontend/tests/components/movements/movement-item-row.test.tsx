@@ -9,6 +9,7 @@
  * - Únicos y cuotas NO tienen la acción de anular en su KebabMenu.
  * - Fase 1.1.7: chip "Calculado" para hijos, indicador GitBranch para padres,
  *   monto negativo/cero, acción "Crear movimiento desde este".
+ * - Fase 1.1.8: chip/marca padre en único y cuota; acción kebab en único/cuota no calculados.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -135,6 +136,7 @@ const fijoCalculado: MovementItem = {
   description: "Ahorro",
   amountCents: 15000,
   calculated: {
+    sourceType: "fijo",
     sourceChainId: "chain-orig",
     sourceId: "rec-1",
     sourceDescription: "Sueldo",
@@ -169,6 +171,64 @@ const fijoPadre: MovementItem = {
   ...fijoActivo,
   id: "padre-1",
   description: "Sueldo",
+  hasCalculated: true,
+};
+
+// ─── Fixtures Fase 1.1.8 — calculados de único y cuota ───────────────────────
+
+/** Único calculado (hijo) — Fase 1.1.8 */
+const unicoCalculado: MovementItem = {
+  ...unico,
+  id: "calc-unico-1",
+  description: "Ahorro rápido",
+  amountCents: 5000,
+  calculated: {
+    sourceType: "unico",
+    sourceChainId: null, // null para origen único (Fase 1.1.8)
+    sourceId: "trans-orig",
+    sourceDescription: "Almuerzo",
+    formulaOperator: "PCT",
+    formulaOperand: 1000,
+    formulaSign: 1,
+    sourceAmountCents: 10000,
+  },
+  hasCalculated: false,
+};
+
+/** Único padre (tiene calculados derivados) — Fase 1.1.8 */
+const unicoPadre: MovementItem = {
+  ...unico,
+  id: "unico-padre-1",
+  description: "Almuerzo caro",
+  hasCalculated: true,
+};
+
+/** Cuota calculada (hijo) — Fase 1.1.8 */
+const cuotaCalculada: MovementItem = {
+  ...cuota,
+  id: "calc-cuota-1",
+  description: "Ahorro cuota",
+  amountCents: 8000,
+  // Un calculado tiene installment === null (no integra el plan de cuotas)
+  installment: null,
+  calculated: {
+    sourceType: "cuota",
+    sourceChainId: null, // null para origen cuota (Fase 1.1.8)
+    sourceId: "inst-group-orig",
+    sourceDescription: "Notebook",
+    formulaOperator: "PCT",
+    formulaOperand: 1000,
+    formulaSign: 1,
+    sourceAmountCents: 50000,
+  },
+  hasCalculated: false,
+};
+
+/** Cuota padre (tiene calculados derivados) — Fase 1.1.8 */
+const cuotaPadre: MovementItem = {
+  ...cuota,
+  id: "cuota-padre-1",
+  description: "Notebook premium",
   hasCalculated: true,
 };
 
@@ -515,5 +575,118 @@ describe("MovementItemRow — Fase 1.1.7: monto negativo/cero", () => {
     renderRow(fijoCalculado);
     // amountCents = 15000 → "$150,00" (sin prefijo +/−)
     expect(screen.getByText("$150,00")).toBeInTheDocument();
+  });
+});
+
+// ─── Tests: Fase 1.1.8 — calculados de único y cuota ─────────────────────────
+
+describe("MovementItemRow — Fase 1.1.8: calculado de único", () => {
+  it("único calculado muestra el chip 'Calculado'", () => {
+    renderRow(unicoCalculado);
+    expect(screen.getByText("Calculado")).toBeInTheDocument();
+  });
+
+  it("único calculado muestra 'desde Almuerzo' en la sublínea", () => {
+    renderRow(unicoCalculado);
+    expect(screen.getByText("Almuerzo")).toBeInTheDocument();
+    expect(screen.getByText("desde")).toBeInTheDocument();
+  });
+
+  it("único calculado NO muestra 'mensual' (sin segmento de frecuencia)", () => {
+    renderRow(unicoCalculado);
+    expect(screen.queryByText(/mensual|bimestral|trimestral|semestral|anual/i)).not.toBeInTheDocument();
+  });
+
+  it("único calculado NO tiene la acción 'Crear movimiento desde este'", () => {
+    const onCreateCalculated = vi.fn();
+    render(
+      <MovementItemRow
+        movement={unicoCalculado}
+        viewMonth="2026-06"
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onCreateCalculated={onCreateCalculated}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    const trigger = screen.getByRole("button", { name: /acciones de ahorro rápido/i });
+    fireEvent.click(trigger);
+
+    expect(
+      screen.queryByRole("menuitem", { name: /crear movimiento desde este/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("único NO calculado tiene 'Crear movimiento desde este' en el KebabMenu", () => {
+    const onCreateCalculated = vi.fn();
+    render(
+      <MovementItemRow
+        movement={unico}
+        viewMonth="2026-06"
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onCreateCalculated={onCreateCalculated}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    const trigger = screen.getByRole("button", { name: /acciones de almuerzo/i });
+    fireEvent.click(trigger);
+
+    expect(
+      screen.getByRole("menuitem", { name: /crear movimiento desde este/i }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("MovementItemRow — Fase 1.1.8: calculado de cuota", () => {
+  it("cuota calculada muestra el chip 'Calculado'", () => {
+    renderRow(cuotaCalculada);
+    expect(screen.getByText("Calculado")).toBeInTheDocument();
+  });
+
+  it("cuota calculada muestra 'desde Notebook' en la sublínea", () => {
+    renderRow(cuotaCalculada);
+    expect(screen.getByText("Notebook")).toBeInTheDocument();
+    expect(screen.getByText("desde")).toBeInTheDocument();
+  });
+
+  it("cuota calculada NO muestra etiqueta 'Cuota X/N' (columna 3 vacía, installment=null)", () => {
+    renderRow(cuotaCalculada);
+    expect(screen.queryByText(/cuota \d+\/\d+/i)).not.toBeInTheDocument();
+  });
+
+  it("cuota NO calculada tiene 'Crear movimiento desde este' en el KebabMenu", () => {
+    const onCreateCalculated = vi.fn();
+    render(
+      <MovementItemRow
+        movement={cuota}
+        viewMonth="2026-06"
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onCreateCalculated={onCreateCalculated}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    const trigger = screen.getByRole("button", { name: /acciones de notebook/i });
+    fireEvent.click(trigger);
+
+    expect(
+      screen.getByRole("menuitem", { name: /crear movimiento desde este/i }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("MovementItemRow — Fase 1.1.8: marca padre en único y cuota", () => {
+  it("único padre (hasCalculated=true) NO muestra chip 'Calculado'", () => {
+    renderRow(unicoPadre);
+    expect(screen.queryByText("Calculado")).not.toBeInTheDocument();
+  });
+
+  it("cuota padre (hasCalculated=true) NO muestra chip 'Calculado'", () => {
+    renderRow(cuotaPadre);
+    expect(screen.queryByText("Calculado")).not.toBeInTheDocument();
   });
 });

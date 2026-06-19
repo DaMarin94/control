@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { CategoryScope, FormulaOperator, MovementType, RecurringFrequency } from '@prisma/client';
+import { CategoryScope, FormulaOperator, MovementType, RecurringFrequency, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { applyFormula } from '../recurring/formula.helper';
 
@@ -26,7 +26,7 @@ interface RawAnnualUnicoRow {
 /**
  * Shape de una fila de Recurring para la proyección anual.
  * Incluye frequency (P2) y skippedMonths (P1) — Fase 1.1.1.
- * Incluye campos de calculado (Fase 1.1.7).
+ * Incluye campos de calculado (Fase 1.1.7 y 1.1.7.ext).
  */
 export interface RecurringForAnnual {
   id: string;
@@ -47,8 +47,12 @@ export interface RecurringForAnnual {
   categoryScope: string;
   /** Identidad estable de cadena (Fase 1.1.7) */
   chainId: string;
-  /** chainId del fijo de origen (Fase 1.1.7); null en fijos normales */
+  /** chainId del fijo de origen (Fase 1.1.7); null si no es calculado de fijo */
   sourceChainId: string | null;
+  /** id del Transaction de origen (Fase 1.1.7.ext); null si no es calculado de único */
+  sourceMovementId: string | null;
+  /** id del InstallmentGroup de origen (Fase 1.1.7.ext); null si no es calculado de cuota */
+  sourceInstallmentGroupId: string | null;
   formulaOperator: FormulaOperator | null;
   formulaOperand: number | null;
   formulaSign: number | null;
@@ -119,7 +123,7 @@ export interface InstallmentInfo {
  * Información de la relación padre/hijo para movimientos calculados (Fase 1.1.7).
  *
  * Para un fijo CALCULADO (hijo):
- *   calculated = { sourceChainId, formulaOperator, formulaOperand, formulaSign,
+ *   calculated = { sourceType, sourceId, sourceChainId?, formulaOperator, formulaOperand, formulaSign,
  *                  sourceDescription }
  *   hasCalculated = false (no puede ser origen de otro calculado)
  *
@@ -132,10 +136,26 @@ export interface InstallmentInfo {
  *   hasCalculated = false
  */
 export interface CalculatedInfo {
-  /** chainId del fijo de origen */
-  sourceChainId: string;
-  /** id de la fila activa del origen (para el front poder mostrar nombre/descripción) */
+  /**
+   * Discriminador del tipo de origen (Fase 1.1.7.ext):
+   * - 'fijo':  el origen es un movimiento fijo (sourceChainId no-null)
+   * - 'unico': el origen es un movimiento único Transaction (sourceMovementId no-null)
+   * - 'cuota': el origen es un grupo de cuotas InstallmentGroup (sourceInstallmentGroupId no-null)
+   */
+  sourceType: 'fijo' | 'unico' | 'cuota';
+  /**
+   * ID del origen según el tipo:
+   * - fijo:  chainId estable del fijo de origen (= sourceChainId)
+   * - unico: id del Transaction
+   * - cuota: id del InstallmentGroup
+   * El front lo usa para prefilar el PATCH y el preview.
+   */
   sourceId: string;
+  /**
+   * chainId del fijo de origen (solo presente si sourceType='fijo'; back-compat).
+   * null si el origen es un único o cuota.
+   */
+  sourceChainId: string | null;
   /** Descripción del origen en ese mes (para el preview del formulario) */
   sourceDescription: string | null;
   formulaOperator: FormulaOperator;
@@ -147,10 +167,12 @@ export interface CalculatedInfo {
   /** 1 (positivo) o -1 (negativo) */
   formulaSign: number;
   /**
-   * Monto del fijo de origen en el mes consultado (en centavos).
+   * Monto del origen en el mes consultado (en centavos).
+   * - Fijo: monto de la fila activa del fijo en ese mes.
+   * - Único: amountCents del Transaction.
+   * - Cuota: amountCents por cuota del InstallmentGroup.
    * Es el monto base sobre el que se aplica la fórmula para derivar el amountCents del calculado.
    * Usado por el front para mostrar el preview del resultado al editar la fórmula.
-   * Siempre > 0 (el origen es un fijo normal con amountCents > 0).
    */
   sourceAmountCents: number;
 }
@@ -248,6 +270,10 @@ export class MovementsRepository {
   /**
    * Lista los movimientos únicos (Transaction) que pertenecen al mes YYYY-MM,
    * bucketando por la timezone propia de CADA registro (AT TIME ZONE t.timezone).
+   *
+   * Fase 1.1.7.ext — calculados de único:
+   * Incluye los calculados de único (Recurring con sourceMovementId != null) activos
+   * en este mes. Aparecen con origin='unico' (su sección de origen), no en 'fijos'.
    */
   async findUnicosByMonth(
     userId: string,
@@ -290,31 +316,119 @@ export class MovementsRepository {
       ORDER BY t."amountCents" DESC, t."occurredAt" DESC
     `;
 
-    return rows.map((row) => this.mapRowToMovementItem(row));
+    const unicosItems = rows.map((row) => this.mapRowToMovementItem(row));
+
+    // Calculados de único: Recurring con sourceMovementId != null activos en el mes
+    const calculadosDeUnico = await this.prisma.recurring.findMany({
+      where: {
+        userId,
+        sourceMovementId: { not: null },
+        sourceChainId: null,
+        sourceInstallmentGroupId: null,
+        startMonth: { lte: month },
+        OR: [
+          { deletedFrom: null },
+          { deletedFrom: { gt: month } },
+        ],
+      },
+      include: {
+        category: {
+          select: { id: true, name: true, color: true, scope: true },
+        },
+      },
+    });
+
+    if (calculadosDeUnico.length === 0) {
+      return unicosItems;
+    }
+
+    // Cargar Transactions de origen
+    const txIds = calculadosDeUnico.map((r) => r.sourceMovementId!);
+    const txRows = await this.prisma.transaction.findMany({
+      where: { id: { in: txIds } },
+      select: { id: true, amountCents: true, description: true, occurredAt: true, timezone: true },
+    });
+    const txOriginMap = new Map<string, {
+      amountCents: number;
+      description: string | null;
+      occurredAt: Date;
+      timezone: string;
+    }>();
+    for (const tx of txRows) {
+      txOriginMap.set(tx.id, {
+        amountCents: tx.amountCents,
+        description: tx.description,
+        occurredAt: tx.occurredAt,
+        timezone: tx.timezone,
+      });
+    }
+
+    for (const calc of calculadosDeUnico) {
+      const txData = calc.sourceMovementId ? txOriginMap.get(calc.sourceMovementId) : undefined;
+      if (!txData) continue;
+
+      const derivedAmount = applyFormula(
+        txData.amountCents,
+        calc.formulaOperator as FormulaOperator,
+        calc.formulaOperand!,
+        calc.formulaSign!,
+      );
+      const derivedType: MovementType =
+        derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
+
+      unicosItems.push({
+        id: calc.id,
+        origin: 'unico' as const,
+        type: derivedType,
+        amountCents: derivedAmount,
+        description: calc.description,
+        occurredAt: txData.occurredAt,
+        timezone: txData.timezone,
+        category: {
+          id: calc.category.id,
+          name: calc.category.name,
+          color: calc.category.color,
+          scope: calc.category.scope as CategoryScope,
+        },
+        installment: null,
+        frequency: null,
+        skipped: false,
+        calculated: {
+          sourceType: 'unico',
+          sourceId: calc.sourceMovementId!,
+          sourceChainId: null,
+          sourceDescription: txData.description,
+          formulaOperator: calc.formulaOperator as FormulaOperator,
+          formulaOperand: calc.formulaOperand!,
+          formulaSign: calc.formulaSign!,
+          sourceAmountCents: txData.amountCents,
+        },
+        hasCalculated: false,
+      });
+    }
+
+    // Re-ordenar: amountCents DESC, igual que los únicos puros
+    unicosItems.sort((a, b) => Math.abs(b.amountCents) - Math.abs(a.amountCents));
+
+    return unicosItems;
   }
 
   /**
    * Lista los movimientos fijos (Recurring) que aparecen en el mes YYYY-MM.
    *
-   * Fase 1.1.7 — calculados on-the-fly:
-   * Los calculados (sourceChainId != null) se incluyen en la lista CON SU MONTO DERIVADO.
-   * El monto real se calcula: sign × round(formula(sourceAmountCents)).
-   * Para ello se construye un mapa chainId → amountCents de los fijos activos en el mes.
+   * Solo incluye fijos normales y calculados de fijo (sourceChainId != null).
+   * Los calculados de único (sourceMovementId != null) van en findUnicosByMonth.
+   * Los calculados de cuota (sourceInstallmentGroupId != null) van en findCuotasByMonth.
    *
-   * Un calculado aparece en el mes M sii:
-   * 1. Su propio rango (startMonth <= M y deletedFrom IS NULL o > M) está activo.
-   * 2. La cadena origen (sourceChainId) tiene una fila activa en M (rango + frecuencia + skip).
-   *
-   * Si el origen está skippeado en M, el calculado también se marca skipped (no suma a totales).
-   * Si el origen no tiene fila activa (fue eliminado), el calculado no aparece.
-   *
-   * Campos nuevos en MovementItem: calculated (info del calculado) y hasCalculated (si es origen).
+   * Fase 1.1.7 — calculados on-the-fly (de fijo):
+   * Los calculados con sourceChainId != null se incluyen con su monto derivado.
+   * El origen es el fijo activo en el mes; su presencia gate-a al calculado.
    */
   async findFijosByMonth(
     userId: string,
     month: string,
   ): Promise<MovementItem[]> {
-    // Traer candidatos activos en el rango (la frecuencia se aplica en JS)
+    // Traer candidatos activos en el rango, EXCLUYENDO calculados de único/cuota
     const recurrings = await this.prisma.recurring.findMany({
       where: {
         userId,
@@ -323,6 +437,9 @@ export class MovementsRepository {
           { deletedFrom: null },
           { deletedFrom: { gt: month } },
         ],
+        // Excluir calculados de único y cuota: esos van en sus propias secciones
+        sourceMovementId: null,
+        sourceInstallmentGroupId: null,
       },
       orderBy: [
         { amountCents: 'desc' },
@@ -344,24 +461,16 @@ export class MovementsRepository {
       },
     });
 
-    // Aplicar filtro de frecuencia (P2) SOLO a fijos normales.
-    // Para los calculados, NO se aplica isOnFrequency: su presencia está gate-ada
-    // únicamente por el origen (si el origen no está activo en el mes, el calculado
-    // tampoco aparece — controlado por originMap más abajo).
-    // Aplicar isOnFrequency al calculado usando su propio startMonth puede causar
-    // desalineamiento con el origen cuando la frecuencia tiene step > 1 (BIMONTHLY,
-    // QUARTERLY, BIANNUAL, ANNUAL) y el startMonth del calculado no está alineado
-    // con el startMonth del origen.
+    // Separar en normales y calculados de fijo
     const normales = recurrings.filter(
-      (r) => r.sourceChainId === null && isOnFrequency(r.startMonth, r.frequency, month),
+      (r) => r.sourceChainId === null
+        && isOnFrequency(r.startMonth, r.frequency, month),
     );
-    // Los calculados pasan el filtro de rango (ya filtrado por la query Prisma),
-    // pero NO pasan por isOnFrequency. Su gating final es el originMap.
-    const calculados = recurrings.filter((r) => r.sourceChainId !== null);
+    // Calculados de fijo: gating por el origen
+    const calculadosDeFijo = recurrings.filter((r) => r.sourceChainId !== null);
 
     // Construir mapa chainId → { amountCents, skipped, id, description }
     // para los fijos normales activos en el mes.
-    // Los calculados usan este mapa para derivar su monto y heredar el skip del origen.
     const originMap = new Map<string, {
       amountCents: number;
       skipped: boolean;
@@ -379,9 +488,8 @@ export class MovementsRepository {
     }
 
     // Determinar qué chainIds tienen calculados activos en este mes
-    // (para marcar hasCalculated en los fijos de origen)
     const chainsWithCalculados = new Set<string>();
-    for (const calc of calculados) {
+    for (const calc of calculadosDeFijo) {
       if (calc.sourceChainId && originMap.has(calc.sourceChainId)) {
         chainsWithCalculados.add(calc.sourceChainId);
       }
@@ -414,36 +522,26 @@ export class MovementsRepository {
       });
     }
 
-    // Agregar calculados (con monto derivado on-the-fly)
-    for (const calc of calculados) {
-      // El calculado solo aparece si el origen tiene fila activa en este mes
+    // Agregar calculados de fijo (con monto derivado on-the-fly)
+    for (const calc of calculadosDeFijo) {
       const originData = calc.sourceChainId ? originMap.get(calc.sourceChainId) : undefined;
-      if (!originData) {
-        // El origen no está activo en este mes (o no existe) → calculado no aparece
-        continue;
-      }
+      if (!originData) continue; // origen no activo en este mes
 
-      // El calculado hereda el skip del origen (RF-MCALC-005)
       const skipped = originData.skipped;
-
-      // Derivar el monto on-the-fly
       const derivedAmount = applyFormula(
         originData.amountCents,
         calc.formulaOperator as FormulaOperator,
         calc.formulaOperand!,
         calc.formulaSign!,
       );
-
-      // Derivar el type del signo del monto (RF-MCALC-003, RN-018):
-      // final < 0 → EXPENSE; final > 0 → INCOME; final == 0 → EXPENSE (convención de borde)
       const derivedType: MovementType =
         derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
 
       result.push({
         id: calc.id,
         origin: 'fijo' as const,
-        type: derivedType, // type derivado on-the-fly, NO el placeholder de la DB (RF-MCALC-003)
-        amountCents: derivedAmount, // puede ser negativo o cero (RN-018)
+        type: derivedType,
+        amountCents: derivedAmount,
         description: calc.description,
         occurredAt: null,
         timezone: null,
@@ -457,25 +555,20 @@ export class MovementsRepository {
         frequency: calc.frequency,
         skipped,
         calculated: {
+          sourceType: 'fijo',
+          sourceId: calc.sourceChainId!,
           sourceChainId: calc.sourceChainId!,
-          sourceId: originData.id,
           sourceDescription: originData.description,
           formulaOperator: calc.formulaOperator as FormulaOperator,
           formulaOperand: calc.formulaOperand!,
           formulaSign: calc.formulaSign!,
           sourceAmountCents: originData.amountCents,
         },
-        hasCalculated: false, // un calculado nunca es origen de otro (sin encadenamiento)
+        hasCalculated: false,
       });
     }
 
     // Re-ordenar por magnitud del amountCents DESC (|amountCents| DESC).
-    // Para fijos normales amountCents > 0, por lo que magnitud == valor.
-    // Para calculados el amountCents puede ser negativo (RN-018), por lo que se usa
-    // valor absoluto para no relegar los calculados al final de la lista.
-    // Desempate: createdAt DESC (los fijos normales ya vienen ordenados por Prisma
-    // con amountCents DESC + createdAt DESC; aquí el sort re-ordena la lista mezclada
-    // de normales + calculados con el mismo criterio de magnitud).
     result.sort((a, b) => {
       const magA = Math.abs(a.amountCents);
       const magB = Math.abs(b.amountCents);
@@ -487,6 +580,11 @@ export class MovementsRepository {
 
   /**
    * Lista los grupos de cuotas (InstallmentGroup) activos en el mes YYYY-MM.
+   *
+   * Fase 1.1.7.ext — calculados de cuota:
+   * Incluye los calculados de cuota (Recurring con sourceInstallmentGroupId != null)
+   * activos en el mes, verificando on-the-fly que el mes cae dentro del rango del grupo.
+   * Aparecen con origin='cuota' (su sección de origen), no en 'fijos'.
    */
   async findCuotasByMonth(
     userId: string,
@@ -545,8 +643,107 @@ export class MovementsRepository {
       });
     }
 
+    // Calculados de cuota: Recurring con sourceInstallmentGroupId != null activos en el mes
+    const calculadosDeCuota = await this.prisma.recurring.findMany({
+      where: {
+        userId,
+        sourceInstallmentGroupId: { not: null },
+        sourceChainId: null,
+        sourceMovementId: null,
+        startMonth: { lte: month },
+        OR: [
+          { deletedFrom: null },
+          { deletedFrom: { gt: month } },
+        ],
+      },
+      include: {
+        category: {
+          select: { id: true, name: true, color: true, scope: true },
+        },
+      },
+    });
+
+    if (calculadosDeCuota.length > 0) {
+      // Cargar InstallmentGroups de origen
+      const groupIds = calculadosDeCuota.map((r) => r.sourceInstallmentGroupId!);
+      const groupRows = await this.prisma.installmentGroup.findMany({
+        where: { id: { in: groupIds } },
+        select: {
+          id: true,
+          amountCents: true,
+          description: true,
+          totalInstallments: true,
+          startMonth: true,
+        },
+      });
+      const groupOriginMap = new Map<string, {
+        amountCents: number;
+        description: string | null;
+        totalInstallments: number;
+        startMonth: string;
+      }>();
+      for (const g of groupRows) {
+        groupOriginMap.set(g.id, {
+          amountCents: g.amountCents,
+          description: g.description,
+          totalInstallments: g.totalInstallments,
+          startMonth: g.startMonth,
+        });
+      }
+
+      for (const calc of calculadosDeCuota) {
+        const groupData = calc.sourceInstallmentGroupId
+          ? groupOriginMap.get(calc.sourceInstallmentGroupId)
+          : undefined;
+        if (!groupData) continue;
+
+        // Verificar que el mes está dentro del rango del grupo on-the-fly
+        const endMonth = addMonths(groupData.startMonth, groupData.totalInstallments);
+        if (month >= endMonth) continue;
+
+        const derivedAmount = applyFormula(
+          groupData.amountCents,
+          calc.formulaOperator as FormulaOperator,
+          calc.formulaOperand!,
+          calc.formulaSign!,
+        );
+        const derivedType: MovementType =
+          derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
+
+        result.push({
+          id: calc.id,
+          origin: 'cuota' as const,
+          type: derivedType,
+          amountCents: derivedAmount,
+          description: calc.description,
+          occurredAt: null,
+          timezone: null,
+          category: {
+            id: calc.category.id,
+            name: calc.category.name,
+            color: calc.category.color,
+            scope: calc.category.scope as CategoryScope,
+          },
+          installment: null,
+          frequency: null,
+          skipped: false,
+          calculated: {
+            sourceType: 'cuota',
+            sourceId: calc.sourceInstallmentGroupId!,
+            sourceChainId: null,
+            sourceDescription: groupData.description,
+            formulaOperator: calc.formulaOperator as FormulaOperator,
+            formulaOperand: calc.formulaOperand!,
+            formulaSign: calc.formulaSign!,
+            sourceAmountCents: groupData.amountCents,
+          },
+          hasCalculated: false,
+        });
+      }
+    }
+
     result.sort(
-      (a, b) => b.amountCents - a.amountCents || a.id.localeCompare(b.id),
+      (a, b) => Math.abs(b.amountCents) - Math.abs(a.amountCents) || a.id.localeCompare(b.id),
     );
 
     return result;
@@ -583,8 +780,12 @@ export class MovementsRepository {
 
   /**
    * Calcula los totales de los movimientos fijos activos en el mes.
-   * Incluye calculados (con monto derivado on-the-fly).
+   * Incluye calculados de fijo, único y cuota (con monto derivado on-the-fly).
    * Excluye fijos skippeados.
+   *
+   * NOTA: este método queda en el código pero MovementsService ya no lo llama
+   * (los totales se recomputan desde las listas filtradas). Disponible para tests
+   * directos del repo o uso futuro.
    */
   async getFijosTotalsByMonth(
     userId: string,
@@ -606,6 +807,8 @@ export class MovementsRepository {
         frequency: true,
         chainId: true,
         sourceChainId: true,
+        sourceMovementId: true,
+        sourceInstallmentGroupId: true,
         formulaOperator: true,
         formulaOperand: true,
         formulaSign: true,
@@ -618,14 +821,39 @@ export class MovementsRepository {
 
     // Construir mapa chainId → amountCents de los normales activos
     const normalesMap = new Map<string, { amountCents: number; skipped: boolean }>();
-    const normales = recurrings.filter((r) =>
-      r.sourceChainId === null && isOnFrequency(r.startMonth, r.frequency, month),
+    const normales = recurrings.filter(
+      (r) => r.sourceChainId === null && r.sourceMovementId === null && r.sourceInstallmentGroupId === null
+        && isOnFrequency(r.startMonth, r.frequency, month),
     );
     for (const r of normales) {
       normalesMap.set(r.chainId, {
         amountCents: r.amountCents,
         skipped: r.skips.length > 0,
       });
+    }
+
+    // Cargar Transactions de origen para calculados de único
+    const calculadosDeUnico = recurrings.filter((r) => r.sourceMovementId !== null);
+    const txIds = calculadosDeUnico.map((r) => r.sourceMovementId!).filter(Boolean);
+    const txMap = new Map<string, number>();
+    if (txIds.length > 0) {
+      const txRows = await this.prisma.transaction.findMany({
+        where: { id: { in: txIds } },
+        select: { id: true, amountCents: true },
+      });
+      for (const tx of txRows) txMap.set(tx.id, tx.amountCents);
+    }
+
+    // Cargar InstallmentGroups de origen para calculados de cuota
+    const calculadosDeCuota = recurrings.filter((r) => r.sourceInstallmentGroupId !== null);
+    const groupIds = calculadosDeCuota.map((r) => r.sourceInstallmentGroupId!).filter(Boolean);
+    const groupMap = new Map<string, { amountCents: number; totalInstallments: number; startMonth: string }>();
+    if (groupIds.length > 0) {
+      const groupRows = await this.prisma.installmentGroup.findMany({
+        where: { id: { in: groupIds } },
+        select: { id: true, amountCents: true, totalInstallments: true, startMonth: true },
+      });
+      for (const g of groupRows) groupMap.set(g.id, { amountCents: g.amountCents, totalInstallments: g.totalInstallments, startMonth: g.startMonth });
     }
 
     let expenseCents = 0;
@@ -635,33 +863,52 @@ export class MovementsRepository {
       let effectiveAmount: number;
       let derivedType: MovementType;
 
-      if (r.sourceChainId === null) {
-        // Fijo normal: aplicar filtro de frecuencia
+      if (r.sourceChainId === null && r.sourceMovementId === null && r.sourceInstallmentGroupId === null) {
+        // Fijo normal
         if (!isOnFrequency(r.startMonth, r.frequency, month)) continue;
-        if (r.skips.length > 0) continue; // skippeado
+        if (r.skips.length > 0) continue;
         effectiveAmount = r.amountCents;
         derivedType = r.type;
-      } else {
-        // Calculado: NO aplicar isOnFrequency (el gating lo hace el normalesMap).
-        // Su presencia está gate-ada por el origen; si el origen no está activo en
-        // el mes (normalesMap), el calculado tampoco suma a los totales.
+      } else if (r.sourceChainId !== null) {
+        // Calculado de fijo
         const originData = normalesMap.get(r.sourceChainId);
-        if (!originData) continue; // origen no activo en este mes
-        if (originData.skipped) continue; // heredar skip del origen
+        if (!originData) continue;
+        if (originData.skipped) continue;
         effectiveAmount = applyFormula(
           originData.amountCents,
           r.formulaOperator as FormulaOperator,
           r.formulaOperand!,
           r.formulaSign!,
         );
-        // Derivar el type del signo del monto on-the-fly (RF-MCALC-003, RN-018):
-        // no usar r.type (placeholder EXPENSE en DB para calculados).
         derivedType = effectiveAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
+      } else if (r.sourceMovementId !== null) {
+        // Calculado de único
+        const txAmount = txMap.get(r.sourceMovementId);
+        if (txAmount === undefined) continue;
+        effectiveAmount = applyFormula(
+          txAmount,
+          r.formulaOperator as FormulaOperator,
+          r.formulaOperand!,
+          r.formulaSign!,
+        );
+        derivedType = effectiveAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
+      } else if (r.sourceInstallmentGroupId !== null) {
+        // Calculado de cuota: verificar que el mes está dentro del rango del grupo
+        const groupData = groupMap.get(r.sourceInstallmentGroupId);
+        if (!groupData) continue;
+        const endMonth = addMonths(groupData.startMonth, groupData.totalInstallments);
+        if (month >= endMonth) continue;
+        effectiveAmount = applyFormula(
+          groupData.amountCents,
+          r.formulaOperator as FormulaOperator,
+          r.formulaOperand!,
+          r.formulaSign!,
+        );
+        derivedType = effectiveAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
+      } else {
+        continue;
       }
 
-      // RN-019: sumar la MAGNITUD (|amountCents|) al bucket del type derivado.
-      // Para fijos normales amountCents > 0 (magnitud == valor).
-      // Para calculados el monto puede ser negativo (RN-018) → usar |effectiveAmount|.
       const magnitude = Math.abs(effectiveAmount);
       if (derivedType === MovementType.EXPENSE) {
         expenseCents += magnitude;
@@ -758,7 +1005,7 @@ export class MovementsRepository {
 
   /**
    * Devuelve todos los movimientos fijos del usuario para la proyección anual.
-   * Incluye frequency (P2), skippedMonths (P1) y campos de calculado (Fase 1.1.7).
+   * Incluye frequency (P2), skippedMonths (P1) y campos de calculado (Fase 1.1.7 + 1.1.7.ext).
    */
   async getAllFijosForAnnual(userId: string): Promise<RecurringForAnnual[]> {
     const [rows, allSkips] = await Promise.all([
@@ -773,6 +1020,8 @@ export class MovementsRepository {
           frequency: true,
           chainId: true,
           sourceChainId: true,
+          sourceMovementId: true,
+          sourceInstallmentGroupId: true,
           formulaOperator: true,
           formulaOperand: true,
           formulaSign: true,
@@ -814,6 +1063,8 @@ export class MovementsRepository {
       categoryScope: r.category.scope as string,
       chainId: r.chainId,
       sourceChainId: r.sourceChainId,
+      sourceMovementId: r.sourceMovementId,
+      sourceInstallmentGroupId: r.sourceInstallmentGroupId,
       formulaOperator: r.formulaOperator,
       formulaOperand: r.formulaOperand,
       formulaSign: r.formulaSign,
@@ -856,6 +1107,37 @@ export class MovementsRepository {
       categoryColor: g.category.color,
       categoryScope: g.category.scope as string,
     }));
+  }
+
+  /**
+   * Devuelve los Transactions con los ids dados (para la proyección anual de calculados de único).
+   * Sin filtro de userId: los ids ya fueron validados en el service al crearlos.
+   */
+  async findTransactionsByIds(ids: string[]): Promise<Array<{
+    id: string;
+    amountCents: number;
+    description: string | null;
+  }>> {
+    return this.prisma.transaction.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, amountCents: true, description: true },
+    });
+  }
+
+  /**
+   * Devuelve los InstallmentGroups con los ids dados (para la proyección anual de calculados de cuota).
+   * Sin filtro de userId: los ids ya fueron validados en el service al crearlos.
+   */
+  async findInstallmentGroupsByIds(ids: string[]): Promise<Array<{
+    id: string;
+    amountCents: number;
+    totalInstallments: number;
+    startMonth: string;
+  }>> {
+    return this.prisma.installmentGroup.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, amountCents: true, totalInstallments: true, startMonth: true },
+    });
   }
 
   /**

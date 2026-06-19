@@ -30,6 +30,8 @@ type RecurringRow = {
   frequency: RecurringFrequency;
   chainId: string;
   sourceChainId: string | null;
+  sourceMovementId: string | null;
+  sourceInstallmentGroupId: string | null;
   formulaOperator: null;
   formulaOperand: null;
   formulaSign: null;
@@ -51,6 +53,8 @@ type RecurringTotalsRow = {
   frequency: RecurringFrequency;
   chainId: string;
   sourceChainId: string | null;
+  sourceMovementId: string | null;
+  sourceInstallmentGroupId: string | null;
   formulaOperator: null;
   formulaOperand: null;
   formulaSign: null;
@@ -69,7 +73,10 @@ const mockPrisma = {
     findMany: jest.fn(),
   },
   installmentGroup: {
-    findMany: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  transaction: {
+    findMany: jest.fn().mockResolvedValue([]),
   },
 };
 
@@ -92,6 +99,8 @@ function makeRecurringRow(overrides: Partial<RecurringRow> = {}): RecurringRow {
     frequency: RecurringFrequency.MONTHLY,
     chainId: 'chain-001',
     sourceChainId: null,
+    sourceMovementId: null,
+    sourceInstallmentGroupId: null,
     formulaOperator: null,
     formulaOperand: null,
     formulaSign: null,
@@ -116,6 +125,8 @@ function makeTotalsRow(overrides: Partial<RecurringTotalsRow> = {}): RecurringTo
     frequency: RecurringFrequency.MONTHLY,
     chainId: 'chain-001',
     sourceChainId: null,
+    sourceMovementId: null,
+    sourceInstallmentGroupId: null,
     formulaOperator: null,
     formulaOperand: null,
     formulaSign: null,

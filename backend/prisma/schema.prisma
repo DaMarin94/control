@@ -172,6 +172,10 @@ model Transaction {
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
+  // Calculados derivados de este Transaction (Fase 1.1.7.ext).
+  // onDelete: Cascade en la FK del lado Recurring garantiza borrado automático.
+  calculados Recurring[]
+
   // Índice compuesto para la consulta de movimientos por mes (filtra por usuario + ordena por fecha)
   @@index([userId, occurredAt])
 }
@@ -212,14 +216,26 @@ model Recurring {
 
   // ---------------------------------------------------------------------------
   // Movimiento calculado (Fase 1.1.7) — campos opcionales:
-  // Solo presentes si esta fila ES un calculado (sourceChainId != null).
+  // Solo presentes si esta fila ES un calculado (sourceChainId != null,
+  // o sourceMovementId != null, o sourceInstallmentGroupId != null).
   // Un fijo normal deja todos estos campos en null.
+  //
+  // Invariante: exactamente uno de {sourceChainId, sourceMovementId,
+  // sourceInstallmentGroupId} no-null en un calculado; los tres null = fijo normal.
+  // La exclusión mutua se valida en el service (no hay CHECK constraint en DB).
   // ---------------------------------------------------------------------------
 
-  // sourceChainId: chainId del fijo de origen. Nunca puede ser el propio chainId
-  // (sin encadenamiento). FK lógica — no hay FK de DB (la cadena puede tener
-  // varias filas con distintos ids).
+  // sourceChainId: chainId del fijo de origen (calculado de fijo).
+  // FK lógica — no hay FK de DB (la cadena puede tener varias filas con distintos ids).
   sourceChainId String?
+
+  // sourceMovementId: id del Transaction de origen (calculado de único — Fase 1.1.7.ext).
+  // FK real con onDelete: Cascade — al borrar el Transaction, el calculado se borra solo.
+  sourceMovementId String?
+
+  // sourceInstallmentGroupId: id del InstallmentGroup de origen (calculado de cuota — Fase 1.1.7.ext).
+  // FK real con onDelete: Cascade — al borrar el InstallmentGroup, el calculado se borra solo.
+  sourceInstallmentGroupId String?
 
   // formulaOperator: operador de la fórmula (ADD/SUB/MUL/DIV/PCT).
   formulaOperator FormulaOperator?
@@ -239,6 +255,11 @@ model Recurring {
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
+  // FK a Transaction de origen (calculado de único). onDelete: Cascade.
+  sourceMovement    Transaction?      @relation(fields: [sourceMovementId], references: [id], onDelete: Cascade)
+  // FK a InstallmentGroup de origen (calculado de cuota). onDelete: Cascade.
+  sourceInstallmentGroup InstallmentGroup? @relation(fields: [sourceInstallmentGroupId], references: [id], onDelete: Cascade)
+
   // Meses salteados (P1 — Fase 1.1.1): cada fila representa una aparición anulada.
   // onDelete: Cascade: si se borra el fijo, sus skips desaparecen.
   skips RecurringSkip[]
@@ -246,6 +267,8 @@ model Recurring {
   @@index([userId])
   @@index([chainId])
   @@index([sourceChainId])
+  @@index([sourceMovementId])
+  @@index([sourceInstallmentGroupId])
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +317,10 @@ model InstallmentGroup {
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  // Calculados derivados de este InstallmentGroup (Fase 1.1.7.ext).
+  // onDelete: Cascade en la FK del lado Recurring garantiza borrado automático.
+  calculados Recurring[]
 
   @@index([userId])
 }

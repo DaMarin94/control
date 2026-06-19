@@ -15,7 +15,7 @@ export interface EmbeddedCategory {
 
 /**
  * Shape completo de un fijo con categoría embebida.
- * Incluye frequency (P2 — Fase 1.1.1), campos de calculado (Fase 1.1.7) y chainId.
+ * Incluye frequency (P2 — Fase 1.1.1), campos de calculado (Fase 1.1.7 + 1.1.7.ext) y chainId.
  */
 export interface RecurringWithCategory {
   id: string;
@@ -28,8 +28,12 @@ export interface RecurringWithCategory {
   deletedFrom: string | null;
   frequency: RecurringFrequency;
   chainId: string;
-  /** null en fijos normales; chainId del origen en calculados */
+  /** null en fijos normales; chainId del origen en calculados de fijo */
   sourceChainId: string | null;
+  /** id del Transaction de origen en calculados de único (Fase 1.1.7.ext); null en los demás */
+  sourceMovementId: string | null;
+  /** id del InstallmentGroup de origen en calculados de cuota (Fase 1.1.7.ext); null en los demás */
+  sourceInstallmentGroupId: string | null;
   formulaOperator: FormulaOperator | null;
   /**
    * Operando almacenado como entero escalado:
@@ -97,6 +101,8 @@ function mapToRecurringWithCategory(
     frequency: r.frequency,
     chainId: r.chainId,
     sourceChainId: r.sourceChainId,
+    sourceMovementId: r.sourceMovementId,
+    sourceInstallmentGroupId: r.sourceInstallmentGroupId,
     formulaOperator: r.formulaOperator,
     formulaOperand: r.formulaOperand,
     formulaSign: r.formulaSign,
@@ -229,6 +235,98 @@ export class RecurringRepository {
       where: { sourceChainId },
       select: { id: true, chainId: true, startMonth: true, deletedFrom: true },
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lookup de orígenes externos (Fase 1.1.7.ext)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Busca un Transaction por id con los campos mínimos necesarios para crear un calculado.
+   * Devuelve null si no existe.
+   * El caller valida ownership (userId).
+   */
+  async findTransactionById(id: string): Promise<{
+    id: string;
+    userId: string;
+    amountCents: number;
+    type: string;
+    description: string | null;
+    occurredAt: Date;
+    timezone: string;
+  } | null> {
+    return this.prisma.transaction.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        userId: true,
+        amountCents: true,
+        type: true,
+        description: true,
+        occurredAt: true,
+        timezone: true,
+      },
+    });
+  }
+
+  /**
+   * Busca un InstallmentGroup por id con los campos mínimos necesarios para crear un calculado.
+   * Devuelve null si no existe.
+   * El caller valida ownership (userId).
+   */
+  async findInstallmentGroupById(id: string): Promise<{
+    id: string;
+    userId: string;
+    amountCents: number;
+    type: string;
+    totalInstallments: number;
+    startMonth: string;
+    description: string | null;
+  } | null> {
+    return this.prisma.installmentGroup.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        userId: true,
+        amountCents: true,
+        type: true,
+        totalInstallments: true,
+        startMonth: true,
+        description: true,
+      },
+    });
+  }
+
+  /**
+   * Busca el calculado vinculado a un Transaction (sourceMovementId).
+   * Devuelve null si no existe calculado para ese Transaction.
+   * Solo debería haber uno (1:1 con el Transaction); si hubiera más de uno devuelve el primero.
+   */
+  async findCalculatedBySourceMovement(
+    sourceMovementId: string,
+  ): Promise<RecurringWithCategory | null> {
+    const r = await this.prisma.recurring.findFirst({
+      where: { sourceMovementId },
+      include: RECURRING_INCLUDE,
+    });
+    if (!r) return null;
+    return mapToRecurringWithCategory(r);
+  }
+
+  /**
+   * Busca el calculado vinculado a un InstallmentGroup (sourceInstallmentGroupId).
+   * Devuelve null si no existe calculado para ese grupo.
+   * Solo debería haber uno (1:1 con el grupo); si hubiera más de uno devuelve el primero.
+   */
+  async findCalculatedBySourceInstallment(
+    sourceInstallmentGroupId: string,
+  ): Promise<RecurringWithCategory | null> {
+    const r = await this.prisma.recurring.findFirst({
+      where: { sourceInstallmentGroupId },
+      include: RECURRING_INCLUDE,
+    });
+    if (!r) return null;
+    return mapToRecurringWithCategory(r);
   }
 
   /**

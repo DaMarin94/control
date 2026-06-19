@@ -3,6 +3,7 @@
  *
  * Fase 1.1.4 (2026-06-16): acordeón + reordenar secciones.
  * Fase 1.1.6 (2026-06-17): filtro de categorías en /mes.
+ * Fase 1.1.7/1.1.8 (2026-06-18): enrutamiento de borrado de calculados por sourceType.
  *
  * Verifica:
  * - Navegación prev/next cambia la URL (/mes?month=YYYY-MM)
@@ -22,6 +23,7 @@
  * - Cableado editar/eliminar: fijos → modal fijo / delete fijo (Fase 6)
  * - Cableado editar/eliminar: cuotas → modal cuota / delete cuota (Fase 7)
  * - Filtro de categorías: botón en header / estado inicial / persistencia (Fase 1.1.6)
+ * - Enrutamiento de borrado de calculados: fijo → DeleteRecurringDialog; único/cuota → confirmación directa (Fase 1.1.8)
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -254,6 +256,60 @@ const mockEmpty: MonthMovements = {
   month: "2026-06",
   totals: { expenseCents: 0, incomeCents: 0, balanceCents: 0 },
   movements: { unicos: [], fijos: [], cuotas: [] },
+};
+
+// Calculados por tipo de origen (Fase 1.1.8)
+const mockCalculatedDeFijo = {
+  ...mockMovementFijo,
+  id: "calc-fijo-1",
+  description: "Calculado de alquiler",
+  calculated: {
+    sourceType: "fijo" as const,
+    sourceId: "rec-1",
+    sourceChainId: "chain-1",
+    sourceDescription: "Alquiler",
+    formulaOperator: "PCT" as const,
+    formulaOperand: 1000,
+    formulaSign: 1 as const,
+    sourceAmountCents: 150000,
+  },
+  hasCalculated: false,
+};
+
+const mockCalculatedDeUnico = {
+  ...mockMovementExpense,
+  id: "calc-unico-1",
+  description: "Calculado de almuerzo",
+  origin: "unico" as const,
+  calculated: {
+    sourceType: "unico" as const,
+    sourceId: "mov-1",
+    sourceChainId: null,
+    sourceDescription: "Almuerzo en el trabajo",
+    formulaOperator: "PCT" as const,
+    formulaOperand: 1000,
+    formulaSign: 1 as const,
+    sourceAmountCents: 15000,
+  },
+  hasCalculated: false,
+};
+
+const mockCalculatedDeCuota = {
+  ...mockMovementCuota,
+  id: "calc-cuota-1",
+  description: "Calculado de cuota notebook",
+  origin: "cuota" as const,
+  calculated: {
+    sourceType: "cuota" as const,
+    sourceId: "inst-1",
+    sourceChainId: null,
+    sourceDescription: "Notebook",
+    formulaOperator: "PCT" as const,
+    formulaOperand: 1000,
+    formulaSign: 1 as const,
+    sourceAmountCents: 50000,
+  },
+  hasCalculated: false,
 };
 
 function mockLoaded(data: MonthMovements) {
@@ -1038,6 +1094,151 @@ describe("MonthViewClient", () => {
 
       // Al cambiar el mes (navegación), el filtro se mantiene en las preferencias
       // (el estado es por pantalla, no por mes)
+    });
+  });
+
+  // ── Enrutamiento de borrado de calculados por sourceType (Fase 1.1.8) ────────
+
+  describe("Enrutamiento de borrado de calculados por sourceType", () => {
+    it("calculado de fijo → abre DeleteRecurringDialog con título 'Eliminar movimiento fijo'", () => {
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 150000, incomeCents: 0, balanceCents: -150000 },
+        movements: {
+          unicos: [],
+          fijos: [mockCalculatedDeFijo],
+          cuotas: [],
+        },
+      });
+      renderMonthView();
+
+      const trigger = screen.getByRole("button", {
+        name: /acciones de calculado de alquiler/i,
+      });
+      fireEvent.click(trigger);
+
+      const deleteItem = screen.getByRole("menuitem", { name: /eliminar/i });
+      fireEvent.click(deleteItem);
+
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /eliminar movimiento fijo/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("calculado de fijo → el diálogo muestra copy de recurrencia ('desde este mes en adelante')", () => {
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 150000, incomeCents: 0, balanceCents: -150000 },
+        movements: {
+          unicos: [],
+          fijos: [mockCalculatedDeFijo],
+          cuotas: [],
+        },
+      });
+      renderMonthView();
+
+      const trigger = screen.getByRole("button", {
+        name: /acciones de calculado de alquiler/i,
+      });
+      fireEvent.click(trigger);
+      fireEvent.click(screen.getByRole("menuitem", { name: /eliminar/i }));
+
+      expect(screen.getByText(/desde este mes en adelante/i)).toBeInTheDocument();
+    });
+
+    it("calculado de único → abre confirmación directa con título 'Eliminar movimiento calculado'", () => {
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 15000, incomeCents: 0, balanceCents: -15000 },
+        movements: {
+          unicos: [mockCalculatedDeUnico],
+          fijos: [],
+          cuotas: [],
+        },
+      });
+      renderMonthView();
+
+      const trigger = screen.getByRole("button", {
+        name: /acciones de calculado de almuerzo/i,
+      });
+      fireEvent.click(trigger);
+
+      const deleteItem = screen.getByRole("menuitem", { name: /eliminar/i });
+      fireEvent.click(deleteItem);
+
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /eliminar movimiento calculado/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("calculado de único → NO muestra copy de recurrencia ('desde este mes en adelante')", () => {
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 15000, incomeCents: 0, balanceCents: -15000 },
+        movements: {
+          unicos: [mockCalculatedDeUnico],
+          fijos: [],
+          cuotas: [],
+        },
+      });
+      renderMonthView();
+
+      const trigger = screen.getByRole("button", {
+        name: /acciones de calculado de almuerzo/i,
+      });
+      fireEvent.click(trigger);
+      fireEvent.click(screen.getByRole("menuitem", { name: /eliminar/i }));
+
+      expect(screen.queryByText(/desde este mes en adelante/i)).not.toBeInTheDocument();
+    });
+
+    it("calculado de cuota → abre confirmación directa con título 'Eliminar movimiento calculado'", () => {
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 50000, incomeCents: 0, balanceCents: -50000 },
+        movements: {
+          unicos: [],
+          fijos: [],
+          cuotas: [mockCalculatedDeCuota],
+        },
+      });
+      renderMonthView();
+
+      const trigger = screen.getByRole("button", {
+        name: /acciones de calculado de cuota notebook/i,
+      });
+      fireEvent.click(trigger);
+
+      const deleteItem = screen.getByRole("menuitem", { name: /eliminar/i });
+      fireEvent.click(deleteItem);
+
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /eliminar movimiento calculado/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("calculado de cuota → NO muestra copy de recurrencia ('desde este mes en adelante')", () => {
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 50000, incomeCents: 0, balanceCents: -50000 },
+        movements: {
+          unicos: [],
+          fijos: [],
+          cuotas: [mockCalculatedDeCuota],
+        },
+      });
+      renderMonthView();
+
+      const trigger = screen.getByRole("button", {
+        name: /acciones de calculado de cuota notebook/i,
+      });
+      fireEvent.click(trigger);
+      fireEvent.click(screen.getByRole("menuitem", { name: /eliminar/i }));
+
+      expect(screen.queryByText(/desde este mes en adelante/i)).not.toBeInTheDocument();
     });
   });
 });

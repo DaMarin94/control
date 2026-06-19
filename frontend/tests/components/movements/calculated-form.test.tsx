@@ -105,7 +105,41 @@ const origenFijo: MovementItem = {
   hasCalculated: false,
 };
 
-/** Ítem calculado (para modo editar) */
+/** Ítem único de origen — Fase 1.1.8 */
+const origenUnico: MovementItem = {
+  id: "trans-origen",
+  origin: "unico",
+  type: "EXPENSE",
+  amountCents: 50000, // $500,00
+  description: "Compra",
+  occurredAt: "2026-06-10T12:00:00.000Z",
+  timezone: "America/Argentina/Buenos_Aires",
+  installment: null,
+  frequency: null,
+  skipped: false,
+  category: { id: "cat-expense", name: "Servicios", color: "#FF5733", scope: "EXPENSE" },
+  calculated: null,
+  hasCalculated: false,
+};
+
+/** Ítem cuota de origen — Fase 1.1.8 */
+const origenCuota: MovementItem = {
+  id: "inst-group-origen",
+  origin: "cuota",
+  type: "EXPENSE",
+  amountCents: 30000, // $300,00
+  description: "Notebook",
+  occurredAt: null,
+  timezone: null,
+  installment: { number: 2, total: 6, startMonth: "2026-05" },
+  frequency: null,
+  skipped: false,
+  category: { id: "cat-expense", name: "Tecnología", color: "#0000FF", scope: "EXPENSE" },
+  calculated: null,
+  hasCalculated: false,
+};
+
+/** Ítem calculado (para modo editar — origen fijo) */
 const calculadoExistente: MovementItem = {
   id: "calc-1",
   origin: "fijo",
@@ -119,6 +153,7 @@ const calculadoExistente: MovementItem = {
   skipped: false,
   category: { id: "cat-expense", name: "Servicios", color: "#FF5733", scope: "EXPENSE" },
   calculated: {
+    sourceType: "fijo",
     sourceChainId: "chain-orig",
     sourceId: "rec-origen",
     sourceDescription: "Sueldo",
@@ -126,6 +161,32 @@ const calculadoExistente: MovementItem = {
     formulaOperand: 1000, // 10%
     formulaSign: -1,
     sourceAmountCents: 100000,
+  },
+  hasCalculated: false,
+};
+
+/** Ítem calculado de origen único (para modo editar — Fase 1.1.8) */
+const calculadoUnicoExistente: MovementItem = {
+  id: "calc-unico-1",
+  origin: "unico",
+  type: "EXPENSE",
+  amountCents: 5000,
+  description: "Comisión",
+  occurredAt: "2026-06-10T12:00:00.000Z",
+  timezone: "America/Argentina/Buenos_Aires",
+  installment: null,
+  frequency: null,
+  skipped: false,
+  category: { id: "cat-expense", name: "Servicios", color: "#FF5733", scope: "EXPENSE" },
+  calculated: {
+    sourceType: "unico",
+    sourceChainId: null, // null para origen único
+    sourceId: "trans-origen",
+    sourceDescription: "Compra",
+    formulaOperator: "PCT",
+    formulaOperand: 1000, // 10%
+    formulaSign: 1,
+    sourceAmountCents: 50000,
   },
   hasCalculated: false,
 };
@@ -397,5 +458,107 @@ describe("CalculatedForm — payload de update no incluye type (RF-MCALC-003)", 
     expect(callData).toHaveProperty("formulaOperator");
     expect(callData).toHaveProperty("formulaOperand");
     expect(callData).toHaveProperty("formulaSign");
+  });
+});
+
+// ─── Tests Fase 1.1.8 — origen único y cuota ─────────────────────────────────
+
+describe("CalculatedForm — Fase 1.1.8: crear desde origen único (sin startMonth)", () => {
+  it("createCalculated se llama sin 'startMonth' cuando el origen es único", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    mockCreateCalculated.mockResolvedValue({ success: true, id: "new-calc-unico" });
+
+    render(
+      <CalculatedForm mode="create" movement={origenUnico} onClose={onClose} viewMonth="2026-06" />,
+      { wrapper: createWrapper() },
+    );
+
+    // Ingresamos operando "10"
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+
+    // Signo default = positivo → resultado > 0 → INCOME → disponibles: cat-income, cat-both
+    const select = screen.getByRole("combobox");
+    await user.selectOptions(select, "cat-income");
+
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(mockCreateCalculated).toHaveBeenCalledTimes(1);
+    });
+
+    const [callId, callData, callSourceType] = mockCreateCalculated.mock.calls[0] as [string, Record<string, unknown>, string];
+    expect(callId).toBe("trans-origen");
+    // Sin startMonth (no aplica a único)
+    expect(callData).not.toHaveProperty("startMonth");
+    // Sin type
+    expect(callData).not.toHaveProperty("type");
+    // sourceType pasado correctamente
+    expect(callSourceType).toBe("unico");
+  });
+});
+
+describe("CalculatedForm — Fase 1.1.8: crear desde origen cuota (sin startMonth)", () => {
+  it("createCalculated se llama sin 'startMonth' cuando el origen es cuota", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    mockCreateCalculated.mockResolvedValue({ success: true, id: "new-calc-cuota" });
+
+    render(
+      <CalculatedForm mode="create" movement={origenCuota} onClose={onClose} viewMonth="2026-06" />,
+      { wrapper: createWrapper() },
+    );
+
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+
+    // Signo default = positivo → PCT 10% de 30000 = 3000 > 0 → INCOME → cat-income o cat-both
+    const select = screen.getByRole("combobox");
+    await user.selectOptions(select, "cat-income");
+
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(mockCreateCalculated).toHaveBeenCalledTimes(1);
+    });
+
+    const [callId, callData, callSourceType] = mockCreateCalculated.mock.calls[0] as [string, Record<string, unknown>, string];
+    expect(callId).toBe("inst-group-origen");
+    expect(callData).not.toHaveProperty("startMonth");
+    expect(callData).not.toHaveProperty("type");
+    expect(callSourceType).toBe("cuota");
+  });
+});
+
+describe("CalculatedForm — Fase 1.1.8: editar calculado de origen único", () => {
+  it("renderiza el bloque Origen con el nombre del origen único", () => {
+    render(
+      <CalculatedForm mode="edit" movement={calculadoUnicoExistente} onClose={vi.fn()} viewMonth="2026-06" />,
+      { wrapper: createWrapper() },
+    );
+    // sourceDescription = "Compra"
+    expect(screen.getByText("Compra")).toBeInTheDocument();
+  });
+
+  it("updateCalculated se llama con sourceType 'unico' al guardar", async () => {
+    const user = userEvent.setup();
+    mockUpdateCalculated.mockResolvedValue({ success: true, id: "calc-unico-1" });
+
+    render(
+      <CalculatedForm mode="edit" movement={calculadoUnicoExistente} onClose={vi.fn()} viewMonth="2026-06" />,
+      { wrapper: createWrapper() },
+    );
+
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(mockUpdateCalculated).toHaveBeenCalledTimes(1);
+    });
+
+    const [, , callSourceType] = mockUpdateCalculated.mock.calls[0] as [string, Record<string, unknown>, string];
+    expect(callSourceType).toBe("unico");
   });
 });

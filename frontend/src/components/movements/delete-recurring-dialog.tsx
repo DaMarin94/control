@@ -1,13 +1,15 @@
 "use client";
 
 /**
- * Diálogo de confirmación para eliminar un movimiento fijo (RF-MF-004).
+ * Diálogo de confirmación para eliminar un movimiento fijo (RF-MF-004)
+ * o un calculado de origen único/cuota.
  *
- * Comportamiento: la eliminación aplica SIEMPRE desde el mes visualizado inclusive
- * en adelante, sin opciones a elegir (fromCurrentMonth = true hardcodeado).
- * Los meses anteriores al mes visualizado nunca se modifican.
+ * - variant="fijo" (default): copy específico de fijo ("desde este mes en adelante").
+ * - variant="calculated-simple": confirmación directa para calculados de único/cuota
+ *   ("¿Eliminar este movimiento calculado?"). Sin copy de recurrencia.
  *
- * No hay checkbox ni estado extra: la spec dice "sin opciones" (RF-MF-004).
+ * En ambas variantes: fromCurrentMonth=true hardcodeado, viewMonth como currentMonth.
+ * El backend ignora currentMonth/fromCurrentMonth para calculados de único/cuota.
  */
 
 import { useState, useEffect } from "react";
@@ -20,14 +22,19 @@ import { formatCurrency, getCurrentMonth } from "@/lib/format";
 import type { MovementItem } from "@/types/movement";
 
 interface DeleteRecurringDialogProps {
-  /** MovementItem del fijo a eliminar (origin === "fijo") */
+  /** MovementItem a eliminar */
   movement: MovementItem;
   onClose: () => void;
   /** Mes visualizado en la Vista del mes (YYYY-MM). Fallback: mes actual del navegador. */
   viewMonth?: string;
+  /**
+   * "fijo" (default): diálogo específico para fijos (con copy de recurrencia).
+   * "calculated-simple": confirmación directa para calculados de único/cuota.
+   */
+  variant?: "fijo" | "calculated-simple";
 }
 
-export function DeleteRecurringDialog({ movement, onClose, viewMonth }: DeleteRecurringDialogProps) {
+export function DeleteRecurringDialog({ movement, onClose, viewMonth, variant = "fijo" }: DeleteRecurringDialogProps) {
   const [mounted, setMounted] = useState(false);
   const { toast } = useToast();
   const { deleteRecurring, isDeleting } = useRecurring();
@@ -56,6 +63,11 @@ export function DeleteRecurringDialog({ movement, onClose, viewMonth }: DeleteRe
   const typeLabel = movement.type === "EXPENSE" ? "Gasto" : "Ingreso";
   const description = movement.description ?? movement.category.name;
 
+  const isCalculatedSimple = variant === "calculated-simple";
+  const dialogTitleId = isCalculatedSimple
+    ? "delete-calculated-simple-title"
+    : "delete-recurring-title";
+
   if (!mounted) return null;
 
   return createPortal(
@@ -65,7 +77,7 @@ export function DeleteRecurringDialog({ movement, onClose, viewMonth }: DeleteRe
       style={{ background: "oklch(0.18 0.02 270 / 0.46)", backdropFilter: "blur(3px)" }}
       role="dialog"
       aria-modal="true"
-      aria-labelledby="delete-recurring-title"
+      aria-labelledby={dialogTitleId}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {/* Diálogo */}
@@ -76,42 +88,54 @@ export function DeleteRecurringDialog({ movement, onClose, viewMonth }: DeleteRe
         {/* Header */}
         <div className="px-[22px] pt-5 pb-4">
           <h2
-            id="delete-recurring-title"
+            id={dialogTitleId}
             className="text-[18px] font-bold tracking-[-0.01em] text-ink m-0"
           >
-            Eliminar movimiento fijo
+            {isCalculatedSimple ? "Eliminar movimiento calculado" : "Eliminar movimiento fijo"}
           </h2>
         </div>
 
         {/* Cuerpo */}
         <div className="px-[22px] pb-[22px] space-y-[14px]">
           <p className="text-[14px] text-ink">
-            ¿Estás seguro de que querés eliminar este movimiento fijo?
+            {isCalculatedSimple
+              ? "¿Estás seguro de que querés eliminar este movimiento calculado?"
+              : "¿Estás seguro de que querés eliminar este movimiento fijo?"}
           </p>
           <div className="rounded-ctl border border-line bg-panel-2 px-4 py-3 text-[13px]">
             <p className="font-semibold text-ink">{description}</p>
             <p className="mt-0.5 text-muted mono">
-              {typeLabel} · {amountLabel} · Mensual
+              {isCalculatedSimple
+                ? `${typeLabel} · ${amountLabel} · Calculado`
+                : `${typeLabel} · ${amountLabel} · Mensual`}
             </p>
           </div>
-          <p className="text-[13px] text-muted">
-            El fijo dejará de aparecer desde este mes en adelante. Los meses anteriores no se modifican.
-          </p>
-          {movement.hasCalculated && (
-            <div
-              className="rounded-ctl px-3 py-2.5 flex items-start gap-2.5"
-              style={{ background: "var(--warning-soft)", border: "1px solid var(--warning)" }}
-            >
-              <AlertTriangle
-                size={16}
-                strokeWidth={2}
-                aria-hidden="true"
-                style={{ color: "var(--warning-ink)", flexShrink: 0, marginTop: "1px" }}
-              />
-              <p className="text-[13px] font-medium leading-snug m-0" style={{ color: "var(--warning-ink)" }}>
-                Este movimiento fijo tiene movimientos calculados que dependen de él. Si lo eliminás, esos calculados también se eliminarán.
+          {isCalculatedSimple ? (
+            <p className="text-[12.5px] text-muted">
+              Esta acción es permanente y no se puede deshacer.
+            </p>
+          ) : (
+            <>
+              <p className="text-[13px] text-muted">
+                El fijo dejará de aparecer desde este mes en adelante. Los meses anteriores no se modifican.
               </p>
-            </div>
+              {movement.hasCalculated && (
+                <div
+                  className="rounded-ctl px-3 py-2.5 flex items-start gap-2.5"
+                  style={{ background: "var(--warning-soft)", border: "1px solid var(--warning)" }}
+                >
+                  <AlertTriangle
+                    size={16}
+                    strokeWidth={2}
+                    aria-hidden="true"
+                    style={{ color: "var(--warning-ink)", flexShrink: 0, marginTop: "1px" }}
+                  />
+                  <p className="text-[13px] font-medium leading-snug m-0" style={{ color: "var(--warning-ink)" }}>
+                    Este movimiento fijo tiene movimientos calculados que dependen de él. Si lo eliminás, esos calculados también se eliminarán.
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </div>
 

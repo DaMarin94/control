@@ -30,14 +30,29 @@ export type FormulaOperator = "ADD" | "SUB" | "MUL" | "DIV" | "PCT";
 
 /**
  * Datos del calculado embebidos en MovementItem cuando el ítem es un movimiento calculado.
- * Presente solo si el ítem es un fijo calculado; null en todos los demás casos.
- * (Fase 1.1.7 — RF-MCALC-001..007)
+ * Presente si el ítem es un calculado (fijo, único o cuota); null en todos los demás casos.
+ * (Fase 1.1.7 — RF-MCALC-001..007; Fase 1.1.8 — extendido a único y cuota)
  */
 export interface CalculatedInfo {
-  /** Id estable de la cadena del origen (identidad de cadena del fijo origen) */
-  sourceChainId: string;
-  /** Id de la fila activa del origen en ese mes */
+  /**
+   * Tipo de origen del calculado (Fase 1.1.8).
+   * 'fijo': derivado de un fijo (cadena recurrente).
+   * 'unico': derivado de un movimiento único.
+   * 'cuota': derivado de un grupo de cuotas.
+   */
+  sourceType: "fijo" | "unico" | "cuota";
+  /**
+   * Id estable del origen:
+   * - Para 'fijo': chainId de la cadena recurrente.
+   * - Para 'unico': id del Transaction.
+   * - Para 'cuota': id del InstallmentGroup.
+   */
   sourceId: string;
+  /**
+   * Id estable de la cadena del fijo de origen (Fase 1.1.7 — solo para 'fijo').
+   * null para origen 'unico' o 'cuota' (Fase 1.1.8 — ahora nullable).
+   */
+  sourceChainId: string | null;
   /** Descripción/nombre del fijo de origen (null si no tiene) */
   sourceDescription: string | null;
   /** Operador de la fórmula */
@@ -52,7 +67,10 @@ export interface CalculatedInfo {
   /** Signo del resultado: +1 o -1 */
   formulaSign: 1 | -1;
   /**
-   * Monto del fijo de origen en el mes consultado (entero positivo en centavos).
+   * Monto del origen en el mes consultado (entero positivo en centavos).
+   * - Para 'fijo': monto del fijo en ese mes.
+   * - Para 'cuota': monto por cuota del grupo.
+   * - Para 'unico': monto del movimiento único.
    * Presente en modo edición para habilitar el preview en vivo del resultado.
    * null/ausente para no-calculados o cuando no está disponible.
    */
@@ -124,14 +142,14 @@ export interface MovementItem {
   skipped: boolean;
   category: MovementCategory;
   /**
-   * Datos del calculado — Fase 1.1.7 (RF-MCALC-001..007).
-   * Presente solo si este ítem es un movimiento calculado (fijo cuyo monto se deriva).
+   * Datos del calculado — Fase 1.1.7/1.1.8 (RF-MCALC-001..007).
+   * Presente si este ítem es un movimiento calculado (de origen fijo, único o cuota).
    * null si no es calculado.
    */
   calculated: CalculatedInfo | null;
   /**
-   * Indica si este ítem fijo tiene al menos un movimiento calculado derivado en el mes.
-   * Solo relevante para origin==="fijo" y calculated===null (los "padres").
+   * Indica si este ítem tiene al menos un movimiento calculado derivado en el mes.
+   * Relevante para cualquier origen (fijo, único o cuota) cuando calculated===null.
    * En ítems que son calculados: false (no pueden ser padres, RF-MCALC-001).
    */
   hasCalculated: boolean;

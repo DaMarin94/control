@@ -237,6 +237,8 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   // Estado de modales para calculados (Fase 1.1.7)
   const [creatingCalculated, setCreatingCalculated] = useState<MovementItem | null>(null);
   const [editingCalculated, setEditingCalculated] = useState<MovementItem | null>(null);
+  // Calculado de origen único/cuota: confirmación directa sin opciones de mes
+  const [deletingCalculatedSimple, setDeletingCalculatedSimple] = useState<MovementItem | null>(null);
 
   // ── Estado de acordeón y orden (Fase 1.1.4) ───────────────────────────────
 
@@ -314,14 +316,15 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   // ── Handlers editar/eliminar ──────────────────────────────────────────────
 
   function handleEdit(movement: MovementItem) {
+    // Si el ítem es un calculado (cualquier origen), abrir el modal de edición de calculado.
+    // Los calculados se editan siempre por PATCH /:endpoint/:id/calculated (Fase 1.1.8).
+    if (movement.calculated) {
+      setEditingCalculated(movement);
+      return;
+    }
+    // Ítem no calculado: enrutar por origen
     if (movement.origin === "fijo") {
-      // Si es un calculado → abrir modal de edición de calculado (PATCH /calculated)
-      // Si es un fijo normal → abrir modal de edición de fijo
-      if (movement.calculated) {
-        setEditingCalculated(movement);
-      } else {
-        setEditingFijo(movement);
-      }
+      setEditingFijo(movement);
     } else if (movement.origin === "cuota") {
       setEditingCuota(movement);
     } else {
@@ -335,6 +338,18 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   }
 
   function handleDelete(movement: MovementItem) {
+    // Calculados: enrutar por tipo de origen del calculado.
+    if (movement.calculated) {
+      if (movement.calculated.sourceType === "fijo") {
+        // Calculado de fijo → DeleteRecurringDialog (variant="fijo" default, con opciones de mes).
+        setDeletingFijo(movement);
+      } else {
+        // Calculado de único o cuota → confirmación directa sin opciones de mes.
+        setDeletingCalculatedSimple(movement);
+      }
+      return;
+    }
+    // No-calculados: enrutar por origen
     if (movement.origin === "fijo") {
       setDeletingFijo(movement);
     } else if (movement.origin === "cuota") {
@@ -775,6 +790,16 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
         <DeleteInstallmentDialog
           movement={deletingCuota}
           onClose={() => setDeletingCuota(null)}
+        />
+      )}
+
+      {/* ── Diálogo eliminar calculado de único/cuota (confirmación directa) ── */}
+      {deletingCalculatedSimple && (
+        <DeleteRecurringDialog
+          movement={deletingCalculatedSimple}
+          onClose={() => setDeletingCalculatedSimple(null)}
+          viewMonth={month}
+          variant="calculated-simple"
         />
       )}
 

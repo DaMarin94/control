@@ -15,6 +15,10 @@ import { CreateRecurringDto } from './dto/create-recurring.dto';
 import { UpdateRecurringDto } from './dto/update-recurring.dto';
 import { CreateCalculatedRecurringDto } from './dto/create-calculated-recurring.dto';
 import { UpdateCalculatedRecurringDto } from './dto/update-calculated-recurring.dto';
+import { CreateCalculatedFromTransactionDto } from './dto/create-calculated-from-transaction.dto';
+import { UpdateCalculatedFromTransactionDto } from './dto/update-calculated-from-transaction.dto';
+import { CreateCalculatedFromInstallmentDto } from './dto/create-calculated-from-installment.dto';
+import { UpdateCalculatedFromInstallmentDto } from './dto/update-calculated-from-installment.dto';
 import { validateFormulaOperand } from './formula.helper';
 
 @Injectable()
@@ -373,12 +377,286 @@ export class RecurringService {
   }
 
   // ---------------------------------------------------------------------------
+  // POST /transactions/:id/calculated — crear calculado desde un único (Fase 1.1.7.ext)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Crea un movimiento calculado derivado de un Transaction (movimiento único).
+   *
+   * El calculado aparece en UN solo mes: el mes del único (derivado de occurredAt + timezone).
+   * Autolimitado con startMonth = mes del único, deletedFrom = nextMonth(startMonth).
+   * La cascada de borrado la maneja la FK onDelete:Cascade del lado Recurring.
+   *
+   * Sin encadenamiento: el Transaction no puede ser a su vez un calculado (no aplica —
+   * los Transactions nunca son calculados; la restricción here es solo para Recurrings).
+   *
+   * 404 si el Transaction no existe o no es del usuario.
+   * 400 si operando=0 para DIV/PCT.
+   * 400 si la categoría es inválida.
+   */
+  async createCalculatedFromTransaction(
+    userId: string,
+    transactionId: string,
+    dto: CreateCalculatedFromTransactionDto,
+  ): Promise<RecurringWithCategory> {
+    // Localizar el Transaction de origen
+    const tx = await this.repo.findTransactionById(transactionId);
+    if (!tx || tx.userId !== userId) {
+      throw new NotFoundException('Movimiento único de origen no encontrado');
+    }
+
+    // Validar operando: DIV y PCT rechazan operando 0 (RN-017)
+    validateFormulaOperand(dto.formulaOperator, dto.formulaOperand);
+
+    // Validar categoría con skipScopeCheck (tipo derivado on-the-fly — RF-MCALC-003)
+    await this.categoryValidator.validateCategory(userId, dto.categoryId, MovementType.EXPENSE, true);
+
+    // Derivar el mes del Transaction a partir de occurredAt + timezone
+    const startMonth = this.occurrenceToMonth(tx.occurredAt, tx.timezone);
+    const deletedFromMonth = this.nextMonth(startMonth);
+
+    const calc = await this.repo.create({
+      user: { connect: { id: userId } },
+      category: { connect: { id: dto.categoryId } },
+      type: MovementType.EXPENSE, // placeholder en DB; type real se deriva on-the-fly
+      amountCents: 0, // placeholder; monto real se deriva on-the-fly
+      startMonth,
+      deletedFrom: deletedFromMonth, // autolimitado a 1 mes
+      frequency: RecurringFrequency.MONTHLY, // default; no se usa para el gating
+      description: dto.description ?? null,
+      sourceMovement: { connect: { id: tx.id } }, // FK a Transaction
+      formulaOperator: dto.formulaOperator,
+      formulaOperand: dto.formulaOperand,
+      formulaSign: dto.formulaSign,
+    });
+
+    this.logger.log(
+      {
+        userId,
+        calculatedId: calc.id,
+        calculatedChainId: calc.chainId,
+        sourceMovementId: tx.id,
+        startMonth,
+        deletedFrom: deletedFromMonth,
+        operator: dto.formulaOperator,
+        sign: dto.formulaSign,
+      },
+      'Movimiento calculado de único creado',
+    );
+
+    return calc;
+  }
+
+  // ---------------------------------------------------------------------------
+  // PATCH /transactions/:id/calculated — editar calculado de único (Fase 1.1.7.ext)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Edita un movimiento calculado derivado de un Transaction.
+   *
+   * El calculado de único edita in-place siempre (no hay split: su rango es 1 mes).
+   * Campos editables: categoryId, description, formulaOperator, formulaOperand, formulaSign.
+   * NO editable: sourceMovementId (el vínculo al origen es inmutable).
+   *
+   * 404 si el calculado no existe o no es del usuario.
+   * 404 si el calculado no tiene sourceMovementId = transactionId (no pertenece a ese origen).
+   * 400 si operando=0 para DIV/PCT.
+   * 400 si la categoría es inválida.
+   */
+  async updateCalculatedFromTransaction(
+    userId: string,
+    transactionId: string,
+    dto: UpdateCalculatedFromTransactionDto,
+  ): Promise<RecurringWithCategory> {
+    // Verificar que el Transaction de origen existe y es del usuario
+    const tx = await this.repo.findTransactionById(transactionId);
+    if (!tx || tx.userId !== userId) {
+      throw new NotFoundException('Movimiento único de origen no encontrado');
+    }
+
+    // Buscar el calculado vinculado a este Transaction
+    const existing = await this.repo.findCalculatedBySourceMovement(transactionId);
+    if (!existing || existing.userId !== userId) {
+      throw new NotFoundException('Movimiento calculado no encontrado para este origen');
+    }
+
+    // Validar operando efectivo
+    const effectiveOperator = dto.formulaOperator ?? existing.formulaOperator!;
+    const effectiveOperand = dto.formulaOperand ?? existing.formulaOperand!;
+    validateFormulaOperand(effectiveOperator, effectiveOperand);
+
+    // Validar categoría si cambia
+    if (dto.categoryId !== undefined) {
+      await this.categoryValidator.validateCategory(userId, dto.categoryId, MovementType.EXPENSE, true);
+    }
+
+    // Update in-place (sin split — calculado de único no tiene inmutabilidad del pasado)
+    const result = await this.repo.update(existing.id, {
+      ...(dto.categoryId !== undefined && {
+        category: { connect: { id: dto.categoryId } },
+      }),
+      ...(dto.description !== undefined && { description: dto.description }),
+      ...(dto.formulaOperator !== undefined && { formulaOperator: dto.formulaOperator }),
+      ...(dto.formulaOperand !== undefined && { formulaOperand: dto.formulaOperand }),
+      ...(dto.formulaSign !== undefined && { formulaSign: dto.formulaSign }),
+    });
+
+    this.logger.log(
+      {
+        userId,
+        calculatedId: existing.id,
+        sourceMovementId: transactionId,
+      },
+      'Movimiento calculado de único actualizado',
+    );
+
+    return result;
+  }
+
+  // ---------------------------------------------------------------------------
+  // POST /installments/:id/calculated — crear calculado desde cuota (Fase 1.1.7.ext)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Crea un movimiento calculado derivado de un InstallmentGroup (grupo de cuotas).
+   *
+   * El calculado aparece en cada mes del grupo: startMonth = grupo.startMonth,
+   * deletedFrom = null (el rango lo limita la proyección on-the-fly del grupo).
+   * Deriva del monto POR CUOTA (amountCents del InstallmentGroup).
+   * La cascada de borrado la maneja la FK onDelete:Cascade del lado Recurring.
+   *
+   * 404 si el InstallmentGroup no existe o no es del usuario.
+   * 400 si operando=0 para DIV/PCT.
+   * 400 si la categoría es inválida.
+   */
+  async createCalculatedFromInstallment(
+    userId: string,
+    installmentGroupId: string,
+    dto: CreateCalculatedFromInstallmentDto,
+  ): Promise<RecurringWithCategory> {
+    // Localizar el InstallmentGroup de origen
+    const group = await this.repo.findInstallmentGroupById(installmentGroupId);
+    if (!group || group.userId !== userId) {
+      throw new NotFoundException('Grupo de cuotas de origen no encontrado');
+    }
+
+    // Validar operando: DIV y PCT rechazan operando 0 (RN-017)
+    validateFormulaOperand(dto.formulaOperator, dto.formulaOperand);
+
+    // Validar categoría con skipScopeCheck (tipo derivado on-the-fly — RF-MCALC-003)
+    await this.categoryValidator.validateCategory(userId, dto.categoryId, MovementType.EXPENSE, true);
+
+    const calc = await this.repo.create({
+      user: { connect: { id: userId } },
+      category: { connect: { id: dto.categoryId } },
+      type: MovementType.EXPENSE, // placeholder en DB; type real se deriva on-the-fly
+      amountCents: 0, // placeholder; monto real se deriva on-the-fly
+      startMonth: group.startMonth, // hereda el startMonth del grupo
+      deletedFrom: null, // rango ilimitado: lo limita la proyección on-the-fly del grupo
+      frequency: RecurringFrequency.MONTHLY, // default; no se usa para el gating
+      description: dto.description ?? null,
+      sourceInstallmentGroup: { connect: { id: group.id } }, // FK a InstallmentGroup
+      formulaOperator: dto.formulaOperator,
+      formulaOperand: dto.formulaOperand,
+      formulaSign: dto.formulaSign,
+    });
+
+    this.logger.log(
+      {
+        userId,
+        calculatedId: calc.id,
+        calculatedChainId: calc.chainId,
+        sourceInstallmentGroupId: group.id,
+        startMonth: group.startMonth,
+        operator: dto.formulaOperator,
+        sign: dto.formulaSign,
+      },
+      'Movimiento calculado de cuota creado',
+    );
+
+    return calc;
+  }
+
+  // ---------------------------------------------------------------------------
+  // PATCH /installments/:id/calculated — editar calculado de cuota (Fase 1.1.7.ext)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Edita un movimiento calculado derivado de un InstallmentGroup.
+   *
+   * El calculado de cuota edita in-place siempre (no hay split: cuotas no tienen
+   * inmutabilidad del pasado — ver PATCH /installments/:id).
+   * Campos editables: categoryId, description, formulaOperator, formulaOperand, formulaSign.
+   * NO editable: sourceInstallmentGroupId (el vínculo al origen es inmutable).
+   *
+   * 404 si el InstallmentGroup no existe o no es del usuario.
+   * 404 si no existe calculado vinculado a ese origen.
+   * 400 si operando=0 para DIV/PCT.
+   * 400 si la categoría es inválida.
+   */
+  async updateCalculatedFromInstallment(
+    userId: string,
+    installmentGroupId: string,
+    dto: UpdateCalculatedFromInstallmentDto,
+  ): Promise<RecurringWithCategory> {
+    // Verificar que el InstallmentGroup de origen existe y es del usuario
+    const group = await this.repo.findInstallmentGroupById(installmentGroupId);
+    if (!group || group.userId !== userId) {
+      throw new NotFoundException('Grupo de cuotas de origen no encontrado');
+    }
+
+    // Buscar el calculado vinculado a este InstallmentGroup
+    const existing = await this.repo.findCalculatedBySourceInstallment(installmentGroupId);
+    if (!existing || existing.userId !== userId) {
+      throw new NotFoundException('Movimiento calculado no encontrado para este origen');
+    }
+
+    // Validar operando efectivo
+    const effectiveOperator = dto.formulaOperator ?? existing.formulaOperator!;
+    const effectiveOperand = dto.formulaOperand ?? existing.formulaOperand!;
+    validateFormulaOperand(effectiveOperator, effectiveOperand);
+
+    // Validar categoría si cambia
+    if (dto.categoryId !== undefined) {
+      await this.categoryValidator.validateCategory(userId, dto.categoryId, MovementType.EXPENSE, true);
+    }
+
+    // Update in-place (sin split)
+    const result = await this.repo.update(existing.id, {
+      ...(dto.categoryId !== undefined && {
+        category: { connect: { id: dto.categoryId } },
+      }),
+      ...(dto.description !== undefined && { description: dto.description }),
+      ...(dto.formulaOperator !== undefined && { formulaOperator: dto.formulaOperator }),
+      ...(dto.formulaOperand !== undefined && { formulaOperand: dto.formulaOperand }),
+      ...(dto.formulaSign !== undefined && { formulaSign: dto.formulaSign }),
+    });
+
+    this.logger.log(
+      {
+        userId,
+        calculatedId: existing.id,
+        sourceInstallmentGroupId: installmentGroupId,
+      },
+      'Movimiento calculado de cuota actualizado',
+    );
+
+    return result;
+  }
+
+  // ---------------------------------------------------------------------------
   // DELETE /recurring/:id — soft-set deletedFrom o hard-delete (RF-MF-004, D2)
   // ---------------------------------------------------------------------------
 
   /**
-   * Elimina (o marca para eliminar) un fijo.
+   * Elimina (o marca para eliminar) un fijo o calculado.
    *
+   * --- Calculado de único o cuota (sourceMovementId != null || sourceInstallmentGroupId != null) ---
+   * Hard-delete total de la fila. El corte por boundary no aplica: un calculado de único
+   * existe solo 1 mes y un calculado de cuota se borra como grupo completo, igual que
+   * su origen. Los params currentMonth/fromCurrentMonth se aceptan pero se ignoran.
+   *
+   * --- Fijo normal y calculado de fijo (los demás casos) ---
    * Lógica (D2) — aplicada a TODA la cadena (chainId):
    * - boundary = fromCurrentMonth ? currentMonth : nextMonth(currentMonth)
    * - Para CADA fila de la cadena:
@@ -393,8 +671,8 @@ export class RecurringService {
    *
    * 404 si no existe o no es del usuario.
    *
-   * Cascada a calculados (RF-MCALC-005):
-   * Al eliminar un fijo de origen (no calculado), los calculados de su cadena
+   * Cascada a calculados de fijo (RF-MCALC-005):
+   * Al eliminar un fijo de origen (no calculado), los calculados de fijo de su cadena
    * (sourceChainId == chainId del origen) siguen el mismo boundary con la misma
    * lógica por fila sobre toda la cadena del calculado.
    * Eliminar un calculado NO afecta al origen.
@@ -405,7 +683,7 @@ export class RecurringService {
     currentMonth: string,
     fromCurrentMonth: boolean,
   ): Promise<void> {
-    // Validar formato y semántica del mes
+    // Validar formato y semántica del mes (siempre, incluso para calculados de único/cuota)
     this.validateMonthFormat(currentMonth);
     this.validateMonthValue(currentMonth);
 
@@ -413,6 +691,25 @@ export class RecurringService {
 
     if (!existing || existing.userId !== userId) {
       throw new NotFoundException('Movimiento fijo no encontrado');
+    }
+
+    // Calculado de único o de cuota: hard-delete total, sin lógica de boundary.
+    // La decisión de producto es que se borran igual que su origen:
+    // el único se borra de una, la cuota se borra como grupo entero.
+    if (existing.sourceMovementId !== null || existing.sourceInstallmentGroupId !== null) {
+      await this.repo.delete(existing.id);
+
+      this.logger.log(
+        {
+          userId,
+          recurringId: id,
+          sourceMovementId: existing.sourceMovementId,
+          sourceInstallmentGroupId: existing.sourceInstallmentGroupId,
+        },
+        'Calculado de único/cuota eliminado (hard-delete total, sin boundary)',
+      );
+
+      return;
     }
 
     const boundary = fromCurrentMonth
@@ -427,8 +724,8 @@ export class RecurringService {
       'Cadena de fijo eliminada/truncada (boundary aplicado a toda la cadena)',
     );
 
-    // Cascada a calculados del origen (RF-MCALC-005).
-    // Solo si es un fijo de origen (no calculado): eliminar un calculado no afecta al origen.
+    // Cascada a calculados de fijo del origen (RF-MCALC-005).
+    // Solo si es un fijo de origen (sourceChainId === null): eliminar un calculado no afecta al origen.
     if (existing.sourceChainId === null) {
       await this.cascadeDeleteCalculados(existing.chainId, boundary, userId);
     }
@@ -580,6 +877,27 @@ export class RecurringService {
   // ---------------------------------------------------------------------------
   // Helpers de validación de mes
   // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
+  // Helper: derivar YYYY-MM a partir de un Date (UTC) y timezone IANA
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Convierte un instante UTC a la string YYYY-MM en la zona horaria dada.
+   * Usa Intl.DateTimeFormat para obtener año y mes en la zona local del usuario.
+   */
+  private occurrenceToMonth(occurredAt: Date, timezone: string): string {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+    });
+    // Formato en-CA produce "YYYY-MM" (ISO-like)
+    const parts = formatter.formatToParts(occurredAt);
+    const year = parts.find((p) => p.type === 'year')?.value ?? '';
+    const month = parts.find((p) => p.type === 'month')?.value ?? '';
+    return `${year}-${month}`;
+  }
 
   /**
    * Valida que el string tenga formato YYYY-MM.

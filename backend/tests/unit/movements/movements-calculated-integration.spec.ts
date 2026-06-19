@@ -72,6 +72,8 @@ class InMemoryRecurringDB {
       frequency: data.frequency ?? RecurringFrequency.MONTHLY,
       chainId,
       sourceChainId: data.sourceChainId ?? null,
+      sourceMovementId: data.sourceMovement?.connect?.id ?? data.sourceMovementId ?? null,
+      sourceInstallmentGroupId: data.sourceInstallmentGroup?.connect?.id ?? data.sourceInstallmentGroupId ?? null,
       formulaOperator: data.formulaOperator ?? null,
       formulaOperand: data.formulaOperand ?? null,
       formulaSign: data.formulaSign ?? null,
@@ -290,6 +292,9 @@ describe('Bug B — flujo real: crear fijo → split → crear calculado', () =>
         delete: jest.fn().mockResolvedValue(undefined),
       },
       installmentGroup: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      transaction: {
         findMany: jest.fn().mockResolvedValue([]),
       },
       $queryRaw: jest.fn().mockResolvedValue([]),
@@ -765,6 +770,9 @@ describe('BUG borrado de cadena — flujo real: crear fijo → split → crear c
         delete: jest.fn().mockResolvedValue(undefined),
       },
       installmentGroup: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      transaction: {
         findMany: jest.fn().mockResolvedValue([]),
       },
       $queryRaw: jest.fn().mockResolvedValue([]),

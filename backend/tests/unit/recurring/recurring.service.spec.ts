@@ -85,6 +85,8 @@ function makeRecurring(
     frequency: RecurringFrequency.MONTHLY,
     chainId: 'chain-001',
     sourceChainId: null,
+    sourceMovementId: null,
+    sourceInstallmentGroupId: null,
     formulaOperator: null,
     formulaOperand: null,
     formulaSign: null,

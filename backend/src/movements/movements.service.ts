@@ -265,23 +265,41 @@ export class MovementsService {
       }
     }
 
-    // 2. Fijos (incluye calculados — Fase 1.1.7)
+    // 2. Fijos (incluye calculados — Fase 1.1.7 + 1.1.7.ext)
     const allFijos = await this.repo.getAllFijosForAnnual(userId);
 
-    // Construir mapa chainId → fijo para la resolución del origen de calculados
-    // Un fijo puede tener múltiples filas en la cadena; para cada mes tomamos
-    // la fila con startMonth más alto que sea activa en ese mes.
-    // Indexamos todas las filas normales por chainId para lookup rápido.
-    const normalesForAnnual = allFijos.filter((f) => f.sourceChainId === null);
-    const calculadosForAnnual = allFijos.filter((f) => f.sourceChainId !== null);
+    // Separar en normales y tres tipos de calculados
+    const normalesForAnnual = allFijos.filter(
+      (f) => f.sourceChainId === null && f.sourceMovementId === null && f.sourceInstallmentGroupId === null,
+    );
+    const calculadosDeFijoAnual = allFijos.filter((f) => f.sourceChainId !== null);
+    const calculadosDeUnicoAnual = allFijos.filter((f) => f.sourceMovementId !== null);
+    const calculadosDeCuotaAnual = allFijos.filter((f) => f.sourceInstallmentGroupId !== null);
+
+    // Cargar todos los Transactions de origen para calculados de único (una sola query)
+    const txIdsAnual = [...new Set(calculadosDeUnicoAnual.map((f) => f.sourceMovementId!).filter(Boolean))];
+    const txAnualMap = new Map<string, { amountCents: number; description: string | null }>();
+    if (txIdsAnual.length > 0) {
+      const txRows = await this.repo.findTransactionsByIds(txIdsAnual);
+      for (const tx of txRows) txAnualMap.set(tx.id, { amountCents: tx.amountCents, description: tx.description });
+    }
+
+    // Cargar todos los InstallmentGroups de origen para calculados de cuota (una sola query)
+    const groupIdsAnual = [...new Set(calculadosDeCuotaAnual.map((f) => f.sourceInstallmentGroupId!).filter(Boolean))];
+    const groupAnualMap = new Map<string, {
+      amountCents: number;
+      totalInstallments: number;
+      startMonth: string;
+    }>();
+    if (groupIdsAnual.length > 0) {
+      const groupRows = await this.repo.findInstallmentGroupsByIds(groupIdsAnual);
+      for (const g of groupRows) groupAnualMap.set(g.id, { amountCents: g.amountCents, totalInstallments: g.totalInstallments, startMonth: g.startMonth });
+    }
 
     for (let i = 0; i < 12; i++) {
       const mes = months12[i];
 
       // Construir mapa chainId → datos del normal activo en este mes.
-      // La invariante del split garantiza que para cualquier mes dado, a lo sumo UNA fila
-      // por cadena pasa los filtros inRange+isOnFrequency (los rangos de splits no se solapan).
-      // El desempate por startMonth más alto es una red de seguridad para datos atípicos.
       const normalesActivosMes = new Map<string, { amountCents: number; skipped: boolean; startMonth: string }>();
       for (const fijo of normalesForAnnual) {
         const inRange =
@@ -290,8 +308,6 @@ export class MovementsService {
         if (!inRange) continue;
         if (!isOnFrequency(fijo.startMonth, fijo.frequency, mes)) continue;
 
-        // Red de seguridad: si hubiera dos filas de la misma cadena activas en el mismo mes
-        // (estado anómalo), tomamos la de mayor startMonth (la más reciente).
         const existing = normalesActivosMes.get(fijo.chainId);
         if (!existing || fijo.startMonth > existing.startMonth) {
           normalesActivosMes.set(fijo.chainId, {
@@ -330,27 +346,20 @@ export class MovementsService {
         }
       }
 
-      // Procesar calculados (Fase 1.1.7)
-      for (const calc of calculadosForAnnual) {
+      // Procesar calculados de fijo (Fase 1.1.7)
+      for (const calc of calculadosDeFijoAnual) {
         if (filterSet !== null && !filterSet.has(calc.categoryId)) continue;
 
-        // Verificar rango propio del calculado (startMonth/deletedFrom).
-        // NO se aplica isOnFrequency al calculado: su presencia está gate-ada
-        // enteramente por el origen (normalesActivosMes). Aplicar isOnFrequency
-        // con el startMonth del calculado puede causar desalineamiento con el
-        // origen cuando la frecuencia tiene step > 1 y el startMonth del
-        // calculado no está alineado con el del origen.
         const inRange =
           calc.startMonth <= mes &&
           (calc.deletedFrom === null || calc.deletedFrom > mes);
         if (!inRange) continue;
 
-        // El calculado hereda el gating y skip del origen
         const originData = calc.sourceChainId
           ? normalesActivosMes.get(calc.sourceChainId)
           : undefined;
-        if (!originData) continue; // origen no activo en este mes
-        if (originData.skipped) continue; // heredar skip del origen
+        if (!originData) continue;
+        if (originData.skipped) continue;
 
         const derivedAmount = applyFormula(
           originData.amountCents,
@@ -358,21 +367,100 @@ export class MovementsService {
           calc.formulaOperand!,
           calc.formulaSign!,
         );
-
-        // Derivar el type del signo del monto (RF-MCALC-003, RN-018):
-        // final < 0 → EXPENSE; final > 0 → INCOME; final == 0 → EXPENSE (convención de borde)
         const derivedType =
           derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
-
-        // RN-019: sumar la MAGNITUD (|amountCents|) al bucket del type derivado.
-        // El amountCents puede ser negativo (RN-018), pero los totales siempre suman
-        // magnitudes (nunca restan): un calculado EXPENSE de -2000 suma 2000 a expenseCents.
         const magnitude = Math.abs(derivedAmount);
 
         if (derivedType === MovementType.INCOME) {
           agg[i].incomeCents += magnitude;
         } else {
-          // EXPENSE: suma magnitud (no el valor firmado)
+          agg[i].expenseCents += magnitude;
+          const prev = agg[i].categoryExpense.get(calc.categoryId) ?? 0;
+          agg[i].categoryExpense.set(calc.categoryId, prev + magnitude);
+        }
+
+        if (!catMeta.has(calc.categoryId) && derivedType === MovementType.EXPENSE) {
+          catMeta.set(calc.categoryId, {
+            categoryId: calc.categoryId,
+            name: calc.categoryName,
+            color: calc.categoryColor,
+          });
+        }
+      }
+
+      // Procesar calculados de único (Fase 1.1.7.ext)
+      // El rango ya está autolimitado (1 mes), así que el inRange garantiza que solo aparece
+      // en el mes del único. No hay skip (los únicos no tienen skip).
+      for (const calc of calculadosDeUnicoAnual) {
+        if (filterSet !== null && !filterSet.has(calc.categoryId)) continue;
+
+        const inRange =
+          calc.startMonth <= mes &&
+          (calc.deletedFrom === null || calc.deletedFrom > mes);
+        if (!inRange) continue;
+
+        const txData = calc.sourceMovementId ? txAnualMap.get(calc.sourceMovementId) : undefined;
+        if (!txData) continue;
+
+        const derivedAmount = applyFormula(
+          txData.amountCents,
+          calc.formulaOperator as FormulaOperator,
+          calc.formulaOperand!,
+          calc.formulaSign!,
+        );
+        const derivedType =
+          derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
+        const magnitude = Math.abs(derivedAmount);
+
+        if (derivedType === MovementType.INCOME) {
+          agg[i].incomeCents += magnitude;
+        } else {
+          agg[i].expenseCents += magnitude;
+          const prev = agg[i].categoryExpense.get(calc.categoryId) ?? 0;
+          agg[i].categoryExpense.set(calc.categoryId, prev + magnitude);
+        }
+
+        if (!catMeta.has(calc.categoryId) && derivedType === MovementType.EXPENSE) {
+          catMeta.set(calc.categoryId, {
+            categoryId: calc.categoryId,
+            name: calc.categoryName,
+            color: calc.categoryColor,
+          });
+        }
+      }
+
+      // Procesar calculados de cuota (Fase 1.1.7.ext)
+      // El rango on-the-fly del grupo limita los meses de aparición.
+      for (const calc of calculadosDeCuotaAnual) {
+        if (filterSet !== null && !filterSet.has(calc.categoryId)) continue;
+
+        const inRange =
+          calc.startMonth <= mes &&
+          (calc.deletedFrom === null || calc.deletedFrom > mes);
+        if (!inRange) continue;
+
+        const groupData = calc.sourceInstallmentGroupId
+          ? groupAnualMap.get(calc.sourceInstallmentGroupId)
+          : undefined;
+        if (!groupData) continue;
+
+        // Verificar límite on-the-fly del grupo
+        const endMonth = addMonths(groupData.startMonth, groupData.totalInstallments);
+        if (mes >= endMonth) continue;
+
+        const derivedAmount = applyFormula(
+          groupData.amountCents,
+          calc.formulaOperator as FormulaOperator,
+          calc.formulaOperand!,
+          calc.formulaSign!,
+        );
+        const derivedType =
+          derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
+        const magnitude = Math.abs(derivedAmount);
+
+        if (derivedType === MovementType.INCOME) {
+          agg[i].incomeCents += magnitude;
+        } else {
           agg[i].expenseCents += magnitude;
           const prev = agg[i].categoryExpense.get(calc.categoryId) ?? 0;
           agg[i].categoryExpense.set(calc.categoryId, prev + magnitude);

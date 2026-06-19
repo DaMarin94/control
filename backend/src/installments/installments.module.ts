@@ -3,6 +3,7 @@ import { InstallmentsController } from './installments.controller';
 import { InstallmentsService } from './installments.service';
 import { InstallmentsRepository } from './installments.repository';
 import { CategoriesModule } from '../categories/categories.module';
+import { RecurringModule } from '../recurring/recurring.module';
 
 /**
  * InstallmentsModule — CRUD de grupos de cuotas (RF-MC-001 a RF-MC-003).
@@ -13,6 +14,9 @@ import { CategoriesModule } from '../categories/categories.module';
  * Importa CategoriesModule para acceder a CategoryValidatorService (D3 — Fase 7):
  * la validación de categoría está consolidada en un servicio compartido.
  *
+ * Importa RecurringModule para acceder a RecurringService (endpoints de calculados
+ * derivados de cuotas: POST/PATCH /installments/:id/calculated — Fase 1.1.7.ext).
+ *
  * No existe GET /installments/:id — el front prefilea desde el MovementItem
  * de GET /movements, que ya trae installment.number, installment.total,
  * amountCents, categoryId, etc.
@@ -21,7 +25,7 @@ import { CategoriesModule } from '../categories/categories.module';
  * de cuotas sin tocar la tabla directamente (regla de propiedad de dominio).
  */
 @Module({
-  imports: [CategoriesModule],
+  imports: [CategoriesModule, RecurringModule],
   controllers: [InstallmentsController],
   providers: [InstallmentsService, InstallmentsRepository],
   exports: [InstallmentsService],

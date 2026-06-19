@@ -12,6 +12,9 @@ import {
 import { InstallmentsService } from './installments.service';
 import { CreateInstallmentDto } from './dto/create-installment.dto';
 import { UpdateInstallmentDto } from './dto/update-installment.dto';
+import { RecurringService } from '../recurring/recurring.service';
+import { CreateCalculatedFromInstallmentDto } from '../recurring/dto/create-calculated-from-installment.dto';
+import { UpdateCalculatedFromInstallmentDto } from '../recurring/dto/update-calculated-from-installment.dto';
 
 interface AuthRequest extends Request {
   user: { userId: string };
@@ -29,7 +32,10 @@ interface AuthRequest extends Request {
  */
 @Controller('installments')
 export class InstallmentsController {
-  constructor(private readonly installmentsService: InstallmentsService) {}
+  constructor(
+    private readonly installmentsService: InstallmentsService,
+    private readonly recurringService: RecurringService,
+  ) {}
 
   /**
    * POST /installments
@@ -65,10 +71,54 @@ export class InstallmentsController {
    * Hard delete permanente del grupo completo (RF-MC-002).
    * Elimina todas las instancias (pasadas y futuras).
    * 204 No Content. 404 si no existe o no es del usuario.
+   * Nota: el calculado vinculado (si existe) se elimina automáticamente por onDelete:Cascade en DB.
    */
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Request() req: AuthRequest, @Param('id') id: string) {
     return this.installmentsService.remove(req.user.userId, id);
+  }
+
+  /**
+   * POST /installments/:id/calculated
+   * Crea un movimiento calculado derivado del InstallmentGroup con id = :id (Fase 1.1.7.ext).
+   *
+   * El calculado aparece en cada mes del grupo (rango = rango del grupo).
+   * Deriva del monto por cuota (amountCents del InstallmentGroup).
+   *
+   * 201 + sobre con Recurring del calculado.
+   * 400 si operando=0 para DIV o PCT.
+   * 400 si la categoría es inválida.
+   * 404 si el InstallmentGroup no existe o no es del usuario.
+   */
+  @Post(':id/calculated')
+  @HttpCode(HttpStatus.CREATED)
+  createCalculated(
+    @Request() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() dto: CreateCalculatedFromInstallmentDto,
+  ) {
+    return this.recurringService.createCalculatedFromInstallment(req.user.userId, id, dto);
+  }
+
+  /**
+   * PATCH /installments/:id/calculated
+   * Edita el movimiento calculado derivado del InstallmentGroup con id = :id (Fase 1.1.7.ext).
+   *
+   * Edición in-place siempre (sin split).
+   *
+   * 200 + sobre con Recurring actualizado.
+   * 400 si operando=0 para DIV o PCT.
+   * 400 si la categoría es inválida.
+   * 404 si el InstallmentGroup no existe o no es del usuario.
+   * 404 si no existe calculado vinculado a ese InstallmentGroup.
+   */
+  @Patch(':id/calculated')
+  updateCalculated(
+    @Request() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() dto: UpdateCalculatedFromInstallmentDto,
+  ) {
+    return this.recurringService.updateCalculatedFromInstallment(req.user.userId, id, dto);
   }
 }

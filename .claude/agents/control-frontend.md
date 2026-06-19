@@ -178,13 +178,14 @@ Re-estilado de todas las pantallas y modales con los tokens del DS y migración 
 - **`MOVEMENTS_QUERY_KEY` cambió de aridad:** ahora `(month, categoriesKey = null) => ["movements", month, categoriesKey]`. Las **invalidaciones por prefijo `["movements"]`** (use-recurring, use-installments) **siguen funcionando** — no las rompas al tocar la key.
 - **Persistencia del filtro de `/mes` vía `usePreferences`, clave `monthCategoryFilter`** (mismo patrón optimista que `monthSections`: estado local inmediato + `setPreferences` en background, mandar el blob completo). Es **por pantalla, no por mes**: la selección se conserva al navegar de mes. Default todas (`null`). El filtro del dashboard es **efímero** (estado local, no toca esta clave); el de reportes vive en `reports`.
 
-### Movimientos calculados (detalle en `docs/frontend.md`, §Movimientos calculados) — Fase 1.1.7, RF-MCALC-001..007
+### Movimientos calculados (detalle en `docs/frontend.md`, §Movimientos calculados) — Fase 1.1.7 / 1.1.8, RF-MCALC-001..010
 
-- **El calculado NO elige tipo: se deriva del signo+monto final** (`>0 → INCOME`, `≤0 → EXPENSE`). El form (`calculated-form.tsx`) **no tiene** selector Gasto/Ingreso; tiene operador + operando + signo + preview en vivo con badge de tipo derivado. **No enviar `type`** en ningún body.
-- **Creación SOLO desde la acción "crear movimiento desde este"** (kebab, ícono `Calculator`) sobre un ítem **fijo no calculado** en `/mes`. No hay tab "calculado" en el modal de carga; no inventarlo.
+- **Enrutar SIEMPRE por `calculated.sourceType`** (`fijo` | `unico` | `cuota`) — NO asumir fijo (1.1.8). `sourceChainId` puede ser **null** (lo es en único/cuota). `useCalculated` elige el endpoint por `sourceType`: `fijo` → `/recurring`, `unico` → `/transactions`, `cuota` → `/installments` (POST y PATCH); el borrado reutiliza `deleteRecurring` (`DELETE /recurring/:id`) en los tres.
+- **El calculado NO elige tipo: se deriva del signo+monto final** (`>0 → INCOME`, `≤0 → EXPENSE`). El form (`calculated-form.tsx`) **no tiene** selector Gasto/Ingreso; tiene operador + operando + signo + preview en vivo con badge de tipo derivado. **No enviar `type`** en ningún body. `CreateCalculatedRequest` lleva `startMonth` solo para origen fijo (único/cuota lo derivan en el backend).
+- **Creación SOLO desde la acción "crear movimiento desde este"** (kebab) sobre un ítem **no calculado** (fijo, único o cuota) en `/mes`. No aparece sobre un ítem que ya es calculado. No hay tab "calculado" en el modal de carga; no inventarlo. Ícono en `docs/design.md`.
 - **Operando escalado** al enviar (ADD/SUB `×100`, MUL/DIV `×1_000_000`, PCT `×100`); desescalar al editar. Misma escala que el backend (`docs/data-model.md`, §Escalado del operando).
-- **Editar un calculado va SIEMPRE por `useCalculated.updateCalculated`** (`PATCH /recurring/:id/calculated`): `PATCH /recurring/:id` rechaza calculados con `400`. Borrado reutiliza `deleteRecurring`. Invalidar `["movements"]` por prefijo.
-- **Padre/hijo:** chip "Calculado" + "desde {Origen}" si es hijo (`movement.calculated`), `GitBranch` si es padre (`hasCalculated`), callout en el diálogo de borrado si `hasCalculated`.
+- **Borrado por `sourceType`:** fijo → `DeleteRecurringDialog` con opciones de mes (boundary); único/cuota → `variant="calculated-simple"`, confirmación directa (borrado total, RF-MCALC-009). Editar va SIEMPRE por `useCalculated.updateCalculated`; invalidar `["movements"]` por prefijo.
+- **Padre/hijo:** chip de calculado + "desde {Origen}" si es hijo (`movement.calculated`), indicador de padre si `hasCalculated`, callout en el diálogo de borrado si `hasCalculated`. Detalle visual en `docs/design.md`.
 
 ### 1. Build
 Correr el build del frontend y corregir cualquier error de TypeScript antes de reportar listo.

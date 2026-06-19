@@ -903,3 +903,89 @@ Ninguna bloquea la implementación visual del grueso del spec, pero conviene con
 3. **Default del operador (3.2):** propuse **`%`** como default (caso de uso típico). Si producto prefiere otro (ej. `×`), se ajusta — es una preferencia de diseño, no una regla.
 4. **Total de sección que pueda volverse negativo (1.c / RN-019):** si por RN-019 un **subtotal de sección o un total del mes** puede dar negativo y eso necesita una decisión visual propia (cómo se presenta un subtotal de Fijos negativo), excede esta fila y habría que speccearlo aparte. Esta spec resuelve el **monto de fila** negativo; los totales conservan su lenguaje actual salvo aviso.
 5. **Frecuencia heredada como dato en el form (3.0):** no agregué un bloque "Frecuencia" read-only en el form del calculado (la hereda del origen y no es editable). Si producto lo quiere visible, es una adición menor — no la asumí.
+
+---
+
+## Calculados de único y cuota — spec visual (Fase 1.1.8, 2026-06-18)
+
+> Extiende la Fase 1.1.7. Hasta 1.1.7 el origen de un calculado era siempre un **fijo** y el calculado vivía en la sección **Fijos**. Ahora el origen también puede ser un **gasto único** o una **cuota**, y el calculado se lista **en la sección de su origen**: calculado de único → **Únicos**, calculado de cuota → **Cuotas** (RF funcional ya cerrado por el analista). Esta spec define **cómo se ve** el calculado dentro de esas dos secciones. **No introduce tokens, chips ni glifos nuevos:** reutiliza **íntegro** el lenguaje de relación padre/hijo de 1.1.7 (chip "Calculado" + `Link2`, "desde {Origen}", marca padre `GitBranch`) y la regla de monto negativo/cero (1.7.c). Toca un solo archivo de render: `movement-item-row.tsx`.
+>
+> **Restricción dura:** el look vigente de las filas de Único y de Cuota **se mantiene**; esta spec **agrega** los indicadores padre/hijo a esas filas (que hoy solo los tenían los fijos) y aclara dos diferencias de columna heredadas del origen. Todo lo no mencionado queda como está.
+>
+> **Premisa de reuso:** los indicadores de 1.1.7 ya están construidos como **segmentos de sublínea neutros**, ortogonales al `origin` del ítem. La única razón por la que hoy no aparecen en único/cuota es que el código los gateaba detrás de `isFijo`. Visualmente, **el chip "Calculado", el "desde {Origen}" y la marca padre `GitBranch` son idénticos en las tres secciones** — un calculado se ve igual sea cual sea su origen; lo único que cambia entre secciones es la **columna 3** (fecha vs. "X/N" vs. vacío) y el segmento de **frecuencia** (solo en origen fijo). El front debe **dejar de condicionar los indicadores a `isFijo`** y condicionarlos a `isCalculated` / `hasCalculated`, que ya existen en el contrato (`MovementItem.calculated`, `MovementItem.hasCalculated`).
+
+### 1. Chip/marca padre→hijo del calculado dentro de la fila de Único y de Cuota
+
+**Reuso exacto de 1.1.7 — sin diferencias de estilo.** El **hijo** (ítem que es un calculado) muestra en su sublínea, sin importar la sección:
+
+- **Chip "Calculado"** como **primer segmento** de la sublínea: chip neutro `--panel-3` / texto `--muted`, radio `--r-chip` (7px), 11px·600·`letter-spacing .04em`, padding `1px 7px`, con mini-glifo lucide **`Link2`** (11px, `--muted`) a su izquierda. **Idéntico** al de 1.1.7. (Si además está anulado —solo posible si el calculado es de origen fijo, ver más abajo— el chip "Anulado" va primero: `[Anulado] [Calculado] …`.)
+- **Segmento "desde {Origen}"** como **último segmento** de la sublínea: `--muted` 12.5px (rol *Meta/subtítulos*), **"desde"** en `--muted` y el nombre del origen en `--ink-2`, sin mono, con truncado por elipsis. Igual a 1.1.7. El nombre del origen lo provee `movement.calculated.sourceDescription`; si es `null`, el chip "Calculado" solo basta (igual que en 1.1.7).
+- El **ícono** de columna 1 (tintado por tipo), el **nombre** (columna 2, línea principal), el **monto** (columna 4) y el **hover/kebab** del ítem **no cambian** respecto de cualquier único/cuota normal.
+
+**Diferencia por sección — segmento de frecuencia (`Repeat`):** el segmento de frecuencia (`Repeat` 12px + etiqueta "mensual/bimestral/…") **es exclusivo del origen fijo** y **no** aparece en calculados de único ni de cuota. La sublínea del hijo de único/cuota queda:
+
+```
+[Calculado] Categoría · gasto · desde Alquiler
+```
+
+(versus la del hijo de fijo, que sí lleva frecuencia: `[Calculado] Categoría · gasto · 🔁 mensual · desde Sueldo`). El front debe gatear el segmento de frecuencia por `isFijo` (como hoy), **independientemente** de si es calculado — un calculado de único no es fijo, no lleva frecuencia.
+
+### 2. Marca en el ítem ORIGEN (único/cuota) que tiene ≥1 calculado derivado
+
+**Reuso exacto de la marca padre de 1.1.7.** Un **único** o una **cuota** que tiene al menos un calculado derivado (`hasCalculated === true`) muestra, como **último segmento** de su sublínea, la marca padre liviana: glifo lucide **`GitBranch`** (13px, `--muted`), con `title` nativo *"Tiene movimiento(s) calculado(s)"* (y contador mono tabular pegado al glifo si el backend expone el conteo y es >1; mientras el contrato solo dé el booleano, va solo el glifo). **Idéntica** a la del fijo padre.
+
+- **Cambio de gating:** hoy `isParent` está calculado como `isFijo && !isCalculated && movement.hasCalculated`. Debe pasar a **`!isCalculated && movement.hasCalculated`** (un calculado nunca es padre, RF-MCALC-001; pero el padre puede ser único, cuota o fijo). El front no debe condicionar la marca padre a `isFijo`.
+- Es la **señal más liviana** del par (info secundaria), igual que en 1.1.7: no cambia ícono, color ni monto del origen; solo suma el segmento `GitBranch` al final de la sublínea.
+- **Orden de la sublínea del origen** según su sección: único → `Categoría · gasto · ⎇GitBranch`; cuota → `Categoría · gasto · ⎇GitBranch` (la cuota no lleva frecuencia; su "X/N" va en columna 3, no en la sublínea). El `GitBranch` siempre **al final**.
+
+### 3. El calculado de cuota se ve SIN la etiqueta "X/N"
+
+**Confirmado y explícito:** el calculado de cuota **no** muestra la etiqueta **"Cuota X/N"** en la columna 3. Es un **movimiento propio** que se lista en la sección Cuotas por afinidad de origen, pero **no integra el plan de cuotas** del origen (no tiene número de cuota propio). Por contrato, un calculado tiene `installment === null` (no es una cuota del grupo), así que la columna 3 **queda vacía**, igual que la de un fijo.
+
+- **Cómo queda la fila del calculado de cuota respecto de una cuota normal:**
+
+  | Elemento | Cuota normal | Calculado (en sección Cuotas) |
+  |---|---|---|
+  | Columna 1 (ícono por tipo) | igual | igual |
+  | Columna 2 — nombre | igual | igual |
+  | Columna 2 — sublínea | `Categoría · gasto` | `[Calculado] Categoría · gasto · desde {Origen}` |
+  | **Columna 3** | **`Cuota X/N`** (mono, `--muted`) | **vacía** |
+  | Columna 4 — monto | `−$…` / `+$…`, color por tipo | `−$…` / `$0,00` / `$…`, color por tipo (regla 1.7.c) |
+
+- La **ausencia de "X/N"** (columna 3 vacía) + el **chip "Calculado"** en la sublínea son juntos la señal inequívoca de que esa fila, dentro de Cuotas, **no** es una cuota del plan sino un derivado. No se agrega ninguna marca extra para diferenciarla: el chip "Calculado" + columna 3 vacía ya distinguen sin ruido.
+- El front condiciona la columna 3 de "X/N" por `isCuota && movement.installment` (como hoy): un calculado tiene `installment === null`, por lo que **naturalmente** no renderiza "X/N" sin lógica adicional. La spec solo confirma que ese comportamiento es el correcto y deseado.
+
+### 4. Orden dentro de la sección y posición del calculado respecto de su origen
+
+- **Mismo criterio único de orden que el resto: magnitud `|amountCents| DESC`.** El backend ordena cada sección por valor absoluto del monto descendente, **mezclando** calculados y no-calculados (un calculado puede ser negativo; se ordena por su magnitud). El calculado **cae donde su magnitud lo ubique** dentro de su sección.
+- **El calculado NO se ancla ni se agrupa junto a su origen.** No hay sangría, ni bloque anidado, ni "hijo debajo del padre": el vínculo se comunica **solo** por el chip "Calculado" + "desde {Origen}" en la sublínea del hijo y la marca `GitBranch` en el padre. Un calculado de magnitud chica puede quedar al fondo de la sección y su origen arriba, o viceversa — es esperado y correcto. (Esto preserva el orden por relevancia/monto del producto; el agrupamiento padre-hijo sería un lenguaje nuevo no pedido.)
+- Esto vale igual en las tres secciones (Únicos, Cuotas, Fijos): el orden es por magnitud, plano, sin tratamiento especial para calculados.
+
+### 5. Estados: monto negativo y monto cero del calculado (reuso de 1.7.c)
+
+**Sin cambios respecto de 1.1.7** — la regla del signo es transversal al origen:
+
+- **Monto negativo:** prefijo `−` (signo menos `U+2212`) antes del símbolo de moneda — **`−$1.234,56`** — mono tabular, rol *Monto en fila* (15.5px/600). **El color lo da el TIPO, no el signo:** un calculado de tipo gasto con monto negativo sigue en color de gasto; el `−` hereda el color del monto. Nunca se recolorea por signo (regla dura 1). Vale igual sea el origen único, cuota o fijo.
+- **Monto cero:** **`$0,00`** (sin signo), mono tabular, color por tipo. Sin tratamiento especial (no se atenúa ni se marca distinto): es un monto válido que no suma.
+- **Atenuación por anulado:** solo aplica a calculados de **origen fijo** (el estado anulado/`skipped` es exclusivo de fijos; únicos y cuotas no se anulan). Un calculado de único o cuota nunca está `skipped`, por lo que su fila nunca lleva opacidad 0.55 + tachado + chip "Anulado". No hay caso nuevo que speccear aquí.
+
+### 6. Convivencia con las reglas duras
+
+- **Regla dura 1:** el color del monto del calculado lo da siempre el **tipo** (derivado del signo del monto final, RF-MCALC-003), nunca el signo del valor — idéntico en las tres secciones. El `−` marca el negativo; no recolorea.
+- **Regla dura 2:** los indicadores padre/hijo son **neutros** (`--panel-3` / `--muted`); ningún acento índigo aparece sobre el ítem ni el monto.
+- **Regla dura 3:** el monto (incluido el negativo/cero) va en mono tabular; el contador de derivados (si aparece) va en mono. El chip "Calculado" y "desde {Origen}" son texto, no cifras.
+
+### 7. Resumen de cambios para el front (delta sobre `movement-item-row.tsx`)
+
+1. `isParent`: cambiar de `isFijo && !isCalculated && hasCalculated` → **`!isCalculated && movement.hasCalculated`** (la marca padre `GitBranch` ahora aplica también a único y cuota).
+2. El **chip "Calculado" + `Link2`** y el **segmento "desde {Origen}"** ya no deben depender de que el ítem sea fijo: dependen de `isCalculated` (que ya es independiente de `origin`). Si hoy hay algún gating implícito por sección, removerlo.
+3. El segmento de **frecuencia (`Repeat`)** sigue gateado por `isFijo` (un calculado de único/cuota no lleva frecuencia).
+4. **Columna 3:** sin cambios de lógica — un calculado tiene `installment === null`, por lo que la cuota "X/N" no se renderiza para él de forma natural; confirmar que la fila del calculado en Cuotas deja la columna 3 vacía.
+5. **Sin tokens, chips ni glifos nuevos.** Reutiliza todo lo de 1.1.7.
+
+### 8. Dudas para el orquestador
+
+Ninguna bloquea la implementación; conviene confirmar con el analista (no son decisiones visuales):
+
+1. **Acción "Crear movimiento desde este" en el kebab de único/cuota:** la Fase 1.1.7 limitó esa acción a **fijos no calculados**. Esta fase amplía los **orígenes** posibles a único/cuota — lo que implica que el kebab de un **único** y de una **cuota** debería ahora ofrecer "Crear movimiento desde este" (para que existan calculados de ese origen). Eso es **comportamiento funcional** (qué ítems pueden ser origen), no visual: el ítem de menú ya tiene su spec visual cerrada en 1.1.7 (label "Crear movimiento desde este", ícono `Calculator` 15px, neutro, antes de "Eliminar"); solo cambia **en qué tipos de ítem aparece**. **Reportado al orquestador** para que el analista confirme/derive — el front no debe asumir que lo habilita por su cuenta.
+2. **`skipped` en calculados de origen único/cuota:** asumo que un calculado de único/cuota **nunca** está `skipped` (únicos/cuotas no se anulan). Si por RF-MCALC-005 un calculado heredara una anulación aun con origen no-fijo, habría que revisar — pero por el contrato actual (`skipped` solo true en fijos) no hay caso. Confirmar si el backend pudiera marcar `skipped` en estos calculados.

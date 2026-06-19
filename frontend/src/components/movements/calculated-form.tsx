@@ -27,6 +27,8 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Repeat,
+  Receipt,
+  CreditCard,
   Info,
   AlertTriangle,
   Check,
@@ -49,7 +51,7 @@ import { formatCurrency, getCurrentMonth } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/logger";
 
-/** Etiqueta en minúscula por valor de frecuencia (para la caja de origen) */
+/** Etiqueta en minúscula por valor de frecuencia (para la caja de origen fijo) */
 const FREQUENCY_LABEL_LOWER: Record<RecurringFrequency, string> = {
   MONTHLY: "mensual",
   BIMONTHLY: "bimestral",
@@ -57,6 +59,15 @@ const FREQUENCY_LABEL_LOWER: Record<RecurringFrequency, string> = {
   BIANNUAL: "semestral",
   ANNUAL: "anual",
 };
+
+/** Etiqueta de tipo de origen para la caja de origen read-only */
+function getOriginTypeLabel(origin: "fijo" | "unico" | "cuota"): string {
+  switch (origin) {
+    case "fijo": return "fijo";
+    case "unico": return "único";
+    case "cuota": return "cuota";
+  }
+}
 
 const logger = createLogger("CalculatedForm");
 
@@ -232,21 +243,26 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
 
   // ── Datos del origen para el form ─────────────────────────────────────────
 
-  // En crear: movement ES el origen (fijo padre).
+  // En crear: movement ES el origen (fijo, único o cuota padre).
   // En editar: movement ES el calculado (tiene .calculated con los datos de la fórmula).
   const calc = movement.calculated;
 
+  // Tipo de origen:
+  // - En crear: el origin del movement (el item de origen pasado).
+  // - En editar: el sourceType del calculado.
+  const sourceType: "fijo" | "unico" | "cuota" = isEditing
+    ? (calc?.sourceType ?? "fijo")
+    : (movement.origin as "fijo" | "unico" | "cuota");
+
   // Nombre descriptivo del origen
   const originName = isEditing
-    ? (calc?.sourceDescription ?? "Fijo de origen")
+    ? (calc?.sourceDescription ?? "Origen")
     : (movement.description ?? movement.category.name);
 
   // Monto del origen para el preview.
-  // En crear: el amountCents del ítem origen (el fijo padre que se pasa).
-  // En editar: el backend ahora expone calculated.sourceAmountCents (entero positivo
-  // en centavos del fijo de origen en el mes consultado). Lo usamos directamente.
-  // Si no está disponible (null/ausente), el preview muestra "—" sin romper el bloque
-  // (el spec indica que la omisión es aceptable cuando el dato no está disponible).
+  // En crear: el amountCents del ítem origen.
+  // En editar: el backend expone calculated.sourceAmountCents.
+  // Si no está disponible (null/ausente), el preview muestra "—".
   const originCents: number | null = isEditing
     ? (calc?.sourceAmountCents ?? null)
     : movement.amountCents;
@@ -385,17 +401,22 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
     if (isNaN(userOpFloat)) return;
 
     const scaledOperand = scaleOperand(userOpFloat, data.operator);
-    const sign = data.sign === "1" ? 1 : -1;
+    const sign: 1 | -1 = data.sign === "1" ? 1 : -1;
 
     if (isEditing) {
-      const result = await updateCalculated(movement.id, {
-        currentMonth: viewMonth ?? getCurrentMonth(),
-        categoryId: data.categoryId,
-        description: data.description || null,
-        formulaOperator: data.operator,
-        formulaOperand: scaledOperand,
-        formulaSign: sign,
-      });
+      // En edición el id del movimiento calculado + el sourceType del calculado
+      const result = await updateCalculated(
+        movement.id,
+        {
+          currentMonth: viewMonth ?? getCurrentMonth(),
+          categoryId: data.categoryId,
+          description: data.description || null,
+          formulaOperator: data.operator,
+          formulaOperand: scaledOperand,
+          formulaSign: sign,
+        },
+        sourceType,
+      );
 
       if (!result.success) {
         toast.error(result.error ?? "No se pudo guardar el movimiento.");
@@ -406,14 +427,26 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
       onClose();
     } else {
       // sourceId: en crear, movement ES el origen → su id
-      const result = await createCalculated(movement.id, {
-        categoryId: data.categoryId,
-        startMonth: viewMonth ?? getCurrentMonth(),
-        formulaOperator: data.operator,
-        formulaOperand: scaledOperand,
-        formulaSign: sign,
-        description: data.description || undefined,
-      });
+      // Solo para fijos se incluye startMonth en el body (contrato Fase 1.1.8)
+      const createData =
+        sourceType === "fijo"
+          ? {
+              categoryId: data.categoryId,
+              startMonth: viewMonth ?? getCurrentMonth(),
+              formulaOperator: data.operator,
+              formulaOperand: scaledOperand,
+              formulaSign: sign,
+              description: data.description || undefined,
+            }
+          : {
+              categoryId: data.categoryId,
+              formulaOperator: data.operator,
+              formulaOperand: scaledOperand,
+              formulaSign: sign,
+              description: data.description || undefined,
+            };
+
+      const result = await createCalculated(movement.id, createData, sourceType);
 
       if (!result.success) {
         toast.error(result.error ?? "No se pudo guardar el movimiento.");
@@ -443,16 +476,27 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
               Origen
             </Label>
             <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px]">
-              <Repeat size={15} className="text-accent-ink shrink-0" aria-hidden="true" />
+              {/* Ícono de tipo de origen: Repeat solo para fijos (Fase 1.1.8) */}
+              {sourceType === "fijo" && (
+                <Repeat size={15} className="text-accent-ink shrink-0" aria-hidden="true" />
+              )}
+              {sourceType === "unico" && (
+                <Receipt size={15} className="text-accent-ink shrink-0" aria-hidden="true" />
+              )}
+              {sourceType === "cuota" && (
+                <CreditCard size={15} className="text-accent-ink shrink-0" aria-hidden="true" />
+              )}
               <span className="text-[14px] font-semibold text-ink-2 flex-1 min-w-0 truncate">
                 {originName}
               </span>
               <span className="text-[12.5px] text-muted shrink-0 whitespace-nowrap">
                 {movement.type === "EXPENSE" ? "gasto" : "ingreso"}
                 {" · "}
-                {movement.frequency
-                  ? (FREQUENCY_LABEL_LOWER[movement.frequency] ?? "mensual")
-                  : "mensual"}
+                {sourceType === "fijo"
+                  ? (movement.frequency
+                      ? (FREQUENCY_LABEL_LOWER[movement.frequency] ?? "mensual")
+                      : "mensual")
+                  : getOriginTypeLabel(sourceType)}
               </span>
               {originCents !== null && (
                 <span className="text-[12.5px] text-muted mono shrink-0 ml-2">
@@ -464,7 +508,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
             {!isEditing && (
               <div className="flex items-center gap-[7px] pt-[2px] text-[12.5px] text-muted">
                 <Info size={14} className="text-accent-ink shrink-0" aria-hidden="true" />
-                El monto se calcula a partir de este movimiento, mes a mes.
+                El monto se calcula a partir de este movimiento.
               </div>
             )}
           </div>

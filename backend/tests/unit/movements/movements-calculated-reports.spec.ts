@@ -28,6 +28,9 @@ const mockRepo = {
   getAllFijosForAnnual: jest.fn(),
   getAllCuotasForAnnual: jest.fn(),
   getEarliestYear: jest.fn(),
+  // Fase 1.1.7.ext — lookups de origen para calculados de único y cuota
+  findTransactionsByIds: jest.fn().mockResolvedValue([]),
+  findInstallmentGroupsByIds: jest.fn().mockResolvedValue([]),
 };
 
 const mockLogger = {
@@ -55,6 +58,8 @@ function makeOriginFijo(overrides: Partial<RecurringForAnnual> = {}): RecurringF
     categoryScope: 'EXPENSE',
     chainId: ORIGIN_CHAIN_ID,
     sourceChainId: null,
+    sourceMovementId: null,
+    sourceInstallmentGroupId: null,
     formulaOperator: null,
     formulaOperand: null,
     formulaSign: null,
@@ -77,6 +82,8 @@ function makeCalcFijo(overrides: Partial<RecurringForAnnual> = {}): RecurringFor
     categoryScope: 'EXPENSE',
     chainId: CALC_CHAIN_ID,
     sourceChainId: ORIGIN_CHAIN_ID,
+    sourceMovementId: null,
+    sourceInstallmentGroupId: null,
     formulaOperator: FormulaOperator.PCT,
     formulaOperand: 1000, // 10%
     formulaSign: 1,

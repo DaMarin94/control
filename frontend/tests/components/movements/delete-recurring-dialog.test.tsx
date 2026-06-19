@@ -1,6 +1,8 @@
 /**
- * Tests del diálogo de eliminación de movimiento fijo (RF-MF-004).
- * Verifica:
+ * Tests del diálogo de eliminación de movimiento fijo (RF-MF-004) y
+ * de la variante "calculated-simple" para calculados de único/cuota (Fase 1.1.8).
+ *
+ * Variante "fijo" (default) — verifica:
  * - Renderizado del título, descripción y monto.
  * - No hay checkbox (la confirmación no ofrece opciones — RF-MF-004).
  * - Siempre llama deleteRecurring con fromCurrentMonth=true.
@@ -8,6 +10,11 @@
  * - Toast de confirmación tras eliminar.
  * - Cancelar no elimina.
  * - Manejo de error del backend.
+ *
+ * Variante "calculated-simple" — verifica:
+ * - Título "Eliminar movimiento calculado".
+ * - Copy directo sin texto de recurrencia ("desde este mes en adelante").
+ * - Llama deleteRecurring con fromCurrentMonth=true y viewMonth como currentMonth.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -57,18 +64,55 @@ const mockFijoMovement: MovementItem = {
   hasCalculated: false,
 };
 
+/** Calculado de origen único — fixture para la variante calculated-simple */
+const mockCalculatedUnicoMovement: MovementItem = {
+  id: "calc-unico-1",
+  origin: "unico",
+  type: "EXPENSE",
+  amountCents: 5000,
+  description: "Calculado de almuerzo",
+  occurredAt: "2026-06-17T17:30:00.000Z",
+  timezone: "America/Argentina/Buenos_Aires",
+  installment: null,
+  frequency: null,
+  skipped: false,
+  category: {
+    id: "cat-2",
+    name: "Alimentación",
+    color: "#33FF57",
+    scope: "EXPENSE",
+  },
+  calculated: {
+    sourceType: "unico",
+    sourceId: "mov-1",
+    sourceChainId: null,
+    sourceDescription: "Almuerzo en el trabajo",
+    formulaOperator: "PCT",
+    formulaOperand: 1000,
+    formulaSign: 1,
+    sourceAmountCents: 50000,
+  },
+  hasCalculated: false,
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function renderDialog(props: {
   movement?: MovementItem;
   onClose?: () => void;
   viewMonth?: string;
+  variant?: "fijo" | "calculated-simple";
 }) {
   const onClose = props.onClose ?? vi.fn();
   const movement = props.movement ?? mockFijoMovement;
   return render(
     <ToastProvider>
-      <DeleteRecurringDialog movement={movement} onClose={onClose} viewMonth={props.viewMonth} />
+      <DeleteRecurringDialog
+        movement={movement}
+        onClose={onClose}
+        viewMonth={props.viewMonth}
+        variant={props.variant}
+      />
     </ToastProvider>,
   );
 }
@@ -238,5 +282,129 @@ describe("DeleteRecurringDialog", () => {
       expect(mockDeleteRecurring).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();
     });
+  });
+});
+
+// ─── Variante calculated-simple (calculados de único/cuota) ──────────────────
+
+describe("DeleteRecurringDialog — variante calculated-simple", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockUseRecurring.mockReturnValue({
+      createRecurring: vi.fn(),
+      updateRecurring: vi.fn(),
+      deleteRecurring: mockDeleteRecurring,
+      skipRecurring: vi.fn(),
+      isCreating: false,
+      isUpdating: false,
+      isDeleting: false,
+      isSkipping: false,
+    });
+  });
+
+  it("muestra el título 'Eliminar movimiento calculado'", () => {
+    renderDialog({
+      movement: mockCalculatedUnicoMovement,
+      variant: "calculated-simple",
+    });
+    expect(screen.getByRole("heading", { name: /eliminar movimiento calculado/i })).toBeInTheDocument();
+  });
+
+  it("NO muestra el título 'Eliminar movimiento fijo'", () => {
+    renderDialog({
+      movement: mockCalculatedUnicoMovement,
+      variant: "calculated-simple",
+    });
+    expect(screen.queryByRole("heading", { name: /eliminar movimiento fijo/i })).not.toBeInTheDocument();
+  });
+
+  it("muestra el copy de confirmación directa", () => {
+    renderDialog({
+      movement: mockCalculatedUnicoMovement,
+      variant: "calculated-simple",
+    });
+    expect(screen.getByText(/estás seguro de que querés eliminar este movimiento calculado/i)).toBeInTheDocument();
+  });
+
+  it("NO muestra copy de recurrencia ('desde este mes en adelante')", () => {
+    renderDialog({
+      movement: mockCalculatedUnicoMovement,
+      variant: "calculated-simple",
+    });
+    expect(screen.queryByText(/desde este mes en adelante/i)).not.toBeInTheDocument();
+  });
+
+  it("NO muestra copy de meses anteriores ('meses anteriores no se modifican')", () => {
+    renderDialog({
+      movement: mockCalculatedUnicoMovement,
+      variant: "calculated-simple",
+    });
+    expect(screen.queryByText(/meses anteriores no se modifican/i)).not.toBeInTheDocument();
+  });
+
+  it("muestra descripción y monto del movimiento", () => {
+    renderDialog({
+      movement: mockCalculatedUnicoMovement,
+      variant: "calculated-simple",
+    });
+    expect(screen.getByText("Calculado de almuerzo")).toBeInTheDocument();
+    // 5000 centavos = $50,00
+    expect(screen.getByText(/50,00/)).toBeInTheDocument();
+  });
+
+  it("no hay checkbox", () => {
+    renderDialog({
+      movement: mockCalculatedUnicoMovement,
+      variant: "calculated-simple",
+    });
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("llama a deleteRecurring con fromCurrentMonth=true y viewMonth como currentMonth", async () => {
+    mockDeleteRecurring.mockResolvedValue({ success: true });
+    const onClose = vi.fn();
+    renderDialog({
+      movement: mockCalculatedUnicoMovement,
+      onClose,
+      viewMonth: "2026-06",
+      variant: "calculated-simple",
+    });
+
+    const confirmBtn = screen.getByRole("button", { name: /eliminar/i });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(mockDeleteRecurring).toHaveBeenCalledWith(
+        "calc-unico-1",
+        expect.objectContaining({ currentMonth: "2026-06", fromCurrentMonth: true }),
+      );
+    });
+  });
+
+  it("cancelar no llama a deleteRecurring", () => {
+    renderDialog({
+      movement: mockCalculatedUnicoMovement,
+      variant: "calculated-simple",
+    });
+
+    const cancelBtn = screen.getByRole("button", { name: /cancelar/i });
+    fireEvent.click(cancelBtn);
+
+    expect(mockDeleteRecurring).not.toHaveBeenCalled();
+  });
+
+  it("cancelar llama a onClose", () => {
+    const onClose = vi.fn();
+    renderDialog({
+      movement: mockCalculatedUnicoMovement,
+      onClose,
+      variant: "calculated-simple",
+    });
+
+    const cancelBtn = screen.getByRole("button", { name: /cancelar/i });
+    fireEvent.click(cancelBtn);
+
+    expect(onClose).toHaveBeenCalled();
   });
 });
