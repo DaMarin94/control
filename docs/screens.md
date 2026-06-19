@@ -124,7 +124,7 @@ Pantalla de inicio tras autenticarse. Da el panorama financiero del mes actual y
   - Balance del mes (ingresos − gastos), con el positivo y el negativo diferenciables.
   - Los totales incluyen movimientos únicos, fijos activos en el mes y cuotas que caen en el mes.
 - **Enlace "Ver todos"** (o equivalente) hacia la vista del mes (RF-DASH-005).
-- **Widget de reporte — Ingresos vs. Gastos** (pantalla 8, RF-REP-001/RF-REP-002), montado en **modo efímero** (RF-DASH-001): abre en el **año en curso** con la **navegación de año ACTIVA** e independiente (flechas embebidas) y el **filtro de categorías** activo. La selección de categorías y el año del widget **no se persisten** — al recargar vuelve a año en curso + todas las categorías. Muestra, por mes del año seleccionado, el total de ingresos y el total de gastos. El tipo Gastos por categoría (Forma 2) **no** aparece en el dashboard; vive solo en la pantalla `/reportes` (pantalla 7). Navegar el año o filtrar categorías en este widget **no afecta** el resumen financiero mensual de arriba, que sigue fijo en el mes en curso (RF-DASH-002).
+- **Widget de reporte — Ingresos vs. Gastos** (pantalla 8, RF-REP-001/RF-REP-002), montado en **modo efímero** (RF-DASH-001): abre en el **año en curso** con la **navegación de año ACTIVA** e independiente (flechas embebidas), el **filtro de categorías** activo y el **toggle de modo de vista** "Total / Por categoría" (RF-REP-006). El año, la selección de categorías y el modo de vista del widget **no se persisten** — al recargar vuelve a año en curso + todas las categorías + modo "Total". Muestra, por mes del año seleccionado, el total de ingresos y el total de gastos (o el desglose de gastos por categoría en modo "Por categoría"). El tipo Gastos por categoría (Forma 2) **no** aparece en el dashboard; vive solo en la pantalla `/reportes` (pantalla 7). Navegar el año, filtrar categorías o cambiar el modo de vista en este widget **no afecta** el resumen financiero mensual de arriba, que sigue fijo en el mes en curso (RF-DASH-002).
 
 No muestra lista de movimientos (decisión 2026-06-03, ex RF-DASH-004 fuera de alcance).
 
@@ -358,25 +358,29 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 - **Tipo de reporte** — `income-expense` (Forma 1) o `by-category` (Forma 2). Define qué visualización monta la instancia (RF-REP-001).
 - **Año a mostrar** — el año cuyos 12 meses se grafican. La navegación de año está **siempre embebida y activa** (flechas de 1.1.3), **independiente por instancia**.
 - **Categorías seleccionadas (filtro)** — subconjunto de categorías; default **todas**. El checklist embebido ofrece el **universo de categorías del usuario** (no solo las que tienen gasto), porque el filtro aplica también a la Forma 1. **Tres estados** (igual que el filtro de `/mes`, RF-VM-006): todas (default), subconjunto y **ninguna** (todas destildadas → serie en cero). *(Desde 1.1.6 destildar todas grafica la serie en cero; antes se colapsaba a "sin filtro".)*
-- **Modo de persistencia** — **persistido** (en `/reportes`: año y filtro se guardan en la clave `reports`, RF-REP-004) o **efímero** (en el Dashboard: año y filtro son de sesión, no se persisten — al recargar vuelve a año en curso + todas las categorías).
+- **Modo de vista (solo `income-expense`, RF-REP-006, Fase 1.2.2)** — toggle de dos opciones: **"Total"** (dos series agregadas, default) y **"Por categoría"** (el total de gastos descompuesto por categoría apilada; solo gastos). El tipo `by-category` **no** tiene este toggle. El modo de vista no cambia el año ni el filtro; el filtro de categorías aplica al desglose de gastos en "Por categoría". El detalle visual (dos tabs) lo define `control-design`.
+- **Modo de persistencia** — **persistido** (en `/reportes`: año, filtro **y modo de vista** se guardan en la clave `reports`, RF-REP-004/006) o **efímero** (en el Dashboard: año, filtro y modo de vista son de sesión, no se persisten — al recargar vuelve a año en curso + todas las categorías + modo "Total").
 
 ### Contenido
 
 - **Eje X:** los 12 meses del año configurado. **Eje Y:** monto.
-- **Tipo Ingresos vs. Gastos (Forma 1):** por cada mes, el total de ingresos y el total de gastos (cada total suma únicos + fijos activos + cuotas del mes, igual que RF-VM-002), **restringido a las categorías seleccionadas**.
-- **Tipo Gastos por categoría, apilado (Forma 2):** por cada mes, el total de gastos descompuesto en bandas apiladas por categoría —**solo las seleccionadas**—, cada banda con el color propio de su categoría (RF-CAT-005). Solo gastos; los ingresos no se descomponen acá.
+- **Tipo Ingresos vs. Gastos (Forma 1), modo "Total":** por cada mes, el total de ingresos y el total de gastos (cada total suma únicos + fijos activos + cuotas del mes, igual que RF-VM-002), **restringido a las categorías seleccionadas**.
+- **Tipo Ingresos vs. Gastos (Forma 1), modo "Por categoría" (RF-REP-006):** por cada mes, el total de gastos descompuesto en bandas apiladas por categoría —**solo las seleccionadas**—, cada banda con el color de su categoría (RF-CAT-005). **Solo desglosa gastos; los ingresos no se descomponen.** Reutiliza el mismo desglose de gastos que la Forma 2 (array `categories`).
+- **Tipo Gastos por categoría, apilado (Forma 2):** por cada mes, el total de gastos descompuesto en bandas apiladas por categoría —**solo las seleccionadas**—, cada banda con el color propio de su categoría (RF-CAT-005). Solo gastos; los ingresos no se descomponen acá. Este tipo **no** tiene toggle.
 - **Flechas de navegación de año** ‹ › embebidas en el recuadro.
 - **Filtro de categorías** embebido (checklist del universo de categorías del usuario; check/destildar).
+- **Selector de modo de vista** "Total / Por categoría" (dos tabs) — solo en el tipo `income-expense` (RF-REP-006). El detalle visual lo define `control-design`.
 
 ### Acciones disponibles
 
 - **Navegar de año** — recalcula el recuadro para el año seleccionado, dentro de los límites: hacia atrás el control ‹ se deshabilita antes del **primer año con CUALQUIER movimiento del usuario** (`earliestYear`, no afectado por el filtro); hacia adelante los años futuros quedan bloqueados (máximo navegable = año en curso).
 - **Filtrar categorías** — checkear/destildar categorías recalcula el recuadro. En modo persistido, año y filtro se guardan (RF-REP-004); en modo efímero, no.
+- **Cambiar el modo de vista** (solo `income-expense`, RF-REP-006) — alternar "Total" / "Por categoría" recalcula la visualización de la card sin tocar año ni filtro. En modo persistido, el modo se guarda por card (clave `reports`, campo `categoryBreakdown`); en modo efímero (dashboard), no se persiste (al recargar vuelve a "Total").
 
 ### Puntos de uso
 
-- **Dashboard (`/`):** se monta **solo el tipo Ingresos vs. Gastos**, en **modo efímero** — navegación de año **activa** e independiente, filtro de categorías activo pero **no persistido** (al recargar vuelve a año en curso + todas). El resumen mensual del dashboard (pantalla 3) **no** se ve afectado por este widget.
-- **Cards de `/reportes` (pantalla 7):** cada card monta una instancia en **modo persistido**; el tipo, el año y el filtro vienen de su entrada en `reports` y cada cambio se persiste.
+- **Dashboard (`/`):** se monta **solo el tipo Ingresos vs. Gastos**, en **modo efímero** — navegación de año **activa** e independiente, filtro de categorías y **toggle de modo de vista** activos pero **no persistidos** (al recargar vuelve a año en curso + todas las categorías + modo "Total"). El resumen mensual del dashboard (pantalla 3) **no** se ve afectado por este widget.
+- **Cards de `/reportes` (pantalla 7):** cada card monta una instancia en **modo persistido**; el tipo, el año, el filtro y el modo de vista (`income-expense`) vienen de su entrada en `reports` y cada cambio se persiste.
 
 ### Estados
 

@@ -110,13 +110,15 @@ ReportCardConfig = {
   id: string,                                   // id local de la card (key de React / quitar); generado en el front
   type: "income-expense" | "by-category",       // tipo de reporte (RF-REP-001)
   year: number,                                 // año que muestra la card
-  categoryIds: string[] | null                  // null = todas las categorías; lista = subconjunto explícito de categoryIds
+  categoryIds: string[] | null,                 // null = todas las categorías; lista = subconjunto explícito de categoryIds
+  categoryBreakdown?: boolean                    // modo de vista de la card income-expense (Fase 1.2.2, RF-REP-006)
 }
 ```
 
 - **`type`** — `"income-expense"` (Forma 1, Ingresos vs. Gastos) o `"by-category"` (Forma 2, Gastos por categoría apilado). Son los dos únicos tipos (RF-REP-001).
 - **`year`** — el año que la card grafica; lo cambia la navegación de año embebida del widget.
 - **`categoryIds`** — filtro de categorías de la card. **`null` = todas** (default al crear); una **lista** = subconjunto explícito de `categoryId`s seleccionados. Aplica a ambos tipos (en `income-expense` restringe qué categorías cuentan en los totales; en `by-category`, qué bandas se apilan). Lo que el front manda al endpoint como `categories` deriva de este campo (ver contrato `GET /movements/reports`).
+- **`categoryBreakdown`** (Fase 1.2.2, RF-REP-006) — modo de vista **solo de las cards `income-expense`**: `true` = vista "Por categoría" (gastos descompuestos por categoría apilada, reutilizando el array `categories`); `false`/ausente = vista "Total" (dos series agregadas). **Default `false`; ausencia = `false`** (las cards previas arrancan en "Total" — sin migración). Irrelevante para `by-category` (que no tiene toggle). En el dashboard el modo es **efímero** (estado local) y no usa este campo.
 - **Orden del array = orden de despliegue** de las cards en pantalla.
 - **Ausente / vacío = pantalla vacía.** Clave ausente o `reports: []` → `/reportes` muestra solo el recuadro "[+]" (estado vacío inicial, RF-REP-003).
 - **Back-compat / normalización.** Un blob previo **sin** `reports` se interpreta como `[]` (pantalla vacía). La normalización (entradas malformadas, `type` desconocido, `categoryIds` que apunten a categorías inexistentes/eliminadas) es responsabilidad del front; un blob viejo o parcial nunca rompe la pantalla.
@@ -331,7 +333,7 @@ El `Recurring` que devuelven los endpoints (y que el front recibe) incluye, adem
 
 > **Renombre (fase 1.1.5):** este endpoint era `GET /movements/annual`. Se renombró a `GET /movements/reports` (RF-REP-005) y se le sumó el filtro de categorías por query param; la mecánica de agregación anual no cambia. El shape de respuesta se conserva.
 
-`GET /movements/reports?year=YYYY&categories=<id1,id2,...>` devuelve, dentro del sobre `{ success, statusCode, data }`, la serie **anual agregada** del usuario para los reportes (RF-REP-001/002): ingreso/gasto por mes y el gasto mensual desglosado por categoría. **No** devuelve movimientos individuales. Reutiliza el mismo criterio de bucketeo que el contrato mensual (RN-015), sin introducir reglas de zona nuevas. Detalle de implementación en `docs/backend.md`, sección Movimientos del mes (subsección Serie anual).
+`GET /movements/reports?year=YYYY&categories=<id1,id2,...>` devuelve, dentro del sobre `{ success, statusCode, data }`, la serie **anual agregada** del usuario para los reportes (RF-REP-001/002): ingreso/gasto por mes y el gasto mensual desglosado por categoría (`categories`). **No** devuelve movimientos individuales. Reutiliza el mismo criterio de bucketeo que el contrato mensual (RN-015), sin introducir reglas de zona nuevas. Detalle de implementación en `docs/backend.md`, sección Movimientos del mes (subsección Serie anual).
 
 **Query params:**
 
@@ -342,7 +344,7 @@ El `Recurring` que devuelven los endpoints (y que el front recibe) incluye, adem
 ReportsMovementsResponse = {
   year: number,                       // el año pedido
   months: ReportMonth[],              // SIEMPRE 12 entradas, ene→dic, en orden; filtradas al set pedido
-  categories: ReportCategory[],       // solo categorías con gasto EXPENSE en el año, dentro del set pedido
+  categories: ReportCategory[],       // desglose de GASTOS: solo categorías con gasto EXPENSE en el año, dentro del set pedido
   earliestYear: number | null         // año más antiguo con algún movimiento del usuario; NO afectado por el filtro
 }
 
@@ -361,7 +363,7 @@ ReportCategory = {
 ```
 
 - **`months` — siempre 12, ene→dic.** Los meses sin datos (incluidos los **futuros** del año en curso) vienen con `incomeCents` / `expenseCents` en **cero**, nunca omitidos. Con filtro de categorías, los totales mensuales suman **solo los movimientos de las categorías pedidas** (un mes sin movimientos en el set queda en cero). El mes de cada movimiento se determina con el mismo bucketeo que el mensual (RN-015): únicos por la zona propia del registro (`AT TIME ZONE`), fijos y cuotas a nivel mes. Para los **fijos**, la proyección respeta la **frecuencia** (un fijo solo se imputa a los meses que dicta su `frequency`, RF-MF-006 / RN-016) y **excluye los meses anulados** (RF-MF-005): un mes con skip no suma a ese mes del año.
-- **`categories` — solo gasto (`EXPENSE`), dentro del filtro.** Los ingresos **no** se desglosan por categoría; solo aparecen agregados en `months[*].incomeCents`. Una categoría aparece si tuvo gasto en algún mes del año, **está dentro del set pedido** (si hay filtro) e **incluye categorías soft-deleted** con gasto histórico (RF-CAT-004; el desglose no filtra por `deletedAt`). Orden: por **gasto anual total DESC**, desempate por `categoryId` ASC.
+- **`categories` — desglose de gasto (`EXPENSE`), dentro del filtro.** Es el **único** desglose por categoría del contrato y es **solo de gastos** (`EXPENSE`). Una categoría aparece si tuvo gasto en algún mes del año, **está dentro del set pedido** (si hay filtro) e **incluye categorías soft-deleted** con gasto histórico (RF-CAT-004; el desglose no filtra por `deletedAt`). Orden: por **gasto anual total DESC**, desempate por `categoryId` ASC. Alimenta tanto la Forma 2 (`by-category`) como el modo "Por categoría" de la card `income-expense` (RF-REP-006), que desglosa **solo gastos**.
 - **Invariante de consistencia.** Para cada mes `i`, la suma de `categories[*].monthlyExpenseCents[i]` **es igual a** `months[i].expenseCents`. El front puede confiar en que las bandas de gasto apiladas por categoría suman exactamente el total de gastos del mes (dentro del set filtrado). **Calculados (Fase 1.1.7):** la suma respeta la imputación por **magnitud al bucket del tipo derivado** de RN-019 — un movimiento calculado tiene `type` derivado del signo de su `amountCents` (RN-018), así que un calculado de monto negativo es `EXPENSE` y suma su **magnitud** (`\|amountCents\|`) tanto a `months[i].expenseCents` como a la banda `monthlyExpenseCents[i]` de su categoría, conservando la invariante. Como cada movimiento suma magnitud (nunca resta) al bucket que le corresponde, los totales y las bandas **no pueden quedar negativos** por la presencia de calculados.
 - **`earliestYear` — NO afectado por el filtro.** Año más antiguo con **cualquier** movimiento del usuario (mínimo entre el año del mes local de cualquier único y el año del `startMonth` de cualquier fijo/cuota), **calculado sobre todos los movimientos, ignorando el filtro `categories`**; `null` si el usuario no tiene ningún movimiento. El front lo usa para deshabilitar la navegación ‹ antes del primer año con datos (RF-REP-002); que sea independiente del filtro evita que los límites de navegación salten al filtrar categorías.
 

@@ -25,6 +25,7 @@
 | Navegación global — sidebar persistente | RF-NAV-001 | Implementado |
 | Crear categoría desde el formulario de movimiento | RF-MU-004 | Implementado (los tres tabs) |
 | Reportes — pantalla configurable por cards + widget en dashboard | RF-REP-001..005 | Implementado (fase 1.1.5) |
+| Reportes — toggle "Total / Por categoría" en la card Ingresos y gastos (desglose de solo gastos) | RF-REP-006 | Implementado (fase 1.2.2) |
 | Preferencias de usuario — cimiento (blob JSON + sesión) | — (fase 1.1.0, ST1) | Implementado (sin UI de producto) |
 
 ---
@@ -113,6 +114,7 @@
 - **Widget en el dashboard:** monta el reporte Ingresos vs. Gastos con navegación de año **activa** y filtro de categorías **efímero** (no persiste); el resumen mensual sigue fijo en el mes en curso (RF-DASH-001/002, RF-REP-002).
 - **Backend:** `GET /movements/reports?year=&categories=` (filtro de categorías opcional, omitido = todas). Contrato en `docs/data-model.md`, §Contrato de serie de reportes; implementación en `docs/backend.md`, §Serie de reportes.
 - **Frontend (arquitectura en dos capas, heredada del anual):** primitiva de charting `components/ui/chart.tsx` + tarjetas autónomas en `components/charts/report-card.tsx`, hook `useReports`. Detalles y gotchas en `docs/frontend.md`, §Reportes.
+- **Fase 1.2.2 (completada) — toggle "Total / Por categoría" en la card `income-expense` (RF-REP-006):** la card gana un modo "Por categoría" que apila **solo gastos** por categoría (reutiliza el array `categories`, que ya existía); la card `by-category` no tiene toggle. **Sin cambio de contrato en el backend.** Persistido por card (`categoryBreakdown` en la clave `reports`, default `false`); efímero en el dashboard. El selector de modo son dos tabs (detalle visual en `docs/design.md`). Contrato en `docs/data-model.md`; reglas en RF-REP-006; bitácora 2026-06-19. Gotchas front en el agente.
 
 ### Fijos extendidos — anular por mes + periodicidad (fase 1.1.1)
 

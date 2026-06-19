@@ -37,6 +37,8 @@ export function DashboardClient() {
   // Estado efímero del widget de reporte (no se persiste — RF-DASH-001)
   const [reportYear, setReportYear] = useState(currentYear);
   const [reportCategoryIds, setReportCategoryIds] = useState<string[] | null>(null);
+  // Toggle Total / Por categoría — efímero (al recargar vuelve a "Total")
+  const [reportCategoryBreakdown, setReportCategoryBreakdown] = useState(false);
 
   const totals = data?.totals;
   const unicos = data?.movements.unicos ?? [];
@@ -238,9 +240,11 @@ export function DashboardClient() {
               type="income-expense"
               year={reportYear}
               categoryIds={reportCategoryIds}
+              categoryBreakdown={reportCategoryBreakdown}
               chartHeight={280}
               onYearChange={setReportYear}
               onCategoryIdsChange={setReportCategoryIds}
+              onCategoryBreakdownChange={setReportCategoryBreakdown}
               removable={false}
             />
           </div>

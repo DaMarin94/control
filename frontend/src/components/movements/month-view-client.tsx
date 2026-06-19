@@ -73,6 +73,7 @@ import {
   nextMonth,
   getCurrentMonth,
 } from "@/lib/format";
+import { sumMovementTotals, groupSubtotalCents } from "@/lib/movements";
 import type { MovementItem } from "@/types/movement";
 import type { Transaction } from "@/types/transaction";
 import type { Recurring } from "@/types/recurring";
@@ -378,21 +379,13 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   const cuotas = applyFilter(rawCuotas, listFilters.cuotas);
 
   // ── Totales recalculados desde lo visible ─────────────────────────────────
+  // RN-019: usa Math.abs(amountCents) por bucket de type. Los calculados EXPENSE
+  // tienen amountCents negativo; sumarlo crudo produciría totales incorrectos.
+  // sumMovementTotals encapsula esta regla en lib/movements.ts.
 
-  function sumVisible(items: MovementItem[]): { expense: number; income: number } {
-    return items.reduce(
-      (acc, m) => {
-        if (m.type === "EXPENSE") acc.expense += m.amountCents;
-        else acc.income += m.amountCents;
-        return acc;
-      },
-      { expense: 0, income: 0 },
-    );
-  }
-
-  const unicosTotals = sumVisible(unicos);
-  const fijosTotals = sumVisible(fijos);
-  const cuotasTotals = sumVisible(cuotas);
+  const unicosTotals = sumMovementTotals(unicos);
+  const fijosTotals = sumMovementTotals(fijos);
+  const cuotasTotals = sumMovementTotals(cuotas);
 
   const expenseCents =
     unicosTotals.expense + fijosTotals.expense + cuotasTotals.expense;
@@ -466,12 +459,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   }
 
   // ── Subtotales por grupo ──────────────────────────────────────────────────
-
-  function groupSubtotal(items: MovementItem[]): number {
-    return items.reduce((acc, m) => {
-      return acc + (m.type === "EXPENSE" ? -m.amountCents : m.amountCents);
-    }, 0);
-  }
+  // groupSubtotalCents delega a sumMovementTotals para respetar RN-019.
 
   function formatSubtotal(cents: number): string {
     const abs = formatCurrency(Math.abs(cents));
@@ -809,7 +797,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                         id={key}
                         label={label}
                         count={items.length}
-                        subtotal={formatSubtotal(groupSubtotal(items))}
+                        subtotal={formatSubtotal(groupSubtotalCents(items))}
                         isCollapsed={isCollapsed}
                         onToggle={() => handleToggleCollapse(key)}
                         isOrderMode={isOrderMode}

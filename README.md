@@ -52,7 +52,14 @@ pnpm dev
 
 ## TODO
 
-Los pendientes **F1, F3, F4** y los dos fixes de **1.1.3 / 1.1.4** están **planificados en [`docs/roadmap-v1.2.md`](docs/roadmap-v1.2.md)** (multi-moneda, toggle por categoría en reportes, filtros por listado y los polish de `/mes`).
+.P1 - Que los labels de los reportes (que aparecen en el footer) funcionen como los chques de filtrado y en vez de boxes se subrayaria/tacharia/*loquepropongas* segun se habiliten o no.
+.P2 - Modo oscuro. Default = que el navegador o sistema, recordar compatibilidad absoluta en cualquier tipo de dispositivo, es mas podriamos agregar eso como regla importante en todos los lugares que consideres pertinentes. se puede almacenar la preferencia como el resto de las configuraciones que se persisten en DB.
+
+Errores:
+.E2 - En la screen reportes, cuando le doy agregar y me lista los reportes disponiobles, el 3er reporte ya no se peude ver la lista por que esta al final de la pantalla y la lista siempre va para abajo.
+.E3 - En la screen mes, cuando tenes todos los grupos del acordeon contraiodos y la pagina se ve "vacia". Se genera un scroll, imposible si sobra espacio.
+
+
 
 - **F2 — convención global de _ordering_ en los query params del API** queda **diferido, fuera de v1.2**: sigue sin haber un listado paginado o grande que lo justifique. Se diseñará cuando aparezca el primer listado que lo amerite, definiendo formato de los params, campos ordenables y dirección, de forma reutilizable entre endpoints.
 

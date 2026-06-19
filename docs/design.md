@@ -326,6 +326,78 @@ Reemplaza los **placeholders CSS** del logo (la "C" dibujada con gradiente índi
 
 > Regla viva derivada: **el gem de marca siempre se monta dentro de un contenedor con radio + `overflow-hidden`** (10px en sidebar, 13px de chip / 9px de gem interior en login). Sobre superficies **claras** (sidebar `--panel`) el gem va **directo** (su azul contrasta con el blanco). Sobre superficies **de marca índigo** (login) el gem va **con marco blanco** para no encimar dos azules. El azul del asset nunca sale del recuadro del gem; el índigo del DS sigue siendo el acento de todo lo demás.
 
+### Toggle de vista en la card `income-expense` — "Total" ↔ "Por categoría" (Fase 1.2.2)
+
+La card de reporte `income-expense` (hoy un AreaChart con dos áreas superpuestas: ingresos vs. gastos, mes a mes — Forma 1) gana un **selector de modo** que alterna entre **dos vistas del mismo gráfico**, sin cambiar de tipo de card ni de altura de canvas. Aplica **idéntico** en `/reportes` y en la card del Dashboard (mismo widget `ReportCard`). **No** es la antigua "Forma 2" (barras apiladas por categoría, que sigue siendo su propia card `by-category`): es una **vista alternativa de la card de ingresos vs. gastos**, en su mismo "skin" de áreas continuas.
+
+- **Vista A — "Total" (default, actual, sin cambios):** las dos áreas superpuestas de la Forma 1 (income verde, expense rojo), tal cual están hoy. No se toca.
+- **Vista B — "Por categoría" (nueva) — SOLO GASTOS:** **un único stack de áreas apiladas** en el mismo canvas, subiendo desde cero: N áreas de gasto apiladas, una por categoría (`categories[]`), que suman la **línea de gasto del mes**. **No hay desglose de ingresos** en esta vista (no hay segundo stack, ni doble código, ni rótulos por tipo): es la línea de gasto de la Forma 1 descompuesta en sus categorías. Mismo trazo de áreas continuas `monotone` mes a mes que la Forma 1. **No** son barras (las barras siguen siendo de la card `by-category`).
+
+> Cambio de alcance respecto de la versión previa de esta spec: la vista B perdió el stack de ingresos. Quedan **eliminados del spec**: el stack de ingreso, el contrato `incomeCategories` (revertido del backend — ya no existe), el prefijo `income_`, la leyenda en dos grupos, el tooltip con bloque/total de ingresos, el z-order ingreso/gasto y el wash por hue semántico. La vista B usa **solo `categories[]`** (gastos).
+
+#### 1. El selector de modo — DOS TABS horizontales en la cabecera de la card
+
+El cambio de modo se presenta como **dos tabs ("Total" / "Por categoría") una al lado de la otra, alineadas en el mismo eje X (horizontal)**, ubicadas en la cabecera de la card. **No** es un segmented control (se deroga el segmented de 2 segmentos de la versión previa de esta spec): es un patrón de **tabs nuevas** para el DS, definido acá.
+
+- **Forma de las tabs (patrón underline neutro).** Dos labels en una fila horizontal, separados por `gap-[18px]`. Cada tab: texto **13px / 600**, `py-[6px]`, sin relleno ni pista de fondo (no hay track tipo segmented). La **tab activa** se marca con un **underline indicador 2px `--ink`** pegado al borde inferior de la fila de tabs (no semántico, no índigo: el modo de visualización es neutro) + texto a `--ink`. La **tab inactiva**: texto `--muted`, sin underline; **hover** → texto `--ink-2` y un underline 2px `--line-strong` (afordancia de clickeabilidad). El underline activo **se desliza** horizontalmente entre las dos tabs (transición `transform`/`left` + `width` 0.18s ease-out; instantáneo con `prefers-reduced-motion`).
+- **Por qué underline neutro y no índigo ni segmented:** las tabs eligen **modo de visualización**, no un tipo income/expense ni una acción de marca. El underline `--ink` es la señal de "estás acá" más sobria del DS, y libera la cabecera de la pista gris del segmented (que competía con el stepper y el filtro). El acento índigo **no** se usa (es marca, no estado de un control de datos); el verde/rojo **no** se usa (no hay tipo que comunicar: vista A muestra ambos, vista B es gasto pero ya lo dice su línea de contorno).
+- **Etiquetas:** **"Total"** (vista A) / **"Por categoría"** (vista B). "Total" comunica la suma agregada ingreso vs. gasto, en contraste con el desglose. Default: **"Total"** (vista A).
+- **Lado y orden en la cabecera — tabs a la IZQUIERDA, controles a la derecha.** La cabecera de la card pasa a tener **dos zonas en una fila** (`flex`, `items-center`, `justify-between`):
+  - **Izquierda:** las **dos tabs** (`[Total] [Por categoría]`). Son el control de **mayor jerarquía** (definen qué se está viendo), por eso encabezan la fila a la izquierda, alineadas con el título/contenido de la card y separadas de la zona de controles por el `justify-between`.
+  - **Derecha (la barra de controles ya existente, sin reordenar internamente):** `[stepper de año] [filtro de categorías] [· divisor + X quitar (solo /reportes)]`, con el mismo `gap-2` de hoy. El stepper y el filtro **modulan** la vista que las tabs eligieron, por eso quedan a la derecha como controles secundarios.
+  - Orden visual resultante de izq→der: `[Total · Por categoría]  ⟷  [stepper año] [filtro categorías] [divisor + X]`.
+- **Responsive (≤940px / cabecera angosta):** si las dos zonas no entran en una fila, la fila de tabs **baja a su propia línea sobre** la barra de controles (las tabs siguen a la izquierda de su línea; los controles quedan en la línea de abajo, alineados a la derecha como hoy). Las tabs **nunca** se colapsan en un menú ni cambian a segmented: siempre son dos labels horizontales con su underline.
+- **a11y:** `role="tablist"` `aria-label="Vista del reporte"` con dos `role="tab"` (`aria-selected`), cada uno controlando el `role="tabpanel"` del canvas (`aria-controls` / `id`). Navegable por teclado (flechas izq/der mueven la selección, según patrón ARIA tabs). **Focus ring:** `--accent-soft` 3px sobre la tab enfocada (mismo focus ring del DS para controles; el ring de foco sí puede ser acento — es cromo de interacción, no estado de datos ni monto).
+- **Solo en la card `income-expense`.** La card `by-category` (barras apiladas) **no** lleva estas tabs: su cabecera queda igual.
+- **El filtro de categorías sigue valiendo en ambas vistas.** En vista B, filtrar categorías recorta el stack de gasto (las categorías excluidas no aportan banda). El stepper de año y sus límites (`earliestYear` / año en curso) no cambian con la vista.
+
+#### 2. La vista apilada — el stack de solo-gastos
+
+Un **único stack de gasto** sube desde cero en el canvas, con el mismo skin de áreas continuas de la Forma 1. El color **identifica la categoría**; la **firma de gasto** la da la línea de contorno superior (regla dura 1/2 intacta).
+
+- **Color de cada banda = `category.color` (identificador), regla dura 1/2 intacta.** Cada banda usa el `color` de su `categories[]`. El color es **solo identificador de categoría**, nunca comunica gasto (eso lo hace la línea de contorno). No se retiñe ninguna banda con rojo expense.
+- **Línea de contorno superior del stack = la línea de gasto de la Forma 1.** La suma del stack (el total de gasto del mes) se traza como **línea de contorno superior** en `var(--expense)`, **2px**, opacidad 1, `monotone` — idéntica a la línea de gasto de la Forma 1. La vista B es la línea de gasto de la Forma 1 con su área **descompuesta en bandas por categoría debajo**, lo que garantiza continuidad visual entre las dos vistas y comunica "esto es gasto" con el semántico correcto, sin teñir las bandas.
+- **Relleno de las bandas (fill):** cada banda se rellena con su `category.color` a **opacidad 0.55** (más sólida que el 0.14 de las áreas de Forma 1, porque acá las bandas son la descomposición que hay que distinguir entre sí, no áreas translúcidas que se solapan). El degradé translúcido de la Forma 1 **no** se usa en las bandas.
+- **Separadores entre bandas:** 1px `var(--panel)` (blanco) entre bandas apiladas, **mismo recurso que las barras de la Forma 2** (`stroke="var(--panel)"` `strokeWidth={1}`), para que dos categorías de color parecido no se fundan. Crítico con muchas categorías y colores reciclados.
+- **Orden de apilado (stack order):** determinístico y estable entre meses. El stack se apila **de mayor a menor gasto anual** de la categoría (la de mayor gasto anual en la base) — los datos ya vienen ordenados así (`categories[]` por gasto anual DESC). El orden es **el mismo para los 12 meses** (no se reordena por mes), para que el ojo siga cada banda horizontalmente.
+- **Muchas categorías (legibilidad) — sin agrupar en v1:** se muestran **todas** las categorías con gasto en el año, cada una en su banda, sin agrupar ni colapsar (fiel a la Forma 2). Recursos de legibilidad, todos visuales (no cambian datos): orden de apilado mayor→menor (bandas grandes en la base, finas arriba), separadores 1px `--panel`, leyenda con `flex-wrap`. (Post-v1, candidato a evaluar igual que en Forma 2: banda "Otras" para la cola. Fuera de v1 sin decisión explícita.)
+
+#### 3. Leyenda en vista B
+
+Reutiliza `ChartLegend` (swatch 10px radio 3px + etiqueta UI 12.5px/500 `--ink-2`, `flex-wrap`, `margin-top` 14px). **Un solo grupo de categorías, sin rótulos de tipo ni agrupación:**
+
+- **Un único grupo plano:** un ítem por categoría de gasto (swatch `category.color` + nombre), en el **mismo orden del apilado** (mayor a menor gasto anual), separación estándar entre ítems (16px), `flex-wrap`. **No** hay rótulos "Gastos"/"Ingresos" ni dos grupos: la vista es solo gastos, no hay tipo que rotular.
+- Las cifras **no** van en la leyenda (van en el tooltip). La leyenda es color → nombre.
+- En vista A la leyenda queda como hoy: dos ítems "Ingresos" (`--income`) / "Gastos" (`--expense`).
+
+#### 4. Tooltip en vista B
+
+Reutiliza `ChartTooltipContent` siguiendo el patrón de la Forma 2 (`Form2Tooltip`) **tal cual** — un único bloque de gastos:
+
+- **Encabezado:** mes y año (ej. "Marzo 2026"), igual que hoy.
+- **Filas:** una por categoría de **gasto** con valor > 0 en ese mes (`categories[].monthlyExpenseCents[mes]`): swatch con `category.color` + nombre `--ink-2` + monto **mono** en `--ink` (el color lo da el swatch, no el número; un gasto de categoría no se recolorea). Categorías con valor 0 en el mes se **omiten** (igual que la Forma 2).
+- **Total:** fila **"Total gastos"** + monto mono `--expense-ink`, separada por `--hair` (es el total de gastos del mes — sí es expense). Mismo patrón exacto que `Form2Tooltip` hoy. **No** hay bloque ni total de ingresos.
+- Si el mes está vacío (sin gastos), no hay tooltip (igual que hoy).
+- **Cursor de hover:** guía vertical `--hair` 1px (igual que la Forma 1, que es área).
+
+#### 5. Estados (vista B)
+
+Heredan el comportamiento ya vigente de la card de reporte; sin tokens nuevos.
+
+- **Vacío (año sin gastos):** los 12 meses se dibujan en cero (eje X completo), overlay centrado "Sin movimientos en {año}." (texto UI 14px `--muted`), sin error — **idéntico** al empty actual de la card. Si el **filtro** vacía la vista (todas las categorías deseleccionadas), mismo empty.
+- **Loading:** mismo skeleton del DS de la card (bloque `bg-panel-3 rounded-ctl animate-pulse` del alto del canvas + chips fantasma de leyenda). La cabecera —incluidas las tabs— ya está presente e inerte mientras carga.
+- **Error:** mismo tratamiento de la card (ícono `AlertTriangle` 20px `--warning-ink`, "No se pudo cargar el gráfico.", botón ghost "Reintentar").
+- **`prefers-reduced-motion`:** las áreas apiladas **no** animan su *grow* de entrada ni al cambiar de año/vista (`isAnimationActive={false}`); el cambio entre vista A y B es instantáneo (sin morph/cross-fade); el underline de las tabs no se desliza (cambia de posición instantáneo). El tooltip aparece sin transición. Regla obligatoria del DS.
+- **Cambio de vista (con movimiento):** A↔B reanima el *grow* de las áreas (~0.4s ease-out, mismo timing que la Forma 1) y el underline de la tab se desliza (0.18s). No hay morph entre las dos topologías de área (la actual desaparece y la nueva crece desde la base): se evita una transición ambigua entre "dos áreas" y "un stack de N bandas".
+
+#### Restricciones duras reafirmadas
+
+- **Verde = ingreso, rojo = gasto** solo en la **línea de contorno** del stack (rojo) y el **total** del tooltip (rojo) — nunca en las bandas de categoría ni en los montos por categoría (esos van por `category.color` / `--ink`). Las bandas son identificador, no semántico.
+- **El acento índigo no aparece en esta vista** salvo el **focus ring** de las tabs (cromo de interacción, no estado de datos ni monto). El indicador de tab activa es `--ink` (neutro), no acento.
+- **Toda cifra del tooltip va en mono tabular.**
+
+> Reutiliza: las **líneas/degradés income/expense** de la Forma 1 (gráfico anual); los **separadores 1px `--panel`** y el **orden de apilado mayor→menor estable** de la Forma 2; `ChartLegend` y `ChartTooltipContent` (patrón `Form2Tooltip`) tal cual. Aporta: el patrón nuevo de **tabs underline neutras** en la cabecera de la card (deroga el segmented de 2 segmentos de la versión previa) y la **vista B de un único stack de gastos por categoría** (línea de contorno rojo = firma de gasto; bandas = `category.color` identificador). Detalle verbatim: *Toggle de vista en la card `income-expense` (Fase 1.2.2)* en `docs/design/specs-archive.md`.
+
 ### Filtro de categorías embebido (checklist en popover)
 
 Control reutilizable para filtrar por categorías sin tapar el contenido. Botón disparador + popover con checklist.
@@ -413,3 +485,4 @@ Las specs visuales puntuales de cada fase ya implementada se conservan **verbati
 | Movimientos calculados | 1.1.7 | Vigente | *Metadatos de relación en la sublínea del ítem de `/mes`* (chips padre/hijo); regla del **signo del monto** (negativo/cero, en *Paleta y uso de tokens*); form de calculado y acción del kebab (específicos de fase, no transversales) |
 | Calculados de único y cuota | 1.1.8 | Vigente | *Metadatos de relación…* extendido a Únicos/Cuotas (mismo chip/marca padre-hijo, transversal al origen); calculado de cuota **sin** "X/N" |
 | Filtros por listado en `/mes` | 1.2.1 | Vigente | *Filtros por listado en `/mes` — controles de sección*; reutiliza *Filtro de categorías embebido*; aporta el **triple switch de tipo** (segmented neutro) |
+| Toggle de vista en la card `income-expense` | 1.2.2 | Vigente | *Toggle de vista en la card `income-expense`*; reutiliza las líneas/degradés income/expense (Forma 1) y los separadores/orden de apilado (Forma 2); aporta el patrón nuevo de **tabs underline neutras** (deroga el segmented de 2 segmentos) y la **vista B de un único stack de gastos por categoría** (línea de contorno rojo = firma; bandas = `category.color` identificador) |

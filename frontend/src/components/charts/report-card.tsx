@@ -105,6 +105,7 @@ function buildChartData(data: ReportsMovementsResponse): ChartDataPoint[] {
       incomeCents: m.incomeCents,
       expenseCents: m.expenseCents,
     };
+    // Gastos por categoría (Forma 2 + Vista B)
     data.categories.forEach((cat) => {
       point[cat.categoryId] = cat.monthlyExpenseCents[i] ?? 0;
     });
@@ -164,6 +165,98 @@ function Form2Tooltip({ active, payload, label, data, year }: Form2TooltipProps)
   const totalRow = { color: "var(--expense)", label: "Total gastos", formattedValue: formatCurrency(totalCents), valueColor: "var(--expense-ink)" };
   return <ChartTooltipContent monthLabel={fullLabel} rows={catRows} totalRow={totalRow} />;
 }
+
+// ─── Toggle de vista — tabs underline neutras (Fase 1.2.2) ──────────────────
+
+const VIEW_TABS = [
+  { label: "Total", val: false, id: "tab-total" },
+  { label: "Por categoría", val: true, id: "tab-porcategoria" },
+] as const;
+
+interface ViewTabsProps {
+  value: boolean; // false = "Total", true = "Por categoría"
+  onChange: (v: boolean) => void;
+  panelId: string;
+}
+
+function ViewTabs({ value, onChange, panelId }: ViewTabsProps) {
+  // Underline deslizante: mide los botones del tab activo para posicionar el indicador.
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([null, null]);
+  const [underline, setUnderline] = useState<{ left: number; width: number } | null>(null);
+  const reducedMotionTabs = useReducedMotion();
+
+  const selectedIndex = value ? 1 : 0;
+
+  useEffect(() => {
+    const btn = tabRefs.current[selectedIndex];
+    if (!btn) return;
+    setUnderline({ left: btn.offsetLeft, width: btn.offsetWidth });
+  }, [selectedIndex]);
+
+  function handleKeyDown(e: React.KeyboardEvent, idx: number) {
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      onChange(idx === 0);
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      onChange(idx === 1);
+    }
+  }
+
+  return (
+    <div
+      role="tablist"
+      aria-label="Vista del reporte"
+      className="relative flex items-end gap-[18px] pb-[2px]"
+    >
+      {/* Underline deslizante — posicionado con left/width medidos del tab activo */}
+      {underline && (
+        <span
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none absolute bottom-0 h-[2px] bg-ink",
+            reducedMotionTabs
+              ? ""
+              : "transition-[left,width] duration-[180ms] ease-out",
+          )}
+          style={{ left: underline.left, width: underline.width }}
+        />
+      )}
+      {VIEW_TABS.map((tab, i) => {
+        const isSelected = tab.val === value;
+        return (
+          <button
+            key={tab.id}
+            id={tab.id}
+            ref={(el) => { tabRefs.current[i] = el; }}
+            type="button"
+            role="tab"
+            aria-selected={isSelected}
+            aria-controls={panelId}
+            onClick={() => onChange(tab.val)}
+            onKeyDown={(e) => handleKeyDown(e, i)}
+            tabIndex={isSelected ? 0 : -1}
+            className={cn(
+              "relative py-[6px] text-[13px] font-semibold leading-none",
+              "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+              "transition-colors duration-[140ms]",
+              isSelected
+                ? "text-ink"
+                : "text-muted hover:text-ink-2 hover:shadow-[inset_0_-2px_0_var(--line-strong)]",
+            )}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ID del panel de gráfico (para aria-controls de tabs)
+const CHART_PANEL_ID = "report-chart-panel";
+
+// (FormBTooltip y TooltipCategoryBlock eliminados en Fase 1.2.2 — Vista B usa Form2Tooltip directamente)
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
@@ -292,6 +385,87 @@ function Form2ChartInner({ chartData, data, year, height, reducedMotion }: Form2
           );
         })}
       </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ─── Vista B — AreaChart stack de solo-gastos por categoría (Fase 1.2.2) ──────
+
+interface FormBChartInnerProps {
+  chartData: ChartDataPoint[];
+  data: ReportsMovementsResponse;
+  year: number;
+  height: number;
+  reducedMotion: boolean;
+}
+
+/**
+ * Stack único de áreas apiladas: solo gastos (categories[]).
+ *
+ * Un único stackId="expense" — N áreas, una por categoría de gasto.
+ * La última área (top del stack) lleva stroke="var(--expense)" 2px: la línea
+ * de contorno superior del stack es la línea de gasto de la Forma 1, lo que
+ * garantiza continuidad visual entre vistas A y B y comunica semántica de gasto.
+ * Las bandas llevan fill=category.color a opacidad 0.55 (uniforme, sin degradé).
+ * Separadores 1px var(--panel) entre bandas para que colores similares no se fusionen.
+ * Tooltip: reutiliza Form2Tooltip (mismo patrón que Forma 2 — solo gastos).
+ */
+function FormBChartInner({ chartData, data, year, height, reducedMotion }: FormBChartInnerProps) {
+  const expenseCategories = data.categories;
+
+  // IDs únicos para los gradientes (evitar colisión con Forma 2 si hay múltiples cards)
+  const gradId = (id: string) => `fbGradE_${id.replace(/[^a-z0-9]/gi, "_")}`;
+
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <AreaChart data={chartData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
+        <defs>
+          {/* Gradientes de gasto: fill con color de categoría a opacidad 0.55 (uniforme) */}
+          {expenseCategories.map((cat) => (
+            <linearGradient key={gradId(cat.categoryId)} id={gradId(cat.categoryId)} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={cat.color} stopOpacity={0.55} />
+              <stop offset="100%" stopColor={cat.color} stopOpacity={0.55} />
+            </linearGradient>
+          ))}
+        </defs>
+
+        <CartesianGrid horizontal vertical={false} stroke="var(--hair)" strokeWidth={1} />
+        <XAxis dataKey="shortLabel" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 500, fill: "var(--muted)", fontFamily: "var(--ui)" }} interval={0} />
+        <YAxis axisLine={false} tickLine={false} tickCount={5} tickFormatter={formatYAxisTick} tick={{ fontSize: 11.5, fill: "var(--muted)", fontFamily: "var(--mono)" }} width={64} />
+        <Tooltip
+          cursor={{ stroke: "var(--hair)", strokeWidth: 1 }}
+          content={({ active, payload, label }) => (
+            <Form2Tooltip
+              active={active}
+              payload={payload as unknown as Array<{ dataKey: string; value: number }>}
+              label={label}
+              data={data}
+              year={year}
+            />
+          )}
+        />
+
+        {/* Stack de GASTO — único stackId */}
+        {expenseCategories.map((cat, idx) => {
+          const isTop = idx === expenseCategories.length - 1;
+          return (
+            <Area
+              key={cat.categoryId}
+              type="monotone"
+              dataKey={cat.categoryId}
+              stackId="expense"
+              stroke={isTop ? "var(--expense)" : "var(--panel)"}
+              strokeWidth={isTop ? 2 : 1}
+              fill={`url(#${gradId(cat.categoryId)})`}
+              dot={false}
+              activeDot={isTop ? { r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 } : false}
+              isAnimationActive={!reducedMotion}
+              animationDuration={400}
+              animationEasing="ease-out"
+            />
+          );
+        })}
+      </AreaChart>
     </ResponsiveContainer>
   );
 }
@@ -470,6 +644,18 @@ export interface ReportCardProps {
    */
   onCategoryIdsChange?: (ids: string[] | null) => void;
   /**
+   * Modo de visualización de la card income-expense.
+   * false (default) = vista "Total" (áreas superpuestas, vista A).
+   * true = vista "Por categoría" (doble stack apilado, vista B).
+   * Solo aplica cuando type === "income-expense". Ignorado en by-category.
+   */
+  categoryBreakdown?: boolean;
+  /**
+   * Callback al cambiar el modo de visualización (toggle Total / Por categoría).
+   * El padre persiste (en /reportes) o gestiona efímero (dashboard).
+   */
+  onCategoryBreakdownChange?: (v: boolean) => void;
+  /**
    * Si se muestra el botón X para quitar la card.
    * Solo en /reportes (no en el dashboard).
    */
@@ -498,6 +684,8 @@ export function ReportCard({
   chartHeight = 300,
   onYearChange,
   onCategoryIdsChange,
+  categoryBreakdown = false,
+  onCategoryBreakdownChange,
   removable = false,
   onRemove,
 }: ReportCardProps) {
@@ -531,6 +719,9 @@ export function ReportCard({
       ? data.months.every((m) => m.incomeCents === 0 && m.expenseCents === 0)
       : data.months.every((m) => m.expenseCents === 0));
 
+  // Para la vista B: el título es el mismo ("Ingresos y gastos") pero el modo cambia
+  const isViewB = type === "income-expense" && categoryBreakdown;
+
   function handlePrev() {
     if (earliestYear !== null && year > earliestYear) {
       const newYear = year - 1;
@@ -561,19 +752,33 @@ export function ReportCard({
       aria-label={`${title} ${year}`}
     >
       {/* ── Cabecera de la card ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-[18px]">
-        {/* Izquierda: identidad */}
-        <div>
-          <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
-            Reporte
-          </p>
-          <p className="text-[16px] font-semibold leading-tight mt-[3px] text-ink">
-            {title}
-          </p>
-        </div>
+      {/*
+        Layout responsive:
+        ≥941px: fila única flex justify-between — tabs a la izq, controles a la der.
+        ≤940px: wrap natural — tabs ocupan toda la línea primero, controles en la segunda.
+        Las tabs solo aparecen en income-expense; en by-category la cabecera queda igual que antes.
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-[18px]">
+        {/* Izquierda: tabs de vista (income-expense) o identidad (by-category) */}
+        {type === "income-expense" ? (
+          <ViewTabs
+            value={categoryBreakdown}
+            onChange={(v) => onCategoryBreakdownChange?.(v)}
+            panelId={CHART_PANEL_ID}
+          />
+        ) : (
+          <div>
+            <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+              Reporte
+            </p>
+            <p className="text-[16px] font-semibold leading-tight mt-[3px] text-ink">
+              {title}
+            </p>
+          </div>
+        )}
 
-        {/* Derecha: controles */}
-        <div className="flex items-center gap-2">
+        {/* Derecha: controles (stepper + filtro + quitar) */}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {/* Control de año embebido (stepper pill) */}
           <YearStepper
             year={year}
@@ -626,7 +831,14 @@ export function ReportCard({
       ) : isLoading || !data ? (
         <ChartSkeleton height={chartHeight} />
       ) : (
-        <div className="relative">
+        <div
+          className="relative"
+          {...(type === "income-expense" ? {
+            id: CHART_PANEL_ID,
+            role: "tabpanel" as const,
+            "aria-labelledby": categoryBreakdown ? "tab-porcategoria" : "tab-total",
+          } : {})}
+        >
           {isYearEmpty && (
             <div
               className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none"
@@ -637,15 +849,29 @@ export function ReportCard({
           )}
 
           <ChartResponsiveArea desktopHeight={chartHeight}>
-            {(height) =>
-              type === "income-expense" ? (
-                <Form1ChartInner
-                  chartData={chartData}
-                  year={year}
-                  height={height}
-                  reducedMotion={reducedMotion}
-                />
-              ) : (
+            {(height) => {
+              if (type === "income-expense" && !categoryBreakdown) {
+                return (
+                  <Form1ChartInner
+                    chartData={chartData}
+                    year={year}
+                    height={height}
+                    reducedMotion={reducedMotion}
+                  />
+                );
+              }
+              if (type === "income-expense" && categoryBreakdown) {
+                return (
+                  <FormBChartInner
+                    chartData={chartData}
+                    data={data}
+                    year={year}
+                    height={height}
+                    reducedMotion={reducedMotion}
+                  />
+                );
+              }
+              return (
                 <Form2ChartInner
                   chartData={chartData}
                   data={data}
@@ -653,12 +879,12 @@ export function ReportCard({
                   height={height}
                   reducedMotion={reducedMotion}
                 />
-              )
-            }
+              );
+            }}
           </ChartResponsiveArea>
 
-          {/* Leyenda */}
-          {data && type === "income-expense" && (
+          {/* Leyenda — Vista A (income-expense, Total): Ingresos / Gastos */}
+          {data && type === "income-expense" && !isViewB && (
             <ChartLegend
               items={[
                 { color: "var(--income)", label: "Ingresos" },
@@ -666,6 +892,18 @@ export function ReportCard({
               ]}
             />
           )}
+
+          {/* Leyenda — Vista B (income-expense, Por categoría): grupo plano de categorías de gasto */}
+          {data && isViewB && data.categories.length > 0 && (
+            <ChartLegend
+              items={data.categories.map((cat) => ({
+                color: cat.color,
+                label: cat.name,
+              }))}
+            />
+          )}
+
+          {/* Leyenda — Forma 2 (by-category): categorías de gasto */}
           {data && type === "by-category" && data.categories.length > 0 && (
             <ChartLegend
               items={data.categories.map((cat) => ({

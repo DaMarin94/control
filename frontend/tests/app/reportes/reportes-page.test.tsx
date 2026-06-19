@@ -234,16 +234,24 @@ describe("ReportesPage — estado con cards", () => {
     expect(screen.getByRole("button", { name: /agregar reporte/i })).toBeInTheDocument();
   });
 
-  it("muestra el eyebrow 'Reporte' (cabecera de las cards) para cada card", () => {
+  it("muestra el eyebrow 'Reporte' en la card by-category (income-expense usa tabs)", () => {
     renderPage();
+    // Solo la card by-category tiene el eyebrow "Reporte" en texto visible.
+    // La card income-expense tiene tabs ("Total" / "Por categoría") en lugar del bloque de identidad.
     const eyebrows = screen.getAllByText("Reporte");
-    expect(eyebrows).toHaveLength(2);
+    expect(eyebrows).toHaveLength(1);
+    // La card income-expense tiene el tablist
+    expect(screen.getByRole("tablist", { name: /vista del reporte/i })).toBeInTheDocument();
   });
 
   it("muestra los títulos de las cards", () => {
     renderPage();
-    expect(screen.getByText("Ingresos y gastos")).toBeInTheDocument();
-    expect(screen.getByText("Por categoría")).toBeInTheDocument();
+    // income-expense: el título "Ingresos y gastos" es solo aria-label del wrapper (no texto visible).
+    // Lo que sí es visible: las tabs "Total" y "Por categoría" del tablist.
+    expect(screen.getByRole("tab", { name: "Total" })).toBeInTheDocument();
+    // "Por categoría" aparece como título de la card by-category Y como tab
+    // del tablist de vista en la card income-expense — usar getAllByText.
+    expect(screen.getAllByText("Por categoría").length).toBeGreaterThanOrEqual(1);
   });
 });
 

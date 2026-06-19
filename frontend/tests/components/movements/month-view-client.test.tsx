@@ -6,6 +6,7 @@
  * Fase 1.1.7/1.1.8 (2026-06-18): enrutamiento de borrado de calculados por sourceType.
  * Fase 1.2.0 (2026-06-19): colapso transitorio en modo orden + drag in-place sin DragOverlay.
  * Fase 1.2.1 (2026-06-19): filtros por sección (tipo + categoría) — filtrado en el frontend.
+ * Bug E1 (2026-06-19): totales con gasto calculado (amountCents negativo) — RN-019.
  *   - Eliminado el viejo filtro por-pantalla del header (FilterButton global).
  *   - Nuevo: SectionFilterButton por sección + filtrado frontend + totales recalculados.
  *   - Nueva preferencia: monthListFilters (depreca monthCategoryFilter).
@@ -302,6 +303,34 @@ const mockEmpty: MonthMovements = {
   movements: { unicos: [], fijos: [], cuotas: [] },
 };
 
+// Bug E1: gasto calculado con amountCents NEGATIVO (RN-019).
+// El backend guarda calculados EXPENSE con amountCents < 0; el frontend
+// debe usar Math.abs() para sumar la magnitud, no el crudo con signo.
+const mockMovementCalculadoExpense = {
+  id: "calc-exp-1",
+  origin: "fijo" as const,
+  type: "EXPENSE" as const,
+  amountCents: -5000, // negativo: calculado EXPENSE
+  description: "IVA del alquiler",
+  occurredAt: null,
+  timezone: null,
+  installment: null,
+  frequency: "MONTHLY" as const,
+  skipped: false,
+  category: { id: "cat-3", name: "Servicios", color: "#5733FF", scope: "EXPENSE" as const },
+  calculated: {
+    sourceType: "fijo" as const,
+    sourceId: "rec-1",
+    sourceChainId: "chain-1",
+    sourceDescription: "Alquiler",
+    formulaOperator: "PCT" as const,
+    formulaOperand: 2100,
+    formulaSign: 1 as const,
+    sourceAmountCents: 150000,
+  },
+  hasCalculated: false,
+};
+
 // Calculados por tipo de origen (Fase 1.1.8)
 const mockCalculatedDeFijo = {
   ...mockMovementFijo,
@@ -449,6 +478,57 @@ describe("MonthViewClient", () => {
       const zeroes = screen.getAllByText(/\$0,00/);
       expect(zeroes.length).toBeGreaterThanOrEqual(2);
       expect(screen.getByText("+ $0,00")).toBeInTheDocument();
+    });
+
+    // ── Bug E1 — gasto calculado con amountCents negativo (RN-019) ───────────
+    // El backend devuelve calculados EXPENSE con amountCents < 0. El cliente
+    // debe sumar la MAGNITUD (Math.abs), no el crudo, para que los totales
+    // de /mes coincidan con los del dashboard (que usa totals del server).
+
+    it("Bug E1 — gasto calculado con amountCents negativo suma su magnitud en expense (RN-019)", () => {
+      // Fijos: 1 calculado EXPENSE con amountCents = -5000 (50 pesos)
+      // El total de gastos debe ser 50 pesos (magnitud), NO -50 (crudo).
+      // El balance debe ser −50 pesos, NO +50 (el error original).
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 5000, incomeCents: 0, balanceCents: -5000 },
+        movements: {
+          unicos: [],
+          fijos: [mockMovementCalculadoExpense],
+          cuotas: [],
+        },
+      });
+      renderMonthView();
+
+      // Gastos: debe mostrar $50,00 (magnitud del calculado negativo)
+      expect(screen.getByText("$50,00")).toBeInTheDocument();
+      // Balance: −$50,00 (gasto sin ingresos)
+      expect(screen.getByText("− $50,00")).toBeInTheDocument();
+      // Ingresos: $0,00
+      const zeroes = screen.getAllByText("$0,00");
+      expect(zeroes.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("Bug E1 — mes mixto con calculado negativo: los totales coinciden con el server (RN-019)", () => {
+      // Únicos: 1 ingreso $5000 + 1 gasto normal $150
+      // Fijos: 1 calculado EXPENSE amountCents=-5000 (magnitud $50)
+      // Total esperado: expense = 150+50 = 200 pesos → $200,00
+      //                 income  = 5000 pesos → $5.000,00
+      //                 balance = 4800 pesos → +$4.800,00
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 20000, incomeCents: 500000, balanceCents: 480000 },
+        movements: {
+          unicos: [mockMovementExpense, mockMovementIncome],
+          fijos: [mockMovementCalculadoExpense],
+          cuotas: [],
+        },
+      });
+      renderMonthView();
+
+      expect(screen.getByText("$200,00")).toBeInTheDocument();   // gastos totales
+      expect(screen.getByText("$5.000,00")).toBeInTheDocument(); // ingresos totales
+      expect(screen.getByText("+ $4.800,00")).toBeInTheDocument(); // balance
     });
   });
 

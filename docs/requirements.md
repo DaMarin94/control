@@ -45,6 +45,7 @@ Cubre exclusivamente la plataforma **web** de Control en su versión 1.0. La pla
 | 1.1.7 | 2026-06-17 | Movimientos calculados: fijo cuyo monto se deriva en vivo de otro fijo de origen vía fórmula (submódulo 3.4.b, RF-MCALC-001..007). Nuevas RN-017 (fórmula + redondeo), RN-018 (signo; monto ≤ 0 como excepción a RN-001) y RN-019 (imputación con signo a totales/reportes). Fase 1.1.7. |
 | 1.1.8 | 2026-06-19 | Calculados con origen único o cuota: el origen de un calculado puede ser un movimiento único o un grupo de cuotas, además de un fijo (RF-MCALC-008/009/010; ajusta RF-MCALC-001/004/005/006). Cadencia espejo del origen; borrado total (no por split) para calculados de único/cuota. Fase 1.1.8. |
 | 1.2.1 | 2026-06-19 | Filtros por listado en la Vista del mes (reabre RF-VM-006): el filtro pasa de **por pantalla** (1.1.6) a **por listado** —cada sección (Únicos/Fijos/Cuotas) tiene su filtro de **tipo** (Gasto/Ingreso/Ambos, default Ambos) y de **categoría** (default todas)—; los totales del mes reflejan lo visible tras filtrar las 3 secciones; controles ocultos en modo orden. El filtrado pasa a ser 100% en frontend (`/mes` ya no filtra el endpoint). Deprecada `monthCategoryFilter`; nueva preferencia `monthListFilters`. Fase 1.2.1. |
+| 1.2.2 | 2026-06-19 | Toggle "Total / Por categoría" en la card de reporte Ingresos y gastos (nuevo RF-REP-006): la card `income-expense` gana un modo "Por categoría" que descompone **solo gastos** por categoría apilada (reutiliza el array `categories`, sin cambio de contrato). Persistido por card en `/reportes` (campo `categoryBreakdown`), efímero en el dashboard. Fase 1.2.2. |
 
 ---
 
@@ -1347,7 +1348,7 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 
 **Tipos de reporte:**
 
-- **Forma 1 — Ingresos vs. Gastos** (`income-expense`). Dos series por mes a lo largo del año: el **total de ingresos** del mes y el **total de gastos** del mes. Cada mes del eje X tiene su par de valores (ingresos, gastos). Los totales por mes suman los tres tipos de movimiento que caen en el mes (únicos + fijos activos + cuotas), con el mismo criterio que los totales de la Vista del mes (RF-VM-002) y el Dashboard (RF-DASH-002).
+- **Forma 1 — Ingresos vs. Gastos** (`income-expense`). Dos series por mes a lo largo del año: el **total de ingresos** del mes y el **total de gastos** del mes. Cada mes del eje X tiene su par de valores (ingresos, gastos). Los totales por mes suman los tres tipos de movimiento que caen en el mes (únicos + fijos activos + cuotas), con el mismo criterio que los totales de la Vista del mes (RF-VM-002) y el Dashboard (RF-DASH-002). La card de este tipo tiene un **toggle de dos modos de vista** (RF-REP-006): **"Total"** (las dos series agregadas, descrito acá) y **"Por categoría"** (el total de gastos descompuesto por categoría apilada). El toggle es un modo de la card, **no** un tipo de reporte nuevo.
 - **Forma 2 — Gastos por categoría (apilado)** (`by-category`). Toma el **total de gastos** de cada mes y lo descompone en bandas apiladas, una por **categoría**, cada una con el **color propio de su categoría** (RF-CAT-005 / RN-013). Las bandas de un mes se apilan y suman exactamente el total de gastos de ese mes (el mismo valor que la serie "gastos" de la Forma 1). **La Forma 2 es solo de gastos** (`EXPENSE`): los ingresos no se descomponen por categoría en este reporte; viven únicamente en la Forma 1.
 
 **Criterios de aceptación:**
@@ -1460,6 +1461,34 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 - [ ] El campo **`earliestYear` NO se ve afectado por el filtro**: siempre refleja el primer año con CUALQUIER movimiento del usuario, para que los límites de navegación de año (RF-REP-002) no salten al filtrar.
 - [ ] La respuesta mantiene el shape `{ year, months, categories, earliestYear }`, con `months` y `categories` filtrados al set pedido (`earliestYear` no).
 - [ ] El endpoint filtra siempre por el `userId` del JWT (RNF-002).
+- [ ] El array `categories` (desglose de gastos `EXPENSE`) alimenta tanto la Forma 2 (`by-category`) como el modo "Por categoría" de la card `income-expense` (RF-REP-006), que desglosa **solo gastos**. El contrato del endpoint **no cambia** en 1.2.2.
+
+---
+
+#### RF-REP-006 — Toggle "Total / Por categoría" en la card Ingresos y gastos (Fase 1.2.2)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | La card de reporte de tipo `income-expense` (Ingresos y gastos, Forma 1) ofrece un **toggle de dos modos de vista**: **"Total"** y **"Por categoría"**. Es un **modo de la card existente**, no un tipo de reporte nuevo: ambos modos comparten el mismo tipo, año y filtro de categorías. La card `by-category` (Forma 2) **no** tiene este toggle. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | Existe una card de tipo `income-expense` (en `/reportes` o en el dashboard). |
+
+**Modos de vista:**
+
+- **Total** (default). La vista de la Forma 1 (RF-REP-001): dos series por mes, total de ingresos y total de gastos del mes.
+- **Por categoría.** El total de **gastos** de cada mes se descompone en bandas apiladas por categoría (igual que la Forma 2, `by-category`). La suma de las bandas en un mes iguala el total de gastos de ese mes. Cada banda usa el color propio de su categoría (RF-CAT-005 / RN-013). **Solo desglosa gastos; los ingresos no se descomponen** (siguen como serie agregada o no se muestran, según define `control-design`).
+
+**Criterios de aceptación:**
+- [ ] La card `income-expense` expone un toggle de dos opciones: **"Total"** (default) y **"Por categoría"**.
+- [ ] La card `by-category` **no** expone este toggle.
+- [ ] En modo "Por categoría", los gastos se descomponen por categoría apilada (igual que la Forma 2); la suma de las bandas iguala el total de gastos del mes. Los ingresos **no** se descomponen por categoría.
+- [ ] El toggle **no** cambia el tipo, el año ni el filtro de categorías de la card: el filtro de categorías (RF-REP-002) aplica al desglose de gastos en el modo "Por categoría".
+- [ ] **Persistencia del modo:** en `/reportes` el modo elegido se **persiste por card** (junto al año y al filtro, clave `reports`, RF-REP-004); en el dashboard el modo es **efímero** (estado local; al recargar vuelve a "Total"), coherente con el año y el filtro efímeros del widget del dashboard (RF-DASH-001).
+- [ ] El desglose de gastos por categoría se sirve mediante el array **`categories`** de `GET /movements/reports` (RF-REP-005), que ya existía; el contrato del endpoint **no cambia** en 1.2.2.
+
+**Notas:**
+- El detalle visual del toggle (dos tabs) lo define `control-design` (`docs/design.md`).
 
 ---
 

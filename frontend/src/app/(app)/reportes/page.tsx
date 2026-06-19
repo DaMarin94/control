@@ -248,6 +248,15 @@ function ReportesPageContent() {
     });
   }
 
+  function handleCategoryBreakdownChange(id: string, v: boolean) {
+    const newCards = cards.map((c) =>
+      c.id === id ? { ...c, categoryBreakdown: v } : c
+    );
+    void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
+      logger.error("Error al persistir modo de vista de card", { error: err, cardId: id });
+    });
+  }
+
   const hasCards = cards.length > 0;
 
   return (
@@ -284,9 +293,11 @@ function ReportesPageContent() {
               type={card.type}
               year={card.year}
               categoryIds={card.categoryIds}
+              categoryBreakdown={card.categoryBreakdown ?? false}
               chartHeight={300}
               onYearChange={(year) => handleYearChange(card.id, year)}
               onCategoryIdsChange={(ids) => handleCategoryIdsChange(card.id, ids)}
+              onCategoryBreakdownChange={(v) => handleCategoryBreakdownChange(card.id, v)}
               removable={true}
               onRemove={() => handleRemoveCard(card.id)}
             />

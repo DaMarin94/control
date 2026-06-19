@@ -76,4 +76,11 @@ export interface ReportCardConfig {
    * lista = subconjunto explícito de categoryIds seleccionados.
    */
   categoryIds: string[] | null;
+  /**
+   * Modo de visualización de la card income-expense.
+   * false (default) = vista "Total" (áreas superpuestas agregadas, vista A).
+   * true = vista "Por categoría" (stacks de áreas apiladas, vista B).
+   * Solo aplica cuando type === "income-expense". En by-category, ignorado.
+   */
+  categoryBreakdown?: boolean;
 }

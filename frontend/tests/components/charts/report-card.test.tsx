@@ -155,18 +155,18 @@ describe("ReportCard — cabecera", () => {
     mockUseReports.mockReturnValue(makeSuccessReturn());
   });
 
-  it("muestra eyebrow 'Reporte' para income-expense", () => {
+  it("income-expense muestra las tabs 'Total' y 'Por categoría' (no eyebrow/título identidad)", () => {
     renderCard({ type: "income-expense" });
-    expect(screen.getByText("Reporte")).toBeInTheDocument();
+    // Las tabs reemplazan la identidad en income-expense
+    expect(screen.getByRole("tab", { name: "Total" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Por categoría" })).toBeInTheDocument();
+    // El eyebrow "Reporte" y el título no se muestran en la cabecera de income-expense
+    expect(screen.queryByText("Reporte")).not.toBeInTheDocument();
   });
 
-  it("muestra título 'Ingresos y gastos' para income-expense", () => {
-    renderCard({ type: "income-expense" });
-    expect(screen.getByText("Ingresos y gastos")).toBeInTheDocument();
-  });
-
-  it("muestra título 'Por categoría' para by-category", () => {
+  it("muestra eyebrow 'Reporte' y título 'Por categoría' para by-category", () => {
     renderCard({ type: "by-category" });
+    expect(screen.getByText("Reporte")).toBeInTheDocument();
     expect(screen.getByText("Por categoría")).toBeInTheDocument();
   });
 
@@ -361,5 +361,98 @@ describe("ReportCard — quitar card", () => {
     expect(confirmBtn).toBeDefined();
     if (confirmBtn) fireEvent.click(confirmBtn);
     expect(onRemove).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── Tests: Tabs de vista (Fase 1.2.2) ───────────────────────────────────────
+
+describe("ReportCard — tabs de vista (income-expense)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseReports.mockReturnValue(makeSuccessReturn());
+  });
+
+  it("muestra el tablist 'Vista del reporte' solo en income-expense", () => {
+    renderCard({ type: "income-expense" });
+    expect(screen.getByRole("tablist", { name: /vista del reporte/i })).toBeInTheDocument();
+  });
+
+  it("NO muestra el tablist en by-category", () => {
+    renderCard({ type: "by-category" });
+    expect(screen.queryByRole("tablist", { name: /vista del reporte/i })).not.toBeInTheDocument();
+  });
+
+  it("by-category muestra 'Reporte' y el título 'Por categoría' en la cabecera de identidad", () => {
+    renderCard({ type: "by-category" });
+    expect(screen.getByText("Reporte")).toBeInTheDocument();
+  });
+
+  it("default (categoryBreakdown=false): tab 'Total' aria-selected=true", () => {
+    renderCard({ type: "income-expense", categoryBreakdown: false });
+    const totalTab = screen.getByRole("tab", { name: "Total" });
+    expect(totalTab).toHaveAttribute("aria-selected", "true");
+    const porCatTab = screen.getByRole("tab", { name: "Por categoría" });
+    expect(porCatTab).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("cuando categoryBreakdown=true, tab 'Por categoría' aria-selected=true", () => {
+    renderCard({ type: "income-expense", categoryBreakdown: true });
+    const porCatTab = screen.getByRole("tab", { name: "Por categoría" });
+    expect(porCatTab).toHaveAttribute("aria-selected", "true");
+    const totalTab = screen.getByRole("tab", { name: "Total" });
+    expect(totalTab).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("al hacer clic en tab 'Por categoría', llama onCategoryBreakdownChange(true)", () => {
+    const onChange = vi.fn();
+    renderCard({ type: "income-expense", categoryBreakdown: false, onCategoryBreakdownChange: onChange });
+    fireEvent.click(screen.getByRole("tab", { name: "Por categoría" }));
+    expect(onChange).toHaveBeenCalledWith(true);
+  });
+
+  it("al hacer clic en tab 'Total', llama onCategoryBreakdownChange(false)", () => {
+    const onChange = vi.fn();
+    renderCard({ type: "income-expense", categoryBreakdown: true, onCategoryBreakdownChange: onChange });
+    fireEvent.click(screen.getByRole("tab", { name: "Total" }));
+    expect(onChange).toHaveBeenCalledWith(false);
+  });
+
+  it("en vista B, el gráfico renderiza (FormBChartInner)", () => {
+    renderCard({ type: "income-expense", categoryBreakdown: true });
+    expect(screen.getAllByTestId("recharts-chart").length).toBeGreaterThan(0);
+  });
+
+  it("en vista B, la leyenda muestra nombres de categorías de GASTO", () => {
+    renderCard({ type: "income-expense", categoryBreakdown: true });
+    expect(screen.getByText("Alimentación")).toBeInTheDocument();
+    expect(screen.getByText("Transporte")).toBeInTheDocument();
+  });
+
+  it("en vista B, NO hay rótulos de grupo 'Gastos'/'Ingresos' en la leyenda (es un grupo plano)", () => {
+    renderCard({ type: "income-expense", categoryBreakdown: true });
+    // La leyenda es un grupo plano sin rótulos de tipo
+    // "Ingresos" y "Gastos" ya NO aparecen en la leyenda de la vista B
+    expect(screen.queryByText("Ingresos")).not.toBeInTheDocument();
+    expect(screen.queryByText("Gastos")).not.toBeInTheDocument();
+  });
+
+  it("en vista A (default), leyenda muestra 'Ingresos' y 'Gastos' sin nombres de categoría", () => {
+    renderCard({ type: "income-expense", categoryBreakdown: false });
+    expect(screen.getByText("Ingresos")).toBeInTheDocument();
+    expect(screen.getByText("Gastos")).toBeInTheDocument();
+    expect(screen.queryByText("Alimentación")).not.toBeInTheDocument();
+    expect(screen.queryByText("Transporte")).not.toBeInTheDocument();
+  });
+
+  it("tabs presentes e inertes durante carga (isLoading=true)", () => {
+    mockUseReports.mockReturnValue({
+      ...makeSuccessReturn(),
+      data: undefined,
+      isLoading: true,
+      isPending: true,
+      isSuccess: false,
+    } as unknown as ReturnType<typeof useReports>);
+    renderCard({ type: "income-expense" });
+    expect(screen.getByRole("tablist", { name: /vista del reporte/i })).toBeInTheDocument();
   });
 });
