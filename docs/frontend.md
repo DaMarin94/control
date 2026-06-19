@@ -486,6 +486,14 @@ Los íconos se cablean por **file conventions de Next.js 15 (App Router)** — n
 - **Gotcha — `purpose` no combinado:** el tipo `MetadataRoute.Manifest` de Next 15 **no acepta** `purpose: "any maskable"` combinado (solo `"any" | "maskable" | "monochrome"`). Por eso el manifest lista **4 entradas** de íconos: 192 y 512, cada una declarada por separado en `any` y en `maskable`.
 - **Gotcha — `sharp` no es dep declarada:** vive en `node_modules/.pnpm/sharp@.../`. Cualquier script de generación de assets debe referenciarlo por path o instalarlo explícito.
 
+### Logo de marca in-app (≠ favicon)
+
+El logo de marca que se ve **dentro de la app** (gem del sidebar, chip del login) usa `public/brand-icon.svg`, **no** `src/app/icon.svg`. Para el detalle visual (tamaños, radios, sombras, convivencia de colores) ver `docs/design.md`.
+
+- **Dos copias del mismo SVG, a propósito:** `src/app/icon.svg` es file-convention de Next (favicon/meta; su URL no está garantizada como ruta estable) y `public/brand-icon.svg` es el asset estático addressable como `/brand-icon.svg` para `<img src>` en componentes. Cumplen roles distintos — **no deduplicar borrando uno**.
+- **Se referencia con `<img>` nativo** (no `next/image`), con `eslint-disable-next-line @next/next/no-img-element`: es un SVG de marca con contenedor de tamaño fijo + `object-cover`, no necesita la optimización de `next/image` (los SVG no se optimizan). Si a futuro se migra a `next/image`, requiere `unoptimized` + `fill` con contenedor `relative`.
+- **Consumidores:** `app-sidebar.tsx` (gem 34×34) y `auth-brand-side.tsx` (chip blanco 44×44 con el ícono 34×34 adentro).
+
 ## Testing — gotchas
 
 - Tests en `tests/` (carpeta hermana de `src/`), espejando el árbol de `src/`. Ver convención completa en `docs/technical.md`.

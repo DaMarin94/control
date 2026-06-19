@@ -65,13 +65,15 @@ export function AppSidebar({ email }: AppSidebarProps) {
         className="flex items-center gap-[11px] px-2 pb-[18px] pt-[10px] rounded-ctl transition-colors duration-[140ms] hover:bg-panel-2 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
       >
         {/* Gem */}
-        <span
-          aria-hidden="true"
-          className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] text-white font-bold text-[18px] leading-none shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0_/_0.25)]"
-          style={{ background: "linear-gradient(150deg, var(--accent), var(--accent-press))" }}
-        >
-          C
-        </span>
+        <div className="h-[34px] w-[34px] shrink-0 rounded-[10px] overflow-hidden shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0_/_0.25)]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/brand-icon.svg"
+            alt=""
+            aria-hidden="true"
+            className="h-full w-full object-cover"
+          />
+        </div>
         {/* Wordmark */}
         <div>
           <span className="block text-[18px] font-bold tracking-[-0.01em] text-ink leading-none">

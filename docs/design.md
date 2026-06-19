@@ -298,6 +298,34 @@ La sidebar (`<aside>`, 248px) tiene padding vertical propio `py-[22px]` (de la e
 - **Valor vigente:** el logo lleva `pt` de **`10px`** (era `4px`). Sumado al `py-[22px]` del `<aside>`, da un aire superior total de **32px** (22 + 10) por encima del gem — un valor de la escala (32) que equilibra contra el `pb-[18px]` inferior del logo y el ritmo de la lista de nav que sigue.
 - **Dónde se aplica:** se ajusta el **`pt` del `<Link>` del logo** (10px), **no** el `py` del `<aside>`. El `py-[22px]` del `<aside>` es el padding estructural de la columna (vale igual arriba y abajo, y para desktop y drawer mobile) y no se toca; el aire fino del logo es responsabilidad del propio bloque del logo. El `pb-[18px]` del logo no cambia.
 
+### Logo de marca — ícono real (gem) en sidebar y login (Fase 1.2.2)
+
+Reemplaza los **placeholders CSS** del logo (la "C" dibujada con gradiente índigo) por el **ícono de marca real** ya exportado. El glifo es una **rueda/timón** (círculo con 6 radios + nodos, blanco sobre fondo azul con gradiente). El asset reemplaza a la "C" en los **dos contextos** donde vivía el placeholder: el gem del sidebar y el chip del login.
+
+**Asset canónico vigente.**
+
+- **Imagen del gem (con su fondo azul):** `frontend/src/app/icon.svg` (= `docs/design/icon-export/Control-icon.svg`, idénticos). SVG cuadrado *full-bleed*: `rect` con gradiente azul `#5080eb` (arriba-izq) → `#1b46b4` (abajo-der), glifo blanco centrado con ~18% de padding interno, **esquinas rectas** (el redondeo lo da el contenedor, no el asset).
+- **Intención de marca = esquinas redondeadas.** Los `preview-rounded-*.png` muestran la marca como se quiere ver: gem con esquinas redondeadas. Por eso, en producto, el ícono se monta **siempre dentro de un contenedor con su propio radio** (`rounded-[…]` + `overflow-hidden`), **nunca a borde recto**. El asset full-bleed es correcto: el radio lo aplica el contenedor.
+- **Por qué la imagen y no un SVG inline en el componente:** un solo asset es la fuente de verdad (el mismo que alimenta favicon/PWA, ver `docs/frontend.md`). Se monta como `<img>`/`next/image` con `alt=""` decorativo (el wordmark/`aria-label` adyacente ya nombra la marca), nunca redibujando el glifo a mano.
+
+**El azul del ícono convive con el índigo de marca, no lo reemplaza.** El gem tiene su **azul propio** (`#5080eb`→`#1b46b4`, ya adoptado como `theme_color` del manifest). El **acento del DS sigue siendo índigo** (`--accent`, hue 264) para todo lo demás (nav activo, botones primarios, focus ring). Son dos azules-violáceos de la **misma familia de marca**: el azul vive **encerrado dentro del recuadro del gem**; fuera del gem, manda el índigo. **No** se retiñe el ícono al índigo ni se cambia el `--accent` al azul del ícono. Esta convivencia (gem azul + acento índigo) es **deliberada y vigente**.
+
+**Contexto 1 — gem del sidebar.** Mantiene la **geometría y la elevación** del placeholder actual; solo cambia el relleno (de la "C" CSS al ícono).
+
+- Contenedor: **34×34px**, `rounded-[10px]` (radio gem del DS), `overflow-hidden`, `shrink-0`.
+- Relleno: el ícono `frontend/src/app/icon.svg` a `100%` (cubre el cuadrado; `object-cover`), `alt=""`, `aria-hidden="true"`.
+- **Elevación conservada:** se mantiene el `shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0_/_0.25)]` del placeholder. La `--shadow-sm` lo asienta sobre la columna; el **inset highlight** blanco arriba lee igual de bien sobre el azul del gem que sobre el índigo. **Se elimina** el `style` de `background: linear-gradient(...)` y el texto "C" (el fondo ahora lo trae el asset).
+- El wordmark adyacente ("Control" / "Finanzas del mes") y el `pt-[10px]` del bloque logo **no cambian** (ver sección anterior).
+
+**Contexto 2 — chip del login (`BrandSide`).** Acá el gem va **sobre fondo índigo degradado**. Un gem azul directo sobre índigo "ensucia" el contraste (dos azules pegados). Se conserva el **marco/halo blanco** que ya tenía el chip placeholder, ahora como **passe-partout** del ícono: el blanco separa el azul del gem del índigo del fondo y lo hace leer como una marca asentada, no como una mancha azul.
+
+- Contenedor exterior (chip blanco): **44×44px**, `rounded-[13px]`, `background: #fff`, `shadow-[0_6px_18px_oklch(0.2_0.05_270_/_0.3)]` (los tres valores se conservan del placeholder). `grid place-items-center`, `shrink-0`, `aria-label="Control"`.
+- Ícono dentro del chip: **34×34px**, `rounded-[9px]` (radio interior, ~chip menos el marco), `overflow-hidden`. Deja un **marco blanco de ~5px** alrededor del gem (44 chip − 34 gem = 5px por lado). El ícono a `object-cover`, `alt=""`, `aria-hidden="true"`.
+- Se **elimina** el `color: var(--accent-ink)`, el `text-[24px] font-bold` y la "C" del placeholder.
+- El wordmark "Control" (`<b>` 22px) a la derecha y el resto del `BrandSide` **no cambian**.
+
+> Regla viva derivada: **el gem de marca siempre se monta dentro de un contenedor con radio + `overflow-hidden`** (10px en sidebar, 13px de chip / 9px de gem interior en login). Sobre superficies **claras** (sidebar `--panel`) el gem va **directo** (su azul contrasta con el blanco). Sobre superficies **de marca índigo** (login) el gem va **con marco blanco** para no encimar dos azules. El azul del asset nunca sale del recuadro del gem; el índigo del DS sigue siendo el acento de todo lo demás.
+
 ### Filtro de categorías embebido (checklist en popover)
 
 Control reutilizable para filtrar por categorías sin tapar el contenido. Botón disparador + popover con checklist.

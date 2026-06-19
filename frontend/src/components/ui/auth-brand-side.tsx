@@ -31,13 +31,21 @@ export function BrandSide() {
 
       {/* Logo */}
       <div className="relative flex items-center gap-[13px]">
-        <span
-          className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-[13px] text-[24px] font-bold shadow-[0_6px_18px_oklch(0.2_0.05_270_/_0.3)]"
-          style={{ background: "#fff", color: "var(--accent-ink)" }}
+        <div
+          className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-[13px] shadow-[0_6px_18px_oklch(0.2_0.05_270_/_0.3)]"
+          style={{ background: "#fff" }}
           aria-label="Control"
         >
-          C
-        </span>
+          <div className="h-[34px] w-[34px] rounded-[9px] overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand-icon.svg"
+              alt=""
+              aria-hidden="true"
+              className="h-full w-full object-cover"
+            />
+          </div>
+        </div>
         <b className="text-[22px] font-bold tracking-[-0.01em]">Control</b>
       </div>
 
