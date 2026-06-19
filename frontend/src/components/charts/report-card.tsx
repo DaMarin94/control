@@ -621,10 +621,10 @@ export function ReportCard({
       </div>
 
       {/* ── Área del gráfico ── */}
-      {isLoading ? (
-        <ChartSkeleton height={chartHeight} />
-      ) : isError ? (
+      {isError ? (
         <ChartError height={chartHeight} onRetry={() => refetch()} />
+      ) : isLoading || !data ? (
+        <ChartSkeleton height={chartHeight} />
       ) : (
         <div className="relative">
           {isYearEmpty && (
@@ -648,7 +648,7 @@ export function ReportCard({
               ) : (
                 <Form2ChartInner
                   chartData={chartData}
-                  data={data!}
+                  data={data}
                   year={year}
                   height={height}
                   reducedMotion={reducedMotion}

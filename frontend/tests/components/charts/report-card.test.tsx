@@ -295,6 +295,28 @@ describe("ReportCard — estados de carga/error/vacío", () => {
     renderCard({ type: "by-category", year: 2026 });
     expect(screen.getByText(/sin movimientos en 2026/i)).toBeInTheDocument();
   });
+
+  it("by-category: muestra skeleton (no crashea) cuando isLoading=false y data=undefined (transición de query key)", () => {
+    // Reproduce el estado intermedio de React Query v5 al cambiar la query key
+    // (ej: cambio de filtro de categorías a una key sin cache):
+    // isLoading = isPending && isFetching → false cuando isPending=false aunque data aún sea undefined.
+    mockUseReports.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+      isPending: false,
+      isSuccess: false,
+      error: null,
+      status: "success" as const,
+      fetchStatus: "fetching" as const,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useReports>);
+
+    // No debe lanzar TypeError al acceder a data.categories
+    expect(() => renderCard({ type: "by-category" })).not.toThrow();
+    // El gráfico no debe estar en el árbol
+    expect(screen.queryByTestId("recharts-chart")).not.toBeInTheDocument();
+  });
 });
 
 describe("ReportCard — leyenda", () => {
