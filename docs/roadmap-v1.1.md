@@ -303,3 +303,9 @@ El orden de las fases de v1.1 sigue las dependencias reales y el riesgo de cada 
 - **Las fases chicas y design-driven (1.1.2 color, 1.1.3 flechas) van en el medio:** son acotadas y, en el caso de las flechas, dejan listo un patrón que reutiliza 1.1.5.
 - **Reportes (1.1.5) y filtro (1.1.6) van al final del grueso** por ser las **más grandes** y por depender del cimiento (1.1.0) y del patrón de flechas (1.1.3).
 - **Movimientos calculados (1.1.7) van al final** porque **dependen de 1.1.1** (el calculado sigue el ciclo de vida del fijo de origen: anulación mensual de P1 y frecuencia de P2) y son un **agregado sobre los fijos**. Su alcance ya está **definido en firme**; se ubican al final por esa dependencia, no por incertidumbre.
+
+---
+
+## Continuación
+
+v1.1 está **completa**. La continuación del proyecto vive en [`roadmap-v1.2.md`](roadmap-v1.2.md), que cubre los ítems nuevos del TODO del `README.md` (F1, F3, F4 y los dos fixes de 1.1.3 / 1.1.4).
