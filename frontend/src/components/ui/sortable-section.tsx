@@ -6,12 +6,18 @@
  * Envuelve un AccordionSection con la lógica de `useSortable` de @dnd-kit/sortable.
  * Cuando el modo orden está activo, la sección se puede arrastrar.
  *
- * El overlay del ítem levantado (DragOverlay) se renderiza en el padre (MonthViewClient)
- * para poder portalarlo fuera del contexto de transformación si es necesario.
+ * Drag in-place (Fase 1.2.0):
+ *   - Sin DragOverlay: el ítem activo se desliza in-place (no flota).
+ *   - opacity: 1 siempre (el original no se atenúa, ya no hay clon flotante).
+ *   - El feedback visual del ítem activo (elevación, fondo, radio, cursor grabbing)
+ *     se aplica sobre la propia cabecera cuando isActive=true.
+ *   - Los modifiers restrictToVerticalAxis + restrictToParentElement se configuran
+ *     en el DndContext padre (MonthViewClient).
  *
  * Props:
  *   - id: identificador único de la sección sortable.
  *   - isOrderMode: true cuando está en modo orden (activa el drag).
+ *   - isActive: true cuando esta sección es la que se está arrastrando.
  *   - Resto de props se pasan a AccordionSection.
  */
 
@@ -27,6 +33,8 @@ interface SortableSectionProps {
   isCollapsed: boolean;
   onToggle: () => void;
   isOrderMode: boolean;
+  /** true cuando esta sección es la que se está arrastrando activamente */
+  isActive?: boolean;
   children: React.ReactNode;
 }
 
@@ -38,6 +46,7 @@ export function SortableSection({
   isCollapsed,
   onToggle,
   isOrderMode,
+  isActive = false,
   children,
 }: SortableSectionProps) {
   const {
@@ -46,7 +55,6 @@ export function SortableSection({
     setNodeRef,
     transform,
     transition,
-    isDragging,
   } = useSortable({
     id,
     // Solo sortable cuando está en modo orden
@@ -54,11 +62,17 @@ export function SortableSection({
   });
 
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
+    transform: CSS.Translate.toString(transform),
     transition,
-    // El ítem levantado queda invisible en su posición original
-    // (el DragOverlay lo muestra en su lugar)
-    opacity: isDragging ? 0 : 1,
+    // Drag in-place (Fase 1.2.0): el ítem permanece visible (opacity 1 siempre).
+    // Feedback visual del ítem activo: elevación + fondo + radio (sin scale).
+    ...(isActive && {
+      boxShadow: "var(--shadow-md)",
+      background: "var(--panel)",
+      borderRadius: "var(--r-ctl)",
+      cursor: "grabbing",
+      padding: "10px",
+    }),
   };
 
   return (
@@ -71,6 +85,9 @@ export function SortableSection({
         isCollapsed={isCollapsed}
         onToggle={onToggle}
         isOrderMode={isOrderMode}
+        // En modo orden: colapso instantáneo (sin animación de altura) para que
+        // dnd-kit mida rects estables desde el primer frame del drag.
+        noTransition={isOrderMode}
         showGripHandle={isOrderMode}
         gripAttributes={attributes}
         gripListeners={listeners}

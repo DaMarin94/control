@@ -22,7 +22,7 @@
  *       Mobile:  pill stepper compacto (‹ rótulo ›).
  *       Siempre: botón "Ordenar secciones" / "Listo" + botón "+ Nuevo movimiento" a la derecha.
  *   - Totales: grid 1fr 1fr 1.1fr (Gastos / Ingresos / mini-balance).
- *   - Grupos Únicos / Fijos / Cuotas: AccordionSection + SortableSection.
+ *   - Grupos Únicos / Fijos / Cuotas: SortableSection (envuelve AccordionSection).
  *   - Filas: .mov (ícono, nombre, fecha, monto).
  *
  * Lógica preservada intacta (hooks, router, mappers, handlers de editar/eliminar).
@@ -36,11 +36,12 @@ import {
   closestCenter,
   KeyboardSensor,
   PointerSensor,
+  MeasuringStrategy,
   useSensor,
   useSensors,
-  DragOverlay,
 } from "@dnd-kit/core";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
+import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
 import {
   SortableContext,
   sortableKeyboardCoordinates,
@@ -52,7 +53,6 @@ import { usePreferences } from "@/hooks/use-preferences";
 import { useCategories } from "@/hooks/use-categories";
 import { FilterButton, CategoryFilterPopover } from "@/components/ui/category-filter";
 import { SortableSection } from "@/components/ui/sortable-section";
-import { AccordionSection } from "@/components/ui/accordion-section";
 import { MovementItemRow } from "@/components/movements/movement-item-row";
 import { TransactionModal } from "@/components/movements/transaction-modal";
 import { DeleteTransactionDialog } from "@/components/movements/delete-transaction-dialog";
@@ -258,8 +258,11 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   // Modo orden (drag activo)
   const [isOrderMode, setIsOrderMode] = useState(false);
 
-  // Id de la sección que se está arrastrando (para el DragOverlay)
+  // Id de la sección que se está arrastrando (para feedback del ítem activo)
   const [activeId, setActiveId] = useState<MonthSectionKey | null>(null);
+
+  // Estado de colapso previo al entrar en modo orden (para restaurar al salir)
+  const [collapsedBeforeOrderMode, setCollapsedBeforeOrderMode] = useState<Set<MonthSectionKey> | null>(null);
 
   // Sincronizar con preferencias cuando lleguen del servidor (primer mount / refetch)
   // Solo sincronizamos si el usuario no está en modo orden (para no interrumpir el drag)
@@ -416,13 +419,22 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
     [preferences, setPreferences],
   );
 
-  // ── Modo orden (Fase 1.1.4 P6) ───────────────────────────────────────────
+  // ── Modo orden (Fase 1.1.4 P6, revisado Fase 1.2.0) ──────────────────────
 
   function handleEnterOrderMode() {
+    // Guardar el estado de colapso actual para restaurarlo al salir
+    setCollapsedBeforeOrderMode(new Set(collapsedSections));
+    // Colapsar todas las secciones visualmente (transitorio, no persiste)
+    setCollapsedSections(new Set(ALL_SECTION_KEYS));
     setIsOrderMode(true);
   }
 
   function handleExitOrderMode() {
+    // Restaurar el estado de colapso previo al modo orden
+    if (collapsedBeforeOrderMode !== null) {
+      setCollapsedSections(collapsedBeforeOrderMode);
+      setCollapsedBeforeOrderMode(null);
+    }
     setIsOrderMode(false);
   }
 
@@ -464,43 +476,6 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
 
   const periodLabel = `${mesName} ${yearName}`;
   const statusLabel = isCurrentMonth ? "Mes en curso" : "Histórico";
-
-  // ── Render de la sección activa en el DragOverlay ─────────────────────────
-
-  function renderOverlay(id: MonthSectionKey) {
-    const items = sectionItems[id];
-    const isCollapsed = collapsedSections.has(id);
-    const label = SECTION_LABELS[id];
-
-    return (
-      <div
-        style={{
-          transform: "scale(1.02)",
-          opacity: 0.95,
-          boxShadow: "var(--shadow-lg)",
-          borderRadius: "var(--r-card)",
-          background: "var(--panel)",
-        }}
-      >
-        <AccordionSection
-          id={`overlay-${id}`}
-          label={label}
-          count={items.length}
-          subtotal={formatSubtotal(groupSubtotal(items))}
-          isCollapsed={isCollapsed}
-          onToggle={() => {}}
-          isOrderMode={true}
-          showGripHandle={true}
-        >
-          {items.length === 0 ? (
-            <SectionEmpty sectionKey={id} />
-          ) : (
-            <SectionList items={items} viewMonth={month} onEdit={handleEdit} onDelete={handleDelete} onCreateCalculated={handleCreateCalculated} />
-          )}
-        </AccordionSection>
-      </div>
-    );
-  }
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -683,9 +658,20 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
             </div>
 
             {/* ── Lista agrupada por origen — con acordeón y reordenamiento ── */}
+            {/*
+             * modifiers: restrictToVerticalAxis + restrictToParentElement (Fase 1.2.0).
+             * El drag se restringe al eje Y y al contenedor padre.
+             * Sin DragOverlay: el ítem activo se desliza in-place (no flota).
+             */}
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
+              modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+              // Re-medir rects durante el drag. Junto con el colapso instantáneo
+              // en modo orden (noTransition en AccordionSection), elimina el bug
+              // de achatamiento: dnd-kit no usa medidas obsoletas de secciones
+              // expandidas al calcular los transforms durante el drag.
+              measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
             >
@@ -709,6 +695,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                         isCollapsed={isCollapsed}
                         onToggle={() => handleToggleCollapse(key)}
                         isOrderMode={isOrderMode}
+                        isActive={activeId === key}
                       >
                         {/* Contenido de la sección: lista o empty inline */}
                         {items.length === 0 ? (
@@ -730,11 +717,6 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                   })}
                 </div>
               </SortableContext>
-
-              {/* DragOverlay — ítem levantado con sombra de elevación */}
-              <DragOverlay>
-                {activeId ? renderOverlay(activeId) : null}
-              </DragOverlay>
             </DndContext>
           </>
         )}

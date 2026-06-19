@@ -62,7 +62,7 @@ export function AppSidebar({ email }: AppSidebarProps) {
       <Link
         href="/"
         onClick={() => setMobileOpen(false)}
-        className="flex items-center gap-[11px] px-2 pb-[18px] pt-1 rounded-ctl transition-colors duration-[140ms] hover:bg-panel-2 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+        className="flex items-center gap-[11px] px-2 pb-[18px] pt-[10px] rounded-ctl transition-colors duration-[140ms] hover:bg-panel-2 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
       >
         {/* Gem */}
         <span

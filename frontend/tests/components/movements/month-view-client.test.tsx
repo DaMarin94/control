@@ -4,6 +4,7 @@
  * Fase 1.1.4 (2026-06-16): acordeón + reordenar secciones.
  * Fase 1.1.6 (2026-06-17): filtro de categorías en /mes.
  * Fase 1.1.7/1.1.8 (2026-06-18): enrutamiento de borrado de calculados por sourceType.
+ * Fase 1.2.0 (2026-06-19): colapso transitorio en modo orden + drag in-place sin DragOverlay.
  *
  * Verifica:
  * - Navegación prev/next cambia la URL (/mes?month=YYYY-MM)
@@ -19,6 +20,8 @@
  * - Reordenar secciones entra/sale al modo orden (P6)
  * - Modo orden: botón "Ordenar secciones" → "Listo" (P6)
  * - Modo orden: "+ Nuevo movimiento" se deshabilita (P6)
+ * - Modo orden: al entrar se colapsan todas las secciones (Fase 1.2.0)
+ * - Modo orden: al salir se restaura el estado de colapso previo (Fase 1.2.0)
  * - Cableado editar/eliminar: únicos → modal único / delete único
  * - Cableado editar/eliminar: fijos → modal fijo / delete fijo (Fase 6)
  * - Cableado editar/eliminar: cuotas → modal cuota / delete cuota (Fase 7)
@@ -734,6 +737,72 @@ describe("MonthViewClient", () => {
       // Deben aparecer handles (uno por sección)
       const handles = screen.getAllByLabelText("Arrastrar sección");
       expect(handles.length).toBe(3);
+    });
+
+    // ── Fase 1.2.0 — colapso transitorio y restauración ─────────────────
+
+    it("al entrar al modo orden todas las secciones se colapsan (aria-expanded=false)", () => {
+      renderMonthView();
+
+      // Sin preferencias, todas las secciones están expandidas por defecto
+      const unicosHeader = screen.getByRole("button", { name: /únicos/i });
+      const fijosHeader = screen.getByRole("button", { name: /fijos/i });
+      const cuotasHeader = screen.getByRole("button", { name: /cuotas/i });
+      expect(unicosHeader).toHaveAttribute("aria-expanded", "true");
+      expect(fijosHeader).toHaveAttribute("aria-expanded", "true");
+      expect(cuotasHeader).toHaveAttribute("aria-expanded", "true");
+
+      // Entrar al modo orden
+      const ordenarBtn = screen.getByRole("button", { name: /ordenar secciones/i });
+      fireEvent.click(ordenarBtn);
+
+      // Todas deben quedar colapsadas (transitorio)
+      expect(unicosHeader).toHaveAttribute("aria-expanded", "false");
+      expect(fijosHeader).toHaveAttribute("aria-expanded", "false");
+      expect(cuotasHeader).toHaveAttribute("aria-expanded", "false");
+    });
+
+    it("al salir del modo orden se restaura el estado de colapso previo", () => {
+      renderMonthView();
+
+      const unicosHeader = screen.getByRole("button", { name: /únicos/i });
+      const fijosHeader = screen.getByRole("button", { name: /fijos/i });
+
+      // Colapsar manualmente "fijos" antes de entrar al modo orden
+      fireEvent.click(fijosHeader);
+      expect(fijosHeader).toHaveAttribute("aria-expanded", "false");
+      expect(unicosHeader).toHaveAttribute("aria-expanded", "true");
+
+      // Entrar al modo orden (todas colapsan)
+      const ordenarBtn = screen.getByRole("button", { name: /ordenar secciones/i });
+      fireEvent.click(ordenarBtn);
+      expect(unicosHeader).toHaveAttribute("aria-expanded", "false");
+      expect(fijosHeader).toHaveAttribute("aria-expanded", "false");
+
+      // Salir del modo orden (se restaura: únicos expandido, fijos colapsado)
+      const listoBtn = screen.getByRole("button", { name: /listo/i });
+      fireEvent.click(listoBtn);
+
+      expect(unicosHeader).toHaveAttribute("aria-expanded", "true");
+      expect(fijosHeader).toHaveAttribute("aria-expanded", "false");
+    });
+
+    it("salir del modo orden no persiste el colapso transitorio (no pisa las preferencias de colapso)", () => {
+      renderMonthView();
+
+      // Entrar y salir del modo orden sin haber colapsado nada antes
+      const ordenarBtn = screen.getByRole("button", { name: /ordenar secciones/i });
+      fireEvent.click(ordenarBtn);
+
+      const listoBtn = screen.getByRole("button", { name: /listo/i });
+      fireEvent.click(listoBtn);
+
+      // mockSetPreferences no debe haber sido llamado por el flujo de modo orden
+      // (el colapso transitorio es local, no persiste)
+      // Nota: mockSetPreferences puede haber sido llamado por handleToggleCollapse
+      // si el usuario colapsó secciones, pero no por handleEnterOrderMode ni handleExitOrderMode.
+      // En este test no hubo toggle manual, así que no debe haberse llamado.
+      expect(mockSetPreferences).not.toHaveBeenCalled();
     });
   });
 

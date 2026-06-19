@@ -43,6 +43,9 @@ interface AccordionSectionProps {
   isCollapsed: boolean;
   onToggle: () => void;
   isOrderMode: boolean;
+  /** Cuando true, omite la transición de altura del acordeón (colapso instantáneo).
+   * Usado en modo orden para que las alturas sean estables antes del primer drag. */
+  noTransition?: boolean;
   showGripHandle?: boolean;
   gripAttributes?: DraggableAttributes;
   gripListeners?: SyntheticListenerMap;
@@ -57,6 +60,7 @@ export function AccordionSection({
   isCollapsed,
   onToggle,
   isOrderMode,
+  noTransition = false,
   showGripHandle = false,
   gripAttributes,
   gripListeners,
@@ -169,9 +173,17 @@ export function AccordionSection({
       <div
         id={bodyId}
         className={[
-          "grid transition-[grid-template-rows,opacity] duration-[220ms] ease-out motion-reduce:transition-none",
+          "grid motion-reduce:transition-none",
+          // En modo orden (noTransition=true) el colapso es instantáneo: sin transición.
+          // Esto garantiza que las alturas estén estables antes del primer drag y dnd-kit
+          // no use medidas desactualizadas de las secciones expandidas (gotcha dnd-kit).
+          noTransition
+            ? ""
+            : "transition-[grid-template-rows,opacity] duration-[220ms] ease-out",
           isCollapsed ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100",
-        ].join(" ")}
+        ]
+          .filter(Boolean)
+          .join(" ")}
       >
         <div className="min-h-0 overflow-hidden">
           {children}

@@ -1,5 +1,5 @@
 /**
- * Tests del componente PeriodNav (Fase 1.1.3).
+ * Tests del componente PeriodNav (Fase 1.1.3, revisado 1.2.0).
  *
  * Verifica:
  * - Renderiza el contenido hijo.
@@ -7,6 +7,11 @@
  * - canGoPrev=false → botón prev aria-disabled, no dispara onPrev.
  * - canGoNext=false → botón next aria-disabled, no dispara onNext.
  * - Los aria-labels se asignan correctamente.
+ *
+ * Nota Fase 1.2.0 (spec canónica): las flechas se centran al VIEWPORT con
+ * sticky top-[50vh] -translate-y-1/2. Las celdas laterales llevan
+ * min-height:100vh para que el sticky tenga recorrido también con listas cortas.
+ * El comportamiento funcional (handlers, disabled) no cambia.
  */
 
 import { describe, it, expect, vi } from "vitest";
