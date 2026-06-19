@@ -28,6 +28,11 @@
  *   - isOrderMode: cuando true, la cabecera no dispara colapso (está en modo orden).
  *   - showGripHandle: cuando true, muestra el handle GripVertical (modo orden).
  *   - gripHandleProps: props para el handle de dnd-kit (listeners, attributes).
+ *   - filterSlot: nodo opcional renderizado como HERMANO del <button> de la cabecera
+ *     (NO como hijo). Requerido por la restricción de a11y: no se anidan controles
+ *     interactivos dentro del <button> de disclosure. Se ubica entre el divisor flex
+ *     y el subtotal visual (la fila pasa a ser un contenedor flex que envuelve el
+ *     <button> y, a su derecha, el slot de filtro). Debe ocultarse en isOrderMode.
  *   - children: cuerpo de la sección (tarjeta-lista o empty inline).
  */
 
@@ -49,6 +54,13 @@ interface AccordionSectionProps {
   showGripHandle?: boolean;
   gripAttributes?: DraggableAttributes;
   gripListeners?: SyntheticListenerMap;
+  /**
+   * Slot de control de filtro — renderizado como HERMANO del <button> disclosure,
+   * no como hijo (restricción de a11y: no anidar controles interactivos dentro
+   * de un button). Se ubica a la derecha del <button> en la fila de cabecera.
+   * No se renderiza cuando isOrderMode=true.
+   */
+  filterSlot?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -64,6 +76,7 @@ export function AccordionSection({
   showGripHandle = false,
   gripAttributes,
   gripListeners,
+  filterSlot,
   children,
 }: AccordionSectionProps) {
   const bodyId = `${id}-body`;
@@ -71,92 +84,105 @@ export function AccordionSection({
   return (
     <section aria-labelledby={id}>
       {/*
-       * Cabecera — disclosure trigger.
-       * En modo orden: no es accionable (cursor grab); el handle GripVertical
-       * es el punto de arrastre. Fuera de modo orden: click colapsa/expande.
+       * Fila de cabecera — contenedor flex que envuelve el <button> disclosure
+       * y, a su derecha como sibling, el slot de filtro (filterSlot).
+       *
+       * RESTRICCIÓN DE A11Y: el disparador de filtro NO puede ser hijo del
+       * <button> de disclosure (no se anidan controles interactivos en un button).
+       * El flex-wrapper es solo un contenedor de layout, no tiene semántica propia.
        */}
-      <button
-        type="button"
-        id={id}
-        aria-expanded={!isCollapsed}
-        aria-controls={bodyId}
-        onClick={isOrderMode ? undefined : onToggle}
-        className={[
-          "w-full flex items-center gap-3 px-1 pb-[10px] text-left",
-          "group/header",
-          "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:rounded-[var(--r-chip)]",
-          // Cursor según modo
-          isOrderMode ? "cursor-grab" : "cursor-pointer",
-          // Transición de color hover
-          !isOrderMode ? "transition-colors duration-[140ms]" : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
-      >
-        {/* Handle de drag — solo en modo orden */}
-        {showGripHandle && (
-          <span
-            className="flex items-center text-muted touch-none"
-            style={{ touchAction: "none" }}
-            {...gripAttributes}
-            {...gripListeners}
-            aria-label="Arrastrar sección"
-          >
-            <GripVertical
-              size={16}
-              aria-hidden="true"
-              className="cursor-grab active:cursor-grabbing"
-            />
-          </span>
-        )}
-
-        {/* Chevron de colapso — indicador de estado */}
-        <ChevronRight
-          size={16}
-          aria-hidden="true"
+      <div className="flex items-center gap-1 pb-[10px]">
+        {/*
+         * <button> de disclosure — ocupa todo el espacio disponible (flex-1).
+         * En modo orden: no es accionable (cursor grab); el handle GripVertical
+         * es el punto de arrastre. Fuera de modo orden: click colapsa/expande.
+         */}
+        <button
+          type="button"
+          id={id}
+          aria-expanded={!isCollapsed}
+          aria-controls={bodyId}
+          onClick={isOrderMode ? undefined : onToggle}
           className={[
-            // Color: muted en reposo, ink-2 en hover de la cabecera (fuera de modo orden)
-            "shrink-0 transition-all duration-[220ms] ease-out",
-            isOrderMode
-              ? "text-muted"
-              : "text-muted group-hover/header:text-ink-2",
-            // Rotación: 90° = apunta ▼ (expandido); 0° = apunta ▶ (colapsado)
-            isCollapsed ? "rotate-0" : "rotate-90",
-            // prefers-reduced-motion: sin animación
-            "motion-reduce:transition-none",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-        />
-
-        {/* Rótulo */}
-        <span
-          className={[
-            "text-[13px] font-bold uppercase tracking-[0.1em]",
-            // Color: ink-2 en reposo, ink en hover (fuera de modo orden)
-            isOrderMode
-              ? "text-ink-2"
-              : "text-ink-2 transition-colors duration-[140ms] group-hover/header:text-ink",
+            "flex-1 flex items-center gap-3 px-1 text-left min-w-0",
+            "group/header",
+            "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:rounded-[var(--r-chip)]",
+            // Cursor según modo
+            isOrderMode ? "cursor-grab" : "cursor-pointer",
+            // Transición de color hover
+            !isOrderMode ? "transition-colors duration-[140ms]" : "",
           ]
             .filter(Boolean)
             .join(" ")}
         >
-          {label}
-        </span>
+          {/* Handle de drag — solo en modo orden */}
+          {showGripHandle && (
+            <span
+              className="flex items-center text-muted touch-none"
+              style={{ touchAction: "none" }}
+              {...gripAttributes}
+              {...gripListeners}
+              aria-label="Arrastrar sección"
+            >
+              <GripVertical
+                size={16}
+                aria-hidden="true"
+                className="cursor-grab active:cursor-grabbing"
+              />
+            </span>
+          )}
 
-        {/* Pill contador */}
-        <span className="text-[11.5px] font-semibold text-muted bg-panel-3 rounded-pill px-[9px] py-[1px]">
-          {count}
-        </span>
+          {/* Chevron de colapso — indicador de estado */}
+          <ChevronRight
+            size={16}
+            aria-hidden="true"
+            className={[
+              // Color: muted en reposo, ink-2 en hover de la cabecera (fuera de modo orden)
+              "shrink-0 transition-all duration-[220ms] ease-out",
+              isOrderMode
+                ? "text-muted"
+                : "text-muted group-hover/header:text-ink-2",
+              // Rotación: 90° = apunta ▼ (expandido); 0° = apunta ▶ (colapsado)
+              isCollapsed ? "rotate-0" : "rotate-90",
+              // prefers-reduced-motion: sin animación
+              "motion-reduce:transition-none",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          />
 
-        {/* Línea divisoria */}
-        <span className="flex-1 h-px bg-hair" aria-hidden="true" />
+          {/* Rótulo */}
+          <span
+            className={[
+              "text-[13px] font-bold uppercase tracking-[0.1em]",
+              // Color: ink-2 en reposo, ink en hover (fuera de modo orden)
+              isOrderMode
+                ? "text-ink-2"
+                : "text-ink-2 transition-colors duration-[140ms] group-hover/header:text-ink",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
+            {label}
+          </span>
 
-        {/* Subtotal mono */}
-        <span className="text-[13px] font-semibold text-muted mono">
-          {subtotal}
-        </span>
-      </button>
+          {/* Pill contador */}
+          <span className="text-[11.5px] font-semibold text-muted bg-panel-3 rounded-pill px-[9px] py-[1px]">
+            {count}
+          </span>
+
+          {/* Línea divisoria */}
+          <span className="flex-1 h-px bg-hair" aria-hidden="true" />
+
+          {/* Subtotal mono */}
+          <span className="text-[13px] font-semibold text-muted mono">
+            {subtotal}
+          </span>
+        </button>
+
+        {/* Slot de filtro — hermano del <button>, visible solo fuera del modo orden */}
+        {!isOrderMode && filterSlot}
+      </div>
 
       {/*
        * Cuerpo del acordeón — técnica CSS grid rows para animar height:auto.

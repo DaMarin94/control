@@ -35,6 +35,11 @@ interface SortableSectionProps {
   isOrderMode: boolean;
   /** true cuando esta sección es la que se está arrastrando activamente */
   isActive?: boolean;
+  /**
+   * Slot de control de filtro — se pasa a AccordionSection como hermano del <button>.
+   * AccordionSection lo oculta automáticamente en isOrderMode.
+   */
+  filterSlot?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -47,6 +52,7 @@ export function SortableSection({
   onToggle,
   isOrderMode,
   isActive = false,
+  filterSlot,
   children,
 }: SortableSectionProps) {
   const {
@@ -91,6 +97,7 @@ export function SortableSection({
         showGripHandle={isOrderMode}
         gripAttributes={attributes}
         gripListeners={listeners}
+        filterSlot={filterSlot}
       >
         {children}
       </AccordionSection>

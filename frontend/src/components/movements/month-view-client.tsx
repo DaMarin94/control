@@ -12,6 +12,12 @@
  *   - El orden de secciones es configurable por drag (modo orden con dnd-kit).
  *   - Estado persistido en preferences.monthSections (blob de preferencias).
  *   - Cambios aplicados optimistamente; persistencia en background.
+ * Fase 1.2.1 (2026-06-19): filtros por sección (tipo + categoría).
+ *   - Filtro de categorías por pantalla ELIMINADO del header.
+ *   - Cada sección tiene su propio SectionFilterButton (disparador icon-only).
+ *   - Filtrado en el FRONTEND (el fetch trae todo el mes sin filtro de backend).
+ *   - Totales recalculados desde lo visible (suma de gastos/ingresos visibles).
+ *   - Estado persistido en preferences.monthListFilters.
  *
  * Layout:
  *   - PeriodNav (grid 3 col: auto | minmax(0,1120px) | auto):
@@ -50,9 +56,9 @@ import {
 } from "@dnd-kit/sortable";
 import { useMovements } from "@/hooks/use-movements";
 import { usePreferences } from "@/hooks/use-preferences";
-import { useCategories } from "@/hooks/use-categories";
-import { FilterButton, CategoryFilterPopover } from "@/components/ui/category-filter";
 import { SortableSection } from "@/components/ui/sortable-section";
+import { SectionFilterButton } from "@/components/ui/section-filter-popover";
+import type { SectionFilterType } from "@/components/ui/section-filter-popover";
 import { MovementItemRow } from "@/components/movements/movement-item-row";
 import { TransactionModal } from "@/components/movements/transaction-modal";
 import { DeleteTransactionDialog } from "@/components/movements/delete-transaction-dialog";
@@ -71,7 +77,12 @@ import type { MovementItem } from "@/types/movement";
 import type { Transaction } from "@/types/transaction";
 import type { Recurring } from "@/types/recurring";
 import type { InstallmentGroup } from "@/types/installment";
-import type { MonthSectionKey, MonthSectionsPreferences } from "@/types/auth";
+import type {
+  MonthSectionKey,
+  MonthSectionsPreferences,
+  MonthListFilters,
+  MonthListFilterState,
+} from "@/types/auth";
 
 // ─── Constantes de sección ────────────────────────────────────────────────────
 
@@ -87,6 +98,19 @@ const SECTION_EMPTY_COPY: Record<MonthSectionKey, string> = {
   unicos: "Sin movimientos únicos",
   fijos: "Sin fijos",
   cuotas: "Sin cuotas",
+};
+
+// ─── Default de filtros de sección ───────────────────────────────────────────
+
+const DEFAULT_SECTION_FILTER: MonthListFilterState = {
+  type: "ALL",
+  categories: null,
+};
+
+const DEFAULT_LIST_FILTERS: MonthListFilters = {
+  unicos: { ...DEFAULT_SECTION_FILTER },
+  fijos: { ...DEFAULT_SECTION_FILTER },
+  cuotas: { ...DEFAULT_SECTION_FILTER },
 };
 
 // ─── Normalización de preferencias (back-compat) ─────────────────────────────
@@ -122,6 +146,39 @@ function normalizeMonthSections(
   );
 
   return { order, collapsed };
+}
+
+/**
+ * Normaliza el objeto monthListFilters para garantizar back-compat.
+ * - Si no existe o tiene forma inválida, devuelve defaults.
+ * - Garantiza que las 3 secciones estén presentes con valores válidos.
+ */
+function normalizeMonthListFilters(raw: unknown): MonthListFilters {
+  const validTypes = new Set(["ALL", "EXPENSE", "INCOME"]);
+
+  function normalizeSection(section: unknown): MonthListFilterState {
+    if (!section || typeof section !== "object") return { ...DEFAULT_SECTION_FILTER };
+    const s = section as Record<string, unknown>;
+    const type = validTypes.has(s.type as string)
+      ? (s.type as SectionFilterType)
+      : "ALL";
+    const categories =
+      s.categories === null
+        ? null
+        : Array.isArray(s.categories) &&
+            s.categories.every((id) => typeof id === "string")
+          ? (s.categories as string[])
+          : null;
+    return { type, categories };
+  }
+
+  if (!raw || typeof raw !== "object") return { ...DEFAULT_LIST_FILTERS };
+  const r = raw as Record<string, unknown>;
+  return {
+    unicos: normalizeSection(r.unicos),
+    fijos: normalizeSection(r.fijos),
+    cuotas: normalizeSection(r.cuotas),
+  };
 }
 
 // ─── Mapeo MovementItem → Transaction (únicos) ─────────────────────────────────
@@ -182,6 +239,25 @@ function movementItemToInstallment(item: MovementItem): InstallmentGroup {
   };
 }
 
+// ─── Filtrado de ítems por tipo y categorías ──────────────────────────────────
+
+function applyFilter(items: MovementItem[], filter: MonthListFilterState): MovementItem[] {
+  let result = items;
+
+  // Filtro por tipo
+  if (filter.type !== "ALL") {
+    result = result.filter((m) => m.type === filter.type);
+  }
+
+  // Filtro por categorías
+  if (filter.categories !== null) {
+    const catSet = new Set(filter.categories);
+    result = result.filter((m) => catSet.has(m.category.id));
+  }
+
+  return result;
+}
+
 // ─── Props ─────────────────────────────────────────────────────────────────────
 
 interface MonthViewClientProps {
@@ -193,34 +269,10 @@ interface MonthViewClientProps {
 export function MonthViewClient({ month }: MonthViewClientProps) {
   const router = useRouter();
   const { preferences, setPreferences } = usePreferences();
-  const { categories: allCategories } = useCategories();
 
-  // ── Estado de filtro de categorías (Fase 1.1.6) ──────────────────────────
-  // Leer valor inicial desde preferencias (back-compat: si no existe → null = todas)
-  const savedCategoryFilter =
-    (preferences.monthCategoryFilter as string[] | null | undefined) ?? null;
-
-  // Estado local optimista: responde inmediato, persiste en background
-  const [categoryIds, setCategoryIds] = useState<string[] | null>(savedCategoryFilter);
-
-  // Sincronizar con preferencias cuando lleguen del servidor (solo en primer mount)
-  const [hasSyncedFilter, setHasSyncedFilter] = useState(false);
-  useEffect(() => {
-    if (!hasSyncedFilter && preferences.monthCategoryFilter !== undefined) {
-      setCategoryIds((preferences.monthCategoryFilter as string[] | null | undefined) ?? null);
-      setHasSyncedFilter(true);
-    }
-  }, [preferences.monthCategoryFilter, hasSyncedFilter]);
-
-  // Estado del popover de filtro
-  const [filterOpen, setFilterOpen] = useState(false);
-  const filterButtonRef = useRef<HTMLButtonElement>(null);
-
-  // Conteo total de categorías activas (para el badge del FilterButton)
-  const totalCategories = allCategories?.length ?? 0;
-
-  // Hook de datos: pasa el filtro activo
-  const { data, isLoading, isError } = useMovements(month, categoryIds);
+  // ── Fetch sin filtro de backend (Fase 1.2.1) ─────────────────────────────
+  // El filtrado se hace en el frontend; el hook trae todo el mes.
+  const { data, isLoading, isError } = useMovements(month);
 
   // Estado de modales para únicos
   const [editingUnico, setEditingUnico] = useState<MovementItem | null>(null);
@@ -278,6 +330,29 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
     }
   }, [preferences.monthSections, hasSynced]);
 
+  // ── Estado de filtros por sección (Fase 1.2.1) ───────────────────────────
+
+  // Normalizar desde preferencias (back-compat: si no existe → defaults)
+  const savedListFilters = normalizeMonthListFilters(preferences.monthListFilters);
+
+  // Estado local optimista: responde inmediato, persiste en background
+  const [listFilters, setListFilters] = useState<MonthListFilters>(savedListFilters);
+
+  // Sincronizar con preferencias cuando lleguen del servidor (solo primer mount)
+  const [hasSyncedFilters, setHasSyncedFilters] = useState(false);
+  useEffect(() => {
+    if (!hasSyncedFilters && preferences.monthListFilters !== undefined) {
+      setListFilters(normalizeMonthListFilters(preferences.monthListFilters));
+      setHasSyncedFilters(true);
+    }
+  }, [preferences.monthListFilters, hasSyncedFilters]);
+
+  // Ref para evitar useCallback con dependencia ciclica sobre listFilters
+  const listFiltersRef = useRef(listFilters);
+  useEffect(() => {
+    listFiltersRef.current = listFilters;
+  }, [listFilters]);
+
   // ── Configuración de sensores dnd-kit ────────────────────────────────────
 
   const sensors = useSensors(
@@ -290,12 +365,40 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
     }),
   );
 
-  // ── Datos de movimientos ──────────────────────────────────────────────────
+  // ── Datos brutos de movimientos ───────────────────────────────────────────
 
-  const totals = data?.totals;
-  const unicos = data?.movements.unicos ?? [];
-  const fijos = data?.movements.fijos ?? [];
-  const cuotas = data?.movements.cuotas ?? [];
+  const rawUnicos = data?.movements.unicos ?? [];
+  const rawFijos = data?.movements.fijos ?? [];
+  const rawCuotas = data?.movements.cuotas ?? [];
+
+  // ── Filtrado en el frontend (Fase 1.2.1) ─────────────────────────────────
+
+  const unicos = applyFilter(rawUnicos, listFilters.unicos);
+  const fijos = applyFilter(rawFijos, listFilters.fijos);
+  const cuotas = applyFilter(rawCuotas, listFilters.cuotas);
+
+  // ── Totales recalculados desde lo visible ─────────────────────────────────
+
+  function sumVisible(items: MovementItem[]): { expense: number; income: number } {
+    return items.reduce(
+      (acc, m) => {
+        if (m.type === "EXPENSE") acc.expense += m.amountCents;
+        else acc.income += m.amountCents;
+        return acc;
+      },
+      { expense: 0, income: 0 },
+    );
+  }
+
+  const unicosTotals = sumVisible(unicos);
+  const fijosTotals = sumVisible(fijos);
+  const cuotasTotals = sumVisible(cuotas);
+
+  const expenseCents =
+    unicosTotals.expense + fijosTotals.expense + cuotasTotals.expense;
+  const incomeCents =
+    unicosTotals.income + fijosTotals.income + cuotasTotals.income;
+  const balanceCents = incomeCents - expenseCents;
 
   const monthLabel = formatMonthLabel(month);
   const labelParts = monthLabel.split(" ");
@@ -377,7 +480,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
     return abs;
   }
 
-  // ── Mapa de ítems por sección ─────────────────────────────────────────────
+  // ── Mapa de ítems por sección (ya filtrados) ──────────────────────────────
 
   const sectionItems: Record<MonthSectionKey, MovementItem[]> = {
     unicos,
@@ -408,13 +511,40 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
     [preferences, sectionOrder, setPreferences],
   );
 
-  // ── Handler filtro de categorías (Fase 1.1.6) ────────────────────────────
+  // ── Handler de filtros por sección (Fase 1.2.1) ───────────────────────────
 
-  const handleCategoryChange = useCallback(
-    (ids: string[] | null) => {
-      setCategoryIds(ids);
-      // Persistir en background (merge manual con el resto de preferencias)
-      void setPreferences({ ...preferences, monthCategoryFilter: ids });
+  const handleSectionTypeChange = useCallback(
+    (key: MonthSectionKey, type: SectionFilterType) => {
+      setListFilters((prev) => {
+        const next: MonthListFilters = {
+          ...prev,
+          [key]: { ...prev[key], type },
+        };
+        // Persistir en background (merge manual)
+        void setPreferences({
+          ...preferences,
+          monthListFilters: next,
+        });
+        return next;
+      });
+    },
+    [preferences, setPreferences],
+  );
+
+  const handleSectionCategoriesChange = useCallback(
+    (key: MonthSectionKey, ids: string[] | null) => {
+      setListFilters((prev) => {
+        const next: MonthListFilters = {
+          ...prev,
+          [key]: { ...prev[key], categories: ids },
+        };
+        // Persistir en background (merge manual)
+        void setPreferences({
+          ...preferences,
+          monthListFilters: next,
+        });
+        return next;
+      });
     },
     [preferences, setPreferences],
   );
@@ -467,12 +597,6 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
       return next;
     });
   }
-
-  // ── Totales ───────────────────────────────────────────────────────────────
-
-  const expenseCents = totals?.expenseCents ?? 0;
-  const incomeCents = totals?.incomeCents ?? 0;
-  const balanceCents = totals?.balanceCents ?? 0;
 
   const periodLabel = `${mesName} ${yearName}`;
   const statusLabel = isCurrentMonth ? "Mes en curso" : "Histórico";
@@ -538,17 +662,10 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
             </button>
           </div>
 
-          {/* Acciones del header: filtro + "Ordenar secciones" / "Listo" + "+ Nuevo movimiento" */}
+          {/* Acciones del header: "Ordenar secciones" / "Listo" + "+ Nuevo movimiento" */}
+          {/* Nota: el filtro de categorías por pantalla fue eliminado en Fase 1.2.1.
+              Cada sección tiene su propio SectionFilterButton en la cabecera del acordeón. */}
           <div className="flex items-center gap-3 flex-wrap">
-            {/* Botón filtro de categorías */}
-            <FilterButton
-              selectedIds={categoryIds}
-              totalCategories={totalCategories}
-              isOpen={filterOpen}
-              buttonRef={filterButtonRef}
-              onClick={() => setFilterOpen((o) => !o)}
-            />
-
             {/* Botón Ordenar secciones / Listo */}
             {isOrderMode ? (
               <button
@@ -684,6 +801,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                     const items = sectionItems[key];
                     const label = SECTION_LABELS[key];
                     const isCollapsed = collapsedSections.has(key);
+                    const filter = listFilters[key];
 
                     return (
                       <SortableSection
@@ -696,6 +814,16 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                         onToggle={() => handleToggleCollapse(key)}
                         isOrderMode={isOrderMode}
                         isActive={activeId === key}
+                        filterSlot={
+                          <SectionFilterButton
+                            sectionKey={key}
+                            sectionLabel={label}
+                            selectedType={filter.type}
+                            selectedCategories={filter.categories}
+                            onTypeChange={(type) => handleSectionTypeChange(key, type)}
+                            onCategoriesChange={(ids) => handleSectionCategoriesChange(key, ids)}
+                          />
+                        }
                       >
                         {/* Contenido de la sección: lista o empty inline */}
                         {items.length === 0 ? (
@@ -802,16 +930,6 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
           calculated={editingCalculated}
           onClose={() => setEditingCalculated(null)}
           viewMonth={month}
-        />
-      )}
-
-      {/* ── Popover de filtro de categorías (portaleado a body) ── */}
-      {filterOpen && (
-        <CategoryFilterPopover
-          selectedIds={categoryIds}
-          onSelectionChange={handleCategoryChange}
-          onClose={() => setFilterOpen(false)}
-          anchorRef={filterButtonRef}
         />
       )}
     </PeriodNav>

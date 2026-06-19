@@ -173,12 +173,23 @@ Re-estilado de todas las pantallas y modales con los tokens del DS y migración 
   - **Alto por prop, no CSS var:** Recharts necesita el alto como valor numérico en `height`. Resuelto con dos `<div>` + media queries de Tailwind v4 (`[@media(max-width:940px)]:hidden` / `[@media(min-width:941px)]:hidden`).
   - **`prefers-reduced-motion`:** las tarjetas detectan reduced-motion; jsdom no implementa `window.matchMedia` → hay un **mock global de `matchMedia` en `tests/setup.ts`**. Necesario para cualquier componente futuro que detecte reduced-motion.
 
-### Filtro por categoría — Vista del mes + unificación (detalle de contrato en `docs/data-model.md`, §Filtro de categorías) — Fase 1.1.6, RF-VM-006
+### Filtro por categoría — `/reportes` (detalle de contrato en `docs/data-model.md`, §Filtro de categorías) — Fase 1.1.6, RF-REP-002
 
-- **Control de filtro compartido en `src/components/ui/category-filter.tsx`** (exporta `CategoryFilterPopover` y `FilterButton`). Lo usan **tanto `/mes`** (`month-view-client.tsx`) **como `/reportes`** (`report-card.tsx`). Antes vivía dentro de `report-card.tsx` — se extrajo. Reusar este componente, no duplicar el popover.
+> En 1.1.6 este control también lo usaba `/mes`; en 1.2.1 `/mes` migró a filtros por listado (ver §Filtros por listado de `/mes` abajo). Lo de acá aplica hoy a **`/reportes`** (y al filtro efímero del dashboard).
+
+- **Control de filtro compartido en `src/components/ui/category-filter.tsx`** (exporta `CategoryFilterPopover` y `FilterButton`). Lo usa **`/reportes`** (`report-card.tsx`); se extrajo de ahí para compartir. Reusar este componente, no duplicar el popover.
 - **Serialización de los 3 estados centralizada en `serializeCategoryFilter()`**, idéntica en `use-reports.ts` y `use-movements.ts`: **`null` → omitir el param** (todas); **`[]` → `&categories=`** (vacío explícito = ninguna); **lista → `&categories=id1,id2`** (coma literal, NO `URLSearchParams` — encodearía la coma). La **query key debe distinguir los 3 estados** (`null` vs `""` vs `"id1,id2"`) o React Query no refetchea al pasar de "todas" a "ninguna".
 - **`MOVEMENTS_QUERY_KEY` cambió de aridad:** ahora `(month, categoriesKey = null) => ["movements", month, categoriesKey]`. Las **invalidaciones por prefijo `["movements"]`** (use-recurring, use-installments) **siguen funcionando** — no las rompas al tocar la key.
-- **Persistencia del filtro de `/mes` vía `usePreferences`, clave `monthCategoryFilter`** (mismo patrón optimista que `monthSections`: estado local inmediato + `setPreferences` en background, mandar el blob completo). Es **por pantalla, no por mes**: la selección se conserva al navegar de mes. Default todas (`null`). El filtro del dashboard es **efímero** (estado local, no toca esta clave); el de reportes vive en `reports`.
+- **Persistencia del filtro de `/reportes` en la clave `reports`; el del dashboard es efímero** (estado local, no persiste). El `CategoryFilterPopover` de `category-filter.tsx` sigue siendo el control de `/reportes`.
+
+### Filtros por listado de `/mes` (detalle en `docs/frontend.md`, §Vista del mes y §Sistema de componentes) — Fase 1.2.1, RF-VM-006
+
+> Reabre RF-VM-006: el filtro de `/mes` pasó de **por pantalla** (1.1.6, `monthCategoryFilter`, backend filtraba) a **por listado** con **filtrado 100% en el frontend**.
+
+- **Filtrado y totales en cliente.** `useMovements(month)` se llama **sin** `categories` (trae todo el mes); `month-view-client.tsx` filtra cada lista y **recalcula los totales del mes** sobre lo visible. **NO usar `data.totals` del backend en `/mes`** (sí en el dashboard). `GET /movements` conserva el param `categories`, pero `/mes` ya no lo manda (lo sigue usando `/reportes`).
+- **Un control por sección — `SectionFilterPopover` (`components/ui/section-filter-popover.tsx`):** tipo (Gasto/Ingreso/**Ambos**, default Ambos) + categoría (tres estados, default todas). Se monta vía el **`filterSlot` de `AccordionSection`** (renderizado como **hermano** del `<button>` disclosure, **no** hijo — a11y) y se **oculta en modo orden**.
+- **Persistencia vía `usePreferences`, clave `monthListFilters`** (patrón optimista, blob completo; shape/defaults/back-compat en `docs/data-model.md`, §Preferencia `monthListFilters`). **`monthCategoryFilter` quedó deprecada:** no leerla ni migrarla; cada lista arranca fresca (Ambos + todas).
+- **GOTCHA de testing — `getByRole("button", { name })` ambiguo.** Cuando más de un botón matchea la misma regex de nombre (el disclosure del acordeón **y** el disparador de filtro `aria-label="Filtrar {sección}"`), `getByRole("button", { name })` falla por ambigüedad. Diferenciarlos por la presencia de **`aria-expanded` + `aria-controls`** (helper tipo `getDisclosureButton`).
 
 ### Movimientos calculados (detalle en `docs/frontend.md`, §Movimientos calculados) — Fase 1.1.7 / 1.1.8, RF-MCALC-001..010
 

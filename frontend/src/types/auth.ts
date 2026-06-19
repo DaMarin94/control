@@ -29,6 +29,26 @@ export interface MonthSectionsPreferences {
 }
 
 /**
+ * Estado de filtro de una sección individual en /mes (Fase 1.2.1).
+ * - type: "ALL" = ambos (default), "EXPENSE" = solo gastos, "INCOME" = solo ingresos.
+ * - categories: null = todas, [] = ninguna, lista = subconjunto explícito.
+ */
+export interface MonthListFilterState {
+  type: "ALL" | "EXPENSE" | "INCOME";
+  categories: string[] | null;
+}
+
+/**
+ * Filtros por listado en /mes (Fase 1.2.1).
+ * Una entrada por sección: unicos, fijos, cuotas.
+ */
+export interface MonthListFilters {
+  unicos: MonthListFilterState;
+  fijos: MonthListFilterState;
+  cuotas: MonthListFilterState;
+}
+
+/**
  * Blob de preferencias del usuario.
  * Es un objeto abierto/extensible: en Fase 1.1.0 está vacío ({}).
  * Cada fase posterior agrega sus claves sin cambiar el tipo base.
@@ -43,15 +63,16 @@ export interface UserPreferences {
    */
   reports?: import("@/types/reports").ReportCardConfig[];
   /**
-   * Fase 1.1.6: filtro de categorías activo en la pantalla /mes.
-   * Es un set ÚNICO por pantalla (no por mes). Se mantiene al navegar entre meses.
-   *
-   * Semántica de 3 estados:
-   *   - null / ausente = todas las categorías (default — param ausente en la URL).
-   *   - []             = ninguna categoría (param `categories=` vacío en la URL).
-   *   - lista          = subconjunto explícito de categoryIds.
+   * @deprecated Fase 1.2.1: reemplazado por `monthListFilters` (filtros por sección).
+   * Se preserva en el tipo para no crashear con blobs existentes, pero ya no se
+   * lee ni se escribe desde /mes. Arranque fresco — no se migra su valor.
    */
   monthCategoryFilter?: string[] | null;
+  /**
+   * Fase 1.2.1: filtros por listado en /mes — uno por sección.
+   * Ausente / inválido → default: cada sección con type "ALL" + categories null.
+   */
+  monthListFilters?: MonthListFilters;
   [key: string]: unknown;
 }
 

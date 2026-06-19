@@ -5,6 +5,10 @@
  * Fase 1.1.6 (2026-06-17): filtro de categorías en /mes.
  * Fase 1.1.7/1.1.8 (2026-06-18): enrutamiento de borrado de calculados por sourceType.
  * Fase 1.2.0 (2026-06-19): colapso transitorio en modo orden + drag in-place sin DragOverlay.
+ * Fase 1.2.1 (2026-06-19): filtros por sección (tipo + categoría) — filtrado en el frontend.
+ *   - Eliminado el viejo filtro por-pantalla del header (FilterButton global).
+ *   - Nuevo: SectionFilterButton por sección + filtrado frontend + totales recalculados.
+ *   - Nueva preferencia: monthListFilters (depreca monthCategoryFilter).
  *
  * Verifica:
  * - Navegación prev/next cambia la URL (/mes?month=YYYY-MM)
@@ -25,8 +29,16 @@
  * - Cableado editar/eliminar: únicos → modal único / delete único
  * - Cableado editar/eliminar: fijos → modal fijo / delete fijo (Fase 6)
  * - Cableado editar/eliminar: cuotas → modal cuota / delete cuota (Fase 7)
- * - Filtro de categorías: botón en header / estado inicial / persistencia (Fase 1.1.6)
  * - Enrutamiento de borrado de calculados: fijo → DeleteRecurringDialog; único/cuota → confirmación directa (Fase 1.1.8)
+ * - Filtros por sección: disparador por sección existe / aria-expanded (Fase 1.2.1)
+ * - Filtros por sección: filtro de tipo (Gasto/Ingreso/Ambos) filtra ítems en el frontend
+ * - Filtros por sección: filtro de categoría filtra ítems en el frontend
+ * - Filtros por sección: totales recalculados desde lo visible
+ * - Filtros por sección: default fresco (Ambos + todas → sin filtrado)
+ * - Filtros por sección: persistencia en setPreferences (monthListFilters)
+ * - Filtros por sección: en modo orden NO aparece el disparador
+ * - useMovements se llama sin filtro de backend (sin segundo parámetro)
+ * - monthCategoryFilter ya NO se lee ni se escribe
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -77,9 +89,14 @@ vi.mock("@/hooks/use-toast", () => ({
   })),
 }));
 
+const mockCategories = [
+  { id: "cat-1", name: "Alimentación", color: "#FF5733", scope: "BOTH" as const, isActive: true },
+  { id: "cat-2", name: "Sueldo", color: "#33FF57", scope: "INCOME" as const, isActive: true },
+];
+
 vi.mock("@/hooks/use-categories", () => ({
   useCategories: vi.fn(() => ({
-    categories: [],
+    categories: mockCategories,
     isLoading: false,
     isError: false,
     error: null,
@@ -149,6 +166,30 @@ function createWrapper() {
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
   }
   return Wrapper;
+}
+
+/**
+ * Helper para encontrar el botón de disclosure del acordeón de una sección.
+ *
+ * Con Fase 1.2.1, hay dos botones por sección en el DOM:
+ *   1. El disclosure button (aria-expanded + aria-controls) — el que colapsa/expande.
+ *   2. El filter button (aria-haspopup="dialog") — el SectionFilterButton.
+ *
+ * `getByRole("button", { name: /únicos/i })` falla porque ambos coinciden
+ * (el label "Filtrar Únicos" también contiene "Únicos").
+ *
+ * Esta helper toma el primer botón que tenga `aria-expanded` (el disclosure),
+ * usando `getAllByRole` para evitar el error de "multiple elements found".
+ */
+function getDisclosureButton(sectionName: RegExp): HTMLElement {
+  const allButtons = screen.getAllByRole("button", { name: sectionName });
+  const disclosure = allButtons.find(
+    (btn) => btn.hasAttribute("aria-expanded") && btn.hasAttribute("aria-controls"),
+  );
+  if (!disclosure) {
+    throw new Error(`No se encontró el disclosure button para la sección ${sectionName}`);
+  }
+  return disclosure;
 }
 
 function renderMonthView(month = "2026-06") {
@@ -515,14 +556,14 @@ describe("MonthViewClient", () => {
       // Los botones de disclosure tienen aria-expanded
       // (la cabecera de acordeón es el disclosure trigger)
       // Únicos debe estar expandido por defecto
-      const unicosHeader = screen.getByRole("button", { name: /únicos/i });
+      const unicosHeader = getDisclosureButton(/únicos/i);
       expect(unicosHeader).toHaveAttribute("aria-expanded", "true");
     });
 
     it("colapsar una sección cambia aria-expanded a false", () => {
       renderMonthView();
 
-      const unicosHeader = screen.getByRole("button", { name: /únicos/i });
+      const unicosHeader = getDisclosureButton(/únicos/i);
       expect(unicosHeader).toHaveAttribute("aria-expanded", "true");
 
       fireEvent.click(unicosHeader);
@@ -533,7 +574,7 @@ describe("MonthViewClient", () => {
     it("volver a clickear expande la sección (aria-expanded=true)", () => {
       renderMonthView();
 
-      const unicosHeader = screen.getByRole("button", { name: /únicos/i });
+      const unicosHeader = getDisclosureButton(/únicos/i);
 
       // Colapsar
       fireEvent.click(unicosHeader);
@@ -547,7 +588,7 @@ describe("MonthViewClient", () => {
     it("colapsar persiste con setPreferences", async () => {
       renderMonthView();
 
-      const unicosHeader = screen.getByRole("button", { name: /únicos/i });
+      const unicosHeader = getDisclosureButton(/únicos/i);
       fireEvent.click(unicosHeader);
 
       await waitFor(() => {
@@ -579,7 +620,7 @@ describe("MonthViewClient", () => {
 
       renderMonthView();
 
-      const unicosHeader = screen.getByRole("button", { name: /únicos/i });
+      const unicosHeader = getDisclosureButton(/únicos/i);
       // Debe estar colapsada por preferencia → aria-expanded=false
       expect(unicosHeader).toHaveAttribute("aria-expanded", "false");
 
@@ -601,7 +642,7 @@ describe("MonthViewClient", () => {
     it("el botón de disclosure tiene aria-controls apuntando al body de la sección", () => {
       renderMonthView();
 
-      const unicosHeader = screen.getByRole("button", { name: /únicos/i });
+      const unicosHeader = getDisclosureButton(/únicos/i);
       const controlledId = unicosHeader.getAttribute("aria-controls");
       expect(controlledId).toBeTruthy();
       // El body con ese id debe existir
@@ -649,10 +690,10 @@ describe("MonthViewClient", () => {
 
       renderMonthView();
 
-      const fijosHeader = screen.getByRole("button", { name: /fijos/i });
+      const fijosHeader = getDisclosureButton(/fijos/i);
       expect(fijosHeader).toHaveAttribute("aria-expanded", "false");
 
-      const unicosHeader = screen.getByRole("button", { name: /únicos/i });
+      const unicosHeader = getDisclosureButton(/únicos/i);
       expect(unicosHeader).toHaveAttribute("aria-expanded", "true");
     });
   });
@@ -715,7 +756,7 @@ describe("MonthViewClient", () => {
       fireEvent.click(ordenarBtn);
 
       // La cabecera de Únicos en modo orden no tiene onClick activo
-      const unicosHeader = screen.getByRole("button", { name: /únicos/i });
+      const unicosHeader = getDisclosureButton(/únicos/i);
       const ariaExpandedBefore = unicosHeader.getAttribute("aria-expanded");
 
       fireEvent.click(unicosHeader);
@@ -745,9 +786,9 @@ describe("MonthViewClient", () => {
       renderMonthView();
 
       // Sin preferencias, todas las secciones están expandidas por defecto
-      const unicosHeader = screen.getByRole("button", { name: /únicos/i });
-      const fijosHeader = screen.getByRole("button", { name: /fijos/i });
-      const cuotasHeader = screen.getByRole("button", { name: /cuotas/i });
+      const unicosHeader = getDisclosureButton(/únicos/i);
+      const fijosHeader = getDisclosureButton(/fijos/i);
+      const cuotasHeader = getDisclosureButton(/cuotas/i);
       expect(unicosHeader).toHaveAttribute("aria-expanded", "true");
       expect(fijosHeader).toHaveAttribute("aria-expanded", "true");
       expect(cuotasHeader).toHaveAttribute("aria-expanded", "true");
@@ -765,8 +806,8 @@ describe("MonthViewClient", () => {
     it("al salir del modo orden se restaura el estado de colapso previo", () => {
       renderMonthView();
 
-      const unicosHeader = screen.getByRole("button", { name: /únicos/i });
-      const fijosHeader = screen.getByRole("button", { name: /fijos/i });
+      const unicosHeader = getDisclosureButton(/únicos/i);
+      const fijosHeader = getDisclosureButton(/fijos/i);
 
       // Colapsar manualmente "fijos" antes de entrar al modo orden
       fireEvent.click(fijosHeader);
@@ -1068,104 +1109,6 @@ describe("MonthViewClient", () => {
     });
   });
 
-  // ── Fase 1.1.6 — Filtro de categorías ────────────────────────────────────
-
-  describe("Fase 1.1.6 — Filtro de categorías", () => {
-    beforeEach(() => {
-      mockLoaded(mockWithData);
-    });
-
-    it("muestra el botón 'Filtrar categorías' en el header", () => {
-      renderMonthView();
-
-      expect(screen.getByRole("button", { name: /filtrar categorías/i })).toBeInTheDocument();
-    });
-
-    it("el botón de filtro tiene aria-expanded=false por defecto (cerrado)", () => {
-      renderMonthView();
-
-      const filterBtn = screen.getByRole("button", { name: /filtrar categorías/i });
-      expect(filterBtn).toHaveAttribute("aria-expanded", "false");
-    });
-
-    it("al hacer click en el botón de filtro, aria-expanded pasa a true", () => {
-      renderMonthView();
-
-      const filterBtn = screen.getByRole("button", { name: /filtrar categorías/i });
-      fireEvent.click(filterBtn);
-
-      expect(filterBtn).toHaveAttribute("aria-expanded", "true");
-    });
-
-    it("lee el filtro inicial desde preferences.monthCategoryFilter (null = todas)", () => {
-      mockUsePreferences.mockReturnValue({
-        preferences: { monthCategoryFilter: null },
-        setPreferences: mockSetPreferences,
-        isSaving: false,
-        isLoading: false,
-        isError: false,
-        error: null,
-      } as ReturnType<typeof usePreferences>);
-
-      renderMonthView();
-
-      // null = todas, el botón no debe mostrar el punto indicador
-      const filterBtn = screen.getByRole("button", { name: /filtrar categorías/i });
-      expect(filterBtn).toBeInTheDocument();
-      // El texto base "Categorías" sin conteo
-      expect(filterBtn).toHaveTextContent("Categorías");
-    });
-
-    it("pasa categoryIds a useMovements (firma con segundo parámetro)", () => {
-      mockUsePreferences.mockReturnValue({
-        preferences: { monthCategoryFilter: ["cat-1"] },
-        setPreferences: mockSetPreferences,
-        isSaving: false,
-        isLoading: false,
-        isError: false,
-        error: null,
-      } as ReturnType<typeof usePreferences>);
-
-      renderMonthView("2026-06");
-
-      // useMovements debe haber sido llamado con el mes y el filtro de categorías
-      expect(mockUseMovements).toHaveBeenCalledWith("2026-06", ["cat-1"]);
-    });
-
-    it("al cambiar el filtro llama a setPreferences con monthCategoryFilter", async () => {
-      // Preferencias vacías inicialmente
-      renderMonthView();
-
-      const filterBtn = screen.getByRole("button", { name: /filtrar categorías/i });
-      fireEvent.click(filterBtn);
-
-      // El popover se abre — buscar el diálogo del popover
-      // (el popover está portaleado a body, puede no estar en el mismo árbol pero jsdom lo incluye)
-      // Verificar que aria-expanded es true
-      expect(filterBtn).toHaveAttribute("aria-expanded", "true");
-    });
-
-    it("el filtro se mantiene al navegar entre meses (estado por pantalla, no por mes)", () => {
-      // Simular filtro activo desde preferencias
-      mockUsePreferences.mockReturnValue({
-        preferences: { monthCategoryFilter: ["cat-1"] },
-        setPreferences: mockSetPreferences,
-        isSaving: false,
-        isLoading: false,
-        isError: false,
-        error: null,
-      } as ReturnType<typeof usePreferences>);
-
-      renderMonthView("2026-06");
-
-      // El componente usa categoryIds=["cat-1"] sin importar el mes
-      expect(mockUseMovements).toHaveBeenCalledWith("2026-06", ["cat-1"]);
-
-      // Al cambiar el mes (navegación), el filtro se mantiene en las preferencias
-      // (el estado es por pantalla, no por mes)
-    });
-  });
-
   // ── Enrutamiento de borrado de calculados por sourceType (Fase 1.1.8) ────────
 
   describe("Enrutamiento de borrado de calculados por sourceType", () => {
@@ -1308,6 +1251,413 @@ describe("MonthViewClient", () => {
       fireEvent.click(screen.getByRole("menuitem", { name: /eliminar/i }));
 
       expect(screen.queryByText(/desde este mes en adelante/i)).not.toBeInTheDocument();
+    });
+  });
+
+  // ── Fase 1.2.1 — Filtros por sección ─────────────────────────────────────
+
+  describe("Fase 1.2.1 — Filtros por sección", () => {
+    // ── useMovements se llama SIN filtro de backend ────────────────────────
+
+    it("useMovements se llama con solo el mes (sin segundo parámetro de categorías)", () => {
+      mockLoaded(mockWithData);
+      renderMonthView("2026-06");
+
+      // Sin segundo parámetro = null (todas las categorías, sin filtro de backend)
+      expect(mockUseMovements).toHaveBeenCalledWith("2026-06");
+    });
+
+    it("NO hay botón 'Filtrar categorías' en el header (fue eliminado en Fase 1.2.1)", () => {
+      mockLoaded(mockWithData);
+      renderMonthView();
+
+      // El viejo FilterButton con label "Filtrar categorías" ya no existe en el header
+      // Ahora hay SectionFilterButton por sección con label "Filtrar Únicos/Fijos/Cuotas"
+      const filterBtns = screen.queryAllByRole("button", { name: /^filtrar categorías$/i });
+      expect(filterBtns).toHaveLength(0);
+    });
+
+    // ── Disparadores de filtro por sección ────────────────────────────────
+
+    it("hay un botón de filtro por cada sección (Filtrar Únicos, Fijos, Cuotas)", () => {
+      mockLoaded(mockWithData);
+      renderMonthView();
+
+      expect(screen.getByRole("button", { name: /filtrar únicos/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /filtrar fijos/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /filtrar cuotas/i })).toBeInTheDocument();
+    });
+
+    it("el disparador tiene aria-expanded=false por defecto (cerrado)", () => {
+      mockLoaded(mockWithData);
+      renderMonthView();
+
+      const filterBtn = screen.getByRole("button", { name: /filtrar únicos/i });
+      expect(filterBtn).toHaveAttribute("aria-expanded", "false");
+    });
+
+    it("al hacer click en el disparador, aria-expanded pasa a true", () => {
+      mockLoaded(mockWithData);
+      renderMonthView();
+
+      const filterBtn = screen.getByRole("button", { name: /filtrar únicos/i });
+      fireEvent.click(filterBtn);
+
+      expect(filterBtn).toHaveAttribute("aria-expanded", "true");
+    });
+
+    it("al volver a clickear el disparador, se cierra (aria-expanded=false)", () => {
+      mockLoaded(mockWithData);
+      renderMonthView();
+
+      const filterBtn = screen.getByRole("button", { name: /filtrar únicos/i });
+      fireEvent.click(filterBtn);
+      expect(filterBtn).toHaveAttribute("aria-expanded", "true");
+
+      fireEvent.click(filterBtn);
+      expect(filterBtn).toHaveAttribute("aria-expanded", "false");
+    });
+
+    // ── Default fresco — Ambos + todas ────────────────────────────────────
+
+    it("sin preferencias: las 3 secciones muestran todos sus ítems (Ambos + todas, sin filtro)", () => {
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 15000, incomeCents: 500000, balanceCents: 485000 },
+        movements: {
+          unicos: [mockMovementExpense, mockMovementIncome],
+          fijos: [],
+          cuotas: [],
+        },
+      });
+      renderMonthView();
+
+      // Ambos ítems de Únicos deben verse
+      expect(screen.getByText("Almuerzo en el trabajo")).toBeInTheDocument();
+      // El ítem de ingreso (sin description) se identifica por la sección
+      const unicosSection = screen.getByRole("region", { name: /únicos/i });
+      expect(unicosSection).toBeInTheDocument();
+    });
+
+    // ── Filtro de tipo: EXPENSE filtra los ítems ──────────────────────────
+
+    it("filtro de tipo EXPENSE en Únicos: solo muestra gastos", async () => {
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 15000, incomeCents: 500000, balanceCents: 485000 },
+        movements: {
+          unicos: [mockMovementExpense, mockMovementIncome],
+          fijos: [],
+          cuotas: [],
+        },
+      });
+      renderMonthView();
+
+      // Abrir el popover de filtros de Únicos
+      const filterBtn = screen.getByRole("button", { name: /filtrar únicos/i });
+      fireEvent.click(filterBtn);
+
+      // El popover debe abrirse — hay un radiogroup "Tipo de movimiento"
+      await waitFor(() => {
+        expect(screen.getByRole("radiogroup", { name: /tipo de movimiento/i })).toBeInTheDocument();
+      });
+
+      // Seleccionar "Gasto"
+      const gastoRadio = screen.getByRole("radio", { name: /gasto/i });
+      fireEvent.click(gastoRadio);
+
+      // El gasto debe seguir visible
+      expect(screen.getByText("Almuerzo en el trabajo")).toBeInTheDocument();
+
+      // El ingreso (mockMovementIncome) no tiene descripción — verificamos por el pill del contador
+      // El contador de Únicos debe mostrar 1 (solo el gasto)
+      // El pill está dentro del <button> de disclosure
+      const unicosHeader = getDisclosureButton(/únicos/i);
+      expect(unicosHeader).toHaveTextContent("1");
+    });
+
+    it("filtro de tipo INCOME en Únicos: solo muestra ingresos", async () => {
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 15000, incomeCents: 500000, balanceCents: 485000 },
+        movements: {
+          unicos: [mockMovementExpense, mockMovementIncome],
+          fijos: [],
+          cuotas: [],
+        },
+      });
+      renderMonthView();
+
+      // Abrir el popover de filtros de Únicos
+      const filterBtn = screen.getByRole("button", { name: /filtrar únicos/i });
+      fireEvent.click(filterBtn);
+
+      await waitFor(() => {
+        expect(screen.getByRole("radiogroup", { name: /tipo de movimiento/i })).toBeInTheDocument();
+      });
+
+      // Seleccionar "Ingreso"
+      const ingresoRadio = screen.getByRole("radio", { name: /ingreso/i });
+      fireEvent.click(ingresoRadio);
+
+      // El gasto ya no debe verse
+      expect(screen.queryByText("Almuerzo en el trabajo")).not.toBeInTheDocument();
+
+      // El contador de Únicos debe mostrar 1 (solo el ingreso)
+      const unicosHeader = getDisclosureButton(/únicos/i);
+      expect(unicosHeader).toHaveTextContent("1");
+    });
+
+    it("filtro ALL (Ambos) muestra todos los ítems de la sección", async () => {
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 15000, incomeCents: 500000, balanceCents: 485000 },
+        movements: {
+          unicos: [mockMovementExpense, mockMovementIncome],
+          fijos: [],
+          cuotas: [],
+        },
+      });
+      renderMonthView();
+
+      // Abrir el popover y seleccionar "Ambos" (ya debería estar seleccionado por default)
+      const filterBtn = screen.getByRole("button", { name: /filtrar únicos/i });
+      fireEvent.click(filterBtn);
+
+      await waitFor(() => {
+        expect(screen.getByRole("radiogroup", { name: /tipo de movimiento/i })).toBeInTheDocument();
+      });
+
+      const ambosRadio = screen.getByRole("radio", { name: /ambos/i });
+      expect(ambosRadio).toHaveAttribute("aria-checked", "true");
+
+      // Ambos ítems visibles
+      expect(screen.getByText("Almuerzo en el trabajo")).toBeInTheDocument();
+      const unicosHeader = getDisclosureButton(/únicos/i);
+      expect(unicosHeader).toHaveTextContent("2");
+    });
+
+    // ── Totales recalculados desde lo visible ─────────────────────────────
+
+    it("al filtrar por EXPENSE en Únicos, los totales se recalculan (solo gastos visibles)", async () => {
+      // Únicos: 1 gasto ($150) + 1 ingreso ($5000)
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 15000, incomeCents: 500000, balanceCents: 485000 },
+        movements: {
+          unicos: [mockMovementExpense, mockMovementIncome],
+          fijos: [],
+          cuotas: [],
+        },
+      });
+      renderMonthView();
+
+      // Antes de filtrar: Gastos $150, Ingresos $5000, Balance +$4850
+      expect(screen.getByText("$150,00")).toBeInTheDocument();
+      expect(screen.getByText("$5.000,00")).toBeInTheDocument();
+
+      // Filtrar por EXPENSE
+      const filterBtn = screen.getByRole("button", { name: /filtrar únicos/i });
+      fireEvent.click(filterBtn);
+      await waitFor(() => {
+        expect(screen.getByRole("radiogroup", { name: /tipo de movimiento/i })).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole("radio", { name: /gasto/i }));
+
+      // Después de filtrar: solo el gasto ($150), ingreso = 0 → balance = -$150
+      // Gastos visibles: $150 (solo el gasto de Únicos)
+      expect(screen.getByText("$150,00")).toBeInTheDocument();
+      // Ingresos visibles: $0 (el ingreso se filtró).
+      // Nota: $0,00 puede aparecer múltiples veces (tarjeta de ingresos + subtotales de secciones).
+      // Verificamos que al menos una tarjeta de ingresos muestre $0,00.
+      const zeroTexts = screen.getAllByText("$0,00");
+      expect(zeroTexts.length).toBeGreaterThanOrEqual(1);
+    });
+
+    // ── Filtro de categoría por sección ───────────────────────────────────
+
+    it("filtro de categoría en Únicos: al filtrar por cat-1, solo se ve el gasto de Alimentación", async () => {
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 15000, incomeCents: 500000, balanceCents: 485000 },
+        movements: {
+          unicos: [mockMovementExpense, mockMovementIncome],
+          fijos: [],
+          cuotas: [],
+        },
+      });
+      renderMonthView();
+
+      // Abrir popover de Únicos
+      const filterBtn = screen.getByRole("button", { name: /filtrar únicos/i });
+      fireEvent.click(filterBtn);
+
+      await waitFor(() => {
+        // La lista de categorías debe estar visible
+        expect(screen.getByRole("button", { name: /ninguna/i })).toBeInTheDocument();
+      });
+
+      // Deseleccionar todas → clic en "Ninguna"
+      fireEvent.click(screen.getByRole("button", { name: /ninguna/i }));
+
+      // Contador de Únicos debe ser 0 (ninguna categoría seleccionada = sin ítems)
+      const unicosHeader = getDisclosureButton(/únicos/i);
+      expect(unicosHeader).toHaveTextContent("0");
+
+      // No debe mostrarse el gasto
+      expect(screen.queryByText("Almuerzo en el trabajo")).not.toBeInTheDocument();
+    });
+
+    // ── Persistencia ──────────────────────────────────────────────────────
+
+    it("cambiar el tipo de Únicos persiste en setPreferences (monthListFilters)", async () => {
+      mockLoaded(mockWithData);
+      renderMonthView();
+
+      const filterBtn = screen.getByRole("button", { name: /filtrar únicos/i });
+      fireEvent.click(filterBtn);
+
+      await waitFor(() => {
+        expect(screen.getByRole("radiogroup", { name: /tipo de movimiento/i })).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole("radio", { name: /gasto/i }));
+
+      await waitFor(() => {
+        expect(mockSetPreferences).toHaveBeenCalledWith(
+          expect.objectContaining({
+            monthListFilters: expect.objectContaining({
+              unicos: expect.objectContaining({ type: "EXPENSE" }),
+            }),
+          }),
+        );
+      });
+    });
+
+    it("lee monthListFilters desde preferencias al montar (default de sección)", () => {
+      mockUsePreferences.mockReturnValue({
+        preferences: {
+          monthListFilters: {
+            unicos: { type: "EXPENSE", categories: null },
+            fijos: { type: "ALL", categories: null },
+            cuotas: { type: "ALL", categories: null },
+          },
+        },
+        setPreferences: mockSetPreferences,
+        isSaving: false,
+        isLoading: false,
+        isError: false,
+        error: null,
+      } as ReturnType<typeof usePreferences>);
+
+      // Datos con gasto e ingreso en Únicos
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 15000, incomeCents: 500000, balanceCents: 485000 },
+        movements: {
+          unicos: [mockMovementExpense, mockMovementIncome],
+          fijos: [],
+          cuotas: [],
+        },
+      });
+      renderMonthView();
+
+      // Con type=EXPENSE guardado, el ingreso no debe verse
+      expect(screen.queryByText("Almuerzo en el trabajo")).toBeInTheDocument();
+
+      // El contador de Únicos debe ser 1 (solo el gasto)
+      const unicosHeader = getDisclosureButton(/únicos/i);
+      expect(unicosHeader).toHaveTextContent("1");
+    });
+
+    // ── Modo orden — el disparador no se renderiza ─────────────────────────
+
+    it("en modo orden, los disparadores de filtro de sección NO se muestran", () => {
+      mockLoaded(mockWithData);
+      renderMonthView();
+
+      // Fuera del modo orden, los disparadores están presentes
+      expect(screen.getByRole("button", { name: /filtrar únicos/i })).toBeInTheDocument();
+
+      // Entrar al modo orden
+      fireEvent.click(screen.getByRole("button", { name: /ordenar secciones/i }));
+
+      // Los disparadores de filtro no deben estar (AccordionSection los oculta en isOrderMode)
+      expect(screen.queryByRole("button", { name: /filtrar únicos/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /filtrar fijos/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /filtrar cuotas/i })).not.toBeInTheDocument();
+    });
+
+    it("al salir del modo orden, los disparadores de filtro vuelven", () => {
+      mockLoaded(mockWithData);
+      renderMonthView();
+
+      // Entrar y salir del modo orden
+      fireEvent.click(screen.getByRole("button", { name: /ordenar secciones/i }));
+      fireEvent.click(screen.getByRole("button", { name: /listo/i }));
+
+      // Los disparadores deben estar de vuelta
+      expect(screen.getByRole("button", { name: /filtrar únicos/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /filtrar fijos/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /filtrar cuotas/i })).toBeInTheDocument();
+    });
+
+    // ── monthCategoryFilter ya no se usa ──────────────────────────────────
+
+    it("ignora monthCategoryFilter de las preferencias (ya no se lee en Fase 1.2.1)", () => {
+      // Preferencias antiguas con monthCategoryFilter — no deben afectar el comportamiento
+      mockUsePreferences.mockReturnValue({
+        preferences: {
+          monthCategoryFilter: ["cat-1"], // valor de la fase anterior
+        },
+        setPreferences: mockSetPreferences,
+        isSaving: false,
+        isLoading: false,
+        isError: false,
+        error: null,
+      } as ReturnType<typeof usePreferences>);
+
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 15000, incomeCents: 500000, balanceCents: 485000 },
+        movements: {
+          unicos: [mockMovementExpense, mockMovementIncome],
+          fijos: [],
+          cuotas: [],
+        },
+      });
+      renderMonthView();
+
+      // useMovements debe llamarse SIN el filtro de categoryIds del viejo filtro por pantalla
+      expect(mockUseMovements).toHaveBeenCalledWith("2026-06");
+
+      // Ambos ítems deben ser visibles (el monthCategoryFilter viejo no filtra)
+      expect(screen.getByText("Almuerzo en el trabajo")).toBeInTheDocument();
+    });
+
+    it("back-compat: monthListFilters ausente en prefs → default (Ambos + todas) sin crash", () => {
+      mockUsePreferences.mockReturnValue({
+        preferences: {}, // sin monthListFilters
+        setPreferences: mockSetPreferences,
+        isSaving: false,
+        isLoading: false,
+        isError: false,
+        error: null,
+      } as ReturnType<typeof usePreferences>);
+
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 15000, incomeCents: 500000, balanceCents: 485000 },
+        movements: {
+          unicos: [mockMovementExpense, mockMovementIncome],
+          fijos: [],
+          cuotas: [],
+        },
+      });
+
+      // No debe crashear, y todos los ítems deben verse
+      expect(() => renderMonthView()).not.toThrow();
+      expect(screen.getByText("Almuerzo en el trabajo")).toBeInTheDocument();
     });
   });
 });

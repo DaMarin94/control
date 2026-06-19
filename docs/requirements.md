@@ -44,6 +44,7 @@ Cubre exclusivamente la plataforma **web** de Control en su versión 1.0. La pla
 | 1.1.6 | 2026-06-17 | Filtro por categoría en la Vista del mes: control por pantalla, persistido por usuario, default todas, tres estados (nuevo RF-VM-006). Unifica el estado "ninguna" del filtro: destildar todas = lista/serie en cero, en `/mes` y en `/reportes` (ajusta RF-REP-002/005). Fase 1.1.6. |
 | 1.1.7 | 2026-06-17 | Movimientos calculados: fijo cuyo monto se deriva en vivo de otro fijo de origen vía fórmula (submódulo 3.4.b, RF-MCALC-001..007). Nuevas RN-017 (fórmula + redondeo), RN-018 (signo; monto ≤ 0 como excepción a RN-001) y RN-019 (imputación con signo a totales/reportes). Fase 1.1.7. |
 | 1.1.8 | 2026-06-19 | Calculados con origen único o cuota: el origen de un calculado puede ser un movimiento único o un grupo de cuotas, además de un fijo (RF-MCALC-008/009/010; ajusta RF-MCALC-001/004/005/006). Cadencia espejo del origen; borrado total (no por split) para calculados de único/cuota. Fase 1.1.8. |
+| 1.2.1 | 2026-06-19 | Filtros por listado en la Vista del mes (reabre RF-VM-006): el filtro pasa de **por pantalla** (1.1.6) a **por listado** —cada sección (Únicos/Fijos/Cuotas) tiene su filtro de **tipo** (Gasto/Ingreso/Ambos, default Ambos) y de **categoría** (default todas)—; los totales del mes reflejan lo visible tras filtrar las 3 secciones; controles ocultos en modo orden. El filtrado pasa a ser 100% en frontend (`/mes` ya no filtra el endpoint). Deprecada `monthCategoryFilter`; nueva preferencia `monthListFilters`. Fase 1.2.1. |
 
 ---
 
@@ -1246,33 +1247,39 @@ La vista del mes muestra todos los movimientos del mes seleccionado (únicos, fi
 
 ---
 
-#### RF-VM-006 — Filtro por categoría de la vista del mes
+#### RF-VM-006 — Filtros por listado de la vista del mes
+
+> **Reabierto en 1.2.1 (de por-pantalla a por-listado).** En 1.1.6 el filtro era **uno por pantalla** (un solo control de categoría que restringía toda la vista, persistido en `monthCategoryFilter`, con el **backend** filtrando `GET /movements?categories=`). En 1.2.1 pasa a ser **por listado** —cada sección tiene sus propios controles de tipo y categoría— y el **filtrado se mueve al frontend** (`/mes` trae todo el mes en una sola llamada y filtra cada lista en cliente; el endpoint ya no se filtra desde `/mes`). La preferencia pasa a `monthListFilters`; `monthCategoryFilter` queda **deprecada** (ver `docs/data-model.md`).
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | La vista del mes ofrece un filtro por categoría que restringe la lista y los totales del mes a las categorías seleccionadas. Es un control **por pantalla** (no por mes): la selección se mantiene al navegar entre meses y se persiste por usuario. |
+| **Descripción** | Cada una de las tres secciones de la vista del mes (Únicos, Fijos, Cuotas) ofrece **sus propios** controles de filtro: un **filtro de tipo** (Gasto / Ingreso / Ambos) y un **filtro de categoría**. Filtran solo su sección. Los **totales del mes** reflejan la suma de lo visible tras aplicar los filtros de las tres secciones. Es un estado **por pantalla** (no por mes): la selección se mantiene al navegar entre meses y se persiste por usuario. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | El usuario está en la vista del mes. |
 
 **Flujo principal:**
-1. La vista del mes expone un control de filtro de categorías (mismo control que el widget de reporte, RF-REP-002).
-2. El usuario abre el filtro y selecciona el subconjunto de categorías que quiere ver.
-3. La lista y los totales del mes se recalculan al instante para reflejar solo las categorías seleccionadas.
+1. Cada sección (Únicos / Fijos / Cuotas) expone su disparador de filtro con dos controles propios: **tipo** (Gasto / Ingreso / Ambos) y **categoría**.
+2. El usuario filtra una sección por tipo y/o categoría.
+3. La lista de esa sección, su **contador (pill)** y su **subtotal** se recalculan al instante para reflejar lo filtrado; los **totales del mes** se recalculan como la suma de lo visible en las tres secciones.
 
-**Tres estados del filtro:**
-- **Todas** (default): sin filtro; se muestran todos los movimientos del mes.
-- **Subconjunto:** solo se muestran (y suman a los totales) los movimientos de las categorías tildadas.
-- **Ninguna** (todas destildadas): la lista queda **vacía** y los totales en **cero**.
+**Controles por sección:**
+- **Tipo:** Gasto / Ingreso / **Ambos** (default Ambos). Restringe la sección al tipo elegido.
+- **Categoría:** **tres estados** —**todas** (default, sin filtro), **subconjunto** (solo las tildadas), **ninguna** (todas destildadas → la sección queda vacía)—.
 
 **Criterios de aceptación:**
-- [ ] El filtro afecta **tanto la lista como los totales** del mes: ambos se recalculan según la selección.
-- [ ] El default es **todas las categorías** (sin filtro).
-- [ ] La selección **se mantiene al navegar entre meses** (es por pantalla, no por mes) y se **persiste por usuario** vía las preferencias (1.1.0), clave `monthCategoryFilter` (shape en `docs/data-model.md`); sobrevive a la navegación y al cierre de sesión.
-- [ ] El estado **"ninguna"** (todas destildadas) deja la **lista vacía y los totales en cero** (igual que el filtro de `/reportes`, RF-REP-002).
-- [ ] Con "todas" (sin filtro) se siguen mostrando movimientos cuya categoría fue eliminada (soft delete, RF-CAT-004 / RF-VM-002); con un subconjunto, solo entran las categorías seleccionadas.
+- [ ] Cada sección tiene **dos controles propios e independientes**: filtro de tipo (Gasto/Ingreso/Ambos, default **Ambos**) y filtro de categoría (default **todas**). El filtro de una sección no afecta a las otras dos.
+- [ ] El **pill contador** y el **subtotal** de cada sección reflejan **lo filtrado** en esa sección.
+- [ ] Los **totales del mes** (RF-VM-002) son la **suma de lo visible** tras aplicar los filtros de las tres secciones.
+- [ ] El estado de categoría **"ninguna"** (todas destildadas) deja esa sección **vacía** y sin aporte a los totales.
+- [ ] Los controles de filtro **no se muestran en modo orden** (RF-VM-005).
+- [ ] La selección **se mantiene al navegar entre meses** (es por pantalla, no por mes) y se **persiste por usuario** vía las preferencias (1.1.0), clave `monthListFilters` (shape en `docs/data-model.md`); sobrevive a la navegación y al cierre de sesión.
+- [ ] Con categoría "todas" (sin filtro) se siguen mostrando movimientos cuya categoría fue eliminada (soft delete, RF-CAT-004 / RF-VM-002); con un subconjunto, solo entran las categorías seleccionadas.
 - [ ] El filtro **no es global:** no afecta a otras pantallas (dashboard ni reportes tienen su propio estado de filtro, independiente de este).
-- [ ] El filtro reutiliza el control de categorías del widget de reporte (RF-REP-002), sin un control visual nuevo.
+- [ ] **Arranque fresco:** cada lista arranca en su default (Ambos + todas). La preferencia anterior `monthCategoryFilter` (1.1.6) **no se migra** ni se lee desde `/mes`.
+
+**Notas:**
+- El **filtrado es 100% en el frontend** (1.2.1): `/mes` trae todo el mes en una sola llamada y filtra cada lista en cliente; los totales del mes se recalculan en cliente sobre lo visible. El query param `categories` de `GET /movements` **sigue existiendo pero ya no se usa desde `/mes`** (lo sigue usando `/reportes`); ver `docs/data-model.md`, §Filtro de categorías.
 
 ---
 

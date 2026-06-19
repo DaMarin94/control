@@ -122,9 +122,13 @@ ReportCardConfig = {
 - **Back-compat / normalización.** Un blob previo **sin** `reports` se interpreta como `[]` (pantalla vacía). La normalización (entradas malformadas, `type` desconocido, `categoryIds` que apunten a categorías inexistentes/eliminadas) es responsabilidad del front; un blob viejo o parcial nunca rompe la pantalla.
 - **El back NO valida ni conoce esta clave** (igual que `monthSections`): `PUT /preferences` guarda el blob tal cual. La normalización y los defaults son del frontend consumidor.
 
-#### `monthCategoryFilter` — filtro de categorías de la Vista del mes (Fase 1.1.6, RF-VM-006)
+#### `monthListFilters` — filtros por listado de la Vista del mes (Fase 1.2.1, RF-VM-006)
 
-Filtro por categoría de `/mes`, persistido por usuario. Shape, semántica de los tres estados y back-compat en §Filtro de categorías → `monthCategoryFilter` (más abajo).
+Filtros **por sección** de `/mes` (tipo + categoría por cada una de Únicos/Fijos/Cuotas), persistidos por usuario. Reemplaza a `monthCategoryFilter`. Shape, semántica y back-compat en §Filtro de categorías → `monthListFilters` (más abajo).
+
+#### `monthCategoryFilter` — filtro de categorías de la Vista del mes (Fase 1.1.6, RF-VM-006) — **DEPRECADA (1.2.1)**
+
+**Deprecada en 1.2.1**: reemplazada por `monthListFilters`. Ya no se lee ni se escribe desde `/mes`; se conserva en el tipo para no romper blobs viejos y **no se migra**. Detalle en §Filtro de categorías → `monthCategoryFilter` (más abajo).
 
 ---
 
@@ -205,7 +209,7 @@ Transaction = {
 **Query params:**
 
 - **`month`** (requerido) — el mes a listar, `YYYY-MM`.
-- **`categories`** (opcional, Fase 1.1.6) — filtro por categoría. Lista de `categoryId`s **separados por comas, sin URL-encode** (ej. `categories=abc,def`). **Distingue "ausente" de "presente y vacío"** (ver tabla del filtro de categorías más abajo): ausente = todas; `categories=` (vacío) = ninguna (listas vacías + totales en cero); lista = solo esas categorías. Afecta **gastos e ingresos** y recalcula **listas y totales**. Lo alimenta el filtro de `/mes` (RF-VM-006), derivado de la preferencia `monthCategoryFilter`.
+- **`categories`** (opcional, Fase 1.1.6) — filtro por categoría. Lista de `categoryId`s **separados por comas, sin URL-encode** (ej. `categories=abc,def`). **Distingue "ausente" de "presente y vacío"** (ver tabla del filtro de categorías más abajo): ausente = todas; `categories=` (vacío) = ninguna (listas vacías + totales en cero); lista = solo esas categorías. Afecta **gastos e ingresos** y recalcula **listas y totales**. **El param sigue vigente pero `/mes` ya NO lo usa (Fase 1.2.1):** el filtrado de la Vista del mes se movió al frontend (filtros por listado, RF-VM-006), así que `/mes` trae todo el mes sin `categories`. El param lo sigue consumiendo `GET /movements/reports` (filtro de reportes).
 
 ```
 data = {
@@ -365,7 +369,7 @@ ReportCategory = {
 
 ## Filtro de categorías — query param `categories` (Fase 1.1.6)
 
-> Destino canónico del contrato del param `categories`. Aplica **igual** a `GET /movements?month=YYYY-MM` (filtro de `/mes`, RF-VM-006) y a `GET /movements/reports?year=YYYY` (filtro de reportes, RF-REP-002). Los dos endpoints lo referencian.
+> Destino canónico del contrato del param `categories`. Lo consume **`GET /movements/reports?year=YYYY`** (filtro de reportes, RF-REP-002). `GET /movements?month=YYYY-MM` lo **acepta** con la misma semántica, pero **`/mes` ya no lo envía** (Fase 1.2.1: el filtro de la Vista del mes se movió al frontend — filtros por listado, RF-VM-006; ver §Preferencia `monthListFilters`).
 
 El param distingue **tres estados** —y, en particular, distingue **"ausente" de "presente y vacío"**:
 
@@ -380,15 +384,32 @@ El param distingue **tres estados** —y, en particular, distingue **"ausente" d
 - En reportes, **`earliestYear` ignora el filtro siempre** (ver §Contrato de serie de reportes).
 - Front: los tres estados derivan de la preferencia/`categoryIds` correspondiente — **`null`/ausente → omitir el param**, **`[]` → `categories=`**, **lista → `categories=id1,id2`**. La coma va **literal** (no `URLSearchParams`).
 
-### Preferencia `monthCategoryFilter` — filtro de la Vista del mes (Fase 1.1.6, RF-VM-006)
+### Preferencia `monthListFilters` — filtros por listado de la Vista del mes (Fase 1.2.1, RF-VM-006)
 
-Clave nueva del blob `UserPreferences` (ver §Contrato de preferencias → Claves del blob). Persiste el filtro de categorías de `/mes`, **set único por esa pantalla** (no por mes).
+> **Destino canónico** del contrato de los filtros de `/mes`. Clave del blob `UserPreferences` (ver §Contrato de preferencias → Claves del blob). Reabre y reemplaza a `monthCategoryFilter` (1.1.6): el filtro pasa de **uno por pantalla** a **uno por sección**, con dos controles propios por sección (tipo + categoría). Persiste **por pantalla** (no por mes). Desde 1.2.1 el filtrado de `/mes` ocurre **100% en el frontend** (ver más abajo).
+
+```
+monthListFilters: {
+  unicos: { type: "ALL" | "EXPENSE" | "INCOME", categories: string[] | null },
+  fijos:  { type: "ALL" | "EXPENSE" | "INCOME", categories: string[] | null },
+  cuotas: { type: "ALL" | "EXPENSE" | "INCOME", categories: string[] | null }
+}
+```
+
+- **`type`** — filtro de tipo de la sección: `"ALL"` (Ambos, default) / `"EXPENSE"` (Gasto) / `"INCOME"` (Ingreso).
+- **`categories`** — filtro de categoría de la sección, con la **misma semántica de 3 estados** que el resto del proyecto: **`null` = todas** (default, sin filtro), **`[]` = ninguna** (sección vacía), **lista = subconjunto** de `categoryId`s.
+- **Default fresco por sección:** `{ type: "ALL", categories: null }`.
+- **Back-compat / normalización** (igual que `monthSections`): si `monthListFilters` **no existe** → default por sección; si falta una sección o trae claves/valores raros → se completa/normaliza esa sección al default. Un blob viejo o parcial nunca rompe la pantalla.
+- Es **independiente** del filtro de reportes (clave `reports`) y del filtro efímero del dashboard.
+- **El back NO valida ni conoce esta clave** (igual que `monthSections` / `reports`): `PUT /preferences` guarda el blob tal cual. La normalización y los defaults son del frontend consumidor.
+
+### Preferencia `monthCategoryFilter` — filtro de la Vista del mes (Fase 1.1.6, RF-VM-006) — **DEPRECADA (1.2.1)**
+
+> **Deprecada en 1.2.1**, reemplazada por `monthListFilters` (arriba). Se conserva en el tipo para no romper blobs viejos, pero **`/mes` ya no la lee ni la escribe** y su valor **no se migra** a `monthListFilters` (arranque fresco). Documentada acá solo como registro del contrato histórico.
 
 ```
 monthCategoryFilter: string[] | null
 ```
 
 - **`null` / ausente = todas** (default, sin filtro). **`[]` = ninguna** (lista/totales en cero). **lista = subconjunto** de `categoryId`s.
-- Mapea 1:1 a los tres estados del param `categories` de `GET /movements` (tabla de arriba).
-- Es **independiente** del filtro de reportes (clave `reports`) y del filtro efímero del dashboard: no se contaminan entre pantallas.
-- **El back NO valida ni conoce esta clave** (igual que `monthSections` / `reports`): `PUT /preferences` guarda el blob tal cual. La normalización y los defaults son del frontend consumidor.
+- En 1.1.6 mapeaba 1:1 a los tres estados del param `categories` de `GET /movements` (tabla de arriba) y el filtrado lo hacía el backend. Desde 1.2.1 ese filtrado se movió al frontend y esta clave quedó sin uso.
