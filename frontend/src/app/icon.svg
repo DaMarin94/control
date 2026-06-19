@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#5080eb"></stop>
+      <stop offset="1" stop-color="#1b46b4"></stop>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"></rect>
+  <g transform="translate(184.32 184.32) scale(6.5536)">
+    <g fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round">
+      <circle cx="50" cy="50" r="32"></circle>
+      <line x1="50.00" y1="43.00" x2="50.00" y2="18.00"></line><line x1="56.06" y1="46.50" x2="77.71" y2="34.00"></line><line x1="56.06" y1="53.50" x2="77.71" y2="66.00"></line><line x1="50.00" y1="57.00" x2="50.00" y2="82.00"></line><line x1="43.94" y1="53.50" x2="22.29" y2="66.00"></line><line x1="43.94" y1="46.50" x2="22.29" y2="34.00"></line>
+    </g>
+    <g fill="#fff">
+      <circle cx="50.00" cy="10.00" r="5"></circle><circle cx="84.64" cy="30.00" r="5"></circle><circle cx="84.64" cy="70.00" r="5"></circle><circle cx="50.00" cy="90.00" r="5"></circle><circle cx="15.36" cy="70.00" r="5"></circle><circle cx="15.36" cy="30.00" r="5"></circle>
+      <circle cx="50" cy="50" r="7"></circle>
+    </g>
+  </g>
+</svg>

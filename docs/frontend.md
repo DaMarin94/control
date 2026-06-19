@@ -469,6 +469,23 @@ Detalle operativo para no romper tokens en `.claude/agents/control-frontend.md`.
 
 - No usar `@apply` con clases que referencian tokens custom (ej: `border-border`). En `@layer base` referenciar las CSS variables directo con `var(--color-border)`. Es un cambio de comportamiento de v3 a v4 que produce un error de build poco claro si se ignora.
 
+## Íconos de la app y PWA manifest
+
+Los íconos se cablean por **file conventions de Next.js 15 (App Router)** — no hay `<link>` manuales en `layout.tsx`. Next genera los `<head>` a partir de archivos con nombres reservados:
+
+| Archivo | Rol |
+| --- | --- |
+| `src/app/icon.svg` | Favicon escalable. |
+| `src/app/favicon.ico` | Fallback legacy multi-res (16/32/48). |
+| `src/app/apple-icon.png` | iOS home-screen, 180×180. |
+| `src/app/manifest.ts` | Genera `/manifest.webmanifest` (PWA). |
+| `public/web-app-manifest-192x192.png` / `-512x512.png` | Íconos referenciados por el manifest. |
+
+- **Fuente de los assets:** `docs/design/icon-export/` (export del ícono de marca). Para cambiar el ícono se reemplazan esos fuentes y se regeneran los derivados de arriba.
+- **Color del manifest:** `theme_color: "#1b46b4"` (azul profundo del gradiente del ícono), `background_color: "#ffffff"`.
+- **Gotcha — `purpose` no combinado:** el tipo `MetadataRoute.Manifest` de Next 15 **no acepta** `purpose: "any maskable"` combinado (solo `"any" | "maskable" | "monochrome"`). Por eso el manifest lista **4 entradas** de íconos: 192 y 512, cada una declarada por separado en `any` y en `maskable`.
+- **Gotcha — `sharp` no es dep declarada:** vive en `node_modules/.pnpm/sharp@.../`. Cualquier script de generación de assets debe referenciarlo por path o instalarlo explícito.
+
 ## Testing — gotchas
 
 - Tests en `tests/` (carpeta hermana de `src/`), espejando el árbol de `src/`. Ver convención completa en `docs/technical.md`.
