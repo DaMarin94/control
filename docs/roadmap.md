@@ -184,7 +184,7 @@ Backend y frontend se trabajan **en paralelo** porque en esta fase son independi
 - Vista del mes — `/mes`
 - Dashboard — `/`
 
-> **Decisión (2026-06-09) — Sidebar (RF-NAV-001) diferido. → RESUELTO (2026-06-10): implementado.** En esta fase el sidebar de navegación global se difirió; la navegación interina entre `/`, `/mes` y `/categorias` se hacía con los **accesos definidos en cada pantalla** (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL directa). **El sidebar ya se implementó** post-Fase 7, como **feature frontend independiente fuera de la secuencia de fases** (no en Fase 5): las tres pantallas autenticadas viven bajo el route group `app/(app)/` con un layout compartido que monta el sidebar. Ver bitácora de `docs/decisions.md` (2026-06-10) y `docs/frontend.md` (sección Navegación global).
+> **Decisión (2026-06-09) — Sidebar (RF-NAV-001) diferido. → RESUELTO (2026-06-10): implementado.** En esta fase el sidebar de navegación global se difirió; la navegación interina entre `/`, `/mes` y `/categorias` se hacía con los **accesos definidos en cada pantalla** (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL directa). **El sidebar ya se implementó** post-Fase 7, como **feature frontend independiente fuera de la secuencia de fases** (no en Fase 5): las tres pantallas autenticadas viven bajo el route group `app/(app)/` con un layout compartido que monta el sidebar. Ver `docs/frontend.md` (sección Navegación global).
 
 **Rama:** `feat/month-view-dashboard`
 **Depende de:** Fase 4.

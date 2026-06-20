@@ -177,7 +177,7 @@ El mes de un movimiento se determina con la **`timezone` guardada en cada regist
 
 ### Categoría soft-deleted incluida (RF-CAT-004)
 
-El join de movimientos y el cálculo de totales **no filtran por `Category.deletedAt`**: un movimiento histórico muestra su categoría embebida aunque esté eliminada, y **sigue contando en los totales** (RF-VM-002). El soft delete de categoría no saca movimientos de los cálculos (ver bitácora 2026-06-08).
+El join de movimientos y el cálculo de totales **no filtran por `Category.deletedAt`**: un movimiento histórico muestra su categoría embebida aunque esté eliminada, y **sigue contando en los totales** (RF-VM-002). El soft delete de categoría no saca movimientos de los cálculos.
 
 ### Totales
 
@@ -341,7 +341,7 @@ Gestión de grupos de cuotas, **scopeada por `userId` del JWT**. El módulo expo
 | `POST /installments/:id/calculated` | calculado desde el grupo `:id` (1.1.8) | `201` · `data: Recurring` | `400` · `404` |
 | `PATCH /installments/:id/calculated` | edita el calculado de cuota `:id` (1.1.8) | `200` · `data: Recurring` | `400` · `404` |
 
-- **Solo `EXPENSE` en v1:** el endpoint **rechaza `INCOME` con `400`** (resuelve la contradicción RF-MC-001 vs "Fuera de alcance: Ingreso en cuotas" — ver bitácora 2026-06-09). `amountCents` es el monto **por cuota** (entero `> 0`, RN-002), no el total. `totalInstallments` es la cantidad (entero `> 0`). `startMonth` es `YYYY-MM`.
+- **Solo `EXPENSE` en v1:** el endpoint **rechaza `INCOME` con `400`** (resuelve la contradicción RF-MC-001 vs "Fuera de alcance: Ingreso en cuotas"). `amountCents` es el monto **por cuota** (entero `> 0`, RN-002), no el total. `totalInstallments` es la cantidad (entero `> 0`). `startMonth` es `YYYY-MM`.
 - **`PATCH /installments/:id` — edita el grupo completo in-place (RF-MC-003).** Campos editables: monto por cuota, cantidad, mes de inicio, categoría, descripción. **El `type` no se edita.** **No hay split ni inmutabilidad del pasado** (a diferencia de los fijos): la edición aplica a todas las instancias del grupo. `404` si no existe o no es del usuario.
 - **`DELETE /installments/:id` — hard delete del grupo entero.** Borra **físicamente** todas las cuotas (pasadas y futuras): `InstallmentGroup` no tiene `deletedFrom` ni soft delete. **`204` sin cuerpo.** `404` si no existe o no es del usuario. Si el grupo tiene calculados derivados (`sourceInstallmentGroupId`), la FK `onDelete: Cascade` los borra enteros (1.1.8 — ver §Movimientos calculados, Eliminación).
 - **`POST|PATCH /installments/:id/calculated`** (1.1.8) — calculado de origen cuota (deriva del **monto por cuota**); contrato en `docs/data-model.md`, §Contrato de movimientos calculados; mecánica en §Movimientos calculados (abajo).

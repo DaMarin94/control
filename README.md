@@ -56,8 +56,8 @@ pnpm dev
 .P2 - Modo oscuro. Default = que el navegador o sistema, recordar compatibilidad absoluta en cualquier tipo de dispositivo, es mas podriamos agregar eso como regla importante en todos los lugares que consideres pertinentes. se puede almacenar la preferencia como el resto de las configuraciones que se persisten en DB.
 
 Errores:
+.E1 - En la screen mes, cuando tenes todos los grupos del acordeon contraiodos y la pagina se ve "vacia". Se genera un scroll, imposible si sobra espacio.
 .E2 - En la screen reportes, cuando le doy agregar y me lista los reportes disponiobles, el 3er reporte ya no se peude ver la lista por que esta al final de la pantalla y la lista siempre va para abajo.
-.E3 - En la screen mes, cuando tenes todos los grupos del acordeon contraiodos y la pagina se ve "vacia". Se genera un scroll, imposible si sobra espacio.
 
 
 

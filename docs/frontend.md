@@ -224,7 +224,7 @@ Carga, edición y eliminación de movimientos fijos. Se crean desde el tab **Fij
 
 ### `delete-recurring-dialog.tsx`
 
-- Diálogo de confirmación **sin opciones** (RF-MF-004, reescrito en Bitácora 2026-06-13): la eliminación aplica **siempre desde el mes visualizado inclusive en adelante**. El cliente fija `fromCurrentMonth = true` y `currentMonth` = mes visualizado (`viewMonth`, fallback `getCurrentMonth()`). El checkbox "Eliminar también desde este mes" que existió en versiones previas fue **quitado** — no reintroducirlo (ver gotcha en `.claude/agents/control-frontend.md`, Fase 3).
+- Diálogo de confirmación **sin opciones** (RF-MF-004): la eliminación aplica **siempre desde el mes visualizado inclusive en adelante**. El cliente fija `fromCurrentMonth = true` y `currentMonth` = mes visualizado (`viewMonth`, fallback `getCurrentMonth()`). El checkbox "Eliminar también desde este mes" que existió en versiones previas fue **quitado** — no reintroducirlo (ver gotcha en `.claude/agents/control-frontend.md`, Fase 3).
 
 ### `movement-item-row.tsx`
 
@@ -383,7 +383,7 @@ La navegación entre `/`, `/mes` y `/categorias` se hace por el **sidebar global
 
 ## Navegación global (sidebar — RF-NAV-001)
 
-Feature 100% frontend, construida **fuera de la secuencia de fases** (post-Fase 7). Resuelve la navegación entre secciones, la acción primaria de nuevo movimiento y el menú de usuario, persistente en pantallas autenticadas. Ver bitácora 2026-06-10 en `docs/decisions.md`.
+Feature 100% frontend, construida **fuera de la secuencia de fases** (post-Fase 7). Resuelve la navegación entre secciones, la acción primaria de nuevo movimiento y el menú de usuario, persistente en pantallas autenticadas.
 
 ### Punto único de montaje: route group `app/(app)/`
 
