@@ -3,11 +3,13 @@ import {
   IsInt,
   IsISO8601,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   Min,
 } from 'class-validator';
-import { MovementType } from '@prisma/client';
+import { Currency, MovementType } from '@prisma/client';
 
 /**
  * DTO para crear un movimiento único (POST /transactions).
@@ -51,4 +53,22 @@ export class CreateTransactionDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  /**
+   * Moneda del movimiento (ARS o USD). Opcional — default ARS.
+   * Fase 1.2.3.
+   */
+  @IsOptional()
+  @IsEnum(Currency, { message: 'currency debe ser ARS o USD' })
+  currency?: Currency;
+
+  /**
+   * Cotización ARS/1 USD al momento del movimiento. Opcional — default 1.
+   * Número positivo con decimales (no centavos).
+   * Fase 1.2.3.
+   */
+  @IsOptional()
+  @IsNumber({}, { message: 'exchangeRate debe ser un número' })
+  @IsPositive({ message: 'exchangeRate debe ser un número positivo' })
+  exchangeRate?: number;
 }

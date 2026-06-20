@@ -34,6 +34,8 @@ const mockRecurring: Recurring = {
   startMonth: "2026-06",
   deletedFrom: null,
   frequency: "MONTHLY",
+  currency: "ARS",
+  exchangeRate: 1,
   createdAt: "2026-06-01T00:00:00.000Z",
   updatedAt: "2026-06-01T00:00:00.000Z",
   category: {
@@ -80,6 +82,7 @@ describe("useRecurring", () => {
         put: vi.fn(),
       },
       token: "test-token",
+      isAuthenticated: true,
     });
   });
 

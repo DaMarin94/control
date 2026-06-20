@@ -21,6 +21,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   CategoryScope,
+  Currency,
   FormulaOperator,
   MovementType,
   RecurringFrequency,
@@ -32,6 +33,7 @@ import {
 } from '../../../src/movements/movements.repository';
 import { MovementsService } from '../../../src/movements/movements.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
+import { SettingsService } from '../../../src/settings/settings.service';
 
 // ---------------------------------------------------------------------------
 // Tipos y fixtures compartidos
@@ -529,11 +531,18 @@ const mockLogger = {
   log: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), verbose: jest.fn(),
 };
 
+const mockSettingsServiceExt = {
+  getSettings: jest.fn(),
+  updateLastExchangeRate: jest.fn(),
+};
+
 function makeCalcDeUnicoAnual(overrides: Partial<RecurringForAnnual> = {}): RecurringForAnnual {
   return {
     id: CALC_TX_ID,
     type: MovementType.EXPENSE,
     amountCents: 0,
+    currency: Currency.ARS,
+    exchangeRate: 1,
     startMonth: '2026-06',
     deletedFrom: '2026-07',
     frequency: RecurringFrequency.MONTHLY,
@@ -558,6 +567,8 @@ function makeCalcDeCuotaAnual(overrides: Partial<RecurringForAnnual> = {}): Recu
     id: CALC_CUOTA_ID,
     type: MovementType.EXPENSE,
     amountCents: 0,
+    currency: Currency.ARS,
+    exchangeRate: 1,
     startMonth: '2026-01',
     deletedFrom: null,
     frequency: RecurringFrequency.MONTHLY,
@@ -582,6 +593,7 @@ describe('MovementsService.getReportsMovements — calculados de único y cuota 
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockSettingsServiceExt.getSettings.mockResolvedValue({ defaultCurrency: Currency.ARS, lastExchangeRate: null });
     mockRepo.getAnnualUnicosAggregated.mockResolvedValue([]);
     mockRepo.getAllCuotasForAnnual.mockResolvedValue([]);
     mockRepo.getEarliestYear.mockResolvedValue(null);
@@ -593,6 +605,7 @@ describe('MovementsService.getReportsMovements — calculados de único y cuota 
         MovementsService,
         { provide: MovementsRepository, useValue: mockRepo },
         { provide: Logger, useValue: mockLogger },
+        { provide: SettingsService, useValue: mockSettingsServiceExt },
       ],
     }).compile();
 
@@ -602,7 +615,7 @@ describe('MovementsService.getReportsMovements — calculados de único y cuota 
   it('calculado de único aparece solo en el mes del Transaction (junio 2026)', async () => {
     const calc = makeCalcDeUnicoAnual({ startMonth: '2026-06', deletedFrom: '2026-07' });
     mockRepo.getAllFijosForAnnual.mockResolvedValue([calc]);
-    mockRepo.findTransactionsByIds.mockResolvedValue([{ id: TX_ID, amountCents: 10000, description: 'Viaje' }]);
+    mockRepo.findTransactionsByIds.mockResolvedValue([{ id: TX_ID, amountCents: 10000, description: 'Viaje', currency: Currency.ARS, exchangeRate: 1 }]);
 
     const result = await service.getReportsMovements(USER_A, 2026);
 
@@ -626,6 +639,8 @@ describe('MovementsService.getReportsMovements — calculados de único y cuota 
       amountCents: 5000,
       totalInstallments: 6,
       startMonth: '2026-01',
+      currency: Currency.ARS,
+      exchangeRate: 1,
     }]);
 
     const result = await service.getReportsMovements(USER_A, 2026);
@@ -650,6 +665,8 @@ describe('MovementsService.getReportsMovements — calculados de único y cuota 
       amountCents: 5000,
       totalInstallments: 6,
       startMonth: '2026-01',
+      currency: Currency.ARS,
+      exchangeRate: 1,
     }]);
 
     const result = await service.getReportsMovements(USER_A, 2026);

@@ -46,7 +46,7 @@ export function DeleteInstallmentDialog({ movement, onClose }: DeleteInstallment
     onClose();
   }
 
-  const amountLabel = formatCurrency(movement.amountCents);
+  const amountLabel = formatCurrency(movement.amountCents, movement.currency);
   const description = movement.description ?? movement.category.name;
 
   const installmentInfo = movement.installment

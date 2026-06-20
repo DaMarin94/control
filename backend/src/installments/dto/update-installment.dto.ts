@@ -1,11 +1,15 @@
 import {
+  IsEnum,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   Matches,
   Min,
 } from 'class-validator';
+import { Currency } from '@prisma/client';
 
 /**
  * DTO para editar un grupo de cuotas (PATCH /installments/:id).
@@ -43,4 +47,15 @@ export class UpdateInstallmentDto {
   @IsOptional()
   @IsString()
   description?: string | null;
+
+  /** Moneda del grupo. Opcional. Fase 1.2.3. */
+  @IsOptional()
+  @IsEnum(Currency, { message: 'currency debe ser ARS o USD' })
+  currency?: Currency;
+
+  /** Cotización ARS/1 USD. Número positivo con decimales. Opcional. Fase 1.2.3. */
+  @IsOptional()
+  @IsNumber({}, { message: 'exchangeRate debe ser un número' })
+  @IsPositive({ message: 'exchangeRate debe ser un número positivo' })
+  exchangeRate?: number;
 }

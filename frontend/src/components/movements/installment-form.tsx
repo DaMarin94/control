@@ -22,15 +22,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { CurrencyExchangeBlock } from "@/components/ui/currency-exchange-block";
 import { useCategories } from "@/hooks/use-categories";
 import { useInstallments } from "@/hooks/use-installments";
+import { useSettings } from "@/hooks/use-settings";
 import { useToast } from "@/hooks/use-toast";
 import { type Category, type CategoryScope } from "@/types/category";
 import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
 import { type InstallmentGroup } from "@/types/installment";
-import { parseCurrencyInput, getCurrentMonth } from "@/lib/format";
+import {
+  parseCurrencyInput,
+  parseExchangeRateInput,
+  formatExchangeRate,
+  getCurrentMonth,
+} from "@/lib/format";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import type { CurrencyCode } from "@/types/settings";
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -41,6 +49,9 @@ const installmentSchema = z.object({
     .refine((val) => parseCurrencyInput(val) !== null, {
       message: "Ingresá un monto mayor a 0",
     }),
+  currency: z.enum(["ARS", "USD"]),
+  /** Input de cotización como string. Solo se valida cuando currency !== defaultCurrency. */
+  exchangeRateInput: z.string(),
   totalInstallments: z
     .string()
     .min(1, "La cantidad de cuotas es requerida")
@@ -85,14 +96,28 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
   const { toast } = useToast();
   const { categories } = useCategories();
   const { createInstallment, updateInstallment, isCreating, isUpdating } = useInstallments();
+  const { defaultCurrency, lastExchangeRate } = useSettings();
 
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [exchangeRateError, setExchangeRateError] = useState<string | undefined>();
+  const [isExchangeRateModified, setIsExchangeRateModified] = useState(false);
 
   const isLoading = isEditing ? isUpdating : isCreating;
+
+  // Cotización pre-cargada:
+  // - Editando: la del grupo de cuotas (siempre presente, nunca null en el backend).
+  // - Creando: el lastExchangeRate del usuario, o vacío si aún no tiene historial.
+  const preloadedExchangeRateInput = isEditing
+    ? formatExchangeRate(installment.exchangeRate ?? 1)
+    : lastExchangeRate != null
+      ? formatExchangeRate(lastExchangeRate)
+      : "";
 
   const defaultValues: InstallmentFormData = isEditing
     ? {
         amountInput: String(installment.amountCents / 100).replace(".", ","),
+        currency: installment.currency ?? defaultCurrency,
+        exchangeRateInput: formatExchangeRate(installment.exchangeRate ?? 1),
         totalInstallments: String(installment.totalInstallments),
         startMonth: installment.startMonth,
         categoryId: installment.categoryId,
@@ -100,15 +125,20 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
       }
     : {
         amountInput: "",
+        currency: defaultCurrency,
+        exchangeRateInput: preloadedExchangeRateInput,
         totalInstallments: "",
         startMonth: defaultMonth ?? getCurrentMonth(),
         categoryId: "",
         description: "",
       };
 
+  const [initialExchangeRateInput] = useState(defaultValues.exchangeRateInput);
+
   const {
     register,
     handleSubmit,
+    watch,
     setValue,
     control,
     reset,
@@ -122,13 +152,36 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
     if (isEditing) {
       reset({
         amountInput: String(installment.amountCents / 100).replace(".", ","),
+        currency: installment.currency ?? defaultCurrency,
+        exchangeRateInput: formatExchangeRate(installment.exchangeRate ?? 1),
         totalInstallments: String(installment.totalInstallments),
         startMonth: installment.startMonth,
         categoryId: installment.categoryId,
         description: installment.description ?? "",
       });
+      setIsExchangeRateModified(false);
     }
-  }, [installment, isEditing, reset]);
+  }, [installment, isEditing, reset, defaultCurrency]);
+
+  // Pre-cargar cotización cuando defaultCurrency o lastExchangeRate cambian (solo en crear)
+  useEffect(() => {
+    if (!isEditing) {
+      setValue("currency", defaultCurrency);
+      setValue(
+        "exchangeRateInput",
+        lastExchangeRate != null ? formatExchangeRate(lastExchangeRate) : "",
+      );
+      setIsExchangeRateModified(false);
+    }
+  }, [defaultCurrency, lastExchangeRate, isEditing, setValue]);
+
+  const exchangeRateInput = watch("exchangeRateInput");
+
+  useEffect(() => {
+    setIsExchangeRateModified(
+      exchangeRateInput !== initialExchangeRateInput && exchangeRateInput !== ""
+    );
+  }, [exchangeRateInput, initialExchangeRateInput]);
 
   const availableCategories = filterCategoriesForExpense(
     (categories ?? []).map((c) => ({ id: c.id, name: c.name, scope: c.scope })),
@@ -142,6 +195,15 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
 
     const totalInstallments = parseInt(data.totalInstallments, 10);
 
+    // Validar cotización SIEMPRE (no solo en cross-rate): el roadmap exige capturar
+    // y persistir la cotización real también cuando moneda === defaultCurrency.
+    const parsedExchangeRate = parseExchangeRateInput(data.exchangeRateInput);
+    if (parsedExchangeRate === null) {
+      setExchangeRateError("Ingresá una cotización mayor a 0");
+      return;
+    }
+    setExchangeRateError(undefined);
+
     if (isEditing) {
       const result = await updateInstallment(installment.id, {
         amountCents,
@@ -149,6 +211,7 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
         startMonth: data.startMonth,
         categoryId: data.categoryId,
         description: data.description || null,
+        exchangeRate: parsedExchangeRate,
       });
 
       if (!result.success) {
@@ -166,6 +229,8 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
         startMonth: data.startMonth,
         categoryId: data.categoryId,
         description: data.description || undefined,
+        currency: data.currency,
+        exchangeRate: parsedExchangeRate,
       });
 
       if (!result.success) {
@@ -231,6 +296,26 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
               <p className="text-[12px] text-expense-ink">{errors.amountInput.message}</p>
             )}
           </div>
+
+          {/* ── Moneda y cotización ── */}
+          <Controller
+            name="currency"
+            control={control}
+            render={({ field }) => (
+              <CurrencyExchangeBlock
+                currency={field.value as CurrencyCode}
+                exchangeRateInput={exchangeRateInput}
+                defaultCurrency={defaultCurrency}
+                isExchangeRateModified={isExchangeRateModified}
+                exchangeRateError={exchangeRateError}
+                onCurrencyChange={(val) => {
+                  field.onChange(val);
+                }}
+                onExchangeRateChange={(val) => setValue("exchangeRateInput", val)}
+                exchangeRateInputId="inst-exchange-rate"
+              />
+            )}
+          />
 
           {/* ── Cantidad de cuotas + Mes de inicio (grid 2-col) ── */}
           <div className="grid grid-cols-2 gap-[14px]">

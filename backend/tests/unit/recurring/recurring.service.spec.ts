@@ -16,7 +16,7 @@
  */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { CategoryScope, MovementType, RecurringFrequency } from '@prisma/client';
+import { CategoryScope, Currency, MovementType, RecurringFrequency } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { RecurringService } from '../../../src/recurring/recurring.service';
 import {
@@ -24,6 +24,7 @@ import {
   RecurringWithCategory,
 } from '../../../src/recurring/recurring.repository';
 import { CategoryValidatorService } from '../../../src/categories/category-validator.service';
+import { SettingsService } from '../../../src/settings/settings.service';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -62,6 +63,11 @@ const mockLogger = {
   verbose: jest.fn(),
 };
 
+const mockSettingsServiceRec = {
+  getSettings: jest.fn().mockResolvedValue({ defaultCurrency: Currency.ARS, lastExchangeRate: null }),
+  updateLastExchangeRate: jest.fn().mockResolvedValue(undefined),
+};
+
 // ---------------------------------------------------------------------------
 // Helpers de fixtures
 // ---------------------------------------------------------------------------
@@ -79,6 +85,8 @@ function makeRecurring(
     categoryId: CAT_ID,
     type: MovementType.EXPENSE,
     amountCents: 5000,
+    currency: Currency.ARS,
+    exchangeRate: 1,
     description: null,
     startMonth: '2026-01',
     deletedFrom: null,
@@ -120,6 +128,7 @@ describe('RecurringService', () => {
         { provide: RecurringRepository, useValue: mockRepo },
         { provide: CategoryValidatorService, useValue: mockCategoryValidator },
         { provide: Logger, useValue: mockLogger },
+        { provide: SettingsService, useValue: mockSettingsServiceRec },
       ],
     }).compile();
 

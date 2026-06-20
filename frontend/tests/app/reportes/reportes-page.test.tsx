@@ -18,6 +18,19 @@ import type { UserPreferences } from "@/types/auth";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
+vi.mock("@/hooks/use-settings", () => ({
+  useSettings: vi.fn(() => ({
+    settings: { defaultCurrency: "ARS", lastExchangeRate: null },
+    defaultCurrency: "ARS",
+    lastExchangeRate: null,
+    isLoading: false,
+    isError: false,
+    updateSettings: vi.fn(),
+    isSaving: false,
+  })),
+}));
+
+
 vi.mock("@/hooks/use-preferences", () => ({
   usePreferences: vi.fn(),
 }));
@@ -335,5 +348,31 @@ describe("ReportesPage — navegación de año de card", () => {
 
     const callArg = setPreferences.mock.calls[0]?.[0] as UserPreferences;
     expect(callArg.reports?.[0]?.year).toBe(2025);
+  });
+});
+
+describe("ReportesPage — chip de moneda default (Fase 1.2.3-ext)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    uuidCounter = 0;
+    makePreferencesHook([]);
+  });
+
+  it("el chip de moneda aparece en el header de /reportes (ARS por defecto)", () => {
+    renderPage();
+    const chip = screen.getByRole("link", { name: /moneda por defecto: ARS/i });
+    expect(chip).toBeInTheDocument();
+  });
+
+  it("el chip es un link a /configuracion", () => {
+    renderPage();
+    const chip = screen.getByRole("link", { name: /moneda por defecto: ARS/i });
+    expect(chip).toHaveAttribute("href", "/configuracion");
+  });
+
+  it("el chip muestra el texto del código de moneda 'ARS'", () => {
+    renderPage();
+    const chip = screen.getByRole("link", { name: /moneda por defecto: ARS/i });
+    expect(chip).toHaveTextContent("ARS");
   });
 });

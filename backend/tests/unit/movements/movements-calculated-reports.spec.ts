@@ -9,13 +9,14 @@
  */
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { FormulaOperator, RecurringFrequency } from '@prisma/client';
+import { Currency, FormulaOperator, RecurringFrequency } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { MovementsService } from '../../../src/movements/movements.service';
 import {
   MovementsRepository,
   RecurringForAnnual,
 } from '../../../src/movements/movements.repository';
+import { SettingsService } from '../../../src/settings/settings.service';
 
 const mockRepo = {
   findUnicosByMonth: jest.fn(),
@@ -37,6 +38,11 @@ const mockLogger = {
   log: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), verbose: jest.fn(),
 };
 
+const mockSettingsServiceCalc = {
+  getSettings: jest.fn(),
+  updateLastExchangeRate: jest.fn(),
+};
+
 const USER_A = 'user-calc-reports';
 const CAT_ORIGIN = 'cat-origin';
 const CAT_CALC = 'cat-calc';
@@ -48,6 +54,8 @@ function makeOriginFijo(overrides: Partial<RecurringForAnnual> = {}): RecurringF
     id: 'r1',
     type: 'EXPENSE' as any,
     amountCents: 10000,
+    currency: Currency.ARS,
+    exchangeRate: 1,
     startMonth: '2026-01',
     deletedFrom: null,
     frequency: RecurringFrequency.MONTHLY,
@@ -72,6 +80,8 @@ function makeCalcFijo(overrides: Partial<RecurringForAnnual> = {}): RecurringFor
     id: 'calc-001',
     type: 'EXPENSE' as any, // placeholder en DB — no se usa para totales (RF-MCALC-003)
     amountCents: 0, // placeholder
+    currency: Currency.ARS,
+    exchangeRate: 1,
     startMonth: '2026-01',
     deletedFrom: null,
     frequency: RecurringFrequency.MONTHLY,
@@ -96,6 +106,7 @@ describe('MovementsService getReportsMovements — calculados (Fase 1.1.7)', () 
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockSettingsServiceCalc.getSettings.mockResolvedValue({ defaultCurrency: Currency.ARS, lastExchangeRate: null });
     mockRepo.getAnnualUnicosAggregated.mockResolvedValue([]);
     mockRepo.getAllCuotasForAnnual.mockResolvedValue([]);
     mockRepo.getEarliestYear.mockResolvedValue(null);
@@ -105,6 +116,7 @@ describe('MovementsService getReportsMovements — calculados (Fase 1.1.7)', () 
         MovementsService,
         { provide: MovementsRepository, useValue: mockRepo },
         { provide: Logger, useValue: mockLogger },
+        { provide: SettingsService, useValue: mockSettingsServiceCalc },
       ],
     }).compile();
 

@@ -3,11 +3,13 @@ import {
   IsInt,
   IsISO8601,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   Min,
 } from 'class-validator';
-import { MovementType } from '@prisma/client';
+import { Currency, MovementType } from '@prisma/client';
 
 /**
  * DTO para editar un movimiento único (PATCH /transactions/:id).
@@ -48,4 +50,15 @@ export class UpdateTransactionDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  /** Moneda del movimiento (ARS o USD). Opcional. Fase 1.2.3. */
+  @IsOptional()
+  @IsEnum(Currency, { message: 'currency debe ser ARS o USD' })
+  currency?: Currency;
+
+  /** Cotización ARS/1 USD. Número positivo con decimales. Fase 1.2.3. */
+  @IsOptional()
+  @IsNumber({}, { message: 'exchangeRate debe ser un número' })
+  @IsPositive({ message: 'exchangeRate debe ser un número positivo' })
+  exchangeRate?: number;
 }

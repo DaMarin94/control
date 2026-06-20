@@ -136,6 +136,18 @@ vi.mock("@/hooks/use-installments", () => ({
   })),
 }));
 
+vi.mock("@/hooks/use-settings", () => ({
+  useSettings: vi.fn(() => ({
+    settings: { defaultCurrency: "ARS", lastExchangeRate: null },
+    defaultCurrency: "ARS",
+    lastExchangeRate: null,
+    isLoading: false,
+    isError: false,
+    updateSettings: vi.fn(),
+    isSaving: false,
+  })),
+}));
+
 vi.mock("@/lib/format", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/format")>();
   return {
@@ -213,6 +225,9 @@ const mockMovementExpense = {
   category: { id: "cat-1", name: "Alimentación", color: "#FF5733", scope: "BOTH" as const },
   calculated: null,
   hasCalculated: false,
+  currency: "ARS" as const,
+  exchangeRate: 1,
+  convertedAmountCents: 15000,
 };
 
 const mockMovementIncome = {
@@ -229,6 +244,9 @@ const mockMovementIncome = {
   category: { id: "cat-2", name: "Sueldo", color: "#33FF57", scope: "INCOME" as const },
   calculated: null,
   hasCalculated: false,
+  currency: "ARS" as const,
+  exchangeRate: 1,
+  convertedAmountCents: 500000,
 };
 
 const mockMovementFijo = {
@@ -245,6 +263,9 @@ const mockMovementFijo = {
   category: { id: "cat-3", name: "Servicios", color: "#5733FF", scope: "EXPENSE" as const },
   calculated: null,
   hasCalculated: false,
+  currency: "ARS" as const,
+  exchangeRate: 1,
+  convertedAmountCents: 150000,
 };
 
 const mockMovementCuota = {
@@ -265,6 +286,9 @@ const mockMovementCuota = {
   category: { id: "cat-4", name: "Tecnología", color: "#FF33AA", scope: "EXPENSE" as const },
   calculated: null,
   hasCalculated: false,
+  currency: "ARS" as const,
+  exchangeRate: 1,
+  convertedAmountCents: 50000,
 };
 
 const mockWithData: MonthMovements = {
@@ -329,6 +353,9 @@ const mockMovementCalculadoExpense = {
     sourceAmountCents: 150000,
   },
   hasCalculated: false,
+  currency: "ARS" as const,
+  exchangeRate: 1,
+  convertedAmountCents: -5000,
 };
 
 // Calculados por tipo de origen (Fase 1.1.8)
@@ -529,6 +556,77 @@ describe("MonthViewClient", () => {
       expect(screen.getByText("$200,00")).toBeInTheDocument();   // gastos totales
       expect(screen.getByText("$5.000,00")).toBeInTheDocument(); // ingresos totales
       expect(screen.getByText("+ $4.800,00")).toBeInTheDocument(); // balance
+    });
+
+    // ── Fase 1.2.3 — multi-moneda: totales usan convertedAmountCents ─────────
+    // Criterio de aceptación: con todos los ítems visibles (sin filtros),
+    // el total recalculado en el front coincide con data.totals del backend
+    // (que también suma convertedAmountCents por bucket de type).
+
+    it("Fase 1.2.3 — multi-moneda: totales usan convertedAmountCents, NO amountCents", () => {
+      // Ítem USD: amountCents=100 (1 USD crudo), convertedAmountCents=120000 ($1200 ARS)
+      // El total de gastos debe mostrar $1200 (convertedAmountCents), NO $1 (amountCents).
+      const usdExpense = {
+        ...mockMovementExpense,
+        id: "usd-exp-1",
+        type: "EXPENSE" as const,
+        amountCents: 100,           // 1 USD en centavos de USD
+        currency: "USD" as const,
+        exchangeRate: 1200,
+        convertedAmountCents: 120000, // $1200 ARS en centavos
+      };
+      mockLoaded({
+        month: "2026-06",
+        // data.totals refleja la suma de convertedAmountCents del backend
+        totals: { expenseCents: 120000, incomeCents: 0, balanceCents: -120000 },
+        movements: {
+          unicos: [usdExpense],
+          fijos: [],
+          cuotas: [],
+        },
+      });
+      renderMonthView();
+
+      // Gastos: debe mostrar $1.200,00 (convertedAmountCents / 100), NO $1,00 (amountCents / 100)
+      expect(screen.getByText("$1.200,00")).toBeInTheDocument();
+      // El $1,00 de amountCents NO debe aparecer en los totales
+      expect(screen.queryByText("$1,00")).not.toBeInTheDocument();
+      // Balance: − $1.200,00
+      expect(screen.getByText("− $1.200,00")).toBeInTheDocument();
+    });
+
+    it("Fase 1.2.3 — multi-moneda: total recalculado en front coincide con data.totals del backend", () => {
+      // ARS expense: amountCents=15000, convertedAmountCents=15000 ($150 ARS)
+      // USD income: amountCents=20000 (200 USD), convertedAmountCents=24000000 ($240000 ARS)
+      // Backend data.totals: expense=15000, income=24000000
+      // Front debe calcular los mismos valores desde los ítems (sin filtros).
+      const arsExpense = { ...mockMovementExpense }; // convertedAmountCents=15000
+      const usdIncome = {
+        ...mockMovementIncome,
+        id: "usd-inc-1",
+        type: "INCOME" as const,
+        amountCents: 20000,
+        currency: "USD" as const,
+        exchangeRate: 1200,
+        convertedAmountCents: 24000000,
+      };
+      mockLoaded({
+        month: "2026-06",
+        totals: { expenseCents: 15000, incomeCents: 24000000, balanceCents: 23985000 },
+        movements: {
+          unicos: [arsExpense, usdIncome],
+          fijos: [],
+          cuotas: [],
+        },
+      });
+      renderMonthView();
+
+      // Gastos: $150,00 (convertedAmountCents del ARS expense)
+      expect(screen.getByText("$150,00")).toBeInTheDocument();
+      // Ingresos: $240.000,00 (convertedAmountCents del USD income)
+      expect(screen.getByText("$240.000,00")).toBeInTheDocument();
+      // Balance: + $239.850,00
+      expect(screen.getByText("+ $239.850,00")).toBeInTheDocument();
     });
   });
 
@@ -1739,5 +1837,61 @@ describe("MonthViewClient", () => {
       expect(() => renderMonthView()).not.toThrow();
       expect(screen.getByText("Almuerzo en el trabajo")).toBeInTheDocument();
     });
+  });
+});
+
+// ─── Chip de moneda default en /mes (Fase 1.2.3-ext) ─────────────────────────
+
+describe("MonthViewClient — chip de moneda default", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Preferencias sin filtros previos
+    mockUsePreferences.mockReturnValue({
+      preferences: {},
+      setPreferences: mockSetPreferences,
+      isSaving: false,
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as ReturnType<typeof usePreferences>);
+  });
+
+  function mockEmpty() {
+    mockUseMovements.mockReturnValue({
+      data: {
+        month: "2026-06",
+        totals: { expenseCents: 0, incomeCents: 0, balanceCents: 0 },
+        movements: { unicos: [], fijos: [], cuotas: [] },
+      },
+      isLoading: false,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      error: null,
+      status: "success",
+      fetchStatus: "idle",
+    } as ReturnType<typeof useMovements>);
+  }
+
+  it("el chip de moneda aparece en el header de /mes (ARS por defecto)", () => {
+    mockEmpty();
+    renderMonthView();
+    // El chip está presente en el header — puede haber uno en desktop y uno en mobile
+    const chips = screen.getAllByRole("link", { name: /moneda por defecto: ARS/i });
+    expect(chips.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("el chip de /mes es un link a /configuracion", () => {
+    mockEmpty();
+    renderMonthView();
+    const chips = screen.getAllByRole("link", { name: /moneda por defecto: ARS/i });
+    chips.forEach((chip) => expect(chip).toHaveAttribute("href", "/configuracion"));
+  });
+
+  it("el chip de /mes muestra el código de moneda 'ARS'", () => {
+    mockEmpty();
+    renderMonthView();
+    const chips = screen.getAllByRole("link", { name: /moneda por defecto: ARS/i });
+    chips.forEach((chip) => expect(chip).toHaveTextContent("ARS"));
   });
 });

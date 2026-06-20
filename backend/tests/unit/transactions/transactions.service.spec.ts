@@ -15,12 +15,12 @@
  */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { MovementType } from '@prisma/client';
+import { CategoryScope, Currency, MovementType } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { TransactionsService } from '../../../src/transactions/transactions.service';
 import { TransactionsRepository, TransactionWithCategory } from '../../../src/transactions/transactions.repository';
 import { CategoryValidatorService } from '../../../src/categories/category-validator.service';
-import { CategoryScope } from '@prisma/client';
+import { SettingsService } from '../../../src/settings/settings.service';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -45,6 +45,11 @@ const mockLogger = {
   verbose: jest.fn(),
 };
 
+const mockSettingsServiceTx = {
+  getSettings: jest.fn().mockResolvedValue({ defaultCurrency: Currency.ARS, lastExchangeRate: null }),
+  updateLastExchangeRate: jest.fn().mockResolvedValue(undefined),
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -60,6 +65,8 @@ function makeTransaction(overrides: Partial<TransactionWithCategory> = {}): Tran
     categoryId: CAT_ID,
     type: MovementType.EXPENSE,
     amountCents: 1500,
+    currency: Currency.ARS,
+    exchangeRate: 1,
     description: null,
     occurredAt: new Date('2026-06-08T14:30:00Z'),
     timezone: 'America/Argentina/Buenos_Aires',
@@ -92,6 +99,7 @@ describe('TransactionsService', () => {
         { provide: TransactionsRepository, useValue: mockRepo },
         { provide: CategoryValidatorService, useValue: mockCategoryValidator },
         { provide: Logger, useValue: mockLogger },
+        { provide: SettingsService, useValue: mockSettingsServiceTx },
       ],
     }).compile();
 

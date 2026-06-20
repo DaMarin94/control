@@ -29,6 +29,18 @@ vi.mock("@/hooks/use-recurring", () => ({
   useRecurring: vi.fn(),
 }));
 
+vi.mock("@/hooks/use-settings", () => ({
+  useSettings: vi.fn(() => ({
+    settings: { defaultCurrency: "ARS", lastExchangeRate: 1200 },
+    defaultCurrency: "ARS",
+    lastExchangeRate: 1200,
+    isLoading: false,
+    isError: false,
+    updateSettings: vi.fn(),
+    isSaving: false,
+  })),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(() => ({ push: vi.fn() })),
 }));
@@ -43,10 +55,12 @@ vi.mock("@/lib/format", async (importOriginal) => {
 
 import { useCategories } from "@/hooks/use-categories";
 import { useRecurring } from "@/hooks/use-recurring";
+import { useSettings } from "@/hooks/use-settings";
 import { useRouter } from "next/navigation";
 
 const mockUseCategories = vi.mocked(useCategories);
 const mockUseRecurring = vi.mocked(useRecurring);
+const mockUseSettings = vi.mocked(useSettings);
 const mockUseRouter = vi.mocked(useRouter);
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -97,6 +111,8 @@ const mockRecurring: Recurring = {
   startMonth: "2026-01",
   deletedFrom: null,
   frequency: "MONTHLY",
+  currency: "ARS",
+  exchangeRate: 1,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
   category: {
@@ -127,6 +143,16 @@ const mockPush = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
+
+  mockUseSettings.mockReturnValue({
+    settings: { defaultCurrency: "ARS", lastExchangeRate: 1200 },
+    defaultCurrency: "ARS",
+    lastExchangeRate: 1200,
+    isLoading: false,
+    isError: false,
+    updateSettings: vi.fn(),
+    isSaving: false,
+  });
 
   mockUseCategories.mockReturnValue({
     categories: [mockExpenseCategory, mockIncomeCategory, mockBothCategory],
@@ -542,6 +568,63 @@ describe("RecurringForm — frecuencia read-only en edición (P2 — Fase 1.1.1)
       const [, updateBody] = mockUpdateRecurring.mock.calls[0] as [string, Record<string, unknown>];
       // frequency NO debe estar en el body del PATCH
       expect(updateBody).not.toHaveProperty("frequency");
+    });
+  });
+});
+
+// ─── Tests: validación cotización > 0 (siempre, no solo cross-rate) ───────────
+
+describe("RecurringForm — validación cotización > 0 (siempre)", () => {
+  it("muestra el campo de cotización también cuando moneda === defaultCurrency", () => {
+    renderForm({});
+    expect(screen.getByLabelText(/cotización/i)).toBeInTheDocument();
+  });
+
+  it("bloquea el submit si la cotización está vacía (lastExchangeRate null, usuario nuevo)", async () => {
+    const user = userEvent.setup();
+    // Sobreescribir el mock para simular usuario nuevo sin historial de cotización
+    mockUseSettings.mockReturnValue({
+      settings: { defaultCurrency: "ARS", lastExchangeRate: null },
+      defaultCurrency: "ARS",
+      lastExchangeRate: null,
+      isLoading: false,
+      isError: false,
+      updateSettings: vi.fn(),
+      isSaving: false,
+    });
+
+    renderForm({});
+
+    await user.type(screen.getByLabelText(/monto/i), "1500");
+    await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
+
+    // El campo de cotización arranca vacío (usuario nuevo) → el submit debe bloquearse
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/ingresá una cotización mayor a 0/i)).toBeInTheDocument();
+    });
+    expect(mockCreateRecurring).not.toHaveBeenCalled();
+  });
+
+  it("envía la cotización real al backend (no hardcodea 1 cuando moneda === default)", async () => {
+    const user = userEvent.setup();
+    mockCreateRecurring.mockResolvedValue({ success: true, recurring: mockRecurring });
+
+    renderForm({});
+
+    await user.type(screen.getByLabelText(/monto/i), "1500");
+    await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
+    // El campo cotización viene pre-cargado con 1200 (el mock de beforeEach)
+
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(mockCreateRecurring).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exchangeRate: 1200,
+        }),
+      );
     });
   });
 });

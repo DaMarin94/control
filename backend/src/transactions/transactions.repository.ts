@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { MovementType, Prisma } from '@prisma/client';
+import { Currency, MovementType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -25,6 +25,10 @@ export interface TransactionWithCategory {
   description: string | null;
   occurredAt: Date;
   timezone: string;
+  /** Moneda original del movimiento (Fase 1.2.3) */
+  currency: Currency;
+  /** Cotización ARS/1 USD al momento del movimiento (Fase 1.2.3) */
+  exchangeRate: number;
   createdAt: Date;
   updatedAt: Date;
   category: EmbeddedCategory;
@@ -57,6 +61,9 @@ function mapToTransactionWithCategory(
     description: tx.description,
     occurredAt: tx.occurredAt,
     timezone: tx.timezone,
+    currency: tx.currency,
+    // Prisma 7 devuelve Decimal para campos @db.Decimal; convertir a number para serializar
+    exchangeRate: Number(tx.exchangeRate),
     createdAt: tx.createdAt,
     updatedAt: tx.updatedAt,
     category: {

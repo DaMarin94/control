@@ -15,10 +15,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, Plus } from "lucide-react";
 import { useMovements } from "@/hooks/use-movements";
+import { useSettings } from "@/hooks/use-settings";
 import { getCurrentMonth, formatMonthLabel, formatCurrency } from "@/lib/format";
 import { NewTransactionButton } from "@/components/movements/new-transaction-button";
 import { TransactionModal } from "@/components/movements/transaction-modal";
 import { ReportCard } from "@/components/charts/report-card";
+import { CurrencyChip } from "@/components/ui/currency-chip";
 
 /** Deriva el año actual del helper getCurrentMonth para no usar new Date() directamente. */
 function getCurrentYear(): number {
@@ -30,6 +32,7 @@ export function DashboardClient() {
   const month = getCurrentMonth();
   const currentYear = getCurrentYear();
   const { data, isLoading, isError } = useMovements(month);
+  const { defaultCurrency } = useSettings();
 
   // Estado para el CTA "Cargá tu primer movimiento" del estado vacío
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -66,9 +69,9 @@ export function DashboardClient() {
   const incomeRatio = totalAbs > 0 ? (incomeCents / totalAbs) * 100 : 50;
   const expenseRatio = totalAbs > 0 ? (expenseCents / totalAbs) * 100 : 50;
 
-  // Formatear monto de balance con prefijo de signo
+  // Formatear monto de balance con prefijo de signo — símbolo de la moneda default
   function formatBalanceAmount(cents: number): string {
-    const formatted = formatCurrency(Math.abs(cents));
+    const formatted = formatCurrency(Math.abs(cents), defaultCurrency);
     if (cents > 0) return `+ ${formatted}`;
     if (cents < 0) return `− ${formatted}`;
     return formatted;
@@ -87,9 +90,13 @@ export function DashboardClient() {
       {/* ── Header .phead ── */}
       <div className="flex items-end justify-between gap-5 mb-7 flex-wrap">
         <div>
-          <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted mb-[6px]">
-            Tu mes
-          </p>
+          {/* Fila del eyebrow: label + chip de moneda default (a la derecha del eyebrow) */}
+          <div className="flex items-center gap-[10px] mb-[6px]">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+              Tu mes
+            </p>
+            <CurrencyChip currency={defaultCurrency} />
+          </div>
           <h1 className="text-[32px] font-bold tracking-[-0.02em] leading-[1.05] text-ink m-0">
             {mesName} <span className="text-accent-ink">{yearName}</span>
           </h1>
@@ -126,7 +133,7 @@ export function DashboardClient() {
                 Gastos
               </div>
               <div className="text-[30px] font-semibold tracking-[-0.02em] leading-none mono text-ink">
-                {formatCurrency(expenseCents)}
+                {formatCurrency(expenseCents, defaultCurrency)}
               </div>
               <div className="text-[12.5px] text-muted">
                 <span className="mono">{expenseCount}</span> movimientos
@@ -142,7 +149,7 @@ export function DashboardClient() {
                 Ingresos
               </div>
               <div className="text-[30px] font-semibold tracking-[-0.02em] leading-none mono text-income-ink">
-                {formatCurrency(incomeCents)}
+                {formatCurrency(incomeCents, defaultCurrency)}
               </div>
               <div className="text-[12.5px] text-muted">
                 <span className="mono">{incomeCount}</span> movimientos
@@ -203,11 +210,11 @@ export function DashboardClient() {
             <div className="flex justify-between text-[12px] text-white/80 mt-[9px] relative">
               <span>
                 Ingresos{" "}
-                <b className="text-white font-semibold mono">{formatCurrency(incomeCents)}</b>
+                <b className="text-white font-semibold mono">{formatCurrency(incomeCents, defaultCurrency)}</b>
               </span>
               <span>
                 Gastos{" "}
-                <b className="text-white font-semibold mono">{formatCurrency(expenseCents)}</b>
+                <b className="text-white font-semibold mono">{formatCurrency(expenseCents, defaultCurrency)}</b>
               </span>
             </div>
           </div>

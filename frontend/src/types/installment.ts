@@ -1,12 +1,13 @@
 /**
  * Tipos del dominio de movimientos en cuotas.
- * Reflejan el contrato de la API del backend (Fase 7).
+ * Reflejan el contrato de la API del backend (Fase 7 + Fase 1.2.3).
  *
  * InstallmentGroup es el grupo padre que define monto, cantidad y mes de inicio.
  * No hay paquete compartido con el backend — el frontend define los suyos.
  */
 
 import type { CategoryScope } from "@/types/category";
+import type { CurrencyCode } from "@/types/settings";
 
 /** Categoría embebida en la respuesta de un grupo de cuotas */
 export interface InstallmentCategory {
@@ -29,13 +30,17 @@ export interface InstallmentGroup {
   categoryId: string;
   /** Siempre "EXPENSE" en v1 */
   type: "EXPENSE";
-  /** Monto de cada cuota en centavos enteros (no el total de la compra) */
+  /** Monto de cada cuota en centavos enteros de la moneda original (no el total de la compra) */
   amountCents: number;
   /** Cantidad total de cuotas (entero > 0) */
   totalInstallments: number;
   /** Mes de inicio del grupo en formato YYYY-MM */
   startMonth: string;
   description: string | null;
+  /** Moneda del grupo de cuotas (Fase 1.2.3). Default "ARS". */
+  currency: CurrencyCode;
+  /** Cotización ARS por 1 USD (Fase 1.2.3). 1 para cuotas en ARS. */
+  exchangeRate: number;
   createdAt: string;
   updatedAt: string;
   /** Categoría embebida en la respuesta */
@@ -57,6 +62,10 @@ export interface CreateInstallmentRequest {
   startMonth: string;
   categoryId: string;
   description?: string;
+  /** Moneda del movimiento (Fase 1.2.3). Default ARS. */
+  currency?: CurrencyCode;
+  /** Cotización ARS por 1 USD (Fase 1.2.3). Requerido si currency !== defaultCurrency. */
+  exchangeRate?: number;
 }
 
 /**
@@ -70,4 +79,6 @@ export interface UpdateInstallmentRequest {
   startMonth?: string;
   categoryId?: string;
   description?: string | null;
+  /** Cotización ARS por 1 USD (Fase 1.2.3). */
+  exchangeRate?: number;
 }

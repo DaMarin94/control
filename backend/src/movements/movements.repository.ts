@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { CategoryScope, FormulaOperator, MovementType, RecurringFrequency, Prisma } from '@prisma/client';
+import { CategoryScope, Currency, FormulaOperator, MovementType, RecurringFrequency, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { applyFormula } from '../recurring/formula.helper';
+import { convertToDefaultCurrency } from '../common/currency.helper';
 
 // ---------------------------------------------------------------------------
 // Interfaces para la agregación anual
@@ -9,7 +10,8 @@ import { applyFormula } from '../recurring/formula.helper';
 
 /**
  * Fila devuelta por el SQL raw de agregación anual de únicos.
- * Una fila por (mes local, categoryId, type).
+ * Una fila por (mes local, categoryId, type, currency, exchangeRate).
+ * Fase 1.2.3: agrupar por currency+exchangeRate para aplicar la conversión antes de sumar.
  */
 interface RawAnnualUnicoRow {
   /** Mes en formato YYYY-MM (calculado con AT TIME ZONE del registro) */
@@ -19,6 +21,10 @@ interface RawAnnualUnicoRow {
   categoryColor: string;
   categoryScope: string;
   type: string;
+  /** Moneda original del grupo (Fase 1.2.3) */
+  currency: string;
+  /** Cotización ARS/1 USD como string (Postgres Decimal → string) */
+  exchangeRate: string;
   /** BigInt de JS — resultado de SUM de Postgres */
   totalCents: bigint;
 }
@@ -27,6 +33,7 @@ interface RawAnnualUnicoRow {
  * Shape de una fila de Recurring para la proyección anual.
  * Incluye frequency (P2) y skippedMonths (P1) — Fase 1.1.1.
  * Incluye campos de calculado (Fase 1.1.7 y 1.1.7.ext).
+ * Incluye currency y exchangeRate (Fase 1.2.3).
  */
 export interface RecurringForAnnual {
   id: string;
@@ -36,6 +43,10 @@ export interface RecurringForAnnual {
    * Para calculados: 0 (placeholder; el monto real se deriva on-the-fly).
    */
   amountCents: number;
+  /** Moneda original del fijo (Fase 1.2.3). */
+  currency: Currency;
+  /** Cotización ARS/1 USD del fijo (Fase 1.2.3). */
+  exchangeRate: number;
   startMonth: string;
   deletedFrom: string | null;
   frequency: RecurringFrequency;
@@ -60,11 +71,16 @@ export interface RecurringForAnnual {
 
 /**
  * Shape de una fila de InstallmentGroup para la proyección anual.
+ * Incluye currency y exchangeRate (Fase 1.2.3).
  */
 export interface InstallmentGroupForAnnual {
   id: string;
   type: MovementType;
   amountCents: number;
+  /** Moneda original del grupo de cuotas (Fase 1.2.3). */
+  currency: Currency;
+  /** Cotización ARS/1 USD del grupo (Fase 1.2.3). */
+  exchangeRate: number;
   totalInstallments: number;
   startMonth: string;
   categoryId: string;
@@ -221,8 +237,23 @@ export interface MovementItem {
   /**
    * Para fijos normales y únicos: siempre > 0.
    * Para calculados: puede ser negativo o cero (RN-018).
+   * En la moneda ORIGINAL del movimiento (Fase 1.2.3).
    */
   amountCents: number;
+  /**
+   * Monto convertido a la moneda default del usuario, en centavos enteros.
+   * Si currency == defaultCurrency: igual a |amountCents| para fijos/únicos normales.
+   * Para calculados: |amountCents| convertido.
+   * Fase 1.2.3.
+   */
+  convertedAmountCents: number;
+  /** Moneda original del movimiento (Fase 1.2.3). */
+  currency: Currency;
+  /**
+   * Cotización ARS/1 USD del movimiento (Fase 1.2.3).
+   * Para calculados: cotización del origen (heredada al vuelo).
+   */
+  exchangeRate: number;
   description: string | null;
   occurredAt: Date | null;
   timezone: string | null;
@@ -249,6 +280,10 @@ interface RawTransactionRow {
   description: string | null;
   occurredAt: Date;
   timezone: string;
+  /** Moneda original del movimiento (Fase 1.2.3) */
+  currency: string;
+  /** Cotización ARS/1 USD como string (Postgres devuelve Decimal como string) */
+  exchangeRate: string;
   categoryId: string;
   categoryName: string;
   categoryColor: string;
@@ -274,10 +309,13 @@ export class MovementsRepository {
    * Fase 1.1.7.ext — calculados de único:
    * Incluye los calculados de único (Recurring con sourceMovementId != null) activos
    * en este mes. Aparecen con origin='unico' (su sección de origen), no en 'fijos'.
+   *
+   * Fase 1.2.3 — defaultCurrency: moneda default del usuario para la conversión.
    */
   async findUnicosByMonth(
     userId: string,
     month: string,
+    defaultCurrency: Currency = Currency.ARS,
   ): Promise<MovementItem[]> {
     const [yearStr, monthStr] = month.split('-');
     const year = parseInt(yearStr, 10);
@@ -296,17 +334,19 @@ export class MovementsRepository {
 
     const rows = await this.prisma.$queryRaw<RawTransactionRow[]>`
       SELECT
-        t.id             AS "id",
-        t."userId"       AS "userId",
-        t.type::text     AS "type",
-        t."amountCents"  AS "amountCents",
-        t.description    AS "description",
-        t."occurredAt"   AS "occurredAt",
-        t.timezone       AS "timezone",
-        t."categoryId"   AS "categoryId",
-        c.name           AS "categoryName",
-        c.color          AS "categoryColor",
-        c.scope::text    AS "categoryScope"
+        t.id                       AS "id",
+        t."userId"                 AS "userId",
+        t.type::text               AS "type",
+        t."amountCents"            AS "amountCents",
+        t.description              AS "description",
+        t."occurredAt"             AS "occurredAt",
+        t.timezone                 AS "timezone",
+        t.currency::text           AS "currency",
+        t."exchangeRate"::text     AS "exchangeRate",
+        t."categoryId"             AS "categoryId",
+        c.name                     AS "categoryName",
+        c.color                    AS "categoryColor",
+        c.scope::text              AS "categoryScope"
       FROM "Transaction" t
       JOIN "Category" c ON c.id = t."categoryId"
       WHERE
@@ -316,7 +356,7 @@ export class MovementsRepository {
       ORDER BY t."amountCents" DESC, t."occurredAt" DESC
     `;
 
-    const unicosItems = rows.map((row) => this.mapRowToMovementItem(row));
+    const unicosItems = rows.map((row) => this.mapRowToMovementItem(row, defaultCurrency));
 
     // Calculados de único: Recurring con sourceMovementId != null activos en el mes
     const calculadosDeUnico = await this.prisma.recurring.findMany({
@@ -346,13 +386,15 @@ export class MovementsRepository {
     const txIds = calculadosDeUnico.map((r) => r.sourceMovementId!);
     const txRows = await this.prisma.transaction.findMany({
       where: { id: { in: txIds } },
-      select: { id: true, amountCents: true, description: true, occurredAt: true, timezone: true },
+      select: { id: true, amountCents: true, description: true, occurredAt: true, timezone: true, currency: true, exchangeRate: true },
     });
     const txOriginMap = new Map<string, {
       amountCents: number;
       description: string | null;
       occurredAt: Date;
       timezone: string;
+      currency: Currency;
+      exchangeRate: number;
     }>();
     for (const tx of txRows) {
       txOriginMap.set(tx.id, {
@@ -360,6 +402,8 @@ export class MovementsRepository {
         description: tx.description,
         occurredAt: tx.occurredAt,
         timezone: tx.timezone,
+        currency: tx.currency,
+        exchangeRate: Number(tx.exchangeRate),
       });
     }
 
@@ -376,11 +420,22 @@ export class MovementsRepository {
       const derivedType: MovementType =
         derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
 
+      // Calculados heredan moneda y cotización del origen
+      const convertedAmount = convertToDefaultCurrency(
+        Math.abs(derivedAmount),
+        txData.currency,
+        txData.exchangeRate,
+        defaultCurrency,
+      );
+
       unicosItems.push({
         id: calc.id,
         origin: 'unico' as const,
         type: derivedType,
         amountCents: derivedAmount,
+        convertedAmountCents: convertedAmount,
+        currency: txData.currency,
+        exchangeRate: txData.exchangeRate,
         description: calc.description,
         occurredAt: txData.occurredAt,
         timezone: txData.timezone,
@@ -423,10 +478,13 @@ export class MovementsRepository {
    * Fase 1.1.7 — calculados on-the-fly (de fijo):
    * Los calculados con sourceChainId != null se incluyen con su monto derivado.
    * El origen es el fijo activo en el mes; su presencia gate-a al calculado.
+   *
+   * Fase 1.2.3 — defaultCurrency: moneda default del usuario para la conversión.
    */
   async findFijosByMonth(
     userId: string,
     month: string,
+    defaultCurrency: Currency = Currency.ARS,
   ): Promise<MovementItem[]> {
     // Traer candidatos activos en el rango, EXCLUYENDO calculados de único/cuota
     const recurrings = await this.prisma.recurring.findMany({
@@ -469,13 +527,15 @@ export class MovementsRepository {
     // Calculados de fijo: gating por el origen
     const calculadosDeFijo = recurrings.filter((r) => r.sourceChainId !== null);
 
-    // Construir mapa chainId → { amountCents, skipped, id, description }
+    // Construir mapa chainId → { amountCents, skipped, id, description, currency, exchangeRate }
     // para los fijos normales activos en el mes.
     const originMap = new Map<string, {
       amountCents: number;
       skipped: boolean;
       id: string;
       description: string | null;
+      currency: Currency;
+      exchangeRate: number;
     }>();
 
     for (const r of normales) {
@@ -484,6 +544,8 @@ export class MovementsRepository {
         skipped: r.skips.length > 0,
         id: r.id,
         description: r.description,
+        currency: r.currency,
+        exchangeRate: Number(r.exchangeRate),
       });
     }
 
@@ -500,11 +562,21 @@ export class MovementsRepository {
     // Agregar fijos normales
     for (const r of normales) {
       const skipped = r.skips.length > 0;
+      const exchangeRate = Number(r.exchangeRate);
+      const convertedAmountCents = convertToDefaultCurrency(
+        r.amountCents,
+        r.currency,
+        exchangeRate,
+        defaultCurrency,
+      );
       result.push({
         id: r.id,
         origin: 'fijo' as const,
         type: r.type,
         amountCents: r.amountCents,
+        convertedAmountCents,
+        currency: r.currency,
+        exchangeRate,
         description: r.description,
         occurredAt: null,
         timezone: null,
@@ -537,11 +609,22 @@ export class MovementsRepository {
       const derivedType: MovementType =
         derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
 
+      // Calculados heredan moneda y cotización del origen
+      const convertedAmountCents = convertToDefaultCurrency(
+        Math.abs(derivedAmount),
+        originData.currency,
+        originData.exchangeRate,
+        defaultCurrency,
+      );
+
       result.push({
         id: calc.id,
         origin: 'fijo' as const,
         type: derivedType,
         amountCents: derivedAmount,
+        convertedAmountCents,
+        currency: originData.currency,
+        exchangeRate: originData.exchangeRate,
         description: calc.description,
         occurredAt: null,
         timezone: null,
@@ -585,10 +668,13 @@ export class MovementsRepository {
    * Incluye los calculados de cuota (Recurring con sourceInstallmentGroupId != null)
    * activos en el mes, verificando on-the-fly que el mes cae dentro del rango del grupo.
    * Aparecen con origin='cuota' (su sección de origen), no en 'fijos'.
+   *
+   * Fase 1.2.3 — defaultCurrency: moneda default del usuario para la conversión.
    */
   async findCuotasByMonth(
     userId: string,
     month: string,
+    defaultCurrency: Currency = Currency.ARS,
   ): Promise<MovementItem[]> {
     const groups = await this.prisma.installmentGroup.findMany({
       where: {
@@ -616,12 +702,22 @@ export class MovementsRepository {
       }
 
       const number = monthDiff(g.startMonth, month) + 1;
+      const exchangeRate = Number(g.exchangeRate);
+      const convertedAmountCents = convertToDefaultCurrency(
+        g.amountCents,
+        g.currency,
+        exchangeRate,
+        defaultCurrency,
+      );
 
       result.push({
         id: g.id,
         origin: 'cuota' as const,
         type: g.type,
         amountCents: g.amountCents,
+        convertedAmountCents,
+        currency: g.currency,
+        exchangeRate,
         description: g.description,
         occurredAt: null,
         timezone: null,
@@ -674,6 +770,8 @@ export class MovementsRepository {
           description: true,
           totalInstallments: true,
           startMonth: true,
+          currency: true,
+          exchangeRate: true,
         },
       });
       const groupOriginMap = new Map<string, {
@@ -681,6 +779,8 @@ export class MovementsRepository {
         description: string | null;
         totalInstallments: number;
         startMonth: string;
+        currency: Currency;
+        exchangeRate: number;
       }>();
       for (const g of groupRows) {
         groupOriginMap.set(g.id, {
@@ -688,6 +788,8 @@ export class MovementsRepository {
           description: g.description,
           totalInstallments: g.totalInstallments,
           startMonth: g.startMonth,
+          currency: g.currency,
+          exchangeRate: Number(g.exchangeRate),
         });
       }
 
@@ -710,11 +812,22 @@ export class MovementsRepository {
         const derivedType: MovementType =
           derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
 
+        // Calculados heredan moneda y cotización del origen
+        const convertedAmountCents = convertToDefaultCurrency(
+          Math.abs(derivedAmount),
+          groupData.currency,
+          groupData.exchangeRate,
+          defaultCurrency,
+        );
+
         result.push({
           id: calc.id,
           origin: 'cuota' as const,
           type: derivedType,
           amountCents: derivedAmount,
+          convertedAmountCents,
+          currency: groupData.currency,
+          exchangeRate: groupData.exchangeRate,
           description: calc.description,
           occurredAt: null,
           timezone: null,
@@ -975,13 +1088,15 @@ export class MovementsRepository {
         to_char(
           date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone),
           'YYYY-MM'
-        )                    AS "monthKey",
-        t."categoryId"       AS "categoryId",
-        c.name               AS "categoryName",
-        c.color              AS "categoryColor",
-        c.scope::text        AS "categoryScope",
-        t.type::text         AS "type",
-        SUM(t."amountCents") AS "totalCents"
+        )                        AS "monthKey",
+        t."categoryId"           AS "categoryId",
+        c.name                   AS "categoryName",
+        c.color                  AS "categoryColor",
+        c.scope::text            AS "categoryScope",
+        t.type::text             AS "type",
+        t.currency::text         AS "currency",
+        t."exchangeRate"::text   AS "exchangeRate",
+        SUM(t."amountCents")     AS "totalCents"
       FROM "Transaction" t
       JOIN "Category" c ON c.id = t."categoryId"
       WHERE
@@ -995,7 +1110,9 @@ export class MovementsRepository {
         c.name,
         c.color,
         c.scope,
-        t.type
+        t.type,
+        t.currency,
+        t."exchangeRate"
       ORDER BY
         date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone),
         t."categoryId"
@@ -1015,6 +1132,8 @@ export class MovementsRepository {
           id: true,
           type: true,
           amountCents: true,
+          currency: true,
+          exchangeRate: true,
           startMonth: true,
           deletedFrom: true,
           frequency: true,
@@ -1053,6 +1172,8 @@ export class MovementsRepository {
       id: r.id,
       type: r.type,
       amountCents: r.amountCents,
+      currency: r.currency,
+      exchangeRate: Number(r.exchangeRate),
       startMonth: r.startMonth,
       deletedFrom: r.deletedFrom,
       frequency: r.frequency,
@@ -1083,6 +1204,8 @@ export class MovementsRepository {
         id: true,
         type: true,
         amountCents: true,
+        currency: true,
+        exchangeRate: true,
         totalInstallments: true,
         startMonth: true,
         categoryId: true,
@@ -1100,6 +1223,8 @@ export class MovementsRepository {
       id: g.id,
       type: g.type,
       amountCents: g.amountCents,
+      currency: g.currency,
+      exchangeRate: Number(g.exchangeRate),
       totalInstallments: g.totalInstallments,
       startMonth: g.startMonth,
       categoryId: g.categoryId,
@@ -1117,11 +1242,20 @@ export class MovementsRepository {
     id: string;
     amountCents: number;
     description: string | null;
+    currency: Currency;
+    exchangeRate: number;
   }>> {
-    return this.prisma.transaction.findMany({
+    const rows = await this.prisma.transaction.findMany({
       where: { id: { in: ids } },
-      select: { id: true, amountCents: true, description: true },
+      select: { id: true, amountCents: true, description: true, currency: true, exchangeRate: true },
     });
+    return rows.map((r) => ({
+      id: r.id,
+      amountCents: r.amountCents,
+      description: r.description,
+      currency: r.currency,
+      exchangeRate: Number(r.exchangeRate),
+    }));
   }
 
   /**
@@ -1133,11 +1267,21 @@ export class MovementsRepository {
     amountCents: number;
     totalInstallments: number;
     startMonth: string;
+    currency: Currency;
+    exchangeRate: number;
   }>> {
-    return this.prisma.installmentGroup.findMany({
+    const rows = await this.prisma.installmentGroup.findMany({
       where: { id: { in: ids } },
-      select: { id: true, amountCents: true, totalInstallments: true, startMonth: true },
+      select: { id: true, amountCents: true, totalInstallments: true, startMonth: true, currency: true, exchangeRate: true },
     });
+    return rows.map((r) => ({
+      id: r.id,
+      amountCents: r.amountCents,
+      totalInstallments: r.totalInstallments,
+      startMonth: r.startMonth,
+      currency: r.currency,
+      exchangeRate: Number(r.exchangeRate),
+    }));
   }
 
   /**
@@ -1176,12 +1320,27 @@ export class MovementsRepository {
   // Mappers privados
   // ---------------------------------------------------------------------------
 
-  private mapRowToMovementItem(row: RawTransactionRow): MovementItem {
+  private mapRowToMovementItem(
+    row: RawTransactionRow,
+    defaultCurrency: Currency = Currency.ARS,
+  ): MovementItem {
+    const exchangeRate = Number(row.exchangeRate);
+    const amountCents = Number(row.amountCents);
+    const currency = row.currency as Currency;
+    const convertedAmountCents = convertToDefaultCurrency(
+      amountCents,
+      currency,
+      exchangeRate,
+      defaultCurrency,
+    );
     return {
       id: row.id,
       origin: 'unico',
       type: row.type as MovementType,
-      amountCents: Number(row.amountCents),
+      amountCents,
+      convertedAmountCents,
+      currency,
+      exchangeRate,
       description: row.description,
       occurredAt: row.occurredAt,
       timezone: row.timezone,

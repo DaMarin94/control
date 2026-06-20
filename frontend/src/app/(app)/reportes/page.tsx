@@ -21,11 +21,13 @@ import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Plus, AreaChart, BarChart3 } from "lucide-react";
 import { usePreferences } from "@/hooks/use-preferences";
+import { useSettings } from "@/hooks/use-settings";
 import { ReportCard } from "@/components/charts/report-card";
 import type { ReportCardConfig, ReportCardType } from "@/types/reports";
 import { cn } from "@/lib/utils";
 import { getCurrentMonth } from "@/lib/format";
 import { createLogger } from "@/lib/logger";
+import { CurrencyChip } from "@/components/ui/currency-chip";
 
 const logger = createLogger("ReportesPage");
 
@@ -204,6 +206,7 @@ function AddCardButton({ variant, buttonRef, isMenuOpen, onClick }: AddCardButto
 
 function ReportesPageContent() {
   const { preferences, setPreferences } = usePreferences();
+  const { defaultCurrency } = useSettings();
   const addButtonRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -264,9 +267,13 @@ function ReportesPageContent() {
       {/* ── Header .phead ── */}
       <div className="flex items-end justify-between gap-5 mb-7 flex-wrap">
         <div>
-          <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted mb-[6px]">
-            Tu actividad
-          </p>
+          {/* Fila del eyebrow: label + chip de moneda default (a la derecha del eyebrow) */}
+          <div className="flex items-center gap-[10px] mb-[6px]">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+              Tu actividad
+            </p>
+            <CurrencyChip currency={defaultCurrency} />
+          </div>
           <h1 className="text-[32px] font-bold tracking-[-0.02em] leading-[1.05] text-ink m-0">
             Reportes
           </h1>

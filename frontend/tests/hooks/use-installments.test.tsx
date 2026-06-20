@@ -32,6 +32,8 @@ const mockInstallment: InstallmentGroup = {
   totalInstallments: 12,
   startMonth: "2026-01",
   description: "Notebook",
+  currency: "ARS",
+  exchangeRate: 1,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
   category: {
@@ -78,6 +80,7 @@ describe("useInstallments", () => {
         put: vi.fn(),
       },
       token: "test-token",
+      isAuthenticated: true,
     });
   });
 

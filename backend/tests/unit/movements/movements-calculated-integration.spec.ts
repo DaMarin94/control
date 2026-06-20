@@ -17,6 +17,7 @@
 import { Test } from '@nestjs/testing';
 import {
   CategoryScope,
+  Currency,
   FormulaOperator,
   MovementType,
   RecurringFrequency,
@@ -27,6 +28,12 @@ import { RecurringRepository } from '../../../src/recurring/recurring.repository
 import { MovementsRepository } from '../../../src/movements/movements.repository';
 import { CategoryValidatorService } from '../../../src/categories/category-validator.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
+import { SettingsService } from '../../../src/settings/settings.service';
+
+const mockSettingsServiceIntegration = {
+  getSettings: jest.fn(),
+  updateLastExchangeRate: jest.fn(),
+};
 
 // ---------------------------------------------------------------------------
 // Mini-DB en memoria
@@ -77,6 +84,9 @@ class InMemoryRecurringDB {
       formulaOperator: data.formulaOperator ?? null,
       formulaOperand: data.formulaOperand ?? null,
       formulaSign: data.formulaSign ?? null,
+      // Fase 1.2.3: moneda y cotización (default ARS/1 para tests de integración)
+      currency: data.currency ?? Currency.ARS,
+      exchangeRate: data.exchangeRate ?? 1,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -113,6 +123,12 @@ class InMemoryRecurringDB {
     }
     if (args.data.description !== undefined) {
       row.description = args.data.description;
+    }
+    if (args.data.currency !== undefined) {
+      row.currency = args.data.currency;
+    }
+    if (args.data.exchangeRate !== undefined) {
+      row.exchangeRate = args.data.exchangeRate;
     }
     row.updatedAt = new Date();
 
@@ -265,6 +281,10 @@ describe('Bug B — flujo real: crear fijo → split → crear calculado', () =>
   let prismaMock: any;
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+    mockSettingsServiceIntegration.getSettings.mockResolvedValue({ defaultCurrency: Currency.ARS, lastExchangeRate: null });
+    mockSettingsServiceIntegration.updateLastExchangeRate.mockResolvedValue(undefined);
+
     db = new InMemoryRecurringDB();
 
     prismaMock = {
@@ -314,6 +334,7 @@ describe('Bug B — flujo real: crear fijo → split → crear calculado', () =>
           provide: Logger,
           useValue: { log: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), verbose: jest.fn() },
         },
+        { provide: SettingsService, useValue: mockSettingsServiceIntegration },
       ],
     }).compile();
 
@@ -744,6 +765,10 @@ describe('BUG borrado de cadena — flujo real: crear fijo → split → crear c
   let prismaMock: any;
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+    mockSettingsServiceIntegration.getSettings.mockResolvedValue({ defaultCurrency: Currency.ARS, lastExchangeRate: null });
+    mockSettingsServiceIntegration.updateLastExchangeRate.mockResolvedValue(undefined);
+
     db = new InMemoryRecurringDB();
 
     prismaMock = {
@@ -792,6 +817,7 @@ describe('BUG borrado de cadena — flujo real: crear fijo → split → crear c
           provide: Logger,
           useValue: { log: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), verbose: jest.fn() },
         },
+        { provide: SettingsService, useValue: mockSettingsServiceIntegration },
       ],
     }).compile();
 

@@ -1,11 +1,15 @@
 import {
+  IsEnum,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   Matches,
   Min,
 } from 'class-validator';
+import { Currency } from '@prisma/client';
 
 /**
  * DTO para editar un movimiento fijo (PATCH /recurring/:id).
@@ -37,4 +41,23 @@ export class UpdateRecurringDto {
     message: 'currentMonth debe tener formato YYYY-MM (ej: 2026-06)',
   })
   currentMonth!: string;
+
+  /**
+   * Cotización ARS/1 USD para el mes editado. Opcional.
+   * Al editar con split, la fila nueva R2 usa esta cotización.
+   * Fase 1.2.3.
+   */
+  @IsOptional()
+  @IsNumber({}, { message: 'exchangeRate debe ser un número' })
+  @IsPositive({ message: 'exchangeRate debe ser un número positivo' })
+  exchangeRate?: number;
+
+  /**
+   * Moneda del fijo. Opcional. Inmutable conceptualmente en la cadena vigente,
+   * pero editable al hacer split (la fila nueva puede tener distinta moneda).
+   * Fase 1.2.3.
+   */
+  @IsOptional()
+  @IsEnum(Currency, { message: 'currency debe ser ARS o USD' })
+  currency?: Currency;
 }

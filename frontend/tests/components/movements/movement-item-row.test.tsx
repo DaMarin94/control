@@ -37,9 +37,24 @@ vi.mock("@/hooks/use-toast", () => ({
   })),
 }));
 
+// Mock de use-settings — defaultCurrency ARS (caso mono-moneda estándar)
+vi.mock("@/hooks/use-settings", () => ({
+  useSettings: vi.fn(() => ({
+    settings: { defaultCurrency: "ARS", lastExchangeRate: null },
+    defaultCurrency: "ARS",
+    lastExchangeRate: null,
+    isLoading: false,
+    isError: false,
+    updateSettings: vi.fn(),
+    isSaving: false,
+  })),
+}));
+
 import { useRecurring } from "@/hooks/use-recurring";
+import { useSettings } from "@/hooks/use-settings";
 
 const mockUseRecurring = vi.mocked(useRecurring);
+const mockUseSettings = vi.mocked(useSettings);
 
 const mockSkipRecurring = vi.fn();
 
@@ -66,6 +81,9 @@ const fijoActivo: MovementItem = {
   category: baseCategory,
   calculated: null,
   hasCalculated: false,
+  currency: "ARS",
+  exchangeRate: 1,
+  convertedAmountCents: 150000,
 };
 
 const fijoAnulado: MovementItem = {
@@ -111,6 +129,9 @@ const unico: MovementItem = {
   category: { id: "cat-2", name: "Alimentación", color: "#00FF00", scope: "BOTH" },
   calculated: null,
   hasCalculated: false,
+  currency: "ARS",
+  exchangeRate: 1,
+  convertedAmountCents: 10000,
 };
 
 const cuota: MovementItem = {
@@ -127,6 +148,9 @@ const cuota: MovementItem = {
   category: { id: "cat-3", name: "Tecnología", color: "#0000FF", scope: "EXPENSE" },
   calculated: null,
   hasCalculated: false,
+  currency: "ARS",
+  exchangeRate: 1,
+  convertedAmountCents: 50000,
 };
 
 /** Fijo calculado (hijo) */
@@ -135,6 +159,7 @@ const fijoCalculado: MovementItem = {
   id: "calc-1",
   description: "Ahorro",
   amountCents: 15000,
+  convertedAmountCents: 15000,
   calculated: {
     sourceType: "fijo",
     sourceChainId: "chain-orig",
@@ -153,6 +178,7 @@ const fijoCalculadoNegativo: MovementItem = {
   ...fijoCalculado,
   id: "calc-neg",
   amountCents: -5000,
+  convertedAmountCents: -5000,
   calculated: {
     ...fijoCalculado.calculated!,
     formulaSign: -1,
@@ -164,6 +190,7 @@ const fijoCalculadoCero: MovementItem = {
   ...fijoCalculado,
   id: "calc-zero",
   amountCents: 0,
+  convertedAmountCents: 0,
 };
 
 /** Fijo padre (tiene calculados derivados) */
@@ -688,5 +715,99 @@ describe("MovementItemRow — Fase 1.1.8: marca padre en único y cuota", () => 
   it("cuota padre (hasCalculated=true) NO muestra chip 'Calculado'", () => {
     renderRow(cuotaPadre);
     expect(screen.queryByText("Calculado")).not.toBeInTheDocument();
+  });
+});
+
+// ─── Tests: Fase 1.2.3 — Multi-moneda cross-rate ─────────────────────────────
+
+/** Movimiento en USD cuando defaultCurrency es ARS */
+const unicoUSD: MovementItem = {
+  ...unico,
+  id: "mov-usd-1",
+  description: "Suscripción Netflix",
+  amountCents: 1500, // USD 15,00
+  currency: "USD",
+  exchangeRate: 120000, // 1200,00 ARS por USD (escalado ×100)
+  convertedAmountCents: 180000, // = USD 15,00 × ARS 1200,00 = ARS 1800,00
+};
+
+describe("MovementItemRow — Fase 1.2.3: display cross-rate", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // useSettings por defecto en ARS (ya está en el vi.mock global)
+    mockUseSettings.mockReturnValue({
+      settings: { defaultCurrency: "ARS", lastExchangeRate: null },
+      defaultCurrency: "ARS",
+      lastExchangeRate: null,
+      isLoading: false,
+      isError: false,
+      updateSettings: vi.fn(),
+      isSaving: false,
+    });
+    mockUseRecurring.mockReturnValue({
+      createRecurring: vi.fn(),
+      updateRecurring: vi.fn(),
+      deleteRecurring: vi.fn(),
+      skipRecurring: mockSkipRecurring,
+      isCreating: false,
+      isUpdating: false,
+      isDeleting: false,
+      isSkipping: false,
+    });
+  });
+
+  it("muestra el monto convertido (ARS) como cifra dominante en cross-rate", () => {
+    renderRow(unicoUSD);
+    // convertedAmountCents = 180000 → "−$1.800,00"
+    expect(screen.getByText("−$1.800,00")).toBeInTheDocument();
+  });
+
+  it("muestra el badge de moneda original 'USD' en cross-rate", () => {
+    renderRow(unicoUSD);
+    // El badge usa aria-label o el texto
+    const badge = screen.getByText("USD");
+    expect(badge).toBeInTheDocument();
+  });
+
+  it("muestra el valor original en la segunda línea con símbolo 'US$15,00' (Fase 1.2.3-ext)", () => {
+    renderRow(unicoUSD);
+    // Fase 1.2.3-ext: el valor original usa el símbolo "US$" en vez del código "USD X"
+    expect(screen.getByText("US$15,00")).toBeInTheDocument();
+  });
+
+  it("NO muestra badge ni segunda línea cuando currency === defaultCurrency (ARS)", () => {
+    renderRow(unico); // currency: "ARS", defaultCurrency: "ARS"
+    // No debe haber badge "USD" ni línea de valor original
+    // El monto normal se muestra sin badge
+    expect(screen.queryByText("USD")).not.toBeInTheDocument();
+    // Solo hay un monto mostrado
+    const montos = screen.getAllByText(/\$\d/);
+    // En modo ARS solo hay un monto (sin segunda línea)
+    expect(montos).toHaveLength(1);
+  });
+
+  it("cuando defaultCurrency cambia a USD, un movimiento ARS no es cross-rate", () => {
+    // Simular que el usuario cambió su default a USD
+    mockUseSettings.mockReturnValue({
+      settings: { defaultCurrency: "USD", lastExchangeRate: 1200 },
+      defaultCurrency: "USD",
+      lastExchangeRate: 1200,
+      isLoading: false,
+      isError: false,
+      updateSettings: vi.fn(),
+      isSaving: false,
+    });
+    // unico tiene currency: "ARS" — si default es USD, sería cross-rate
+    // Pero queremos testear el caso inverso: movimiento en USD (la default) — no es cross-rate
+    const unicoEnUSD: MovementItem = {
+      ...unico,
+      currency: "USD",
+      exchangeRate: 1,
+      convertedAmountCents: unico.amountCents,
+    };
+    renderRow(unicoEnUSD);
+    // No debe mostrarse badge de moneda porque currency === defaultCurrency (USD)
+    // El único texto "USD" que podría aparecer sería en el badge, que no debe existir
+    expect(screen.queryByText("USD")).not.toBeInTheDocument();
   });
 });

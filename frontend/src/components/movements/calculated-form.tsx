@@ -237,6 +237,8 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
   const { toast } = useToast();
   const { categories } = useCategories();
   const { createCalculated, updateCalculated, isCreating, isUpdating } = useCalculated();
+  // Moneda del movimiento de origen: en crear = la del ítem origen; en editar = la del calculado (heredada del origen)
+  const movementCurrency = movement.currency;
   const [showCategoryModal, setShowCategoryModal] = useState(false);
 
   const isLoading = isEditing ? isUpdating : isCreating;
@@ -369,10 +371,11 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
 
   function buildExpression(): string {
     if (userOperand === null) return "—";
-    const originFmt = originCents !== null ? formatCurrency(originCents) : "origen";
+    // Los montos del origen y del operando ADD/SUB van en la moneda del movimiento de origen
+    const originFmt = originCents !== null ? formatCurrency(originCents, movementCurrency) : "origen";
     switch (selectedOperator) {
-      case "ADD": return `${originFmt} + ${formatCurrency(userOperand * 100)}`;
-      case "SUB": return `${originFmt} − ${formatCurrency(userOperand * 100)}`;
+      case "ADD": return `${originFmt} + ${formatCurrency(userOperand * 100, movementCurrency)}`;
+      case "SUB": return `${originFmt} − ${formatCurrency(userOperand * 100, movementCurrency)}`;
       case "MUL": return `${originFmt} × ${String(userOperand).replace(".", ",")}`;
       case "DIV": return `${originFmt} ÷ ${String(userOperand).replace(".", ",")}`;
       case "PCT": return `${String(userOperand).replace(".", ",")}% de ${originFmt}`;
@@ -380,12 +383,13 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
   }
 
   // ── Formato del resultado para el preview ─────────────────────────────────
+  // El resultado derivado va en la misma moneda que el origen (heredada del calculado)
 
   function formatPreviewAmount(cents: number | null): string {
     if (cents === null) return "—";
-    if (cents === 0) return formatCurrency(0);
-    if (cents < 0) return `−${formatCurrency(Math.abs(cents))}`;
-    return formatCurrency(cents);
+    if (cents === 0) return formatCurrency(0, movementCurrency);
+    if (cents < 0) return `−${formatCurrency(Math.abs(cents), movementCurrency)}`;
+    return formatCurrency(cents, movementCurrency);
   }
 
   // ── Color de la cifra del preview (por tipo derivado, no por signo) ───────
@@ -500,7 +504,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
               </span>
               {originCents !== null && (
                 <span className="text-[12.5px] text-muted mono shrink-0 ml-2">
-                  {formatCurrency(originCents)}
+                  {formatCurrency(originCents, movementCurrency)}
                 </span>
               )}
             </div>

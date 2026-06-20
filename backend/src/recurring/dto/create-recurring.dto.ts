@@ -2,12 +2,14 @@ import {
   IsEnum,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   Matches,
   Min,
 } from 'class-validator';
-import { MovementType, RecurringFrequency } from '@prisma/client';
+import { Currency, MovementType, RecurringFrequency } from '@prisma/client';
 
 /**
  * DTO para crear un movimiento fijo (POST /recurring).
@@ -56,4 +58,22 @@ export class CreateRecurringDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  /**
+   * Moneda del fijo (ARS o USD). Opcional — default ARS.
+   * La cotización es por mes de aparición: al editar con split, la fila nueva la hereda.
+   * Fase 1.2.3.
+   */
+  @IsOptional()
+  @IsEnum(Currency, { message: 'currency debe ser ARS o USD' })
+  currency?: Currency;
+
+  /**
+   * Cotización ARS/1 USD al momento de creación del fijo. Opcional — default 1.
+   * Número positivo con decimales. Fase 1.2.3.
+   */
+  @IsOptional()
+  @IsNumber({}, { message: 'exchangeRate debe ser un número' })
+  @IsPositive({ message: 'exchangeRate debe ser un número positivo' })
+  exchangeRate?: number;
 }

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { MovementType, Prisma } from '@prisma/client';
+import { Currency, MovementType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -26,6 +26,10 @@ export interface InstallmentGroupWithCategory {
   totalInstallments: number;
   description: string | null;
   startMonth: string;
+  /** Moneda del grupo (Fase 1.2.3). Única para todas las cuotas. */
+  currency: Currency;
+  /** Cotización ARS/1 USD del grupo (Fase 1.2.3). */
+  exchangeRate: number;
   createdAt: Date;
   updatedAt: Date;
   category: EmbeddedCategory;
@@ -58,6 +62,8 @@ function mapToInstallmentGroupWithCategory(
     totalInstallments: g.totalInstallments,
     description: g.description,
     startMonth: g.startMonth,
+    currency: g.currency,
+    exchangeRate: Number(g.exchangeRate),
     createdAt: g.createdAt,
     updatedAt: g.updatedAt,
     category: {

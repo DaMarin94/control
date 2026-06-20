@@ -2,27 +2,53 @@
  * Helpers de formato centralizados para la UI.
  * Un único lugar para cambiar locale, símbolo de moneda y formatos de fecha.
  *
- * Moneda: centavos → pesos con 2 decimales, locale es-AR, símbolo $.
+ * Moneda: centavos → cifra con símbolo de moneda y separadores, locale es-AR.
+ *   El símbolo se elige por código de moneda desde CURRENCY_SYMBOLS (mapa único y extensible).
+ *   Sumar una moneda futura = una entrada en ese mapa.
  * Fechas: Intl.DateTimeFormat, locale es-AR, en la timezone del registro.
  */
 
 // ─── Moneda ───────────────────────────────────────────────────────────────────
 
 const CURRENCY_LOCALE = "es-AR";
-const CURRENCY_SYMBOL = "$";
 const CURRENCY_DECIMALS = 2;
 
 /**
- * Convierte centavos a pesos y formatea con símbolo y separadores.
- * Ej: 150050 → "$1.500,50"
+ * Mapa de código de moneda → símbolo de prefijo.
+ * Fuente de verdad única. Extensible: sumar una moneda = una entrada.
+ *
+ * Spec (docs/design/specs-archive.md §"Símbolos de moneda por código"):
+ *   ARS → "$"   (convención argentina, back-compat)
+ *   USD → "US$" (prefijo internacional inequívoco del dólar estadounidense)
  */
-export function formatCurrency(amountCents: number): string {
+export const CURRENCY_SYMBOLS: Record<string, string> = {
+  ARS: "$",
+  USD: "US$",
+};
+
+/** Símbolo de fallback cuando el código no está en el mapa. */
+const CURRENCY_SYMBOL_FALLBACK = "$";
+
+/**
+ * Convierte centavos a cifra formateada con el símbolo de la moneda indicada.
+ * Prefijo pegado a la cifra, SIN espacio — "US$1.500,00", "$219.400,00".
+ *
+ * @param amountCents  Monto en centavos (puede ser negativo para calculados).
+ * @param currency     Código de moneda (default "ARS" para back-compat).
+ *
+ * El signo NO se incluye en esta función — el llamador prepone "−" o "+" según
+ * la regla de presentación de cada contexto (tipo del movimiento, balance, etc.).
+ * Ej: 150050, "ARS" → "$1.500,50"
+ *     150000, "USD" → "US$1.500,00"
+ */
+export function formatCurrency(amountCents: number, currency = "ARS"): string {
+  const symbol = CURRENCY_SYMBOLS[currency] ?? CURRENCY_SYMBOL_FALLBACK;
   const amount = amountCents / 100;
   const formatted = new Intl.NumberFormat(CURRENCY_LOCALE, {
     minimumFractionDigits: CURRENCY_DECIMALS,
     maximumFractionDigits: CURRENCY_DECIMALS,
   }).format(amount);
-  return `${CURRENCY_SYMBOL}${formatted}`;
+  return `${symbol}${formatted}`;
 }
 
 /**
@@ -46,6 +72,39 @@ export function parseCurrencyInput(value: string): number | null {
 
   // Redondear para evitar problemas de punto flotante
   return Math.round(parsed * 100);
+}
+
+/**
+ * Convierte un string de cotización ingresado por el usuario (con decimales)
+ * a un número flotante para enviar al backend.
+ *
+ * La cotización es ARS por 1 USD — NO se convierte a centavos (es un factor, no un monto).
+ * Acepta tanto punto como coma como separador decimal.
+ * Ej: "1.480,50" → 1480.5 (con separador de miles punto y decimal coma, locale AR)
+ * Ej: "1480.50" → 1480.5
+ *
+ * Retorna null si el valor no es un número válido > 0.
+ */
+export function parseExchangeRateInput(value: string): number | null {
+  // En locale es-AR: punto = separador de miles, coma = decimal.
+  // Normalizar: quitar puntos de miles, reemplazar coma decimal por punto.
+  const normalized = value.trim().replace(/\./g, "").replace(",", ".");
+  const parsed = parseFloat(normalized);
+  if (isNaN(parsed) || parsed <= 0) {
+    return null;
+  }
+  return parsed;
+}
+
+/**
+ * Formatea un número de cotización para mostrar en el input (locale es-AR).
+ * Ej: 1480.5 → "1.480,50"
+ */
+export function formatExchangeRate(rate: number): string {
+  return new Intl.NumberFormat("es-AR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(rate);
 }
 
 // ─── Fechas ───────────────────────────────────────────────────────────────────

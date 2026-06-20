@@ -16,7 +16,7 @@
  */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { MovementType, CategoryScope } from '@prisma/client';
+import { CategoryScope, Currency, MovementType } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { InstallmentsService } from '../../../src/installments/installments.service';
 import {
@@ -24,6 +24,7 @@ import {
   InstallmentGroupWithCategory,
 } from '../../../src/installments/installments.repository';
 import { CategoryValidatorService } from '../../../src/categories/category-validator.service';
+import { SettingsService } from '../../../src/settings/settings.service';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -48,6 +49,11 @@ const mockLogger = {
   verbose: jest.fn(),
 };
 
+const mockSettingsServiceInst = {
+  getSettings: jest.fn().mockResolvedValue({ defaultCurrency: Currency.ARS, lastExchangeRate: null }),
+  updateLastExchangeRate: jest.fn().mockResolvedValue(undefined),
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -66,6 +72,8 @@ function makeGroup(
     categoryId: CAT_ID,
     type: MovementType.EXPENSE,
     amountCents: 5000,
+    currency: Currency.ARS,
+    exchangeRate: 1,
     totalInstallments: 12,
     description: null,
     startMonth: '2026-01',
@@ -98,6 +106,7 @@ describe('InstallmentsService', () => {
         { provide: InstallmentsRepository, useValue: mockRepo },
         { provide: CategoryValidatorService, useValue: mockCategoryValidator },
         { provide: Logger, useValue: mockLogger },
+        { provide: SettingsService, useValue: mockSettingsServiceInst },
       ],
     }).compile();
 

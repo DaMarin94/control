@@ -8,6 +8,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   parseCurrencyInput,
   formatCurrency,
+  CURRENCY_SYMBOLS,
   localToUtcIso,
   utcToLocalDate,
   utcToLocalTime,
@@ -72,27 +73,84 @@ describe("parseCurrencyInput", () => {
   });
 });
 
+// ─── CURRENCY_SYMBOLS (mapa código → símbolo) ──────────────────────────────
+
+describe("CURRENCY_SYMBOLS", () => {
+  it("ARS → '$'", () => {
+    expect(CURRENCY_SYMBOLS["ARS"]).toBe("$");
+  });
+
+  it("USD → 'US$'", () => {
+    expect(CURRENCY_SYMBOLS["USD"]).toBe("US$");
+  });
+
+  it("el mapa es extensible (tiene al menos ARS y USD)", () => {
+    expect(Object.keys(CURRENCY_SYMBOLS).length).toBeGreaterThanOrEqual(2);
+  });
+});
+
 // ─── formatCurrency (centavos → presentación) ─────────────────────────────
 
 describe("formatCurrency", () => {
-  it("formatea 150050 como '$1.500,50' (locale es-AR)", () => {
+  // ─── ARS (default) ───────────────────────────────────────────────────────
+
+  it("ARS: formatea 150050 como '$1.500,50' (locale es-AR)", () => {
     const result = formatCurrency(150050);
     expect(result).toBe("$1.500,50");
   });
 
-  it("formatea 100 como '$1,00'", () => {
+  it("ARS: formatea 150050 como '$1.500,50' cuando se pasa 'ARS' explícito", () => {
+    const result = formatCurrency(150050, "ARS");
+    expect(result).toBe("$1.500,50");
+  });
+
+  it("ARS: formatea 100 como '$1,00'", () => {
     const result = formatCurrency(100);
     expect(result).toBe("$1,00");
   });
 
-  it("formatea 0 como '$0,00'", () => {
+  it("ARS: formatea 0 como '$0,00'", () => {
     const result = formatCurrency(0);
     expect(result).toBe("$0,00");
   });
 
-  it("siempre muestra 2 decimales", () => {
+  it("ARS: siempre muestra 2 decimales", () => {
     const result = formatCurrency(1000);
     expect(result).toMatch(/,00$/);
+  });
+
+  // ─── USD ─────────────────────────────────────────────────────────────────
+
+  it("USD: formatea 150000 como 'US$1.500,00'", () => {
+    const result = formatCurrency(150000, "USD");
+    expect(result).toBe("US$1.500,00");
+  });
+
+  it("USD: formatea 100 como 'US$1,00'", () => {
+    const result = formatCurrency(100, "USD");
+    expect(result).toBe("US$1,00");
+  });
+
+  it("USD: formatea 0 como 'US$0,00'", () => {
+    const result = formatCurrency(0, "USD");
+    expect(result).toBe("US$0,00");
+  });
+
+  it("USD: formatea 150 como 'US$1,50' (1500 centavos)", () => {
+    const result = formatCurrency(1500, "USD");
+    expect(result).toBe("US$15,00");
+  });
+
+  // ─── Orden con signo: [signo][símbolo][cifra] (el signo lo pone el llamador) ─
+
+  it("el llamador puede anteponer '−' para negativo: '−' + formatCurrency(abs, ARS) → '−$1.234,56'", () => {
+    const abs = formatCurrency(123456, "ARS");
+    expect(`−${abs}`).toBe("−$1.234,56");
+  });
+
+  it("el llamador puede anteponer '−' para negativo USD: '−' + formatCurrency(abs, USD) → '−US$1.234,56'", () => {
+    const abs = formatCurrency(123456, "USD");
+    expect(`−${abs}`).toBe("−US$1.234,56");
   });
 });
 

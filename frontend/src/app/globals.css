@@ -194,6 +194,12 @@
   }
 }
 
+/* fadeIn — fade simple 0→1 (cotización en form de movimiento, Fase 1.2.3) */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 @layer utilities {
   .animate-toast-in {
     animation: toast-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;

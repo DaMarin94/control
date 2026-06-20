@@ -47,6 +47,20 @@ vi.mock("@/hooks/use-api", () => ({
       put: vi.fn(),
     },
     token: "test-token",
+    isAuthenticated: true,
+  })),
+}));
+
+// Mock de use-settings — defaultCurrency ARS (caso mono-moneda estándar)
+vi.mock("@/hooks/use-settings", () => ({
+  useSettings: vi.fn(() => ({
+    settings: { defaultCurrency: "ARS", lastExchangeRate: null },
+    defaultCurrency: "ARS",
+    lastExchangeRate: null,
+    isLoading: false,
+    isError: false,
+    updateSettings: vi.fn(),
+    isSaving: false,
   })),
 }));
 
@@ -119,6 +133,9 @@ const mockWithMovements: MonthMovements = {
         category: { id: "cat-1", name: "Alimentación", color: "#FF5733", scope: "BOTH" },
         calculated: null,
         hasCalculated: false,
+        currency: "ARS" as const,
+        exchangeRate: 1,
+        convertedAmountCents: 15000,
       },
     ],
     fijos: [],
@@ -280,6 +297,40 @@ describe("DashboardClient", () => {
 
       expect(screen.getByRole("alert")).toBeInTheDocument();
       expect(screen.getByRole("alert")).toHaveTextContent(/no se pudieron cargar/i);
+    });
+  });
+
+  describe("Chip de moneda default (Fase 1.2.3-ext)", () => {
+    beforeEach(() => {
+      mockUseMovements.mockReturnValue({
+        data: mockEmpty,
+        isLoading: false,
+        isError: false,
+        isPending: false,
+        isSuccess: true,
+        error: null,
+        status: "success",
+        fetchStatus: "idle",
+      } as ReturnType<typeof useMovements>);
+    });
+
+    it("el chip de moneda aparece en el header del dashboard (ARS por defecto)", () => {
+      renderDashboard();
+      // El chip muestra el código de moneda en el header
+      const chip = screen.getByRole("link", { name: /moneda por defecto: ARS/i });
+      expect(chip).toBeInTheDocument();
+    });
+
+    it("el chip es un link a /configuracion", () => {
+      renderDashboard();
+      const chip = screen.getByRole("link", { name: /moneda por defecto: ARS/i });
+      expect(chip).toHaveAttribute("href", "/configuracion");
+    });
+
+    it("el chip muestra el texto del código de moneda 'ARS'", () => {
+      renderDashboard();
+      const chip = screen.getByRole("link", { name: /moneda por defecto: ARS/i });
+      expect(chip).toHaveTextContent("ARS");
     });
   });
 });

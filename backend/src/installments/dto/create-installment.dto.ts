@@ -2,12 +2,14 @@ import {
   IsEnum,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   Matches,
   Min,
 } from 'class-validator';
-import { MovementType } from '@prisma/client';
+import { Currency, MovementType } from '@prisma/client';
 
 /**
  * DTO para crear un grupo de cuotas (POST /installments).
@@ -50,4 +52,21 @@ export class CreateInstallmentDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  /**
+   * Moneda del grupo de cuotas (ARS o USD). Única para todo el grupo.
+   * Opcional — default ARS. Fase 1.2.3.
+   */
+  @IsOptional()
+  @IsEnum(Currency, { message: 'currency debe ser ARS o USD' })
+  currency?: Currency;
+
+  /**
+   * Cotización ARS/1 USD. Única para todo el grupo de cuotas.
+   * Número positivo con decimales. Opcional — default 1. Fase 1.2.3.
+   */
+  @IsOptional()
+  @IsNumber({}, { message: 'exchangeRate debe ser un número' })
+  @IsPositive({ message: 'exchangeRate debe ser un número positivo' })
+  exchangeRate?: number;
 }

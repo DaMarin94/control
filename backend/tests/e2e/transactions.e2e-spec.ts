@@ -66,6 +66,14 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  // recurringSkip — necesario para RecurringModule (Fase 1.1.1)
+  recurringSkip: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    delete: jest.fn(),
+    deleteMany: jest.fn(),
+  },
   // installmentGroup — necesario para InstallmentsModule (Fase 7 — registrado en AppModule)
   installmentGroup: {
     create: jest.fn(),
@@ -76,6 +84,7 @@ const mockPrisma = {
   },
   $connect: jest.fn(),
   $disconnect: jest.fn(),
+  $queryRaw: jest.fn().mockResolvedValue([]),
 };
 
 // ---------------------------------------------------------------------------
@@ -614,6 +623,53 @@ describe('Transactions (e2e)', () => {
       const res = await request(app.getHttpServer())
         .delete('/transactions/tx-e2e-001')
         .expect(401);
+
+      expect(res.body.success).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Multi-moneda: currency y exchangeRate sobreviven al ValidationPipe
+  // (Fase 1.2.3 — experimento decisivo para el bug de enum descartado)
+  // -------------------------------------------------------------------------
+
+  describe('POST /transactions — currency: "USD" sobrevive al ValidationPipe', () => {
+    it('REPRODUCE-BUG: POST con currency "USD" → Prisma.create recibe currency=USD', async () => {
+      const cat = makeDbCategory();
+      mockPrisma.category.findUnique.mockResolvedValue(cat);
+      const tx = makeDbTransaction({ currency: 'USD', exchangeRate: 1200 });
+      mockPrisma.transaction.create.mockResolvedValue(tx);
+      // updateLastExchangeRate llama a user.update — mock para no romper
+      mockPrisma.user.update = jest.fn().mockResolvedValue({});
+      mockPrisma.user.findUnique = jest.fn().mockResolvedValue({ id: USER_A_ID });
+
+      const res = await request(app.getHttpServer())
+        .post('/transactions')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({
+          ...VALID_CREATE_BODY,
+          currency: 'USD',
+          exchangeRate: 1200,
+        })
+        .expect(201);
+
+      expect(res.body.success).toBe(true);
+
+      // Verificar que Prisma.transaction.create fue llamado con currency=USD
+      // Si el enum se descarta, create se llama sin currency (o con ARS por default de DB)
+      const createCall = mockPrisma.transaction.create.mock.calls[0][0] as {
+        data: { currency?: string; exchangeRate?: number };
+      };
+      expect(createCall.data.currency).toBe('USD');
+      expect(createCall.data.exchangeRate).toBe(1200);
+    });
+
+    it('400 si currency tiene valor inválido (PESO no es enum válido)', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/transactions')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...VALID_CREATE_BODY, currency: 'PESO' })
+        .expect(400);
 
       expect(res.body.success).toBe(false);
     });

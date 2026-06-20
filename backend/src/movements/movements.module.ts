@@ -2,23 +2,19 @@ import { Module } from '@nestjs/common';
 import { MovementsController } from './movements.controller';
 import { MovementsService } from './movements.service';
 import { MovementsRepository } from './movements.repository';
+import { SettingsModule } from '../settings/settings.module';
 
 /**
  * MovementsModule — endpoint unificado GET /movements?month=YYYY-MM.
  *
- * Hoy sirve movimientos únicos (Fase 5). Está diseñado para incorporar
- * fijos (Fase 6) y cuotas (Fase 7) sin cambiar el contrato con el frontend:
- * la respuesta ya estructura movements.fijos y movements.cuotas (vacíos hoy).
+ * Importa SettingsModule para leer el defaultCurrency del usuario y aplicar
+ * la conversión de moneda en MovementsService (Fase 1.2.3).
  *
  * PrismaService está disponible globalmente (PrismaModule global).
  * Logger (nestjs-pino) también está disponible globalmente.
- *
- * El movementsModule NO importa TransactionsModule — accede directamente
- * a la DB via MovementsRepository (que usa PrismaService global).
- * Esto sigue el patrón de "cada módulo con su propio repository", y evita
- * una dependencia circular o acoplamiento innecesario.
  */
 @Module({
+  imports: [SettingsModule],
   controllers: [MovementsController],
   providers: [MovementsService, MovementsRepository],
 })

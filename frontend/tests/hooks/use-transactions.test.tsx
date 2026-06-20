@@ -32,6 +32,8 @@ const mockTransaction: Transaction = {
   description: "Almuerzo",
   occurredAt: "2026-06-17T17:30:00.000Z",
   timezone: "America/Argentina/Buenos_Aires",
+  currency: "ARS",
+  exchangeRate: 1,
   createdAt: "2026-06-17T17:30:00.000Z",
   updatedAt: "2026-06-17T17:30:00.000Z",
   category: {
@@ -78,6 +80,7 @@ describe("useTransactions", () => {
         put: vi.fn(),
       },
       token: "test-token",
+      isAuthenticated: true,
     });
   });
 

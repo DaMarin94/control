@@ -1,6 +1,6 @@
 /**
  * Tipos del dominio de movimientos — endpoint unificado GET /movements.
- * Reflejan el contrato de la API del backend (Fase 5–7, Fase 1.1.7).
+ * Reflejan el contrato de la API del backend (Fase 5–7, Fase 1.1.7, Fase 1.2.3).
  *
  * MovementItem es el ítem individual que puede ser "unico", "fijo" o "cuota".
  * - "unico": occurredAt/timezone presentes; installment=null.
@@ -8,12 +8,14 @@
  * - "cuota": occurredAt/timezone=null; installment presente con number/total/startMonth.
  *
  * Fase 1.1.7: se agregan `calculated` y `hasCalculated` para movimientos calculados.
+ * Fase 1.2.3: se agregan `currency`, `exchangeRate` y `convertedAmountCents`.
  *
  * MonthMovements es la respuesta completa de GET /movements?month=YYYY-MM.
  */
 
 import type { CategoryScope } from "@/types/category";
 import type { RecurringFrequency } from "@/types/recurring";
+import type { CurrencyCode } from "@/types/settings";
 
 /** Discriminador de origen del movimiento */
 export type MovementOrigin = "unico" | "fijo" | "cuota";
@@ -153,6 +155,22 @@ export interface MovementItem {
    * En ítems que son calculados: false (no pueden ser padres, RF-MCALC-001).
    */
   hasCalculated: boolean;
+  /**
+   * Moneda original del ítem (Fase 1.2.3).
+   * "ARS" por defecto (back-compat — movimientos anteriores son ARS).
+   */
+  currency: CurrencyCode;
+  /**
+   * Cotización del ítem: ARS por 1 USD (Fase 1.2.3).
+   * 1 para ítems en ARS (cotización 1:1).
+   */
+  exchangeRate: number;
+  /**
+   * Monto convertido a la moneda default vigente del usuario (Fase 1.2.3).
+   * Si currency === defaultCurrency, coincide con amountCents.
+   * El front muestra este valor como monto principal (el que entra al total).
+   */
+  convertedAmountCents: number;
 }
 
 /** Totales del mes */

@@ -4,6 +4,7 @@ import { InstallmentsService } from './installments.service';
 import { InstallmentsRepository } from './installments.repository';
 import { CategoriesModule } from '../categories/categories.module';
 import { RecurringModule } from '../recurring/recurring.module';
+import { SettingsModule } from '../settings/settings.module';
 
 /**
  * InstallmentsModule — CRUD de grupos de cuotas (RF-MC-001 a RF-MC-003).
@@ -25,7 +26,7 @@ import { RecurringModule } from '../recurring/recurring.module';
  * de cuotas sin tocar la tabla directamente (regla de propiedad de dominio).
  */
 @Module({
-  imports: [CategoriesModule, RecurringModule],
+  imports: [CategoriesModule, RecurringModule, SettingsModule],
   controllers: [InstallmentsController],
   providers: [InstallmentsService, InstallmentsRepository],
   exports: [InstallmentsService],

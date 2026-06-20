@@ -23,17 +23,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { CurrencyExchangeBlock } from "@/components/ui/currency-exchange-block";
 import { useCategories } from "@/hooks/use-categories";
 import { useRecurring } from "@/hooks/use-recurring";
+import { useSettings } from "@/hooks/use-settings";
 import { useToast } from "@/hooks/use-toast";
 import { type TransactionType } from "@/types/transaction";
 import { type Category, type CategoryScope } from "@/types/category";
 import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
 import { type Recurring } from "@/types/recurring";
-import { parseCurrencyInput, getCurrentMonth } from "@/lib/format";
+import {
+  parseCurrencyInput,
+  parseExchangeRateInput,
+  formatExchangeRate,
+  formatMonthLabel,
+  getCurrentMonth,
+} from "@/lib/format";
 import { createLogger } from "@/lib/logger";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import type { CurrencyCode } from "@/types/settings";
 
 const logger = createLogger("RecurringForm");
 
@@ -65,6 +74,11 @@ const recurringSchema = z.object({
     .refine((val) => parseCurrencyInput(val) !== null, {
       message: "Ingresá un monto mayor a 0",
     }),
+  currency: z.enum(["ARS", "USD"]),
+  /**
+   * Input de cotización como string. Solo se valida cuando currency !== defaultCurrency.
+   */
+  exchangeRateInput: z.string(),
   startMonth: z
     .string()
     .min(1, "El mes de inicio es requerido")
@@ -110,15 +124,29 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
   const { toast } = useToast();
   const { categories } = useCategories();
   const { createRecurring, updateRecurring, isCreating, isUpdating } = useRecurring();
+  const { defaultCurrency, lastExchangeRate } = useSettings();
 
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [exchangeRateError, setExchangeRateError] = useState<string | undefined>();
+  const [isExchangeRateModified, setIsExchangeRateModified] = useState(false);
 
   const isLoading = isEditing ? isUpdating : isCreating;
+
+  // Cotización pre-cargada:
+  // - Editando: la del fijo (siempre presente, nunca null en el backend).
+  // - Creando: el lastExchangeRate del usuario, o vacío si aún no tiene historial.
+  const preloadedExchangeRateInput = isEditing
+    ? formatExchangeRate(recurring.exchangeRate ?? 1)
+    : lastExchangeRate != null
+      ? formatExchangeRate(lastExchangeRate)
+      : "";
 
   const defaultValues: RecurringFormData = isEditing
     ? {
         type: recurring.type,
         amountInput: String(recurring.amountCents / 100).replace(".", ","),
+        currency: recurring.currency ?? defaultCurrency,
+        exchangeRateInput: formatExchangeRate(recurring.exchangeRate ?? 1),
         startMonth: getCurrentMonth(),
         // frequency: se inicializa con el valor del fijo (o MONTHLY como fallback) para
         // satisfacer la validación del schema en edición — NO se envía en el PATCH.
@@ -129,11 +157,15 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
     : {
         type: "EXPENSE",
         amountInput: "",
+        currency: defaultCurrency,
+        exchangeRateInput: preloadedExchangeRateInput,
         startMonth: defaultMonth ?? getCurrentMonth(),
         frequency: "MONTHLY",
         categoryId: "",
         description: "",
       };
+
+  const [initialExchangeRateInput] = useState(defaultValues.exchangeRateInput);
 
   const {
     register,
@@ -153,17 +185,40 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
       reset({
         type: recurring.type,
         amountInput: String(recurring.amountCents / 100).replace(".", ","),
+        currency: recurring.currency ?? defaultCurrency,
+        exchangeRateInput: formatExchangeRate(recurring.exchangeRate ?? 1),
         startMonth: getCurrentMonth(),
         frequency: recurring.frequency ?? "MONTHLY",
         categoryId: recurring.categoryId,
         description: recurring.description ?? "",
       });
+      setIsExchangeRateModified(false);
     }
-  }, [recurring, isEditing, reset]);
+  }, [recurring, isEditing, reset, defaultCurrency]);
+
+  // Pre-cargar cotización cuando defaultCurrency o lastExchangeRate cambian (solo en crear)
+  useEffect(() => {
+    if (!isEditing) {
+      setValue("currency", defaultCurrency);
+      setValue(
+        "exchangeRateInput",
+        lastExchangeRate != null ? formatExchangeRate(lastExchangeRate) : "",
+      );
+      setIsExchangeRateModified(false);
+    }
+  }, [defaultCurrency, lastExchangeRate, isEditing, setValue]);
 
   const selectedType = watch("type");
   const selectedCategoryId = watch("categoryId");
   const selectedFrequency = watch("frequency");
+  const exchangeRateInput = watch("exchangeRateInput");
+
+  // Detectar si el usuario modificó la cotización
+  useEffect(() => {
+    setIsExchangeRateModified(
+      exchangeRateInput !== initialExchangeRateInput && exchangeRateInput !== ""
+    );
+  }, [exchangeRateInput, initialExchangeRateInput]);
 
   const availableCategories = filterCategoriesByType(
     (categories ?? []).map((c) => ({ id: c.id, name: c.name, scope: c.scope })),
@@ -185,12 +240,23 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
     const amountCents = parseCurrencyInput(data.amountInput);
     if (amountCents === null) return;
 
+    // Validar cotización SIEMPRE (no solo en cross-rate): el roadmap exige capturar
+    // y persistir la cotización real también cuando moneda === defaultCurrency.
+    const parsedExchangeRate = parseExchangeRateInput(data.exchangeRateInput);
+    if (parsedExchangeRate === null) {
+      setExchangeRateError("Ingresá una cotización mayor a 0");
+      return;
+    }
+    setExchangeRateError(undefined);
+
     if (isEditing) {
       const result = await updateRecurring(recurring.id, {
         currentMonth: viewMonth ?? getCurrentMonth(),
         amountCents,
         categoryId: data.categoryId,
         description: data.description || null,
+        // En edición de fijo: la cotización aplica al mes visualizado
+        exchangeRate: parsedExchangeRate,
       });
 
       if (!result.success) {
@@ -208,6 +274,8 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
         startMonth: data.startMonth,
         frequency: data.frequency,
         description: data.description || undefined,
+        currency: data.currency,
+        exchangeRate: parsedExchangeRate,
       });
 
       if (!result.success) {
@@ -319,6 +387,33 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
               <p className="text-[12px] text-expense-ink">{errors.amountInput.message}</p>
             )}
           </div>
+
+          {/* ── Moneda y cotización ── */}
+          <Controller
+            name="currency"
+            control={control}
+            render={({ field }) => (
+              <CurrencyExchangeBlock
+                currency={field.value as CurrencyCode}
+                exchangeRateInput={exchangeRateInput}
+                defaultCurrency={defaultCurrency}
+                isExchangeRateModified={isExchangeRateModified}
+                exchangeRateError={exchangeRateError}
+                // Para fijos: nota "Cotización para {Mes Año}" — siempre visible (campo siempre presente)
+                recurringMonthNote={`Cotización para ${
+                  formatMonthLabel(viewMonth ?? getCurrentMonth()).replace(
+                    /^\w/,
+                    (c) => c.toUpperCase()
+                  )
+                }`}
+                onCurrencyChange={(val) => {
+                  field.onChange(val);
+                }}
+                onExchangeRateChange={(val) => setValue("exchangeRateInput", val)}
+                exchangeRateInputId="rec-exchange-rate"
+              />
+            )}
+          />
 
           {/* ── Mes de inicio (solo en modo crear) ── */}
           {!isEditing && (

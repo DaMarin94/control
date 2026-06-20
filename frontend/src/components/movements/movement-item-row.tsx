@@ -30,6 +30,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { ArrowDown, ArrowUp, Repeat, Pencil, Trash2, CalendarOff, CalendarPlus, Link2, GitBranch, Calculator } from "lucide-react";
 import { KebabMenu } from "@/components/ui/kebab-menu";
 import { useRecurring } from "@/hooks/use-recurring";
+import { useSettings } from "@/hooks/use-settings";
 import { useToast } from "@/hooks/use-toast";
 
 /** Etiqueta en minúscula por valor de frequency (para la sublínea del ítem) */
@@ -54,6 +55,10 @@ interface MovementItemRowProps {
 export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreateCalculated }: MovementItemRowProps) {
   const { skipRecurring } = useRecurring();
   const { toast } = useToast();
+  const { defaultCurrency } = useSettings();
+
+  // Fase 1.2.3: mostrar badge y valor original solo cuando moneda ≠ default
+  const isCrossRate = movement.currency !== defaultCurrency;
 
   const isExpense = movement.type === "EXPENSE";
   const isFijo = movement.origin === "fijo";
@@ -72,22 +77,36 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
       ? formatDate(movement.occurredAt, movement.timezone)
       : null;
 
-  // Monto: para calculados puede ser negativo o cero (RN-018, spec 1.c).
+  // Monto principal: convertedAmountCents (en la moneda default del usuario).
+  // Para calculados puede ser negativo o cero (RN-018, spec 1.c).
   // Color siempre por TIPO (no por signo). Prefijo − si negativo.
   // Para no calculados: gastos con −$, ingresos con +$.
+  // Fase 1.2.3 / 1.2.3-ext: usar convertedAmountCents como cifra dominante;
+  // símbolo de la moneda default (todos los convertidos van en la default del usuario).
   function buildAmountDisplay(): string {
+    const cents = movement.convertedAmountCents;
     if (isCalculated) {
       // Monto calculado puede ser negativo, cero o positivo
-      const cents = movement.amountCents;
-      if (cents === 0) return formatCurrency(0); // "$0,00" sin signo
-      if (cents < 0) return `−${formatCurrency(Math.abs(cents))}`; // "−$1.234,56"
-      return formatCurrency(cents); // positivo sin prefijo (es el valor derivado)
+      if (cents === 0) return formatCurrency(0, defaultCurrency); // "$0,00" sin signo
+      if (cents < 0) return `−${formatCurrency(Math.abs(cents), defaultCurrency)}`; // "−$1.234,56"
+      return formatCurrency(cents, defaultCurrency); // positivo sin prefijo (es el valor derivado)
     }
-    // Movimiento normal: gastos con −$, ingresos con +$
-    const amountFormatted = formatCurrency(movement.amountCents);
+    // Movimiento normal: gastos con −$, ingresos con +$ (Math.abs porque puede ser negativo por tipo)
+    const amountFormatted = formatCurrency(Math.abs(cents), defaultCurrency);
     return isExpense ? `−${amountFormatted}` : `+${amountFormatted}`;
   }
   const amountDisplay = buildAmountDisplay();
+
+  // Fase 1.2.3 / 1.2.3-ext: valor original (monto en la moneda original) — solo si cross-rate.
+  // Formato: símbolo de la moneda original + cifra, sin signo, en --muted.
+  // Ej: "US$15,00" cuando currency="USD". El badge de código "USD" sigue presente
+  // junto al monto convertido; esta línea usa el símbolo para la cifra original.
+  function buildOriginalAmountDisplay(): string {
+    // amountCents puede ser negativo en calculados — mostrar abs (solo es referencia)
+    const originalCents = Math.abs(movement.amountCents);
+    return formatCurrency(originalCents, movement.currency);
+  }
+  const originalAmountDisplay = isCrossRate ? buildOriginalAmountDisplay() : null;
 
   // Ícono y clases de color por tipo
   const IconComponent = isExpense ? ArrowDown : ArrowUp;
@@ -266,13 +285,40 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
       </div>
 
       {/* Col 4: Monto mono — tachado si anulado, conservando color semántico */}
-      <span
-        className={`text-[15.5px] font-semibold text-right min-w-[100px] mono ${
-          isExpense ? "text-ink" : "text-income-ink"
-        } ${isSkipped ? "opacity-[0.55] line-through" : ""}`}
+      {/* Fase 1.2.3: si cross-rate, la celda se convierte en columna (flex-col) */}
+      <div
+        className={`flex flex-col items-end text-right min-w-[100px] ${
+          isSkipped ? "opacity-[0.55]" : ""
+        }`}
       >
-        {amountDisplay}
-      </span>
+        {/* Fila principal del monto: badge de moneda (si cross-rate) + cifra convertida */}
+        <span className="inline-flex items-center gap-[7px] justify-end">
+          {/* Badge de moneda original (solo si cross-rate) */}
+          {isCrossRate && (
+            <span
+              className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em] mono"
+              aria-label={`Moneda original: ${movement.currency}`}
+            >
+              {movement.currency}
+            </span>
+          )}
+          {/* Monto convertido — dominante */}
+          <span
+            className={`text-[15.5px] font-semibold mono ${
+              isExpense ? "text-ink" : "text-income-ink"
+            } ${isSkipped ? "line-through" : ""}`}
+          >
+            {amountDisplay}
+          </span>
+        </span>
+
+        {/* Valor original (segunda línea, solo si cross-rate) */}
+        {isCrossRate && originalAmountDisplay && (
+          <span className="text-[12.5px] font-medium text-muted mono mt-[2px]">
+            {originalAmountDisplay}
+          </span>
+        )}
+      </div>
 
       {/* Col 5: KebabMenu de acciones (portal+fixed — ver CLAUDE.md) */}
       {/* El KebabMenu va a opacidad plena incluso en ítems anulados (es la acción de des-anular) */}

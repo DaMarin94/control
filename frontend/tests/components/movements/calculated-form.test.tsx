@@ -103,6 +103,9 @@ const origenFijo: MovementItem = {
   category: { id: "cat-income", name: "Sueldo", color: "#00FF00", scope: "INCOME" },
   calculated: null,
   hasCalculated: false,
+  currency: "ARS",
+  exchangeRate: 1,
+  convertedAmountCents: 100000,
 };
 
 /** Ítem único de origen — Fase 1.1.8 */
@@ -120,6 +123,9 @@ const origenUnico: MovementItem = {
   category: { id: "cat-expense", name: "Servicios", color: "#FF5733", scope: "EXPENSE" },
   calculated: null,
   hasCalculated: false,
+  currency: "ARS",
+  exchangeRate: 1,
+  convertedAmountCents: 50000,
 };
 
 /** Ítem cuota de origen — Fase 1.1.8 */
@@ -137,6 +143,9 @@ const origenCuota: MovementItem = {
   category: { id: "cat-expense", name: "Tecnología", color: "#0000FF", scope: "EXPENSE" },
   calculated: null,
   hasCalculated: false,
+  currency: "ARS",
+  exchangeRate: 1,
+  convertedAmountCents: 30000,
 };
 
 /** Ítem calculado (para modo editar — origen fijo) */
@@ -163,6 +172,9 @@ const calculadoExistente: MovementItem = {
     sourceAmountCents: 100000,
   },
   hasCalculated: false,
+  currency: "ARS",
+  exchangeRate: 1,
+  convertedAmountCents: -10000,
 };
 
 /** Ítem calculado de origen único (para modo editar — Fase 1.1.8) */
@@ -189,6 +201,9 @@ const calculadoUnicoExistente: MovementItem = {
     sourceAmountCents: 50000,
   },
   hasCalculated: false,
+  currency: "ARS",
+  exchangeRate: 1,
+  convertedAmountCents: 5000,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

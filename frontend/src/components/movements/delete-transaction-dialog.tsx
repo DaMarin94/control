@@ -48,7 +48,7 @@ export function DeleteTransactionDialog({
     onClose();
   }
 
-  const amountLabel = formatCurrency(transaction.amountCents);
+  const amountLabel = formatCurrency(transaction.amountCents, transaction.currency);
   const typeLabel = transaction.type === "EXPENSE" ? "Gasto" : "Ingreso";
   const description = transaction.description ?? transaction.category.name;
 

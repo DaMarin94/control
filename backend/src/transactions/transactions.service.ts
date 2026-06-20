@@ -11,6 +11,7 @@ import {
 } from './transactions.repository';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class TransactionsService {
@@ -18,6 +19,7 @@ export class TransactionsService {
     private readonly repo: TransactionsRepository,
     private readonly categoryValidator: CategoryValidatorService,
     private readonly logger: Logger,
+    private readonly settingsService: SettingsService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -31,6 +33,8 @@ export class TransactionsService {
     // Validar categoría: propia + activa + scope compatible (RN-010)
     await this.categoryValidator.validateCategory(userId, dto.categoryId, dto.type);
 
+    const effectiveExchangeRate = dto.exchangeRate ?? 1;
+
     const tx = await this.repo.create({
       user: { connect: { id: userId } },
       category: { connect: { id: dto.categoryId } },
@@ -39,7 +43,12 @@ export class TransactionsService {
       occurredAt: new Date(dto.occurredAt),
       timezone: dto.timezone,
       description: dto.description ?? null,
+      ...(dto.currency !== undefined && { currency: dto.currency }),
+      exchangeRate: effectiveExchangeRate,
     });
+
+    // Actualizar lastExchangeRate del usuario (solo si no es el default de back-compat)
+    await this.settingsService.updateLastExchangeRate(userId, effectiveExchangeRate);
 
     this.logger.log(
       { userId, transactionId: tx.id, type: tx.type, amountCents: tx.amountCents },
@@ -99,7 +108,14 @@ export class TransactionsService {
       ...(dto.timezone !== undefined && { timezone: dto.timezone }),
       // description: permitir limpiarla a null enviando null, o actualizarla si viene en el body
       ...(dto.description !== undefined && { description: dto.description }),
+      ...(dto.currency !== undefined && { currency: dto.currency }),
+      ...(dto.exchangeRate !== undefined && { exchangeRate: dto.exchangeRate }),
     });
+
+    // Actualizar lastExchangeRate del usuario si se editó la cotización
+    if (dto.exchangeRate !== undefined) {
+      await this.settingsService.updateLastExchangeRate(userId, dto.exchangeRate);
+    }
 
     this.logger.log(
       { userId, transactionId: id },

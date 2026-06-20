@@ -20,6 +20,7 @@ import { UpdateCalculatedFromTransactionDto } from './dto/update-calculated-from
 import { CreateCalculatedFromInstallmentDto } from './dto/create-calculated-from-installment.dto';
 import { UpdateCalculatedFromInstallmentDto } from './dto/update-calculated-from-installment.dto';
 import { validateFormulaOperand } from './formula.helper';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class RecurringService {
@@ -27,6 +28,7 @@ export class RecurringService {
     private readonly repo: RecurringRepository,
     private readonly categoryValidator: CategoryValidatorService,
     private readonly logger: Logger,
+    private readonly settingsService: SettingsService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -43,6 +45,8 @@ export class RecurringService {
     // Validar categoría: propia + activa + scope compatible (RN-010)
     await this.categoryValidator.validateCategory(userId, dto.categoryId, dto.type);
 
+    const effectiveExchangeRate = dto.exchangeRate ?? 1;
+
     const r = await this.repo.create({
       user: { connect: { id: userId } },
       category: { connect: { id: dto.categoryId } },
@@ -51,9 +55,13 @@ export class RecurringService {
       startMonth: dto.startMonth,
       frequency: dto.frequency ?? RecurringFrequency.MONTHLY,
       description: dto.description ?? null,
+      ...(dto.currency !== undefined && { currency: dto.currency }),
+      exchangeRate: effectiveExchangeRate,
       // chainId se genera por el @default(cuid()) del schema;
       // sourceChainId/formulaOperator/formulaOperand/formulaSign son null (fijo normal)
     });
+
+    await this.settingsService.updateLastExchangeRate(userId, effectiveExchangeRate);
 
     this.logger.log(
       {
@@ -207,8 +215,10 @@ export class RecurringService {
       await this.repo.update(id, { deletedFrom: dto.currentMonth });
 
       // 2. Crear la nueva fila R2 con los valores nuevos (type NO cambia).
-      // R2 hereda: type, frequency, deletedFrom, chainId del original.
+      // R2 hereda: type, frequency, deletedFrom, chainId, currency, exchangeRate del original.
+      // currency y exchangeRate: el DTO puede sobreescribirlos para el mes editado.
       // chainId: R2 hereda el mismo chainId de R1 (invariante — el split no rompe la cadena).
+      const effectiveExchangeRate = dto.exchangeRate ?? existing.exchangeRate;
       result = await this.repo.create({
         user: { connect: { id: userId } },
         category: { connect: { id: dto.categoryId ?? existing.categoryId } },
@@ -218,11 +228,15 @@ export class RecurringService {
         startMonth: dto.currentMonth,
         deletedFrom: existing.deletedFrom,
         chainId: existing.chainId, // CRÍTICO: preservar la identidad de cadena (Fase 1.1.7)
+        currency: dto.currency ?? existing.currency, // heredar o sobreescribir
+        exchangeRate: effectiveExchangeRate,
         description: dto.description !== undefined
           ? dto.description
           : existing.description,
         // fijo normal: sourceChainId/formulaOperator/formulaOperand/formulaSign son null
       });
+
+      await this.settingsService.updateLastExchangeRate(userId, effectiveExchangeRate);
 
       this.logger.log(
         {
@@ -244,7 +258,13 @@ export class RecurringService {
         }),
         // description: actualizar si se incluye en el body (puede ser null para limpiarla)
         ...(dto.description !== undefined && { description: dto.description }),
+        ...(dto.currency !== undefined && { currency: dto.currency }),
+        ...(dto.exchangeRate !== undefined && { exchangeRate: dto.exchangeRate }),
       });
+
+      if (dto.exchangeRate !== undefined) {
+        await this.settingsService.updateLastExchangeRate(userId, dto.exchangeRate);
+      }
 
       this.logger.log(
         {

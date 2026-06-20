@@ -59,7 +59,7 @@ export function DeleteRecurringDialog({ movement, onClose, viewMonth, variant = 
     onClose();
   }
 
-  const amountLabel = formatCurrency(movement.amountCents);
+  const amountLabel = formatCurrency(movement.amountCents, movement.currency);
   const typeLabel = movement.type === "EXPENSE" ? "Gasto" : "Ingreso";
   const description = movement.description ?? movement.category.name;
 

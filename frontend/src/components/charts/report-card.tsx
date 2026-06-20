@@ -34,7 +34,8 @@ import {
 } from "lucide-react";
 import { useReports } from "@/hooks/use-reports";
 import { useCategories } from "@/hooks/use-categories";
-import { formatCurrency } from "@/lib/format";
+import { useSettings } from "@/hooks/use-settings";
+import { formatCurrency, CURRENCY_SYMBOLS } from "@/lib/format";
 import { ChartTooltipContent } from "@/components/ui/chart";
 import { ChartLegend } from "@/components/ui/chart";
 import { CategoryFilterPopover, FilterButton } from "@/components/ui/category-filter";
@@ -69,20 +70,28 @@ function useReducedMotion(): boolean {
 
 // ─── Helpers de formato del eje Y ─────────────────────────────────────────────
 
-function formatYAxisTick(valueCents: number): string {
-  const pesos = valueCents / 100;
-  if (pesos === 0) return "$0";
-  if (pesos >= 1_000_000) {
-    const m = pesos / 1_000_000;
-    const label = m % 1 === 0 ? String(m) : m.toFixed(1).replace(".", ",");
-    return `$${label}M`;
-  }
-  if (pesos >= 1_000) {
-    const k = pesos / 1_000;
-    const label = k % 1 === 0 ? String(k) : k.toFixed(1).replace(".", ",");
-    return `$${label}k`;
-  }
-  return `$${pesos}`;
+/**
+ * Crea un formateador de ticks del eje Y con el símbolo de la moneda indicada.
+ * Se llama una vez por render (en el nivel del chart) y devuelve el formatter.
+ * Así tickFormatter recibe el símbolo correcto sin perder la firma `(number) => string`.
+ */
+function makeYAxisTickFormatter(currency: string): (valueCents: number) => string {
+  const sym = CURRENCY_SYMBOLS[currency] ?? "$";
+  return function formatYAxisTick(valueCents: number): string {
+    const pesos = valueCents / 100;
+    if (pesos === 0) return `${sym}0`;
+    if (pesos >= 1_000_000) {
+      const m = pesos / 1_000_000;
+      const label = m % 1 === 0 ? String(m) : m.toFixed(1).replace(".", ",");
+      return `${sym}${label}M`;
+    }
+    if (pesos >= 1_000) {
+      const k = pesos / 1_000;
+      const label = k % 1 === 0 ? String(k) : k.toFixed(1).replace(".", ",");
+      return `${sym}${label}k`;
+    }
+    return `${sym}${pesos}`;
+  };
 }
 
 // ─── Tipos de datos del chart ──────────────────────────────────────────────────
@@ -120,9 +129,10 @@ interface Form1TooltipProps {
   payload?: Array<{ dataKey: string; value: number }>;
   label?: string | number;
   year: number;
+  currency: string;
 }
 
-function Form1Tooltip({ active, payload, label, year }: Form1TooltipProps) {
+function Form1Tooltip({ active, payload, label, year, currency }: Form1TooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
   const labelStr = String(label ?? "");
   const monthIndex = MONTH_LABELS_SHORT.indexOf(labelStr);
@@ -131,8 +141,8 @@ function Form1Tooltip({ active, payload, label, year }: Form1TooltipProps) {
   const incomeVal = payload.find((p) => p.dataKey === "incomeCents")?.value ?? 0;
   const expenseVal = payload.find((p) => p.dataKey === "expenseCents")?.value ?? 0;
   const rows = [
-    { color: "var(--income)", label: "Ingresos", formattedValue: formatCurrency(incomeVal), valueColor: "var(--income-ink)" },
-    { color: "var(--expense)", label: "Gastos", formattedValue: formatCurrency(expenseVal), valueColor: "var(--expense-ink)" },
+    { color: "var(--income)", label: "Ingresos", formattedValue: formatCurrency(incomeVal, currency), valueColor: "var(--income-ink)" },
+    { color: "var(--expense)", label: "Gastos", formattedValue: formatCurrency(expenseVal, currency), valueColor: "var(--expense-ink)" },
   ];
   return <ChartTooltipContent monthLabel={fullLabel} rows={rows} />;
 }
@@ -145,9 +155,10 @@ interface Form2TooltipProps {
   label?: string | number;
   data: ReportsMovementsResponse;
   year: number;
+  currency: string;
 }
 
-function Form2Tooltip({ active, payload, label, data, year }: Form2TooltipProps) {
+function Form2Tooltip({ active, payload, label, data, year, currency }: Form2TooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
   const labelStr = String(label ?? "");
   const monthIndex = MONTH_LABELS_SHORT.indexOf(labelStr);
@@ -158,11 +169,11 @@ function Form2Tooltip({ active, payload, label, data, year }: Form2TooltipProps)
     .map((cat) => ({
       color: cat.color,
       label: cat.name,
-      formattedValue: formatCurrency(cat.monthlyExpenseCents[monthIndex] ?? 0),
+      formattedValue: formatCurrency(cat.monthlyExpenseCents[monthIndex] ?? 0, currency),
       valueColor: "var(--ink)",
     }));
   const totalCents = data.months[monthIndex]?.expenseCents ?? 0;
-  const totalRow = { color: "var(--expense)", label: "Total gastos", formattedValue: formatCurrency(totalCents), valueColor: "var(--expense-ink)" };
+  const totalRow = { color: "var(--expense)", label: "Total gastos", formattedValue: formatCurrency(totalCents, currency), valueColor: "var(--expense-ink)" };
   return <ChartTooltipContent monthLabel={fullLabel} rows={catRows} totalRow={totalRow} />;
 }
 
@@ -318,9 +329,11 @@ interface Form1ChartInnerProps {
   year: number;
   height: number;
   reducedMotion: boolean;
+  currency: string;
 }
 
-function Form1ChartInner({ chartData, year, height, reducedMotion }: Form1ChartInnerProps) {
+function Form1ChartInner({ chartData, year, height, reducedMotion, currency }: Form1ChartInnerProps) {
+  const formatYAxisTick = makeYAxisTickFormatter(currency);
   return (
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={chartData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
@@ -340,7 +353,7 @@ function Form1ChartInner({ chartData, year, height, reducedMotion }: Form1ChartI
         <Tooltip
           cursor={{ stroke: "var(--hair)", strokeWidth: 1 }}
           content={({ active, payload, label }) => (
-            <Form1Tooltip active={active} payload={payload as unknown as Array<{ dataKey: string; value: number }>} label={label} year={year} />
+            <Form1Tooltip active={active} payload={payload as unknown as Array<{ dataKey: string; value: number }>} label={label} year={year} currency={currency} />
           )}
         />
         <Area type="monotone" dataKey="expenseCents" stroke="var(--expense)" strokeWidth={2} fill="url(#areaExpenseRep)" dot={false} activeDot={{ r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 }} isAnimationActive={!reducedMotion} animationDuration={400} animationEasing="ease-out" />
@@ -358,10 +371,12 @@ interface Form2ChartInnerProps {
   year: number;
   height: number;
   reducedMotion: boolean;
+  currency: string;
 }
 
-function Form2ChartInner({ chartData, data, year, height, reducedMotion }: Form2ChartInnerProps) {
+function Form2ChartInner({ chartData, data, year, height, reducedMotion, currency }: Form2ChartInnerProps) {
   const categories = data.categories;
+  const formatYAxisTick = makeYAxisTickFormatter(currency);
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={chartData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }} barCategoryGap="27%">
@@ -371,7 +386,7 @@ function Form2ChartInner({ chartData, data, year, height, reducedMotion }: Form2
         <Tooltip
           cursor={{ fill: "var(--accent-soft)", fillOpacity: 0.5 }}
           content={({ active, payload, label }) => (
-            <Form2Tooltip active={active} payload={payload as unknown as Array<{ dataKey: string; value: number }>} label={label} data={data} year={year} />
+            <Form2Tooltip active={active} payload={payload as unknown as Array<{ dataKey: string; value: number }>} label={label} data={data} year={year} currency={currency} />
           )}
         />
         {categories.map((cat, idx) => {
@@ -397,6 +412,7 @@ interface FormBChartInnerProps {
   year: number;
   height: number;
   reducedMotion: boolean;
+  currency: string;
 }
 
 /**
@@ -410,8 +426,9 @@ interface FormBChartInnerProps {
  * Separadores 1px var(--panel) entre bandas para que colores similares no se fusionen.
  * Tooltip: reutiliza Form2Tooltip (mismo patrón que Forma 2 — solo gastos).
  */
-function FormBChartInner({ chartData, data, year, height, reducedMotion }: FormBChartInnerProps) {
+function FormBChartInner({ chartData, data, year, height, reducedMotion, currency }: FormBChartInnerProps) {
   const expenseCategories = data.categories;
+  const formatYAxisTick = makeYAxisTickFormatter(currency);
 
   // IDs únicos para los gradientes (evitar colisión con Forma 2 si hay múltiples cards)
   const gradId = (id: string) => `fbGradE_${id.replace(/[^a-z0-9]/gi, "_")}`;
@@ -441,6 +458,7 @@ function FormBChartInner({ chartData, data, year, height, reducedMotion }: FormB
               label={label}
               data={data}
               year={year}
+              currency={currency}
             />
           )}
         />
@@ -692,6 +710,7 @@ export function ReportCard({
   const reducedMotion = useReducedMotion();
   const { data, isLoading, isError, refetch } = useReports(year, categoryIds);
   const { categories: allCategories } = useCategories();
+  const { defaultCurrency } = useSettings();
   const totalCategories = allCategories?.length ?? 0;
 
   const [filterOpen, setFilterOpen] = useState(false);
@@ -857,6 +876,7 @@ export function ReportCard({
                     year={year}
                     height={height}
                     reducedMotion={reducedMotion}
+                    currency={defaultCurrency}
                   />
                 );
               }
@@ -868,6 +888,7 @@ export function ReportCard({
                     year={year}
                     height={height}
                     reducedMotion={reducedMotion}
+                    currency={defaultCurrency}
                   />
                 );
               }
@@ -878,6 +899,7 @@ export function ReportCard({
                   year={year}
                   height={height}
                   reducedMotion={reducedMotion}
+                  currency={defaultCurrency}
                 />
               );
             }}

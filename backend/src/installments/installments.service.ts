@@ -12,6 +12,7 @@ import {
 } from './installments.repository';
 import { CreateInstallmentDto } from './dto/create-installment.dto';
 import { UpdateInstallmentDto } from './dto/update-installment.dto';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class InstallmentsService {
@@ -19,6 +20,7 @@ export class InstallmentsService {
     private readonly repo: InstallmentsRepository,
     private readonly categoryValidator: CategoryValidatorService,
     private readonly logger: Logger,
+    private readonly settingsService: SettingsService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -51,6 +53,8 @@ export class InstallmentsService {
     // Validar categoría: propia + activa + scope compatible (RN-010)
     await this.categoryValidator.validateCategory(userId, dto.categoryId, dto.type);
 
+    const effectiveExchangeRate = dto.exchangeRate ?? 1;
+
     const group = await this.repo.create({
       user: { connect: { id: userId } },
       category: { connect: { id: dto.categoryId } },
@@ -59,7 +63,11 @@ export class InstallmentsService {
       totalInstallments: dto.totalInstallments,
       startMonth: dto.startMonth,
       description: dto.description ?? null,
+      ...(dto.currency !== undefined && { currency: dto.currency }),
+      exchangeRate: effectiveExchangeRate,
     });
+
+    await this.settingsService.updateLastExchangeRate(userId, effectiveExchangeRate);
 
     this.logger.log(
       {
@@ -128,7 +136,13 @@ export class InstallmentsService {
         category: { connect: { id: dto.categoryId } },
       }),
       ...(dto.description !== undefined && { description: dto.description }),
+      ...(dto.currency !== undefined && { currency: dto.currency }),
+      ...(dto.exchangeRate !== undefined && { exchangeRate: dto.exchangeRate }),
     });
+
+    if (dto.exchangeRate !== undefined) {
+      await this.settingsService.updateLastExchangeRate(userId, dto.exchangeRate);
+    }
 
     this.logger.log(
       { userId, installmentGroupId: id },

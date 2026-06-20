@@ -49,6 +49,9 @@ const mockCuotaMovement: MovementItem = {
   },
   calculated: null,
   hasCalculated: false,
+  currency: "ARS",
+  exchangeRate: 1,
+  convertedAmountCents: 50000,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

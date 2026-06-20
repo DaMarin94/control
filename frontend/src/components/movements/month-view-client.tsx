@@ -56,6 +56,7 @@ import {
 } from "@dnd-kit/sortable";
 import { useMovements } from "@/hooks/use-movements";
 import { usePreferences } from "@/hooks/use-preferences";
+import { useSettings } from "@/hooks/use-settings";
 import { SortableSection } from "@/components/ui/sortable-section";
 import { SectionFilterButton } from "@/components/ui/section-filter-popover";
 import type { SectionFilterType } from "@/components/ui/section-filter-popover";
@@ -66,6 +67,7 @@ import { DeleteRecurringDialog } from "@/components/movements/delete-recurring-d
 import { DeleteInstallmentDialog } from "@/components/movements/delete-installment-dialog";
 import { NewTransactionButton } from "@/components/movements/new-transaction-button";
 import { PeriodNav } from "@/components/ui/period-nav";
+import { CurrencyChip } from "@/components/ui/currency-chip";
 import {
   formatCurrency,
   formatMonthLabel,
@@ -197,6 +199,8 @@ function movementItemToTransaction(item: MovementItem): Transaction {
     description: item.description,
     occurredAt,
     timezone,
+    currency: item.currency,
+    exchangeRate: item.exchangeRate,
     createdAt: occurredAt,
     updatedAt: occurredAt,
     category: item.category,
@@ -216,6 +220,8 @@ function movementItemToRecurring(item: MovementItem): Recurring {
     startMonth: getCurrentMonth(), // Relleno válido para el schema (no se envía en PATCH)
     deletedFrom: null,
     frequency: item.frequency ?? "MONTHLY",
+    currency: item.currency,
+    exchangeRate: item.exchangeRate,
     createdAt: "",
     updatedAt: "",
     category: item.category,
@@ -234,6 +240,8 @@ function movementItemToInstallment(item: MovementItem): InstallmentGroup {
     totalInstallments: item.installment?.total ?? 1,
     startMonth: item.installment?.startMonth ?? "",
     description: item.description,
+    currency: item.currency,
+    exchangeRate: item.exchangeRate,
     createdAt: "",
     updatedAt: "",
     category: item.category,
@@ -274,6 +282,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   // ── Fetch sin filtro de backend (Fase 1.2.1) ─────────────────────────────
   // El filtrado se hace en el frontend; el hook trae todo el mes.
   const { data, isLoading, isError } = useMovements(month);
+  const { defaultCurrency } = useSettings();
 
   // Estado de modales para únicos
   const [editingUnico, setEditingUnico] = useState<MovementItem | null>(null);
@@ -379,9 +388,10 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   const cuotas = applyFilter(rawCuotas, listFilters.cuotas);
 
   // ── Totales recalculados desde lo visible ─────────────────────────────────
-  // RN-019: usa Math.abs(amountCents) por bucket de type. Los calculados EXPENSE
-  // tienen amountCents negativo; sumarlo crudo produciría totales incorrectos.
-  // sumMovementTotals encapsula esta regla en lib/movements.ts.
+  // RN-019: usa Math.abs(convertedAmountCents) por bucket de type (Fase 1.2.3).
+  // convertedAmountCents es el monto en la moneda default del usuario (backend).
+  // Los calculados EXPENSE tienen convertedAmountCents negativo; Math.abs() lo
+  // normaliza. sumMovementTotals encapsula esta regla en lib/movements.ts.
 
   const unicosTotals = sumMovementTotals(unicos);
   const fijosTotals = sumMovementTotals(fijos);
@@ -461,8 +471,9 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   // ── Subtotales por grupo ──────────────────────────────────────────────────
   // groupSubtotalCents delega a sumMovementTotals para respetar RN-019.
 
+  // Símbolo de la moneda default en totales/subtotales (todos en la default del usuario)
   function formatSubtotal(cents: number): string {
-    const abs = formatCurrency(Math.abs(cents));
+    const abs = formatCurrency(Math.abs(cents), defaultCurrency);
     if (cents > 0) return `+${abs}`;
     if (cents < 0) return `−${abs}`;
     return abs;
@@ -606,9 +617,13 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
 
           {/* Bloque de título — desktop (≥941px) */}
           <div className="hidden [@media(min-width:941px)]:flex flex-col gap-0">
-            <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
-              Tu mes
-            </span>
+            {/* Fila del eyebrow: label + chip de moneda default (a la derecha del eyebrow) */}
+            <div className="flex items-center gap-[10px] mb-0.5">
+              <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+                Tu mes
+              </span>
+              <CurrencyChip currency={defaultCurrency} />
+            </div>
             <h1 className="text-[32px] font-bold tracking-[-0.02em] leading-none text-ink mt-0.5 mb-1">
               {periodLabel}
             </h1>
@@ -619,35 +634,39 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
 
           {/* Stepper compacto — mobile (≤940px) */}
           {/*
-           * aria-hidden: en jsdom (tests, sin breakpoints CSS) este bloque
-           * y las flechas de PeriodNav coexisten en el DOM. El aria-hidden
-           * hace que los botones del stepper compacto queden fuera del árbol
-           * de accesibilidad, evitando duplicados en getByRole.
-           * En el browser, la clase hidden/@media ya lo oculta visualmente.
+           * El contenedor flex envuelve el stepper pill (aria-hidden, evita
+           * duplicados en jsdom) y el CurrencyChip accesible (fuera del aria-hidden).
+           * El chip va a la derecha del stepper (gap-[10px]); si no entra, flex-wrap
+           * lo baja a su propia línea alineado a la derecha (spec).
            */}
-          <div aria-hidden="true" className="[@media(min-width:941px)]:hidden inline-flex items-center gap-0.5 bg-panel border border-line rounded-pill px-1 py-1 shadow-[var(--shadow-sm)]">
-            <button
-              onClick={goToPrevMonth}
-              aria-label="Mes anterior"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-ink-2 hover:bg-panel-2 hover:text-ink transition-colors duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
-            >
-              <ChevronLeft size={18} aria-hidden="true" />
-            </button>
-            <div className="min-w-[124px] text-center px-1">
-              <span className="block text-[14.5px] font-semibold text-ink">
-                {mesName} {yearName}
-              </span>
-              <span className="block text-[11px] font-medium text-muted tracking-[0.02em] -mt-0.5">
-                {statusLabel}
-              </span>
+          <div className="[@media(min-width:941px)]:hidden flex items-center gap-[10px] flex-wrap">
+            {/* Pill stepper — aria-hidden para evitar duplicados de botones en jsdom */}
+            <div aria-hidden="true" className="inline-flex items-center gap-0.5 bg-panel border border-line rounded-pill px-1 py-1 shadow-[var(--shadow-sm)]">
+              <button
+                onClick={goToPrevMonth}
+                aria-label="Mes anterior"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-ink-2 hover:bg-panel-2 hover:text-ink transition-colors duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+              >
+                <ChevronLeft size={18} aria-hidden="true" />
+              </button>
+              <div className="min-w-[124px] text-center px-1">
+                <span className="block text-[14.5px] font-semibold text-ink">
+                  {mesName} {yearName}
+                </span>
+                <span className="block text-[11px] font-medium text-muted tracking-[0.02em] -mt-0.5">
+                  {statusLabel}
+                </span>
+              </div>
+              <button
+                onClick={goToNextMonth}
+                aria-label="Mes siguiente"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-ink-2 hover:bg-panel-2 hover:text-ink transition-colors duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+              >
+                <ChevronRight size={18} aria-hidden="true" />
+              </button>
             </div>
-            <button
-              onClick={goToNextMonth}
-              aria-label="Mes siguiente"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-ink-2 hover:bg-panel-2 hover:text-ink transition-colors duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
-            >
-              <ChevronRight size={18} aria-hidden="true" />
-            </button>
+            {/* Chip de moneda — accesible, a la derecha del pill */}
+            <CurrencyChip currency={defaultCurrency} />
           </div>
 
           {/* Acciones del header: "Ordenar secciones" / "Listo" + "+ Nuevo movimiento" */}
@@ -729,7 +748,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                   Gastos
                 </div>
                 <div className="text-[23px] font-semibold tracking-[-0.02em] leading-none mono text-ink">
-                  {formatCurrency(expenseCents)}
+                  {formatCurrency(expenseCents, defaultCurrency)}
                 </div>
               </div>
 
@@ -739,7 +758,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                   Ingresos
                 </div>
                 <div className="text-[23px] font-semibold tracking-[-0.02em] leading-none mono text-income-ink">
-                  {formatCurrency(incomeCents)}
+                  {formatCurrency(incomeCents, defaultCurrency)}
                 </div>
               </div>
 
@@ -756,8 +775,8 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                 </div>
                 <div className="text-[28px] font-semibold tracking-[-0.02em] leading-none mono">
                   {balanceCents >= 0
-                    ? `+ ${formatCurrency(balanceCents)}`
-                    : `− ${formatCurrency(Math.abs(balanceCents))}`}
+                    ? `+ ${formatCurrency(balanceCents, defaultCurrency)}`
+                    : `− ${formatCurrency(Math.abs(balanceCents), defaultCurrency)}`}
                 </div>
               </div>
             </div>

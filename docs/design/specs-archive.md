@@ -989,3 +989,211 @@ Ninguna bloquea la implementación; conviene confirmar con el analista (no son d
 
 1. **Acción "Crear movimiento desde este" en el kebab de único/cuota:** la Fase 1.1.7 limitó esa acción a **fijos no calculados**. Esta fase amplía los **orígenes** posibles a único/cuota — lo que implica que el kebab de un **único** y de una **cuota** debería ahora ofrecer "Crear movimiento desde este" (para que existan calculados de ese origen). Eso es **comportamiento funcional** (qué ítems pueden ser origen), no visual: el ítem de menú ya tiene su spec visual cerrada en 1.1.7 (label "Crear movimiento desde este", ícono `Calculator` 15px, neutro, antes de "Eliminar"); solo cambia **en qué tipos de ítem aparece**. **Reportado al orquestador** para que el analista confirme/derive — el front no debe asumir que lo habilita por su cuenta.
 2. **`skipped` en calculados de origen único/cuota:** asumo que un calculado de único/cuota **nunca** está `skipped` (únicos/cuotas no se anulan). Si por RF-MCALC-005 un calculado heredara una anulación aun con origen no-fijo, habría que revisar — pero por el contrato actual (`skipped` solo true en fijos) no hay caso. Confirmar si el backend pudiera marcar `skipped` en estos calculados.
+
+---
+
+## Multi-moneda ARS/USD + `/configuracion` — spec visual (Fase 1.2.3, 2026-06-20)
+
+> Spec del lenguaje visual de la Fase 1.2.3 (multi-moneda ARS/USD por movimiento, conversión de display a la moneda default del usuario, y la pantalla `/configuracion`). Backend + frontend ya implementados; conserva el detalle verbatim de cómo se cerró. Toca cuatro lugares: la **pantalla `/configuracion`** nueva (+ su link de sidebar), el **bloque moneda+cotización** en los forms de único/fijo/cuotas (`TransactionForm`, `RecurringForm`, `InstallmentForm`), el **ítem de `/mes`** (`MovementItemRow`) y los **reportes** (`/reportes`). **No introduce tokens de color nuevos** — la moneda es **cromo neutro**, nunca semántico ni de marca.
+>
+> **El lenguaje vivo y reutilizable** que salió de esta fase (badge de código de moneda, par moneda+cotización en formularios, línea de valor original en el ítem, tarjeta de ajuste + segmented neutro ARS/USD de `/configuracion`, y la regla derivada "la moneda es cromo neutro") vive resumido en `docs/design.md`. Acá queda el detalle de la spec de fase.
+
+Introduce **moneda explícita (ARS/USD)** y **cotización ARS↔USD por movimiento**, con conversión **100% de display** a la **moneda default** del usuario. Aporta tres piezas de lenguaje nuevas: el **badge de moneda**, el **par moneda + cotización** en formularios, y la **línea de conversión** en el ítem de `/mes`; más la pantalla **`/configuracion`** como contenedor de ajustes. **No introduce tokens de color nuevos** — la moneda es **cromo neutro**, nunca semántico ni de marca.
+
+### Regla dura nueva (extiende las 3 reglas duras)
+
+**La moneda NO es semántica ni de marca.** El badge de moneda, el código "ARS"/"USD" y la cotización se pintan en **neutros** (`--ink-2` / `--muted` / `--panel-3`). **Nunca** se tiñen de verde/rojo (eso es ingreso/gasto, regla dura 1) ni de índigo (eso es marca, regla dura 2). El color de un monto lo sigue dando su **tipo**; la moneda solo lo **rotula**. La cifra original y la convertida van **ambas en mono tabular** (regla dura 3). El acento índigo solo aparece como **cromo de interacción** (focus ring, control de selección activo), nunca tiñendo cifras.
+
+### A. Pantalla `/configuracion` (nueva) — y su link en el sidebar
+
+**Link nuevo en el sidebar (`AppSidebar`, `NAV_LINKS`).** Entra como un ítem más de la lista de navegación, **coherente con los existentes** (mismo `Link` con `gap-[11px] rounded-ctl px-[11px] py-[9px] text-[14.5px]`, ícono lucide 18px, estado activo `bg-accent-soft text-accent-ink font-semibold`, inactivo `text-ink-2`).
+
+- **Posición:** **último** de la lista, después de "Categorías": `[Dashboard] [Vista del mes] [Reportes] [Categorías] [Configuración]`. Configuración es el ajuste de cuenta → va al final del grupo de navegación de contenido (los datos primero, los ajustes al final), antes del CTA "+ Nuevo movimiento" y el menú de usuario que ya cierran la columna.
+- **Label:** **"Configuración"**.
+- **Ícono:** `Settings` (lucide) 18px — el glifo canónico de ajustes, sin colisión con los íconos en uso (`LayoutDashboard`, `CalendarDays`, `BarChart2`, `Tags`).
+- **Activo:** prefijo (`exact: false`), `pathname.startsWith("/configuracion")` → estado activo del DS (acento-soft, igual que el resto). Sin chrome adicional.
+
+Shell idéntico a `/categorias`: `div` `px-10 py-[34px] pb-20 max-w-[1120px] mx-auto animate-screen-fade`, cabecera `.phead` (eyebrow + h1) + bajada, contenido en **tarjetas de ajuste** apiladas.
+
+- **Cabecera `.phead`:** eyebrow *Eyebrow/labels* (12px/600, `.1em`, uppercase, `--muted`) **"Ajustes"** + H1 página (32px/700, -.02em, `--ink`) **"Configuración"**. *(El eyebrow es "Ajustes" —no "Configuración"— para no repetir literalmente el H1; el eyebrow nombra el área, el H1 la pantalla. Si el orquestador prefiere otro rótulo de eyebrow, es el único punto naming abierto.)* **Sin** botón de acción a la derecha (a diferencia de `/categorias`): esta pantalla no crea entidades, persiste preferencias en vivo.
+- **Bajada:** *(opcional, recomendada)* línea *body* 14px `--muted`: "Preferencias de tu cuenta." `mb-6`. Si el orquestador la considera redundante en una pantalla con un solo control, puede omitirse; no es estructural.
+- **Tarjeta de ajuste (patrón nuevo, reutilizable):** `.card` del DS (`--panel`, borde `--line`, `--r-card` 14px, `--shadow-sm`, padding `--card-pad` 22px). Estructura de **fila de ajuste**: a la **izquierda** la identidad del ajuste en columna (título 14.5px/600 `--ink` + descripción *Meta/subtítulos* 12.5px/500 `--muted`, `mt-[2px]`); a la **derecha** el control. Layout `flex items-center justify-between gap-6`. Es el molde para ajustes futuros (un ajuste = una fila; varios ajustes = filas separadas por divisor `--hair` dentro de la misma tarjeta, o tarjetas separadas — se decide cuando aparezca el segundo ajuste; en v1.2.3 hay **uno solo**).
+- **Único ajuste vigente — "Moneda por defecto":**
+  - **Identidad:** título **"Moneda por defecto"**; descripción **"Los totales y reportes se muestran en esta moneda."**
+  - **Control = segmented de 2 opciones (ARS / USD).** Reutiliza el **segmented neutro del DS** (mismo molde que el triple switch de tipo de la Fase 1.2.1, pero **2 segmentos y sin semánticos**): pista pill `--panel-3` (track), radio `--r-pill`, padding interno `2px`; dos segmentos de ancho igual, texto **13px/600** `px-[14px] py-[6px]`, radio `--r-pill`. **Etiquetas:** "ARS" / "USD" (código de 3 letras, en `mono` — es nomenclatura de moneda, va tabular). Segmento **seleccionado:** thumb `--panel` (blanco) + `--shadow-sm`, texto `--ink`, se **desliza** entre las 2 posiciones (0.14s; instantáneo con `prefers-reduced-motion`). Segmento **no seleccionado:** texto `--muted`; hover → `--ink-2`. **Sin color semántico ni índigo en los segmentos** (la moneda no es income/expense/marca). `role="radiogroup"` `aria-label="Moneda por defecto"`, 2 `role="radio"` (`aria-checked`), navegable por teclado, focus ring `--accent-soft` 3px sobre el segmento.
+  - **Persistencia en vivo:** el cambio se guarda al seleccionar (sin botón "Guardar"). Confirmación: **toast** del DS "Moneda por defecto actualizada." (no banner inline). Mientras persiste, el segmento queda en su nuevo estado (optimista); si falla, vuelve al previo + toast de error (patrón estándar del proyecto).
+  - **Implicancia de display:** cambiar la moneda default **no** toca lo guardado; recomputa **en vivo** todos los montos convertidos de `/mes` y reportes (la app ya tiene esos datos por movimiento). Es responsabilidad de `control-frontend` re-renderizar; el spec visual es: el cambio se refleja inmediato en las vistas montadas.
+- **Estados de la pantalla:** *loading* (preferencia aún no resuelta) → skeleton del segmento (bloque `bg-panel-3 rounded-pill animate-pulse` del tamaño del control) dentro de la tarjeta ya dibujada. *Error al cargar la preferencia* → mismo tratamiento de error de pantalla del proyecto (texto `--expense-ink` "No se pudo cargar la configuración. Recargá la página."). No hay estado vacío (siempre hay un default — ARS por back-compat).
+
+### B. Moneda + cotización en el formulario de movimiento (modal)
+
+Aplica al **form de único** (`TransactionForm`), al **de fijo** (`RecurringForm`) y al **de cuotas** (`InstallmentForm`). El **calculado hereda** moneda y cotización del origen → su form **no** muestra estos controles (los lee como parte del origen read-only; sin control editable). Se inserta un **bloque "Moneda y cotización"** en el form, manteniendo el ritmo `space-y-[14px]` y el patrón Label + control vigente.
+
+- **Ubicación en el form:** **inmediatamente debajo del campo Monto**, antes de Categoría. Razón: moneda y cotización **modulan el monto** (definen en qué moneda está la cifra recién tipeada y a cuánto convierte), así que viven pegados a él, antes de los metadatos (categoría/fecha). El orden del form pasa a ser: `[Tipo] [Monto] [Moneda + Cotización] [Categoría] [Fecha/Hora] [Descripción]`.
+- **Fila moneda + cotización — dos campos en `grid grid-cols-2 gap-[14px]`** (mismo grid que Fecha/Hora):
+  1. **Selector de moneda (columna izq):** Label "Moneda" (12.5px/600 `--ink-2`). Control = el **segmented neutro ARS/USD** descrito en A (2 segmentos, código mono, sin semánticos). Default al crear: **la moneda default del usuario** (la misma que `/configuracion`). Al editar: la moneda guardada del movimiento.
+  2. **Cotización (columna der) — SIEMPRE presente y editable:** Label "Cotización" (12.5px/600 `--ink-2`). Input mono con **prefijo de par** dinámico. La cotización es **el precio de 1 unidad de la moneda no-default en la moneda default** (la cotización ARS↔USD del movimiento). **El campo va siempre visible y editable, también cuando `moneda == default`** — porque el valor siempre se captura y persiste, para que un futuro cambio de moneda default pueda convertir el movimiento (ver "Por qué nunca se oculta" abajo). Caja igual a la del Monto (`flex items-center gap-2 rounded-ctl border-[1.5px] px-[13px] py-[11px]`, focus-within `--accent` + ring), con:
+     - **Prefijo de par** (texto `mono` 12px `--muted`, `shrink-0`) que rotula la dirección de la cotización ARS↔USD del movimiento, según la moneda seleccionada:
+       - **moneda ≠ default:** dirección "precio de 1 unidad de la no-default en la default", ej. **"USD→ARS"** cuando default=ARS y moneda=USD (1 USD = N ARS), o **"ARS→USD"** cuando default=USD y moneda=ARS.
+       - **moneda == default:** se muestra igual la dirección que tenga sentido para registrar la cotización ARS↔USD del movimiento — la de la **otra** moneda contra la default, ej. **"USD→ARS"** cuando default=ARS (1 USD = N ARS) y **"ARS→USD"** cuando default=USD. Así el campo, aun en el caso simple, registra el tipo de cambio vigente de ese movimiento. El prefijo es un rótulo de lectura, no editable.
+     - **Input** `mono text-[15px] font-semibold text-ink` con decimales (la cotización lleva decimales, no centavos — ej. `1.480,00`).
+- **Pre-carga editable (requisito del roadmap) — vale en TODOS los casos, incluido `moneda == default`:** al crear, la cotización viene **pre-cargada con el último cambio usado** (lo provee el backend). El campo es **editable** y el valor **siempre se persiste** (no se guarda 1 fijo cuando moneda=default: se guarda el tipo de cambio real, normalmente el último usado pre-cargado). El usuario normalmente no lo toca. Señal visual del estado:
+  - **Default (sin tocar, = último usado):** valor presente en `--ink`, y debajo del input una **nota** *field-note* (12px `--muted`, `mt-[6px]`) **"Último cambio usado"** con mini-glifo `History` (lucide, 12px, `--muted`). Comunica "esto vino pre-cargado, podés cambiarlo".
+  - **Editado (el usuario cambió el valor):** la nota cambia a **"Cotización modificada"** (mismo tamaño, `--ink-2`) — sin color semántico (no es error). No se resalta el input con borde de marca por estar editado; el cambio se comunica con la nota, no con cromo.
+- **Por qué nunca se oculta (corrección a la spec previa, alineada al roadmap §1.2.3):** el roadmap exige que *"en el movimiento cargado en la moneda default, la cotización viene pre-cargada con el último cambio usado y es editable"*. Ocultar el campo cuando moneda=default rompía el feature: los movimientos en la moneda default quedaban sin cotización real (se guardaban con 1) y no se podían convertir al cambiar la moneda default. **Por eso el campo Cotización va SIEMPRE presente y editable**, también en el caso simple. **No se colapsa, no se oculta, no se muestra deshabilitado.**
+- **Caso simple no se recarga visualmente (moneda == default):** el campo está presente pero **no debe pesar** sobre el caso mayoritario. Para eso: (a) la fila mantiene su `grid grid-cols-2 gap-[14px]` — Moneda izq, Cotización der —, sin tratamiento especial que llame la atención; (b) viene **pre-cargado con el último cambio usado** y con la nota *field-note* "Último cambio usado" en `--muted` (lectura tranquila, no acción pendiente); (c) ningún cromo de marca/error mientras el valor sea válido. El usuario que no opera en otra moneda lo ve relleno, neutro y correcto, y sigue de largo. Es la misma caja y los mismos tokens que cuando moneda ≠ default — **no hay dos diseños del campo**, solo cambia el prefijo de par según la moneda seleccionada.
+- **Validación visual:** la cotización debe ser **> 0** en todos los casos (también moneda=default — siempre se persiste un tipo de cambio). En error (vacía o ≤ 0 al intentar guardar): borde `--expense` + ring `--expense-soft` en la caja (mismo patrón que el Monto), y mensaje 12px `--expense-ink` debajo ("Ingresá una cotización mayor a 0"). El selector de moneda no tiene estado de error (siempre hay una seleccionada).
+- **Granularidad por tipo (del roadmap) — el spec visual es el mismo, cambia el alcance del dato:**
+  - **Único:** un par moneda+cotización por movimiento (lo descrito).
+  - **Fijo:** la cotización es **por mes de aparición**, editable mes a mes. Visualmente el form de fijo muestra el **mismo bloque** moneda+cotización; el matiz "esta cotización aplica a este mes" se comunica reutilizando el lenguaje de *nota field-note* del form de fijo (no se inventa un control nuevo): nota 12px `--muted` "Cotización para {Mes Año}" junto al campo. El detalle de cómo el fijo edita meses ya existe en su form; acá solo se suma el par moneda+cotización con esa nota de alcance temporal.
+  - **Cuotas:** par moneda+cotización en el alta del plan (mismo bloque); hereda al resto del plan según el modelo (no se pide por cuota en el form).
+  - **Calculado:** **no** muestra el bloque (hereda del origen, read-only).
+
+### C. Visualización en el ítem de `/mes`
+
+El ítem (`MovementItemRow`, grid `40px 1fr auto auto auto`) gana la **moneda original** y el **valor convertido**. La jerarquía vigente no cambia: **el monto sigue dominando** a la derecha (col 4, 15.5px/600, color por tipo, mono). Se le suman dos elementos **subordinados y neutros**.
+
+- **Qué domina:** el **monto en la moneda default** (el que entra a los totales) es el **dato principal** y ocupa el lugar de hoy (col 4): mismo tamaño/peso/color por tipo/mono/prefijo de signo. **No** se agranda ni se mueve. Esto garantiza que la columna de montos siga siendo legible y comparable de un vistazo (todos en la misma moneda).
+- **Badge de moneda original (col 4, sobre el monto principal cuando moneda ≠ default):** chip neutro **del código de moneda original** (`"USD"`, `"ARS"`), mismo estilo de los chips neutros del ítem (Anulado/Calculado): `--panel-3` / `--muted` / `--r-chip` 7px / 11px/600 / `.04em` / `mono`. Se ubica **inmediatamente a la izquierda del monto principal**, en la misma celda derecha (la celda de monto pasa a `inline-flex items-center gap-[7px] justify-end`). El badge **identifica** la moneda de origen; no se tiñe.
+- **Valor original (sublínea o segunda línea del monto):** debajo del monto principal, alineado a la derecha, una **segunda línea** *Meta/subtítulos* (12.5px/500, `--muted`, `mono`, `mt-[2px]`): el **monto original con su moneda**, ej. **"USD 100,00"** (código mono + cifra mono, sin signo income/expense, en `--muted` — es lectura secundaria, no compite con el monto principal). Así el ítem muestra: arriba el **convertido que entra al total** (color por tipo, dominante), abajo el **original** (neutro, secundario). No se usa prefijo `+`/`−` en la línea original (el signo/tipo ya lo da el monto principal de arriba).
+  - *Alternativa de implementación equivalente:* si la segunda línea bajo el monto complica el grid, el valor original puede ir como **segmento final de la sublínea de col 2** (junto a categoría · tipo), mismo token *Meta/subtítulos* `--muted` mono ("· USD 100,00"). **Preferida la segunda línea bajo el monto** (mantiene juntos original y convertido, que es la relación que el usuario lee). `control-frontend` elige según el grid; ambas respetan tokens.
+- **Caso moneda original = default (no ensuciar el caso simple — crítico):** cuando la moneda del movimiento **es** la default (todos los movimientos back-compat en ARS, y el caso mayoritario), **no se muestra ni el badge ni la línea original**: el ítem queda **exactamente como hoy** (solo el monto en col 4). El badge de moneda y la línea original aparecen **únicamente** cuando `moneda_original ≠ default_vigente`. Esto evita pintar "ARS" en cada fila de un usuario mono-moneda.
+- **Ítem anulado / calculado:** los dos elementos nuevos respetan los tratamientos vigentes: bajo anulado (skipped) van dentro del `opacity-[0.55]` del contenido y el monto convertido conserva el `line-through` + color por tipo (la línea original también se atenúa, sin line-through propio). En calculados (que heredan moneda/cotización del origen) el badge/línea aparecen igual si la moneda heredada ≠ default.
+
+### D. Reportes (`/reportes`)
+
+Los reportes **ya operan sobre datos convertidos** a la moneda default vigente (la conversión es capa de display, aguas arriba del gráfico). Por eso **no cambian visualmente**: ejes, montos del tooltip y leyenda siguen igual, todos en la moneda default. **No** se rotula la moneda dentro de cada card ni se muestran montos originales en reportes (sería ruido; el desglose por moneda no es parte del alcance). La única relación es indirecta: cambiar la moneda default en `/configuracion` recomputa los valores de los reportes montados (display en vivo, igual que `/mes`).
+
+### Restricciones duras reafirmadas
+
+- **La moneda es cromo neutro:** badge, código y cotización en `--ink-2`/`--muted`/`--panel-3`. **Nunca** verde/rojo (eso es tipo) ni índigo (eso es marca). El índigo solo como focus ring / thumb activo del segmented (cromo de interacción).
+- **Verde = ingreso, rojo = gasto** se mantiene **solo** sobre el monto convertido (el que entra al total), por su tipo. La línea del monto original va **neutra** (`--muted`), sin recolorear por tipo (es lectura secundaria de referencia).
+- **Todas las cifras —monto convertido, monto original y cotización— van en mono tabular.**
+- **El caso mono-moneda no se ensucia — donde corresponde:** el **ítem** de `/mes` (sin badge ni línea original cuando moneda=default) y `/configuracion` (un solo segmented) no muestran complejidad de multi-moneda. En el **form**, en cambio, el campo Cotización **va siempre presente y editable** (requisito del roadmap): no se oculta, pero se mantiene neutro y pre-cargado para no recargar el caso simple. "No ensuciar" aplica al ítem y a las pantallas, **no** a esconder la cotización del form.
+
+---
+
+## Indicador de moneda default a nivel app — spec visual (Fase 1.2.3 — extensión, 2026-06-20)
+
+> **Extensión de la Fase 1.2.3.** Spec del **indicador de moneda default a nivel app**: el cromo persistente y consistente que comunica, en cada pantalla con montos, **en qué moneda están todos los números mostrados**. La multi-moneda de 1.2.3 (arriba) resolvió el cromo **por-ítem** (badge de moneda original, valor original vs. convertido) y el **ajuste** (`/configuracion`); esta extensión agrega el **indicador global** que faltaba. Pedido del usuario: *"se ven OK en dólares pero deberíamos agregar un indicador de moneda, más pensado por toda la app ahora que manejamos monedas."* **No introduce tokens de color nuevos** y **no deroga** nada de 1.2.3.
+>
+> **El lenguaje vivo y reutilizable** (el chip de moneda default global, su ubicación canónica en el `.phead`, la jerarquía de tres niveles de cromo de moneda) vive resumido en `docs/design.md`. Acá queda el detalle de la spec.
+
+### Alcance — informativo, no interactivo (CERRADO por el usuario)
+
+El indicador global es **informativo**: comunica la moneda default vigente, **no la cambia**. La edición de la moneda default vive **únicamente en `/configuracion`** (su tarjeta de ajuste con el segmented ARS/USD, persistencia en vivo), como lo cerró el roadmap §1.2.3 — `/configuracion` es el "contenedor" de ese ajuste, y el frontend ya lo implementó así. El indicador es una **lectura** consistente entre pantallas, con una **afordancia de navegación** hacia `/configuracion` (no de edición in-situ). El chip **no** despliega popover ni segmented.
+
+**Flags resueltos por el usuario (2026-06-20):**
+- **(1) Indicador interactivo → DESCARTADO (queda informativo).** Convertir el chip en un selector que cambie la moneda default desde cualquier pantalla sería alcance nuevo, fuera de lo cerrado en el roadmap §1.2.3 (que ancla la edición en `/configuracion`). El usuario confirmó que el chip es **informativo** (lectura + link a `/configuracion`), no interactivo para cambiar moneda. Si en el futuro se quisiera, requiere decisión explícita.
+- **(2) Símbolos de moneda distintos → APROBADO.** Cada moneda usa su **símbolo propio** (`$` ARS / `US$` USD), centralizado y extensible. Ver *Símbolos de moneda por código* abajo, en este mismo archivo.
+
+### A. El chip de moneda default — pieza canónica
+
+Un **chip de moneda** neutro y persistente que rotula el contexto monetario de la pantalla. **Mismo molde que el badge de código de moneda** de 1.2.3 (chip `--panel-3` / `--r-chip` 7px / código en `mono`), enriquecido para su rol global con un glifo que lo distingue del badge por-ítem.
+
+- **Composición:** `inline-flex items-center gap-[6px]`:
+  1. glifo `Wallet` (lucide, **13px**, `--muted`, `shrink-0`, `aria-hidden`) — comunica "moneda del contexto" sin texto largo; lo diferencia del badge por-ítem (que es solo código, sin glifo);
+  2. código de moneda **`"ARS"` / `"USD"`** en `mono` **11.5px·600·`.04em`** `--ink-2`.
+  - Sin símbolo de país, sin bandera, sin nombre largo de moneda.
+- **Caja:** fondo `--panel-3`, radio `--r-chip` **7px**, padding `px-[8px] py-[3px]`. **Neutro estricto:** nunca income/expense (regla dura 1), nunca índigo de marca (regla dura 2). Es cromo de moneda (regla viva 1.2.3).
+- **Es un `Link` a `/configuracion` (navegación, no edición in-situ):**
+  - `aria-label="Moneda por defecto: {ARS|USD}. Cambiar en Configuración"`.
+  - **Reposo:** como arriba.
+  - **Hover:** fondo `--panel-2`, código → `--ink`, glifo → `--ink-2`, y aparece a la derecha un glifo `ChevronRight` (lucide, 11px, `--faint`) que indica "se gestiona en otro lado". Transición 0.14s.
+  - **Focus (teclado):** ring `--accent-soft` 3px, radio `--r-chip` (el focus ring sí es acento — cromo de interacción, no monto ni estado de datos).
+  - **No** despliega popover ni segmented (eso sería el modo interactivo, no decidido). Solo navega a `/configuracion`.
+  - **Degradación si el orquestador decide que NO debe navegar:** el chip pasa a un `<span>` no interactivo con el mismo look de reposo + `title="Moneda por defecto. Cambiala en Configuración."`, sin hover/focus/chevron. **El default de este spec es el `Link`.**
+- **Se muestra SIEMPRE (no solo en cross-rate):** a diferencia del badge por-ítem (que aparece únicamente cuando `moneda ≠ default`), el chip global **siempre está presente**, también cuando todo está en la default y no hay conversión. Es el ancla constante de "todos estos números están en {moneda}"; su valor es ser invariable y siempre visible.
+
+### B. Ubicación por pantalla — en el `.phead`, en la fila del eyebrow
+
+El chip se ancla en el **`.phead`** de cada pantalla con montos, alineado con la **identidad** del header (eyebrow + H1), **no** con la zona de acciones (`+ Nuevo movimiento`). Va en la **fila del eyebrow**, a su derecha, separado por `gap-[10px]`: el eyebrow rotula la pantalla, el chip rotula su moneda — se leen juntos como "contexto de la pantalla". Queda **por encima** del H1 (período / título), nunca tapándolo ni compitiendo con la cifra hero.
+
+- **Dashboard (`/`):** `.phead`, fila del eyebrow "Tu mes" → `[Tu mes]  [💳 ARS]` a la izquierda (el `justify-between` deja `+ Nuevo movimiento` a la derecha). Un solo chip preside todas las cards (Gastos / Ingresos / Balance hero) y la card de reporte: todas en la default.
+- **`/mes`:** en el `.phead` (columna central de `PeriodNav`, régimen ≥941px), fila del eyebrow "Tu mes" → `[Tu mes] [💳 ARS]`, encima del H1 "Junio 2026". En **≤940px** (header colapsado a `.stepper`): el chip va en la **misma fila del stepper**, a su derecha, sin romper el centrado del rótulo de mes (si no entra, baja a su propia línea bajo el stepper, alineado a la derecha — nunca se oculta).
+- **`/reportes`:** en el `.phead` de la **pantalla** (eyebrow de pantalla), **no** en cada card. Una sola lectura de moneda para todos los reportes apilados (todos operan sobre datos convertidos a la default — 1.2.3). Las cards de reporte **no** llevan chip propio (evita repetir el indicador N veces, una por card).
+- **`/configuracion`:** **NO lleva chip indicador.** Es la pantalla donde la moneda default **se edita**: su tarjeta de ajuste "Moneda por defecto" (segmented ARS/USD) ya **es** el control y la lectura del valor. Un chip acá sería redundante y ambiguo respecto del segmented editable. El indicador global vive en las pantallas de **consumo** de montos, no en la de configuración.
+
+**Consistencia:** mismo chip, mismo lugar (fila del eyebrow del `.phead`), mismo valor (la default vigente) en Dashboard, `/mes` y `/reportes`. Al cambiar la default en `/configuracion`, **todos** los chips reflejan el nuevo valor en vivo, junto con la recomputación de totales de 1.2.3. El chip es la confirmación visible de que el cambio surtió efecto en toda la app.
+
+### C. Cómo los totales comunican su moneda
+
+Los totales y montos agregados (totales de `/mes`, cards de Dashboard, mini-balance, cifras de reportes) **no** repiten el código de moneda pegado a cada número. La moneda de **todos** esos agregados la da el **chip global del header**, persistente y visible: es inequívoco porque el chip rige toda la pantalla. Así no se ensucia cada cifra hero/stat con un "ARS" redundante y el monto mantiene su dominio visual (regla de jerarquía).
+
+- **El símbolo es por moneda** (`$` ARS / `US$` USD — ver *Símbolos de moneda por código* abajo): cada cifra es autosuficiente. El chip global ya **no** es la única desambiguación; pasa a ser **contexto de pantalla** + afordancia a config. No se duplica el **código** (`ARS`/`USD`) pegado a cada número agregado (el símbolo ya lo dice).
+- **Los totales NO se recolorean ni cambian de tipografía** por la moneda: conservan su color por tipo (income/expense) o neutro (mini-balance / subtotales) y su `mono tabular`. El símbolo de moneda hereda el color del número (por tipo); la moneda nunca toca el color.
+- **Original vs. convertido (relación con 1.2.3):** la **línea de valor original subordinada** del ítem de `/mes` cross-rate (1.2.3) ahora muestra la cifra original **con el símbolo de su moneda** (ej. `US$100,00` en `--muted`, debajo del convertido en `$`), en lugar del prefijo de código `"USD"`. Eso es **información del ítem** (su moneda de origen), distinta del **contexto de pantalla** (la default). El chip global dice "los totales y el monto dominante están en {default}"; el badge + línea original del ítem dice "este movimiento se cargó en otra moneda". No se contradicen.
+
+### D. Jerarquía de cromo de moneda (que no se pisa)
+
+Tras cerrar los símbolos distintos, son **cuatro** señales, no tres:
+
+1. **Símbolo por cifra** (`$`/`US$`) — la moneda de **ese número**. Autosuficiente, por-cifra, neutro/heredando el color del monto. Ver *Símbolos de moneda por código* abajo.
+2. **Chip global** (header) — **contexto de pantalla** (todos los agregados en {default}) + afordancia a `/configuracion`. Mayor **alcance** (rige todo), menor **peso por unidad** (un chip discreto). Siempre presente.
+3. **Badge de moneda original** (ítem cross-rate, 1.2.3) — etiqueta de origen junto al monto convertido. **Local**, solo en `moneda ≠ default`.
+4. **Línea de valor original** (ítem cross-rate, 1.2.3) — la cifra en su moneda de origen (con su símbolo `US$`), subordinada al convertido. **Local**, solo en cross-rate.
+
+Hablan de cosas distintas (cifra individual / contexto de pantalla / origen del ítem / cifra original), por eso conviven sin redundancia ni contradicción. Ninguna se tiñe por moneda.
+
+### Restricciones duras reafirmadas
+
+- **La moneda es cromo neutro** (regla viva 1.2.3): el chip global (glifo + código) en `--panel-3` / `--muted` / `--ink-2`; el símbolo de moneda hereda el color del monto. **Nunca** verde/rojo por moneda ni índigo (marca). El índigo solo como **focus ring** del chip-link (cromo de interacción).
+- **Toda cifra sigue en mono tabular** (regla dura 3): el código del chip, totales, originales y **símbolo de moneda** en `mono`.
+- **El monto sigue dominando** por su tipo (income/expense) y su tamaño; ni el indicador ni el símbolo de moneda compiten con la cifra.
+
+---
+
+## Símbolos de moneda por código — `$` / `US$` (Fase 1.2.3 — extensión, 2026-06-20)
+
+> **Extensión de la Fase 1.2.3.** Cierra el flag de *símbolos de moneda distintos* que dejó abierto el indicador de moneda default. Decisión del usuario: cada moneda usa su **símbolo propio** en las cifras (no ambas `$`), hecho **bien y centralizado** (un único punto, extensible a monedas futuras). **No introduce tokens de color nuevos** y **no deroga** nada de 1.2.3; refina el formateo de cifras de toda la app.
+>
+> **El lenguaje vivo** (la tabla de símbolos, el placement, la regla "símbolo = cromo neutro de moneda", la convivencia con chip/badge) vive resumido en `docs/design.md` (*Símbolos de moneda por código*). Acá queda el detalle.
+
+### Decisión: `$` para ARS, `US$` para USD
+
+| Código | Símbolo | Ejemplo (formato es-AR) | Negativo | Cero |
+|---|---|---|---|---|
+| `ARS` | `$` | `$219.400,00` | `−$1.234,56` | `$0,00` |
+| `USD` | `US$` | `US$1.500,00` | `−US$1.234,56` | `US$0,00` |
+
+**Por qué `US$` y no `U$S`:**
+- `US$` es el prefijo internacional inequívoco del dólar estadounidense, reconocible fuera del modismo local.
+- Lee **limpio como prefijo** antes de la cifra y respeta el patrón uniforme "símbolo + cifra" (igual que `$` para ARS): el formateador antepone un string y la cifra es idéntica en ambas monedas.
+- `U$S` es grafía coloquial argentina, con el `$` **embebido** en el medio (rompe el patrón prefijo-limpio, complica un formateador genérico y es menos universal). Se descarta.
+- ARS conserva `$` (la convención argentina y back-compat de todo lo ya mostrado en pesos).
+
+### Centralización y extensibilidad (requisito explícito del usuario)
+
+- **Un único punto de verdad:** un **mapa `código de moneda → símbolo`** (`{ ARS: "$", USD: "US$" }`), una sola fuente para toda la app — conceptualmente análogo al pool/matriz de colores de categorías (un único lugar que todos consumen).
+- **Un único formateador de dinero:** **toda** cifra de dinero de la app se renderiza a través de un único helper de formateo que: (a) toma el monto y su código de moneda, (b) busca el símbolo en el mapa, (c) aplica el formato es-AR (miles `.`, decimales `,`, 2 decimales) y el signo. Ningún componente concatena el símbolo a mano ni hardcodea `$`.
+- **Sumar una moneda futura = una entrada en el mapa.** No se tocan componentes. (La configurabilidad por el usuario —monedas creables— es fase futura aparte, fuera de este spec; este mapa deja la puerta abierta sin specearla.)
+- **Señal técnica para `control-frontend` / orquestador:** existe ya un formateo de moneda en el frontend (`$ ...` es-AR). El cambio es: (1) introducir el mapa código→símbolo como única fuente; (2) que el formateador reciba el código de moneda y anteponga el símbolo correspondiente **sin espacio**; (3) reemplazar cualquier `$` hardcodeado por una llamada al formateador. Si el formateador hoy intercala un espacio (`$ 219.400,00`), este spec lo fija **sin espacio** (`$219.400,00`) para que `US$1.500,00` componga parejo. Lo visual lo fija este spec; el detalle de implementación (firma del helper, dónde vive el mapa) es de `control-frontend`.
+
+### Placement y composición
+
+- **Prefijo pegado a la cifra, SIN espacio:** `$219.400,00`, `US$1.500,00`. Mismo `mono tabular` (IBM Plex Mono + `tnum`) y mismo color que la cifra. El símbolo es parte del "bloque de cifra" tipográficamente (no un elemento aparte con otro estilo).
+- **Orden con el signo:** `[signo][símbolo][cifra]` → `−$1.234,56`, `−US$1.234,56`, `$0,00`. El `−` (U+2212) precede al símbolo. El `+` (si se usara) igual. Signo y símbolo **heredan el color del monto**, que lo da el **tipo** (income/expense), nunca el signo (regla del signo en *Paleta y uso de tokens* de `docs/design.md`). El símbolo de moneda no altera esa regla.
+- **Color — cromo neutro de moneda:** el símbolo **no se recolorea por moneda** (ARS y USD no usan colores distintos). Hereda el color del número en el que va: en un monto de gasto es rojo (junto a la cifra), en uno de ingreso verde, en un neutro (mini-balance, subtotales, ejes) es el neutro correspondiente. Es decir: el símbolo sigue al **tipo del monto**, igual que la cifra; la moneda nunca aporta color (regla viva *la moneda es cromo neutro*, 1.2.3).
+
+### Dónde aplica (todas las cifras de dinero)
+
+- **Totales y subtotales de `/mes`** (cabeceras de sección, totales de mes): símbolo de la **default**.
+- **Montos de ítem** (`MovementItemRow`, col 4, monto convertido a la default): símbolo de la **default**.
+- **Línea de valor original** del ítem cross-rate (1.2.3): símbolo de la **moneda original** (ej. `US$100,00`). Reemplaza el prefijo de código `"USD 100,00"` por el símbolo `US$100,00`. **El badge de código `"USD"` junto al monto convertido se mantiene** (ver convivencia abajo).
+- **Cards del Dashboard** (Gastos / Ingresos / Balance hero), **mini-balance**: símbolo de la **default**.
+- **Reportes** (`/reportes` y card del Dashboard): ejes Y (formato abreviado, ej. `$50k`, `US$50k`) y montos del tooltip (`$ 219.400,00` → `$219.400,00` / `US$1.500,00`): símbolo de la **default** (los reportes operan sobre datos convertidos a la default, 1.2.3 §D — no se rotula moneda por dato). El abreviado mantiene su sufijo `k`/`M` después de la cifra; el símbolo va de prefijo como siempre.
+- **Forms** (resultado del calculado, expresiones legibles de la fórmula con montos, etc.): símbolo de la moneda correspondiente al monto que se muestra. El **input de Monto** que el usuario tipea no lleva el símbolo dentro del campo editable (se sigue su patrón vigente); el símbolo aparece en las **lecturas** de montos (resultado, expresión).
+
+### Convivencia con chip global y badge/línea por-ítem (no redundante, no contradictorio)
+
+- **Chip global (header):** sigue **vigente** y siempre visible. Con símbolos distintos, su rol se afina: ya no es la **única** forma de saber qué moneda es un número (el símbolo lo dice por-cifra), sino el **contexto de pantalla** ("todos los agregados están en {default}") y la **afordancia a `/configuracion`** (link). No redundante: símbolo = por-cifra; chip = contexto global + acceso al ajuste.
+- **Badge de código por-ítem `"USD"` (ítem cross-rate, 1.2.3):** se **mantiene**. Razón: el **monto convertido** (dominante, col 4) va en el símbolo de la **default** (`$`), que **no** delata que el movimiento es cross-rate. El badge `"USD"` junto a ese monto es lo que marca "este ítem se cargó en otra moneda" de un vistazo, en la celda del monto dominante; el símbolo `US$` de la línea original (debajo) confirma la cifra en su moneda. Badge = etiqueta de origen junto al convertido; `US$` = símbolo de la cifra original. No se pisan.
+  - *Por qué no se elimina el badge ahora que hay `US$`:* el `US$` vive en la **línea original subordinada** (neutra, debajo). El monto **dominante** sigue en `$` default. Sin el badge, la celda del monto dominante no tendría ninguna marca de cross-rate; habría que leer la segunda línea para enterarse. El badge mantiene la lectura inmediata "cross-rate" donde el ojo cae primero (el monto dominante).
+- **Ítem mono-moneda (moneda = default):** sigue **exactamente como hoy** (1.2.3 §C, caso simple): solo el monto en col 4, con el símbolo de la default (`$` para el caso back-compat ARS). Sin badge, sin línea original. El símbolo distinto **no** agrega nada en el caso simple (un usuario solo-ARS ve `$` como siempre).
+
+### Restricciones duras reafirmadas
+
+- **Verde = ingreso / rojo = gasto** intactos: el color de la cifra (y de su símbolo y signo) lo da el **tipo**, jamás la moneda. El símbolo no introduce color.
+- **El acento índigo sigue siendo solo marca:** ningún símbolo de moneda usa índigo.
+- **Toda cifra en mono tabular:** el símbolo va dentro del bloque mono junto a la cifra (regla dura 3).
+- **La moneda es cromo neutro** (regla viva 1.2.3): el símbolo no aporta color propio por moneda.

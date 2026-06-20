@@ -20,6 +20,13 @@ enum MovementType {
   INCOME
 }
 
+// Moneda de un movimiento (Fase 1.2.3 — Multi-moneda ARS/USD).
+// Set fijo: no hay alta de monedas arbitrarias en v1.
+enum Currency {
+  ARS
+  USD
+}
+
 enum CategoryScope {
   BOTH
   EXPENSE
@@ -71,6 +78,14 @@ model User {
   passwordHash String?
   // Zona horaria IANA "de casa" del usuario, usada como default al crear movimientos
   timezone     String
+
+  // Multi-moneda (Fase 1.2.3): moneda por defecto del usuario y última cotización usada.
+  // defaultCurrency: la moneda en que el usuario opera habitualmente (default ARS).
+  // lastExchangeRate: última cotización ARS/USD ingresada; se actualiza al guardar
+  //   cualquier movimiento con exchangeRate. Se usa para pre-cargar el campo cotización
+  //   en el formulario. Null hasta que el usuario ingrese su primera cotización.
+  defaultCurrency  Currency  @default(ARS)
+  lastExchangeRate Decimal?  @db.Decimal(18, 6)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -166,6 +181,15 @@ model Transaction {
   // y para bucketear por mes en la zona correcta (ver docs/technical.md — Fechas)
   timezone   String
 
+  // Multi-moneda (Fase 1.2.3):
+  // currency: moneda original del movimiento. Default ARS (back-compat).
+  // exchangeRate: cotización ARS/1 USD al momento del movimiento (con decimales, no centavos).
+  //   Representa "cuántos ARS equivalen a 1 USD". Default 1.0 para back-compat
+  //   (equivale a 1 ARS/USD, lo que hace que los montos ARS existentes no cambien
+  //   numéricamente al convertir entre monedas). El backend usa Decimal para precisión.
+  currency     Currency @default(ARS)
+  exchangeRate Decimal  @default(1) @db.Decimal(18, 6)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -203,6 +227,15 @@ model Recurring {
   // La frecuencia está anclada al startMonth: monthDiff(startMonth, mes) % step === 0
   // determina si el fijo aparece en ese mes.
   frequency RecurringFrequency @default(MONTHLY)
+
+  // Multi-moneda (Fase 1.2.3):
+  // La cotización es POR MES DE APARICIÓN: cuando el usuario edita con split, la fila
+  // nueva R2 hereda currency y exchangeRate del original (junto con los demás campos).
+  // Los calculados heredan moneda y cotización del origen (no los persisten propios).
+  // currency: default ARS para back-compat.
+  // exchangeRate: cotización ARS/1 USD. Default 1 para back-compat.
+  currency     Currency @default(ARS)
+  exchangeRate Decimal  @default(1) @db.Decimal(18, 6)
 
   // ---------------------------------------------------------------------------
   // Identidad de cadena estable (Fase 1.1.7)
@@ -311,6 +344,14 @@ model InstallmentGroup {
 
   // startMonth: mes de la primera cuota, formato "YYYY-MM"
   startMonth String
+
+  // Multi-moneda (Fase 1.2.3):
+  // currency y exchangeRate son ÚNICOS para todo el grupo (todas las cuotas comparten).
+  // No hay split en cuotas: PATCH edita el grupo in-place (incluyendo moneda/cotización).
+  // currency: default ARS para back-compat.
+  // exchangeRate: cotización ARS/1 USD. Default 1 para back-compat.
+  currency     Currency @default(ARS)
+  exchangeRate Decimal  @default(1) @db.Decimal(18, 6)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -22,14 +22,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { CurrencyExchangeBlock } from "@/components/ui/currency-exchange-block";
 import { useCategories } from "@/hooks/use-categories";
 import { useTransactions } from "@/hooks/use-transactions";
+import { useSettings } from "@/hooks/use-settings";
 import { useToast } from "@/hooks/use-toast";
 import { type Transaction, type TransactionType } from "@/types/transaction";
 import { type Category, type CategoryScope } from "@/types/category";
 import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
 import {
   parseCurrencyInput,
+  parseExchangeRateInput,
+  formatExchangeRate,
   getBrowserTimezone,
   localToUtcIso,
   utcToLocalDate,
@@ -37,6 +41,7 @@ import {
 } from "@/lib/format";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import type { CurrencyCode } from "@/types/settings";
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -48,6 +53,13 @@ const transactionSchema = z.object({
     .refine((val) => parseCurrencyInput(val) !== null, {
       message: "Ingresá un monto mayor a 0",
     }),
+  currency: z.enum(["ARS", "USD"]),
+  /**
+   * Input de cotización como string (puede tener decimales, locale es-AR).
+   * Solo se valida cuando currency !== defaultCurrency (se valida en onSubmit).
+   * Se inicializa vacío/"0" si no aplica.
+   */
+  exchangeRateInput: z.string(),
   categoryId: z.string().min(1, "La categoría es requerida"),
   date: z.string().min(1, "La fecha es requerida"),
   time: z.string().min(1, "La hora es requerida"),
@@ -107,17 +119,33 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
   const { toast } = useToast();
   const { categories } = useCategories();
   const { createTransaction, updateTransaction, isCreating, isUpdating } = useTransactions();
+  const { defaultCurrency, lastExchangeRate } = useSettings();
 
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  // Error de cotización (validación manual en onSubmit, no por Zod)
+  const [exchangeRateError, setExchangeRateError] = useState<string | undefined>();
+  // Rastrear si el usuario modificó el valor de cotización respecto al pre-cargado
+  const [isExchangeRateModified, setIsExchangeRateModified] = useState(false);
 
   const isLoading = isEditing ? isUpdating : isCreating;
   const timezone = isEditing ? transaction.timezone : getBrowserTimezone();
   const { date: nowDate, time: nowTime } = getNowLocalDateAndTime();
 
+  // Cotización pre-cargada:
+  // - Editando: la del movimiento (siempre presente, nunca null en el backend).
+  // - Creando: el lastExchangeRate del usuario, o vacío si aún no tiene historial.
+  const preloadedExchangeRateInput = isEditing
+    ? formatExchangeRate(transaction.exchangeRate ?? 1)
+    : lastExchangeRate != null
+      ? formatExchangeRate(lastExchangeRate)
+      : "";
+
   const defaultValues: TransactionFormData = isEditing
     ? {
         type: transaction.type,
         amountInput: String(transaction.amountCents / 100).replace(".", ","),
+        currency: transaction.currency ?? defaultCurrency,
+        exchangeRateInput: formatExchangeRate(transaction.exchangeRate ?? 1),
         categoryId: transaction.categoryId,
         date: utcToLocalDate(transaction.occurredAt, transaction.timezone),
         time: utcToLocalTime(transaction.occurredAt, transaction.timezone),
@@ -126,11 +154,16 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
     : {
         type: "EXPENSE",
         amountInput: "",
+        currency: defaultCurrency,
+        exchangeRateInput: preloadedExchangeRateInput,
         categoryId: "",
         date: nowDate,
         time: nowTime,
         description: "",
       };
+
+  // Moneda inicial para detectar cambios y resetear el flag de modificado
+  const [initialExchangeRateInput] = useState(defaultValues.exchangeRateInput);
 
   const {
     register,
@@ -150,16 +183,39 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
       reset({
         type: transaction.type,
         amountInput: String(transaction.amountCents / 100).replace(".", ","),
+        currency: transaction.currency ?? defaultCurrency,
+        exchangeRateInput: formatExchangeRate(transaction.exchangeRate ?? 1),
         categoryId: transaction.categoryId,
         date: utcToLocalDate(transaction.occurredAt, transaction.timezone),
         time: utcToLocalTime(transaction.occurredAt, transaction.timezone),
         description: transaction.description ?? "",
       });
+      setIsExchangeRateModified(false);
     }
-  }, [transaction, isEditing, reset]);
+  }, [transaction, isEditing, reset, defaultCurrency]);
+
+  // Pre-cargar cotización cuando defaultCurrency o lastExchangeRate cambian (solo en crear)
+  useEffect(() => {
+    if (!isEditing) {
+      setValue("currency", defaultCurrency);
+      setValue(
+        "exchangeRateInput",
+        lastExchangeRate != null ? formatExchangeRate(lastExchangeRate) : "",
+      );
+      setIsExchangeRateModified(false);
+    }
+  }, [defaultCurrency, lastExchangeRate, isEditing, setValue]);
 
   const selectedType = watch("type");
   const selectedCategoryId = watch("categoryId");
+  const exchangeRateInput = watch("exchangeRateInput");
+
+  // Detectar si el usuario modificó la cotización respecto al valor inicial
+  useEffect(() => {
+    setIsExchangeRateModified(
+      exchangeRateInput !== initialExchangeRateInput && exchangeRateInput !== ""
+    );
+  }, [exchangeRateInput, initialExchangeRateInput]);
 
   const availableCategories = filterCategoriesByType(
     (categories ?? []).map((c) => ({ id: c.id, name: c.name, scope: c.scope })),
@@ -181,6 +237,15 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
     const amountCents = parseCurrencyInput(data.amountInput);
     if (amountCents === null) return;
 
+    // Validar cotización SIEMPRE (no solo en cross-rate): el roadmap exige capturar
+    // y persistir la cotización real también cuando moneda === defaultCurrency.
+    const parsedExchangeRate = parseExchangeRateInput(data.exchangeRateInput);
+    if (parsedExchangeRate === null) {
+      setExchangeRateError("Ingresá una cotización mayor a 0");
+      return;
+    }
+    setExchangeRateError(undefined);
+
     const occurredAt = localToUtcIso(data.date, data.time, timezone);
 
     if (isEditing) {
@@ -191,6 +256,8 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
         occurredAt,
         timezone,
         description: data.description || undefined,
+        currency: data.currency,
+        exchangeRate: parsedExchangeRate,
       });
 
       if (!result.success) {
@@ -208,6 +275,8 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
         occurredAt,
         timezone,
         description: data.description || undefined,
+        currency: data.currency,
+        exchangeRate: parsedExchangeRate,
       });
 
       if (!result.success) {
@@ -300,6 +369,26 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
               <p className="text-[12px] text-expense-ink">{errors.amountInput.message}</p>
             )}
           </div>
+
+          {/* ── Moneda y cotización ── */}
+          <Controller
+            name="currency"
+            control={control}
+            render={({ field }) => (
+              <CurrencyExchangeBlock
+                currency={field.value as CurrencyCode}
+                exchangeRateInput={exchangeRateInput}
+                defaultCurrency={defaultCurrency}
+                isExchangeRateModified={isExchangeRateModified}
+                exchangeRateError={exchangeRateError}
+                onCurrencyChange={(val) => {
+                  field.onChange(val);
+                }}
+                onExchangeRateChange={(val) => setValue("exchangeRateInput", val)}
+                exchangeRateInputId="tx-exchange-rate"
+              />
+            )}
+          />
 
           {/* ── Categoría ── */}
           <div className="flex flex-col gap-[7px]">

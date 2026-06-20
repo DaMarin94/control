@@ -331,15 +331,17 @@ Recuperación de contraseña, verificación de email y account linking (mismo em
 
 ## Formato de presentación (moneda y fechas)
 
-Todo el formateo vive en **un único lugar** (`lib/` del frontend), para que cambiar locale o símbolo después sea trivial (consistente con "moneda implícita", RN-009).
+Todo el formateo vive en **un único lugar** (`lib/format.ts` del frontend), para que cambiar locale, símbolo o el manejo de moneda después sea trivial. Cubre montos, código de moneda y cotización (multi-moneda, RN-009 / módulo 3.10 RF-CUR).
 
 ### Moneda
 
-- Helper central con `Intl.NumberFormat`: toma los centavos, divide por 100 y formatea.
+- Helper de monto con `Intl.NumberFormat`: toma los centavos, divide por 100 y formatea anteponiendo el **símbolo de la moneda** del monto.
 - **Locale por defecto `es-AR`:** separador de miles con punto, decimales con coma (`1.500,00`).
-- **Símbolo `$`** (estilo peso), centralizado y cambiable en un solo lugar.
+- **Símbolo por código de moneda — fuente única.** El formateador recibe el **código** (ARS / USD) y resuelve el símbolo desde un **único mapa** `CURRENCY_SYMBOLS`: **ARS → `$`**, **USD → `US$`**. El símbolo se antepone **sin espacio** y el orden con signo es `[signo][símbolo][cifra]` (`$1.500,00`, `US$1.500,00`, `-$1.500,00`). Sumar una moneda futura = una entrada en el mapa; reemplaza al `$` único anterior (cuando todas las cifras usaban el mismo símbolo).
 - **Siempre 2 decimales** (`$1.500,00`).
-- El locale y el símbolo son configurables desde ese único punto.
+- Helper de **código de moneda** (badge `ARS` / `USD`).
+- Helpers de **cotización** (`formatExchangeRate` / `parseExchangeRateInput`), locale `es-AR` (punto = miles, coma = decimal).
+- El detalle funcional/visual vive en `requirements.md` (RF-CUR) y `docs/design.md`; acá solo la nota de que todo este formateo está centralizado.
 
 ### Fechas
 

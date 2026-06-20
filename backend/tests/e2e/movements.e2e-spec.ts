@@ -114,6 +114,9 @@ function makeRawTransactionRow(overrides: Record<string, unknown> = {}) {
     userId: USER_A_ID,
     type: 'EXPENSE',
     amountCents: 1500,
+    // Fase 1.2.3: campos de moneda (como string, igual que los devuelve $queryRaw con ::text)
+    currency: 'ARS',
+    exchangeRate: '1',
     description: null,
     occurredAt: new Date('2026-06-08T17:30:00Z'),
     timezone: 'America/Argentina/Buenos_Aires',
@@ -183,6 +186,12 @@ describe('Movements (e2e)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPrisma.category.createMany.mockResolvedValue({ count: 0 });
+    // Fase 1.2.3: user.findUnique devuelve settings de moneda por defecto (ARS)
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: USER_A_ID,
+      defaultCurrency: 'ARS',
+      lastExchangeRate: null,
+    });
     // Default: sin fijos activos (Fase 6). Los tests de fijos lo sobreescriben.
     mockPrisma.recurring.findMany.mockResolvedValue([]);
     // Default: sin cuotas activas (Fase 7). Los tests de cuotas lo sobreescriben.
@@ -703,10 +712,17 @@ describe('Movements (e2e)', () => {
         categoryId: CAT_A_MES,
         type: 'EXPENSE',
         amountCents: 5000,
+        // Fase 1.2.3: moneda y cotización (default ARS/1)
+        currency: 'ARS',
+        exchangeRate: 1,
         startMonth: '2026-01',
         deletedFrom: null,
         description: null,
         frequency: 'MONTHLY',
+        chainId: 'chain-skip',
+        sourceChainId: null,
+        sourceMovementId: null,
+        sourceInstallmentGroupId: null,
         createdAt: new Date(),
         updatedAt: new Date(),
         category: { id: CAT_A_MES, name: 'Cat A', color: '#aaa', scope: 'EXPENSE' },
@@ -718,17 +734,31 @@ describe('Movements (e2e)', () => {
         categoryId: CAT_A_MES,
         type: 'EXPENSE',
         amountCents: 2000,
+        // Fase 1.2.3: moneda y cotización (default ARS/1)
+        currency: 'ARS',
+        exchangeRate: 1,
         startMonth: '2026-01',
         deletedFrom: null,
         description: null,
         frequency: 'MONTHLY',
+        chainId: 'chain-normal',
+        sourceChainId: null,
+        sourceMovementId: null,
+        sourceInstallmentGroupId: null,
         createdAt: new Date(),
         updatedAt: new Date(),
         category: { id: CAT_A_MES, name: 'Cat A', color: '#aaa', scope: 'EXPENSE' },
         skips: [],
       };
 
-      mockPrisma.recurring.findMany.mockResolvedValue([fijoSkipped, fijoNormal]);
+      // Los fijos solo se devuelven cuando recurring.findMany busca fijos activos.
+      // Cuando busca calculados de único (sourceMovementId: { not: null }) o calculados de cuota
+      // (sourceInstallmentGroupId: { not: null }), debe devolver [].
+      mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+        if (args?.where?.sourceMovementId?.not !== undefined) return Promise.resolve([]);
+        if (args?.where?.sourceInstallmentGroupId?.not !== undefined) return Promise.resolve([]);
+        return Promise.resolve([fijoSkipped, fijoNormal]);
+      });
       // Sin únicos
       mockPrisma.$queryRaw.mockResolvedValueOnce([]);
 

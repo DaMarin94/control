@@ -35,7 +35,7 @@ const mockSignIn = vi.mocked(signIn);
 function renderLoginForm() {
   return render(
     <ToastProvider>
-      <LoginForm />
+      <LoginForm isGoogleConfigured={false} />
     </ToastProvider>,
   );
 }

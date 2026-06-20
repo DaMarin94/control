@@ -110,6 +110,17 @@ function makeDbRecurring(overrides: Record<string, unknown> = {}) {
     description: null,
     startMonth: '2026-06',
     deletedFrom: null,
+    // Campos de cadena (null = fijo normal, no calculado)
+    chainId: 'chain-e2e-001',
+    sourceChainId: null,
+    sourceMovementId: null,
+    sourceInstallmentGroupId: null,
+    formulaOperator: null,
+    formulaOperand: null,
+    formulaSign: null,
+    // Fase 1.2.3: moneda y cotización
+    currency: 'ARS',
+    exchangeRate: 1,
     skips: [],
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -184,6 +195,27 @@ describe('Recurring (e2e)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPrisma.category.createMany.mockResolvedValue({ count: 0 });
+    // Fase 1.2.3: user.findUnique devuelve settings de moneda por defecto (ARS)
+    // Necesario para SettingsService.getSettings() en GET /movements y updateLastExchangeRate
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: USER_A_ID,
+      defaultCurrency: 'ARS',
+      lastExchangeRate: null,
+    });
+    // user.update: necesario para SettingsService.updateLastExchangeRate
+    mockPrisma.user.update.mockResolvedValue({ id: USER_A_ID, defaultCurrency: 'ARS', lastExchangeRate: null });
+    // recurring.findMany: implementación base que distingue entre la query de fijos activos
+    // y las de calculados de único/cuota (que siempre deben devolver [] por defecto).
+    // Los tests individuales pueden sobreescribir para la query de fijos activos.
+    mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+      if (args?.where?.sourceMovementId?.not !== undefined) return Promise.resolve([]);
+      if (args?.where?.sourceInstallmentGroupId?.not !== undefined) return Promise.resolve([]);
+      return Promise.resolve([]);
+    });
+    // $queryRaw: sin transacciones por defecto (para /movements)
+    mockPrisma.$queryRaw.mockResolvedValue([]);
+    // installmentGroup.findMany: sin cuotas por defecto
+    mockPrisma.installmentGroup.findMany.mockResolvedValue([]);
   });
 
   // -------------------------------------------------------------------------
@@ -474,6 +506,17 @@ describe('Recurring (e2e)', () => {
         ...existing,
         deletedFrom: '2026-07',
       });
+      // applyBoundaryToChain necesita que findChainRows devuelva el fijo existente
+      // Las queries de calculados (sourceMovementId.not / sourceInstallmentGroupId.not)
+      // deben devolver [] para que cascadeDeleteCalculados no haga nada extra.
+      mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+        if (args?.where?.sourceMovementId?.not !== undefined) return Promise.resolve([]);
+        if (args?.where?.sourceInstallmentGroupId?.not !== undefined) return Promise.resolve([]);
+        if (args?.where?.sourceChainId !== undefined) return Promise.resolve([]);
+        // Caso chainId: findChainRows devuelve el fijo existente
+        if (args?.where?.chainId !== undefined) return Promise.resolve([existing]);
+        return Promise.resolve([]);
+      });
 
       await request(app.getHttpServer())
         .delete('/recurring/rec-e2e-001?currentMonth=2026-06&fromCurrentMonth=false')
@@ -492,6 +535,13 @@ describe('Recurring (e2e)', () => {
         ...existing,
         deletedFrom: '2026-06',
       });
+      mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+        if (args?.where?.sourceMovementId?.not !== undefined) return Promise.resolve([]);
+        if (args?.where?.sourceInstallmentGroupId?.not !== undefined) return Promise.resolve([]);
+        if (args?.where?.sourceChainId !== undefined) return Promise.resolve([]);
+        if (args?.where?.chainId !== undefined) return Promise.resolve([existing]);
+        return Promise.resolve([]);
+      });
 
       await request(app.getHttpServer())
         .delete('/recurring/rec-e2e-001?currentMonth=2026-06&fromCurrentMonth=true')
@@ -504,6 +554,13 @@ describe('Recurring (e2e)', () => {
       const existing = makeDbRecurring({ startMonth: '2026-06' });
       mockPrisma.recurring.findUnique.mockResolvedValue(existing);
       mockPrisma.recurring.delete.mockResolvedValue(existing);
+      mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+        if (args?.where?.sourceMovementId?.not !== undefined) return Promise.resolve([]);
+        if (args?.where?.sourceInstallmentGroupId?.not !== undefined) return Promise.resolve([]);
+        if (args?.where?.sourceChainId !== undefined) return Promise.resolve([]);
+        if (args?.where?.chainId !== undefined) return Promise.resolve([existing]);
+        return Promise.resolve([]);
+      });
 
       await request(app.getHttpServer())
         .delete('/recurring/rec-e2e-001?currentMonth=2026-06&fromCurrentMonth=true')
@@ -589,7 +646,12 @@ describe('Recurring (e2e)', () => {
           scope: CategoryScope.EXPENSE,
         },
       });
-      mockPrisma.recurring.findMany.mockResolvedValue([fijo]);
+      // Solo devolver el fijo para la query principal (no para calculados de único/cuota)
+      mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+        if (args?.where?.sourceMovementId?.not !== undefined) return Promise.resolve([]);
+        if (args?.where?.sourceInstallmentGroupId?.not !== undefined) return Promise.resolve([]);
+        return Promise.resolve([fijo]);
+      });
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')
@@ -618,6 +680,9 @@ describe('Recurring (e2e)', () => {
         userId: USER_A_ID,
         type: 'EXPENSE',
         amountCents: 1500,
+        // Fase 1.2.3: campos de moneda
+        currency: 'ARS',
+        exchangeRate: '1',
         description: null,
         occurredAt: new Date('2026-06-08T17:30:00Z'),
         timezone: 'America/Argentina/Buenos_Aires',
@@ -642,7 +707,12 @@ describe('Recurring (e2e)', () => {
           scope: CategoryScope.EXPENSE,
         },
       });
-      mockPrisma.recurring.findMany.mockResolvedValue([fijo]);
+      // Solo devolver el fijo para la query principal (no para calculados de único/cuota)
+      mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+        if (args?.where?.sourceMovementId?.not !== undefined) return Promise.resolve([]);
+        if (args?.where?.sourceInstallmentGroupId?.not !== undefined) return Promise.resolve([]);
+        return Promise.resolve([fijo]);
+      });
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')
@@ -670,7 +740,12 @@ describe('Recurring (e2e)', () => {
           scope: CategoryScope.BOTH,
         },
       });
-      mockPrisma.recurring.findMany.mockResolvedValue([fijo]);
+      // Solo devolver el fijo para la query principal (no para calculados de único/cuota)
+      mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+        if (args?.where?.sourceMovementId?.not !== undefined) return Promise.resolve([]);
+        if (args?.where?.sourceInstallmentGroupId?.not !== undefined) return Promise.resolve([]);
+        return Promise.resolve([fijo]);
+      });
 
       const res = await request(app.getHttpServer())
         .get('/movements?month=2026-06')

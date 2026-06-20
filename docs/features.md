@@ -26,6 +26,7 @@
 | Crear categoría desde el formulario de movimiento | RF-MU-004 | Implementado (los tres tabs) |
 | Reportes — pantalla configurable por cards + widget en dashboard | RF-REP-001..005 | Implementado (fase 1.1.5) |
 | Reportes — toggle "Total / Por categoría" en la card Ingresos y gastos (desglose de solo gastos) | RF-REP-006 | Implementado (fase 1.2.2) |
+| Multi-moneda ARS/USD (moneda + cotización por movimiento; totales convertidos a la default) + pantalla `/configuracion` | RF-CUR-001..005, RN-009 | Implementado (fase 1.2.3; reabre RN-009) |
 | Preferencias de usuario — cimiento (blob JSON + sesión) | — (fase 1.1.0, ST1) | Implementado (sin UI de producto) |
 
 ---
@@ -152,5 +153,4 @@
 | Drill-down desde un reporte (clic en un mes → Vista del mes) | Fuera de alcance v1; candidato post-v1 |
 | Agrupar la cola de categorías en una banda "Otras" en la Forma 2 (Por categoría) | En v1 la Forma 2 muestra todas las categorías con gasto sin agrupar (RF-REP-001). El colapso "Otras" por legibilidad con muchas categorías queda post-v1, requiere definición de UX |
 | Tarjetas con fecha de corte | Requiere flujo propio |
-| Multi-moneda | Diseñado para venir después |
 | Importación desde extracto bancario | Sin decisión |

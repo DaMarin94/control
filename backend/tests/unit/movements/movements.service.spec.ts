@@ -17,13 +17,14 @@
  */
 import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { CategoryScope, MovementType, RecurringFrequency } from '@prisma/client';
+import { CategoryScope, Currency, MovementType, RecurringFrequency } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { MovementsService } from '../../../src/movements/movements.service';
 import {
   MovementsRepository,
   MovementItem,
 } from '../../../src/movements/movements.repository';
+import { SettingsService } from '../../../src/settings/settings.service';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -40,6 +41,11 @@ const mockRepo = {
   getTotalsByMonth: jest.fn(),
   getFijosTotalsByMonth: jest.fn(),
   getCuotasTotalsByMonth: jest.fn(),
+};
+
+const mockSettingsService = {
+  getSettings: jest.fn(),
+  updateLastExchangeRate: jest.fn(),
 };
 
 const mockLogger = {
@@ -60,11 +66,14 @@ const CAT_A = 'cat-id-001';
 const CAT_B = 'cat-id-002';
 
 function makeUnicoItem(overrides: Partial<MovementItem> = {}): MovementItem {
-  return {
+  const base: MovementItem = {
     id: 'tx-001',
     origin: 'unico',
     type: MovementType.EXPENSE,
     amountCents: 1500,
+    convertedAmountCents: 1500,
+    currency: Currency.ARS,
+    exchangeRate: 1,
     description: null,
     occurredAt: new Date('2026-06-08T17:30:00Z'),
     timezone: 'America/Argentina/Buenos_Aires',
@@ -81,14 +90,22 @@ function makeUnicoItem(overrides: Partial<MovementItem> = {}): MovementItem {
     hasCalculated: false,
     ...overrides,
   };
+  // Si el caller sobrescribió amountCents pero no convertedAmountCents, sincronizar
+  if (overrides.amountCents !== undefined && overrides.convertedAmountCents === undefined) {
+    base.convertedAmountCents = overrides.amountCents;
+  }
+  return base;
 }
 
 function makeFijoItem(overrides: Partial<MovementItem> = {}): MovementItem {
-  return {
+  const base: MovementItem = {
     id: 'fijo-001',
     origin: 'fijo',
     type: MovementType.EXPENSE,
     amountCents: 5000,
+    convertedAmountCents: 5000,
+    currency: Currency.ARS,
+    exchangeRate: 1,
     description: 'Netflix',
     occurredAt: null,   // D3: fijos no tienen instante
     timezone: null,     // D3: fijos no tienen timezone
@@ -105,14 +122,21 @@ function makeFijoItem(overrides: Partial<MovementItem> = {}): MovementItem {
     hasCalculated: false,
     ...overrides,
   };
+  if (overrides.amountCents !== undefined && overrides.convertedAmountCents === undefined) {
+    base.convertedAmountCents = Math.abs(overrides.amountCents);
+  }
+  return base;
 }
 
 function makeCuotaItem(overrides: Partial<MovementItem> = {}): MovementItem {
-  return {
+  const base: MovementItem = {
     id: 'inst-001',
     origin: 'cuota',
     type: MovementType.EXPENSE,
     amountCents: 2000,
+    convertedAmountCents: 2000,
+    currency: Currency.ARS,
+    exchangeRate: 1,
     description: 'Notebook 3/12',
     occurredAt: null,   // D1/D3: cuotas no tienen instante
     timezone: null,     // D1/D3: cuotas no tienen timezone
@@ -133,6 +157,10 @@ function makeCuotaItem(overrides: Partial<MovementItem> = {}): MovementItem {
     hasCalculated: false,
     ...overrides,
   };
+  if (overrides.amountCents !== undefined && overrides.convertedAmountCents === undefined) {
+    base.convertedAmountCents = Math.abs(overrides.amountCents);
+  }
+  return base;
 }
 
 // Helper para setear todos los mocks con defaults "vacíos"
@@ -155,12 +183,15 @@ describe('MovementsService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    // Restablecer el mock de settings (clearAllMocks limpia las implementaciones)
+    mockSettingsService.getSettings.mockResolvedValue({ defaultCurrency: Currency.ARS, lastExchangeRate: null });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MovementsService,
         { provide: MovementsRepository, useValue: mockRepo },
         { provide: Logger, useValue: mockLogger },
+        { provide: SettingsService, useValue: mockSettingsService },
       ],
     }).compile();
 
@@ -347,9 +378,9 @@ describe('MovementsService', () => {
 
       await service.getMonthMovements(USER_B, '2026-06');
 
-      expect(mockRepo.findUnicosByMonth).toHaveBeenCalledWith(USER_B, '2026-06');
-      expect(mockRepo.findFijosByMonth).toHaveBeenCalledWith(USER_B, '2026-06');
-      expect(mockRepo.findCuotasByMonth).toHaveBeenCalledWith(USER_B, '2026-06');
+      expect(mockRepo.findUnicosByMonth).toHaveBeenCalledWith(USER_B, '2026-06', Currency.ARS);
+      expect(mockRepo.findFijosByMonth).toHaveBeenCalledWith(USER_B, '2026-06', Currency.ARS);
+      expect(mockRepo.findCuotasByMonth).toHaveBeenCalledWith(USER_B, '2026-06', Currency.ARS);
     });
 
     it('lanza las queries al repositorio en paralelo (3 llamadas a find*)', async () => {

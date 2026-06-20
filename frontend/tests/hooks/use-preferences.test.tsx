@@ -81,7 +81,7 @@ describe("usePreferences", () => {
       isAuthenticated: true,
     });
     mockUseSession.mockReturnValue({
-      data: { preferences: {}, accessToken: "test-token", user: { id: "user-1", email: "test@example.com" } },
+      data: { preferences: {}, accessToken: "test-token", expires: "2099-01-01T00:00:00.000Z", user: { id: "user-1", email: "test@example.com" } },
       status: "authenticated",
       update: mockUpdateSession,
     } as ReturnType<typeof useSession>);
@@ -101,7 +101,7 @@ describe("usePreferences", () => {
   it("expone las preferences de la sesión como initialData", () => {
     mockApiGet.mockResolvedValue(mockPreferences);
     mockUseSession.mockReturnValue({
-      data: { preferences: mockPreferences, accessToken: "test-token", user: { id: "user-1", email: "test@example.com" } },
+      data: { preferences: mockPreferences, accessToken: "test-token", expires: "2099-01-01T00:00:00.000Z", user: { id: "user-1", email: "test@example.com" } },
       status: "authenticated",
       update: mockUpdateSession,
     } as ReturnType<typeof useSession>);

@@ -71,6 +71,7 @@ describe("useCategories", () => {
         put: vi.fn(),
       },
       token: "test-token",
+      isAuthenticated: true,
     });
   });
 

@@ -23,7 +23,7 @@
  *   - Ids desconocidos/no existentes → simplemente no matchean (no es error)
  */
 import { Test, TestingModule } from '@nestjs/testing';
-import { RecurringFrequency } from '@prisma/client';
+import { Currency, RecurringFrequency } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { MovementsService } from '../../../src/movements/movements.service';
 import {
@@ -31,6 +31,7 @@ import {
   RecurringForAnnual,
   InstallmentGroupForAnnual,
 } from '../../../src/movements/movements.repository';
+import { SettingsService } from '../../../src/settings/settings.service';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -60,6 +61,11 @@ const mockLogger = {
   error: jest.fn(),
   debug: jest.fn(),
   verbose: jest.fn(),
+};
+
+const mockSettingsService = {
+  getSettings: jest.fn(),
+  updateLastExchangeRate: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -101,6 +107,8 @@ function makeUnicoRow(overrides: {
   categoryScope?: string;
   type?: string;
   totalCents?: bigint;
+  currency?: string;
+  exchangeRate?: string;
 }) {
   return {
     monthKey: overrides.monthKey,
@@ -110,6 +118,8 @@ function makeUnicoRow(overrides: {
     categoryScope: overrides.categoryScope ?? 'EXPENSE',
     type: overrides.type ?? 'EXPENSE',
     totalCents: overrides.totalCents ?? BigInt(1000),
+    currency: overrides.currency ?? 'ARS',
+    exchangeRate: overrides.exchangeRate ?? '1',
   };
 }
 
@@ -118,6 +128,8 @@ function makeFijo(overrides: Partial<RecurringForAnnual> = {}): RecurringForAnnu
     id: 'fijo-001',
     type: 'EXPENSE' as any,
     amountCents: 5000,
+    currency: Currency.ARS,
+    exchangeRate: 1,
     startMonth: '2026-01',
     deletedFrom: null,
     frequency: RecurringFrequency.MONTHLY,
@@ -142,6 +154,8 @@ function makeCuota(overrides: Partial<InstallmentGroupForAnnual> = {}): Installm
     id: 'grupo-001',
     type: 'EXPENSE' as any,
     amountCents: 2000,
+    currency: Currency.ARS,
+    exchangeRate: 1,
     totalInstallments: 12,
     startMonth: '2026-01',
     categoryId: CAT_B,
@@ -161,12 +175,14 @@ describe('MovementsService — getReportsMovements', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockSettingsService.getSettings.mockResolvedValue({ defaultCurrency: Currency.ARS, lastExchangeRate: null });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MovementsService,
         { provide: MovementsRepository, useValue: mockRepo },
         { provide: Logger, useValue: mockLogger },
+        { provide: SettingsService, useValue: mockSettingsService },
       ],
     }).compile();
 

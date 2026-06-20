@@ -1,6 +1,6 @@
 /**
  * Tipos del dominio de movimientos fijos.
- * Reflejan el contrato de la API del backend (Fase 6 + Fase 1.1.1).
+ * Reflejan el contrato de la API del backend (Fase 6 + Fase 1.1.1 + Fase 1.2.3).
  *
  * Recurring es la plantilla recurrente (POST/PATCH /recurring).
  * No hay paquete compartido con el backend — el frontend define los suyos.
@@ -8,6 +8,7 @@
 
 import type { TransactionType } from "@/types/transaction";
 import type { CategoryScope } from "@/types/category";
+import type { CurrencyCode } from "@/types/settings";
 
 /**
  * Frecuencia de recurrencia de un movimiento fijo (P2 — Fase 1.1.1).
@@ -39,7 +40,7 @@ export interface Recurring {
   userId: string;
   categoryId: string;
   type: TransactionType;
-  /** Monto en centavos enteros (sin decimales) */
+  /** Monto en centavos enteros de la moneda original (sin decimales) */
   amountCents: number;
   description: string | null;
   /** Mes de inicio en formato YYYY-MM */
@@ -51,6 +52,10 @@ export interface Recurring {
    * Default MONTHLY para los fijos existentes (back-compat).
    */
   frequency: RecurringFrequency;
+  /** Moneda original del fijo (Fase 1.2.3). Default "ARS". */
+  currency: CurrencyCode;
+  /** Cotización ARS por 1 USD del fijo (Fase 1.2.3). 1 para fijos en ARS. */
+  exchangeRate: number;
   createdAt: string;
   updatedAt: string;
   /** Categoría embebida en la respuesta */
@@ -71,6 +76,10 @@ export interface CreateRecurringRequest {
    */
   frequency?: RecurringFrequency;
   description?: string;
+  /** Moneda del movimiento (Fase 1.2.3). Default ARS. */
+  currency?: CurrencyCode;
+  /** Cotización ARS por 1 USD (Fase 1.2.3). Requerido si currency !== defaultCurrency. */
+  exchangeRate?: number;
 }
 
 /**
@@ -84,6 +93,8 @@ export interface UpdateRecurringRequest {
   amountCents?: number;
   categoryId?: string;
   description?: string | null;
+  /** Cotización ARS por 1 USD para el mes actual (Fase 1.2.3). */
+  exchangeRate?: number;
 }
 
 /**

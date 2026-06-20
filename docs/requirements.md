@@ -72,7 +72,7 @@ No hay roles, administradores ni usuarios invitados. Un usuario accede exclusiva
 ### 2.3 Supuestos y dependencias
 
 - El usuario dispone de una cuenta de Google activa, o bien se registra con email + contraseña.
-- La app opera sobre una moneda implícita (sin selector de moneda en v1).
+- La app maneja moneda **explícita ARS / USD** por movimiento, con totales en la moneda default del usuario (Fase 1.2.3, módulo 3.10; reabre el supuesto original de "moneda implícita").
 - El usuario registra sus movimientos manualmente — no hay integración bancaria.
 - Los movimientos fijos y cuotas se calculan on-the-fly al consultar un mes; no se generan filas individuales por instancia mensual.
 
@@ -1307,6 +1307,7 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
   - **Vista del mes** — lleva a la vista del mes (RF-VM-001), abierta en el mes actual.
   - **Reportes** — lleva a la pantalla de reportes configurable (`/reportes`, RF-REP-003).
   - **Categorías** — lleva a la gestión de categorías (módulo 3.6).
+  - **Configuración** — lleva a la pantalla de configuración (`/configuracion`, RF-CUR-002), debajo de "Categorías" (link agregado en la Fase 1.2.3).
 - **Botón "Nuevo movimiento"** (acción primaria): abre el formulario de carga de movimiento (RF-CM-001).
 - **Menú de usuario** (parte inferior): representado por el avatar del usuario. Al activarlo, despliega la opción **"Cerrar sesión"** (RF-AUTH-004).
 
@@ -1492,6 +1493,114 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 
 ---
 
+### 3.10 Módulo: Multi-moneda (Fase 1.2.3)
+
+> **Reabre la decisión "moneda implícita en v1" (RN-009).** v1 había definido la moneda como **implícita, sin campo de moneda**, con todos los montos en centavos sin moneda asociada. Reabierto en 1.2.3: la moneda pasa a ser **explícita (ARS / USD)** y cada movimiento lleva su **moneda + cotización ARS↔USD**; los totales se expresan en una **única moneda default** del usuario, convertida en vivo. `requirements.md`, `screens.md` y `data-model.md` se actualizan en esta fase. Modelo de datos en `data-model.md`, §Moneda explícita ARS/USD y §Contrato de configuración del usuario (settings).
+
+El alcance es **ARS / USD** únicamente (set fijo, sin alta de monedas). La conversión es **100% de display**: cambiar la moneda default re-expresa los totales sin tocar ningún dato guardado.
+
+---
+
+#### RF-CUR-001 — Moneda y cotización por movimiento
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Cada movimiento (único, fijo, cuota) se carga en una **moneda** de un set fijo **ARS / USD** y lleva una **cotización ARS↔USD** (cuántos ARS vale 1 USD). El monto se ingresa y se guarda en **centavos de la moneda original** del movimiento. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Alta |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Flujo principal:**
+1. En el formulario de carga, debajo del monto, el usuario elige la **moneda** (ARS / USD) y, si corresponde, la **cotización**.
+2. La cotización viene **pre-cargada** con el último cambio usado por el usuario (RF-CUR-003) y es **editable**.
+3. El usuario confirma; el sistema guarda monto (centavos de la moneda original), moneda y cotización.
+
+**Criterios de aceptación:**
+- [ ] El set de monedas es **fijo: ARS y USD**. No hay alta de monedas arbitrarias.
+- [ ] El monto se guarda en **centavos de la moneda original** del movimiento (no convertido).
+- [ ] La cotización es **ARS por 1 USD**, con decimales (no centavos), y debe ser **> 0** (validación; ver RF-CUR-005 / `data-model.md`).
+- [ ] El campo de cotización es **editable también** para movimientos cargados en la **moneda default** del usuario (no solo para la otra moneda).
+- [ ] La presentación del bloque moneda/cotización en el formulario está en `screens.md` §Formulario y `design.md`.
+
+**Notas:**
+- La cotización solo es **semánticamente necesaria** cuando la moneda del movimiento difiere de la default; aun así el campo está **siempre presente y editable** en el formulario (también cuando la moneda elegida == default) y se guarda siempre. Presentación en `screens.md` §Formulario.
+
+---
+
+#### RF-CUR-002 — Moneda por defecto del usuario
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Cada usuario tiene una **moneda por defecto** (ARS / USD, default ARS) configurable en `/configuracion`. Es la moneda en la que se expresan los **totales** de `/mes`, del dashboard y de los reportes. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Alta |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Criterios de aceptación:**
+- [ ] La moneda default se configura en la pantalla **`/configuracion`** (RF-CUR; ver `screens.md`), arrancando en **ARS** para todo usuario.
+- [ ] Todos los **totales** (gastos / ingresos / balance del mes, series de reportes) se muestran **en la moneda default vigente**.
+- [ ] Cambiar la moneda default **no modifica ningún movimiento guardado** (RF-CUR-005): solo re-expresa los totales (conversión de display, en vivo).
+- [ ] Contrato de lectura/escritura en `data-model.md`, §Contrato de configuración del usuario (settings).
+
+---
+
+#### RF-CUR-003 — Pre-carga editable del último cambio usado
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El sistema recuerda el **último cambio (cotización) real** que el usuario ingresó y lo **pre-carga** en el campo de cotización del formulario, donde el usuario puede aceptarlo o editarlo. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Criterios de aceptación:**
+- [ ] El campo de cotización del formulario arranca **pre-cargado** con el último cambio usado por el usuario.
+- [ ] Solo se considera "último cambio" una cotización **real** ingresada por el usuario (≠ el default `1` de back-compat): los movimientos heredados en ARS con cotización `1` **no** contaminan la pre-carga (ver `data-model.md`, `lastExchangeRate`).
+- [ ] El valor pre-cargado es **editable** en cada carga.
+
+---
+
+#### RF-CUR-004 — Granularidad de la cotización por tipo de movimiento
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | La cotización tiene distinta granularidad según el tipo de movimiento: por movimiento en únicos, por mes de aparición en fijos, por grupo en cuotas; los calculados la heredan del origen. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Alta |
+| **Precondiciones** | — |
+
+**Granularidad:**
+- **Únicos:** una cotización **por movimiento**.
+- **Fijos:** una cotización **por mes de aparición**, editable mes a mes; editar la cotización de un mes en adelante usa la **misma mecánica de split del pasado** que cualquier edición de fijo (RN-005), preservando los meses ya corridos.
+- **Cuotas:** **una** cotización por **grupo** (todas las cuotas comparten la del grupo).
+- **Calculados:** **heredan** moneda y cotización del **origen** —no se eligen ni se persisten propias—; se derivan al vuelo junto con el monto.
+
+**Criterios de aceptación:**
+- [ ] Cada único guarda su propia cotización; cada grupo de cuotas, una sola para todo el grupo.
+- [ ] Un fijo puede tener cotizaciones distintas en meses distintos; cambiarla mes-en-adelante no toca los meses pasados.
+- [ ] Un calculado muestra y computa con la moneda y cotización **de su origen** en el mes; no expone campos de moneda/cotización propios.
+- [ ] Modelado de la granularidad en `data-model.md`, §Moneda explícita ARS/USD.
+
+---
+
+#### RF-CUR-005 — Conversión a la moneda default (capa de display, en vivo)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Los totales y reportes se computan convirtiendo cada movimiento desde su moneda original (con su cotización) a la **moneda default vigente** del usuario. La conversión es **100% visual y en vivo**: nunca reescribe lo guardado. |
+| **Actor** | Sistema |
+| **Prioridad** | Alta |
+| **Precondiciones** | — |
+
+**Criterios de aceptación:**
+- [ ] Los totales de `/mes`, del dashboard y las series de reportes se expresan en la **moneda default vigente**, convirtiendo cada movimiento con su cotización.
+- [ ] Cambiar la moneda default **re-expresa** los totales al instante, **sin** modificar ningún movimiento (monto, moneda ni cotización originales quedan intactos).
+- [ ] El ítem de `/mes` muestra el **monto original + moneda** y el **valor convertido** que entra a los totales (ver `screens.md` §Vista del mes y `design.md`).
+- [ ] **Back-compat:** todos los movimientos existentes quedan en **ARS** con cotización `1`; un usuario que nunca tocó nada ve todo igual que antes (default ARS).
+- [ ] Los endpoints sirven los totales/series **ya convertidos** (`convertedAmountCents`); contrato en `data-model.md`, §Contrato de movimientos del mes y §Contrato de serie de reportes.
+
+---
+
 ## 4. Reglas de negocio
 
 | ID | Regla |
@@ -1504,7 +1613,7 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 | RN-006 | Los movimientos fijos y los grupos de cuotas no generan filas individuales por mes. Se calculan on-the-fly al consultar un período. |
 | RN-007 | Una categoría eliminada (soft delete) no aparece en selectores de nuevos movimientos, pero los movimientos históricos conservan la referencia a ella. |
 | RN-008 | No pueden coexistir dos categorías activas con el mismo nombre para el mismo usuario. |
-| RN-009 | En v1 no hay campo de moneda. El sistema opera sobre una moneda implícita. El diseño permite agregar `currency` en el futuro sin romper datos existentes. |
+| RN-009 | **Reabierta en la Fase 1.2.3 (de implícita a explícita).** v1 operaba sobre una **moneda implícita, sin campo de moneda**. Desde 1.2.3 la moneda es **explícita (ARS / USD)**: cada movimiento lleva su `currency` (default `ARS`) y una cotización `exchangeRate` (ARS por 1 USD), `amountCents` significa centavos de la **moneda original**, y los totales se expresan en la **moneda default vigente** del usuario convirtiendo en vivo (capa de display, nunca toca lo guardado). Back-compat: todo lo existente queda en ARS con cotización `1`. Ver módulo 3.10 (RF-CUR-001..005) y `data-model.md`, §Moneda explícita ARS/USD. |
 | RN-010 | El selector de categorías se filtra según el tipo del movimiento en curso: para `EXPENSE` se muestran categorías con scope `EXPENSE` o `BOTH`; para `INCOME` se muestran categorías con scope `INCOME` o `BOTH`. |
 | RN-011 | El movimiento único representa un instante (fecha y hora). Se almacena como timestamp en UTC junto con la zona horaria original del registro (nombre IANA). Se muestra siempre en esa zona horaria original, sin importar dónde se encuentre el usuario después. El mes al que pertenece el movimiento se determina en la zona del propio registro, de forma estable. Los movimientos fijos y las cuotas no aplican esta regla: operan a nivel mes, sin día ni hora. Ver `docs/technical.md` (sección "Fechas y zonas horarias") para el detalle técnico. |
 | RN-012 | Las contraseñas de las cuentas con email + contraseña se almacenan siempre **hasheadas** (bcrypt/argon2), nunca en texto plano. El hash y la verificación ocurren en el backend; el frontend nunca almacena ni compara contraseñas. Las cuentas creadas solo con Google pueden no tener contraseña. |
@@ -1544,7 +1653,6 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 | Edición retroactiva de mes pasado de un fijo | Complejidad en el modelo de datos |
 | Cancelación parcial de cuotas restantes | Pendiente de definición |
 | Ingreso en cuotas | Existe en la realidad; pendiente de definición |
-| Multi-moneda | Diseñado para venir después; no hardcodear en v1 |
 | Multi-usuario (roles, workspaces) | Sin fecha |
 | Importación desde extracto bancario | Sin decisión |
 | Filtro por categoría en vista del mes | Sin decisión para v1 |

@@ -13,6 +13,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   CategoryScope,
+  Currency,
   FormulaOperator,
   MovementType,
   RecurringFrequency,
@@ -24,6 +25,7 @@ import {
   RecurringWithCategory,
 } from '../../../src/recurring/recurring.repository';
 import { CategoryValidatorService } from '../../../src/categories/category-validator.service';
+import { SettingsService } from '../../../src/settings/settings.service';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -59,6 +61,11 @@ const mockLogger = {
   error: jest.fn(),
   debug: jest.fn(),
   verbose: jest.fn(),
+};
+
+const mockSettingsServiceExt = {
+  getSettings: jest.fn().mockResolvedValue({ defaultCurrency: Currency.ARS, lastExchangeRate: null }),
+  updateLastExchangeRate: jest.fn().mockResolvedValue(undefined),
 };
 
 // ---------------------------------------------------------------------------
@@ -104,6 +111,8 @@ function makeCalculadoWithCategory(overrides: Partial<RecurringWithCategory> = {
     categoryId: CAT_ID,
     type: MovementType.EXPENSE,
     amountCents: 0,
+    currency: Currency.ARS,
+    exchangeRate: 1,
     description: null,
     startMonth: '2026-06',
     deletedFrom: '2026-07',
@@ -143,6 +152,7 @@ describe('RecurringService — calculados extendidos (Fase 1.1.7.ext)', () => {
         { provide: RecurringRepository, useValue: mockRepo },
         { provide: CategoryValidatorService, useValue: mockCategoryValidator },
         { provide: Logger, useValue: mockLogger },
+        { provide: SettingsService, useValue: mockSettingsServiceExt },
       ],
     }).compile();
 

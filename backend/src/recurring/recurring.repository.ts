@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { FormulaOperator, MovementType, RecurringFrequency, Prisma } from '@prisma/client';
+import { Currency, FormulaOperator, MovementType, RecurringFrequency, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -44,6 +44,10 @@ export interface RecurringWithCategory {
   formulaOperand: number | null;
   /** 1 (positivo) o -1 (negativo) */
   formulaSign: number | null;
+  /** Moneda del fijo (Fase 1.2.3). Los calculados no usan este campo (heredan del origen). */
+  currency: Currency;
+  /** Cotización ARS/1 USD para este tramo de la cadena (Fase 1.2.3). */
+  exchangeRate: number;
   createdAt: Date;
   updatedAt: Date;
   category: EmbeddedCategory;
@@ -106,6 +110,8 @@ function mapToRecurringWithCategory(
     formulaOperator: r.formulaOperator,
     formulaOperand: r.formulaOperand,
     formulaSign: r.formulaSign,
+    currency: r.currency,
+    exchangeRate: Number(r.exchangeRate),
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     category: {

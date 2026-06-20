@@ -62,6 +62,9 @@ const mockFijoMovement: MovementItem = {
   },
   calculated: null,
   hasCalculated: false,
+  currency: "ARS",
+  exchangeRate: 1,
+  convertedAmountCents: 150000,
 };
 
 /** Calculado de origen único — fixture para la variante calculated-simple */
@@ -93,6 +96,9 @@ const mockCalculatedUnicoMovement: MovementItem = {
     sourceAmountCents: 50000,
   },
   hasCalculated: false,
+  currency: "ARS",
+  exchangeRate: 1,
+  convertedAmountCents: 5000,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

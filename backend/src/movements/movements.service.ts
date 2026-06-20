@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { FormulaOperator, MovementType } from '@prisma/client';
+import { Currency, FormulaOperator, MovementType } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import {
   MovementsRepository,
@@ -10,6 +10,8 @@ import {
   isOnFrequency,
 } from './movements.repository';
 import { applyFormula } from '../recurring/formula.helper';
+import { convertToDefaultCurrency } from '../common/currency.helper';
+import { SettingsService } from '../settings/settings.service';
 
 /**
  * Shape de los totales del mes.
@@ -68,6 +70,7 @@ export class MovementsService {
   constructor(
     private readonly repo: MovementsRepository,
     private readonly logger: Logger,
+    private readonly settingsService: SettingsService,
   ) {}
 
   /**
@@ -102,10 +105,14 @@ export class MovementsService {
       };
     }
 
+    // Cargar la moneda default del usuario (Fase 1.2.3)
+    const userSettings = await this.settingsService.getSettings(userId);
+    const defaultCurrency = userSettings.defaultCurrency;
+
     const [unicos, fijos, cuotas] = await Promise.all([
-      this.repo.findUnicosByMonth(userId, month),
-      this.repo.findFijosByMonth(userId, month),
-      this.repo.findCuotasByMonth(userId, month),
+      this.repo.findUnicosByMonth(userId, month, defaultCurrency),
+      this.repo.findFijosByMonth(userId, month, defaultCurrency),
+      this.repo.findCuotasByMonth(userId, month, defaultCurrency),
     ]);
 
     // Aplicar filtro de categorías
@@ -127,31 +134,31 @@ export class MovementsService {
         : cuotas;
 
     // Calcular totales desde las listas filtradas.
-    // RN-019: sumar la MAGNITUD (|amountCents|) al bucket del type derivado.
-    // Para únicos y fijos normales amountCents > 0 (magnitud == valor).
+    // Fase 1.2.3: usar convertedAmountCents (ya convertido a la moneda default del usuario).
+    // RN-019: sumar la MAGNITUD al bucket del type derivado.
     // Para calculados (Fase 1.1.7) amountCents puede ser negativo o cero (RN-018);
-    // el type ya viene derivado del signo en el MovementItem → usar |amountCents|.
+    // el type ya viene derivado del signo en el MovementItem.
     // Fijos skippeados (y calculados cuyo origen está skippeado) no suman.
     const unicosExpense = unicosFiltrados
       .filter((u) => u.type === 'EXPENSE')
-      .reduce((sum, u) => sum + Math.abs(u.amountCents), 0);
+      .reduce((sum, u) => sum + u.convertedAmountCents, 0);
     const unicosIncome = unicosFiltrados
       .filter((u) => u.type === 'INCOME')
-      .reduce((sum, u) => sum + Math.abs(u.amountCents), 0);
+      .reduce((sum, u) => sum + u.convertedAmountCents, 0);
 
     const fijosExpense = fijosFiltrados
       .filter((f) => !f.skipped && f.type === 'EXPENSE')
-      .reduce((sum, f) => sum + Math.abs(f.amountCents), 0);
+      .reduce((sum, f) => sum + f.convertedAmountCents, 0);
     const fijosIncome = fijosFiltrados
       .filter((f) => !f.skipped && f.type === 'INCOME')
-      .reduce((sum, f) => sum + Math.abs(f.amountCents), 0);
+      .reduce((sum, f) => sum + f.convertedAmountCents, 0);
 
     const cuotasExpense = cuotasFiltradas
       .filter((c) => c.type === 'EXPENSE')
-      .reduce((sum, c) => sum + c.amountCents, 0);
+      .reduce((sum, c) => sum + c.convertedAmountCents, 0);
     const cuotasIncome = cuotasFiltradas
       .filter((c) => c.type === 'INCOME')
-      .reduce((sum, c) => sum + c.amountCents, 0);
+      .reduce((sum, c) => sum + c.convertedAmountCents, 0);
 
     const expenseCents = unicosExpense + fijosExpense + cuotasExpense;
     const incomeCents = unicosIncome + fijosIncome + cuotasIncome;
@@ -214,6 +221,10 @@ export class MovementsService {
           ? EMPTY_SET
           : new Set(categoryIds);
 
+    // Cargar la moneda default del usuario (Fase 1.2.3)
+    const userSettings = await this.settingsService.getSettings(userId);
+    const defaultCurrency = userSettings.defaultCurrency;
+
     const yearStr = String(year).padStart(4, '0');
     const months12: string[] = Array.from({ length: 12 }, (_, i) => {
       const m = String(i + 1).padStart(2, '0');
@@ -246,7 +257,14 @@ export class MovementsService {
       const idx = monthIndex(row.monthKey);
       if (idx < 0 || idx > 11) continue;
 
-      const cents = Number(row.totalCents);
+      // Fase 1.2.3: convertir al defaultCurrency antes de sumar
+      const rawCents = Number(row.totalCents);
+      const cents = convertToDefaultCurrency(
+        rawCents,
+        row.currency as Currency,
+        Number(row.exchangeRate),
+        defaultCurrency,
+      );
 
       if (row.type === 'INCOME') {
         agg[idx].incomeCents += cents;
@@ -278,10 +296,15 @@ export class MovementsService {
 
     // Cargar todos los Transactions de origen para calculados de único (una sola query)
     const txIdsAnual = [...new Set(calculadosDeUnicoAnual.map((f) => f.sourceMovementId!).filter(Boolean))];
-    const txAnualMap = new Map<string, { amountCents: number; description: string | null }>();
+    const txAnualMap = new Map<string, { amountCents: number; description: string | null; currency: Currency; exchangeRate: number }>();
     if (txIdsAnual.length > 0) {
       const txRows = await this.repo.findTransactionsByIds(txIdsAnual);
-      for (const tx of txRows) txAnualMap.set(tx.id, { amountCents: tx.amountCents, description: tx.description });
+      for (const tx of txRows) txAnualMap.set(tx.id, {
+        amountCents: tx.amountCents,
+        description: tx.description,
+        currency: tx.currency,
+        exchangeRate: tx.exchangeRate,
+      });
     }
 
     // Cargar todos los InstallmentGroups de origen para calculados de cuota (una sola query)
@@ -290,17 +313,31 @@ export class MovementsService {
       amountCents: number;
       totalInstallments: number;
       startMonth: string;
+      currency: Currency;
+      exchangeRate: number;
     }>();
     if (groupIdsAnual.length > 0) {
       const groupRows = await this.repo.findInstallmentGroupsByIds(groupIdsAnual);
-      for (const g of groupRows) groupAnualMap.set(g.id, { amountCents: g.amountCents, totalInstallments: g.totalInstallments, startMonth: g.startMonth });
+      for (const g of groupRows) groupAnualMap.set(g.id, {
+        amountCents: g.amountCents,
+        totalInstallments: g.totalInstallments,
+        startMonth: g.startMonth,
+        currency: g.currency,
+        exchangeRate: g.exchangeRate,
+      });
     }
 
     for (let i = 0; i < 12; i++) {
       const mes = months12[i];
 
       // Construir mapa chainId → datos del normal activo en este mes.
-      const normalesActivosMes = new Map<string, { amountCents: number; skipped: boolean; startMonth: string }>();
+      const normalesActivosMes = new Map<string, {
+        amountCents: number;
+        skipped: boolean;
+        startMonth: string;
+        currency: Currency;
+        exchangeRate: number;
+      }>();
       for (const fijo of normalesForAnnual) {
         const inRange =
           fijo.startMonth <= mes &&
@@ -314,6 +351,8 @@ export class MovementsService {
             amountCents: fijo.amountCents,
             skipped: fijo.skippedMonths.has(mes),
             startMonth: fijo.startMonth,
+            currency: fijo.currency,
+            exchangeRate: fijo.exchangeRate,
           });
         }
       }
@@ -329,12 +368,20 @@ export class MovementsService {
         if (!isOnFrequency(fijo.startMonth, fijo.frequency, mes)) continue;
         if (fijo.skippedMonths.has(mes)) continue;
 
+        // Fase 1.2.3: convertir al defaultCurrency
+        const convertedAmount = convertToDefaultCurrency(
+          fijo.amountCents,
+          fijo.currency,
+          fijo.exchangeRate,
+          defaultCurrency,
+        );
+
         if (fijo.type === 'INCOME') {
-          agg[i].incomeCents += fijo.amountCents;
+          agg[i].incomeCents += convertedAmount;
         } else {
-          agg[i].expenseCents += fijo.amountCents;
+          agg[i].expenseCents += convertedAmount;
           const prev = agg[i].categoryExpense.get(fijo.categoryId) ?? 0;
-          agg[i].categoryExpense.set(fijo.categoryId, prev + fijo.amountCents);
+          agg[i].categoryExpense.set(fijo.categoryId, prev + convertedAmount);
         }
 
         if (!catMeta.has(fijo.categoryId) && fijo.type === 'EXPENSE') {
@@ -369,7 +416,14 @@ export class MovementsService {
         );
         const derivedType =
           derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
-        const magnitude = Math.abs(derivedAmount);
+
+        // Fase 1.2.3: calculados heredan moneda/cotización del origen
+        const magnitude = convertToDefaultCurrency(
+          Math.abs(derivedAmount),
+          originData.currency,
+          originData.exchangeRate,
+          defaultCurrency,
+        );
 
         if (derivedType === MovementType.INCOME) {
           agg[i].incomeCents += magnitude;
@@ -410,7 +464,14 @@ export class MovementsService {
         );
         const derivedType =
           derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
-        const magnitude = Math.abs(derivedAmount);
+
+        // Fase 1.2.3: calculados heredan moneda/cotización del origen
+        const magnitude = convertToDefaultCurrency(
+          Math.abs(derivedAmount),
+          txData.currency,
+          txData.exchangeRate,
+          defaultCurrency,
+        );
 
         if (derivedType === MovementType.INCOME) {
           agg[i].incomeCents += magnitude;
@@ -456,7 +517,14 @@ export class MovementsService {
         );
         const derivedType =
           derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
-        const magnitude = Math.abs(derivedAmount);
+
+        // Fase 1.2.3: calculados heredan moneda/cotización del origen
+        const magnitude = convertToDefaultCurrency(
+          Math.abs(derivedAmount),
+          groupData.currency,
+          groupData.exchangeRate,
+          defaultCurrency,
+        );
 
         if (derivedType === MovementType.INCOME) {
           agg[i].incomeCents += magnitude;
@@ -484,18 +552,26 @@ export class MovementsService {
 
       const endMonth = addMonths(grupo.startMonth, grupo.totalInstallments);
 
+      // Fase 1.2.3: convertir al defaultCurrency (misma cotización en todos los meses del grupo)
+      const convertedAmount = convertToDefaultCurrency(
+        grupo.amountCents,
+        grupo.currency,
+        grupo.exchangeRate,
+        defaultCurrency,
+      );
+
       for (let i = 0; i < 12; i++) {
         const mes = months12[i];
         if (grupo.startMonth > mes || mes >= endMonth) continue;
 
         if (grupo.type === 'INCOME') {
-          agg[i].incomeCents += grupo.amountCents;
+          agg[i].incomeCents += convertedAmount;
         } else {
-          agg[i].expenseCents += grupo.amountCents;
+          agg[i].expenseCents += convertedAmount;
           const prev = agg[i].categoryExpense.get(grupo.categoryId) ?? 0;
           agg[i].categoryExpense.set(
             grupo.categoryId,
-            prev + grupo.amountCents,
+            prev + convertedAmount,
           );
         }
 
