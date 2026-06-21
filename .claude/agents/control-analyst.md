@@ -31,7 +31,10 @@ Sos el analista funcional del proyecto Control. **Tu scope es exclusivamente el 
 
 ## Economía de documentación
 
+- **La documentación es una foto del ESTADO ACTUAL, en presente, como si siempre hubiera sido así. NO es su historia.** Documentá el resultado, no la transición. **Prohibido registrar cuándo o por qué cambió algo:** etiquetas de fase ("Fase 6", "corregido 1.2.4"), narrativa de cambio ("antes era X / ahora Y", "ya no", "se revirtió", "deprecado tras…"), causalidad histórica ("fue la causa del bug E1", "para destrabar") y prohibiciones que solo existen por historia ("no reintroducir GET viejo"). El "cuándo" y el "por qué cambió" es trabajo de git. **Sí se queda** el por-qué técnico-estructural (cómo funciona hoy, informa decisiones futuras) y un "deprecado" solo si la cosa sigue viva en el código y un agente puede toparse con ella (en presente, sin el relato de la migración).
 - **Destino canónico único + referencias.** Cada decisión, regla o contrato se escribe **completo en UN solo doc** —el que es su dueño (reglas funcionales → `requirements.md`; contratos de API / shapes → `data-model.md`; estado de implementación → `features.md`; etc.)—. Los demás documentos **referencian** ese destino ("ver RF-XXX", "ver data-model.md §…"), **no repiten** la sustancia. Prohibido reescribir la misma decisión con otra redacción en varios archivos.
+- **Los archivos de agente NO llevan gotchas por feature.** El gotcha estructural vive en `docs/` (destino canónico); el agente solo apunta dónde leerlo. Si te delegan documentar un gotcha, va al doc, no al agente.
+- **El roadmap es un doc de trabajo descartable:** se borra al cerrar la versión. No es registro histórico; no lo trates como fuente de verdad permanente.
 - **Tablas y bullets sobre prosa.** Si una tabla o lista alcanza, no escribas párrafos.
 - **No documentar lo obvio.** Nada de changelog de setup ni repetir estándares que ya viven en otro doc. Si se sabe abriendo el código o el propio archivo, no se documenta.
 

@@ -22,10 +22,10 @@
 
 ## Convenciones
 
-- El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Reportes, Categorías, Configuración) y **no** se muestra en las pantallas no autenticadas (Login, Registro). Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo. Orden de los links: Dashboard → Vista del mes → Reportes → Categorías → Configuración (link de Configuración agregado en la Fase 1.2.3).
+- El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Reportes, Categorías, Configuración) y **no** se muestra en las pantallas no autenticadas (Login, Registro). Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo. Orden de los links: Dashboard → Vista del mes → Reportes → Categorías → Configuración.
   - **Estado de implementación: implementado.** El sidebar (RF-NAV-001) **ya está implementado** (ver `features.md`). Los accesos definidos en cada pantalla (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL directa) se conservan y conviven con el sidebar.
 - El **formulario de carga** (pantalla 5) es un modal sin ruta propia. Se invoca desde el sidebar y desde el dashboard, y se superpone a la pantalla actual.
-- **Chip de moneda default en el header (Fase 1.2.3).** Las pantallas con montos/totales —**Dashboard**, **Vista del mes** y **Reportes**— muestran en su header (fila del eyebrow) un **chip indicador de la moneda default vigente** del usuario (código de la moneda del set curado: ARS / USD / EUR / BRL, RF-CUR-002). Es **informativo**: comunica en qué moneda están expresados los montos y totales de la pantalla y **linkea a `/configuracion`** (no cambia la moneda in-situ). Se muestra **siempre**, también en mono-moneda. **`/configuracion` NO lo lleva** (es donde la moneda se edita). El patrón es común a las tres pantallas y no se repite su definición en cada una; el detalle visual lo define `control-design` (ver `docs/design.md`).
+- **Chip de moneda default en el header.** Las pantallas con montos/totales —**Dashboard**, **Vista del mes** y **Reportes**— muestran en su header (fila del eyebrow) un **chip indicador de la moneda default vigente** del usuario (código de la moneda del set curado: ARS / USD / EUR / BRL, RF-CUR-002). Es **informativo**: comunica en qué moneda están expresados los montos y totales de la pantalla y **linkea a `/configuracion`** (no cambia la moneda in-situ). Se muestra **siempre**, también en mono-moneda. **`/configuracion` NO lo lleva** (es donde la moneda se edita). El patrón es común a las tres pantallas y no se repite su definición en cada una; el detalle visual lo define `control-design` (ver `docs/design.md`).
 
 ---
 
@@ -166,9 +166,9 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 - **Totales del mes** (RF-VM-002): total de gastos, total de ingresos y balance (ingresos − gastos), con positivo y negativo diferenciables. Son la **suma de lo visible** tras aplicar los filtros por listado (RF-VM-006), expresada en la **moneda default vigente** del usuario (cada movimiento entra convertido — RF-CUR-005). Se actualizan al agregar, editar o eliminar un movimiento **y al cambiar cualquier filtro de sección**.
 - **Filtros por listado** (RF-VM-006): cada una de las tres secciones tiene **sus propios** controles de filtro —un **filtro de tipo** (Gasto / Ingreso / **Ambos**, default Ambos) y un **filtro de categoría** (tres estados, default todas)— que filtran **solo esa sección**. El pill contador y el subtotal de cada sección reflejan lo filtrado; los totales del mes son la suma de lo visible en las tres. Los controles **no se muestran en modo orden** (RF-VM-005). El estado es **por pantalla** (no por mes): se mantiene al navegar entre meses y se persiste por usuario (clave `monthListFilters`, ver `data-model.md`). No es global: dashboard y reportes tienen su propio filtro. Detalle visual en `docs/design.md`. Ver "Acciones disponibles" y "Estados".
 - **Lista de movimientos agrupada por tipo** en **tres secciones colapsables** (acordeón) rotuladas — **Únicos**, **Fijos**, **Cuotas** (RF-VM-001, RF-VM-005). El orden de las secciones es el default salvo que el usuario lo haya reordenado (RF-VM-005). Dentro de cada sección, los movimientos se ordenan por **monto descendente** (el monto más alto primero, por magnitud, sin distinguir gasto de ingreso), con el desempate por sección que define el contrato de `GET /movements` (ver `data-model.md`); ese orden de ítems **no** es alterable por el usuario.
-  - **Las tres secciones se muestran siempre**, aunque estén vacías (cambio respecto de v1.0). Cada sección expone una **cabecera de grupo** (rótulo, contador de ítems, subtotal) que actúa como **disclosure**: clic en la cabecera expande/colapsa esa sección. Junto a la cabecera, fuera del modo orden, vive el disparador de filtro de la sección (tipo + categoría, RF-VM-006). Las **Cuotas** muestran, por ítem, su número y total (ej: "3/12"); los **Fijos**, sin día específico.
+  - **Las tres secciones se muestran siempre**, aunque estén vacías. Cada sección expone una **cabecera de grupo** (rótulo, contador de ítems, subtotal) que actúa como **disclosure**: clic en la cabecera expande/colapsa esa sección. Junto a la cabecera, fuera del modo orden, vive el disparador de filtro de la sección (tipo + categoría, RF-VM-006). Las **Cuotas** muestran, por ítem, su número y total (ej: "3/12"); los **Fijos**, sin día específico.
   - Cada ítem muestra: tipo (gasto/ingreso), monto, categoría, descripción (si la tiene) y su origen (único / fijo / cuota X/N). Los **fijos** muestran además su **frecuencia** (Mensual / Bimestral / Trimestral / Semestral / Anual, RF-MF-006) en vez de fecha; un fijo **anulado** para el mes (RF-MF-005) se sigue mostrando con una **diferenciación visual** de anulado (detalle en `docs/design.md`).
-  - **Moneda y conversión (Fase 1.2.3, RF-CUR-005):** el monto que domina en el ítem es el **convertido a la moneda default vigente** (el que entra a los totales). **Solo si la moneda del ítem ≠ la default**, el ítem muestra además un **badge de moneda** (ARS / USD) y una **línea con el valor original** (monto + moneda de carga). Si la moneda del ítem **coincide** con la default, el ítem se ve **idéntico a hoy** (sin badge ni línea extra) — caso mono-moneda. Un **calculado** usa la moneda/cotización de su origen. El detalle visual (badge, jerarquía monto convertido vs. original) lo define `docs/design.md`.
+  - **Moneda y conversión (RF-CUR-005):** el monto que domina en el ítem es el **convertido a la moneda default vigente** (el que entra a los totales). **Solo si la moneda del ítem ≠ la default**, el ítem muestra además un **badge de moneda** (ARS / USD / EUR / BRL) y una **línea con el valor original** (monto + moneda de carga). Si la moneda del ítem **coincide** con la default, el ítem se ve **sin badge ni línea extra** — caso mono-moneda. Un **calculado** usa la moneda/cotización de su origen. El detalle visual (badge, jerarquía monto convertido vs. original) lo define `docs/design.md`.
   - **Sección vacía:** muestra la cabecera completa (contador en 0, subtotal en $0) y un **mensaje de estado vacío inline propio** ("Sin movimientos únicos" / "Sin fijos" / "Sin cuotas"). No hay un mensaje de estado vacío global de la pantalla (ver "Estados"). El detalle visual del acordeón, las cabeceras y el modo orden lo define `control-design` (ver `docs/design.md`).
 
 ### Acciones disponibles
@@ -178,7 +178,7 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 - **Eliminar** un ítem — dispara el flujo de eliminación correspondiente al tipo (RF-MU-003 único, RF-MF-004 fijo, RF-MC-002 grupo de cuotas), con su confirmación específica. Al eliminar un **fijo**, la confirmación **no ofrece opciones** y la eliminación aplica desde el **mes activo (el mes visualizado) inclusive en adelante**, mismo pivote que la edición (RF-MF-004 / RN-005).
 - **Anular / Des-anular este mes** (solo en ítems **fijos**, RF-MF-005) — en el menú de acciones del ítem fijo, además de Editar y Eliminar, una acción **toggle**: **"Anular este mes"** cancela esa aparición del fijo en el mes visualizado; sobre un fijo ya anulado se rotula **"Des-anular este mes"** y la revierte. El ítem anulado **se sigue mostrando** (no desaparece), deja de sumar a los totales del mes y tiene diferenciación visual. Los movimientos **únicos** y las **cuotas** no tienen esta acción. La anulación es por mes puntual y no afecta otros meses, a diferencia de Eliminar (RF-MF-005 / RN-016).
 - **Nuevo movimiento** — abre el modal de carga (pantalla 5). Al abrirlo desde `/mes`, el **mes activo** se propaga al modal como **mes contexto**: es el default del "mes de inicio" en los tabs Fijo y Cuotas. No afecta al tab Único (ver pantalla 5). **En modo orden este botón se deshabilita** (RF-VM-005).
-- **Colapsar / expandir una sección** (RF-VM-005) — clic en la cabecera de cualquiera de las tres secciones la expande o colapsa de forma individual. El estado se **persiste por usuario** (preferencias 1.1.0). Fuera del modo orden.
+- **Colapsar / expandir una sección** (RF-VM-005) — clic en la cabecera de cualquiera de las tres secciones la expande o colapsa de forma individual. El estado se **persiste por usuario** (preferencias). Fuera del modo orden.
 - **Ordenar secciones** (RF-VM-005) — un botón del header ("Ordenar secciones" / "Listo") activa/desactiva el **modo orden**. En modo orden el usuario **arrastra las secciones para reordenarlas entre sí** (no los ítems internos); el colapsar/expandir queda suspendido (la cabecera arrastra) y "+ Nuevo movimiento" se deshabilita. El orden se **aplica en vivo** y se **persiste por usuario**; no hay acción de cancelar. El shape de la preferencia (`monthSections`) está en `data-model.md`.
 - **Filtrar una sección** (RF-VM-006) — abre el disparador de filtro de la sección y ajusta su **tipo** (Gasto / Ingreso / Ambos) y/o su **categoría** (tres estados: todas / subconjunto / ninguna); la lista de esa sección, su pill contador y su subtotal se recalculan al instante, y los totales del mes reflejan la suma de lo visible. Cada sección tiene controles independientes. **Ocultos en modo orden.** La selección persiste por usuario (clave `monthListFilters`) y se conserva al navegar de mes.
 - Acciones globales del sidebar.
@@ -194,7 +194,7 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 - **Cargando:** mientras se obtienen movimientos y totales del mes activo.
 - **Con datos:** las **tres secciones siempre presentes** (RF-VM-005); las que tienen movimientos los listan, las vacías muestran su empty inline propio. Cada sección puede estar expandida o colapsada según la preferencia persistida del usuario. Un fijo **anulado** para el mes (RF-MF-005) se muestra con su diferenciación visual de anulado y no suma a los totales.
 - **Modo orden activo (RF-VM-005):** las secciones se pueden arrastrar para reordenarlas; el colapsar/expandir queda suspendido y "+ Nuevo movimiento" deshabilitado. El orden se aplica en vivo y se persiste.
-- **Vacío (sin movimientos en el mes):** **no hay un mensaje de estado vacío global** (eliminado en la fase 1.1.4). Las tres secciones aparecen vacías, cada una con su empty inline propio ("Sin movimientos únicos" / "Sin fijos" / "Sin cuotas"), y los totales del mes en cero, sin error.
+- **Vacío (sin movimientos en el mes):** **no hay un mensaje de estado vacío global**. Las tres secciones aparecen vacías, cada una con su empty inline propio ("Sin movimientos únicos" / "Sin fijos" / "Sin cuotas"), y los totales del mes en cero, sin error.
 - **Filtros por listado aplicados (RF-VM-006):** cada sección refleja su filtro de tipo y de categoría; su pill y subtotal muestran lo filtrado y los totales del mes suman lo visible en las tres. Una sección cuyo filtro no matchea ningún movimiento (o con categoría en estado **"ninguna"**) queda vacía y no aporta a los totales (sin error). En **modo orden** los controles de filtro no se muestran.
 - **Error:** si falla la carga del mes, se informa el error sin romper la pantalla.
 
@@ -218,10 +218,10 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
   - **Único** (RF-MU-001): tipo (Gasto/Ingreso), monto, categoría, fecha y hora (default: el momento actual — fecha de hoy y hora actual al abrir el formulario en modo creación), descripción (opcional). El mes contexto **no** aplica al único: su default es siempre hoy/ahora, sin importar desde dónde se abra el modal.
   - **Fijo** (RF-MF-001, RF-MF-006): tipo (Gasto/Ingreso), monto, mes de inicio, **frecuencia**, categoría, descripción (opcional). Sin fecha de día. El mes de inicio tiene como default el **mes contexto** si el modal se abrió desde la Vista del mes (`/mes`), o el **mes actual** en cualquier otro origen (dashboard, sidebar). Es editable y admite meses pasados. La **frecuencia** es un selector con un set cerrado de 5 valores —**Mensual** (default), Bimestral, Trimestral, Semestral, Anual (RF-MF-006)— y debajo una nota de recurrencia que se ajusta a la frecuencia elegida (ver "Estados"; el detalle visual está en `docs/design.md`).
   - **Cuotas** (RF-MC-001): tipo (Gasto/Ingreso), monto por cuota, cantidad de cuotas, mes de inicio, categoría, descripción (opcional). El mes de inicio tiene como default el **mes contexto** si el modal se abrió desde la Vista del mes (`/mes`), o el **mes actual** en cualquier otro origen. Es editable y admite meses pasados.
-- **Bloque moneda + cotización (Fase 1.2.3, ampliado en 1.2.4; RF-CUR-001/003/004/006), debajo del campo Monto** en los tabs **Único / Fijo / Cuotas**:
-  - **Selector de moneda** del set curado: **ARS / USD / EUR / BRL** (1.2.4).
-  - **Campo de cotización** (unidades de la default por 1 unidad de la moneda del movimiento): editable. **Se oculta cuando la moneda elegida coincide con la default** del usuario (cotización = 1, 1.2.4). El label del par es **`{moneda del movimiento}→{default}`**. **Pre-cargado** con la **cotización de referencia del mes** (RF-CUR-003/006; fallback al último cambio usado si la tabla no tiene dato). Validación: cotización **> 0**. El detalle visual fino lo define `design.md`.
-  - **Copy de la nota del campo:** **"Cotización de referencia del mes"** (en 1.2.3 era "Último cambio usado").
+- **Bloque moneda + cotización (RF-CUR-001/003/004/006), debajo del campo Monto** en los tabs **Único / Fijo / Cuotas**:
+  - **Selector de moneda** del set curado: **ARS / USD / EUR / BRL**.
+  - **Campo de cotización** (unidades de la default por 1 unidad de la moneda del movimiento): editable. **Se oculta cuando la moneda elegida coincide con la default** del usuario (cotización = 1). El label del par es **`{moneda del movimiento}→{default}`**. **Pre-cargado** con la **cotización de referencia del mes** (RF-CUR-003/006; fallback al último cambio usado si la tabla no tiene dato). Validación: cotización **> 0**. El detalle visual fino lo define `design.md`.
+  - **Copy de la nota del campo:** **"Cotización de referencia del mes"**.
   - **Granularidad del mes del pre-fill** según el tab (RF-CUR-004): en **Fijo**, el mes de aparición; en **Cuotas**, el `startMonth` del grupo; en **Único**, el mes del movimiento.
   - El tab/modo **Calculado** (creación desde el kebab de un movimiento) **no** muestra el bloque moneda/cotización: el calculado **hereda** moneda y cotización del origen (RF-CUR-004).
   - El detalle visual del bloque lo define `docs/design.md`.
@@ -253,7 +253,7 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 ### Estados
 
 - **Creación inicial:** tab Único activo, tipo Gasto, fecha y hora en el momento actual, resto vacío.
-- **Tab Fijo, nota de recurrencia (solo en creación):** debajo de la categoría, una nota se ajusta a la frecuencia elegida — *"Se registra automáticamente {cada mes / cada dos meses / cada tres meses / cada seis meses / cada año} a partir del mes de inicio."* (antes el texto era fijo "cada mes"; ahora contempla la frecuencia, RF-MF-006).
+- **Tab Fijo, nota de recurrencia (solo en creación):** debajo de la categoría, una nota se ajusta a la frecuencia elegida — *"Se registra automáticamente {cada mes / cada dos meses / cada tres meses / cada seis meses / cada año} a partir del mes de inicio."* (RF-MF-006).
 - **Edición:** sin tabs, campos pre-cargados con los valores actuales. En el tab Fijo, la **frecuencia** aparece de solo lectura.
 - **Validación con error:** monto en cero/negativo/no numérico, cantidad de cuotas en cero/negativa, o categoría no seleccionada — se muestra el error y no se guarda.
 - **Sin categorías disponibles:** estado de bloqueo con enlace a `/categorias`.
@@ -319,7 +319,7 @@ Pantalla dedicada para administrar las categorías del usuario: listar, crear, e
 
 **RF relacionados:** RF-REP-001, RF-REP-002, RF-REP-003, RF-REP-004, RF-NAV-001
 
-> **Ruta:** `/reportes`. **Link en el sidebar:** rótulo **"Reportes"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Reportes → Categorías). Renombre del "Gráfico anual" (`/anual`) de v1.0.
+> **Ruta:** `/reportes`. **Link en el sidebar:** rótulo **"Reportes"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Reportes → Categorías).
 
 ### Propósito
 
@@ -367,9 +367,9 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 ### Props funcionales
 
 - **Tipo de reporte** — `income-expense` (Forma 1) o `by-category` (Forma 2). Define qué visualización monta la instancia (RF-REP-001).
-- **Año a mostrar** — el año cuyos 12 meses se grafican. La navegación de año está **siempre embebida y activa** (flechas de 1.1.3), **independiente por instancia**.
-- **Categorías seleccionadas (filtro)** — subconjunto de categorías; default **todas**. El checklist embebido ofrece el **universo de categorías del usuario** (no solo las que tienen gasto), porque el filtro aplica también a la Forma 1. **Tres estados** (igual que el filtro de `/mes`, RF-VM-006): todas (default), subconjunto y **ninguna** (todas destildadas → serie en cero). *(Desde 1.1.6 destildar todas grafica la serie en cero; antes se colapsaba a "sin filtro".)*
-- **Modo de vista (solo `income-expense`, RF-REP-006, Fase 1.2.2)** — toggle de dos opciones: **"Total"** (dos series agregadas, default) y **"Por categoría"** (el total de gastos descompuesto por categoría apilada; solo gastos). El tipo `by-category` **no** tiene este toggle. El modo de vista no cambia el año ni el filtro; el filtro de categorías aplica al desglose de gastos en "Por categoría". El detalle visual (dos tabs) lo define `control-design`.
+- **Año a mostrar** — el año cuyos 12 meses se grafican. La navegación de año está **siempre embebida y activa** (flechas), **independiente por instancia**.
+- **Categorías seleccionadas (filtro)** — subconjunto de categorías; default **todas**. El checklist embebido ofrece el **universo de categorías del usuario** (no solo las que tienen gasto), porque el filtro aplica también a la Forma 1. **Tres estados** (igual que el filtro de `/mes`, RF-VM-006): todas (default), subconjunto y **ninguna** (todas destildadas → serie en cero).
+- **Modo de vista (solo `income-expense`, RF-REP-006)** — toggle de dos opciones: **"Total"** (dos series agregadas, default) y **"Por categoría"** (el total de gastos descompuesto por categoría apilada; solo gastos). El tipo `by-category` **no** tiene este toggle. El modo de vista no cambia el año ni el filtro; el filtro de categorías aplica al desglose de gastos en "Por categoría". El detalle visual (dos tabs) lo define `control-design`.
 - **Modo de persistencia** — **persistido** (en `/reportes`: año, filtro **y modo de vista** se guardan en la clave `reports`, RF-REP-004/006) o **efímero** (en el Dashboard: año, filtro y modo de vista son de sesión, no se persisten — al recargar vuelve a año en curso + todas las categorías + modo "Total").
 
 ### Contenido
@@ -398,7 +398,7 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 - **Cargando:** mientras se obtienen los datos del año (filtrados al set de categorías seleccionado).
 - **Con datos:** recuadro poblado con los 12 meses presentes.
 - **Año sin movimientos (vacío):** los 12 meses se muestran en cero; puede acompañarse de un mensaje de estado vacío, sin error. La representación visual concreta la define `control-design`.
-- **Filtro que vacía el reporte:** si las categorías seleccionadas no tienen movimientos en el año, **o** si el estado es **"ninguna"** (todas destildadas, desde 1.1.6), los 12 meses se grafican en **cero** (sin error); los límites de navegación de año **no** cambian (siguen basados en `earliestYear`, no en el filtro).
+- **Filtro que vacía el reporte:** si las categorías seleccionadas no tienen movimientos en el año, **o** si el estado es **"ninguna"** (todas destildadas), los 12 meses se grafican en **cero** (sin error); los límites de navegación de año **no** cambian (siguen basados en `earliestYear`, no en el filtro).
 - **Meses sin datos dentro del año:** los meses sin movimientos se grafican en **cero** (sin huecos ni omisiones). Aplica tanto a meses futuros del año en curso como a meses pasados; los meses futuros pueden tener datos proyectados por fijos/cuotas (RN-006).
 - **Error:** si falla la carga, se informa el error sin romper la pantalla anfitriona.
 
@@ -408,7 +408,7 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 
 **RF relacionados:** RF-CUR-002, RF-CUR-005, RF-CUR-006, RF-NAV-001
 
-> **Ruta:** `/configuracion`. **Link nuevo en el sidebar** (Fase 1.2.3), debajo de "Categorías" (orden: Dashboard → Vista del mes → Reportes → Categorías → Configuración).
+> **Ruta:** `/configuracion`. **Link en el sidebar**, debajo de "Categorías" (orden: Dashboard → Vista del mes → Reportes → Categorías → Configuración).
 
 ### Propósito
 
@@ -417,8 +417,8 @@ Pantalla de **ajustes de la cuenta** del usuario. Arranca con **un solo ajuste**
 ### Contenido
 
 - **Sidebar** con el link "Configuración" marcado como activo.
-- **Ajuste "Moneda por defecto"** (RF-CUR-002): selector entre las **4 monedas curadas (ARS / USD / EUR / BRL)** (1.2.4). Es la moneda en la que se expresan todos los totales (vista del mes, dashboard, reportes). Se lee/escribe vía el contrato `/settings` (ver `data-model.md`).
-- **Sin editor de la tabla de cotizaciones de referencia (1.2.4):** la tabla de referencia es **interna y no editable por UI** (RF-CUR-006), así que `/configuracion` **no** la muestra ni la edita.
+- **Ajuste "Moneda por defecto"** (RF-CUR-002): selector entre las **4 monedas curadas (ARS / USD / EUR / BRL)**. Es la moneda en la que se expresan todos los totales (vista del mes, dashboard, reportes). Se lee/escribe vía el contrato `/settings` (ver `data-model.md`).
+- **Sin editor de la tabla de cotizaciones de referencia:** la tabla de referencia es **interna y no editable por UI** (RF-CUR-006), así que `/configuracion` **no** la muestra ni la edita.
 - El layout y la presentación los define `docs/design.md`.
 
 ### Acciones disponibles

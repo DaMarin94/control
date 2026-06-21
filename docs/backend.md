@@ -10,7 +10,7 @@
 
 ### CORS
 
-`src/main.ts` habilita CORS al arrancar (`app.enableCors({ origin: CORS_ORIGIN, credentials: true })`). Sin esto, el browser bloquea toda request cross-origin del frontend con error de preflight (era el bug que se corrigió).
+`src/main.ts` habilita CORS al arrancar (`app.enableCors({ origin: CORS_ORIGIN, credentials: true })`). Sin esto, el browser bloquea toda request cross-origin del frontend con error de preflight.
 
 - **`CORS_ORIGIN` es configurable por env** (declarada en `src/config/env.schema.ts`): string, opcional, default `http://localhost:3000` (el frontend local). En staging/prod se setea con el dominio real del frontend.
 - **Acepta UN SOLO origin (string), no una lista.** Para soportar múltiples origins hay que ajustar el schema (`CORS_ORIGIN`) y el `enableCors` para que acepten array.
@@ -61,7 +61,7 @@ La fuente de verdad de tipos, campos y constraints es `backend/prisma/schema.pri
 | `Transaction` | Movimiento único (gasto o ingreso en un instante). Hard delete. |
 | `Recurring` | Movimiento fijo mensual (plantilla activa desde un mes). |
 | `InstallmentGroup` | Grupo de cuotas. `amountCents` es el monto **por cuota**, no el total; `totalInstallments` es la cantidad. |
-| `UserPreferences` | Preferencias del usuario. **1:1 con `User`** (`userId` único, `onDelete: Cascade`); contenido en un campo `Json` `data` (default `{}`). Blob extensible para sumar prefs sin migraciones (fase 1.1.0). |
+| `UserPreferences` | Preferencias del usuario. **1:1 con `User`** (`userId` único, `onDelete: Cascade`); contenido en un campo `Json` `data` (default `{}`). Blob extensible para sumar prefs sin migraciones. |
 
 **Enums:** `MovementType` (`EXPENSE` | `INCOME`) y `CategoryScope` (`BOTH` | `EXPENSE` | `INCOME`).
 
@@ -117,7 +117,7 @@ Devuelve la serie **anual agregada** del usuario para los reportes (RF-REP-001/0
 CRUD de movimientos únicos. El monto siempre en centavos (entero > 0). El instante se guarda en UTC más la zona original del registro (ver fechas/timezone en `docs/technical.md`).
 
 ### `POST /recurring` · `PATCH /recurring/:id` · `DELETE /recurring/:id` · `POST|PATCH /recurring/:id/calculated`
-Gestión de movimientos fijos y calculados. El PATCH y el DELETE reciben el mes actual (`currentMonth`) para resolver la inmutabilidad del pasado; el DELETE además usa `fromCurrentMonth` (query) para controlar desde cuándo deja de aparecer el fijo. Los **calculados** (Fase 1.1.7) usan endpoints propios `POST|PATCH /recurring/:id/calculated`. Contrato completo en la sección **Movimientos fijos (RecurringModule)** y **Movimientos calculados**. **No hay `GET /recurring/:id`.**
+Gestión de movimientos fijos y calculados. El PATCH y el DELETE reciben el mes actual (`currentMonth`) para resolver la inmutabilidad del pasado; el DELETE además usa `fromCurrentMonth` (query) para controlar desde cuándo deja de aparecer el fijo. Los **calculados** usan endpoints propios `POST|PATCH /recurring/:id/calculated`. Contrato completo en la sección **Movimientos fijos (RecurringModule)** y **Movimientos calculados**. **No hay `GET /recurring/:id`.**
 
 ### `POST /installments` · `PATCH /installments/:id` · `DELETE /installments/:id`
 Gestión de grupos de cuotas. **Solo `EXPENSE` en v1** (rechaza `INCOME` con `400`). El PATCH edita el grupo completo in-place (RF-MC-003). El DELETE es **hard delete del grupo entero** (todas las cuotas, pasadas y futuras). **No hay `GET /installments/:id`**: el front prefilea desde el `MovementItem` de `/movements`. Contrato completo en la sección **Movimientos en cuotas (InstallmentsModule)**.
@@ -140,16 +140,16 @@ CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca mo
 | `GET /transactions/:id` | — | `200` · `data: Transaction` | `404` |
 | `PATCH /transactions/:id` | parcial (cualquier campo de POST) | `200` · `data: Transaction` | `400` · `404` |
 | `DELETE /transactions/:id` | — | `204 No Content` | `404` |
-| `POST /transactions/:id/calculated` | calculado desde el único `:id` (1.1.8) | `201` · `data: Recurring` | `400` · `404` |
-| `PATCH /transactions/:id/calculated` | edita el calculado de único `:id` (1.1.8) | `200` · `data: Recurring` | `400` · `404` |
+| `POST /transactions/:id/calculated` | calculado desde el único `:id` | `201` · `data: Recurring` | `400` · `404` |
+| `PATCH /transactions/:id/calculated` | edita el calculado de único `:id` | `200` · `data: Recurring` | `400` · `404` |
 
 - **`POST /transactions`** — `amountCents` entero **en centavos** (`> 0`); `occurredAt` ISO 8601 en **UTC**; `timezone` IANA. `400` por validación de DTO o por categoría inválida (ver Validación de categoría abajo).
 - **`GET /transactions/:id`** — `404` si no existe o no es del usuario.
 - **`PATCH /transactions/:id`** — body parcial (cualquier campo del POST). **Reaplica todas las validaciones** (RN-002 monto, RN-010 scope). `404` si no existe o no es del usuario.
-- **`DELETE /transactions/:id`** — **hard delete** (permanente, RF-MU-003; la entidad no tiene `deletedAt`). **`204` sin cuerpo.** `404` si no existe o no es del usuario. Si el único tiene calculados derivados (`sourceMovementId`), la FK `onDelete: Cascade` los borra enteros (1.1.8 — ver §Movimientos calculados, Eliminación).
-- **`POST|PATCH /transactions/:id/calculated`** (1.1.8) — calculado de origen único; contrato en `docs/data-model.md`, §Contrato de movimientos calculados; mecánica en §Movimientos calculados (abajo).
+- **`DELETE /transactions/:id`** — **hard delete** (permanente, RF-MU-003; la entidad no tiene `deletedAt`). **`204` sin cuerpo.** `404` si no existe o no es del usuario. Si el único tiene calculados derivados (`sourceMovementId`), la FK `onDelete: Cascade` los borra enteros (ver §Movimientos calculados, Eliminación).
+- **`POST|PATCH /transactions/:id/calculated`** — calculado de origen único; contrato en `docs/data-model.md`, §Contrato de movimientos calculados; mecánica en §Movimientos calculados (abajo).
 
-> **`GET /transactions?month&timezone` fue eliminado (Fase 5).** El listado del mes ya **no** vive en `transactions`: lo reemplaza `GET /movements?month=YYYY-MM` (ver la sección **Movimientos del mes (MovementsModule)**), que unifica únicos + fijos + cuotas y agrega los totales. De `transactions` solo quedan los cuatro endpoints de la tabla de arriba (`POST`, `GET /:id`, `PATCH`, `DELETE`).
+> **El listado del mes no vive en `transactions`:** es `GET /movements?month=YYYY-MM` (ver **Movimientos del mes (MovementsModule)**), que unifica únicos + fijos + cuotas y agrega los totales. De `transactions` solo quedan los cuatro endpoints de la tabla de arriba (`POST`, `GET /:id`, `PATCH`, `DELETE`).
 
 ### Validación de categoría (RN-010) — siempre 400, nunca 409
 
@@ -161,7 +161,7 @@ Se valida en **create y update**. El movimiento exige una categoría **propia, a
 
 ## Movimientos del mes (MovementsModule)
 
-Endpoint unificado que devuelve **todos los movimientos del mes más los totales**, scopeado por `userId` del JWT. Reemplaza al eliminado `GET /transactions?month&timezone` (Fase 5). Su estructura está diseñada para incorporar fijos y cuotas en Fases 6/7 sin rehacer el contrato; hoy solo `unicos` trae datos.
+Endpoint unificado que devuelve **todos los movimientos del mes más los totales**, scopeado por `userId` del JWT. Devuelve las tres listas (`unicos`, `fijos`, `cuotas`) con sus datos.
 
 ### `GET /movements?month=YYYY-MM`
 
@@ -171,9 +171,7 @@ Endpoint unificado que devuelve **todos los movimientos del mes más los totales
 
 ### Bucketeo por mes (definitivo) — por la zona propia de cada registro
 
-El mes de un movimiento se determina con la **`timezone` guardada en cada registro**, no con una zona pasada por query. Se calcula en SQL con `date_trunc('month', "occurredAt" AT TIME ZONE timezone)` comparado contra el mes pedido, vía **`$queryRaw` parametrizado** (Prisma 7 no expresa `AT TIME ZONE` de forma idiomática; el raw va parametrizado por seguridad, sin interpolar strings).
-
-- Esto **reemplaza el criterio provisorio de Fase 4** (rango UTC calculado con la `timezone` del query param) y salda esa deuda técnica: dos movimientos cargados en zonas distintas caen cada uno en su mes correcto, sin depender de la zona del request.
+El mes de un movimiento se determina con la **`timezone` guardada en cada registro**, no con una zona pasada por query. Se calcula en SQL con `date_trunc('month', "occurredAt" AT TIME ZONE timezone)` comparado contra el mes pedido, vía **`$queryRaw` parametrizado** (Prisma 7 no expresa `AT TIME ZONE` de forma idiomática; el raw va parametrizado por seguridad, sin interpolar strings). Así dos movimientos cargados en zonas distintas caen cada uno en su mes correcto, sin depender de la zona del request.
 
 ### Categoría soft-deleted incluida (RF-CAT-004)
 
@@ -181,33 +179,33 @@ El join de movimientos y el cálculo de totales **no filtran por `Category.delet
 
 ### Totales
 
-- **Los totales suman movimientos, no categorías** (`amountCents` de cada movimiento del mes). `balanceCents = incomeCents - expenseCents`, sin piso (negativo si los gastos superan los ingresos). Desde Fase 7 agregan únicos + fijos + cuotas.
+- **Los totales suman movimientos, no categorías** (`amountCents` de cada movimiento del mes). `balanceCents = incomeCents - expenseCents`, sin piso (negativo si los gastos superan los ingresos). Agregan únicos + fijos + cuotas.
 - **Gotcha BigInt → Number:** `SUM(...)` en Postgres devuelve `BIGINT`, que llega como `BigInt` de JS desde `$queryRaw`. El repositorio lo castea con `Number(...)` antes de serializar; sin el cast, `JSON.stringify` falla sobre `BigInt`.
 
 ### Por qué un módulo propio
 
 `MovementsModule` es un módulo separado (no vive dentro de `transactions`) para poder **unificar `transactions` + `recurring` + `installments`** en una sola respuesta sin generar dependencia circular entre esos módulos. Consume cada origen a través de su `Service` (regla de propiedad de dominio: nunca toca repositorios ni tablas ajenas).
 
-### Integración de fijos en `/movements` (Fase 6)
+### Integración de fijos en `/movements`
 
 `MovementsModule` puebla la lista `fijos` y suma los fijos activos a los totales del mes llamando a `RecurringService` (regla de propiedad de dominio: nunca toca la tabla `recurrings`).
 
 - **`findFijosByMonth` usa Prisma ORM normal** (no `$queryRaw`, no `AT TIME ZONE`): los fijos operan **a nivel mes**, sin día/hora/zona, así que no hay bucketeo por timezone que resolver.
-- **Condición de actividad en un mes:** `startMonth <= month AND (deletedFrom IS NULL OR deletedFrom > month)` **más** la condición de frecuencia `isOnFrequency(startMonth, frequency, month)` (Fase 1.1.1, RN-016). El rango se compara **léxicamente sobre strings `YYYY-MM`** —válido porque ese formato ordena cronológicamente como texto (`"2026-02" < "2026-10"`)— y la frecuencia se aplica en JS (ver **Cálculo de aparición de fijos por mes**). Se corresponde con RF-MF-002 / RF-MF-006.
-- **Totales del mes ahora suman únicos + fijos activos** (antes solo únicos). El `MovementItem` de un fijo viene con `occurredAt` y `timezone` en `null`, y con `frequency` / `skipped` poblados (Fase 1.1.1; ver shape en `docs/data-model.md`). **Un fijo anulado para el mes (`skipped: true`, RF-MF-005) se incluye en la lista pero se excluye de los totales.**
+- **Condición de actividad en un mes:** `startMonth <= month AND (deletedFrom IS NULL OR deletedFrom > month)` **más** la condición de frecuencia `isOnFrequency(startMonth, frequency, month)` (RN-016). El rango se compara **léxicamente sobre strings `YYYY-MM`** —válido porque ese formato ordena cronológicamente como texto (`"2026-02" < "2026-10"`)— y la frecuencia se aplica en JS (ver **Cálculo de aparición de fijos por mes**). Se corresponde con RF-MF-002 / RF-MF-006.
+- **Los totales del mes suman únicos + fijos activos.** El `MovementItem` de un fijo viene con `occurredAt` y `timezone` en `null`, y con `frequency` / `skipped` poblados (ver shape en `docs/data-model.md`). **Un fijo anulado para el mes (`skipped: true`, RF-MF-005) se incluye en la lista pero se excluye de los totales.**
 
-### Integración de cuotas en `/movements` (Fase 7)
+### Integración de cuotas en `/movements`
 
 `MovementsModule` puebla la lista `cuotas` y suma las cuotas del mes a los totales llamando a `InstallmentsService` (regla de propiedad de dominio: nunca toca la tabla `installmentGroups`).
 
 - **Cálculo on-the-fly (RN-006):** no hay filas por instancia mensual. Se consultan los grupos con `startMonth <= month` (comparación léxica de strings `YYYY-MM`, como los fijos) y se filtra en JS por `month < addMonths(startMonth, totalInstallments)`. Una cuota cae en el mes si `startMonth <= month < addMonths(startMonth, totalInstallments)`.
 - **Número de cuota del mes (1-based):** `monthDiff(startMonth, month) + 1`. Va al campo `installment.number`; `installment.total = totalInstallments`. El `MovementItem` de una cuota trae `occurredAt`/`timezone` en `null` (sin día/hora) y `installment` poblado (en únicos/fijos `installment` es `null`).
 - **Helpers `addMonths` / `monthDiff`** exportados desde `movements.repository.ts` — reusarlos, no reimplementar aritmética de meses.
-- **Totales del mes ahora suman únicos + fijos + cuotas.**
+- **Los totales del mes suman únicos + fijos + cuotas.**
 
 ### Serie de reportes (`GET /movements/reports?year=YYYY&categories=`)
 
-Endpoint **agregado** para los reportes (RF-REP-001/002/005), scopeado por `userId` del JWT (RN-003). Devuelve totales por mes y el gasto mensual desglosado por categoría para un año — **no** devuelve movimientos individuales. **No modifica `GET /movements` mensual**: es un endpoint aparte, que reutiliza el mismo criterio de bucketeo (RN-015) sin introducir reglas de zona nuevas. **Renombre de `GET /movements/annual`** (RF-REP-005): la mecánica de agregación no cambió; se sumó el filtro de categorías.
+Endpoint **agregado** para los reportes (RF-REP-001/002/005), scopeado por `userId` del JWT (RN-003). Devuelve totales por mes y el gasto mensual desglosado por categoría para un año — **no** devuelve movimientos individuales. **No modifica `GET /movements` mensual**: es un endpoint aparte, que reutiliza el mismo criterio de bucketeo (RN-015) sin introducir reglas de zona nuevas.
 
 - **`year` (`YYYY`) obligatorio:** exactamente **4 dígitos**, rango **1900–2200**. Si falta, no tiene 4 dígitos o cae fuera de rango → `400`. `401` global por JWT inválido/ausente.
 - **`categories` (lista de `categoryId`s separados por comas) opcional:** **omitido = todas las categorías** (sin filtro). El front lo manda con la **coma literal** (`categories=id1,id2`).
@@ -218,7 +216,7 @@ Endpoint **agregado** para los reportes (RF-REP-001/002/005), scopeado por `user
 
 - **`months[*]` (12 meses).** Cada `incomeCents` / `expenseCents` suma **únicos + fijos activos + cuotas activas** con el mismo bucketeo que `GET /movements` mensual, sin regla de zona nueva:
   - **únicos** por `date_trunc('month', "occurredAt" AT TIME ZONE timezone)` (la zona propia del registro);
-  - **fijos** por `startMonth <= mes AND (deletedFrom IS NULL OR deletedFrom > mes)` **más** `isOnFrequency(startMonth, frequency, mes)` (Fase 1.1.1), **excluyendo los meses anulados** (`skippedMonths.has(mes)` → no suma; RF-MF-005);
+  - **fijos** por `startMonth <= mes AND (deletedFrom IS NULL OR deletedFrom > mes)` **más** `isOnFrequency(startMonth, frequency, mes)`, **excluyendo los meses anulados** (`skippedMonths.has(mes)` → no suma; RF-MF-005);
   - **cuotas** por `startMonth <= mes < addMonths(startMonth, totalInstallments)`.
 - **`categories[*]`.** El desglose por categoría **no filtra por `Category.deletedAt`** (incluye soft-deleted con gasto histórico, igual que el mensual). Orden por gasto anual total DESC, desempate por `categoryId` ASC.
 - **`earliestYear`.** Mínimo entre el año del mes local de cualquier único (`AT TIME ZONE`) y el año del `startMonth` de cualquier fijo o cuota; `null` si el usuario no tiene movimientos.
@@ -240,13 +238,13 @@ Gestión de movimientos fijos, **scopeada por `userId` del JWT**. El módulo exp
 | `POST /recurring` | `{ type, amountCents, categoryId, startMonth, frequency?, description? }` | `201` · `data: Recurring` | `400` |
 | `PATCH /recurring/:id` | `{ amountCents?, categoryId?, description?, currentMonth }` | `200` · `data: Recurring` | `400` · `404` |
 | `POST /recurring/:id/skip` | `{ month }` (`YYYY-MM`) | `200` · `data: { skipped, month }` | `400` · `404` |
-| `POST /recurring/:id/calculated` | calculado desde el fijo `:id` (1.1.7) | `201` · `data: Recurring` | `400` · `404` |
-| `PATCH /recurring/:id/calculated` | edita el calculado `:id` (1.1.7) | `200` · `data: Recurring` | `400` · `404` |
+| `POST /recurring/:id/calculated` | calculado desde el fijo `:id` | `201` · `data: Recurring` | `400` · `404` |
+| `PATCH /recurring/:id/calculated` | edita el calculado `:id` | `200` · `data: Recurring` | `400` · `404` |
 | `DELETE /recurring/:id` | query: `currentMonth`, `fromCurrentMonth` | `204 No Content` | `404` |
 
 - **`type`, `startMonth` y `frequency` no son editables** por PATCH: solo `amountCents`, `categoryId` y `description` (RF-MF-003). El `startMonth` del POST es el mes actual que envía el front.
-- **`frequency` (P2 — Fase 1.1.1):** opcional en el `POST`, default **`MONTHLY`** si se omite. Set cerrado: `MONTHLY | BIMONTHLY | QUARTERLY | BIANNUAL | ANNUAL` (`400` si el valor no es del enum). Es **inmutable** (como `type`): no se acepta en PATCH; en el split (abajo) la fila nueva R2 la **hereda del original**. La respuesta del `POST` incluye `frequency`. Detalle del cálculo "¿este fijo aparece en este mes?" en **Cálculo de aparición de fijos por mes** (abajo).
-- **`POST /recurring/:id/skip` — toggle de anulación (P1 — Fase 1.1.1):** anula / des-anula la aparición de un fijo en un mes puntual (RF-MF-005). Body `{ month: "YYYY-MM" }`. Es un **toggle**: si ya existe el skip `(fijo, mes)` lo borra (`data: { skipped: false, month }`); si no existe lo crea (`data: { skipped: true, month }`). `404` si el fijo no existe o no es del usuario; `400` si el `month` no cumple `YYYY-MM`. **No valida** que el mes sea una aparición real del fijo según su frecuencia (solo formato y ownership) — esa validación semántica es del frontend, que ya tiene el ítem del mes. Un mes anulado **se sigue listando** en `GET /movements` con `skipped: true` pero **no suma** a los totales ni a la serie anual.
+- **`frequency`:** opcional en el `POST`, default **`MONTHLY`** si se omite. Set cerrado: `MONTHLY | BIMONTHLY | QUARTERLY | BIANNUAL | ANNUAL` (`400` si el valor no es del enum). Es **inmutable** (como `type`): no se acepta en PATCH; en el split (abajo) la fila nueva R2 la **hereda del original**. La respuesta del `POST` incluye `frequency`. Detalle del cálculo "¿este fijo aparece en este mes?" en **Cálculo de aparición de fijos por mes** (abajo).
+- **`POST /recurring/:id/skip` — toggle de anulación:** anula / des-anula la aparición de un fijo en un mes puntual (RF-MF-005). Body `{ month: "YYYY-MM" }`. Es un **toggle**: si ya existe el skip `(fijo, mes)` lo borra (`data: { skipped: false, month }`); si no existe lo crea (`data: { skipped: true, month }`). `404` si el fijo no existe o no es del usuario; `400` si el `month` no cumple `YYYY-MM`. **No valida** que el mes sea una aparición real del fijo según su frecuencia (solo formato y ownership) — esa validación semántica es del frontend, que ya tiene el ítem del mes. Un mes anulado **se sigue listando** en `GET /movements` con `skipped: true` pero **no suma** a los totales ni a la serie anual.
 - **Validación de categoría:** idéntica a la de movimientos únicos — categoría propia, activa y con scope compatible (RN-010); inexistente / ajena / eliminada / scope incompatible son todas `400` (ver `validateCategory` abajo).
 
 ### Inmutabilidad del pasado vía "split al editar"
@@ -279,13 +277,13 @@ Un fijo aparece en `month` si: `startMonth <= month` **y** (`deletedFrom IS NULL
 ### Gotchas
 
 - **`fromCurrentMonth` llega como string** (`"true"` / `"false"`) en los query params; NestJS **no lo castea a boolean**. Hay que parsearlo explícitamente.
-- **Validación de categoría consolidada (Fase 7):** la lógica que en Fases 4/6 estaba duplicada entre `TransactionsService` y `RecurringService` se extrajo a **`CategoryValidatorService`** (módulo `categories`). Los tres módulos de movimientos lo inyectan. Ver sección **Movimientos en cuotas** abajo.
+- **Validación de categoría consolidada:** la lógica de validación de categoría vive en **`CategoryValidatorService`** (módulo `categories`). Los tres módulos de movimientos lo inyectan. Ver sección **Movimientos en cuotas** abajo.
 
-## Movimientos calculados (Fase 1.1.7 / 1.1.8)
+## Movimientos calculados
 
-Un **calculado es un fijo** cuyo `amountCents` y `type` **no se ingresan ni se persisten**: se **derivan al vuelo** en lectura del monto de su movimiento de origen vía fórmula. Vive en el mismo `RecurringModule`. Desde **1.1.8** el origen puede ser **fijo, único o cuota** (RF-MCALC-008): el enganche es por **una de tres FK mutuamente excluyentes** (ver §Origen y enganche por FK). Endpoints y shape en `docs/data-model.md`, §Contrato de movimientos calculados; reglas en RF-MCALC-001..010 / RN-017/018/019. Lo no obvio:
+Un **calculado es un fijo** cuyo `amountCents` y `type` **no se ingresan ni se persisten**: se **derivan al vuelo** en lectura del monto de su movimiento de origen vía fórmula. Vive en el mismo `RecurringModule`. El origen puede ser **fijo, único o cuota** (RF-MCALC-008): el enganche es por **una de tres FK mutuamente excluyentes** (ver §Origen y enganche por FK). Endpoints y shape en `docs/data-model.md`, §Contrato de movimientos calculados; reglas en RF-MCALC-001..010 / RN-017/018/019. Lo no obvio:
 
-### Origen y enganche por FK (Fase 1.1.8)
+### Origen y enganche por FK
 
 - El `Recurring` calculado engancha al origen por **una sola** de tres FK, según el tipo: **fijo** → `sourceChainId` (`chainId` del fijo); **único** → `sourceMovementId` (FK a `Transaction`, `onDelete: Cascade`); **cuota** → `sourceInstallmentGroupId` (FK a `InstallmentGroup`, `onDelete: Cascade`). **Exclusión mutua** (exactamente una no-null en un calculado; las tres null = fijo normal) **validada en el service**.
 - `startMonth` del calculado: lo deriva el backend del origen para único (mes del `Transaction`) y cuota (`grupo.startMonth`); para fijo viene en el body. **Único:** se acota la cadena a **un mes** con `deletedFrom = nextMonth`. **Cuota:** `deletedFrom = null`; el rango lo da on-the-fly `totalInstallments`.
@@ -300,7 +298,7 @@ Un **calculado es un fijo** cuyo `amountCents` y `type` **no se ingresan ni se p
 
 Análogo a RN-006 (fijos/cuotas no generan filas por mes). Cada calculado se inyecta en la lista de **su tipo de origen**:
 
-- **Calculado de fijo** → `findFijosByMonth` (y `getFijosTotalsByMonth`). **Calculado de único** → `findUnicosByMonth`. **Calculado de cuota** → la proyección de cuotas del mes. Cada uno busca los calculados por su FX (`sourceChainId` / `sourceMovementId` / `sourceInstallmentGroupId`) y los emite en esa lista con `origin` = tipo del origen (1.1.8).
+- **Calculado de fijo** → `findFijosByMonth` (y `getFijosTotalsByMonth`). **Calculado de único** → `findUnicosByMonth`. **Calculado de cuota** → la proyección de cuotas del mes. Cada uno busca los calculados por su FX (`sourceChainId` / `sourceMovementId` / `sourceInstallmentGroupId`) y los emite en esa lista con `origin` = tipo del origen.
 - La fila del calculado persiste **placeholders** (`amountCents = 0`, `type = EXPENSE`) que **NUNCA** se usan para mostrar.
 - Para cada calculado, `amountCents = applyFormula(montoOrigen, operator, operand, sign)` y `type` se **deriva del signo**: `> 0 → INCOME`, `≤ 0 → EXPENSE` (default `0 = EXPENSE`). Para **cuota**, `montoOrigen` = **monto por cuota** del grupo (no el total); para **único**, el monto del `Transaction`.
 - **Presencia gobernada SOLO por el origen.** Un calculado aparece en el mes **sii el origen aparece en ese mes**: fijo → fila activa en el mes (no aplicar `isOnFrequency` con su **propio** `startMonth` — desalinea con step > 1, fue causa de un bug; hereda frecuencia, actividad y **skip** del origen); único → solo el mes del único; cuota → cada mes del rango `startMonth ≤ mes < startMonth + totalInstallments` del grupo.
@@ -324,7 +322,7 @@ Cada calculado suma `|final|` al bucket de su **type derivado** (totales del mes
 
 - **`validateCategory` con `skipScopeCheck = true`** para calculados: como el `type` es derivado y varía mes a mes, no hay un type fijo contra el cual validar el scope; se acepta cualquier categoría compatible con `BOTH`.
 - **`PATCH /recurring/:id` y `PATCH /recurring/:id/calculated` se excluyen mutuamente:** el primero rechaza `400` si el `:id` es calculado; el segundo, `400` si no lo es. En el split del calculado, R2 hereda `chainId`, la FK de origen (`sourceChainId` / `sourceMovementId` / `sourceInstallmentGroupId`) y la fórmula del original.
-- **Exactamente una FK de origen no-null por calculado** (`sourceChainId` / `sourceMovementId` / `sourceInstallmentGroupId`); las tres null = fijo normal. La exclusión mutua se valida en el service (1.1.8).
+- **Exactamente una FK de origen no-null por calculado** (`sourceChainId` / `sourceMovementId` / `sourceInstallmentGroupId`); las tres null = fijo normal. La exclusión mutua se valida en el service.
 - **Nunca persistir el monto/tipo derivado.** Si se agrega lógica que escribe `amountCents`/`type` de un calculado, es un bug: esos campos son placeholders.
 
 ## Movimientos en cuotas (InstallmentsModule)
@@ -338,13 +336,13 @@ Gestión de grupos de cuotas, **scopeada por `userId` del JWT**. El módulo expo
 | `POST /installments` | `{ type, amountCents, totalInstallments, startMonth, categoryId, description? }` | `201` · `data: InstallmentGroup` | `400` |
 | `PATCH /installments/:id` | `{ type?, amountCents?, totalInstallments?, startMonth?, categoryId?, description? }` | `200` · `data: InstallmentGroup` | `400` · `404` |
 | `DELETE /installments/:id` | — | `204 No Content` | `404` |
-| `POST /installments/:id/calculated` | calculado desde el grupo `:id` (1.1.8) | `201` · `data: Recurring` | `400` · `404` |
-| `PATCH /installments/:id/calculated` | edita el calculado de cuota `:id` (1.1.8) | `200` · `data: Recurring` | `400` · `404` |
+| `POST /installments/:id/calculated` | calculado desde el grupo `:id` | `201` · `data: Recurring` | `400` · `404` |
+| `PATCH /installments/:id/calculated` | edita el calculado de cuota `:id` | `200` · `data: Recurring` | `400` · `404` |
 
 - **Solo `EXPENSE` en v1:** el endpoint **rechaza `INCOME` con `400`** (resuelve la contradicción RF-MC-001 vs "Fuera de alcance: Ingreso en cuotas"). `amountCents` es el monto **por cuota** (entero `> 0`, RN-002), no el total. `totalInstallments` es la cantidad (entero `> 0`). `startMonth` es `YYYY-MM`.
 - **`PATCH /installments/:id` — edita el grupo completo in-place (RF-MC-003).** Campos editables: monto por cuota, cantidad, mes de inicio, categoría, descripción. **El `type` no se edita.** **No hay split ni inmutabilidad del pasado** (a diferencia de los fijos): la edición aplica a todas las instancias del grupo. `404` si no existe o no es del usuario.
-- **`DELETE /installments/:id` — hard delete del grupo entero.** Borra **físicamente** todas las cuotas (pasadas y futuras): `InstallmentGroup` no tiene `deletedFrom` ni soft delete. **`204` sin cuerpo.** `404` si no existe o no es del usuario. Si el grupo tiene calculados derivados (`sourceInstallmentGroupId`), la FK `onDelete: Cascade` los borra enteros (1.1.8 — ver §Movimientos calculados, Eliminación).
-- **`POST|PATCH /installments/:id/calculated`** (1.1.8) — calculado de origen cuota (deriva del **monto por cuota**); contrato en `docs/data-model.md`, §Contrato de movimientos calculados; mecánica en §Movimientos calculados (abajo).
+- **`DELETE /installments/:id` — hard delete del grupo entero.** Borra **físicamente** todas las cuotas (pasadas y futuras): `InstallmentGroup` no tiene `deletedFrom` ni soft delete. **`204` sin cuerpo.** `404` si no existe o no es del usuario. Si el grupo tiene calculados derivados (`sourceInstallmentGroupId`), la FK `onDelete: Cascade` los borra enteros (ver §Movimientos calculados, Eliminación).
+- **`POST|PATCH /installments/:id/calculated`** — calculado de origen cuota (deriva del **monto por cuota**); contrato en `docs/data-model.md`, §Contrato de movimientos calculados; mecánica en §Movimientos calculados (abajo).
 - **Validación de categoría:** idéntica a únicos y fijos (propia, activa, scope compatible RN-010); inexistente / ajena / eliminada / scope incompatible son todas `400`, nunca `409`; categoría ajena no se distingue de inexistente. Se delega en `CategoryValidatorService` (ver abajo).
 
 ### `CategoryValidatorService` — validador de categoría consolidado
@@ -368,18 +366,18 @@ CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca ca
 | `DELETE /categories/:id` | — | `204 No Content` | `404` |
 
 - **`GET /categories`** — solo activas (`deletedAt` null), ordenadas por **nombre ascendente**, cada una con su `movementCount`.
-- **`POST /categories`** — `name` obligatorio y no vacío; `scope` opcional (default `BOTH`); **`color` opcional** (fase 1.1.2): debe pertenecer a la matriz de 70 (case-insensitive, se normaliza a mayúsculas). Si **no** llega `color`, el backend asigna el "menos usado" como red de seguridad (el front igualmente siempre lo envía). Dos casos de `409`:
+- **`POST /categories`** — `name` obligatorio y no vacío; `scope` opcional (default `BOTH`); **`color` opcional**: debe pertenecer a la matriz de 70 (case-insensitive, se normaliza a mayúsculas). Si **no** llega `color`, el backend asigna el "menos usado" como red de seguridad (el front igualmente siempre lo envía). Dos casos de `409`:
   - **Colisión con una categoría activa** (RN-008): `error.message` = `"Ya existe una categoría activa..."`, **sin** `error.data`. Es un bloqueo duro de duplicado.
   - **Colisión con una categoría eliminada / reactivable** (RF-CAT-002, A3): `error.data = { reactivable: true, category: { id, name, scope, color } }`. El front usa ese `id` para ofrecer reactivar. Ver `ReactivableConflictException` abajo.
   - `400`: nombre vacío o faltante, `scope` inválido, o `color` fuera de la matriz.
 - **`POST /categories/:id/reactivate`** — reactiva una categoría soft-deleted. Vuelve **exactamente como estaba** (mismo `id`, `name`, `scope`, `color`); lo que el usuario haya tipeado en el form de alta **se ignora**. `404` si no existe o no es del usuario; `409` si ya está activa.
-- **`PATCH /categories/:id`** — `name`, `scope` y/o **`color`** (fase 1.1.2: el color **es editable**; debe pertenecer a la matriz, case-insensitive, se almacena en mayúsculas — fuera de la matriz es `400`). `409` si el nuevo nombre colisiona con otra categoría activa (RN-014). `404` si no existe, no es del usuario, o está eliminada.
+- **`PATCH /categories/:id`** — `name`, `scope` y/o **`color`** (el color **es editable**; debe pertenecer a la matriz, case-insensitive, se almacena en mayúsculas — fuera de la matriz es `400`). `409` si el nuevo nombre colisiona con otra categoría activa (RN-014). `404` si no existe, no es del usuario, o está eliminada.
 - **`DELETE /categories/:id`** — soft delete (marca `deletedAt`). **`204` sin cuerpo.** **No es idempotente**: borrar una categoría **ya eliminada** devuelve `404` (no `204`). También `404` si no existe o no es del usuario.
 
 ### Pool de colores (RF-CAT-005)
 
 - **Única fuente:** `backend/src/categories/color-pool.ts`.
-- **`COLOR_MATRIX` — set elegible (70 colores, fase 1.1.2).** Matriz de 7 tonalidades × 10 hues (estilo Office). Es el conjunto de colores que el usuario puede elegir al crear/editar una categoría. La **fila T4** de la matriz es el pool de 10 base (ver `COLOR_POOL`).
+- **`COLOR_MATRIX` — set elegible (70 colores).** Matriz de 7 tonalidades × 10 hues (estilo Office). Es el conjunto de colores que el usuario puede elegir al crear/editar una categoría. La **fila T4** de la matriz es el pool de 10 base (ver `COLOR_POOL`).
 - **`COLOR_POOL` — pool de 10 (fila base T4), sin cambios.** Los 10 colores base:
   `#4F86C6`, `#E07B54`, `#6DBF67`, `#A98BD6`, `#E8C84A`, `#5BC4B8`, `#E06B8B`, `#8B9DBF`, `#C47D3E`, `#7DBF9E`.
   Los primeros 4 son los de las categorías por defecto. `AuthService` y `CategoriesService` importan del mismo módulo; no hay colores hardcodeados sueltos.
@@ -396,23 +394,23 @@ CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca ca
 
 ## Preferencias de usuario (PreferencesModule)
 
-Lectura y escritura del blob JSON de preferencias, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca preferencias de otro). Es el **cimiento de la fase 1.1.0**: no tiene UI de producto propia; lo consumen fases posteriores (1.1.4 secciones colapsadas/orden, 1.1.5 reportes, 1.1.6 filtro por categoría). El blob es **abierto/extensible** — las claves las definen las fases consumidoras, no este módulo. Endpoints, semántica de reemplazo completo (no merge) y modelo en `docs/data-model.md`, §Contrato de preferencias de usuario y entidad `UserPreferences`. Abajo, lo propio de la implementación backend.
+Lectura y escritura del blob JSON de preferencias, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca preferencias de otro). El blob es **abierto/extensible** — las claves las definen sus consumidores (secciones colapsadas/orden de `/mes`, reportes, filtro por categoría), no este módulo. Endpoints, semántica de reemplazo completo (no merge) y modelo en `docs/data-model.md`, §Contrato de preferencias de usuario y entidad `UserPreferences`. Abajo, lo propio de la implementación backend.
 
 ### Back-compat de usuarios sin fila (no se crea en lectura)
 
-La fila `UserPreferences` **no se crea al leer**. Tanto `GET /preferences` como el armado del `AuthResponse` en los flujos de login devuelven **`{}`** cuando el usuario no tiene fila (usuarios anteriores a la fase 1.1.0). La fila se materializa solo:
+La fila `UserPreferences` **no se crea al leer**. Tanto `GET /preferences` como el armado del `AuthResponse` en los flujos de login devuelven **`{}`** cuando el usuario no tiene fila. La fila se materializa solo:
 
 - en el **`PUT`** (upsert al mutar la primera preferencia), o
 - en el **alta de cuenta nueva** — `register` y `google` con usuario nuevo crean la fila junto con las categorías por defecto (no en el `google` de un usuario que ya existía).
 
-### `buildAuthResult` ahora es `async`
+### `buildAuthResult` es `async`
 
-El helper que arma el `AuthResponse` de los tres flujos de auth pasó a ser **`async`** porque ahora lee las preferencias del usuario. Relevante para quien lo **llame o lo mockee** (hay que `await`-earlo).
+El helper que arma el `AuthResponse` de los tres flujos de auth es **`async`** porque lee las preferencias del usuario. Relevante para quien lo **llame o lo mockee** (hay que `await`-earlo).
 
 ### Gotchas
 
 - **Prisma 7 + tipo `Json` (cast obligatorio).** El campo `Json` tiene tipado estricto en `create` / `update` / `upsert`: un `Record<string, unknown>` **no es asignable directo** al input de Prisma. Requiere un cast (`as any` con comentario explicativo). El comportamiento en runtime es correcto; el cast es solo para el type-checker.
-- **Tests e2e que levantan `AppModule` necesitan `userPreferences` en el mock de `PrismaService`.** Como `PreferencesModule` ahora vive en `AppModule` y `AuthService` lo usa, el mock de `PrismaService` de cualquier e2e que arranque `AppModule` debe exponer `userPreferences` con `findUnique`, `upsert` y `create` — análogo al gotcha de `installmentGroup`. Sin esto, los flujos de auth (que ahora leen preferencias) rompen en el setup del test.
+- **Tests e2e que levantan `AppModule` necesitan `userPreferences` en el mock de `PrismaService`.** Como `PreferencesModule` vive en `AppModule` y `AuthService` lo usa, el mock de `PrismaService` de cualquier e2e que arranque `AppModule` debe exponer `userPreferences` con `findUnique`, `upsert` y `create` — análogo al gotcha de `installmentGroup`. Sin esto, los flujos de auth (que leen preferencias) rompen en el setup del test.
 
 ## Autenticación
 
@@ -420,7 +418,7 @@ El `AuthModule` es el **emisor del JWT**: el backend es la autoridad de identida
 
 ### Endpoints
 
-Todas las respuestas usan el sobre `{ success, statusCode, data }`. El payload de éxito (`data`) de los tres endpoints es `{ accessToken, user, preferences }`, donde `user = { id, email, name|null, image|null }` y `preferences` es el **blob JSON de preferencias** del usuario (`{}` si no tiene fila; fase 1.1.0, ver sección Preferencias de usuario). El armado lo hace `buildAuthResult`, que ahora es **`async`** porque lee las preferencias.
+Todas las respuestas usan el sobre `{ success, statusCode, data }`. El payload de éxito (`data`) de los tres endpoints es `{ accessToken, user, preferences }`, donde `user = { id, email, name|null, image|null }` y `preferences` es el **blob JSON de preferencias** del usuario (`{}` si no tiene fila; ver sección Preferencias de usuario). El armado lo hace `buildAuthResult`, que es **`async`** porque lee las preferencias.
 
 | Endpoint | Body | Éxito | Errores |
 |----------|------|-------|---------|
@@ -458,7 +456,7 @@ Al crear una cuenta nueva (por cualquiera de los dos métodos), el backend gener
 | Gastos fijos | `#6DBF67` |
 | Servicios | `#A98BD6` |
 
-`AuthService` importa el pool central (`src/categories/color-pool.ts`) — ya no hay hex hardcodeados sueltos. Estos 4 colores dejaron de ser provisorios: son los primeros 4 del pool oficial (ver más abajo, **Pool de colores**). No se duplican si el usuario ya existía.
+`AuthService` importa el pool central (`src/categories/color-pool.ts`); no hay hex hardcodeados sueltos. Estos 4 colores son los primeros 4 del pool oficial (ver más abajo, **Pool de colores**). No se duplican si el usuario ya existía.
 
 El alta nueva también crea la fila de **preferencias de usuario** (`UserPreferences`, blob `{}`) junto con las categorías por defecto — `register` y `google` con usuario nuevo (no el `google` de un usuario existente). Ver sección **Preferencias de usuario**.
 

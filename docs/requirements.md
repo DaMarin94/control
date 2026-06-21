@@ -1,21 +1,11 @@
-# Requerimientos Funcionales — Control v1.0
+# Requerimientos Funcionales — Control
 
-> Documento de referencia para el desarrollo de Control v1.0.
-> Para la visión del producto ver `product.md`. Para el modelo de datos ver `data-model.md`. Para el estado de implementación ver `features.md`.
+> Requerimientos funcionales de Control: qué hace el sistema, bajo qué condiciones, y los criterios verificables de cada requerimiento. Para el modelo de datos ver `data-model.md`; para el estado de implementación ver `features.md`; para las pantallas, `screens.md`.
+> Aplica a la plataforma **web**; mobile está fuera de scope.
 
 ---
 
-## 1. Introducción
-
-### 1.1 Propósito
-
-Este documento describe los requerimientos funcionales de **Control v1.0**, una aplicación web personal para el registro y seguimiento de gastos e ingresos. Define qué debe hacer el sistema, bajo qué condiciones, y los criterios verificables para considerar cada requerimiento cumplido.
-
-### 1.2 Alcance
-
-Cubre exclusivamente la plataforma **web** de Control en su versión 1.0. La plataforma mobile está fuera de scope.
-
-### 1.3 Definiciones y abreviaturas
+## 1. Definiciones
 
 | Término | Definición |
 |---|---|
@@ -32,58 +22,26 @@ Cubre exclusivamente la plataforma **web** de Control en su versión 1.0. La pla
 | RF | Requerimiento Funcional |
 | RNF | Requerimiento No Funcional |
 
-### 1.4 Versiones del documento
-
-| Versión | Fecha | Descripción |
-|---|---|---|
-| 1.0 | 2026-06-03 | Versión inicial |
-| 1.1.1 | 2026-06-16 | Fijos extendidos: anulación por mes puntual (RF-MF-005) y periodicidad (RF-MF-006); nueva RN-016. Fase 1.1.1. |
-| 1.1.2 | 2026-06-16 | Color de categoría editable: el usuario elige/edita el color desde una matriz de 70 colores (reabre RF-CAT-005, RN-013; ajusta RF-CAT-002/003). Fase 1.1.2. |
-| 1.1.4 | 2026-06-16 | Vista del mes: secciones colapsables + reordenables, persistidas por usuario; las 3 secciones siempre visibles con empty inline (nuevo RF-VM-005; ajusta RF-VM-001). Fase 1.1.4. |
-| 1.1.5 | 2026-06-16 | Reportes configurables: módulo "Gráfico anual" → "Reportes" (RF-GRA-001/002/003 → RF-REP-001..005); pantalla `/reportes` configurable por cards; widget de reporte autónomo con año y filtro de categorías embebidos; reapertura de la navegación del dashboard (ajusta RF-DASH-001/002, RF-NAV-001, RN-015). Fase 1.1.5. |
-| 1.1.6 | 2026-06-17 | Filtro por categoría en la Vista del mes: control por pantalla, persistido por usuario, default todas, tres estados (nuevo RF-VM-006). Unifica el estado "ninguna" del filtro: destildar todas = lista/serie en cero, en `/mes` y en `/reportes` (ajusta RF-REP-002/005). Fase 1.1.6. |
-| 1.1.7 | 2026-06-17 | Movimientos calculados: fijo cuyo monto se deriva en vivo de otro fijo de origen vía fórmula (submódulo 3.4.b, RF-MCALC-001..007). Nuevas RN-017 (fórmula + redondeo), RN-018 (signo; monto ≤ 0 como excepción a RN-001) y RN-019 (imputación con signo a totales/reportes). Fase 1.1.7. |
-| 1.1.8 | 2026-06-19 | Calculados con origen único o cuota: el origen de un calculado puede ser un movimiento único o un grupo de cuotas, además de un fijo (RF-MCALC-008/009/010; ajusta RF-MCALC-001/004/005/006). Cadencia espejo del origen; borrado total (no por split) para calculados de único/cuota. Fase 1.1.8. |
-| 1.2.1 | 2026-06-19 | Filtros por listado en la Vista del mes (reabre RF-VM-006): el filtro pasa de **por pantalla** (1.1.6) a **por listado** —cada sección (Únicos/Fijos/Cuotas) tiene su filtro de **tipo** (Gasto/Ingreso/Ambos, default Ambos) y de **categoría** (default todas)—; los totales del mes reflejan lo visible tras filtrar las 3 secciones; controles ocultos en modo orden. El filtrado pasa a ser 100% en frontend (`/mes` ya no filtra el endpoint). Deprecada `monthCategoryFilter`; nueva preferencia `monthListFilters`. Fase 1.2.1. |
-| 1.2.2 | 2026-06-19 | Toggle "Total / Por categoría" en la card de reporte Ingresos y gastos (nuevo RF-REP-006): la card `income-expense` gana un modo "Por categoría" que descompone **solo gastos** por categoría apilada (reutiliza el array `categories`, sin cambio de contrato). Persistido por card en `/reportes` (campo `categoryBreakdown`), efímero en el dashboard. Fase 1.2.2. |
-| 1.2.3 | 2026-06-19 | Multi-moneda explícita: moneda + cotización por movimiento, moneda default del usuario, conversión de display a la default vigente; pantalla `/configuracion` (módulo 3.10, RF-CUR-001..005; reabre RN-009). Fase 1.2.3. |
-| 1.2.4 | 2026-06-20 | Monedas configurables + tabla de cotizaciones de referencia (reabre "set fijo ARS/USD" de 1.2.3): el set pasa a **4 monedas curadas ARS/USD/EUR/BRL** (sin alta arbitraria); tabla de cotizaciones de referencia **global, interna, no editable por UI** que pre-carga la cotización del movimiento (valor por copia, editable); cotización manual por movimiento preservada (Opción A); nuevo RF-CUR-006; ajusta RF-CUR-001/002/003. Fase 1.2.4. |
-
 ---
 
 ## 2. Descripción general del sistema
 
-### 2.1 Perspectiva del sistema
-
 Control es una aplicación web de uso personal para registrar y visualizar movimientos de dinero organizados por mes. No es un sistema contable: su foco es la **previsibilidad** — ver en qué se va el dinero y detectar patrones mes a mes.
 
-El sistema se compone de:
+**Actor único:** el usuario autenticado (por Google o por email + contraseña). No hay roles, administradores ni invitados; cada usuario accede solo a sus propios datos.
 
-- **Frontend:** Next.js 15 + Tailwind CSS v4 (puerto 3000)
-- **Backend:** NestJS + TypeScript + PostgreSQL + Prisma (puerto 3001)
-- **Auth:** Auth.js (NextAuth v5) con dos métodos que coexisten: Google OAuth y email + contraseña
+**Supuestos:**
 
-### 2.2 Usuarios del sistema
-
-| Actor | Descripción |
-|---|---|
-| Usuario autenticado | Persona que inició sesión, sea con su cuenta de Google o con email + contraseña. Es el único actor del sistema en v1. |
-
-No hay roles, administradores ni usuarios invitados. Un usuario accede exclusivamente a sus propios datos.
-
-### 2.3 Supuestos y dependencias
-
-- El usuario dispone de una cuenta de Google activa, o bien se registra con email + contraseña.
-- La app maneja moneda **explícita** por movimiento sobre un **set curado de 4 monedas (ARS / USD / EUR / BRL)**, con totales en la moneda default del usuario (Fase 1.2.3, ampliado en 1.2.4; módulo 3.10; reabre el supuesto original de "moneda implícita").
+- El usuario dispone de una cuenta de Google, o se registra con email + contraseña.
+- Cada movimiento lleva moneda **explícita** sobre un **set curado de 4 monedas (ARS / USD / EUR / BRL)**, con totales en la moneda default del usuario (módulo 3.10).
 - El usuario registra sus movimientos manualmente — no hay integración bancaria.
-- Los movimientos fijos y cuotas se calculan on-the-fly al consultar un mes; no se generan filas individuales por instancia mensual.
+- Los movimientos fijos y cuotas se calculan on-the-fly al consultar un mes; no se generan filas por instancia mensual.
 
-### 2.4 Restricciones de diseño
+**Restricciones de diseño:**
 
-- Los montos se almacenan en **centavos** (entero sin decimales) para evitar errores de punto flotante.
+- Los montos se almacenan en **centavos** (entero sin decimales) para evitar errores de punto flotante (la cotización es la excepción — ver `data-model.md`).
 - Todos los recursos están **aislados por usuario**: el backend filtra siempre por el `userId` del JWT activo.
-- El instante de un movimiento único (`occurredAt`) es el momento elegido por el usuario (con default "ahora"), no el timestamp de creación del registro (`createdAt`).
-- No se implementa `currency` en v1, pero el modelo lo permite agregar sin romper datos existentes.
+- El instante de un movimiento único (`occurredAt`) es el momento elegido por el usuario (default "ahora"), no el timestamp de creación (`createdAt`).
 
 ---
 
@@ -273,7 +231,7 @@ La recuperación de contraseña ("olvidé mi contraseña"), la verificación de 
 **Criterios de aceptación:**
 - [ ] Al iniciar sesión, el sistema redirige automáticamente al dashboard.
 - [ ] El **resumen financiero del dashboard** (tarjetas Gastos/Ingresos + balance, RF-DASH-002) muestra **siempre el mes actual** — no tiene navegación entre meses.
-- [ ] La **única navegación de período del dashboard** vive en el **widget de reporte Ingresos vs. Gastos** que monta (RF-REP-002): ese widget navega **año** de forma independiente y activa, sin afectar el resumen mensual, que sigue fijo en el mes en curso. (Reabre la decisión de v1.0 "el dashboard no navega".)
+- [ ] La **única navegación de período del dashboard** vive en el **widget de reporte Ingresos vs. Gastos** que monta (RF-REP-002): ese widget navega **año** de forma independiente y activa, sin afectar el resumen mensual, que sigue fijo en el mes en curso.
 - [ ] El dashboard contiene acceso directo para cargar un nuevo movimiento (RF-DASH-003).
 - [ ] El dashboard incluye acceso a la vista del mes completa (RF-DASH-005).
 
@@ -676,9 +634,9 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 
 ---
 
-### 3.4.b Submódulo: Movimientos calculados (Fase 1.1.7)
+### 3.4.b Submódulo: Movimientos calculados
 
-Un **movimiento calculado** es un movimiento **fijo** cuyo monto **no se ingresa**: se **deriva** del monto de un **movimiento de origen** mediante una **fórmula**, **en vivo**. Tiene categoría y descripción **propias**; su **tipo** (Gasto/Ingreso) **no se elige**: se **deriva** del signo del monto resultante (RF-MCALC-003). Lo único que toma del origen es el **monto**. El **origen puede ser un fijo, un único o un grupo de cuotas** (RF-MCALC-008); el calculado **espeja la cadencia** del origen (Fase 1.1.8). Es un fijo a todos los demás efectos (se edita y elimina con la misma mecánica de split del calculado de fijo, salvo el borrado total del calculado de único/cuota — RF-MCALC-006). No es un tipo nuevo en el formulario de carga: su **único** punto de creación es la acción "crear movimiento desde este" sobre un fijo, único o cuota en `/mes` (RF-MCALC-001).
+Un **movimiento calculado** es un movimiento **fijo** cuyo monto **no se ingresa**: se **deriva** del monto de un **movimiento de origen** mediante una **fórmula**, **en vivo**. Tiene categoría y descripción **propias**; su **tipo** (Gasto/Ingreso) **no se elige**: se **deriva** del signo del monto resultante (RF-MCALC-003). Lo único que toma del origen es el **monto**. El **origen puede ser un fijo, un único o un grupo de cuotas** (RF-MCALC-008); el calculado **espeja la cadencia** del origen. Es un fijo a todos los demás efectos (se edita y elimina con la misma mecánica de split del calculado de fijo, salvo el borrado total del calculado de único/cuota — RF-MCALC-006). No es un tipo nuevo en el formulario de carga: su **único** punto de creación es la acción "crear movimiento desde este" sobre un fijo, único o cuota en `/mes` (RF-MCALC-001).
 
 ---
 
@@ -703,7 +661,7 @@ Un **movimiento calculado** es un movimiento **fijo** cuyo monto **no se ingresa
 - *A1 — El usuario cancela:* no se crea nada.
 
 **Criterios de aceptación:**
-- [ ] La acción **"crear movimiento desde este"** está disponible en los ítems **fijo, único y cuota** de `/mes` (Fase 1.1.8; hasta 1.1.7 era solo fijos).
+- [ ] La acción **"crear movimiento desde este"** está disponible en los ítems **fijo, único y cuota** de `/mes`.
 - [ ] El origen es un **fijo, un único o un grupo de cuotas**. Un movimiento **calculado no puede ser origen** de otro calculado (sin encadenamiento): la acción **no** se ofrece sobre un ítem que ya es calculado.
 - [ ] Un mismo origen puede tener **varios** movimientos calculados derivados.
 - [ ] El calculado se crea como un **fijo** (es a la vez fijo y calculado): aparece en `/mes` con la misma mecánica de listado de los fijos.
@@ -828,11 +786,11 @@ Un **movimiento calculado** es un movimiento **fijo** cuyo monto **no se ingresa
 
 ---
 
-#### RF-MCALC-008 — Origen único o cuota; cadencia espejo del origen (Fase 1.1.8)
+#### RF-MCALC-008 — Origen único o cuota; cadencia espejo del origen
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El **origen** de un calculado puede ser un **fijo**, un **único** o un **grupo de cuotas** (hasta 1.1.7 era solo fijo). El calculado **espeja la cadencia del origen**: aparece en los mismos meses que el origen, derivando del monto del origen en cada uno. La derivación es **en vivo** para los tres tipos (RF-MCALC-004): editar el monto del origen recalcula el calculado en la próxima lectura, sin persistir el monto. |
+| **Descripción** | El **origen** de un calculado puede ser un **fijo**, un **único** o un **grupo de cuotas**. El calculado **espeja la cadencia del origen**: aparece en los mismos meses que el origen, derivando del monto del origen en cada uno. La derivación es **en vivo** para los tres tipos (RF-MCALC-004): editar el monto del origen recalcula el calculado en la próxima lectura, sin persistir el monto. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | Existe un movimiento fijo, único o de cuotas, propio del usuario, que no es a su vez un calculado. |
@@ -852,7 +810,7 @@ Un **movimiento calculado** es un movimiento **fijo** cuyo monto **no se ingresa
 
 ---
 
-#### RF-MCALC-009 — Borrado total del calculado de único o cuota (Fase 1.1.8)
+#### RF-MCALC-009 — Borrado total del calculado de único o cuota
 
 | Campo | Detalle |
 |---|---|
@@ -864,11 +822,11 @@ Un **movimiento calculado** es un movimiento **fijo** cuyo monto **no se ingresa
 **Criterios de aceptación:**
 - [ ] Borrar el **propio calculado** de un único/cuota: confirmación directa, borra el calculado **entero** (todas sus apariciones). No se ofrece elegir mes.
 - [ ] Borrar el **origen** único/cuota: cascada **total** a su(s) calculado(s) (los borra enteros).
-- [ ] El calculado de **fijo** conserva su borrado por **boundary** sobre la cadena (RF-MCALC-006) — sin cambios.
+- [ ] El calculado de **fijo** conserva su borrado por **boundary** sobre la cadena (RF-MCALC-006).
 
 ---
 
-#### RF-MCALC-010 — Calculados de único y cuota en reportes (Fase 1.1.8)
+#### RF-MCALC-010 — Calculados de único y cuota en reportes
 
 | Campo | Detalle |
 |---|---|
@@ -991,7 +949,7 @@ Una compra o cobro dividido en N pagos mensuales iguales. El usuario ingresa el 
 
 ### 3.6 Módulo: Categorías
 
-Las categorías clasifican los movimientos. Son personalizables por usuario y tienen un scope que define a qué tipo de movimiento aplican, y un color que el usuario elige y edita desde una matriz de colores predefinidos (v1.1, fase 1.1.2).
+Las categorías clasifican los movimientos. Son personalizables por usuario y tienen un scope que define a qué tipo de movimiento aplican, y un color que el usuario elige y edita desde una matriz de colores predefinidos.
 
 ---
 
@@ -1068,7 +1026,7 @@ Las categorías clasifican los movimientos. Son personalizables por usuario y ti
 | **Precondiciones** | La categoría existe y pertenece al usuario autenticado. |
 
 **Criterios de aceptación:**
-- [ ] El nombre, el scope y el **color** son editables (color: ver RF-CAT-005; editable desde v1.1, fase 1.1.2).
+- [ ] El nombre, el scope y el **color** son editables (color: ver RF-CAT-005).
 - [ ] No puede quedar con el mismo nombre que otra categoría activa del mismo usuario.
 - [ ] Los movimientos ya cargados con esa categoría reflejan automáticamente el nuevo nombre.
 
@@ -1107,8 +1065,6 @@ Las categorías clasifican los movimientos. Son personalizables por usuario y ti
 ---
 
 #### RF-CAT-005 — Color de categoría
-
-> **REABIERTO en v1.1 (Fase 1.1.2, 2026-06-16).** En v1.0 este RF definía el color como **asignado automáticamente y NO editable**. v1.1 lo reabre: el usuario **elige y edita** el color desde una matriz de colores. Lo que sigue es la definición vigente; el criterio v1.0 (no editable) queda derogado.
 
 | Campo | Detalle |
 |---|---|
@@ -1167,7 +1123,7 @@ La vista del mes muestra todos los movimientos del mes seleccionado (únicos, fi
 - [ ] Se listan las cuotas donde `startMonth <= mesActivo < startMonth + totalInstallments meses`.
 - [ ] Cada ítem muestra: tipo (gasto/ingreso), monto, categoría, descripción (si la tiene) y su origen (único / fijo / cuota X/N).
 - [ ] La lista está agrupada por tipo en tres secciones separadas y rotuladas, **Únicos**, **Fijos**, **Cuotas** (orden default; reordenable por el usuario, RF-VM-005). Dentro de cada sección, los movimientos se ordenan por **monto descendente** (`amountCents` DESC: el monto más alto primero, por magnitud, sin distinguir gasto de ingreso). Ante montos iguales, el desempate estable es por sección: Únicos por instante (fecha y hora) descendente; Fijos por fecha de creación descendente; Cuotas por identificador ascendente. El reordenamiento aplica **solo a las secciones entre sí**, nunca a los ítems dentro de una sección (RF-VM-005).
-- [ ] Las **tres secciones se muestran siempre**, aunque estén vacías (cambio respecto de v1.0). Una sección sin movimientos muestra su cabecera completa (rótulo, contador en 0, subtotal en $0) y un mensaje de estado vacío inline propio ("Sin movimientos únicos" / "Sin fijos" / "Sin cuotas").
+- [ ] Las **tres secciones se muestran siempre**, aunque estén vacías. Una sección sin movimientos muestra su cabecera completa (rótulo, contador en 0, subtotal en $0) y un mensaje de estado vacío inline propio ("Sin movimientos únicos" / "Sin fijos" / "Sin cuotas").
 - [ ] Si no hay movimientos en el mes, no se muestra un mensaje de estado vacío global: las tres secciones aparecen vacías con su empty inline propio y los totales del mes en cero, sin error.
 
 ---
@@ -1245,14 +1201,12 @@ La vista del mes muestra todos los movimientos del mes seleccionado (únicos, fi
 - [ ] Cada sección expande/colapsa de forma individual; la cabecera completa de la sección es el control de disclosure.
 - [ ] El usuario puede reordenar **solo las secciones entre sí** mediante drag, dentro de un **modo orden** explícito que se activa/desactiva con un botón del header ("Ordenar secciones" / "Listo").
 - [ ] Los ítems **dentro** de cada sección NO se reordenan: siguen el orden por monto descendente de RF-VM-001.
-- [ ] El estado colapsado/expandido de cada sección y el orden de las secciones se **persisten por usuario** vía las preferencias (1.1.0); sobreviven a la navegación y al cierre de sesión. Shape de la clave de preferencias en `docs/data-model.md` (`monthSections`).
+- [ ] El estado colapsado/expandido de cada sección y el orden de las secciones se **persisten por usuario** vía las preferencias; sobreviven a la navegación y al cierre de sesión. Shape de la clave de preferencias en `docs/data-model.md` (`monthSections`).
 - [ ] En modo orden, el botón "+ Nuevo movimiento" se deshabilita y el colapsar/expandir queda suspendido (la cabecera arrastra en lugar de colapsar). No hay acción de "cancelar": el orden se aplica en vivo.
 
 ---
 
 #### RF-VM-006 — Filtros por listado de la vista del mes
-
-> **Reabierto en 1.2.1 (de por-pantalla a por-listado).** En 1.1.6 el filtro era **uno por pantalla** (un solo control de categoría que restringía toda la vista, persistido en `monthCategoryFilter`, con el **backend** filtrando `GET /movements?categories=`). En 1.2.1 pasa a ser **por listado** —cada sección tiene sus propios controles de tipo y categoría— y el **filtrado se mueve al frontend** (`/mes` trae todo el mes en una sola llamada y filtra cada lista en cliente; el endpoint ya no se filtra desde `/mes`). La preferencia pasa a `monthListFilters`; `monthCategoryFilter` queda **deprecada** (ver `docs/data-model.md`).
 
 | Campo | Detalle |
 |---|---|
@@ -1276,13 +1230,13 @@ La vista del mes muestra todos los movimientos del mes seleccionado (únicos, fi
 - [ ] Los **totales del mes** (RF-VM-002) son la **suma de lo visible** tras aplicar los filtros de las tres secciones.
 - [ ] El estado de categoría **"ninguna"** (todas destildadas) deja esa sección **vacía** y sin aporte a los totales.
 - [ ] Los controles de filtro **no se muestran en modo orden** (RF-VM-005).
-- [ ] La selección **se mantiene al navegar entre meses** (es por pantalla, no por mes) y se **persiste por usuario** vía las preferencias (1.1.0), clave `monthListFilters` (shape en `docs/data-model.md`); sobrevive a la navegación y al cierre de sesión.
+- [ ] La selección **se mantiene al navegar entre meses** (es por pantalla, no por mes) y se **persiste por usuario** vía las preferencias, clave `monthListFilters` (shape en `docs/data-model.md`); sobrevive a la navegación y al cierre de sesión.
 - [ ] Con categoría "todas" (sin filtro) se siguen mostrando movimientos cuya categoría fue eliminada (soft delete, RF-CAT-004 / RF-VM-002); con un subconjunto, solo entran las categorías seleccionadas.
 - [ ] El filtro **no es global:** no afecta a otras pantallas (dashboard ni reportes tienen su propio estado de filtro, independiente de este).
-- [ ] **Arranque fresco:** cada lista arranca en su default (Ambos + todas). La preferencia anterior `monthCategoryFilter` (1.1.6) **no se migra** ni se lee desde `/mes`.
+- [ ] **Arranque fresco:** cada lista arranca en su default (Ambos + todas). La preferencia `monthCategoryFilter` **no se migra** ni se lee desde `/mes`.
 
 **Notas:**
-- El **filtrado es 100% en el frontend** (1.2.1): `/mes` trae todo el mes en una sola llamada y filtra cada lista en cliente; los totales del mes se recalculan en cliente sobre lo visible. El query param `categories` de `GET /movements` **sigue existiendo pero ya no se usa desde `/mes`** (lo sigue usando `/reportes`); ver `docs/data-model.md`, §Filtro de categorías.
+- El **filtrado es 100% en el frontend**: `/mes` trae todo el mes en una sola llamada y filtra cada lista en cliente; los totales del mes se recalculan en cliente sobre lo visible. El query param `categories` de `GET /movements` **no se usa desde `/mes`** (lo usa `/reportes`); ver `docs/data-model.md`, §Filtro de categorías.
 
 ---
 
@@ -1309,7 +1263,7 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
   - **Vista del mes** — lleva a la vista del mes (RF-VM-001), abierta en el mes actual.
   - **Reportes** — lleva a la pantalla de reportes configurable (`/reportes`, RF-REP-003).
   - **Categorías** — lleva a la gestión de categorías (módulo 3.6).
-  - **Configuración** — lleva a la pantalla de configuración (`/configuracion`, RF-CUR-002), debajo de "Categorías" (link agregado en la Fase 1.2.3).
+  - **Configuración** — lleva a la pantalla de configuración (`/configuracion`, RF-CUR-002), debajo de "Categorías".
 - **Botón "Nuevo movimiento"** (acción primaria): abre el formulario de carga de movimiento (RF-CM-001).
 - **Menú de usuario** (parte inferior): representado por el avatar del usuario. Al activarlo, despliega la opción **"Cerrar sesión"** (RF-AUTH-004).
 
@@ -1334,9 +1288,7 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 
 El módulo de Reportes visualiza los movimientos del usuario a lo largo de un año, mes a mes. El eje X son los 12 meses del año; el eje Y es el monto. Ofrece **dos tipos de reporte** —ingresos vs. gastos por mes, y gastos por categoría apilados— implementados como un **widget de reporte autónomo, configurable por props**, que lleva embebidos su propia navegación de año y su propio filtro de categorías. La pantalla `/reportes` es **configurable**: el usuario arma su vista agregando y quitando **cards de reporte**; el dashboard monta una sola instancia del widget (ver RF-DASH-001/002).
 
-> **Nota de renombre (fase 1.1.5):** este módulo era "Gráfico anual" (RF-GRA-001/002/003) en v1.0. Se renombró a "Reportes" (RF-REP-001..005) y la pantalla dedicada `/anual` pasó a ser la pantalla configurable `/reportes`. La **mecánica de datos no cambió** (serie de 12 meses de un año, Forma 1 = ingresos vs. gastos, Forma 2 = gastos por categoría apilado). Las referencias a RF-GRA / `/anual` son registro histórico de v1.0; el estado vigente es el de esta sección.
-
-> **Alcance v1.1:** solo los dos tipos de reporte descritos en RF-REP-001 (ingresos/gastos y apilado por categoría de gastos). Otros tipos de reporte/gráfico (torta, barras, línea) quedan fuera de alcance (ver sección 6) y se evalúan como mini-fase futura.
+> **Alcance:** solo los dos tipos de reporte descritos en RF-REP-001 (ingresos/gastos y apilado por categoría de gastos). Otros tipos de reporte/gráfico (torta, barras, línea) quedan fuera de alcance (ver sección 6).
 
 ---
 
@@ -1344,7 +1296,7 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El módulo ofrece **dos tipos de reporte** sobre los 12 meses de un año (eje X: los meses del año; eje Y: monto): (Forma 1) ingresos vs. gastos por mes, y (Forma 2) gastos del mes descompuestos por categoría. Son los únicos tipos de v1.1; sumar tipos nuevos es una mini-fase futura, fuera de alcance. |
+| **Descripción** | El módulo ofrece **dos tipos de reporte** sobre los 12 meses de un año (eje X: los meses del año; eje Y: monto): (Forma 1) ingresos vs. gastos por mes, y (Forma 2) gastos del mes descompuestos por categoría. Son los únicos tipos disponibles; sumar tipos nuevos queda fuera de alcance. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | El usuario tiene sesión activa. |
@@ -1355,13 +1307,13 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 - **Forma 2 — Gastos por categoría (apilado)** (`by-category`). Toma el **total de gastos** de cada mes y lo descompone en bandas apiladas, una por **categoría**, cada una con el **color propio de su categoría** (RF-CAT-005 / RN-013). Las bandas de un mes se apilan y suman exactamente el total de gastos de ese mes (el mismo valor que la serie "gastos" de la Forma 1). **La Forma 2 es solo de gastos** (`EXPENSE`): los ingresos no se descomponen por categoría en este reporte; viven únicamente en la Forma 1.
 
 **Criterios de aceptación:**
-- [ ] El módulo ofrece exactamente **dos tipos de reporte**: `income-expense` (Forma 1) y `by-category` (Forma 2). No hay tipos adicionales en v1.1.
+- [ ] El módulo ofrece exactamente **dos tipos de reporte**: `income-expense` (Forma 1) y `by-category` (Forma 2). No hay tipos adicionales.
 - [ ] El eje X representa los 12 meses del año configurado; el eje Y representa el monto.
 - [ ] Los **12 meses están siempre presentes** en el eje X; un mes sin datos se grafica en **cero** (no se omite ni deja hueco). Esto incluye los meses futuros del año en curso, que también se muestran en cero salvo lo que proyecten los fijos activos y las cuotas en tramo (RN-006). La representación visual concreta de un mes en cero la define `control-design`.
 - [ ] La Forma 1 muestra, por mes, el total de ingresos y el total de gastos del mes; ambos totales suman únicos + fijos activos + cuotas del mes (mismo criterio que RF-VM-002).
 - [ ] La Forma 2 muestra, por mes, el total de gastos del mes descompuesto en bandas apiladas por categoría, cada banda con el color de su categoría; la suma de las bandas de un mes iguala el total de gastos de ese mes.
 - [ ] La Forma 2 considera **solo gastos** (`EXPENSE`); los ingresos no aparecen descompuestos por categoría.
-- [ ] En v1.1 la Forma 2 muestra **una banda por cada categoría con gasto, sin agrupar ni colapsar** ninguna en una banda "Otras"; no hay tope de categorías visibles. La agrupación "Otras" para la cola de categorías queda como candidato futuro.
+- [ ] La Forma 2 muestra **una banda por cada categoría con gasto, sin agrupar ni colapsar** ninguna en una banda "Otras"; no hay tope de categorías visibles. La agrupación "Otras" para la cola de categorías queda como candidato futuro.
 - [ ] Los colores de las bandas de la Forma 2 son los colores ya asignados a cada categoría (RF-CAT-005); el reporte no inventa ni reasigna colores.
 - [ ] El mes al que pertenece cada movimiento, para la agregación anual, se determina con el mismo criterio de zona horaria ya definido (RN-015): la zona propia de cada registro para los únicos, y el `startMonth` `YYYY-MM` para fijos y cuotas.
 - [ ] Un movimiento cuya categoría fue eliminada (soft delete) sigue contando en los totales y, en la Forma 2, sigue apareciendo bajo su categoría con su color (consistente con RF-CAT-004 / RF-VM-002).
@@ -1383,8 +1335,8 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 **Props funcionales:**
 
 - **Tipo de reporte.** `income-expense` (Forma 1) o `by-category` (Forma 2). Define qué visualización monta la instancia.
-- **Año a mostrar.** Define el año cuyos 12 meses se grafican. La navegación de año (flechas de 1.1.3, embebidas en el widget) está **siempre activa** e **independiente por instancia**: cambiar el año de un widget no afecta a ningún otro. Límites de navegación: hacia atrás el control ‹ se deshabilita antes del **primer año con CUALQUIER movimiento del usuario** (`earliestYear`, no afectado por el filtro de categorías — ver RF-REP-005); hacia adelante se **bloquean los años futuros** (máximo navegable: el año en curso).
-- **Categorías seleccionadas (filtro).** Subconjunto de categorías del usuario que el reporte considera; default **todas**. El checklist ofrece el **universo de categorías del usuario** (no solo las que tienen gasto), porque el filtro aplica también a la Forma 1 (a qué categorías cuentan los totales de ingresos y de gastos). En la Forma 2 además determina qué bandas se apilan. El filtro tiene **tres estados**: **todas** (default, sin filtro), **subconjunto** (solo las tildadas) y **ninguna** (todas destildadas) → la serie se grafica en **cero** (igual que el filtro de `/mes`, RF-VM-006). *(Ajuste 1.1.6: hasta 1.1.5 destildar todas se colapsaba a "sin filtro" y mostraba todas; ahora "ninguna" muestra la serie en cero.)*
+- **Año a mostrar.** Define el año cuyos 12 meses se grafican. La navegación de año (flechas embebidas en el widget) está **siempre activa** e **independiente por instancia**: cambiar el año de un widget no afecta a ningún otro. Límites de navegación: hacia atrás el control ‹ se deshabilita antes del **primer año con CUALQUIER movimiento del usuario** (`earliestYear`, no afectado por el filtro de categorías — ver RF-REP-005); hacia adelante se **bloquean los años futuros** (máximo navegable: el año en curso).
+- **Categorías seleccionadas (filtro).** Subconjunto de categorías del usuario que el reporte considera; default **todas**. El checklist ofrece el **universo de categorías del usuario** (no solo las que tienen gasto), porque el filtro aplica también a la Forma 1 (a qué categorías cuentan los totales de ingresos y de gastos). En la Forma 2 además determina qué bandas se apilan. El filtro tiene **tres estados**: **todas** (default, sin filtro), **subconjunto** (solo las tildadas) y **ninguna** (todas destildadas) → la serie se grafica en **cero** (igual que el filtro de `/mes`, RF-VM-006).
 - **Persistencia (modo).** Define qué hace la instancia con sus cambios de año y de filtro:
   - **Persistida** — en `/reportes`: cada cambio de año y de filtro de la card se persiste en la clave `reports` de preferencias (RF-REP-004).
   - **Efímera** — en el dashboard: el año y el filtro son de sesión; **no** se persisten (al recargar, el widget vuelve a su estado inicial — año en curso, todas las categorías). Ver RF-DASH-001/002.
@@ -1433,10 +1385,10 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | La configuración de las cards de `/reportes` se persiste por usuario mediante el mecanismo de preferencias (fase 1.1.0), en una clave nueva `reports`. Cada card persiste su **tipo + año + categorías seleccionadas**; el **orden del array es el orden de despliegue**. La normalización y el shape concreto los define el front (igual que `monthSections`): el backend no conoce ni valida esta clave. |
+| **Descripción** | La configuración de las cards de `/reportes` se persiste por usuario mediante el mecanismo de preferencias, en la clave `reports`. Cada card persiste su **tipo + año + categorías seleccionadas**; el **orden del array es el orden de despliegue**. La normalización y el shape concreto los define el front (igual que `monthSections`): el backend no conoce ni valida esta clave. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
-| **Precondiciones** | El usuario tiene sesión activa. El mecanismo de preferencias (1.1.0) está disponible. |
+| **Precondiciones** | El usuario tiene sesión activa. El mecanismo de preferencias está disponible. |
 
 **Criterios de aceptación:**
 - [ ] La clave es `reports`, un array de configuraciones de card (shape concreto en `docs/data-model.md`).
@@ -1459,16 +1411,16 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 
 **Criterios de aceptación:**
 - [ ] El endpoint es `GET /movements/reports` (renombre de `GET /movements/annual`); la mecánica de agregación anual no cambia.
-- [ ] Acepta el año y un **filtro de categorías** como query param que distingue **tres estados**: **ausente = todas**, **presente y vacío = ninguna** (serie en cero), **lista = subconjunto** (contrato exacto en `docs/data-model.md`). *(Ajuste 1.1.6: el estado "presente y vacío = ninguna" reemplaza el colapso previo de vacío → todas.)*
+- [ ] Acepta el año y un **filtro de categorías** como query param que distingue **tres estados**: **ausente = todas**, **presente y vacío = ninguna** (serie en cero), **lista = subconjunto** (contrato exacto en `docs/data-model.md`).
 - [ ] El filtro afecta a **ambas formas**: en la Forma 1, qué categorías cuentan en los totales de ingresos y de gastos por mes; en la Forma 2, qué bandas por categoría se incluyen.
 - [ ] El campo **`earliestYear` NO se ve afectado por el filtro**: siempre refleja el primer año con CUALQUIER movimiento del usuario, para que los límites de navegación de año (RF-REP-002) no salten al filtrar.
 - [ ] La respuesta mantiene el shape `{ year, months, categories, earliestYear }`, con `months` y `categories` filtrados al set pedido (`earliestYear` no).
 - [ ] El endpoint filtra siempre por el `userId` del JWT (RNF-002).
-- [ ] El array `categories` (desglose de gastos `EXPENSE`) alimenta tanto la Forma 2 (`by-category`) como el modo "Por categoría" de la card `income-expense` (RF-REP-006), que desglosa **solo gastos**. El contrato del endpoint **no cambia** en 1.2.2.
+- [ ] El array `categories` (desglose de gastos `EXPENSE`) alimenta tanto la Forma 2 (`by-category`) como el modo "Por categoría" de la card `income-expense` (RF-REP-006), que desglosa **solo gastos**.
 
 ---
 
-#### RF-REP-006 — Toggle "Total / Por categoría" en la card Ingresos y gastos (Fase 1.2.2)
+#### RF-REP-006 — Toggle "Total / Por categoría" en la card Ingresos y gastos
 
 | Campo | Detalle |
 |---|---|
@@ -1488,18 +1440,18 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 - [ ] En modo "Por categoría", los gastos se descomponen por categoría apilada (igual que la Forma 2); la suma de las bandas iguala el total de gastos del mes. Los ingresos **no** se descomponen por categoría.
 - [ ] El toggle **no** cambia el tipo, el año ni el filtro de categorías de la card: el filtro de categorías (RF-REP-002) aplica al desglose de gastos en el modo "Por categoría".
 - [ ] **Persistencia del modo:** en `/reportes` el modo elegido se **persiste por card** (junto al año y al filtro, clave `reports`, RF-REP-004); en el dashboard el modo es **efímero** (estado local; al recargar vuelve a "Total"), coherente con el año y el filtro efímeros del widget del dashboard (RF-DASH-001).
-- [ ] El desglose de gastos por categoría se sirve mediante el array **`categories`** de `GET /movements/reports` (RF-REP-005), que ya existía; el contrato del endpoint **no cambia** en 1.2.2.
+- [ ] El desglose de gastos por categoría se sirve mediante el array **`categories`** de `GET /movements/reports` (RF-REP-005).
 
 **Notas:**
 - El detalle visual del toggle (dos tabs) lo define `control-design` (`docs/design.md`).
 
 ---
 
-### 3.10 Módulo: Multi-moneda (Fase 1.2.3, ampliada en 1.2.4)
+### 3.10 Módulo: Multi-moneda
 
-> **Reabre la decisión "moneda implícita en v1" (RN-009) y, en 1.2.4, la decisión "set fijo ARS/USD" de 1.2.3.** v1 había definido la moneda como **implícita, sin campo de moneda**, con todos los montos en centavos sin moneda asociada. Reabierto en 1.2.3: la moneda pasa a ser **explícita** y cada movimiento lleva su **moneda + cotización**; los totales se expresan en una **única moneda default** del usuario, convertida en vivo. **Ampliado en 1.2.4:** el set fijo `ARS/USD` se abre a un **set curado de 4 monedas (ARS / USD / EUR / BRL)** y la cotización del movimiento se **pre-carga desde una tabla de cotizaciones de referencia** (interna, no editable por UI). `requirements.md`, `screens.md` y `data-model.md` se actualizan en estas fases. Modelo de datos en `data-model.md`, §Moneda explícita, set curado, §Contrato de configuración del usuario (settings) y §Tabla de cotizaciones de referencia.
+> La moneda es **explícita**: cada movimiento lleva su **moneda + cotización**; los totales se expresan en una **única moneda default** del usuario, convertida en vivo. La cotización del movimiento se **pre-carga desde una tabla de cotizaciones de referencia** (interna, no editable por UI). Modelo de datos en `data-model.md`, §Moneda explícita, set curado, §Contrato de configuración del usuario (settings) y §Tabla de cotizaciones de referencia.
 
-El alcance es un **set curado de 4 monedas (ARS / USD / EUR / BRL)**, sin alta de monedas arbitrarias por el usuario (1.2.4; en 1.2.3 era el set fijo `ARS/USD`). La conversión es **100% de display**: cambiar la moneda default re-expresa los totales sin tocar ningún dato guardado. La **cotización sigue siendo manual y por movimiento** (Opción A): la tabla de referencia solo pre-carga un valor inicial editable, nunca reescribe lo guardado.
+El alcance es un **set curado de 4 monedas (ARS / USD / EUR / BRL)**, sin alta de monedas arbitrarias por el usuario. La conversión es **100% de display**: cambiar la moneda default re-expresa los totales sin tocar ningún dato guardado. La **cotización es manual y por movimiento** (Opción A): la tabla de referencia solo pre-carga un valor inicial editable, nunca reescribe lo guardado.
 
 ---
 
@@ -1518,14 +1470,14 @@ El alcance es un **set curado de 4 monedas (ARS / USD / EUR / BRL)**, sin alta d
 3. El usuario confirma; el sistema guarda monto (centavos de la moneda original), moneda y cotización.
 
 **Criterios de aceptación:**
-- [ ] El set de monedas es un **set curado de 4: ARS, USD, EUR, BRL**. No hay alta de monedas arbitrarias por el usuario (1.2.4).
+- [ ] El set de monedas es un **set curado de 4: ARS, USD, EUR, BRL**. No hay alta de monedas arbitrarias por el usuario.
 - [ ] El monto se guarda en **centavos de la moneda original** del movimiento (no convertido).
 - [ ] La cotización son **unidades de la default por 1 unidad de la moneda del movimiento** (Opción A), con decimales (no centavos), y debe ser **> 0** (validación; ver RF-CUR-005 / `data-model.md`). Para un movimiento cuya moneda coincide con la default, la cotización es `1` y el bloque puede ocultarse.
 - [ ] El campo de cotización es **editable**; los cruces no triviales (p. ej. EUR con default BRL) se derivan vía el pivote USD para el pre-fill, pero el valor guardado es el que confirma el usuario.
 - [ ] La presentación del bloque moneda/cotización en el formulario está en `screens.md` §Formulario y `design.md`.
 
 **Notas:**
-- La cotización solo es **semánticamente necesaria** cuando la moneda del movimiento difiere de la default; cuando coinciden, el bloque se **oculta** y la cotización es `1` (1.2.4). El label del par en el formulario es `{moneda del movimiento}→{default}`. Presentación en `screens.md` §Formulario.
+- La cotización solo es **semánticamente necesaria** cuando la moneda del movimiento difiere de la default; cuando coinciden, el bloque se **oculta** y la cotización es `1`. El label del par en el formulario es `{moneda del movimiento}→{default}`. Presentación en `screens.md` §Formulario.
 
 ---
 
@@ -1548,8 +1500,6 @@ El alcance es un **set curado de 4 monedas (ARS / USD / EUR / BRL)**, sin alta d
 
 #### RF-CUR-003 — Pre-carga editable de la cotización de referencia del mes
 
-> **Reabierto en 1.2.4.** En 1.2.3 la pre-carga salía del **último cambio usado** (`lastExchangeRate`). Desde 1.2.4 el pre-fill se sirve desde la **tabla de cotizaciones de referencia** según el mes del movimiento (RF-CUR-006); `lastExchangeRate` queda como **fallback** cuando la tabla no tiene dato.
-
 | Campo | Detalle |
 |---|---|
 | **Descripción** | El campo de cotización del formulario arranca **pre-cargado** con la **cotización de referencia del mes** del movimiento (derivada de la tabla de referencia, RF-CUR-006), donde el usuario puede aceptarla o editarla. Si la tabla no tiene dato para ese mes/moneda, cae al último cambio usado (`lastExchangeRate`). |
@@ -1560,8 +1510,8 @@ El alcance es un **set curado de 4 monedas (ARS / USD / EUR / BRL)**, sin alta d
 **Criterios de aceptación:**
 - [ ] El campo de cotización arranca **pre-cargado** con la cotización de referencia del mes (vía `GET /settings/reference-rate`; ver `data-model.md`).
 - [ ] La granularidad del mes que pide el pre-fill sigue la del tipo (RF-CUR-004): en fijos el mes de aparición, en cuotas el `startMonth` del grupo, en únicos el mes del movimiento.
-- [ ] Si la tabla de referencia no tiene dato (`exchangeRate: null`), se usa como **fallback** el último cambio real del usuario (`lastExchangeRate`; ≠ el default `1` de back-compat — ver `data-model.md`).
-- [ ] El copy de la nota del campo es **"Cotización de referencia del mes"** (en 1.2.3 era "Último cambio usado").
+- [ ] Si la tabla de referencia no tiene dato (`exchangeRate: null`), se usa como **fallback** el último cambio real del usuario (`lastExchangeRate`; ≠ el default `1` — ver `data-model.md`).
+- [ ] El copy de la nota del campo es **"Cotización de referencia del mes"**.
 - [ ] El valor pre-cargado es **editable** en cada carga.
 
 ---
@@ -1609,8 +1559,6 @@ El alcance es un **set curado de 4 monedas (ARS / USD / EUR / BRL)**, sin alta d
 
 #### RF-CUR-006 — Tabla de cotizaciones de referencia (interna, no editable)
 
-> **Nuevo en 1.2.4.** Reabre la decisión "set fijo ARS/USD" de 1.2.3: introduce el set curado de 4 monedas y una tabla de referencia que pre-carga la cotización del movimiento.
-
 | Campo | Detalle |
 |---|---|
 | **Descripción** | El sistema mantiene una **tabla de cotizaciones de referencia** por `(moneda, mes)`, **global** (compartida por todos los usuarios), **interna y no editable por la UI**. Sirve de **valor por defecto (copia, no FK)** para pre-cargar la cotización de cada movimiento según su mes (RF-CUR-003); el movimiento conserva su cotización propia y editable. |
@@ -1639,11 +1587,11 @@ El alcance es un **set curado de 4 monedas (ARS / USD / EUR / BRL)**, sin alta d
 | RN-006 | Los movimientos fijos y los grupos de cuotas no generan filas individuales por mes. Se calculan on-the-fly al consultar un período. |
 | RN-007 | Una categoría eliminada (soft delete) no aparece en selectores de nuevos movimientos, pero los movimientos históricos conservan la referencia a ella. |
 | RN-008 | No pueden coexistir dos categorías activas con el mismo nombre para el mismo usuario. |
-| RN-009 | **Reabierta en la Fase 1.2.3 (de implícita a explícita) y en 1.2.4 (set fijo → set curado de 4).** v1 operaba sobre una **moneda implícita, sin campo de moneda**. Desde 1.2.3 la moneda es **explícita**; desde 1.2.4 el set es un **set curado de 4 (ARS / USD / EUR / BRL)**, sin alta arbitraria. Cada movimiento lleva su `currency` (default `ARS`) y una cotización `exchangeRate` = **unidades de la default por 1 unidad de la moneda del movimiento** (Opción A; cruces no triviales derivados vía el pivote USD), `amountCents` significa centavos de la **moneda original**, y los totales se expresan en la **moneda default vigente** del usuario convirtiendo en vivo (capa de display, nunca toca lo guardado). La cotización se pre-carga desde la **tabla de referencia del mes** (RF-CUR-006), editable. Back-compat: todo lo existente queda en ARS con cotización `1`. Ver módulo 3.10 (RF-CUR-001..006) y `data-model.md`, §Moneda explícita, set curado. |
+| RN-009 | **Moneda explícita, set curado.** La moneda es **explícita**, con un **set curado de 4 (ARS / USD / EUR / BRL)**, sin alta arbitraria. Cada movimiento lleva su `currency` (default `ARS`) y una cotización `exchangeRate` = **unidades de la default por 1 unidad de la moneda del movimiento** (Opción A; cruces no triviales derivados vía el pivote USD), `amountCents` significa centavos de la **moneda original**, y los totales se expresan en la **moneda default vigente** del usuario convirtiendo en vivo (capa de display, nunca toca lo guardado). La cotización se pre-carga desde la **tabla de referencia del mes** (RF-CUR-006), editable. Ver módulo 3.10 (RF-CUR-001..006) y `data-model.md`, §Moneda explícita, set curado. |
 | RN-010 | El selector de categorías se filtra según el tipo del movimiento en curso: para `EXPENSE` se muestran categorías con scope `EXPENSE` o `BOTH`; para `INCOME` se muestran categorías con scope `INCOME` o `BOTH`. |
 | RN-011 | El movimiento único representa un instante (fecha y hora). Se almacena como timestamp en UTC junto con la zona horaria original del registro (nombre IANA). Se muestra siempre en esa zona horaria original, sin importar dónde se encuentre el usuario después. El mes al que pertenece el movimiento se determina en la zona del propio registro, de forma estable. Los movimientos fijos y las cuotas no aplican esta regla: operan a nivel mes, sin día ni hora. Ver `docs/technical.md` (sección "Fechas y zonas horarias") para el detalle técnico. |
 | RN-012 | Las contraseñas de las cuentas con email + contraseña se almacenan siempre **hasheadas** (bcrypt/argon2), nunca en texto plano. El hash y la verificación ocurren en el backend; el frontend nunca almacena ni compara contraseñas. Las cuentas creadas solo con Google pueden no tener contraseña. |
-| RN-013 | Cada categoría tiene un color tomado de una **matriz de colores predefinidos** (70 colores). Desde v1.1 (fase 1.1.2) el usuario lo **elige y edita** al crear o editar la categoría; solo se aceptan colores de la matriz (sin hex libre). Al **crear**, el sistema pre-selecciona como default el color "menos usado" entre las categorías activas del usuario, calculado sobre los **10 colores base** (la fila base de la matriz). Las categorías por defecto del alta se asignan automáticamente. El color es de presentación únicamente: no afecta montos, scope ni ninguna regla de negocio. (En v1.0 el color era no editable; reabierto en la fase 1.1.2.) |
+| RN-013 | Cada categoría tiene un color tomado de una **matriz de colores predefinidos** (70 colores). El usuario lo **elige y edita** al crear o editar la categoría; solo se aceptan colores de la matriz (sin hex libre). Al **crear**, el sistema pre-selecciona como default el color "menos usado" entre las categorías activas del usuario, calculado sobre los **10 colores base** (la fila base de la matriz). Las categorías por defecto del alta se asignan automáticamente. El color es de presentación únicamente: no afecta montos, scope ni ninguna regla de negocio. |
 | RN-014 | Para comparar nombres de categoría a efectos de unicidad, el nombre se **normaliza**: trim de espacios, insensible a mayúsculas/minúsculas e insensible a acentos/tildes. Ej: "comida", "Comida" y "Cómida" se consideran el mismo nombre. Esta normalización aplica tanto a la detección de duplicado contra categorías **activas** (bloqueo, RN-008) como contra categorías **eliminadas** (soft delete) para proponer reactivarla (RF-CAT-002). La regla se valida en **ambas capas** —backend como fuente de verdad y frontend para UX— y ambas deben mantenerse alineadas (ver `docs/technical.md`). |
 | RN-015 | Para la agregación anual de los reportes (RF-REP-001), el mes al que se imputa cada movimiento se determina con el **mismo criterio ya definido** para la Vista del mes, sin introducir una regla de zona horaria nueva: para los movimientos **únicos**, el mes se calcula en la **zona horaria propia de cada registro** (RN-011, igual que el bucketeo de `GET /movements`); para los **fijos** y las **cuotas**, que operan a nivel mes (RN-006), el mes es el de su `startMonth` `YYYY-MM` (los fijos caen en cada mes donde están activos; las cuotas, en cada mes de su tramo). Un movimiento se imputa a un año determinado solo si su mes resuelto pertenece a ese año. |
 | RN-016 | **Frecuencia y anulación de movimientos fijos (RF-MF-005, RF-MF-006).** Un movimiento fijo con mes de inicio `S` y frecuencia `F` aparece en el mes `M` si y solo si: `S <= M` **y** (`deletedFrom` es null **o** `deletedFrom > M`) **y** `monthDiff(S, M) % step(F) === 0`, donde el paso por frecuencia es `MONTHLY=1`, `BIMONTHLY=2`, `QUARTERLY=3`, `BIANNUAL=6`, `ANNUAL=12`. La frecuencia está **anclada al mes de inicio** (no al mes consultado). Una **anulación** `(fijo, mes)` no cambia si el fijo aparece o no según esta regla: un fijo anulado para un mes **se sigue listando** en `GET /movements` con la marca de anulado, pero su monto **no suma** a los totales del mes ni a la serie anual de los reportes. La anulación es **reversible** (toggle) y solo tiene sentido sobre meses donde el fijo efectivamente aparece según `F`. El cálculo sigue siendo on-the-fly (RN-006): no se generan filas por instancia mensual. |

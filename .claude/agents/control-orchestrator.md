@@ -61,6 +61,11 @@ Preguntarse:
 
 **Filtro de relevancia:** documentar SOLO lo no obvio (decisiones, reglas, gotchas). Nunca changelog de setup ni repetir estándares que ya viven en `docs/technical.md`. Si se sabe abriendo `package.json` o el propio archivo, no se documenta.
 
+**Reglas vivas de documentación (hacelas cumplir al delegar al analista):**
+- **Estado ACTUAL, en presente.** La doc es una foto del proyecto como si siempre hubiera sido así. **Prohibido registrar cuándo o por qué cambió algo** (etiquetas de fase, "antes era X / ahora Y", "se revirtió", "fue la causa del bug"): eso es git. Si un cambio trae info estructural, documentá el **resultado**, no la transición. El "por qué técnico-estructural" (cómo funciona hoy, informa decisiones futuras) **sí** se queda.
+- **Los archivos de agente NO llevan gotchas por feature.** El gotcha estructural vive en `docs/` (un único destino canónico); el agente solo apunta dónde leerlo.
+- **El roadmap es un doc de trabajo descartable:** se borra al cerrar la versión. No es registro histórico.
+
 **Dos destinos de documentación, ambos vía el analista si aplican:**
 
 **Archivos de agentes** (`.claude/agents/`) — decisiones técnicas, reglas de negocio, patrones y excepciones que un agente futuro necesita saber para no romper nada.

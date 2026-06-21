@@ -51,12 +51,19 @@ Lo visual se define **una sola vez**. Stack: **shadcn/ui + cva** sobre Tailwind 
 - **Las primitivas usan los tokens del design system "Precise Ledger"** (ver sección Design system). Detalle operativo del re-estilado (variantes de Button, patrones Tailwind v4, toast) en `.claude/agents/control-frontend.md`.
 - **Íconos: `lucide-react`** (no SVG inline). Es la librería de íconos del proyecto.
 - **`PeriodNav` (`components/ui/period-nav.tsx`)** — primitiva **genérica de navegación de período**: envuelve un contenido y le pone **flechas gigantes a los costados** (`‹ contenido ›`). La usa **`/mes`** para navegar el mes. (Reportes **no** la usa: navega el año con un stepper pill embebido per-card — ver sección Reportes.) El spec visual vive en `docs/design.md`. API y gotcha de uso en la sección Navegación de período (`PeriodNav`).
-- **`KebabMenu` (`components/ui/kebab-menu.tsx`)** — menú de tres puntos para las acciones de fila **editar / eliminar** en listas. Es el **componente estándar para esas acciones**: toda lista nueva que las necesite lo usa, en lugar de botones inline en la fila. Se renderiza **por portal a `document.body` con posición `fixed`** (coordenadas tomadas del trigger) porque las tarjetas de lista tienen `overflow-hidden` y el `transform` de los contenedores de página atraparía un `position: fixed` no portaleado — mismo motivo que los modales. Detalle operativo (API, comportamiento de apertura/cierre) en `.claude/agents/control-frontend.md`.
-- **`AccordionSection` (`components/ui/accordion-section.tsx`)** — sección de acordeón **genérica** (fase 1.1.4): cabecera-disclosure (`aria-expanded` / `aria-controls`, chevron rotatorio), **handle de drag opcional** y cuerpo colapsable animado. Reutilizable en cualquier pantalla con secciones plegables (se prevén más acordeones en la app). **Animación sin JS** (ver gotcha grid-rows abajo). Primer uso: las secciones de `/mes` (RF-VM-005).
-  - **Patrón `filterSlot` (fase 1.2.1):** slot opcional que `AccordionSection` renderiza como **hermano** del `<button>` disclosure, **no como hijo** — por a11y, un control interactivo no puede anidarse dentro de un `<button>`. Se **oculta en `isOrderMode`**. Patrón reutilizable para colgar controles propios de una sección (en `/mes`: el disparador de filtro tipo+categoría).
-- **`SectionFilterPopover` (`components/ui/section-filter-popover.tsx`, fase 1.2.1)** — disparador + popover que combina un **triple switch de tipo** (Gasto / Ingreso / Ambos) y un **bloque de categorías embebido** (tres estados, igual que el resto). Es el control de filtro por sección de `/mes` (RF-VM-006), montado vía el `filterSlot` de `AccordionSection`.
-- **`SortableSection` (`components/ui/sortable-section.tsx`)** — envuelve `AccordionSection` con `useSortable` de **dnd-kit**; el sortable se activa **solo en modo orden**. Es el patrón estándar para "lista de bloques reordenables por drag" de acá en más. **Sin `DragOverlay` (desde 1.2.0):** el ítem arrastrado se mueve **in-place**, restringido al **eje vertical y al contenedor** con los modifiers `restrictToVerticalAxis` + `restrictToParentElement` de **`@dnd-kit/modifiers`**. El original ya no se oculta; el "activo" lo computa el padre vía `activeId` y se pasa por prop (`isActive`).
-- **dnd-kit** (`@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`, `@dnd-kit/modifiers`) es el **motor de drag estándar del proyecto** desde la fase 1.1.4. Todo drag nuevo (reordenar listas, etc.) lo usa, no se implementa drag a mano. Gotchas de uso (sensor `distance:8` con elementos clickeables, `role=region` en jsdom) en `.claude/agents/control-frontend.md`.
+- **`KebabMenu` (`components/ui/kebab-menu.tsx`)** — menú de tres puntos para las acciones de fila **editar / eliminar** en listas. Es el **componente estándar para esas acciones**: toda lista nueva que las necesite lo usa, en lugar de botones inline en la fila. Se renderiza **por portal a `document.body` con posición `fixed`** (coordenadas tomadas del `getBoundingClientRect()` del trigger) por DOS razones estructurales: (a) las tarjetas de lista tienen `overflow-hidden`, que recortaría un menú `absolute`; (b) el portal lo saca del ancestro transformado (ver "Modales y diálogos: portal a `body`"). API: `ariaLabel`, `items` (`{ label, icon?, onSelect, danger? }`), `className`. El ítem `danger: true` se pinta en `text-expense-ink`. El trigger se mantiene visible mientras el menú está abierto; el menú se cierra en select / click afuera / Escape / scroll / resize (no recalcula posición en movimiento: cierra limpio).
+
+### Modales y diálogos: portal a `body` (regla)
+
+**Todo componente con scrim `fixed inset-0` (modales, diálogos de confirmación) se monta vía `createPortal(<scrim/>, document.body)`.** Los contenedores de página usan `animate-screen-fade`, cuyo keyframe aplica `transform`; un ancestro con `transform` (también `filter` o `will-change`) crea un containing block que atrapa a los descendientes `position: fixed` — el scrim deja de medirse contra el viewport y queda confinado al contenedor, corrido y sin cubrir la pantalla. El portal extrae el modal de ese árbol y lo monta directo en `body`. **No alcanza con `fixed inset-0` solo.**
+
+- **Guard SSR obligatorio:** `document` no existe en el servidor → `const [mounted, setMounted] = useState(false)` + `useEffect(() => setMounted(true), [])` + `if (!mounted) return null` antes del `createPortal`. Todos los hooks se llaman incondicionalmente antes de ese guard (reglas de hooks).
+- Aplica a todos los modales (movimiento, borrado, categoría) y al `KebabMenu`.
+- **`AccordionSection` (`components/ui/accordion-section.tsx`)** — sección de acordeón **genérica**: cabecera-disclosure (`aria-expanded` / `aria-controls`, chevron rotatorio), **handle de drag opcional** y cuerpo colapsable animado. Reutilizable en cualquier pantalla con secciones plegables. **Animación sin JS** (ver gotcha grid-rows abajo). Lo usan las secciones de `/mes` (RF-VM-005).
+  - **Patrón `filterSlot`:** slot opcional que `AccordionSection` renderiza como **hermano** del `<button>` disclosure, **no como hijo** — por a11y, un control interactivo no puede anidarse dentro de un `<button>`. Se **oculta en `isOrderMode`**. Patrón reutilizable para colgar controles propios de una sección (en `/mes`: el disparador de filtro tipo+categoría).
+- **`SectionFilterPopover` (`components/ui/section-filter-popover.tsx`)** — disparador + popover que combina un **triple switch de tipo** (Gasto / Ingreso / Ambos) y un **bloque de categorías embebido** (tres estados, igual que el resto). Es el control de filtro por sección de `/mes` (RF-VM-006), montado vía el `filterSlot` de `AccordionSection`.
+- **`SortableSection` (`components/ui/sortable-section.tsx`)** — envuelve `AccordionSection` con `useSortable` de **dnd-kit**; el sortable se activa **solo en modo orden**. Es el patrón estándar para "lista de bloques reordenables por drag". **Sin `DragOverlay`:** el ítem arrastrado se mueve **in-place**, restringido al **eje vertical y al contenedor** con los modifiers `restrictToVerticalAxis` + `restrictToParentElement` de **`@dnd-kit/modifiers`**. El original no se oculta; el "activo" lo computa el padre vía `activeId` y se pasa por prop (`isActive`).
+- **dnd-kit** (`@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`, `@dnd-kit/modifiers`) es el **motor de drag estándar del proyecto**. Todo drag nuevo (reordenar listas, etc.) lo usa, no se implementa drag a mano. Gotchas de uso (sensor `distance:8` con elementos clickeables, `role=region` en jsdom) en `.claude/agents/control-frontend.md`.
 
 ## Autenticación (Auth.js / NextAuth v5)
 
@@ -95,9 +102,9 @@ Los callbacks `jwt` y `session` persisten el **`accessToken` de NestJS** y el **
 - **Protección de rutas** vía `src/middleware.ts`: una ruta privada sin sesión redirige a `/login`; un usuario autenticado que entra a `/login` o `/registro` es redirigido a `/`.
 - **Auto-login tras registro:** un registro exitoso deja al usuario logueado sin pasar por la pantalla de login (RF-AUTH-006).
 
-## Preferencias de usuario (cimiento — fase 1.1.0)
+## Preferencias de usuario
 
-Mecanismo de persistencia de preferencias del usuario (estado de UI que sobrevive a la navegación y al cierre de sesión). Es el **cimiento** que consumirán fases posteriores (1.1.4 secciones colapsadas/orden, 1.1.5 reportes, 1.1.6 filtro por categoría); en la fase 1.1.0 **no hay UI de producto**. Contrato del backend en `docs/data-model.md` ("Contrato de preferencias de usuario").
+Mecanismo de persistencia de preferencias del usuario (estado de UI que sobrevive a la navegación y al cierre de sesión). Lo consumen las secciones colapsadas/orden de `/mes`, los reportes y el filtro por categoría. Contrato del backend en `docs/data-model.md` ("Contrato de preferencias de usuario").
 
 ### Preferencias en la sesión de Auth.js
 
@@ -127,7 +134,7 @@ CRUD de categorías. Se accede desde el **link "Categorías" del sidebar** (RF-N
 
 Lista de categorías **activas**: por fila el color, el nombre, el scope legible (`AMBOS` / `GASTO` / `INGRESO`) y el contador `"N movimientos"`. Botón "Nueva categoría". Acciones por fila: **Editar**, **Eliminar**. Estados: Cargando, Con datos, Vacío.
 
-- **Modal único crear/editar:** "Nueva categoría" lo abre vacío; "Editar" lo abre pre-cargado. Campos: nombre, scope y **color** (`ColorPicker`, fase 1.1.2).
+- **Modal único crear/editar:** "Nueva categoría" lo abre vacío; "Editar" lo abre pre-cargado. Campos: nombre, scope y **color** (`ColorPicker`).
 - **`ColorPicker` (grid 10×7).** Selector de color con la matriz de 70 colores, presente en crear y editar. En **crear** arranca con el **menos-usado** pre-seleccionado (`getLeastUsedBaseColor()`, replica el criterio de `assignColor` del backend sobre la fila base); en **editar**, con el color actual. Tiene botón **"aleatorio"**. El front siempre envía `color` al backend.
 - **Eliminar:** diálogo de confirmación antes del soft delete.
 
@@ -157,7 +164,7 @@ El mismo `CategoryFormModal` se usa en **dos modos**, diferenciados **solo por p
   - `lockScopeToType` (el tipo del movimiento en curso, `EXPENSE` / `INCOME`) **restringe el selector de scope** a ese tipo + "Ambos" y **preselecciona el tipo exacto**.
   - Al crear o reactivar con éxito, el modal **devuelve la categoría al padre vía `onCreated`** para que el formulario de movimiento la **autoseleccione**.
   - **Cuotas pasan `lockScopeToType="EXPENSE"` fijo** (las cuotas son siempre Gasto en v1).
-- **`ReactivationPrompt.onReactivated` propaga la categoría reactivada hacia arriba:** para soportar la autoselección inline, el prompt de reactivación ahora pasa la categoría reactivada al padre (no solo cierra). El `CategoryFormModal` la reenvía por `onCreated`.
+- **`ReactivationPrompt.onReactivated` propaga la categoría reactivada hacia arriba:** para soportar la autoselección inline, el prompt de reactivación pasa la categoría reactivada al padre (no solo cierra). El `CategoryFormModal` la reenvía por `onCreated`.
 
 ### Apilado de modales — gotcha de z-index
 
@@ -176,7 +183,7 @@ Carga de movimientos. El modal de carga se invoca desde el dashboard (`/`); **ed
 ### Modal de carga (`components/movements/transaction-modal.tsx`)
 
 - **Props como discriminated union por `mode`** (4 variantes) — el modal se comporta distinto según el modo y TypeScript fuerza el shape correcto en cada caso:
-  - **`"create"`** — abre con tabs **Único / Fijo / Cuotas**, los tres funcionales (ya no queda ningún "Próximamente"). Renderiza `TransactionForm`, `RecurringForm` o `InstallmentForm` según el tab.
+  - **`"create"`** — abre con tabs **Único / Fijo / Cuotas**, los tres funcionales. Renderiza `TransactionForm`, `RecurringForm` o `InstallmentForm` según el tab.
   - **`"edit-single"`** — sin tabs; `TransactionForm` precargado con un `Transaction` (RF-MU-002).
   - **`"edit-fixed"`** — sin tabs; `RecurringForm` precargado con un `Recurring` (RF-MF-003).
   - **`"edit-installment"`** — sin tabs; `InstallmentForm` precargado con el grupo de cuotas (RF-MC-003).
@@ -187,7 +194,7 @@ Carga de movimientos. El modal de carga se invoca desde el dashboard (`/`); **ed
 - Tipo **Gasto** (default) / **Ingreso**; monto **en pesos** (se convierte a centavos al enviar); selector de categoría **filtrado por scope** (RN-010) que **reusa `["categories"]`** (`CATEGORIES_QUERY_KEY`); fecha + hora (default: ahora); descripción opcional.
 - **Estados:** Guardando; **Sin categorías disponibles** (link a `/categorias`); **Error backend** — el modal **queda abierto y conserva los datos** ingresados (RNF-008).
 
-### Moneda y cotización en los forms de movimiento (multi-moneda, fase 1.2.4)
+### Moneda y cotización en los forms de movimiento (multi-moneda)
 
 Aplica a los **tres** forms (`transaction-form`, `recurring-form`, `installment-form`). Regla funcional en `docs/requirements.md` (§cotización); acá solo el gotcha de implementación.
 
@@ -206,7 +213,7 @@ Aplica a los **tres** forms (`transaction-form`, `recurring-form`, `installment-
 ### Datos (`use-transactions`)
 
 - Hook **`useTransactions()`** expone las mutaciones: `createTransaction`, `updateTransaction(id, data)`, `deleteTransaction(id, month)`.
-- **La lista del mes ya no vive acá:** se lee con `useMovements(month)` (ver sección Vista del mes y Dashboard). Se eliminó el hook `useTransactionsByMonth` y la query key legacy `["transactions", month]` — apuntaban al endpoint eliminado `GET /transactions?month&timezone`.
+- **La lista del mes no vive acá:** se lee con `useMovements(month)` (ver sección Vista del mes y Dashboard).
 - **Invalidación al mutar:** las mutaciones de `useTransactions` invalidan **`MOVEMENTS_QUERY_KEY(month) = ["movements", month]`** (la clave de `useMovements`).
 - **Gotcha — `deleteTransaction` recibe `month` explícito:** el `DELETE` devuelve `204` sin cuerpo, así que no se puede derivar del recurso qué mes invalidar. El llamador deriva el `month` del `occurredAt` del movimiento de la lista y lo pasa.
 
@@ -217,7 +224,7 @@ Reusarlos, no reimplementar:
 - **`parseCurrencyInput`** — pesos → centavos vía `Math.round(parsed * 100)`; acepta punto o coma decimal. **`formatCurrency`** — centavos → string en pesos.
 - **`localToUtcIso` / `utcToLocalDate` / `utcToLocalTime`** — conversión local ↔ UTC con `Intl.DateTimeFormat` de doble pasada; **maneja DST** correctamente.
 - **`getBrowserTimezone`** — IANA del navegador.
-- **Helpers de mes (Fase 5):** **`getCurrentMonth`** — mes actual `YYYY-MM` en la zona del navegador; **`formatMonthLabel`** — `YYYY-MM` → rótulo legible (nombre de mes + año); **`prevMonth` / `nextMonth`** — desplazan un `YYYY-MM` un mes hacia atrás / adelante. Reusarlos para la navegación del mes; no reimplementar aritmética de meses.
+- **Helpers de mes:** **`getCurrentMonth`** — mes actual `YYYY-MM` en la zona del navegador; **`formatMonthLabel`** — `YYYY-MM` → rótulo legible (nombre de mes + año); **`prevMonth` / `nextMonth`** — desplazan un `YYYY-MM` un mes hacia atrás / adelante. Reusarlos para la navegación del mes; no reimplementar aritmética de meses.
 
 ## Movimientos fijos
 
@@ -227,10 +234,11 @@ Carga, edición y eliminación de movimientos fijos. Se crean desde el tab **Fij
 
 - Tipo **Gasto** (default) / **Ingreso**; monto en pesos; selector de categoría filtrado por scope (reusa `CATEGORIES_QUERY_KEY`); descripción opcional. **No tiene fecha ni hora** — el fijo opera a nivel mes (RF-MF-001).
 - **En edición el tipo es read-only** (RF-MF-003: el tipo no se edita). **Gotcha:** un campo `type` deshabilitado no lo registra react-hook-form; hay que mantener un `<input type="hidden">` con el valor para que RHF lo registre y Zod lo valide.
+- **Gotcha — schema Zod compartido entre crear/editar: TODO campo del schema necesita un `defaultValue` que valide, aunque no se renderice en ese modo.** Si un form usa un único schema Zod para crear y editar y algún `defaultValue` no pasa la validación, `handleSubmit` bloquea el submit **en silencio** (sin excepción, log ni error en la UI; síntoma: "Guardar no hace nada"). Caso real: `startMonth` solo se renderiza en crear pero está en el schema; en edición se inicializa con relleno válido (`getCurrentMonth()`) **solo para satisfacer el schema** — NO se envía en el PATCH (el contrato de edición de fijos no incluye `startMonth`). Defensa: pasar a `handleSubmit` un `onInvalid` que loguee los errores de validación.
 
 ### `delete-recurring-dialog.tsx`
 
-- Diálogo de confirmación **sin opciones** (RF-MF-004): la eliminación aplica **siempre desde el mes visualizado inclusive en adelante**. El cliente fija `fromCurrentMonth = true` y `currentMonth` = mes visualizado (`viewMonth`, fallback `getCurrentMonth()`). El checkbox "Eliminar también desde este mes" que existió en versiones previas fue **quitado** — no reintroducirlo (ver gotcha en `.claude/agents/control-frontend.md`, Fase 3).
+- Diálogo de confirmación **sin opciones** (RF-MF-004): la eliminación aplica **siempre desde el mes visualizado inclusive en adelante**. El cliente fija `fromCurrentMonth = true` y `currentMonth` = mes visualizado (`viewMonth`, fallback `getCurrentMonth()`). **No hay checkbox de opciones** en el diálogo (ver gotcha en `.claude/agents/control-frontend.md`).
 
 ### `movement-item-row.tsx`
 
@@ -245,11 +253,11 @@ Carga, edición y eliminación de movimientos fijos. Se crean desde el tab **Fij
   - En `updateRecurring`, para **limpiar** la descripción se envía `description: null` **explícito** (no `undefined`, que el backend interpretaría como "no cambiar").
   - El mapeo `MovementItem → Recurring` para precargar el form de edición sigue el mismo patrón que el de únicos (el ítem no trae todos los campos del recurso).
 
-## Movimientos calculados (fase 1.1.7 / 1.1.8)
+## Movimientos calculados
 
-Un calculado es un fijo cuyo monto/tipo se derivan; el front solo construye la fórmula y muestra el resultado derivado que ya viene en el `MovementItem` (`calculated` / `hasCalculated` / `amountCents` con signo). Desde **1.1.8** el origen puede ser fijo, único o cuota: el front **enruta siempre por `calculated.sourceType`**. Contrato en `docs/data-model.md`, §Contrato de movimientos calculados; reglas en RF-MCALC-001..010. Lo no obvio:
+Un calculado es un fijo cuyo monto/tipo se derivan; el front solo construye la fórmula y muestra el resultado derivado que ya viene en el `MovementItem` (`calculated` / `hasCalculated` / `amountCents` con signo). El origen puede ser fijo, único o cuota: el front **enruta siempre por `calculated.sourceType`**. Contrato en `docs/data-model.md`, §Contrato de movimientos calculados; reglas en RF-MCALC-001..010. Lo no obvio:
 
-### Creación — desde fijo, único o cuota (1.1.8)
+### Creación — desde fijo, único o cuota
 
 - **No hay tab "calculado"** en el modal de carga (RF-MCALC-001). El único disparador es la acción **"crear movimiento desde este"** del kebab de un ítem **fijo, único o cuota** en `/mes` (ícono en `docs/design.md`). `movement-item-row.tsx` la ofrece en cualquier origen **no** calculado (`!movement.calculated`); sigue **sin** aparecer sobre un ítem que ya es calculado (no hay calculado-de-calculado).
 
@@ -264,11 +272,11 @@ Un calculado es un fijo cuyo monto/tipo se derivan; el front solo construye la f
 ### Indicación padre/hijo (RF-MCALC-007)
 
 - En `movement-item-row.tsx`: si el ítem **es** calculado → chip **"Calculado"** (`Link2`) + segmento **"desde {Origen}"** (de `calculated.sourceDescription`); si **es padre** (`hasCalculated`) → ícono `GitBranch`.
-- **Borrado — enrutado por `sourceType` (1.1.8).** `handleDelete` en `month-view-client.tsx` decide según el calculado: origen **fijo** → `DeleteRecurringDialog` con opciones de mes (boundary/split); origen **único o cuota** → `DeleteRecurringDialog variant="calculated-simple"`, **confirmación directa** sin opciones de mes (borrado total, RF-MCALC-009). `delete-recurring-dialog.tsx` muestra además un **callout de advertencia** cuando `movement.hasCalculated` (los calculados asociados también se eliminarán — cascada, RF-MCALC-005).
+- **Borrado — enrutado por `sourceType`.** `handleDelete` en `month-view-client.tsx` decide según el calculado: origen **fijo** → `DeleteRecurringDialog` con opciones de mes (boundary/split); origen **único o cuota** → `DeleteRecurringDialog variant="calculated-simple"`, **confirmación directa** sin opciones de mes (borrado total, RF-MCALC-009). `delete-recurring-dialog.tsx` muestra además un **callout de advertencia** cuando `movement.hasCalculated` (los calculados asociados también se eliminarán — cascada, RF-MCALC-005).
 
 ### Datos (`use-calculated`)
 
-- **Enrutado por `sourceType` (1.1.8).** `useCalculated` recibe el `sourceType` y elige el endpoint: `fijo` → `/recurring/:id/calculated`, `unico` → `/transactions/:id/calculated`, `cuota` → `/installments/:id/calculated` (POST y PATCH). El borrado del calculado **reutiliza `deleteRecurring`** (`DELETE /recurring/:id`) en los tres casos.
+- **Enrutado por `sourceType`.** `useCalculated` recibe el `sourceType` y elige el endpoint: `fijo` → `/recurring/:id/calculated`, `unico` → `/transactions/:id/calculated`, `cuota` → `/installments/:id/calculated` (POST y PATCH). El borrado del calculado **reutiliza `deleteRecurring`** (`DELETE /recurring/:id`) en los tres casos.
 - **`CreateCalculatedRequest` es una unión:** con `startMonth` para origen **fijo**, **sin** `startMonth` para único/cuota (lo deriva el backend del origen — RF-MCALC-008). `CalculatedInfo` trae `sourceType`/`sourceId` y `sourceChainId` **nullable** (null en único/cuota).
 - Invalida toda la familia `["movements"]` por prefijo (un calculado afecta muchos meses, igual que un fijo).
 - **`type` NO se envía** en ningún body (lo deriva el backend). Editar un calculado va **siempre** por este hook: `PATCH /recurring/:id` rechaza calculados con `400`.
@@ -294,7 +302,7 @@ Carga, edición y eliminación de grupos de cuotas. Se crean desde el tab **Cuot
 
 > **Gotcha — `MovementItem.installment` es campo requerido del tipo.** En los `MovementItem` de únicos y fijos hay que poner `installment: null` explícito (el tipo no lo hace opcional).
 
-## Navegación de período (`PeriodNav`) — fase 1.1.3
+## Navegación de período (`PeriodNav`)
 
 Componente reutilizable **`components/ui/period-nav.tsx`**: navegación genérica de período con **flechas gigantes a los costados** del contenido que envuelve (`‹ contenido ›`; ‹ = anterior, › = siguiente). Genérico por diseño; hoy lo usa **`/mes`** para navegar el mes. **Reportes no lo reutiliza**: navega el año con un stepper pill embebido en cada card (ver sección Reportes). Spec visual en `docs/design.md`.
 
@@ -318,7 +326,7 @@ Componente reutilizable **`components/ui/period-nav.tsx`**: navegación genéric
 | Derecha | `auto` | Flecha › (siguiente). |
 
 - **`grid-template-columns: auto minmax(0, 1120px) auto`.** Las columnas laterales `auto` hacen las flechas simétricas respecto del contenido. El cap de 1120px + el `px-10` viven en la **columna central** del propio componente — el consumidor (`page.tsx`) ya **no** lleva `max-w-[1120px] mx-auto`.
-- **Flechas:** **ancladas al centro vertical del viewport** — el botón usa `sticky top-[50vh]` + `translateY(-50%)`, de modo que permanecen centradas en el viewport al scrollear (el `sticky` se **conserva**, no se deroga). Para que el centrado al viewport funcione también con **listas cortas**, las celdas laterales llevan `min-height: 100vh`, que le da al `sticky` recorrido suficiente cuando el contenido es más bajo que el viewport. Tamaño único **64×64** (glifo 46px), sin variantes por breakpoint. Detalle visual fino en `docs/design.md`.
+- **Flechas:** **ancladas al centro vertical del viewport** — el botón usa `sticky top-[50vh]` + `translateY(-50%)`, de modo que permanecen centradas en el viewport al scrollear. Para que el centrado al viewport funcione también con **listas cortas**, las celdas laterales llevan `min-height: 100vh`, que le da al `sticky` recorrido suficiente cuando el contenido es más bajo que el viewport. Tamaño único **64×64** (glifo 46px), sin variantes por breakpoint. Detalle visual fino en `docs/design.md`.
 
 ### Dos regímenes
 
@@ -327,8 +335,6 @@ Componente reutilizable **`components/ui/period-nav.tsx`**: navegación genéric
 | ≥941px | Grid de 3 columnas (flechas a los costados). |
 | ≤940px | Colapsa al **pill stepper** en el header (sin flechas laterales). |
 
-(Se eliminó el modo intermedio del enfoque anterior.)
-
 ### Gotchas técnicos
 
 1. **`grid-template-columns` va por `style` inline, no como clase Tailwind.** `auto minmax(0, 1120px) auto` mezcla `auto` y `minmax()`, y Tailwind v4 no lo resuelve como utilidad `grid-cols-[...]`.
@@ -336,15 +342,15 @@ Componente reutilizable **`components/ui/period-nav.tsx`**: navegación genéric
 
 ## Vista del mes y Dashboard
 
-Las dos pantallas de visualización (Fase 5), sobre el endpoint unificado `GET /movements?month=YYYY-MM` (contrato en `docs/backend.md`, sección Movimientos del mes).
+Las dos pantallas de visualización, sobre el endpoint unificado `GET /movements?month=YYYY-MM` (contrato en `docs/backend.md`, sección Movimientos del mes).
 
-### Dashboard movido a `/`
+### El dashboard vive en `/`
 
-El dashboard vive en **`/`** (`src/app/page.tsx`). Antes era `/dashboard` — una desviación de `screens.md` introducida en Fase 2 que se corrigió acá. La carpeta `/dashboard` se eliminó. Redirects actualizados a `/`:
+El dashboard es `src/app/page.tsx` en **`/`** (no hay `/dashboard`). Redirects:
 
 - `src/middleware.ts`: un usuario autenticado que entra a `/login` o `/registro` se redirige a `/`.
 - `callbackUrl` / `redirectTo` por defecto del login, el registro y `use-register` apuntan a `/`.
-- **Sign-out sigue yendo a `/login`** (sin cambios).
+- **Sign-out va a `/login`.**
 
 ### Dashboard (`/`)
 
@@ -357,13 +363,15 @@ El dashboard vive en **`/`** (`src/app/page.tsx`). Antes era `/dashboard` — un
 ### Vista del mes (`/mes`)
 
 - Lee el mes de **`?month=YYYY-MM`** (default: mes actual en la zona del navegador, vía `getCurrentMonth`).
-- **`month-view-client.tsx` envuelve su contenido en `PeriodNav`** (flechas gigantes ‹ ›, fase 1.1.3) para la navegación prev / next, que cambia `?month=` (con `prevMonth` / `nextMonth`). El rótulo del mes (`formatMonthLabel`) se promueve al **header `.phead`** en ≥941px; en ≤940px el header lleva un **stepper compacto** en lugar de las flechas. Ambos siempre `canGoPrev`/`canGoNext` (en `/mes` no hay topes de navegación). El cap de 1120px y el `px-10` los aporta el propio `PeriodNav` (columna central del grid); `page.tsx` no lleva `max-w-[1120px] mx-auto` (ver sección Navegación de período).
+- **`month-view-client.tsx` envuelve su contenido en `PeriodNav`** (flechas gigantes ‹ ›) para la navegación prev / next, que cambia `?month=` (con `prevMonth` / `nextMonth`). El rótulo del mes (`formatMonthLabel`) se promueve al **header `.phead`** en ≥941px; en ≤940px el header lleva un **stepper compacto** en lugar de las flechas. Ambos siempre `canGoPrev`/`canGoNext` (en `/mes` no hay topes de navegación). El cap de 1120px y el `px-10` los aporta el propio `PeriodNav` (columna central del grid); `page.tsx` no lleva `max-w-[1120px] mx-auto` (ver sección Navegación de período).
 - **Totales del mes** (de `data.totals`).
-- **Lista agrupada en secciones colapsables + reordenables Únicos / Fijos / Cuotas** (fase 1.1.4, RF-VM-005). Las **tres secciones se muestran siempre** (cambió respecto de v1.0: antes una sección vacía se ocultaba); una sección vacía muestra cabecera completa + empty inline propio. Se renderizan con `AccordionSection` / `SortableSection` (ver Sistema de componentes). **Se eliminó el empty global** de la pantalla. Cada ítem (`movement-item-row`) muestra tipo, monto, categoría, descripción y badge de origen, con acciones **Editar** y **Eliminar** que abren el flujo según el origen: únicos → `TransactionModal` (`edit-single`) / `DeleteTransactionDialog`; fijos → `TransactionModal` (`edit-fixed`) / `delete-recurring-dialog`; cuotas → `TransactionModal` (`edit-installment`) / `delete-installment-dialog`.
-- **Filtros por listado (fase 1.2.1, RF-VM-006) — filtrado y totales en cliente.** Cada sección (Únicos/Fijos/Cuotas) tiene su disparador de filtro de **tipo + categoría** (`components/ui/section-filter-popover.tsx`, ver Sistema de componentes), renderizado como `filterSlot` de `AccordionSection` (oculto en modo orden). **`month-view-client.tsx` filtra cada lista en cliente y recalcula los totales del mes** sobre lo visible: los `data.totals` que devuelve el backend **ya no se usan en `/mes`** (sí en el dashboard). `useMovements(month)` se llama **sin** `categories` (trae todo el mes en una sola llamada). El pill contador y el subtotal de cada sección reflejan lo filtrado. Estado persistido vía `usePreferences`, clave `monthListFilters` (mismo patrón optimista que `monthSections`); shape, defaults y back-compat en `docs/data-model.md`, §Preferencia `monthListFilters` — replicarlos, no inventar otra normalización. Es **por pantalla, no por mes** (se conserva al navegar). La preferencia anterior `monthCategoryFilter` quedó deprecada (no se lee ni migra).
+- **Lista agrupada en secciones colapsables + reordenables Únicos / Fijos / Cuotas** (RF-VM-005). Las **tres secciones se muestran siempre**; una sección vacía muestra cabecera completa + empty inline propio (no hay empty global de la pantalla). Se renderizan con `AccordionSection` / `SortableSection` (ver Sistema de componentes). Cada ítem (`movement-item-row`) muestra tipo, monto, categoría, descripción y badge de origen, con acciones **Editar** y **Eliminar** que abren el flujo según el origen: únicos → `TransactionModal` (`edit-single`) / `DeleteTransactionDialog`; fijos → `TransactionModal` (`edit-fixed`) / `delete-recurring-dialog`; cuotas → `TransactionModal` (`edit-installment`) / `delete-installment-dialog`.
+- **Filtros por listado (RF-VM-006) — filtrado y totales en cliente.** Cada sección (Únicos/Fijos/Cuotas) tiene su disparador de filtro de **tipo + categoría** (`components/ui/section-filter-popover.tsx`, ver Sistema de componentes), renderizado como `filterSlot` de `AccordionSection` (oculto en modo orden). **`month-view-client.tsx` filtra cada lista en cliente y recalcula los totales del mes** sobre lo visible: los `data.totals` que devuelve el backend **no se usan en `/mes`** (sí en el dashboard). `useMovements(month)` se llama **sin** `categories` (trae todo el mes en una sola llamada).
+- **RN-019 tiene UN único punto de implementación en el frontend: `src/lib/movements.ts`.** Como `/mes` recalcula totales/subtotales en cliente, la regla de imputación a totales (RN-019, en `requirements.md`) está nucleada ahí: `sumMovementTotals(items) → { expense, income }` (magnitud al bucket del `type`) y `groupSubtotalCents(items) → number` (neto con signo de presentación, income − expense; delega en el anterior). **Todo componente que calcule totales o subtotales importa de ahí — no reimplementar la suma inline.**
+- **`MovementItem.amountCents` puede ser NEGATIVO** (calculados `EXPENSE`). Al bucketear por tipo **siempre `Math.abs()`** (lo hace `sumMovementTotals`); sumar el `amountCents` crudo con signo resta el gasto en vez de sumarlo y diverge del dashboard. El pill contador y el subtotal de cada sección reflejan lo filtrado. Estado persistido vía `usePreferences`, clave `monthListFilters` (mismo patrón optimista que `monthSections`); shape, defaults y back-compat en `docs/data-model.md`, §Preferencia `monthListFilters` — replicarlos, no inventar otra normalización. Es **por pantalla, no por mes** (se conserva al navegar). La preferencia `monthCategoryFilter` está deprecada (no se lee ni migra).
 - **Estado de secciones desde `usePreferences` (clave `monthSections`).** El colapsado/expandido y el orden de las secciones se leen y persisten vía `usePreferences` (ver §Preferencias de usuario). Shape de la clave en `docs/data-model.md` (§Contrato de preferencias → `monthSections`); ahí también vive la regla de **back-compat / normalización** (default si falta, filtra desconocidas, agrega faltantes al final) — replicarla en el consumidor, no inventar otra.
   - **Sincronización optimista:** al colapsar/expandir o reordenar, el **estado local cambia inmediato** en la UI y `setPreferences` persiste en **background**; la interacción **no se bloquea** con `isSaving`. El llamador manda el blob completo (`{ ...preferences, monthSections: ... }`), porque la semántica del backend es reemplazo total (ver §Preferencias de usuario).
-  - **Gotcha modo orden (1.2.0):** al **entrar** en modo orden todas las secciones se **colapsan de forma transitoria** (estado local, **puramente visual, NO se persiste**); al **salir** se **restaura el estado de colapso previo** del usuario sin pisar su preferencia (`monthSections.collapsed`). Es deliberado — un futuro agente que toque `month-view-client` debe respetarlo.
+  - **Gotcha modo orden:** al **entrar** en modo orden todas las secciones se **colapsan de forma transitoria** (estado local, **puramente visual, NO se persiste**); al **salir** se **restaura el estado de colapso previo** del usuario sin pisar su preferencia (`monthSections.collapsed`). Es deliberado — un agente que toque `month-view-client` debe respetarlo.
 - **Se actualiza al mutar** (crear / editar / eliminar) por invalidación de la query del mes.
 
 ### Datos (`use-movements`)
@@ -379,10 +387,10 @@ El dashboard vive en **`/`** (`src/app/page.tsx`). Antes era `/dashboard` — un
 
 - `/mes` usa **`useSearchParams()`**, que en el App Router de Next.js 15 **obliga a envolver el componente en `<Suspense>`** (si no, el build falla). Ya resuelto con un wrapper que provee el límite de Suspense.
 
-### Animación de acordeón sin JS — técnica grid-rows (`AccordionSection`, fase 1.1.4)
+### Animación de acordeón sin JS — técnica grid-rows (`AccordionSection`)
 
 - **Animar `height:auto` puramente en CSS, sin medir el DOM ni `ResizeObserver`:** el cuerpo colapsable usa **`grid-template-rows: 0fr ↔ 1fr`** en un contenedor `overflow-hidden`, con **`min-h-0`** en el hijo. La transición de `0fr` a `1fr` anima la altura del contenido real sin conocerla de antemano. `prefers-reduced-motion` quita la transición. Patrón reutilizable, vive en `AccordionSection` — reusarlo para cualquier colapsable futuro en vez de medir alturas a mano.
-- **Gotcha de testing — `grid-rows-[0fr]` colapsado NO oculta del DOM en jsdom.** La técnica `grid-rows-[0fr]↔[1fr]` oculta **visualmente** pero no aplica `display:none` / `visibility:hidden` ni borra el nodo. **jsdom no ejecuta CSS**, así que ve los elementos colapsados como presentes. Por eso los tests de un disclosure colapsable deben afirmar contra **render / no-render del nodo**, no contra visibilidad. Aplicado al disclosure "Moneda y cotización" (fase 1.2.4): el selector de moneda **siempre** está en el DOM; el input de cotización **solo se renderiza cuando `currency !== defaultCurrency`** — testear ese montaje condicional, no si el bloque está visualmente colapsado.
+- **Gotcha de testing — `grid-rows-[0fr]` colapsado NO oculta del DOM en jsdom.** La técnica `grid-rows-[0fr]↔[1fr]` oculta **visualmente** pero no aplica `display:none` / `visibility:hidden` ni borra el nodo. **jsdom no ejecuta CSS**, así que ve los elementos colapsados como presentes. Por eso los tests de un disclosure colapsable deben afirmar contra **render / no-render del nodo**, no contra visibilidad. Aplicado al disclosure "Moneda y cotización": el selector de moneda **siempre** está en el DOM; el input de cotización **solo se renderiza cuando `currency !== defaultCurrency`** — testear ese montaje condicional, no si el bloque está visualmente colapsado.
 
 ### Navegación entre pantallas
 
@@ -390,7 +398,7 @@ La navegación entre `/`, `/mes` y `/categorias` se hace por el **sidebar global
 
 ## Navegación global (sidebar — RF-NAV-001)
 
-Feature 100% frontend, construida **fuera de la secuencia de fases** (post-Fase 7). Resuelve la navegación entre secciones, la acción primaria de nuevo movimiento y el menú de usuario, persistente en pantallas autenticadas.
+Feature 100% frontend. Resuelve la navegación entre secciones, la acción primaria de nuevo movimiento y el menú de usuario, persistente en pantallas autenticadas.
 
 ### Punto único de montaje: route group `app/(app)/`
 
@@ -399,8 +407,8 @@ Las tres pantallas autenticadas (`/` dashboard, `/mes`, `/categorias`) viven den
 - **Los route groups de Next.js no alteran las URLs:** `/`, `/mes` y `/categorias` siguen siendo idénticas — `(app)` es solo organización de archivos.
 - **`login` y `registro` quedan FUERA del grupo** → no heredan el layout, por eso no muestran sidebar (cumple el criterio de RF-NAV-001 "no se muestra en pantallas no autenticadas").
 - **Regla para pantallas futuras: toda pantalla nueva con sesión debe vivir bajo `app/(app)/`** para heredar el sidebar. No remontar el sidebar por pantalla.
-- El `<main className="min-h-screen ...">` con el contenedor `mx-auto max-w-2xl` vive ahora en este layout; **las páginas hijas solo devuelven su contenido**, no su propio `<main>` ni contenedor.
-- Los componentes co-ubicados de categorías (`categories-list`, `category-form-modal`, `delete-category-dialog`, `reactivation-prompt`) se movieron junto a su `page.tsx` dentro de `(app)/categorias/`.
+- El `<main className="min-h-screen ...">` con el contenedor `mx-auto max-w-2xl` vive en este layout; **las páginas hijas solo devuelven su contenido**, no su propio `<main>` ni contenedor.
+- Los componentes co-ubicados de categorías (`categories-list`, `category-form-modal`, `delete-category-dialog`, `reactivation-prompt`) viven junto a su `page.tsx` dentro de `(app)/categorias/`.
 
 ### Componentes
 
@@ -422,7 +430,7 @@ Logo/nombre "Control" → `/`; links **Dashboard** (`/`), **Vista del mes** (`/m
 
 ## Reportes (RF-REP-001..005)
 
-Visualización de reportes de ingresos/gastos. **Renombra el módulo "Gráfico anual"** (ruta `/anual` → `/reportes`, endpoint `/movements/annual` → `/movements/reports`, hook `use-annual` → `use-reports`, tipos `annual.ts` → `reports.ts`, widget `annual-chart-widget.tsx` → `report-card.tsx`); el legado "anual" se eliminó por completo. El spec visual (color, alturas, jerarquía, transición) vive en `docs/design.md` — acá solo arquitectura y gotchas técnicos.
+Visualización de reportes de ingresos/gastos en `/reportes`. El spec visual (color, alturas, jerarquía, transición) vive en `docs/design.md` — acá solo arquitectura y gotchas técnicos.
 
 ### Arquitectura en dos capas (enfoque shadcn charts)
 
@@ -459,7 +467,7 @@ Para que un agente futuro que toque gráficos no los re-tropiece:
 - **`prefers-reduced-motion`:** las tarjetas usan un detector interno de reduced-motion. **jsdom no implementa `window.matchMedia`**, así que se agregó un **mock global de `matchMedia` en `tests/setup.ts`** — necesario para cualquier componente futuro que detecte reduced-motion.
 - **Dedupe de `useReports` por query key — no es doble fetch:** cuando `useReports(year, categoryIds)` se invoca **varias veces a la vez** con los mismos argumentos, React Query lo resuelve como **una sola request** por compartir la misma key (dedupe por key). No es N peticiones simultáneas.
 
-## Design system "Precise Ledger" — tokens (Fase 1)
+## Design system "Precise Ledger" — tokens
 
 Detalle operativo para no romper tokens en `.claude/agents/control-frontend.md`. Lo esencial:
 
@@ -469,8 +477,8 @@ Detalle operativo para no romper tokens en `.claude/agents/control-frontend.md`.
 - **Sin utilidad `shadow-*` del DS:** las sombras compuestas viven solo en `:root` (`var(--shadow-sm|md|lg)`).
 - **Densidad fija** (`--row-pad`/`--card-pad`/`--gap`); sin toggles. **Dark mode no portado** (se hará sobreescribiendo `:root` bajo `[data-theme="dark"]`).
 - **Cifras de dinero:** helper `.mono` (IBM Plex Mono + `tnum`).
-- **Token semántico `warning`** (ámbar, hue 75) agregado en Fase 2 con la misma dualidad `@theme`/`:root` que income/expense; al portar dark mode necesita su variante oscura. Detalle de valores y del re-estilado de primitivas en `.claude/agents/control-frontend.md`.
-- **Todas las pantallas y modales usan el DS y `lucide-react`** (Fase 3): login, registro, sidebar, dashboard, vista del mes, categorías y los modales de movimiento/borrado. No queda SVG inline ni estilos fuera del DS. Nuevos componentes/utilidades compartidos: **`components/ui/auth-brand-side.tsx`** (panel de marca de login y registro) y la animación de modal **`animate-modal-pop`** (utility en `globals.css`). Detalle operativo (grilla/glow con `<div>` absolutos, gradiente hardcodeado, botón Google placeholder, scrim del modal) en `.claude/agents/control-frontend.md`, sección Fase 3.
+- **Token semántico `warning`** (ámbar, hue 75) con la misma dualidad `@theme`/`:root` que income/expense; al portar dark mode necesita su variante oscura. Detalle de valores y del re-estilado de primitivas en `.claude/agents/control-frontend.md`.
+- **Todas las pantallas y modales usan el DS y `lucide-react`**: login, registro, sidebar, dashboard, vista del mes, categorías y los modales de movimiento/borrado. No queda SVG inline ni estilos fuera del DS. Componentes/utilidades compartidos: **`components/ui/auth-brand-side.tsx`** (panel de marca de login y registro) y la animación de modal **`animate-modal-pop`** (utility en `globals.css`). Detalle operativo (grilla/glow con `<div>` absolutos, gradiente hardcodeado, botón Google placeholder, scrim del modal) en `.claude/agents/control-frontend.md`.
 
 ## Tailwind v4 — gotcha
 
@@ -505,3 +513,9 @@ El logo de marca que se ve **dentro de la app** (gem del sidebar, chip del login
 
 - Tests en `tests/` (carpeta hermana de `src/`), espejando el árbol de `src/`. Ver convención completa en `docs/technical.md`.
 - Con `vi.useFakeTimers()` activo: `waitFor` no funciona (usa `setInterval` internamente). Disparar eventos con `fireEvent` y avanzar el tiempo con `act(() => vi.advanceTimersByTime(...))`, luego assertions síncronas. En `afterEach` usar `vi.clearAllTimers()` (no `runAllTimers()`) antes de `vi.useRealTimers()` para evitar warnings de act() de React 19.
+- **jsdom no ejecuta CSS:** los elementos ocultos por CSS (clases `hidden` de Tailwind, `grid-rows-[0fr]` colapsado) **siguen presentes en el árbol**. Consecuencias:
+  - **Dos variantes responsive del mismo contenido** (desktop/mobile alternadas con `hidden`) quedan ambas → `getByText`/`getByLabelText` fallan por duplicado. Patrón: `aria-hidden="true"` en la variante que no debe estar en el árbol de accesibilidad, y `getAllByText` cuando el texto se comparte. Aplica a `/mes` (flechas ≥941px vs stepper ≤940px).
+  - **Disclosure colapsable (técnica grid-rows):** afirmar contra render / no-render del nodo, no contra visibilidad. Ej. el bloque "Moneda y cotización": el selector de moneda siempre está en el DOM; el input de cotización solo se renderiza cuando `currency !== defaultCurrency` — testear ese montaje condicional.
+  - **`role="region"` duplicado:** si el `<section>` padre del acordeón ya provee `role=region` vía `aria-labelledby`, no poner otro `role=region` con el mismo nombre en el `<div>` interno, o `getByRole("region", { name })` falla por duplicado.
+  - **`getByRole("button", { name })` ambiguo** cuando más de un botón matchea (disclosure del acordeón + disparador de filtro `aria-label="Filtrar {sección}"`): diferenciarlos por presencia de `aria-expanded` + `aria-controls` (helper `getDisclosureButton`).
+- **Mock global de `matchMedia` en `tests/setup.ts`:** jsdom no implementa `window.matchMedia`; necesario para componentes que detectan `prefers-reduced-motion` (tarjetas de reporte).
