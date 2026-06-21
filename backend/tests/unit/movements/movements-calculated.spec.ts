@@ -35,6 +35,9 @@ type RecurringRow = {
   userId: string;
   type: MovementType;
   amountCents: number;
+  currency: string;
+  exchangeRate: number;
+  anchorCurrency: string;
   description: string | null;
   startMonth: string;
   deletedFrom: string | null;
@@ -74,6 +77,9 @@ const mockPrisma = {
   transaction: {
     findMany: jest.fn().mockResolvedValue([]), // no hay calculados de único en estos tests
   },
+  referenceRate: {
+    findMany: jest.fn().mockResolvedValue([]), // sin cotizaciones de referencia en estos tests (mismo anchor)
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -93,6 +99,9 @@ function makeNormalRow(overrides: Partial<RecurringRow> = {}): RecurringRow {
     userId: USER_A,
     type: MovementType.EXPENSE,
     amountCents: 10000,
+    currency: 'ARS',
+    exchangeRate: 1,
+    anchorCurrency: 'ARS',
     description: 'Alquiler',
     startMonth: '2026-01',
     deletedFrom: null,
@@ -123,6 +132,9 @@ function makeCalcRow(overrides: Partial<RecurringRow> = {}): RecurringRow {
     userId: USER_A,
     type: MovementType.EXPENSE,
     amountCents: 0, // placeholder — el monto real se deriva on-the-fly
+    currency: 'ARS',
+    exchangeRate: 1,
+    anchorCurrency: 'ARS',
     description: 'Expensas (10% del alquiler)',
     startMonth: '2026-01',
     deletedFrom: null,
@@ -399,7 +411,7 @@ describe('MovementsRepository — calculados (Fase 1.1.7)', () => {
   // BUG D: calculado se ordena por monto derivado (no placeholder 0)
   // -------------------------------------------------------------------------
 
-  describe('BUG D: calculado ordenado por amountCents derivado', () => {
+  describe('BUG D: calculado ordenado por convertedAmountCents derivado', () => {
     it('calculado con monto derivado > 0 no aparece al final', async () => {
       // Origen: 10000. Calculado: 50% = 5000.
       // Otro fijo normal: 3000.
@@ -423,10 +435,10 @@ describe('MovementsRepository — calculados (Fase 1.1.7)', () => {
       const result = await repo.findFijosByMonth(USER_A, '2026-06');
 
       expect(result).toHaveLength(3);
-      // El orden final debe ser por amountCents derivado DESC
-      expect(result[0].id).toBe('origin'); // 10000
-      expect(result[1].id).toBe('calc');   // 5000 derivado (BUG D: si fuera 0, estaría al final)
-      expect(result[2].id).toBe('otro');   // 3000
+      // El orden final debe ser por convertedAmountCents derivado DESC (con ARS coincide con amountCents)
+      expect(result[0].id).toBe('origin'); // convertedAmountCents 10000
+      expect(result[1].id).toBe('calc');   // convertedAmountCents 5000 derivado
+      expect(result[2].id).toBe('otro');   // convertedAmountCents 3000
     });
 
     it('calculado con monto derivado < monto de otro fijo aparece después de ese fijo', async () => {
@@ -472,9 +484,9 @@ describe('MovementsRepository — calculados (Fase 1.1.7)', () => {
       const result = await repo.findFijosByMonth(USER_A, '2026-06');
 
       expect(result).toHaveLength(2);
-      // derivedAmount = 10000 > origin (5000) → calculado aparece primero
-      expect(result[0].id).toBe('calc');   // 10000 derivado
-      expect(result[1].id).toBe('origin'); // 5000
+      // convertedAmountCents del calc = 10000 > del origin = 5000 → calculado aparece primero
+      expect(result[0].id).toBe('calc');   // convertedAmountCents 10000 derivado
+      expect(result[1].id).toBe('origin'); // convertedAmountCents 5000
     });
   });
 

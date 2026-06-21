@@ -1,11 +1,11 @@
 /**
- * Tests de SettingsClient (/configuracion — Fase 1.2.3).
+ * Tests de SettingsClient (/configuracion — Fase 1.2.4: 4 monedas).
  *
  * Verifica:
  * - Estado de carga: muestra skeleton (sin el segmented)
  * - Estado de error: muestra mensaje de error
- * - Estado cargado: muestra el segmented con defaultCurrency correcto
- * - Cambiar la moneda llama updateSettings con la nueva moneda
+ * - Estado cargado: muestra el segmented con los 4 segmentos y defaultCurrency correcto
+ * - Cambiar la moneda llama updateSettings con la nueva moneda (ARS, USD, EUR, BRL)
  * - Toast de éxito al guardar correctamente
  * - Toast de error si la mutación falla
  * - isSaving: el segmented está deshabilitado mientras se guarda
@@ -107,20 +107,45 @@ describe("SettingsClient", () => {
     });
   });
 
-  describe("Estado cargado", () => {
-    it("muestra el segmented con ARS seleccionado", () => {
+  describe("Estado cargado — 4 segmentos", () => {
+    it("muestra el segmented con los 4 segmentos (ARS, USD, EUR, BRL)", () => {
       setupMocks({ defaultCurrency: "ARS" });
       renderSettings();
       const radiogroup = screen.getByRole("radiogroup", { name: /moneda por defecto/i });
       expect(radiogroup).toBeInTheDocument();
-      expect(screen.getByRole("radio", { name: "ARS" })).toHaveAttribute("aria-checked", "true");
-      expect(screen.getByRole("radio", { name: "USD" })).toHaveAttribute("aria-checked", "false");
+      expect(screen.getByRole("radio", { name: "ARS" })).toBeInTheDocument();
+      expect(screen.getByRole("radio", { name: "USD" })).toBeInTheDocument();
+      expect(screen.getByRole("radio", { name: "EUR" })).toBeInTheDocument();
+      expect(screen.getByRole("radio", { name: "BRL" })).toBeInTheDocument();
     });
 
-    it("muestra el segmented con USD seleccionado cuando defaultCurrency=USD", () => {
+    it("ARS seleccionado: aria-checked=true solo en ARS", () => {
+      setupMocks({ defaultCurrency: "ARS" });
+      renderSettings();
+      expect(screen.getByRole("radio", { name: "ARS" })).toHaveAttribute("aria-checked", "true");
+      expect(screen.getByRole("radio", { name: "USD" })).toHaveAttribute("aria-checked", "false");
+      expect(screen.getByRole("radio", { name: "EUR" })).toHaveAttribute("aria-checked", "false");
+      expect(screen.getByRole("radio", { name: "BRL" })).toHaveAttribute("aria-checked", "false");
+    });
+
+    it("USD seleccionado: aria-checked=true solo en USD", () => {
       setupMocks({ defaultCurrency: "USD", settings: { defaultCurrency: "USD", lastExchangeRate: 1200 } });
       renderSettings();
       expect(screen.getByRole("radio", { name: "USD" })).toHaveAttribute("aria-checked", "true");
+      expect(screen.getByRole("radio", { name: "ARS" })).toHaveAttribute("aria-checked", "false");
+    });
+
+    it("EUR seleccionado: aria-checked=true solo en EUR", () => {
+      setupMocks({ defaultCurrency: "EUR", settings: { defaultCurrency: "EUR", lastExchangeRate: null } });
+      renderSettings();
+      expect(screen.getByRole("radio", { name: "EUR" })).toHaveAttribute("aria-checked", "true");
+      expect(screen.getByRole("radio", { name: "ARS" })).toHaveAttribute("aria-checked", "false");
+    });
+
+    it("BRL seleccionado: aria-checked=true solo en BRL", () => {
+      setupMocks({ defaultCurrency: "BRL", settings: { defaultCurrency: "BRL", lastExchangeRate: null } });
+      renderSettings();
+      expect(screen.getByRole("radio", { name: "BRL" })).toHaveAttribute("aria-checked", "true");
       expect(screen.getByRole("radio", { name: "ARS" })).toHaveAttribute("aria-checked", "false");
     });
   });
@@ -135,6 +160,30 @@ describe("SettingsClient", () => {
 
       await waitFor(() => {
         expect(mockUpdateSettings).toHaveBeenCalledWith({ defaultCurrency: "USD" });
+      });
+    });
+
+    it("llama updateSettings con 'EUR' al hacer click en EUR", async () => {
+      mockUpdateSettings.mockResolvedValue({ success: true });
+      setupMocks({ defaultCurrency: "ARS" });
+      renderSettings();
+
+      fireEvent.click(screen.getByRole("radio", { name: "EUR" }));
+
+      await waitFor(() => {
+        expect(mockUpdateSettings).toHaveBeenCalledWith({ defaultCurrency: "EUR" });
+      });
+    });
+
+    it("llama updateSettings con 'BRL' al hacer click en BRL", async () => {
+      mockUpdateSettings.mockResolvedValue({ success: true });
+      setupMocks({ defaultCurrency: "ARS" });
+      renderSettings();
+
+      fireEvent.click(screen.getByRole("radio", { name: "BRL" }));
+
+      await waitFor(() => {
+        expect(mockUpdateSettings).toHaveBeenCalledWith({ defaultCurrency: "BRL" });
       });
     });
 
@@ -167,13 +216,13 @@ describe("SettingsClient", () => {
   });
 
   describe("Estado isSaving", () => {
-    it("el segmented está deshabilitado mientras isSaving=true", () => {
+    it("todos los segmentos están deshabilitados mientras isSaving=true", () => {
       setupMocks({ isSaving: true });
       renderSettings();
-      const arsBtn = screen.getByRole("radio", { name: "ARS" });
-      const usdBtn = screen.getByRole("radio", { name: "USD" });
-      expect(arsBtn).toBeDisabled();
-      expect(usdBtn).toBeDisabled();
+      expect(screen.getByRole("radio", { name: "ARS" })).toBeDisabled();
+      expect(screen.getByRole("radio", { name: "USD" })).toBeDisabled();
+      expect(screen.getByRole("radio", { name: "EUR" })).toBeDisabled();
+      expect(screen.getByRole("radio", { name: "BRL" })).toBeDisabled();
     });
   });
 });

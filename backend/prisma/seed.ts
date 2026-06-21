@@ -23,6 +23,7 @@ if (process.env.NODE_ENV === 'production') {
 
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { seedReferenceRates } from './seed-reference-rates';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
@@ -214,6 +215,10 @@ async function main() {
   } else {
     console.log(`[seed] Cuotas existentes: "Notebook 12 cuotas"`);
   }
+
+  // --- Cotizaciones de referencia (idempotente, también carga en dev) ---
+  const ratesUpserted = await seedReferenceRates(prisma);
+  console.log(`[seed] Cotizaciones de referencia: ${ratesUpserted} filas insertadas/actualizadas.`);
 
   console.log('[seed] Seed de desarrollo completado.');
 }

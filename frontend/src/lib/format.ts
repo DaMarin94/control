@@ -17,13 +17,17 @@ const CURRENCY_DECIMALS = 2;
  * Mapa de código de moneda → símbolo de prefijo.
  * Fuente de verdad única. Extensible: sumar una moneda = una entrada.
  *
- * Spec (docs/design/specs-archive.md §"Símbolos de moneda por código"):
+ * Spec (docs/design.md §"Símbolos de moneda por código" / §"Monedas configurables — Fase 1.2.4"):
  *   ARS → "$"   (convención argentina, back-compat)
  *   USD → "US$" (prefijo internacional inequívoco del dólar estadounidense)
+ *   EUR → "€"   (símbolo universal del euro)
+ *   BRL → "R$"  (real brasileño — prefijo estándar)
  */
 export const CURRENCY_SYMBOLS: Record<string, string> = {
   ARS: "$",
   USD: "US$",
+  EUR: "€",
+  BRL: "R$",
 };
 
 /** Símbolo de fallback cuando el código no está en el mapa. */

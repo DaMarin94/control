@@ -93,6 +93,8 @@ export interface UpdateRecurringRequest {
   amountCents?: number;
   categoryId?: string;
   description?: string | null;
+  /** Moneda del fijo (Fase 1.2.4). Permite cambiar la moneda al editar. */
+  currency?: CurrencyCode;
   /** Cotización ARS por 1 USD para el mes actual (Fase 1.2.3). */
   exchangeRate?: number;
 }

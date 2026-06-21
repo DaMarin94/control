@@ -113,6 +113,7 @@ function makeCalculadoWithCategory(overrides: Partial<RecurringWithCategory> = {
     amountCents: 0,
     currency: Currency.ARS,
     exchangeRate: 1,
+    anchorCurrency: Currency.ARS,
     description: null,
     startMonth: '2026-06',
     deletedFrom: '2026-07',

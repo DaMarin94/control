@@ -42,6 +42,14 @@ vi.mock("@/hooks/use-settings", () => ({
   })),
 }));
 
+vi.mock("@/hooks/use-reference-rate", () => ({
+  useReferenceRate: vi.fn(() => ({
+    referenceRate: null,
+    isLoading: false,
+    isError: false,
+  })),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(() => ({ push: vi.fn() })),
 }));
@@ -57,11 +65,13 @@ vi.mock("@/lib/format", async (importOriginal) => {
 import { useCategories } from "@/hooks/use-categories";
 import { useInstallments } from "@/hooks/use-installments";
 import { useSettings } from "@/hooks/use-settings";
+import { useReferenceRate } from "@/hooks/use-reference-rate";
 import { useRouter } from "next/navigation";
 
 const mockUseCategories = vi.mocked(useCategories);
 const mockUseInstallments = vi.mocked(useInstallments);
 const mockUseSettings = vi.mocked(useSettings);
+const mockUseReferenceRate = vi.mocked(useReferenceRate);
 const mockUseRouter = vi.mocked(useRouter);
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -572,17 +582,20 @@ describe("InstallmentForm — error del backend", () => {
   });
 });
 
-// ─── Tests: validación cotización > 0 (siempre, no solo cross-rate) ───────────
+// ─── Tests: cotización y moneda (Fase 1.2.4 — disclosure + moneda=default) ───────
 
-describe("InstallmentForm — validación cotización > 0 (siempre)", () => {
-  it("muestra el campo de cotización también cuando moneda === defaultCurrency", () => {
+describe("InstallmentForm — cotización y moneda (Fase 1.2.4)", () => {
+  it("NO muestra el campo de cotización cuando moneda === defaultCurrency (campo oculto)", () => {
+    // Fase 1.2.4: cuando moneda==default el campo cotización no se renderiza.
     renderForm({});
-    expect(screen.getByLabelText(/cotización/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/cotización/i)).not.toBeInTheDocument();
   });
 
-  it("bloquea el submit si la cotización está vacía (lastExchangeRate null, usuario nuevo)", async () => {
+  it("envía exchangeRate=1 al backend cuando moneda === default (no valida el campo oculto)", async () => {
     const user = userEvent.setup();
-    // Sobreescribir el mock para simular usuario nuevo sin historial de cotización
+    mockCreateInstallment.mockResolvedValue({ success: true, installment: mockInstallmentGroup });
+
+    // Incluso con lastExchangeRate=null, si moneda===default el form envía 1 directamente.
     mockUseSettings.mockReturnValue({
       settings: { defaultCurrency: "ARS", lastExchangeRate: null },
       defaultCurrency: "ARS",
@@ -599,16 +612,67 @@ describe("InstallmentForm — validación cotización > 0 (siempre)", () => {
     await user.type(screen.getByLabelText(/cant\. de cuotas/i), "12");
     await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
 
-    // El campo de cotización arranca vacío (usuario nuevo) → el submit debe bloquearse
     await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/ingresá una cotización mayor a 0/i)).toBeInTheDocument();
+      expect(mockCreateInstallment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exchangeRate: 1,
+        }),
+      );
     });
-    expect(mockCreateInstallment).not.toHaveBeenCalled();
   });
 
-  it("envía la cotización real al backend (no hardcodea 1 cuando moneda === default)", async () => {
+  it("envía exchangeRate=1 (no usa lastExchangeRate) cuando moneda === default", async () => {
+    const user = userEvent.setup();
+    mockCreateInstallment.mockResolvedValue({ success: true, installment: mockInstallmentGroup });
+
+    // lastExchangeRate=1200 pero moneda===ARS (default) → se envía 1, no 1200
+    renderForm({});
+
+    await user.type(screen.getByLabelText(/monto por cuota/i), "500");
+    await user.type(screen.getByLabelText(/cant\. de cuotas/i), "12");
+    await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
+
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(mockCreateInstallment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exchangeRate: 1,
+        }),
+      );
+    });
+  });
+});
+
+// ─── Tests: currency en edición (Fase 1.2.4) ─────────────────────────────────
+
+describe("InstallmentForm — currency en edición (Fase 1.2.4)", () => {
+  it("el PATCH incluye currency con el valor del form al editar (sin cambio de moneda)", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    mockUpdateInstallment.mockResolvedValue({ success: true, installment: mockInstallmentGroup });
+
+    renderForm({ installment: mockInstallmentGroup, onClose });
+
+    const amountInput = screen.getByLabelText(/monto por cuota/i) as HTMLInputElement;
+    await user.clear(amountInput);
+    await user.type(amountInput, "600");
+
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(mockUpdateInstallment).toHaveBeenCalledWith(
+        "inst-1",
+        expect.objectContaining({
+          currency: "ARS",
+        }),
+      );
+    });
+  });
+
+  it("el crear incluye currency en el payload (crea con ARS por defecto)", async () => {
     const user = userEvent.setup();
     mockCreateInstallment.mockResolvedValue({ success: true, installment: mockInstallmentGroup });
 
@@ -617,16 +681,70 @@ describe("InstallmentForm — validación cotización > 0 (siempre)", () => {
     await user.type(screen.getByLabelText(/monto por cuota/i), "500");
     await user.type(screen.getByLabelText(/cant\. de cuotas/i), "12");
     await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
-    // El campo cotización viene pre-cargado con 1200 (el mock de beforeEach)
 
     await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => {
       expect(mockCreateInstallment).toHaveBeenCalledWith(
         expect.objectContaining({
-          exchangeRate: 1200,
+          currency: "ARS",
         }),
       );
+    });
+  });
+
+  it("cambiar la moneda en edición actualiza la cotización desde referenceRate", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    mockUpdateInstallment.mockResolvedValue({ success: true, installment: mockInstallmentGroup });
+
+    // Configurar referenceRate para USD
+    mockUseReferenceRate.mockReturnValue({
+      referenceRate: 1350,
+      isLoading: false,
+      isError: false,
+    });
+
+    // Grupo en ARS con exchangeRate=1
+    const arsInstallment = { ...mockInstallmentGroup, currency: "ARS" as const, exchangeRate: 1 };
+    renderForm({ installment: arsInstallment, onClose });
+
+    // Con moneda=ARS (==default) el disclosure arranca colapsado y no hay campo cotización.
+    // El CurrencySegmented está en el DOM (el grid-rows lo oculta visualmente, no del DOM).
+    // Cambiar la moneda a USD: el radio está accesible aunque el disclosure esté colapsado.
+    const usdBtn = screen.getByRole("radio", { name: /^usd$/i });
+    await user.click(usdBtn);
+
+    // Después de cambiar a USD (≠ default), el cuerpo del disclosure muestra el grid 2-col
+    // con el input de cotización. La cotización se actualiza a 1350 (referenceRate).
+    await waitFor(() => {
+      const updatedRateInput = screen.getByLabelText(/cotización/i) as HTMLInputElement;
+      expect(updatedRateInput.value).toBe("1.350,00");
+    });
+  });
+
+  it("cambiar la moneda en edición sin referenceRate usa lastExchangeRate", async () => {
+    const user = userEvent.setup();
+    mockUpdateInstallment.mockResolvedValue({ success: true, installment: mockInstallmentGroup });
+
+    // Sin referenceRate disponible
+    mockUseReferenceRate.mockReturnValue({
+      referenceRate: null,
+      isLoading: false,
+      isError: false,
+    });
+
+    const arsInstallment = { ...mockInstallmentGroup, currency: "ARS" as const, exchangeRate: 1 };
+    renderForm({ installment: arsInstallment });
+
+    // Cambiar a USD: el radio está en el DOM aunque el disclosure esté colapsado.
+    const usdBtn = screen.getByRole("radio", { name: /^usd$/i });
+    await user.click(usdBtn);
+
+    // Sin referenceRate, usa lastExchangeRate = 1200 (del mock beforeEach)
+    await waitFor(() => {
+      const updatedRateInput = screen.getByLabelText(/cotización/i) as HTMLInputElement;
+      expect(updatedRateInput.value).toBe("1.200,00");
     });
   });
 });

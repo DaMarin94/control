@@ -12,7 +12,7 @@
  * Lógica de negocio preservada intacta.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -26,6 +26,7 @@ import { CurrencyExchangeBlock } from "@/components/ui/currency-exchange-block";
 import { useCategories } from "@/hooks/use-categories";
 import { useTransactions } from "@/hooks/use-transactions";
 import { useSettings } from "@/hooks/use-settings";
+import { useReferenceRate } from "@/hooks/use-reference-rate";
 import { useToast } from "@/hooks/use-toast";
 import { type Transaction, type TransactionType } from "@/types/transaction";
 import { type Category, type CategoryScope } from "@/types/category";
@@ -53,7 +54,7 @@ const transactionSchema = z.object({
     .refine((val) => parseCurrencyInput(val) !== null, {
       message: "Ingresá un monto mayor a 0",
     }),
-  currency: z.enum(["ARS", "USD"]),
+  currency: z.enum(["ARS", "USD", "EUR", "BRL"]),
   /**
    * Input de cotización como string (puede tener decimales, locale es-AR).
    * Solo se valida cuando currency !== defaultCurrency (se valida en onSubmit).
@@ -131,21 +132,19 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
   const timezone = isEditing ? transaction.timezone : getBrowserTimezone();
   const { date: nowDate, time: nowTime } = getNowLocalDateAndTime();
 
-  // Cotización pre-cargada:
+  // Cotización pre-cargada inicial (para el defaultValues del form):
   // - Editando: la del movimiento (siempre presente, nunca null en el backend).
-  // - Creando: el lastExchangeRate del usuario, o vacío si aún no tiene historial.
-  const preloadedExchangeRateInput = isEditing
+  // - Creando: vacío para ahora; se actualiza al resolver la query de referencia.
+  const initialEditingExchangeRateInput = isEditing
     ? formatExchangeRate(transaction.exchangeRate ?? 1)
-    : lastExchangeRate != null
-      ? formatExchangeRate(lastExchangeRate)
-      : "";
+    : "";
 
   const defaultValues: TransactionFormData = isEditing
     ? {
         type: transaction.type,
         amountInput: String(transaction.amountCents / 100).replace(".", ","),
         currency: transaction.currency ?? defaultCurrency,
-        exchangeRateInput: formatExchangeRate(transaction.exchangeRate ?? 1),
+        exchangeRateInput: initialEditingExchangeRateInput,
         categoryId: transaction.categoryId,
         date: utcToLocalDate(transaction.occurredAt, transaction.timezone),
         time: utcToLocalTime(transaction.occurredAt, transaction.timezone),
@@ -155,15 +154,23 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
         type: "EXPENSE",
         amountInput: "",
         currency: defaultCurrency,
-        exchangeRateInput: preloadedExchangeRateInput,
+        exchangeRateInput: "",
         categoryId: "",
         date: nowDate,
         time: nowTime,
         description: "",
       };
 
-  // Moneda inicial para detectar cambios y resetear el flag de modificado
-  const [initialExchangeRateInput] = useState(defaultValues.exchangeRateInput);
+  // Rastrear el valor de pre-carga para detectar si el usuario lo modificó
+  const [preloadedExchangeRateInput, setPreloadedExchangeRateInput] = useState(
+    initialEditingExchangeRateInput,
+  );
+
+  // En edición: moneda original al abrir el modal. Si el usuario la cambia, se
+  // pre-carga la cotización de referencia para la nueva moneda (como en creación).
+  const initialCurrencyRef = useRef<CurrencyCode>(
+    isEditing ? (transaction?.currency ?? defaultCurrency) : defaultCurrency,
+  );
 
   const {
     register,
@@ -178,44 +185,82 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
     defaultValues,
   });
 
+  const selectedType = watch("type");
+  const selectedCategoryId = watch("categoryId");
+  const selectedCurrency = watch("currency") as CurrencyCode;
+  const selectedDate = watch("date");
+  const exchangeRateInput = watch("exchangeRateInput");
+
+  // Mes del movimiento derivado de la fecha seleccionada (para el endpoint de referencia)
+  const movementMonth = selectedDate?.length >= 7 ? selectedDate.substring(0, 7) : nowDate.substring(0, 7);
+
+  // Hook de cotización de referencia — Fase 1.2.4
+  // Solo activo en modo crear y cuando la moneda difiere de la default (currency ≠ default).
+  const { referenceRate } = useReferenceRate({
+    month: movementMonth,
+    currency: selectedCurrency,
+    defaultCurrency,
+  });
+
   useEffect(() => {
     if (isEditing) {
+      const newCurrency = transaction.currency ?? defaultCurrency;
       reset({
         type: transaction.type,
         amountInput: String(transaction.amountCents / 100).replace(".", ","),
-        currency: transaction.currency ?? defaultCurrency,
+        currency: newCurrency,
         exchangeRateInput: formatExchangeRate(transaction.exchangeRate ?? 1),
         categoryId: transaction.categoryId,
         date: utcToLocalDate(transaction.occurredAt, transaction.timezone),
         time: utcToLocalTime(transaction.occurredAt, transaction.timezone),
         description: transaction.description ?? "",
       });
+      // Actualizar la referencia de moneda inicial para que el effect de pre-carga
+      // pueda detectar correctamente si el usuario la cambia en esta sesión.
+      initialCurrencyRef.current = newCurrency;
       setIsExchangeRateModified(false);
     }
   }, [transaction, isEditing, reset, defaultCurrency]);
 
-  // Pre-cargar cotización cuando defaultCurrency o lastExchangeRate cambian (solo en crear)
+  // Pre-cargar cotización al crear: prioridad referenceRate → lastExchangeRate → vacío (Fase 1.2.4).
+  // Se recalcula cuando cambia: defaultCurrency, selectedCurrency, referenceRate, lastExchangeRate.
   useEffect(() => {
     if (!isEditing) {
       setValue("currency", defaultCurrency);
-      setValue(
-        "exchangeRateInput",
-        lastExchangeRate != null ? formatExchangeRate(lastExchangeRate) : "",
-      );
+      // Para el par que muestra el label cuando moneda===default, la cotización relevante
+      // es siempre referenceRate/lastExchangeRate de la "otra" moneda. En ese caso
+      // no cambiamos nada — el campo queda como estaba (o vacío al inicio).
+      // Cuando la moneda cambia a algo distinto de la default, tomamos la referencia del mes.
+    }
+  }, [defaultCurrency, isEditing, setValue]);
+
+  // Pre-cargar cotización: prioridad referenceRate → lastExchangeRate → vacío (Fase 1.2.4).
+  // En modo crear: siempre al cambiar referencia o moneda.
+  // En modo edición: solo si el usuario cambió la moneda (≠ moneda original al abrir) y
+  // no modificó la cotización manualmente.
+  useEffect(() => {
+    const currencyChanged = selectedCurrency !== initialCurrencyRef.current;
+    if (isEditing && !currencyChanged) return;
+    if (isEditing && isExchangeRateModified) return;
+    const rate =
+      referenceRate !== null
+        ? referenceRate
+        : lastExchangeRate;
+    const formatted = rate !== null ? formatExchangeRate(rate) : "";
+    setPreloadedExchangeRateInput(formatted);
+    setValue("exchangeRateInput", formatted);
+    if (!isEditing) {
       setIsExchangeRateModified(false);
     }
-  }, [defaultCurrency, lastExchangeRate, isEditing, setValue]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [referenceRate, lastExchangeRate, isEditing, selectedCurrency, setValue]);
 
-  const selectedType = watch("type");
-  const selectedCategoryId = watch("categoryId");
-  const exchangeRateInput = watch("exchangeRateInput");
-
-  // Detectar si el usuario modificó la cotización respecto al valor inicial
+  // Detectar si el usuario modificó la cotización respecto al valor pre-cargado
   useEffect(() => {
     setIsExchangeRateModified(
-      exchangeRateInput !== initialExchangeRateInput && exchangeRateInput !== ""
+      exchangeRateInput !== preloadedExchangeRateInput && exchangeRateInput !== ""
     );
-  }, [exchangeRateInput, initialExchangeRateInput]);
+  }, [exchangeRateInput, preloadedExchangeRateInput]);
 
   const availableCategories = filterCategoriesByType(
     (categories ?? []).map((c) => ({ id: c.id, name: c.name, scope: c.scope })),
@@ -237,14 +282,22 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
     const amountCents = parseCurrencyInput(data.amountInput);
     if (amountCents === null) return;
 
-    // Validar cotización SIEMPRE (no solo en cross-rate): el roadmap exige capturar
-    // y persistir la cotización real también cuando moneda === defaultCurrency.
-    const parsedExchangeRate = parseExchangeRateInput(data.exchangeRateInput);
-    if (parsedExchangeRate === null) {
-      setExchangeRateError("Ingresá una cotización mayor a 0");
-      return;
+    // Cuando moneda === defaultCurrency el campo cotización está oculto (Fase 1.2.4).
+    // El backend ignora exchangeRate en ese caso, así que enviamos 1 directamente.
+    // Solo cuando moneda ≠ default validamos y parseamos el input visible.
+    let parsedExchangeRate: number;
+    if (data.currency === defaultCurrency) {
+      parsedExchangeRate = 1;
+      setExchangeRateError(undefined);
+    } else {
+      const parsed = parseExchangeRateInput(data.exchangeRateInput);
+      if (parsed === null) {
+        setExchangeRateError("Ingresá una cotización mayor a 0");
+        return;
+      }
+      parsedExchangeRate = parsed;
+      setExchangeRateError(undefined);
     }
-    setExchangeRateError(undefined);
 
     const occurredAt = localToUtcIso(data.date, data.time, timezone);
 

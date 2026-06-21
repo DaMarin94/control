@@ -87,6 +87,7 @@ function makeRecurring(
     amountCents: 5000,
     currency: Currency.ARS,
     exchangeRate: 1,
+    anchorCurrency: Currency.ARS,
     description: null,
     startMonth: '2026-01',
     deletedFrom: null,

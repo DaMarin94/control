@@ -27,6 +27,7 @@
 | Reportes — pantalla configurable por cards + widget en dashboard | RF-REP-001..005 | Implementado (fase 1.1.5) |
 | Reportes — toggle "Total / Por categoría" en la card Ingresos y gastos (desglose de solo gastos) | RF-REP-006 | Implementado (fase 1.2.2) |
 | Multi-moneda ARS/USD (moneda + cotización por movimiento; totales convertidos a la default) + pantalla `/configuracion` | RF-CUR-001..005, RN-009 | Implementado (fase 1.2.3; reabre RN-009) |
+| Monedas configurables — set curado 4 (ARS/USD/EUR/BRL) + tabla de cotizaciones de referencia (global, interna, no editable; pivote USD) pre-cargando la cotización del movimiento | RF-CUR-001..006, RN-009 | Implementado (fase 1.2.4; reabre "set fijo ARS/USD" de 1.2.3) |
 | Preferencias de usuario — cimiento (blob JSON + sesión) | — (fase 1.1.0, ST1) | Implementado (sin UI de producto) |
 
 ---

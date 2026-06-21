@@ -27,8 +27,10 @@ export interface TransactionWithCategory {
   timezone: string;
   /** Moneda original del movimiento (Fase 1.2.3) */
   currency: Currency;
-  /** Cotización ARS/1 USD al momento del movimiento (Fase 1.2.3) */
+  /** Cotización anchorCurrency/1 currency al momento del movimiento (Fase 1.2.3/1.2.4) */
   exchangeRate: number;
+  /** Moneda default del usuario al momento de guardar el movimiento (Fase 1.2.4) */
+  anchorCurrency: Currency;
   createdAt: Date;
   updatedAt: Date;
   category: EmbeddedCategory;
@@ -64,6 +66,7 @@ function mapToTransactionWithCategory(
     currency: tx.currency,
     // Prisma 7 devuelve Decimal para campos @db.Decimal; convertir a number para serializar
     exchangeRate: Number(tx.exchangeRate),
+    anchorCurrency: tx.anchorCurrency,
     createdAt: tx.createdAt,
     updatedAt: tx.updatedAt,
     category: {

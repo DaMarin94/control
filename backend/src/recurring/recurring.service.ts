@@ -47,6 +47,10 @@ export class RecurringService {
 
     const effectiveExchangeRate = dto.exchangeRate ?? 1;
 
+    // Cargar la defaultCurrency del usuario para anclarla como anchor (Fase 1.2.4)
+    const userSettings = await this.settingsService.getSettings(userId);
+    const anchorCurrency = userSettings.defaultCurrency;
+
     const r = await this.repo.create({
       user: { connect: { id: userId } },
       category: { connect: { id: dto.categoryId } },
@@ -57,6 +61,7 @@ export class RecurringService {
       description: dto.description ?? null,
       ...(dto.currency !== undefined && { currency: dto.currency }),
       exchangeRate: effectiveExchangeRate,
+      anchorCurrency,
       // chainId se genera por el @default(cuid()) del schema;
       // sourceChainId/formulaOperator/formulaOperand/formulaSign son null (fijo normal)
     });
@@ -219,6 +224,10 @@ export class RecurringService {
       // currency y exchangeRate: el DTO puede sobreescribirlos para el mes editado.
       // chainId: R2 hereda el mismo chainId de R1 (invariante — el split no rompe la cadena).
       const effectiveExchangeRate = dto.exchangeRate ?? existing.exchangeRate;
+      // anchorCurrency: si se actualiza la cotización, usar la default vigente; si no, heredar del original
+      const effectiveAnchorCurrency = (dto.exchangeRate !== undefined || dto.currency !== undefined)
+        ? (await this.settingsService.getSettings(userId)).defaultCurrency
+        : existing.anchorCurrency;
       result = await this.repo.create({
         user: { connect: { id: userId } },
         category: { connect: { id: dto.categoryId ?? existing.categoryId } },
@@ -230,6 +239,7 @@ export class RecurringService {
         chainId: existing.chainId, // CRÍTICO: preservar la identidad de cadena (Fase 1.1.7)
         currency: dto.currency ?? existing.currency, // heredar o sobreescribir
         exchangeRate: effectiveExchangeRate,
+        anchorCurrency: effectiveAnchorCurrency,
         description: dto.description !== undefined
           ? dto.description
           : existing.description,
@@ -251,6 +261,12 @@ export class RecurringService {
       );
     } else {
       // UPDATE IN-PLACE: currentMonth <= startMonth, no hay meses pasados
+      let inPlaceAnchor = undefined;
+      if (dto.exchangeRate !== undefined || dto.currency !== undefined) {
+        const s = await this.settingsService.getSettings(userId);
+        inPlaceAnchor = s.defaultCurrency;
+      }
+
       result = await this.repo.update(id, {
         ...(dto.amountCents !== undefined && { amountCents: dto.amountCents }),
         ...(dto.categoryId !== undefined && {
@@ -260,6 +276,7 @@ export class RecurringService {
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.currency !== undefined && { currency: dto.currency }),
         ...(dto.exchangeRate !== undefined && { exchangeRate: dto.exchangeRate }),
+        ...(inPlaceAnchor !== undefined && { anchorCurrency: inPlaceAnchor }),
       });
 
       if (dto.exchangeRate !== undefined) {

@@ -58,10 +58,10 @@ export function SettingsClient() {
 
           {/* Derecha: control */}
           {isLoading ? (
-            /* Skeleton del segmented mientras carga */
+            /* Skeleton del segmented mientras carga — ancho para 4 segmentos */
             <div
               className="rounded-pill bg-panel-3 animate-pulse shrink-0"
-              style={{ width: "130px", height: "36px" }}
+              style={{ width: "220px", height: "36px" }}
               aria-hidden="true"
             />
           ) : isError ? (

@@ -6,8 +6,8 @@
  * PATCH /settings → body: UpdateSettingsRequest; data: UserSettings
  */
 
-/** Código de moneda soportado en v1 */
-export type CurrencyCode = "ARS" | "USD";
+/** Código de moneda soportado en v1 (ampliado a 4 en Fase 1.2.4) */
+export type CurrencyCode = "ARS" | "USD" | "EUR" | "BRL";
 
 /**
  * Configuración de usuario tal como la devuelve el backend.

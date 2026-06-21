@@ -8,7 +8,7 @@
  * - Validación de month inválido / faltante → BadRequestException
  * - Mes vacío → totales en cero, listas vacías
  * - Aislamiento por userId (delega al repositorio con el userId correcto)
- * - Orden de únicos: amountCents DESC (desempate occurredAt DESC — lo hace el repositorio/SQL)
+ * - Orden de únicos: convertedAmountCents DESC (desempate occurredAt DESC — lo hace el repositorio)
  * - D3: fijos y cuotas con occurredAt=null, timezone=null
  * - D1: cuotas con campo installment { number, total, startMonth }
  * - Filtro de categorías (Fase 1.1.6): 3 estados (null=todas, []=ninguna, [ids]=subconjunto)
@@ -358,8 +358,8 @@ describe('MovementsService', () => {
       expect(result.totals.expenseCents).toBe(2000);
     });
 
-    it('orden: el repositorio devuelve únicos en orden amountCents DESC y el service lo preserva', async () => {
-      // El repositorio ya ordenó por amountCents DESC; el service preserva ese orden sin reordenar
+    it('orden: el repositorio devuelve únicos en orden convertedAmountCents DESC y el service lo preserva', async () => {
+      // El repositorio ya ordenó por convertedAmountCents DESC; el service preserva ese orden sin reordenar
       const items = [
         makeUnicoItem({ id: 'tx-mayor', amountCents: 5000 }),
         makeUnicoItem({ id: 'tx-menor', amountCents: 1000 }),

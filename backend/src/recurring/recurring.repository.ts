@@ -46,8 +46,10 @@ export interface RecurringWithCategory {
   formulaSign: number | null;
   /** Moneda del fijo (Fase 1.2.3). Los calculados no usan este campo (heredan del origen). */
   currency: Currency;
-  /** Cotización ARS/1 USD para este tramo de la cadena (Fase 1.2.3). */
+  /** Cotización anchorCurrency/1 currency para este tramo de la cadena (Fase 1.2.3/1.2.4). */
   exchangeRate: number;
+  /** Moneda default del usuario al momento de guardar el movimiento (Fase 1.2.4). */
+  anchorCurrency: Currency;
   createdAt: Date;
   updatedAt: Date;
   category: EmbeddedCategory;
@@ -112,6 +114,7 @@ function mapToRecurringWithCategory(
     formulaSign: r.formulaSign,
     currency: r.currency,
     exchangeRate: Number(r.exchangeRate),
+    anchorCurrency: r.anchorCurrency,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     category: {

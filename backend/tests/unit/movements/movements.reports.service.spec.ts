@@ -53,6 +53,7 @@ const mockRepo = {
   // Fase 1.1.7.ext — lookups de origen para calculados de único y cuota
   findTransactionsByIds: jest.fn().mockResolvedValue([]),
   findInstallmentGroupsByIds: jest.fn().mockResolvedValue([]),
+  loadPivotRatesForYear: jest.fn().mockResolvedValue(new Map()),
 };
 
 const mockLogger = {
@@ -109,6 +110,7 @@ function makeUnicoRow(overrides: {
   totalCents?: bigint;
   currency?: string;
   exchangeRate?: string;
+  anchorCurrency?: string;
 }) {
   return {
     monthKey: overrides.monthKey,
@@ -120,6 +122,7 @@ function makeUnicoRow(overrides: {
     totalCents: overrides.totalCents ?? BigInt(1000),
     currency: overrides.currency ?? 'ARS',
     exchangeRate: overrides.exchangeRate ?? '1',
+    anchorCurrency: overrides.anchorCurrency ?? 'ARS',
   };
 }
 
@@ -130,6 +133,7 @@ function makeFijo(overrides: Partial<RecurringForAnnual> = {}): RecurringForAnnu
     amountCents: 5000,
     currency: Currency.ARS,
     exchangeRate: 1,
+    anchorCurrency: Currency.ARS,
     startMonth: '2026-01',
     deletedFrom: null,
     frequency: RecurringFrequency.MONTHLY,
@@ -156,6 +160,7 @@ function makeCuota(overrides: Partial<InstallmentGroupForAnnual> = {}): Installm
     amountCents: 2000,
     currency: Currency.ARS,
     exchangeRate: 1,
+    anchorCurrency: Currency.ARS,
     totalInstallments: 12,
     startMonth: '2026-01',
     categoryId: CAT_B,

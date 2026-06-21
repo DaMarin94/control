@@ -51,9 +51,9 @@ export class UpdateTransactionDto {
   @IsString()
   description?: string;
 
-  /** Moneda del movimiento (ARS o USD). Opcional. Fase 1.2.3. */
+  /** Moneda del movimiento (ARS | USD | EUR | BRL). Opcional. Fase 1.2.4: +EUR +BRL. */
   @IsOptional()
-  @IsEnum(Currency, { message: 'currency debe ser ARS o USD' })
+  @IsEnum(Currency, { message: 'currency debe ser ARS, USD, EUR o BRL' })
   currency?: Currency;
 
   /** Cotización ARS/1 USD. Número positivo con decimales. Fase 1.2.3. */

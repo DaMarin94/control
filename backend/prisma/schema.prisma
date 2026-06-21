@@ -20,11 +20,14 @@ enum MovementType {
   INCOME
 }
 
-// Moneda de un movimiento (Fase 1.2.3 — Multi-moneda ARS/USD).
-// Set fijo: no hay alta de monedas arbitrarias en v1.
+// Moneda de un movimiento (Fase 1.2.3 — Multi-moneda ARS/USD; Fase 1.2.4 — +EUR +BRL).
+// Set curado de 4 monedas: no hay alta de monedas arbitrarias.
+// Pivote de conversión: USD (toda cotización es "unidades de esta moneda por 1 USD").
 enum Currency {
   ARS
   USD
+  EUR
+  BRL
 }
 
 enum CategoryScope {
@@ -63,6 +66,44 @@ enum FormulaOperator {
   MUL
   DIV
   PCT
+}
+
+// ---------------------------------------------------------------------------
+// ReferenceRate (tabla de cotizaciones de referencia por mes — Fase 1.2.4)
+// ---------------------------------------------------------------------------
+
+// Cotización de referencia mensual, global (sin userId).
+// Sirve de valor por defecto/pre-carga para la cotización de los movimientos.
+// No es un FK: el movimiento copia el valor al crearse; el campo exchangeRate
+// del movimiento sigue siendo editable y es el que manda en la conversión.
+//
+// Semántica del campo rate:
+//   rate = unidades de ESTA moneda por 1 USD (pivote USD).
+//   - Para ARS: cuántos ARS vale 1 USD (ej: 1432)
+//   - Para EUR: cuántos EUR vale 1 USD (ej: 0.865)
+//   - Para BRL: cuántos BRL vale 1 USD (ej: 5.11)
+//   - USD no necesita fila (implícito: rate = 1). Decisión: NO guardar filas USD=1;
+//     el service las trata implícitamente. Esto evita ruido en la tabla y aclara
+//     que el pivote es USD (rate_USD = 1 siempre, por definición).
+//
+// El cruce entre dos monedas no-USD se deriva: para convertir X de moneda A a B,
+// se pasa por USD: X_USD = X_A / rate_A; X_B = X_USD * rate_B.
+//
+// yearMonth: mes de vigencia en formato "YYYY-MM" (igual que startMonth/deletedFrom).
+// Clave única: (currency, yearMonth) — una fila por moneda por mes.
+model ReferenceRate {
+  id        String   @id @default(cuid())
+  currency  Currency
+  yearMonth String   // "YYYY-MM"
+  // Cotización: unidades de esta moneda por 1 USD.
+  // Tipo Decimal para precisión; no en centavos (igual que exchangeRate en movimientos).
+  rate      Decimal  @db.Decimal(18, 6)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([currency, yearMonth])
+  @@index([currency, yearMonth])
 }
 
 // ---------------------------------------------------------------------------
@@ -181,14 +222,21 @@ model Transaction {
   // y para bucketear por mes en la zona correcta (ver docs/technical.md — Fechas)
   timezone   String
 
-  // Multi-moneda (Fase 1.2.3):
+  // Multi-moneda (Fase 1.2.3 / 1.2.4):
   // currency: moneda original del movimiento. Default ARS (back-compat).
-  // exchangeRate: cotización ARS/1 USD al momento del movimiento (con decimales, no centavos).
-  //   Representa "cuántos ARS equivalen a 1 USD". Default 1.0 para back-compat
-  //   (equivale a 1 ARS/USD, lo que hace que los montos ARS existentes no cambien
-  //   numéricamente al convertir entre monedas). El backend usa Decimal para precisión.
-  currency     Currency @default(ARS)
-  exchangeRate Decimal  @default(1) @db.Decimal(18, 6)
+  // exchangeRate: cotización al momento del movimiento.
+  //   Semántica: unidades de anchorCurrency por 1 unidad de currency.
+  //   Default 1.0 para back-compat (movimientos ARS con anchorCurrency ARS).
+  // anchorCurrency: moneda default del usuario AL MOMENTO de guardar/editar el movimiento.
+  //   Es la moneda de referencia del exchangeRate guardado.
+  //   Default ARS para back-compat (todos los movimientos preexistentes fueron creados
+  //   cuando ARS era la única default posible).
+  //   Permite re-rutar la conversión si el usuario cambia su defaultCurrency:
+  //     amount_display = amountCents × exchangeRate × rate_display / rate_anchor
+  //   donde rate_* son filas de ReferenceRate del mes del movimiento.
+  currency        Currency @default(ARS)
+  exchangeRate    Decimal  @default(1) @db.Decimal(18, 6)
+  anchorCurrency  Currency @default(ARS)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -228,14 +276,16 @@ model Recurring {
   // determina si el fijo aparece en ese mes.
   frequency RecurringFrequency @default(MONTHLY)
 
-  // Multi-moneda (Fase 1.2.3):
+  // Multi-moneda (Fase 1.2.3 / 1.2.4):
   // La cotización es POR MES DE APARICIÓN: cuando el usuario edita con split, la fila
-  // nueva R2 hereda currency y exchangeRate del original (junto con los demás campos).
-  // Los calculados heredan moneda y cotización del origen (no los persisten propios).
+  // nueva R2 hereda currency, exchangeRate y anchorCurrency del original (junto con los demás).
+  // Los calculados heredan moneda, cotización y anchor del origen (no los persisten propios).
   // currency: default ARS para back-compat.
-  // exchangeRate: cotización ARS/1 USD. Default 1 para back-compat.
-  currency     Currency @default(ARS)
-  exchangeRate Decimal  @default(1) @db.Decimal(18, 6)
+  // exchangeRate: cotización (unidades de anchorCurrency por 1 unidad de currency). Default 1.
+  // anchorCurrency: moneda default del usuario al guardar. Default ARS para back-compat.
+  currency        Currency @default(ARS)
+  exchangeRate    Decimal  @default(1) @db.Decimal(18, 6)
+  anchorCurrency  Currency @default(ARS)
 
   // ---------------------------------------------------------------------------
   // Identidad de cadena estable (Fase 1.1.7)
@@ -345,13 +395,15 @@ model InstallmentGroup {
   // startMonth: mes de la primera cuota, formato "YYYY-MM"
   startMonth String
 
-  // Multi-moneda (Fase 1.2.3):
-  // currency y exchangeRate son ÚNICOS para todo el grupo (todas las cuotas comparten).
-  // No hay split en cuotas: PATCH edita el grupo in-place (incluyendo moneda/cotización).
+  // Multi-moneda (Fase 1.2.3 / 1.2.4):
+  // currency, exchangeRate y anchorCurrency son ÚNICOS para todo el grupo.
+  // No hay split en cuotas: PATCH edita el grupo in-place (incluyendo moneda/cotización/anchor).
   // currency: default ARS para back-compat.
-  // exchangeRate: cotización ARS/1 USD. Default 1 para back-compat.
-  currency     Currency @default(ARS)
-  exchangeRate Decimal  @default(1) @db.Decimal(18, 6)
+  // exchangeRate: cotización (unidades de anchorCurrency por 1 unidad de currency). Default 1.
+  // anchorCurrency: moneda default del usuario al guardar. Default ARS para back-compat.
+  currency        Currency @default(ARS)
+  exchangeRate    Decimal  @default(1) @db.Decimal(18, 6)
+  anchorCurrency  Currency @default(ARS)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

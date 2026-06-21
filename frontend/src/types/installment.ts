@@ -79,6 +79,8 @@ export interface UpdateInstallmentRequest {
   startMonth?: string;
   categoryId?: string;
   description?: string | null;
+  /** Moneda del grupo de cuotas (Fase 1.2.4). Permite cambiar la moneda al editar. */
+  currency?: CurrencyCode;
   /** Cotización ARS por 1 USD (Fase 1.2.3). */
   exchangeRate?: number;
 }

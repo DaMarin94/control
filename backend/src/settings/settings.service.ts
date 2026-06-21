@@ -8,8 +8,16 @@ import { UpdateSettingsDto } from './dto/update-settings.dto';
  * Shape de los settings del usuario (moneda + cotización).
  */
 export interface UserSettings {
+  /** Moneda default del usuario: ARS | USD | EUR | BRL (Fase 1.2.4: +EUR +BRL). */
   defaultCurrency: Currency;
-  /** null si el usuario aún no ha ingresado ninguna cotización */
+  /**
+   * Última cotización real ingresada por el usuario.
+   * null si el usuario nunca ingresó ninguna cotización.
+   * Semántica: unidades de defaultCurrency por 1 unidad de la moneda usada en ese momento.
+   * Deprecado como mecanismo de pre-fill (Fase 1.2.4): la pre-carga ahora viene de
+   * GET /settings/reference-rate. Se mantiene para back-compat y para cuando el usuario
+   * anula la cotización de referencia con un valor propio.
+   */
   lastExchangeRate: number | null;
 }
 

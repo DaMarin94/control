@@ -210,6 +210,9 @@ const TX_DATA = {
   description: 'Viaje',
   occurredAt: TX_OCCURRED_AT,
   timezone: TX_TIMEZONE,
+  currency: 'ARS',
+  exchangeRate: '1',
+  anchorCurrency: 'ARS',
 };
 const GROUP_DATA = {
   id: GROUP_ID,
@@ -217,6 +220,9 @@ const GROUP_DATA = {
   description: 'Cuota laptop',
   totalInstallments: 6,
   startMonth: '2026-01',
+  currency: 'ARS',
+  exchangeRate: '1',
+  anchorCurrency: 'ARS',
 };
 
 // ---------------------------------------------------------------------------
@@ -236,12 +242,14 @@ describe('[REGRESIÓN] Calculados en su sección de origen — no en fijos', () 
     transaction: { findMany: jest.fn() },
     installmentGroup: { findMany: jest.fn() },
     recurringSkip: { findMany: jest.fn() },
+    referenceRate: { findMany: jest.fn().mockResolvedValue([]) },
     $queryRaw: jest.fn().mockResolvedValue([]),
   };
 
   beforeEach(async () => {
     jest.resetAllMocks();
     mockPrisma.$queryRaw.mockResolvedValue([]);
+    mockPrisma.referenceRate.findMany.mockResolvedValue([]); // sin cotizaciones de referencia (same anchor)
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -483,6 +491,7 @@ describe('[REGRESIÓN] Calculados en su sección de origen — no en fijos', () 
       // findUnicosByMonth: $queryRaw vacío, recurring devuelve el calc de único
       jest.resetAllMocks();
       mockPrisma.$queryRaw.mockResolvedValue([]);
+      mockPrisma.referenceRate.findMany.mockResolvedValue([]);
       mockPrisma.recurring.findMany.mockResolvedValueOnce([makeCalcDeUnico()]);
       mockPrisma.transaction.findMany.mockResolvedValue([TX_DATA]);
       const unicos = await repo.findUnicosByMonth(USER_A, '2026-06');
@@ -492,6 +501,7 @@ describe('[REGRESIÓN] Calculados en su sección de origen — no en fijos', () 
 
       // findCuotasByMonth: installmentGroup vacío, recurring devuelve calc de cuota
       jest.resetAllMocks();
+      mockPrisma.referenceRate.findMany.mockResolvedValue([]);
       mockPrisma.installmentGroup.findMany
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([GROUP_DATA]);
@@ -525,6 +535,7 @@ const mockRepo = {
   getEarliestYear: jest.fn(),
   findTransactionsByIds: jest.fn(),
   findInstallmentGroupsByIds: jest.fn(),
+  loadPivotRatesForYear: jest.fn().mockResolvedValue(new Map()),
 };
 
 const mockLogger = {
@@ -543,6 +554,7 @@ function makeCalcDeUnicoAnual(overrides: Partial<RecurringForAnnual> = {}): Recu
     amountCents: 0,
     currency: Currency.ARS,
     exchangeRate: 1,
+    anchorCurrency: Currency.ARS,
     startMonth: '2026-06',
     deletedFrom: '2026-07',
     frequency: RecurringFrequency.MONTHLY,
@@ -569,6 +581,7 @@ function makeCalcDeCuotaAnual(overrides: Partial<RecurringForAnnual> = {}): Recu
     amountCents: 0,
     currency: Currency.ARS,
     exchangeRate: 1,
+    anchorCurrency: Currency.ARS,
     startMonth: '2026-01',
     deletedFrom: null,
     frequency: RecurringFrequency.MONTHLY,
@@ -599,6 +612,7 @@ describe('MovementsService.getReportsMovements — calculados de único y cuota 
     mockRepo.getEarliestYear.mockResolvedValue(null);
     mockRepo.findTransactionsByIds.mockResolvedValue([]);
     mockRepo.findInstallmentGroupsByIds.mockResolvedValue([]);
+    mockRepo.loadPivotRatesForYear.mockResolvedValue(new Map());
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -615,7 +629,7 @@ describe('MovementsService.getReportsMovements — calculados de único y cuota 
   it('calculado de único aparece solo en el mes del Transaction (junio 2026)', async () => {
     const calc = makeCalcDeUnicoAnual({ startMonth: '2026-06', deletedFrom: '2026-07' });
     mockRepo.getAllFijosForAnnual.mockResolvedValue([calc]);
-    mockRepo.findTransactionsByIds.mockResolvedValue([{ id: TX_ID, amountCents: 10000, description: 'Viaje', currency: Currency.ARS, exchangeRate: 1 }]);
+    mockRepo.findTransactionsByIds.mockResolvedValue([{ id: TX_ID, amountCents: 10000, description: 'Viaje', currency: Currency.ARS, exchangeRate: 1, anchorCurrency: Currency.ARS }]);
 
     const result = await service.getReportsMovements(USER_A, 2026);
 
@@ -641,6 +655,7 @@ describe('MovementsService.getReportsMovements — calculados de único y cuota 
       startMonth: '2026-01',
       currency: Currency.ARS,
       exchangeRate: 1,
+      anchorCurrency: Currency.ARS,
     }]);
 
     const result = await service.getReportsMovements(USER_A, 2026);
@@ -667,6 +682,7 @@ describe('MovementsService.getReportsMovements — calculados de único y cuota 
       startMonth: '2026-01',
       currency: Currency.ARS,
       exchangeRate: 1,
+      anchorCurrency: Currency.ARS,
     }]);
 
     const result = await service.getReportsMovements(USER_A, 2026);

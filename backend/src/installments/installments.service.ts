@@ -55,6 +55,10 @@ export class InstallmentsService {
 
     const effectiveExchangeRate = dto.exchangeRate ?? 1;
 
+    // Cargar la defaultCurrency del usuario para anclarla como anchor (Fase 1.2.4)
+    const userSettings = await this.settingsService.getSettings(userId);
+    const anchorCurrency = userSettings.defaultCurrency;
+
     const group = await this.repo.create({
       user: { connect: { id: userId } },
       category: { connect: { id: dto.categoryId } },
@@ -65,6 +69,7 @@ export class InstallmentsService {
       description: dto.description ?? null,
       ...(dto.currency !== undefined && { currency: dto.currency }),
       exchangeRate: effectiveExchangeRate,
+      anchorCurrency,
     });
 
     await this.settingsService.updateLastExchangeRate(userId, effectiveExchangeRate);
@@ -126,6 +131,13 @@ export class InstallmentsService {
       );
     }
 
+    // Si se actualiza la cotización o moneda, actualizar el anchor (Fase 1.2.4)
+    let updateAnchor = undefined;
+    if (dto.exchangeRate !== undefined || dto.currency !== undefined) {
+      const s = await this.settingsService.getSettings(userId);
+      updateAnchor = s.defaultCurrency;
+    }
+
     const updated = await this.repo.update(id, {
       ...(dto.amountCents !== undefined && { amountCents: dto.amountCents }),
       ...(dto.totalInstallments !== undefined && {
@@ -138,6 +150,7 @@ export class InstallmentsService {
       ...(dto.description !== undefined && { description: dto.description }),
       ...(dto.currency !== undefined && { currency: dto.currency }),
       ...(dto.exchangeRate !== undefined && { exchangeRate: dto.exchangeRate }),
+      ...(updateAnchor !== undefined && { anchorCurrency: updateAnchor }),
     });
 
     if (dto.exchangeRate !== undefined) {

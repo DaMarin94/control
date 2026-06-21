@@ -12,7 +12,7 @@
  * Lógica de negocio preservada intacta.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -26,6 +26,7 @@ import { CurrencyExchangeBlock } from "@/components/ui/currency-exchange-block";
 import { useCategories } from "@/hooks/use-categories";
 import { useInstallments } from "@/hooks/use-installments";
 import { useSettings } from "@/hooks/use-settings";
+import { useReferenceRate } from "@/hooks/use-reference-rate";
 import { useToast } from "@/hooks/use-toast";
 import { type Category, type CategoryScope } from "@/types/category";
 import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
@@ -49,7 +50,7 @@ const installmentSchema = z.object({
     .refine((val) => parseCurrencyInput(val) !== null, {
       message: "Ingresá un monto mayor a 0",
     }),
-  currency: z.enum(["ARS", "USD"]),
+  currency: z.enum(["ARS", "USD", "EUR", "BRL"]),
   /** Input de cotización como string. Solo se valida cuando currency !== defaultCurrency. */
   exchangeRateInput: z.string(),
   totalInstallments: z
@@ -104,20 +105,18 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
 
   const isLoading = isEditing ? isUpdating : isCreating;
 
-  // Cotización pre-cargada:
+  // Cotización pre-cargada inicial:
   // - Editando: la del grupo de cuotas (siempre presente, nunca null en el backend).
-  // - Creando: el lastExchangeRate del usuario, o vacío si aún no tiene historial.
-  const preloadedExchangeRateInput = isEditing
+  // - Creando: se rellena luego desde referenceRate/lastExchangeRate.
+  const initialEditingExchangeRateInput = isEditing
     ? formatExchangeRate(installment.exchangeRate ?? 1)
-    : lastExchangeRate != null
-      ? formatExchangeRate(lastExchangeRate)
-      : "";
+    : "";
 
   const defaultValues: InstallmentFormData = isEditing
     ? {
         amountInput: String(installment.amountCents / 100).replace(".", ","),
         currency: installment.currency ?? defaultCurrency,
-        exchangeRateInput: formatExchangeRate(installment.exchangeRate ?? 1),
+        exchangeRateInput: initialEditingExchangeRateInput,
         totalInstallments: String(installment.totalInstallments),
         startMonth: installment.startMonth,
         categoryId: installment.categoryId,
@@ -126,14 +125,22 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
     : {
         amountInput: "",
         currency: defaultCurrency,
-        exchangeRateInput: preloadedExchangeRateInput,
+        exchangeRateInput: "",
         totalInstallments: "",
         startMonth: defaultMonth ?? getCurrentMonth(),
         categoryId: "",
         description: "",
       };
 
-  const [initialExchangeRateInput] = useState(defaultValues.exchangeRateInput);
+  const [preloadedExchangeRateInput, setPreloadedExchangeRateInput] = useState(
+    initialEditingExchangeRateInput,
+  );
+
+  // En edición: moneda original al abrir el modal. Si el usuario la cambia, se
+  // pre-carga la cotización de referencia para la nueva moneda (como en creación).
+  const initialCurrencyRef = useRef<CurrencyCode>(
+    isEditing ? (installment?.currency ?? defaultCurrency) : defaultCurrency,
+  );
 
   const {
     register,
@@ -148,40 +155,77 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
     defaultValues,
   });
 
+  const selectedCurrency = watch("currency") as CurrencyCode;
+  const selectedStartMonth = watch("startMonth");
+  const exchangeRateInput = watch("exchangeRateInput");
+
+  // Mes relevante para la cotización de referencia:
+  // - Crear: mes de inicio seleccionado (o mes actual como fallback)
+  // - Editar: el startMonth del grupo (no cambia en edición)
+  const referenceMonth = isEditing
+    ? (installment.startMonth ?? getCurrentMonth())
+    : (selectedStartMonth?.length >= 7 ? selectedStartMonth : getCurrentMonth());
+
+  // Hook de cotización de referencia — Fase 1.2.4
+  const { referenceRate } = useReferenceRate({
+    month: referenceMonth,
+    currency: selectedCurrency,
+    defaultCurrency,
+  });
+
   useEffect(() => {
     if (isEditing) {
+      const newCurrency = installment.currency ?? defaultCurrency;
       reset({
         amountInput: String(installment.amountCents / 100).replace(".", ","),
-        currency: installment.currency ?? defaultCurrency,
+        currency: newCurrency,
         exchangeRateInput: formatExchangeRate(installment.exchangeRate ?? 1),
         totalInstallments: String(installment.totalInstallments),
         startMonth: installment.startMonth,
         categoryId: installment.categoryId,
         description: installment.description ?? "",
       });
+      // Actualizar la referencia de moneda inicial para que el effect de pre-carga
+      // pueda detectar correctamente si el usuario la cambia en esta sesión.
+      initialCurrencyRef.current = newCurrency;
       setIsExchangeRateModified(false);
     }
   }, [installment, isEditing, reset, defaultCurrency]);
 
-  // Pre-cargar cotización cuando defaultCurrency o lastExchangeRate cambian (solo en crear)
+  // Pre-cargar defaultCurrency al crear cuando cambia
   useEffect(() => {
     if (!isEditing) {
       setValue("currency", defaultCurrency);
-      setValue(
-        "exchangeRateInput",
-        lastExchangeRate != null ? formatExchangeRate(lastExchangeRate) : "",
-      );
+    }
+  }, [defaultCurrency, isEditing, setValue]);
+
+  // Pre-cargar cotización: prioridad referenceRate → lastExchangeRate → vacío (Fase 1.2.4).
+  // En modo crear: siempre al cambiar referencia o moneda.
+  // En modo edición: solo si el usuario cambió la moneda (≠ moneda original al abrir) y
+  // no modificó la cotización manualmente.
+  useEffect(() => {
+    const currencyChanged = selectedCurrency !== initialCurrencyRef.current;
+    if (isEditing && !currencyChanged) return;
+    if (isEditing && isExchangeRateModified) return;
+    const rate =
+      referenceRate !== null
+        ? referenceRate
+        : lastExchangeRate;
+    const formatted = rate !== null ? formatExchangeRate(rate) : "";
+    setPreloadedExchangeRateInput(formatted);
+    setValue("exchangeRateInput", formatted);
+    if (!isEditing) {
       setIsExchangeRateModified(false);
     }
-  }, [defaultCurrency, lastExchangeRate, isEditing, setValue]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [referenceRate, lastExchangeRate, isEditing, selectedCurrency, setValue]);
 
-  const exchangeRateInput = watch("exchangeRateInput");
-
+  // Detectar si el usuario modificó la cotización respecto al valor pre-cargado
   useEffect(() => {
     setIsExchangeRateModified(
-      exchangeRateInput !== initialExchangeRateInput && exchangeRateInput !== ""
+      exchangeRateInput !== preloadedExchangeRateInput && exchangeRateInput !== ""
     );
-  }, [exchangeRateInput, initialExchangeRateInput]);
+  }, [exchangeRateInput, preloadedExchangeRateInput]);
 
   const availableCategories = filterCategoriesForExpense(
     (categories ?? []).map((c) => ({ id: c.id, name: c.name, scope: c.scope })),
@@ -195,14 +239,22 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
 
     const totalInstallments = parseInt(data.totalInstallments, 10);
 
-    // Validar cotización SIEMPRE (no solo en cross-rate): el roadmap exige capturar
-    // y persistir la cotización real también cuando moneda === defaultCurrency.
-    const parsedExchangeRate = parseExchangeRateInput(data.exchangeRateInput);
-    if (parsedExchangeRate === null) {
-      setExchangeRateError("Ingresá una cotización mayor a 0");
-      return;
+    // Cuando moneda === defaultCurrency el campo cotización está oculto (Fase 1.2.4).
+    // El backend ignora exchangeRate en ese caso, así que enviamos 1 directamente.
+    // Solo cuando moneda ≠ default validamos y parseamos el input visible.
+    let parsedExchangeRate: number;
+    if (data.currency === defaultCurrency) {
+      parsedExchangeRate = 1;
+      setExchangeRateError(undefined);
+    } else {
+      const parsed = parseExchangeRateInput(data.exchangeRateInput);
+      if (parsed === null) {
+        setExchangeRateError("Ingresá una cotización mayor a 0");
+        return;
+      }
+      parsedExchangeRate = parsed;
+      setExchangeRateError(undefined);
     }
-    setExchangeRateError(undefined);
 
     if (isEditing) {
       const result = await updateInstallment(installment.id, {
@@ -211,6 +263,7 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
         startMonth: data.startMonth,
         categoryId: data.categoryId,
         description: data.description || null,
+        currency: data.currency,
         exchangeRate: parsedExchangeRate,
       });
 

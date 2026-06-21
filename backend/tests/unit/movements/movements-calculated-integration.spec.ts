@@ -317,6 +317,9 @@ describe('Bug B — flujo real: crear fijo → split → crear calculado', () =>
       transaction: {
         findMany: jest.fn().mockResolvedValue([]),
       },
+      referenceRate: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       $queryRaw: jest.fn().mockResolvedValue([]),
     };
 
@@ -546,10 +549,10 @@ describe('Bug B — flujo real: crear fijo → split → crear calculado', () =>
     console.log('[BUG D] Orden resultado:', result.map(f => ({ id: f.id, amount: f.amountCents })));
 
     expect(result).toHaveLength(3);
-    // Orden por amountCents derivado DESC:
-    expect(result[0].id).toBe(fijo1.id);  // 100000
-    expect(result[1].id).toBe(calc.id);   // 50000 derivado (BUG D: si fuera 0, estaría al final)
-    expect(result[2].id).toBe(fijo2.id);  // 30000
+    // Orden por convertedAmountCents DESC (con currency=ARS/anchor=ARS, coincide con amountCents derivado):
+    expect(result[0].id).toBe(fijo1.id);  // 100000 → convertedAmountCents 100000
+    expect(result[1].id).toBe(calc.id);   // 50000 derivado → convertedAmountCents 50000
+    expect(result[2].id).toBe(fijo2.id);  // 30000 → convertedAmountCents 30000
   });
 
   // ---------------------------------------------------------------------------
@@ -798,6 +801,9 @@ describe('BUG borrado de cadena — flujo real: crear fijo → split → crear c
         findMany: jest.fn().mockResolvedValue([]),
       },
       transaction: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      referenceRate: {
         findMany: jest.fn().mockResolvedValue([]),
       },
       $queryRaw: jest.fn().mockResolvedValue([]),

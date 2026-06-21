@@ -187,6 +187,12 @@ Carga de movimientos. El modal de carga se invoca desde el dashboard (`/`); **ed
 - Tipo **Gasto** (default) / **Ingreso**; monto **en pesos** (se convierte a centavos al enviar); selector de categoría **filtrado por scope** (RN-010) que **reusa `["categories"]`** (`CATEGORIES_QUERY_KEY`); fecha + hora (default: ahora); descripción opcional.
 - **Estados:** Guardando; **Sin categorías disponibles** (link a `/categorias`); **Error backend** — el modal **queda abierto y conserva los datos** ingresados (RNF-008).
 
+### Moneda y cotización en los forms de movimiento (multi-moneda, fase 1.2.4)
+
+Aplica a los **tres** forms (`transaction-form`, `recurring-form`, `installment-form`). Regla funcional en `docs/requirements.md` (§cotización); acá solo el gotcha de implementación.
+
+- **`onSubmit` con `currency === defaultCurrency` envía `exchangeRate = 1` hardcodeado** — **no parsea el input de cotización**, porque ese input está **fuera del DOM** en ese caso (solo se renderiza cuando `currency !== defaultCurrency`). El backend ya ignora `exchangeRate` cuando `currency === anchorCurrency`, así que el `1` es seguro y no afecta cálculos. **Gotcha:** un cambio futuro no debe volver a parsear el input oculto en ese caso — el `1` es deliberado.
+
 ### Crear desde el dashboard
 
 - Botón **"Nuevo movimiento"** en `/` abre el modal. Al guardar → toast con acción **"Ir a ver"** que navega a `/mes?month=YYYY-MM`.
@@ -376,6 +382,7 @@ El dashboard vive en **`/`** (`src/app/page.tsx`). Antes era `/dashboard` — un
 ### Animación de acordeón sin JS — técnica grid-rows (`AccordionSection`, fase 1.1.4)
 
 - **Animar `height:auto` puramente en CSS, sin medir el DOM ni `ResizeObserver`:** el cuerpo colapsable usa **`grid-template-rows: 0fr ↔ 1fr`** en un contenedor `overflow-hidden`, con **`min-h-0`** en el hijo. La transición de `0fr` a `1fr` anima la altura del contenido real sin conocerla de antemano. `prefers-reduced-motion` quita la transición. Patrón reutilizable, vive en `AccordionSection` — reusarlo para cualquier colapsable futuro en vez de medir alturas a mano.
+- **Gotcha de testing — `grid-rows-[0fr]` colapsado NO oculta del DOM en jsdom.** La técnica `grid-rows-[0fr]↔[1fr]` oculta **visualmente** pero no aplica `display:none` / `visibility:hidden` ni borra el nodo. **jsdom no ejecuta CSS**, así que ve los elementos colapsados como presentes. Por eso los tests de un disclosure colapsable deben afirmar contra **render / no-render del nodo**, no contra visibilidad. Aplicado al disclosure "Moneda y cotización" (fase 1.2.4): el selector de moneda **siempre** está en el DOM; el input de cotización **solo se renderiza cuando `currency !== defaultCurrency`** — testear ese montaje condicional, no si el bloque está visualmente colapsado.
 
 ### Navegación entre pantallas
 

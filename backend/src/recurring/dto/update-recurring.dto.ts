@@ -58,6 +58,6 @@ export class UpdateRecurringDto {
    * Fase 1.2.3.
    */
   @IsOptional()
-  @IsEnum(Currency, { message: 'currency debe ser ARS o USD' })
+  @IsEnum(Currency, { message: 'currency debe ser ARS, USD, EUR o BRL' })
   currency?: Currency;
 }

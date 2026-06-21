@@ -67,6 +67,7 @@ function makeTransaction(overrides: Partial<TransactionWithCategory> = {}): Tran
     amountCents: 1500,
     currency: Currency.ARS,
     exchangeRate: 1,
+    anchorCurrency: Currency.ARS,
     description: null,
     occurredAt: new Date('2026-06-08T14:30:00Z'),
     timezone: 'America/Argentina/Buenos_Aires',

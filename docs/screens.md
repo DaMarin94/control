@@ -25,7 +25,7 @@
 - El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Reportes, Categorías, Configuración) y **no** se muestra en las pantallas no autenticadas (Login, Registro). Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo. Orden de los links: Dashboard → Vista del mes → Reportes → Categorías → Configuración (link de Configuración agregado en la Fase 1.2.3).
   - **Estado de implementación: implementado.** El sidebar (RF-NAV-001) **ya está implementado** (ver `features.md`). Los accesos definidos en cada pantalla (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL directa) se conservan y conviven con el sidebar.
 - El **formulario de carga** (pantalla 5) es un modal sin ruta propia. Se invoca desde el sidebar y desde el dashboard, y se superpone a la pantalla actual.
-- **Chip de moneda default en el header (Fase 1.2.3).** Las pantallas con montos/totales —**Dashboard**, **Vista del mes** y **Reportes**— muestran en su header (fila del eyebrow) un **chip indicador de la moneda default vigente** del usuario (código ARS / USD, RF-CUR-002). Es **informativo**: comunica en qué moneda están expresados los montos y totales de la pantalla y **linkea a `/configuracion`** (no cambia la moneda in-situ). Se muestra **siempre**, también en mono-moneda. **`/configuracion` NO lo lleva** (es donde la moneda se edita). El patrón es común a las tres pantallas y no se repite su definición en cada una; el detalle visual lo define `control-design` (ver `docs/design.md`).
+- **Chip de moneda default en el header (Fase 1.2.3).** Las pantallas con montos/totales —**Dashboard**, **Vista del mes** y **Reportes**— muestran en su header (fila del eyebrow) un **chip indicador de la moneda default vigente** del usuario (código de la moneda del set curado: ARS / USD / EUR / BRL, RF-CUR-002). Es **informativo**: comunica en qué moneda están expresados los montos y totales de la pantalla y **linkea a `/configuracion`** (no cambia la moneda in-situ). Se muestra **siempre**, también en mono-moneda. **`/configuracion` NO lo lleva** (es donde la moneda se edita). El patrón es común a las tres pantallas y no se repite su definición en cada una; el detalle visual lo define `control-design` (ver `docs/design.md`).
 
 ---
 
@@ -218,10 +218,11 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
   - **Único** (RF-MU-001): tipo (Gasto/Ingreso), monto, categoría, fecha y hora (default: el momento actual — fecha de hoy y hora actual al abrir el formulario en modo creación), descripción (opcional). El mes contexto **no** aplica al único: su default es siempre hoy/ahora, sin importar desde dónde se abra el modal.
   - **Fijo** (RF-MF-001, RF-MF-006): tipo (Gasto/Ingreso), monto, mes de inicio, **frecuencia**, categoría, descripción (opcional). Sin fecha de día. El mes de inicio tiene como default el **mes contexto** si el modal se abrió desde la Vista del mes (`/mes`), o el **mes actual** en cualquier otro origen (dashboard, sidebar). Es editable y admite meses pasados. La **frecuencia** es un selector con un set cerrado de 5 valores —**Mensual** (default), Bimestral, Trimestral, Semestral, Anual (RF-MF-006)— y debajo una nota de recurrencia que se ajusta a la frecuencia elegida (ver "Estados"; el detalle visual está en `docs/design.md`).
   - **Cuotas** (RF-MC-001): tipo (Gasto/Ingreso), monto por cuota, cantidad de cuotas, mes de inicio, categoría, descripción (opcional). El mes de inicio tiene como default el **mes contexto** si el modal se abrió desde la Vista del mes (`/mes`), o el **mes actual** en cualquier otro origen. Es editable y admite meses pasados.
-- **Bloque moneda + cotización (Fase 1.2.3, RF-CUR-001/003/004), debajo del campo Monto** en los tabs **Único / Fijo / Cuotas**:
-  - **Selector de moneda** ARS / USD.
-  - **Campo de cotización** (ARS por 1 USD): **siempre presente y editable** (RF-CUR-003), también cuando la moneda elegida coincide con la default del usuario. **Pre-cargado** con el último cambio usado del usuario. Validación: cotización **> 0** en todos los casos. El detalle visual fino lo define `design.md`.
-  - **Nota de granularidad** según el tab (RF-CUR-004): en **Fijo**, "Cotización para {Mes Año}" (cotización del mes de aparición); en **Cuotas**, la cotización aplica al grupo; en **Único**, al movimiento.
+- **Bloque moneda + cotización (Fase 1.2.3, ampliado en 1.2.4; RF-CUR-001/003/004/006), debajo del campo Monto** en los tabs **Único / Fijo / Cuotas**:
+  - **Selector de moneda** del set curado: **ARS / USD / EUR / BRL** (1.2.4).
+  - **Campo de cotización** (unidades de la default por 1 unidad de la moneda del movimiento): editable. **Se oculta cuando la moneda elegida coincide con la default** del usuario (cotización = 1, 1.2.4). El label del par es **`{moneda del movimiento}→{default}`**. **Pre-cargado** con la **cotización de referencia del mes** (RF-CUR-003/006; fallback al último cambio usado si la tabla no tiene dato). Validación: cotización **> 0**. El detalle visual fino lo define `design.md`.
+  - **Copy de la nota del campo:** **"Cotización de referencia del mes"** (en 1.2.3 era "Último cambio usado").
+  - **Granularidad del mes del pre-fill** según el tab (RF-CUR-004): en **Fijo**, el mes de aparición; en **Cuotas**, el `startMonth` del grupo; en **Único**, el mes del movimiento.
   - El tab/modo **Calculado** (creación desde el kebab de un movimiento) **no** muestra el bloque moneda/cotización: el calculado **hereda** moneda y cotización del origen (RF-CUR-004).
   - El detalle visual del bloque lo define `docs/design.md`.
 - El selector de categorías se filtra según el tipo: para Gasto se muestran categorías con scope `EXPENSE` o `BOTH`; para Ingreso, scope `INCOME` o `BOTH` (RN-010). Las categorías con soft delete no aparecen.
@@ -405,23 +406,24 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 
 ## 9. Configuración (`/configuracion`)
 
-**RF relacionados:** RF-CUR-002, RF-CUR-005, RF-NAV-001
+**RF relacionados:** RF-CUR-002, RF-CUR-005, RF-CUR-006, RF-NAV-001
 
 > **Ruta:** `/configuracion`. **Link nuevo en el sidebar** (Fase 1.2.3), debajo de "Categorías" (orden: Dashboard → Vista del mes → Reportes → Categorías → Configuración).
 
 ### Propósito
 
-Pantalla de **ajustes de la cuenta** del usuario. En la Fase 1.2.3 arranca con **un solo ajuste** —la **moneda por defecto**— y queda como **contenedor para ajustes futuros** (es esperable que sume más opciones en fases posteriores).
+Pantalla de **ajustes de la cuenta** del usuario. Arranca con **un solo ajuste** —la **moneda por defecto**— y queda como **contenedor para ajustes futuros** (es esperable que sume más opciones en fases posteriores).
 
 ### Contenido
 
 - **Sidebar** con el link "Configuración" marcado como activo.
-- **Ajuste "Moneda por defecto"** (RF-CUR-002): selector **ARS / USD**. Es la moneda en la que se expresan todos los totales (vista del mes, dashboard, reportes). Se lee/escribe vía el contrato `/settings` (ver `data-model.md`).
+- **Ajuste "Moneda por defecto"** (RF-CUR-002): selector entre las **4 monedas curadas (ARS / USD / EUR / BRL)** (1.2.4). Es la moneda en la que se expresan todos los totales (vista del mes, dashboard, reportes). Se lee/escribe vía el contrato `/settings` (ver `data-model.md`).
+- **Sin editor de la tabla de cotizaciones de referencia (1.2.4):** la tabla de referencia es **interna y no editable por UI** (RF-CUR-006), así que `/configuracion` **no** la muestra ni la edita.
 - El layout y la presentación los define `docs/design.md`.
 
 ### Acciones disponibles
 
-- **Cambiar la moneda por defecto** — al elegir ARS / USD, el cambio se persiste (`PATCH /settings`) y **re-expresa los totales en vivo** sin tocar ningún movimiento guardado (RF-CUR-005). No requiere recargar datos de movimientos del backend más allá de re-pedir los totales convertidos.
+- **Cambiar la moneda por defecto** — al elegir una de las 4 monedas, el cambio se persiste (`PATCH /settings`) y **re-expresa los totales en vivo** sin tocar ningún movimiento guardado (RF-CUR-005). No requiere recargar datos de movimientos del backend más allá de re-pedir los totales convertidos.
 - Acciones globales del sidebar.
 
 ### Navegación

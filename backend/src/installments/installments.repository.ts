@@ -28,8 +28,10 @@ export interface InstallmentGroupWithCategory {
   startMonth: string;
   /** Moneda del grupo (Fase 1.2.3). Única para todas las cuotas. */
   currency: Currency;
-  /** Cotización ARS/1 USD del grupo (Fase 1.2.3). */
+  /** Cotización anchorCurrency/1 currency del grupo (Fase 1.2.3/1.2.4). */
   exchangeRate: number;
+  /** Moneda default del usuario al momento de guardar el grupo (Fase 1.2.4). */
+  anchorCurrency: Currency;
   createdAt: Date;
   updatedAt: Date;
   category: EmbeddedCategory;
@@ -64,6 +66,7 @@ function mapToInstallmentGroupWithCategory(
     startMonth: g.startMonth,
     currency: g.currency,
     exchangeRate: Number(g.exchangeRate),
+    anchorCurrency: g.anchorCurrency,
     createdAt: g.createdAt,
     updatedAt: g.updatedAt,
     category: {

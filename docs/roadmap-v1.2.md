@@ -35,7 +35,7 @@ Dos fases de v1.2 **reabren explícitamente** decisiones que estaban cerradas en
 
 - **Filtro por categoría — reabierto en la fase 1.2.1.** v1.1 (RF-VM-006, fase 1.1.6) lo definió **por pantalla**: un único control en `/mes` que define el set de categorías a mostrar/computar para toda la vista. v1.2 lo reabre: el filtro pasa a ser **por listado** (Únicos / Fijos / Cuotas) y se le suma un **filtro de tipo** (Gasto / Ingreso / Ambos) también por listado.
 - **Moneda implícita — reabierta en la fase 1.2.3.** El modelo de datos definía la **moneda como implícita en v1, sin campo de moneda**, con todos los montos en **centavos sin moneda asociada**. v1.2 lo reabre: introduce **moneda explícita (ARS/USD)** y **cotización ARS↔USD por movimiento**, y `amountCents` pasa a significar **centavos de la moneda original del movimiento**.
-- **Set fijo de monedas — reabierto (planificado) en la fase 1.2.4.** La 1.2.3 cerró **"set fijo ARS/USD, sin alta de monedas"** y la conversión cableada como "ARS por 1 USD". La fase **1.2.4 (planificada)** reabre esa decisión: propone **monedas configurables** (sumando EUR y, según se cierre, monedas arbitrarias creables por el usuario) y una **tabla de cotizaciones de referencia por mes**. La actualización de `requirements.md` / `screens.md` / `data-model.md` ocurrirá **al implementar la fase**, una vez cerradas sus decisiones pendientes.
+- **Set fijo de monedas — reabierto en la fase 1.2.4.** La 1.2.3 cerró **"set fijo ARS/USD, sin alta de monedas"** y la cotización como "ARS por 1 USD". La fase **1.2.4** reabre esa decisión: el set pasa a un **set curado de 4 (ARS/USD/EUR/BRL)** —sin monedas arbitrarias—, la semántica de la cotización se generaliza a **"unidades de la default por 1 unidad de la moneda del movimiento"** (Opción A) con cruces derivados vía **pivote USD**, y se suma una **tabla de cotizaciones de referencia** (global, interna, no editable) que pre-carga la cotización del movimiento. `requirements.md` / `screens.md` / `data-model.md` se actualizaron al implementar la fase.
 
 ---
 
@@ -47,11 +47,11 @@ Dos fases de v1.2 **reabren explícitamente** decisiones que estaban cerradas en
 | 1.2.1 | Filtros por listado | `feat/per-list-filters` | Back→Front | 1.1.0 |
 | 1.2.2 | Toggle "por categoría" en reporte | `feat/report-category-toggle` | Front+Design | 1.1.5 |
 | 1.2.3 | Multi-moneda ARS/USD + settings | `feat/multi-currency` | Back→Front+Design | 1.1.0 |
-| 1.2.4 | Monedas configurables + cotizaciones de referencia por mes (+ Euro) — **planificada** | `feat/configurable-currencies` | Back→Front+Design | 1.2.3 |
+| 1.2.4 | Monedas configurables (set curado ARS/USD/EUR/BRL) + tabla de cotizaciones de referencia | `feat/configurable-currencies` | Back→Front+Design | 1.2.3 |
 
 > El "origen" de cada fase refiere a los pendientes del TODO del `README.md` (F1–F4, P3 y los dos fixes de 1.1.3/1.1.4). Se anota como trazabilidad del origen de cada fase.
 >
-> **Estado:** las fases 1.2.0–1.2.3 están **completas**. La fase **1.2.4 está planificada** (no construida) y es **lo siguiente a tomar**; antes de implementarla hay que **cerrar las decisiones pendientes** que enumera (reabre la decisión "set fijo ARS/USD" de 1.2.3).
+> **Estado:** las fases 1.2.0–1.2.4 están **completas**.
 
 ---
 
@@ -176,44 +176,33 @@ Dos fases de v1.2 **reabren explícitamente** decisiones que estaban cerradas en
 
 ---
 
-## Fase 1.2.4 — Monedas configurables + cotizaciones de referencia por mes (+ Euro) — PLANIFICADA (origen: P3)
+## Fase 1.2.4 — Monedas configurables (set curado ARS/USD/EUR/BRL) + tabla de cotizaciones de referencia (origen: P3)
 
-> **Estado: planificada, NO implementada.** Es **lo siguiente a tomar** después de la 1.2.3. **Reabre la decisión cerrada en la 1.2.3** ("set fijo ARS/USD, sin alta de monedas"). Antes de planificar la implementación hay que **cerrar las decisiones pendientes** listadas abajo. `requirements.md`, `screens.md` y `data-model.md` se actualizan **al implementar esta fase** (no antes).
+> **Estado: completa.** **Reabre la decisión cerrada en la 1.2.3** ("set fijo ARS/USD, sin alta de monedas"). `requirements.md`, `screens.md` y `data-model.md` se actualizaron al implementar la fase.
 
 **Origen:** pedido del usuario durante la 1.2.3; se relaciona con el ítem **P3** del TODO del `README.md` (reportes con cambio de moneda por card).
 
-**Objetivo:** pasar del **set fijo ARS/USD** a **monedas configurables**, con una **tabla de cotizaciones de referencia por mes** que sirve de **valor por defecto (copia, no FK)** para la cotización de cada movimiento.
+**Objetivo:** pasar del **set fijo ARS/USD** a un **set curado de monedas**, con una **tabla de cotizaciones de referencia por mes** que sirve de **valor por defecto (copia, no FK)** para la cotización de cada movimiento.
 
-**Tres piezas (de distinto peso y riesgo):**
-1. **Tabla de cotizaciones de referencia por mes** — *pieza más clara, menor riesgo.* Un registro por `(moneda, año-mes)` con la cotización de referencia. Es **valor por copia, NO FK**: cada movimiento conserva su **cotización propia** (como en 1.2.3), pero la **toma como default/inicial** de esta tabla según su mes, y sigue siendo **editable**.
-2. **Euro** — sumar **EUR** al set de monedas.
-3. **Monedas en su propia tabla, creables por el usuario** — *cambio grande.* Hoy `Currency` es un **enum de 2 valores** y la conversión está cableada como "ARS por 1 USD". Monedas arbitrarias **obligan a rediseñar la capa de conversión** (moneda base + tasa relativa a la base) y a dar **metadata** a cada moneda (código, símbolo, decimales).
+**Decisiones cerradas:**
+- **Set curado de 4 monedas — `ARS`, `USD`, `EUR`, `BRL`** (se sumaron `EUR` y `BRL` a 1.2.3). **No** hay alta de monedas arbitrarias por el usuario; `Currency` sigue siendo un enum cerrado.
+- **Pivote `USD`.** La conversión se generaliza: cada cotización es "unidades de la default por 1 unidad de la moneda del movimiento" y los cruces no triviales (EUR↔BRL, etc.) se **derivan vía el pivote USD**, no se guardan pares.
+- **Tabla de cotizaciones de referencia: global, interna, NO editable por UI.** `(moneda, mes)`, `rate` = unidades de la moneda por 1 USD; **USD sin fila** (pivote implícito = 1). Es **valor por copia, no FK**: pre-carga la cotización del movimiento, que sigue editable.
+- **Semántica per-movimiento = Opción A.** `exchangeRate` = "unidades de la default por 1 unidad de la moneda del movimiento" — preserva la UX de 1.2.3 y es back-compat perfecto.
+- **Cotización manual, sin APIs externas** (rige la decisión v1): la tabla de referencia se siembra por seed; no se inventan cotizaciones en runtime.
 
-**Decisiones a cerrar antes de planificar la implementación (PENDIENTES):**
-- **¿Monedas creables/arbitrarias o set curado (ARS/USD/EUR)?** Define el tamaño de toda la fase. *Recomendación registrada:* si se hace multi-moneda real, pasar a **moneda base** (p. ej. ARS) y expresar toda cotización como "unidades de la base por 1 unidad de la moneda".
-- **¿La tabla de referencia es por usuario o global?** *Recomendación:* **por usuario**, editable en `/configuracion`.
-- **¿Qué representa cada valor?** *Recomendación:* **unidades de la base por 1 unidad de la moneda extranjera**, por `año-mes`.
-- **¿Quién carga los valores?** **Manual** — rige la decisión v1 **sin APIs externas**; no se inventan cotizaciones (las carga el usuario).
-- **Alcance temporal:** tabla keyed por `año-mes` (los movimientos pueden ser de cualquier año, aunque el usuario mencionó "solo 2026").
+**Relación con la 1.2.3:** la conversión sigue siendo **capa de display** (no toca lo guardado). El **pre-fill** del campo de cotización pasó a servirse desde la **tabla de referencia del mes** (`GET /settings/reference-rate`); `lastExchangeRate` quedó como **fallback** cuando la tabla no tiene dato.
 
-**Relación con la 1.2.3:** la conversión sigue siendo **capa de display** (no toca lo guardado). El **pre-fill** del campo de cotización del formulario pasaría a tomarse de la **tabla de referencia del mes del movimiento** (hoy toma `lastExchangeRate`). El **indicador de moneda** y los **símbolos centralizados** (`CURRENCY_SYMBOLS`) ya quedaron **extensibles** en 1.2.3.
-
-**Qué hace el backend (primero):**
-- Modela la **tabla de cotizaciones de referencia por `(moneda, año-mes)`** (valor por copia hacia el movimiento, no FK).
-- Suma **EUR** y, según la decisión que se cierre, mueve las monedas de **enum** a **tabla con metadata** y **rediseña la capa de conversión** a **moneda base + tasa relativa**.
-- Ajusta el **pre-fill** de cotización para servirlo desde la tabla de referencia del mes.
-
-**Qué hace el frontend + diseño (después):**
-- `control-design` define la presentación de la **administración de monedas** y de la **tabla de cotizaciones de referencia por mes** en `/configuracion`, y el ajuste del campo de cotización en formularios.
-- `control-frontend` implementa la edición de la tabla de referencia en `/configuracion`, el alta/gestión de monedas (según se cierre) y el pre-fill del campo de cotización desde la tabla.
+**Lo construido:**
+- **Backend:** modelo `ReferenceRate` global `(currency, yearMonth)` + seed idempotente (`seed-reference-rates.ts`, 54 filas; `pnpm seed:rates` en prod, incluido en `pnpm db:seed` en dev); enum `Currency` a 4; `defaultCurrency` / `currency` a 4 en settings y DTOs; endpoint `GET /settings/reference-rate?month&currency` (deriva el cruce vía pivote USD; `null` si no hay dato). Contrato en `data-model.md`.
+- **Frontend + diseño:** selector de 4 monedas en `/configuracion` y en los formularios; bloque de cotización con label `{moneda}→{default}`, oculto cuando la moneda coincide con la default; copy "Cotización de referencia del mes"; pre-fill vía `useReferenceRate` con fallback a `lastExchangeRate`.
 
 **Pantallas involucradas:**
 - Configuración — `/configuracion`.
 - Vista del mes — `/mes`.
-- Reportes — `/reportes`.
 - Formulario de carga de movimiento (modal).
 
-**Rama sugerida:** `feat/configurable-currencies`
+**Rama:** `feat/configurable-currencies`
 **Depende de:** 1.2.3.
 
 ---
@@ -225,5 +214,5 @@ El orden de las fases de v1.2 sigue el criterio aprobado **chico → grande**, r
 - **Los fixes (1.2.0) van primero:** son chicos, **sin dependencias**, y dan valor inmediato sobre comportamientos que ya están en producción.
 - **Filtros por listado (1.2.1) y toggle de reporte (1.2.2) van a continuación:** features acotados que se apoyan en cimientos ya existentes — preferencias de usuario (1.1.0) y reportes configurables (1.1.5) — sin tocar el modelo de datos.
 - **Multi-moneda (1.2.3) va al final de lo implementado** por ser la **más grande y riesgosa**: toca el modelo de datos y agrega una capa de conversión a totales y reportes. Al ser conversión de **capa de display**, el rework sobre 1.2.1/1.2.2 queda **acotado** (los filtros y el toggle operan sobre datos ya convertidos a la moneda default vigente).
-- **Monedas configurables (1.2.4) queda planificada como lo siguiente a tomar:** es una **expansión** de la 1.2.3 que **reabre** su decisión de set fijo. Su tamaño depende de las **decisiones aún pendientes** (monedas arbitrarias vs. set curado); por eso entra al roadmap como **planificada**, no construida, y debe pasar por su ciclo **plan → aprobación → delegación** una vez cerradas esas decisiones.
+- **Monedas configurables (1.2.4) cierra v1.2:** es una **expansión** de la 1.2.3 que **reabre** su decisión de set fijo. Se cerró sobre un **set curado de 4** (no monedas arbitrarias), acotando su tamaño, y reusó la capa de display de 1.2.3 generalizando la cotización a la Opción A con pivote USD.
 - **F2 (convención de _ordering_ en query params del API, del TODO) queda diferido, fuera de v1.2:** sigue **sin haber un listado** paginado o grande que lo justifique; se diseñará cuando aparezca el primer listado que lo amerite.

@@ -10,7 +10,7 @@ import {
   isOnFrequency,
 } from './movements.repository';
 import { applyFormula } from '../recurring/formula.helper';
-import { convertToDefaultCurrency } from '../common/currency.helper';
+import { convertToDisplayCurrency, PivotRates, buildPivotRates } from '../common/currency.helper';
 import { SettingsService } from '../settings/settings.service';
 
 /**
@@ -221,9 +221,12 @@ export class MovementsService {
           ? EMPTY_SET
           : new Set(categoryIds);
 
-    // Cargar la moneda default del usuario (Fase 1.2.3)
-    const userSettings = await this.settingsService.getSettings(userId);
-    const defaultCurrency = userSettings.defaultCurrency;
+    // Cargar la moneda default del usuario y las pivot rates del año en paralelo (Fase 1.2.4)
+    const [userSettings, pivotRatesForYear] = await Promise.all([
+      this.settingsService.getSettings(userId),
+      this.repo.loadPivotRatesForYear(year),
+    ]);
+    const displayCurrency = userSettings.defaultCurrency;
 
     const yearStr = String(year).padStart(4, '0');
     const months12: string[] = Array.from({ length: 12 }, (_, i) => {
@@ -257,13 +260,16 @@ export class MovementsService {
       const idx = monthIndex(row.monthKey);
       if (idx < 0 || idx > 11) continue;
 
-      // Fase 1.2.3: convertir al defaultCurrency antes de sumar
+      // Fase 1.2.4: re-rutear vía pivot rates del mes del movimiento
+      const pivotRates = pivotRatesForYear.get(row.monthKey) ?? null;
       const rawCents = Number(row.totalCents);
-      const cents = convertToDefaultCurrency(
+      const cents = convertToDisplayCurrency(
         rawCents,
         row.currency as Currency,
         Number(row.exchangeRate),
-        defaultCurrency,
+        row.anchorCurrency as Currency,
+        displayCurrency,
+        pivotRates,
       );
 
       if (row.type === 'INCOME') {
@@ -296,7 +302,7 @@ export class MovementsService {
 
     // Cargar todos los Transactions de origen para calculados de único (una sola query)
     const txIdsAnual = [...new Set(calculadosDeUnicoAnual.map((f) => f.sourceMovementId!).filter(Boolean))];
-    const txAnualMap = new Map<string, { amountCents: number; description: string | null; currency: Currency; exchangeRate: number }>();
+    const txAnualMap = new Map<string, { amountCents: number; description: string | null; currency: Currency; exchangeRate: number; anchorCurrency: Currency }>();
     if (txIdsAnual.length > 0) {
       const txRows = await this.repo.findTransactionsByIds(txIdsAnual);
       for (const tx of txRows) txAnualMap.set(tx.id, {
@@ -304,6 +310,7 @@ export class MovementsService {
         description: tx.description,
         currency: tx.currency,
         exchangeRate: tx.exchangeRate,
+        anchorCurrency: tx.anchorCurrency,
       });
     }
 
@@ -315,6 +322,7 @@ export class MovementsService {
       startMonth: string;
       currency: Currency;
       exchangeRate: number;
+      anchorCurrency: Currency;
     }>();
     if (groupIdsAnual.length > 0) {
       const groupRows = await this.repo.findInstallmentGroupsByIds(groupIdsAnual);
@@ -324,11 +332,14 @@ export class MovementsService {
         startMonth: g.startMonth,
         currency: g.currency,
         exchangeRate: g.exchangeRate,
+        anchorCurrency: g.anchorCurrency,
       });
     }
 
     for (let i = 0; i < 12; i++) {
       const mes = months12[i];
+      // Pivot rates del mes (para re-rutear la conversión si anchorCurrency ≠ displayCurrency)
+      const pivotRates = pivotRatesForYear.get(mes) ?? null;
 
       // Construir mapa chainId → datos del normal activo en este mes.
       const normalesActivosMes = new Map<string, {
@@ -337,6 +348,7 @@ export class MovementsService {
         startMonth: string;
         currency: Currency;
         exchangeRate: number;
+        anchorCurrency: Currency;
       }>();
       for (const fijo of normalesForAnnual) {
         const inRange =
@@ -353,6 +365,7 @@ export class MovementsService {
             startMonth: fijo.startMonth,
             currency: fijo.currency,
             exchangeRate: fijo.exchangeRate,
+            anchorCurrency: fijo.anchorCurrency,
           });
         }
       }
@@ -368,12 +381,14 @@ export class MovementsService {
         if (!isOnFrequency(fijo.startMonth, fijo.frequency, mes)) continue;
         if (fijo.skippedMonths.has(mes)) continue;
 
-        // Fase 1.2.3: convertir al defaultCurrency
-        const convertedAmount = convertToDefaultCurrency(
+        // Fase 1.2.4: re-rutear vía pivot rates del mes
+        const convertedAmount = convertToDisplayCurrency(
           fijo.amountCents,
           fijo.currency,
           fijo.exchangeRate,
-          defaultCurrency,
+          fijo.anchorCurrency,
+          displayCurrency,
+          pivotRates,
         );
 
         if (fijo.type === 'INCOME') {
@@ -417,12 +432,14 @@ export class MovementsService {
         const derivedType =
           derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
 
-        // Fase 1.2.3: calculados heredan moneda/cotización del origen
-        const magnitude = convertToDefaultCurrency(
+        // Calculados heredan moneda/cotización/anchor del origen; re-rutear vía pivot rates
+        const magnitude = convertToDisplayCurrency(
           Math.abs(derivedAmount),
           originData.currency,
           originData.exchangeRate,
-          defaultCurrency,
+          originData.anchorCurrency,
+          displayCurrency,
+          pivotRates,
         );
 
         if (derivedType === MovementType.INCOME) {
@@ -465,12 +482,14 @@ export class MovementsService {
         const derivedType =
           derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
 
-        // Fase 1.2.3: calculados heredan moneda/cotización del origen
-        const magnitude = convertToDefaultCurrency(
+        // Calculados heredan moneda/cotización/anchor del origen; re-rutear vía pivot rates
+        const magnitude = convertToDisplayCurrency(
           Math.abs(derivedAmount),
           txData.currency,
           txData.exchangeRate,
-          defaultCurrency,
+          txData.anchorCurrency,
+          displayCurrency,
+          pivotRates,
         );
 
         if (derivedType === MovementType.INCOME) {
@@ -518,12 +537,14 @@ export class MovementsService {
         const derivedType =
           derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
 
-        // Fase 1.2.3: calculados heredan moneda/cotización del origen
-        const magnitude = convertToDefaultCurrency(
+        // Calculados heredan moneda/cotización/anchor del origen; re-rutear vía pivot rates
+        const magnitude = convertToDisplayCurrency(
           Math.abs(derivedAmount),
           groupData.currency,
           groupData.exchangeRate,
-          defaultCurrency,
+          groupData.anchorCurrency,
+          displayCurrency,
+          pivotRates,
         );
 
         if (derivedType === MovementType.INCOME) {
@@ -552,17 +573,20 @@ export class MovementsService {
 
       const endMonth = addMonths(grupo.startMonth, grupo.totalInstallments);
 
-      // Fase 1.2.3: convertir al defaultCurrency (misma cotización en todos los meses del grupo)
-      const convertedAmount = convertToDefaultCurrency(
-        grupo.amountCents,
-        grupo.currency,
-        grupo.exchangeRate,
-        defaultCurrency,
-      );
-
       for (let i = 0; i < 12; i++) {
         const mes = months12[i];
         if (grupo.startMonth > mes || mes >= endMonth) continue;
+
+        // Fase 1.2.4: re-rutear vía pivot rates del mes correspondiente a cada cuota
+        const pivotRates = pivotRatesForYear.get(mes) ?? null;
+        const convertedAmount = convertToDisplayCurrency(
+          grupo.amountCents,
+          grupo.currency,
+          grupo.exchangeRate,
+          grupo.anchorCurrency,
+          displayCurrency,
+          pivotRates,
+        );
 
         if (grupo.type === 'INCOME') {
           agg[i].incomeCents += convertedAmount;

@@ -5,7 +5,7 @@
  *
  * Cubre:
  * - Shape completo de la respuesta (sobre + data con month, totals, movements)
- * - Listado del mes con únicos (orden: amountCents DESC, desempate occurredAt DESC)
+ * - Listado del mes con únicos (orden: convertedAmountCents DESC, desempate occurredAt DESC)
  * - Totales correctos (expenseCents, incomeCents, balanceCents)
  * - Movimiento con categoría soft-deleted sigue en totales y con categoría
  * - Bucketeo por zona propia: el mock devuelve los ítems que corresponden
@@ -323,8 +323,8 @@ describe('Movements (e2e)', () => {
       expect(res.body.data.totals.expenseCents).toBe(1500);
     });
 
-    it('200 + orden de unicos: mayor monto primero (amountCents DESC)', async () => {
-      // El SQL ordena por amountCents DESC; el mock devuelve en ese orden y el service lo preserva
+    it('200 + orden de unicos: mayor monto primero (convertedAmountCents DESC)', async () => {
+      // El repo ordena por convertedAmountCents DESC; con moneda ARS coincide con amountCents DESC
       const row1 = makeRawTransactionRow({
         id: 'tx-mayor',
         amountCents: 5000,

@@ -35,6 +35,10 @@ export class TransactionsService {
 
     const effectiveExchangeRate = dto.exchangeRate ?? 1;
 
+    // Cargar la defaultCurrency del usuario para anclarla como anchor (Fase 1.2.4)
+    const userSettings = await this.settingsService.getSettings(userId);
+    const anchorCurrency = userSettings.defaultCurrency;
+
     const tx = await this.repo.create({
       user: { connect: { id: userId } },
       category: { connect: { id: dto.categoryId } },
@@ -45,6 +49,7 @@ export class TransactionsService {
       description: dto.description ?? null,
       ...(dto.currency !== undefined && { currency: dto.currency }),
       exchangeRate: effectiveExchangeRate,
+      anchorCurrency,
     });
 
     // Actualizar lastExchangeRate del usuario (solo si no es el default de back-compat)
@@ -96,6 +101,13 @@ export class TransactionsService {
       await this.categoryValidator.validateCategory(userId, effectiveCategoryId, effectiveType);
     }
 
+    // Si se está actualizando la cotización, también actualizar el anchor (Fase 1.2.4)
+    let anchorCurrency = undefined;
+    if (dto.exchangeRate !== undefined || dto.currency !== undefined) {
+      const userSettings = await this.settingsService.getSettings(userId);
+      anchorCurrency = userSettings.defaultCurrency;
+    }
+
     const updated = await this.repo.update(id, {
       ...(dto.type !== undefined && { type: dto.type }),
       ...(dto.amountCents !== undefined && { amountCents: dto.amountCents }),
@@ -110,6 +122,7 @@ export class TransactionsService {
       ...(dto.description !== undefined && { description: dto.description }),
       ...(dto.currency !== undefined && { currency: dto.currency }),
       ...(dto.exchangeRate !== undefined && { exchangeRate: dto.exchangeRate }),
+      ...(anchorCurrency !== undefined && { anchorCurrency }),
     });
 
     // Actualizar lastExchangeRate del usuario si se editó la cotización

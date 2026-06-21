@@ -48,9 +48,9 @@ export class UpdateInstallmentDto {
   @IsString()
   description?: string | null;
 
-  /** Moneda del grupo. Opcional. Fase 1.2.3. */
+  /** Moneda del grupo. Opcional. Fase 1.2.4: acepta ARS, USD, EUR, BRL. */
   @IsOptional()
-  @IsEnum(Currency, { message: 'currency debe ser ARS o USD' })
+  @IsEnum(Currency, { message: 'currency debe ser ARS, USD, EUR o BRL' })
   currency?: Currency;
 
   /** Cotización ARS/1 USD. Número positivo con decimales. Opcional. Fase 1.2.3. */

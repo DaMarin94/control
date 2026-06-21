@@ -78,6 +78,9 @@ const mockPrisma = {
   transaction: {
     findMany: jest.fn().mockResolvedValue([]),
   },
+  referenceRate: {
+    findMany: jest.fn().mockResolvedValue([]),
+  },
 };
 
 // ---------------------------------------------------------------------------

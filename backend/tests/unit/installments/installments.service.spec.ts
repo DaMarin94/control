@@ -74,6 +74,7 @@ function makeGroup(
     amountCents: 5000,
     currency: Currency.ARS,
     exchangeRate: 1,
+    anchorCurrency: Currency.ARS,
     totalInstallments: 12,
     description: null,
     startMonth: '2026-01',

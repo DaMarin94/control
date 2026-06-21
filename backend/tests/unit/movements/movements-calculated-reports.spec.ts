@@ -32,6 +32,7 @@ const mockRepo = {
   // Fase 1.1.7.ext — lookups de origen para calculados de único y cuota
   findTransactionsByIds: jest.fn().mockResolvedValue([]),
   findInstallmentGroupsByIds: jest.fn().mockResolvedValue([]),
+  loadPivotRatesForYear: jest.fn().mockResolvedValue(new Map()),
 };
 
 const mockLogger = {
@@ -56,6 +57,7 @@ function makeOriginFijo(overrides: Partial<RecurringForAnnual> = {}): RecurringF
     amountCents: 10000,
     currency: Currency.ARS,
     exchangeRate: 1,
+    anchorCurrency: Currency.ARS,
     startMonth: '2026-01',
     deletedFrom: null,
     frequency: RecurringFrequency.MONTHLY,
@@ -82,6 +84,7 @@ function makeCalcFijo(overrides: Partial<RecurringForAnnual> = {}): RecurringFor
     amountCents: 0, // placeholder
     currency: Currency.ARS,
     exchangeRate: 1,
+    anchorCurrency: Currency.ARS,
     startMonth: '2026-01',
     deletedFrom: null,
     frequency: RecurringFrequency.MONTHLY,

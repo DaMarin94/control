@@ -12,7 +12,7 @@
  * Lógica de negocio preservada intacta.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -27,6 +27,7 @@ import { CurrencyExchangeBlock } from "@/components/ui/currency-exchange-block";
 import { useCategories } from "@/hooks/use-categories";
 import { useRecurring } from "@/hooks/use-recurring";
 import { useSettings } from "@/hooks/use-settings";
+import { useReferenceRate } from "@/hooks/use-reference-rate";
 import { useToast } from "@/hooks/use-toast";
 import { type TransactionType } from "@/types/transaction";
 import { type Category, type CategoryScope } from "@/types/category";
@@ -74,7 +75,7 @@ const recurringSchema = z.object({
     .refine((val) => parseCurrencyInput(val) !== null, {
       message: "Ingresá un monto mayor a 0",
     }),
-  currency: z.enum(["ARS", "USD"]),
+  currency: z.enum(["ARS", "USD", "EUR", "BRL"]),
   /**
    * Input de cotización como string. Solo se valida cuando currency !== defaultCurrency.
    */
@@ -132,21 +133,19 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
 
   const isLoading = isEditing ? isUpdating : isCreating;
 
-  // Cotización pre-cargada:
+  // Cotización pre-cargada inicial:
   // - Editando: la del fijo (siempre presente, nunca null en el backend).
-  // - Creando: el lastExchangeRate del usuario, o vacío si aún no tiene historial.
-  const preloadedExchangeRateInput = isEditing
+  // - Creando: se rellena luego desde referenceRate/lastExchangeRate.
+  const initialEditingExchangeRateInput = isEditing
     ? formatExchangeRate(recurring.exchangeRate ?? 1)
-    : lastExchangeRate != null
-      ? formatExchangeRate(lastExchangeRate)
-      : "";
+    : "";
 
   const defaultValues: RecurringFormData = isEditing
     ? {
         type: recurring.type,
         amountInput: String(recurring.amountCents / 100).replace(".", ","),
         currency: recurring.currency ?? defaultCurrency,
-        exchangeRateInput: formatExchangeRate(recurring.exchangeRate ?? 1),
+        exchangeRateInput: initialEditingExchangeRateInput,
         startMonth: getCurrentMonth(),
         // frequency: se inicializa con el valor del fijo (o MONTHLY como fallback) para
         // satisfacer la validación del schema en edición — NO se envía en el PATCH.
@@ -158,14 +157,22 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
         type: "EXPENSE",
         amountInput: "",
         currency: defaultCurrency,
-        exchangeRateInput: preloadedExchangeRateInput,
+        exchangeRateInput: "",
         startMonth: defaultMonth ?? getCurrentMonth(),
         frequency: "MONTHLY",
         categoryId: "",
         description: "",
       };
 
-  const [initialExchangeRateInput] = useState(defaultValues.exchangeRateInput);
+  const [preloadedExchangeRateInput, setPreloadedExchangeRateInput] = useState(
+    initialEditingExchangeRateInput,
+  );
+
+  // En edición: moneda original al abrir el modal. Si el usuario la cambia, se
+  // pre-carga la cotización de referencia para la nueva moneda (como en creación).
+  const initialCurrencyRef = useRef<CurrencyCode>(
+    isEditing ? (recurring?.currency ?? defaultCurrency) : defaultCurrency,
+  );
 
   const {
     register,
@@ -180,45 +187,78 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
     defaultValues,
   });
 
+  const selectedType = watch("type");
+  const selectedCategoryId = watch("categoryId");
+  const selectedFrequency = watch("frequency");
+  const selectedCurrency = watch("currency") as CurrencyCode;
+  const exchangeRateInput = watch("exchangeRateInput");
+
+  // Mes relevante para la cotización de referencia:
+  // - Crear: mes de inicio seleccionado (o mes actual como fallback)
+  // - Editar: mes visualizado (viewMonth) o mes actual
+  const referenceMonth = viewMonth ?? getCurrentMonth();
+
+  // Hook de cotización de referencia — Fase 1.2.4
+  const { referenceRate } = useReferenceRate({
+    month: referenceMonth,
+    currency: selectedCurrency,
+    defaultCurrency,
+  });
+
   useEffect(() => {
     if (isEditing) {
+      const newCurrency = recurring.currency ?? defaultCurrency;
       reset({
         type: recurring.type,
         amountInput: String(recurring.amountCents / 100).replace(".", ","),
-        currency: recurring.currency ?? defaultCurrency,
+        currency: newCurrency,
         exchangeRateInput: formatExchangeRate(recurring.exchangeRate ?? 1),
         startMonth: getCurrentMonth(),
         frequency: recurring.frequency ?? "MONTHLY",
         categoryId: recurring.categoryId,
         description: recurring.description ?? "",
       });
+      // Actualizar la referencia de moneda inicial para que el effect de pre-carga
+      // pueda detectar correctamente si el usuario la cambia en esta sesión.
+      initialCurrencyRef.current = newCurrency;
       setIsExchangeRateModified(false);
     }
   }, [recurring, isEditing, reset, defaultCurrency]);
 
-  // Pre-cargar cotización cuando defaultCurrency o lastExchangeRate cambian (solo en crear)
+  // Pre-cargar defaultCurrency al crear cuando cambia
   useEffect(() => {
     if (!isEditing) {
       setValue("currency", defaultCurrency);
-      setValue(
-        "exchangeRateInput",
-        lastExchangeRate != null ? formatExchangeRate(lastExchangeRate) : "",
-      );
+    }
+  }, [defaultCurrency, isEditing, setValue]);
+
+  // Pre-cargar cotización: prioridad referenceRate → lastExchangeRate → vacío (Fase 1.2.4).
+  // En modo crear: siempre al cambiar referencia o moneda.
+  // En modo edición: solo si el usuario cambió la moneda (≠ moneda original al abrir) y
+  // no modificó la cotización manualmente.
+  useEffect(() => {
+    const currencyChanged = selectedCurrency !== initialCurrencyRef.current;
+    if (isEditing && !currencyChanged) return;
+    if (isEditing && isExchangeRateModified) return;
+    const rate =
+      referenceRate !== null
+        ? referenceRate
+        : lastExchangeRate;
+    const formatted = rate !== null ? formatExchangeRate(rate) : "";
+    setPreloadedExchangeRateInput(formatted);
+    setValue("exchangeRateInput", formatted);
+    if (!isEditing) {
       setIsExchangeRateModified(false);
     }
-  }, [defaultCurrency, lastExchangeRate, isEditing, setValue]);
-
-  const selectedType = watch("type");
-  const selectedCategoryId = watch("categoryId");
-  const selectedFrequency = watch("frequency");
-  const exchangeRateInput = watch("exchangeRateInput");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [referenceRate, lastExchangeRate, isEditing, selectedCurrency, setValue]);
 
   // Detectar si el usuario modificó la cotización
   useEffect(() => {
     setIsExchangeRateModified(
-      exchangeRateInput !== initialExchangeRateInput && exchangeRateInput !== ""
+      exchangeRateInput !== preloadedExchangeRateInput && exchangeRateInput !== ""
     );
-  }, [exchangeRateInput, initialExchangeRateInput]);
+  }, [exchangeRateInput, preloadedExchangeRateInput]);
 
   const availableCategories = filterCategoriesByType(
     (categories ?? []).map((c) => ({ id: c.id, name: c.name, scope: c.scope })),
@@ -240,14 +280,22 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
     const amountCents = parseCurrencyInput(data.amountInput);
     if (amountCents === null) return;
 
-    // Validar cotización SIEMPRE (no solo en cross-rate): el roadmap exige capturar
-    // y persistir la cotización real también cuando moneda === defaultCurrency.
-    const parsedExchangeRate = parseExchangeRateInput(data.exchangeRateInput);
-    if (parsedExchangeRate === null) {
-      setExchangeRateError("Ingresá una cotización mayor a 0");
-      return;
+    // Cuando moneda === defaultCurrency el campo cotización está oculto (Fase 1.2.4).
+    // El backend ignora exchangeRate en ese caso, así que enviamos 1 directamente.
+    // Solo cuando moneda ≠ default validamos y parseamos el input visible.
+    let parsedExchangeRate: number;
+    if (data.currency === defaultCurrency) {
+      parsedExchangeRate = 1;
+      setExchangeRateError(undefined);
+    } else {
+      const parsed = parseExchangeRateInput(data.exchangeRateInput);
+      if (parsed === null) {
+        setExchangeRateError("Ingresá una cotización mayor a 0");
+        return;
+      }
+      parsedExchangeRate = parsed;
+      setExchangeRateError(undefined);
     }
-    setExchangeRateError(undefined);
 
     if (isEditing) {
       const result = await updateRecurring(recurring.id, {
@@ -255,6 +303,7 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
         amountCents,
         categoryId: data.categoryId,
         description: data.description || null,
+        currency: data.currency,
         // En edición de fijo: la cotización aplica al mes visualizado
         exchangeRate: parsedExchangeRate,
       });
