@@ -63,7 +63,6 @@ export function DeleteInstallmentDialog({ movement, onClose }: DeleteInstallment
       role="dialog"
       aria-modal="true"
       aria-labelledby="delete-installment-title"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {/* Diálogo */}
       <div

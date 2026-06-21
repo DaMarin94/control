@@ -78,7 +78,6 @@ export function DeleteRecurringDialog({ movement, onClose, viewMonth, variant = 
       role="dialog"
       aria-modal="true"
       aria-labelledby={dialogTitleId}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {/* Diálogo */}
       <div

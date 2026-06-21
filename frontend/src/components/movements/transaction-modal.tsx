@@ -150,9 +150,6 @@ export function TransactionModal(props: TransactionModalProps) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="transaction-modal-title"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
     >
       {/* Diálogo */}
       <div

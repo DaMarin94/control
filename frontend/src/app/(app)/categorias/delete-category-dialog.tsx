@@ -54,7 +54,6 @@ export function DeleteCategoryDialog({ category, onClose }: DeleteCategoryDialog
       role="dialog"
       aria-modal="true"
       aria-labelledby="delete-category-title"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {/* Diálogo */}
       <div

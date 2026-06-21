@@ -215,6 +215,13 @@ Notas de construcción (para entender la matriz, no son reglas que el código de
 >
 > Los **gráficos** (Forma 1 — área de ingresos vs. gastos; Forma 2 — barras apiladas por categoría), con sus ejes, gridlines, leyenda, tooltip, altos de canvas y mapeos de color, se definen en *Gráficos — Forma 1 y Forma 2* (abajo). El encuadre que los rodea (cómo se montan en pantalla) vive en *Card de reporte*.
 
+### Cierre de overlays — modales vs. popovers
+
+Dos comportamientos de cierre, según el tipo de overlay:
+
+- **Modales / diálogos** (transaction-modal, category-form-modal y los diálogos de confirmación de borrado — transaction / recurring / installment / category): se cierran **únicamente con el botón ✕ y con `Esc`**. El click en el scrim/backdrop **no** cierra. Son superficies que demandan una decisión explícita; no se descartan por click accidental afuera.
+- **Popovers** (filtro de categorías, filtro de sección, menú de tipo de reporte): se cierran por **clic fuera / `Esc` / re-clic**. Son auxiliares y livianos; descartarlos al tocar fuera es lo esperado.
+
 ### PeriodNav — navegación de período (flechas gigantes laterales + modo `.stepper`)
 
 Patrón **genérico** para navegar un período (mes o año): `‹ contenido ›`, donde **‹ va al período anterior y › al siguiente**. Recibe un rótulo de período ya formateado, handlers anterior/siguiente y dos flags `canGoPrev` / `canGoNext`. **Mismo componente, distinto período.** Tiene **dos formas**:

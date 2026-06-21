@@ -54,6 +54,15 @@ interface AddCardMenuProps {
   onClose: () => void;
 }
 
+/** Ancho fijo del popover (debe coincidir con w-[240px] en el JSX). */
+const POPOVER_WIDTH = 240;
+/** Colchón mínimo al borde del viewport. */
+const VIEWPORT_MARGIN = 12;
+/** Gap entre anchor y popover (ambas direcciones). */
+const POPOVER_GAP = 6;
+/** Alto estimado para el primer frame antes de medir el DOM real. */
+const POPOVER_HEIGHT_ESTIMATE = 150;
+
 function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
@@ -63,11 +72,59 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
     setMounted(true);
   }, []);
 
-  useEffect(() => {
+  /**
+   * Calcula la posición del popover con flip vertical.
+   * Se invoca tanto en el mount (con alto estimado) como después de pintar
+   * (con alto real del DOM), para evitar saltos visibles.
+   */
+  function calcPosition(popoverHeight: number) {
     if (!anchorRef.current) return;
     const rect = anchorRef.current.getBoundingClientRect();
-    setPosition({ top: rect.bottom + 6, left: rect.left });
+    const vh = window.innerHeight;
+
+    const espacioAbajo = vh - rect.bottom - VIEWPORT_MARGIN;
+    const espacioArriba = rect.top - VIEWPORT_MARGIN;
+    const cabe_abajo = popoverHeight + POPOVER_GAP <= espacioAbajo;
+    const cabe_arriba = popoverHeight + POPOVER_GAP <= espacioArriba;
+
+    let top: number;
+    if (cabe_abajo) {
+      // Default: abajo del anchor
+      top = rect.bottom + POPOVER_GAP;
+    } else if (cabe_arriba) {
+      // Flip: arriba del anchor
+      top = rect.top - popoverHeight - POPOVER_GAP;
+    } else {
+      // No entra en ningún lado: priorizar el que tiene más espacio, clampear
+      const topCandidate =
+        espacioArriba > espacioAbajo
+          ? rect.top - popoverHeight - POPOVER_GAP
+          : rect.bottom + POPOVER_GAP;
+      top = Math.max(VIEWPORT_MARGIN, Math.min(topCandidate, vh - popoverHeight - VIEWPORT_MARGIN));
+    }
+
+    // Clamp horizontal: si el popover se pasa del borde derecho, recortar
+    let left = rect.left;
+    if (left + POPOVER_WIDTH > window.innerWidth - VIEWPORT_MARGIN) {
+      left = window.innerWidth - POPOVER_WIDTH - VIEWPORT_MARGIN;
+    }
+
+    setPosition({ top, left });
+  }
+
+  // Primera pasada con estimado (antes del primer paint del menú)
+  useEffect(() => {
+    calcPosition(POPOVER_HEIGHT_ESTIMATE);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchorRef]);
+
+  // Segunda pasada con alto real (después de que el menú está en el DOM)
+  useEffect(() => {
+    if (!menuRef.current) return;
+    const realHeight = menuRef.current.getBoundingClientRect().height;
+    if (realHeight > 0) calcPosition(realHeight);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {

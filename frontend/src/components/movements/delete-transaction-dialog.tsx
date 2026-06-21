@@ -62,7 +62,6 @@ export function DeleteTransactionDialog({
       role="dialog"
       aria-modal="true"
       aria-labelledby="delete-transaction-title"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {/* Diálogo */}
       <div

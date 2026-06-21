@@ -208,7 +208,6 @@ export function CategoryFormModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="category-modal-title"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {/* Diálogo */}
       <div
