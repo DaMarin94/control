@@ -1271,6 +1271,7 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
   - **Categorías** — lleva a la gestión de categorías (módulo 3.6).
   - **Configuración** — lleva a la pantalla de configuración (`/configuracion`, RF-CUR-002), debajo de "Categorías".
 - **Botón "Nuevo movimiento"** (acción primaria): abre el formulario de carga de movimiento (RF-CM-001).
+- **Control de modo de color** (parte inferior, en su propia fila encima del menú de usuario): toggle de iconos Sistema / Claro / Oscuro que aplica y persiste el modo de color de la app (RF-APP-001).
 - **Menú de usuario** (parte inferior): representado por el avatar del usuario. Al activarlo, despliega la opción **"Cerrar sesión"** (RF-AUTH-004).
 
 **Criterios de aceptación:**
@@ -1282,6 +1283,7 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 - [ ] El link "Reportes" lleva a `/reportes` (RF-REP-003) y se ubica entre "Vista del mes" y "Categorías".
 - [ ] El botón "Nuevo movimiento" abre el formulario de carga (RF-CM-001) desde cualquier pantalla, cumpliendo el límite de 2 interacciones (RNF-003).
 - [ ] El sidebar indica visualmente cuál es la sección activa.
+- [ ] El control de modo de color (toggle Sistema / Claro / Oscuro) vive en la parte inferior del sidebar, en su propia fila encima del menú de usuario, y dispara RF-APP-001.
 - [ ] El menú de usuario se ubica en la parte inferior del sidebar y muestra el avatar del usuario.
 - [ ] La opción "Cerrar sesión" vive dentro del menú de usuario y dispara el flujo de RF-AUTH-004.
 
@@ -1608,6 +1610,30 @@ El alcance es un **set curado de 4 monedas (ARS / USD / EUR / BRL)**, sin alta d
 
 ---
 
+### 3.11 Módulo: Apariencia
+
+> El usuario elige el **modo de color** de la app (Sistema / Claro / Oscuro) desde un control en el **chrome global** (sidebar, RF-NAV-001). Persiste por usuario en el blob de preferencias (`theme`); modelo de datos en `data-model.md`, §Claves del blob → `theme`. Arquitectura de aplicación (override de tokens, anti-flash) en `docs/frontend.md`, §Modo de color (theming).
+
+---
+
+#### RF-APP-001 — Modo de color (Sistema / Claro / Oscuro)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El usuario elige el modo de color de la app entre **Sistema**, **Claro** y **Oscuro**, desde un control en el **chrome global** (sidebar, RF-NAV-001). **Sistema** es el default: sigue la preferencia de color del dispositivo y reacciona en vivo a sus cambios. La elección persiste por usuario. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Criterios de aceptación:**
+- [ ] El control vive en el **chrome global**, en el **sidebar** (RF-NAV-001), como un toggle de iconos (Sistema / Claro / Oscuro), con tres opciones. No vive en `/configuracion`.
+- [ ] El **default es Sistema**: la app sigue la preferencia de color del dispositivo (`prefers-color-scheme`) y **reacciona en vivo** a un cambio del modo del sistema operativo mientras está en Sistema.
+- [ ] **Claro** y **Oscuro** fuerzan ese modo con independencia del dispositivo.
+- [ ] La elección **persiste por usuario** en el blob de preferencias (clave `theme`): sobrevive al cierre de sesión, al cambio de dispositivo y a limpiar el navegador. No vive en `/settings` (la moneda default sí; esto no).
+- [ ] **Compatibilidad visual total en ambos modos y en cualquier tipo de dispositivo:** toda pantalla y todo control se ven correctos tanto en claro como en oscuro. Las reglas semánticas son **idénticas** en los dos modos: verde = ingreso, rojo = gasto, índigo solo como color de marca, cifras de dinero en fuente monoespaciada. El detalle visual de cada modo lo define `control-design` (`docs/design.md`).
+
+---
+
 ## 4. Reglas de negocio
 
 | ID | Regla |
@@ -1688,6 +1714,7 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 | Movimiento | Registro de una transacción económica. Puede ser único, fijo o una cuota. |
 | Movimiento calculado | Movimiento **fijo** cuyo monto no se ingresa: se deriva al vuelo del monto de un movimiento de origen mediante una fórmula (operador + operando) con signo. El **origen puede ser un fijo, un único o un grupo de cuotas** (RF-MCALC-008); el calculado espeja la cadencia del origen (de cuota deriva del monto por cuota). Tiene categoría y descripción propias; su **tipo (Gasto/Ingreso) se deriva del signo del monto** (negativo → Gasto, positivo → Ingreso). Puede tener monto negativo o cero. Sigue el ciclo de vida del origen; el calculado de único/cuota se borra de forma total (RF-MCALC-009). Ver submódulo 3.4.b (RF-MCALC-001..010), RN-017/018/019. |
 | Identidad de cadena de un fijo | Identificador estable, compartido por todas las filas `Recurring` de un mismo fijo lógico, que sobrevive a los splits del pasado. Es a lo que se vincula un movimiento calculado (no a una fila puntual). Ver `docs/data-model.md`, §Identidad de cadena estable. |
+| Modo de color | Modo claro u oscuro de la app, elegible desde el chrome global (sidebar) entre **Sistema** (default, sigue al dispositivo), **Claro** y **Oscuro**. Persiste por usuario en el blob de preferencias (`theme`). Ver RF-APP-001. |
 | Movimiento fijo | Plantilla recurrente mensual activa hasta que el usuario la elimina. Sin día específico dentro del mes. |
 | Movimiento único | Movimiento que ocurrió en un instante específico (fecha y hora), una sola vez. Se almacena en UTC junto con su zona horaria original; ver RN-011. |
 | Scope de categoría | Indica a qué tipo de movimiento aplica la categoría: `BOTH`, `EXPENSE`, o `INCOME`. |

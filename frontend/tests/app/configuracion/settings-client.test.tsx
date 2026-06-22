@@ -1,14 +1,19 @@
 /**
- * Tests de SettingsClient (/configuracion — Fase 1.2.4: 4 monedas).
+ * Tests de SettingsClient (/configuracion).
  *
  * Verifica:
- * - Estado de carga: muestra skeleton (sin el segmented)
+ * Tarjeta 1 — Moneda por defecto:
+ * - Estado de carga: muestra skeleton (sin el segmented de moneda)
  * - Estado de error: muestra mensaje de error
  * - Estado cargado: muestra el segmented con los 4 segmentos y defaultCurrency correcto
  * - Cambiar la moneda llama updateSettings con la nueva moneda (ARS, USD, EUR, BRL)
  * - Toast de éxito al guardar correctamente
  * - Toast de error si la mutación falla
- * - isSaving: el segmented está deshabilitado mientras se guarda
+ * - isSaving: el segmented de moneda está deshabilitado mientras se guarda
+ *
+ * Nota: El control de Apariencia (modo de color) se mudó al sidebar.
+ * Sus tests viven en tests/components/layout/app-sidebar.test.tsx
+ * y tests/components/ui/theme-segmented.test.tsx.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -55,7 +60,11 @@ const mockToastSuccess = vi.fn();
 const mockToastError = vi.fn();
 const mockUpdateSettings = vi.fn();
 
-function setupMocks(overrides: Partial<ReturnType<typeof useSettings>> = {}) {
+function setupMocks({
+  settingsOverrides = {},
+}: {
+  settingsOverrides?: Partial<ReturnType<typeof useSettings>>;
+} = {}) {
   mockUseSettings.mockReturnValue({
     settings: { defaultCurrency: "ARS", lastExchangeRate: null },
     defaultCurrency: "ARS",
@@ -64,7 +73,7 @@ function setupMocks(overrides: Partial<ReturnType<typeof useSettings>> = {}) {
     isError: false,
     updateSettings: mockUpdateSettings,
     isSaving: false,
-    ...overrides,
+    ...settingsOverrides,
   });
 
   mockUseToast.mockReturnValue({
@@ -78,28 +87,30 @@ function setupMocks(overrides: Partial<ReturnType<typeof useSettings>> = {}) {
   });
 }
 
-// ─── Tests ────────────────────────────────────────────────────────────────────
+// ─── Tests — Tarjeta 1: Moneda por defecto ────────────────────────────────────
 
-describe("SettingsClient", () => {
+describe("SettingsClient — Moneda por defecto", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   describe("Estado de carga", () => {
-    it("muestra skeleton mientras isLoading=true (sin el radiogroup)", () => {
-      setupMocks({ isLoading: true });
+    it("muestra skeleton mientras isLoading=true (sin el radiogroup de moneda)", () => {
+      setupMocks({ settingsOverrides: { isLoading: true } });
       renderSettings();
-      // No debe haber el segmented
-      expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+      // El segmented de moneda no debe estar presente
+      expect(
+        screen.queryByRole("radiogroup", { name: /moneda por defecto/i }),
+      ).not.toBeInTheDocument();
       // El skeleton existe como aria-hidden
-      const skeleton = document.querySelector("[aria-hidden='true']");
-      expect(skeleton).toBeInTheDocument();
+      const skeletons = document.querySelectorAll("[aria-hidden='true']");
+      expect(skeletons.length).toBeGreaterThan(0);
     });
   });
 
   describe("Estado de error", () => {
     it("muestra mensaje de error cuando isError=true", () => {
-      setupMocks({ isError: true, isLoading: false });
+      setupMocks({ settingsOverrides: { isError: true, isLoading: false } });
       renderSettings();
       expect(
         screen.getByText(/no se pudo cargar la configuración/i),
@@ -109,7 +120,7 @@ describe("SettingsClient", () => {
 
   describe("Estado cargado — 4 segmentos", () => {
     it("muestra el segmented con los 4 segmentos (ARS, USD, EUR, BRL)", () => {
-      setupMocks({ defaultCurrency: "ARS" });
+      setupMocks({ settingsOverrides: { defaultCurrency: "ARS" } });
       renderSettings();
       const radiogroup = screen.getByRole("radiogroup", { name: /moneda por defecto/i });
       expect(radiogroup).toBeInTheDocument();
@@ -120,7 +131,7 @@ describe("SettingsClient", () => {
     });
 
     it("ARS seleccionado: aria-checked=true solo en ARS", () => {
-      setupMocks({ defaultCurrency: "ARS" });
+      setupMocks({ settingsOverrides: { defaultCurrency: "ARS" } });
       renderSettings();
       expect(screen.getByRole("radio", { name: "ARS" })).toHaveAttribute("aria-checked", "true");
       expect(screen.getByRole("radio", { name: "USD" })).toHaveAttribute("aria-checked", "false");
@@ -129,21 +140,36 @@ describe("SettingsClient", () => {
     });
 
     it("USD seleccionado: aria-checked=true solo en USD", () => {
-      setupMocks({ defaultCurrency: "USD", settings: { defaultCurrency: "USD", lastExchangeRate: 1200 } });
+      setupMocks({
+        settingsOverrides: {
+          defaultCurrency: "USD",
+          settings: { defaultCurrency: "USD", lastExchangeRate: 1200 },
+        },
+      });
       renderSettings();
       expect(screen.getByRole("radio", { name: "USD" })).toHaveAttribute("aria-checked", "true");
       expect(screen.getByRole("radio", { name: "ARS" })).toHaveAttribute("aria-checked", "false");
     });
 
     it("EUR seleccionado: aria-checked=true solo en EUR", () => {
-      setupMocks({ defaultCurrency: "EUR", settings: { defaultCurrency: "EUR", lastExchangeRate: null } });
+      setupMocks({
+        settingsOverrides: {
+          defaultCurrency: "EUR",
+          settings: { defaultCurrency: "EUR", lastExchangeRate: null },
+        },
+      });
       renderSettings();
       expect(screen.getByRole("radio", { name: "EUR" })).toHaveAttribute("aria-checked", "true");
       expect(screen.getByRole("radio", { name: "ARS" })).toHaveAttribute("aria-checked", "false");
     });
 
     it("BRL seleccionado: aria-checked=true solo en BRL", () => {
-      setupMocks({ defaultCurrency: "BRL", settings: { defaultCurrency: "BRL", lastExchangeRate: null } });
+      setupMocks({
+        settingsOverrides: {
+          defaultCurrency: "BRL",
+          settings: { defaultCurrency: "BRL", lastExchangeRate: null },
+        },
+      });
       renderSettings();
       expect(screen.getByRole("radio", { name: "BRL" })).toHaveAttribute("aria-checked", "true");
       expect(screen.getByRole("radio", { name: "ARS" })).toHaveAttribute("aria-checked", "false");
@@ -153,7 +179,7 @@ describe("SettingsClient", () => {
   describe("Cambiar la moneda", () => {
     it("llama updateSettings con 'USD' al hacer click en USD", async () => {
       mockUpdateSettings.mockResolvedValue({ success: true });
-      setupMocks({ defaultCurrency: "ARS" });
+      setupMocks({ settingsOverrides: { defaultCurrency: "ARS" } });
       renderSettings();
 
       fireEvent.click(screen.getByRole("radio", { name: "USD" }));
@@ -165,7 +191,7 @@ describe("SettingsClient", () => {
 
     it("llama updateSettings con 'EUR' al hacer click en EUR", async () => {
       mockUpdateSettings.mockResolvedValue({ success: true });
-      setupMocks({ defaultCurrency: "ARS" });
+      setupMocks({ settingsOverrides: { defaultCurrency: "ARS" } });
       renderSettings();
 
       fireEvent.click(screen.getByRole("radio", { name: "EUR" }));
@@ -177,7 +203,7 @@ describe("SettingsClient", () => {
 
     it("llama updateSettings con 'BRL' al hacer click en BRL", async () => {
       mockUpdateSettings.mockResolvedValue({ success: true });
-      setupMocks({ defaultCurrency: "ARS" });
+      setupMocks({ settingsOverrides: { defaultCurrency: "ARS" } });
       renderSettings();
 
       fireEvent.click(screen.getByRole("radio", { name: "BRL" }));
@@ -189,7 +215,7 @@ describe("SettingsClient", () => {
 
     it("muestra toast de éxito al guardar correctamente", async () => {
       mockUpdateSettings.mockResolvedValue({ success: true });
-      setupMocks({ defaultCurrency: "ARS" });
+      setupMocks({ settingsOverrides: { defaultCurrency: "ARS" } });
       renderSettings();
 
       fireEvent.click(screen.getByRole("radio", { name: "USD" }));
@@ -204,7 +230,7 @@ describe("SettingsClient", () => {
         success: false,
         error: "No se pudo guardar la configuración.",
       });
-      setupMocks({ defaultCurrency: "ARS" });
+      setupMocks({ settingsOverrides: { defaultCurrency: "ARS" } });
       renderSettings();
 
       fireEvent.click(screen.getByRole("radio", { name: "USD" }));
@@ -215,9 +241,9 @@ describe("SettingsClient", () => {
     });
   });
 
-  describe("Estado isSaving", () => {
-    it("todos los segmentos están deshabilitados mientras isSaving=true", () => {
-      setupMocks({ isSaving: true });
+  describe("Estado isSaving — moneda", () => {
+    it("todos los segmentos de moneda están deshabilitados mientras isSaving=true", () => {
+      setupMocks({ settingsOverrides: { isSaving: true } });
       renderSettings();
       expect(screen.getByRole("radio", { name: "ARS" })).toBeDisabled();
       expect(screen.getByRole("radio", { name: "USD" })).toBeDisabled();

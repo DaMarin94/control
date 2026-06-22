@@ -489,14 +489,24 @@ Para que un agente futuro que toque gráficos no los re-tropiece:
 
 Detalle operativo para no romper tokens en `.claude/agents/control-frontend.md`. Lo esencial:
 
-- **Fuente de verdad de los valores:** `docs/design/control.css`. Implementación: tokens en `frontend/src/app/globals.css`, fuentes en `frontend/src/app/layout.tsx`. Hoy solo modo claro, preset Medio, acento Índigo.
+- **Fuente de verdad de los valores:** `docs/design/control.css`. Implementación: tokens en `frontend/src/app/globals.css`, fuentes en `frontend/src/app/layout.tsx`. Preset Medio, acento Índigo. **Modo claro y oscuro** (ver §Modo de color (theming)).
 - **Tokens en dos lugares por diseño de Tailwind v4 (no es redundancia):** `@theme` (valores literales que generan utilidades `bg-paper`/`text-accent`/`rounded-card`/`font-ui`) y `:root` (CSS vars directas `var(--accent)`… + sombras compuestas, densidad y fuentes). Cambiar un color implica mantener **ambos** alias.
 - **Acento:** hue por `var(--accent-h)` (264) en `:root`, pero **hardcodeado a `264` en `@theme`** porque Tailwind v4 no resuelve CSS vars dentro de `@theme` en build.
 - **Sin utilidad `shadow-*` del DS:** las sombras compuestas viven solo en `:root` (`var(--shadow-sm|md|lg)`).
-- **Densidad fija** (`--row-pad`/`--card-pad`/`--gap`); sin toggles. **Dark mode no portado** (se hará sobreescribiendo `:root` bajo `[data-theme="dark"]`).
+- **Densidad fija** (`--row-pad`/`--card-pad`/`--gap`); sin toggles.
 - **Cifras de dinero:** helper `.mono` (IBM Plex Mono + `tnum`).
-- **Token semántico `warning`** (ámbar, hue 75) con la misma dualidad `@theme`/`:root` que income/expense; al portar dark mode necesita su variante oscura. Detalle de valores y del re-estilado de primitivas en `.claude/agents/control-frontend.md`.
+- **Token semántico `warning`** (ámbar, hue 75) con la misma dualidad `@theme`/`:root` que income/expense, con su variante oscura. Detalle de valores y del re-estilado de primitivas en `.claude/agents/control-frontend.md`.
 - **Todas las pantallas y modales usan el DS y `lucide-react`**: login, registro, sidebar, dashboard, vista del mes, categorías y los modales de movimiento/borrado. No queda SVG inline ni estilos fuera del DS. Componentes/utilidades compartidos: **`components/ui/auth-brand-side.tsx`** (panel de marca de login y registro) y la animación de modal **`animate-modal-pop`** (utility en `globals.css`). Detalle operativo (grilla/glow con `<div>` absolutos, gradiente hardcodeado, botón Google placeholder, scrim del modal) en `.claude/agents/control-frontend.md`.
+
+## Modo de color (theming)
+
+El modo de color (Sistema / Claro / Oscuro, RF-APP-001) se resuelve **por override de los alias CSS de `:root`** y se aplica a `<html>`. Regla funcional en `requirements.md`, RF-APP-001; spec visual de cada modo en `docs/design.md` (§modo de color). Lo no obvio:
+
+- **El override va sobre `:root`, no sobre `@theme`.** El modo oscuro redefine los alias CSS de `:root` (`var(--paper)`, `var(--accent)`, sombras, etc.) bajo el selector **`[data-theme="dark"]`**. **`@theme` NO se toca**: no soporta theming dinámico (sus valores se hornean a utilidades en build). Como los componentes consumen `var(--token)`, el override de `:root` alcanza para repintar toda la app sin tocar `@theme`. El atributo **`data-theme` se setea en `<html>`** (`document.documentElement`).
+- **Fuente canónica = blob `preferences` (clave `theme`, vía DB/sesión).** El flujo de aplicación es **DB → mirror localStorage → DOM**: cuando las preferencias cargan, el modo se sincroniza desde el blob al mirror y al DOM. La aplicación al DOM es **optimista** (se aplica antes de que el `PUT /preferences` resuelva). El mirror en localStorage (`"control:theme"`) **no es fuente de verdad**: existe solo para el boot sin flash.
+- **Anti-flash (FOUC) — script inline síncrono en el `<head>` del root layout.** Un IIFE **clásico** (inyectado por `dangerouslySetInnerHTML`, **sin** `type="module"`) resuelve y aplica el tema **antes del primer paint**, leyendo el mirror localStorage; si vale `"system"` resuelve con `matchMedia("(prefers-color-scheme: dark)")`. **Gotcha:** debe ser síncrono y no-módulo — los módulos ES son diferidos y correrían **post-paint**, reintroduciendo el flash. `<html>` lleva **`suppressHydrationWarning`** porque el script muta `data-theme` antes de que hidrate React.
+- **Reacción en vivo en "Sistema":** mientras el modo es `"system"`, un listener de `matchMedia` repinta al cambiar el `prefers-color-scheme` del SO.
+- **Transición de flip a nivel `html`** (~0.18–0.20s, **solo color, nunca layout**); instantánea bajo `prefers-reduced-motion`. El panel de marca de auth (`.auth-grid-bg` / `.auth-glow`) es **invariante**: no cambia con el modo.
 
 ## Tailwind v4 — gotcha
 

@@ -85,6 +85,13 @@ export interface UserPreferences {
    * Ausente / inválido → default: "amount" (|amountCents| DESC).
    */
   unicosSort?: UnicosSort;
+  /**
+   * Ola 4: modo de color de la UI.
+   * "system" (default ausente) = sigue prefers-color-scheme del dispositivo.
+   * "light" / "dark" = forzado independientemente del SO.
+   * Ausente equivale a "system".
+   */
+  theme?: "system" | "light" | "dark";
   [key: string]: unknown;
 }
 

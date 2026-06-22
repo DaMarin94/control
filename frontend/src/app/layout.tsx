@@ -16,6 +16,7 @@ import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import { ReactQueryProvider } from "@/lib/react-query";
 import { ToastProvider } from "@/components/ui/toast";
 import { AuthSessionProvider } from "@/lib/session-provider";
+import { ThemeProvider } from "@/components/providers/theme-provider";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -35,6 +36,24 @@ export const metadata: Metadata = {
   description: "Registrá y controlá tus gastos personales",
 };
 
+/**
+ * Script inline anti-flash (FOUC) para el modo de color.
+ *
+ * Se ejecuta de forma síncrona antes del primer paint — nunca como módulo
+ * (los scripts de módulo son diferidos). Lee el mirror de localStorage
+ * ("control:theme") que el hook useTheme mantiene sincronizado con la
+ * fuente canónica (clave `theme` del blob de preferencias en DB).
+ *
+ * Lógica:
+ *   1. Lee el mirror ("system" | "light" | "dark" | null/ausente).
+ *   2. "system" (o ausente) → resuelve con matchMedia('prefers-color-scheme: dark').
+ *   3. Setea document.documentElement.dataset.theme = "light" | "dark".
+ *
+ * La fuente canónica (DB) se sincroniza en el cliente cuando la sesión carga
+ * (ver hook useTheme). El mirror existe solo para el boot sin flash.
+ */
+const themeScript = `(function(){try{var t=localStorage.getItem('control:theme');var resolved=(t==='dark'||(!t||t==='system')&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';document.documentElement.dataset.theme=resolved;}catch(e){}})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -42,10 +61,16 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" suppressHydrationWarning>
+      {/* Script inline síncrono — resuelve el tema ANTES del primer paint (anti-FOUC) */}
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} antialiased`}>
         <AuthSessionProvider>
           <ReactQueryProvider>
-            <ToastProvider>{children}</ToastProvider>
+            <ThemeProvider>
+              <ToastProvider>{children}</ToastProvider>
+            </ThemeProvider>
           </ReactQueryProvider>
         </AuthSessionProvider>
       </body>

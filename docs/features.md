@@ -32,6 +32,7 @@
 | Reportes — toggle "Total / Por categoría" en la card Ingresos y gastos | RF-REP-006 | Implementado |
 | Reportes — moneda de display por card (selector por card, nace con la default global) | RF-REP-007 | Implementado |
 | Multi-moneda — set curado 4 (ARS/USD/EUR/BRL) + tabla de cotizaciones de referencia + pantalla `/configuracion` | RF-CUR-001..006, RN-009 | Implementado |
+| Modo de color — toggle Sistema/Claro/Oscuro en el chrome global (sidebar), persistido (blob `theme`) | RF-APP-001 | Implementado |
 | Preferencias de usuario — cimiento (blob JSON + sesión) | — | Implementado (sin UI de producto) |
 
 ---

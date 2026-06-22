@@ -155,6 +155,14 @@ unicosSort: "amount" | "date"
 
 - Orden de los movimientos de la sección **Únicos** de `/mes`: `"amount"` (por monto descendente) o `"date"` (por fecha, más reciente primero). **Default `"amount"`** (clave ausente = `"amount"`). Solo aplica a Únicos (Fijos y Cuotas no tienen fecha). Estado de **UI frontend-puro**: el backend **NO lo interpreta** (blob opaco, igual que el resto de las claves). Regla funcional en `requirements.md`, RF-VM-001.
 
+#### `theme` — modo de color de la app (RF-APP-001)
+
+```
+theme: "system" | "light" | "dark"
+```
+
+- Modo de color elegido desde el chrome global (sidebar, RF-NAV-001): `"system"` (sigue `prefers-color-scheme` del dispositivo), `"light"` o `"dark"`. **Default por ausencia = `"system"`** (la clave ausente se interpreta como Sistema); si el usuario elige "Sistema" explícitamente se persiste `"system"`. Estado de **UI frontend-puro**: el backend **NO lo interpreta** (blob abierto/opaco, igual que el resto de las claves) — el frontend lo mergea sobre el blob en el `PUT /preferences`. Regla funcional en `requirements.md`, RF-APP-001; arquitectura de aplicación (override de tokens, anti-flash) en `docs/frontend.md`, §Modo de color (theming).
+
 #### `monthCategoryFilter` — filtro de categorías de la Vista del mes (RF-VM-006) — **DEPRECADA**
 
 Deprecada. No se lee ni se escribe desde `/mes`; se conserva en el tipo para no romper blobs viejos y **no se migra**. Detalle en §Filtro de categorías → `monthCategoryFilter` (más abajo).

@@ -38,7 +38,8 @@ El detalle estructural (arquitectura, componentes, gotchas) vive en `docs/`. Le�
 | Estructura de carpetas, server vs client, env server-only | `docs/frontend.md` §Estructura / §Convenciones |
 | Sistema de componentes, primitivas, dnd-kit, portal a `body` | `docs/frontend.md` §Sistema de componentes |
 | Estados de carga: skeletons (regla + primitivas `Skeleton*`) | `docs/frontend.md` §Estados de carga + spec visual en `docs/design.md` §Skeletons |
-| Design system (tokens, `@theme`/`:root`, fuentes, dark mode) | `docs/frontend.md` §Design system + `docs/design.md` |
+| Design system (tokens, `@theme`/`:root`, fuentes) | `docs/frontend.md` §Design system + `docs/design.md` |
+| Modo de color (Sistema/Claro/Oscuro: override `[data-theme="dark"]`, anti-flash) | `docs/frontend.md` §Modo de color (theming) + `docs/design.md` (modo de color) |
 | Autenticación, `useApi`, gate `isAuthenticated` | `docs/frontend.md` §Autenticación |
 | Preferencias (`usePreferences`, blob, merge en el llamador) | `docs/frontend.md` §Preferencias de usuario |
 | Categorías, `ColorPicker`, uso dual del modal, z-index | `docs/frontend.md` §Categorías |

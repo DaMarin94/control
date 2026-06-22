@@ -119,6 +119,95 @@
 }
 
 /* ============================================================
+   Modo oscuro — override bajo [data-theme="dark"]
+   Ola 4: paleta dark completa según docs/design.md §"Modo de color".
+
+   Los componentes de la UI de Control usan dos tipos de referencias:
+   (a) alias `:root` (var(--panel), var(--ink)…): usados en estilos inline,
+       en clases utilitarias ad-hoc y en componentes que no tienen utilidad
+       Tailwind para ese token.
+   (b) tokens `@theme --color-*` (bg-panel, text-ink, border-line…): Tailwind
+       v4 los emite como custom properties en `:root` con el prefijo `--color-`.
+       Un selector más específico (`[data-theme="dark"]`) los puede overridear.
+
+   Por eso se sobreescriben AMBOS namespaces en este bloque: los alias `:root`
+   (--panel, --ink…) y los tokens de Tailwind (--color-panel, --color-ink…)
+   con los mismos valores dark. Sin este doble override las utilidades Tailwind
+   (bg-panel, text-ink, border-line, etc.) siguen resolviendo los valores claros
+   y el grueso de la UI no cambia al modo oscuro.
+
+   Auth (.auth-grid-bg / .auth-glow) NO cambia con el modo — es superficie
+   de marca con fondo propio oscuro, invariante por diseño.
+   ============================================================ */
+[data-theme="dark"] {
+  /* ---- Neutros — alias :root ---- */
+  --paper:       oklch(0.18 0.008 270);
+  --panel:       oklch(0.225 0.009 270);
+  --panel-2:     oklch(0.265 0.010 270);
+  --panel-3:     oklch(0.305 0.011 270);
+  --ink:         oklch(0.95 0.006 270);
+  --ink-2:       oklch(0.78 0.008 270);
+  --muted:       oklch(0.62 0.009 270);
+  --faint:       oklch(0.48 0.009 270);
+  /* Bordes: polaridad invertida — blanco con alfa (claro sobre oscuro) */
+  --hair:        oklch(1 0 0 / 0.07);
+  --line:        oklch(1 0 0 / 0.12);
+  --line-strong: oklch(1 0 0 / 0.20);
+
+  /* ---- Neutros — tokens @theme (utilidades Tailwind: bg-panel, text-ink, etc.) ---- */
+  --color-paper:       oklch(0.18 0.008 270);
+  --color-panel:       oklch(0.225 0.009 270);
+  --color-panel-2:     oklch(0.265 0.010 270);
+  --color-panel-3:     oklch(0.305 0.011 270);
+  --color-ink:         oklch(0.95 0.006 270);
+  --color-ink-2:       oklch(0.78 0.008 270);
+  --color-muted:       oklch(0.62 0.009 270);
+  --color-faint:       oklch(0.48 0.009 270);
+  --color-hair:        oklch(1 0 0 / 0.07);
+  --color-line:        oklch(1 0 0 / 0.12);
+  --color-line-strong: oklch(1 0 0 / 0.20);
+
+  /* ---- Semánticos income / expense / warning — alias :root ---- */
+  --income:       oklch(0.70 0.13 158);
+  --income-soft:  oklch(0.32 0.05 158);
+  --income-ink:   oklch(0.80 0.12 158);
+  --expense:      oklch(0.66 0.17 27);
+  --expense-soft: oklch(0.33 0.06 27);
+  --expense-ink:  oklch(0.78 0.15 27);
+  --warning:      oklch(0.78 0.15 75);
+  --warning-soft: oklch(0.34 0.06 75);
+  --warning-ink:  oklch(0.84 0.13 75);
+
+  /* ---- Semánticos — tokens @theme (bg-income-soft, text-expense-ink, etc.) ---- */
+  --color-income:       oklch(0.70 0.13 158);
+  --color-income-soft:  oklch(0.32 0.05 158);
+  --color-income-ink:   oklch(0.80 0.12 158);
+  --color-expense:      oklch(0.66 0.17 27);
+  --color-expense-soft: oklch(0.33 0.06 27);
+  --color-expense-ink:  oklch(0.78 0.15 27);
+  --color-warning:      oklch(0.78 0.15 75);
+  --color-warning-soft: oklch(0.34 0.06 75);
+  --color-warning-ink:  oklch(0.84 0.13 75);
+
+  /* ---- Acento índigo — alias :root (solo marca; nunca tiñe montos) ---- */
+  --accent:       oklch(0.66 0.17 264);
+  --accent-press: oklch(0.58 0.17 264);
+  --accent-soft:  oklch(0.34 0.07 264);
+  --accent-ink:   oklch(0.82 0.14 264);
+
+  /* ---- Acento — tokens @theme (bg-accent, text-accent-ink, bg-accent-soft, etc.) ---- */
+  --color-accent:       oklch(0.66 0.17 264);
+  --color-accent-press: oklch(0.58 0.17 264);
+  --color-accent-soft:  oklch(0.34 0.07 264);
+  --color-accent-ink:   oklch(0.82 0.14 264);
+
+  /* ---- Sombras — más opacas en oscuro (elevación por escalón+borde) ---- */
+  --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.30), 0 1px 3px oklch(0 0 0 / 0.24);
+  --shadow-md: 0 4px 16px oklch(0 0 0 / 0.40), 0 2px 6px oklch(0 0 0 / 0.30);
+  --shadow-lg: 0 18px 50px oklch(0 0 0 / 0.55), 0 6px 18px oklch(0 0 0 / 0.40);
+}
+
+/* ============================================================
    Base global
    ============================================================ */
 @layer base {
@@ -130,6 +219,24 @@
   body {
     margin: 0;
     height: 100%;
+  }
+
+  /*
+   * Transición de color de modo (~0.18s, solo color — nunca layout).
+   * Se aplica a nivel raíz para que el flip claro↔oscuro sea suave.
+   * prefers-reduced-motion: instantáneo (motion-reduce suprime la transición).
+   */
+  html {
+    transition:
+      background-color 0.18s ease,
+      color 0.18s ease,
+      border-color 0.18s ease;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      transition: none;
+    }
   }
 
   body {

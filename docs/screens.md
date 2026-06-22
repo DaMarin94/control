@@ -22,7 +22,7 @@
 
 ## Convenciones
 
-- El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Reportes, Categorías, Configuración) y **no** se muestra en las pantallas no autenticadas (Login, Registro). Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo. Orden de los links: Dashboard → Vista del mes → Reportes → Categorías → Configuración.
+- El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Reportes, Categorías, Configuración) y **no** se muestra en las pantallas no autenticadas (Login, Registro). Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo. Orden de los links: Dashboard → Vista del mes → Reportes → Categorías → Configuración. Aloja, en su parte inferior, el **control de modo de color** (toggle Sistema / Claro / Oscuro) sobre el menú de usuario (RF-APP-001).
   - **Estado de implementación: implementado.** El sidebar (RF-NAV-001) **ya está implementado** (ver `features.md`). Los accesos definidos en cada pantalla (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL directa) se conservan y conviven con el sidebar.
 - El **formulario de carga** (pantalla 5) es un modal sin ruta propia. Se invoca desde el sidebar y desde el dashboard, y se superpone a la pantalla actual.
 - **Chip de moneda default en el header.** Las pantallas con montos/totales —**Dashboard**, **Vista del mes** y **Reportes**— muestran en su header (fila del eyebrow) un **chip indicador de la moneda default vigente** del usuario (código de la moneda del set curado: ARS / USD / EUR / BRL, RF-CUR-002). Es **informativo**: comunica en qué moneda están expresados los montos y totales de la pantalla y **linkea a `/configuracion`** (no cambia la moneda in-situ). Se muestra **siempre**, también en mono-moneda. **`/configuracion` NO lo lleva** (es donde la moneda se edita). El patrón es común a las tres pantallas y no se repite su definición en cada una; el detalle visual lo define `control-design` (ver `docs/design.md`).
@@ -415,7 +415,7 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 
 ### Propósito
 
-Pantalla de **ajustes de la cuenta** del usuario. Arranca con **un solo ajuste** —la **moneda por defecto**— y queda como **contenedor para ajustes futuros** (es esperable que sume más opciones en fases posteriores).
+Pantalla de **ajustes de la cuenta** del usuario. Reúne las preferencias del usuario en tarjetas de ajuste y queda como **contenedor para ajustes futuros**.
 
 ### Contenido
 

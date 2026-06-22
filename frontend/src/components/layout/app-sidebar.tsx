@@ -22,6 +22,8 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NewTransactionButton } from "@/components/movements/new-transaction-button";
 import { UserMenu } from "@/components/layout/user-menu";
+import { ThemeIconToggle } from "@/components/ui/theme-icon-toggle";
+import { useTheme } from "@/hooks/use-theme";
 import {
   LayoutDashboard,
   CalendarDays,
@@ -47,6 +49,7 @@ const NAV_LINKS = [
 export function AppSidebar({ email }: AppSidebarProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { theme, resolvedTheme, setTheme, isSaving: isThemeSaving } = useTheme();
 
   /**
    * Determina si un link está activo.
@@ -130,6 +133,24 @@ export function AppSidebar({ email }: AppSidebarProps) {
       {/* ── CTA Nuevo movimiento ── */}
       <div className="mx-0.5 mb-[14px] mt-1 [&>*]:w-full [&>*>button]:w-full">
         <NewTransactionButton label="+ Nuevo movimiento" variant="default" />
+      </div>
+
+      {/* ── Fila de tema — toggle de iconos encima del UserMenu ── */}
+      <div
+        className="flex items-center justify-between mb-[10px]"
+        style={{ borderTop: "1px solid var(--hair)", paddingTop: "10px" }}
+      >
+        <span
+          className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-faint select-none"
+        >
+          Tema
+        </span>
+        <ThemeIconToggle
+          value={theme}
+          onChange={(newTheme) => void setTheme(newTheme)}
+          disabled={isThemeSaving}
+          resolvedTheme={resolvedTheme}
+        />
       </div>
 
       {/* ── Menú de usuario (parte inferior) ── */}

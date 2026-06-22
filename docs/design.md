@@ -7,7 +7,7 @@
 > - **`docs/frontend.md`** (secciones Design system) — cómo los tokens están **implementados** en el código (Tailwind v4, dualidad `@theme`/`:root`, qué está portado). El "cómo" técnico.
 > - **`docs/design.md`** (este documento) — el "qué" visual vigente: paleta, tipografía, espaciado, geometría, jerarquía, los **patrones de componentes vigentes** y las reglas duras. Ante un conflicto con el handoff crudo, prevalece lo cerrado acá.
 >
-> Sistema: **"Precise Ledger"**, modo claro, densidad Medio, acento Índigo. (Dark mode y densidad variable no están en v1.)
+> Sistema: **"Precise Ledger"**, densidad Medio, acento Índigo. Dos **modos de color** vigentes — **claro** y **oscuro** — con default **Sistema** (sigue `prefers-color-scheme`); el lenguaje visual es el mismo en ambos, cambia la paleta de tokens. La densidad variable no está en v1. La paleta dark y su selector se definen en *Modo de color — claro / oscuro*.
 
 ---
 
@@ -18,12 +18,15 @@ No se negocian sin decisión explícita del usuario:
 1. **Verde = ingreso, Rojo = gasto.** Reservados **estrictamente** para ese significado semántico. No se usan para decorar ni para otra cosa.
 2. **El acento índigo es solo marca.** NUNCA se usa para montos ni para teñir cifras de dinero.
 3. **Toda cifra de dinero va en mono tabular** (IBM Plex Mono + `font-feature-settings: "tnum" 1`). Sin excepción.
+4. **Compatibilidad visual total en cualquier dispositivo.** Toda pantalla y componente se ve correcto en **ambos modos de color** (claro y oscuro) y en cualquier tipo de dispositivo. Ninguna superficie, texto, borde, sombra o estado puede asumir un único modo: cada token semántico tiene su valor en claro y en oscuro (ver *Modo de color — claro / oscuro*), y las reglas duras 1–3 (verde/rojo, índigo solo marca, mono tabular) se cumplen **idénticas** en los dos modos.
 
 ---
 
 ## Paleta y uso de tokens
 
 > Valores definidos en `docs/design/control.css` con `oklch()`. Hex aproximados solo como referencia rápida — preferir los valores oklch.
+>
+> Las tablas de abajo dan el valor **claro** de cada token. El valor **oscuro** de **todos** los tokens vive en *Modo de color — claro / oscuro* (la columna "Dark"). Los componentes consumen siempre el alias (`var(--token)`); el modo activo decide qué valor toma.
 
 ### Acento de marca — Índigo (default)
 
@@ -134,6 +137,124 @@ Los botones primarios suman un **inset highlight** `white/0.2` arriba.
 ## Focus ring
 
 Foco visible del DS: anillo de 3px en `--accent-soft` (`shadow-[0_0_0_3px_var(--accent-soft)]`). En estado de error el anillo usa `--expense-soft`.
+
+---
+
+## Modo de color — claro / oscuro
+
+Control tiene **dos modos de color**: **claro** y **oscuro**. El lenguaje visual (tipografía, geometría, espaciado, jerarquía, patrones de componente, las tres reglas duras semánticas) es **idéntico** en ambos; lo único que cambia es la **paleta de tokens**. Default = **Sistema** (sigue `prefers-color-scheme`); el usuario lo fija desde el **chrome global** (el toggle de tema del sidebar — ver *Selector de modo de color* abajo). Es **regla dura 4**: toda superficie se ve correcta en los dos modos.
+
+### Cómo se modela
+
+- **Un solo alias por token, dos valores.** Los componentes consumen siempre `var(--token)` (nunca un valor literal). El **claro** es el valor base (en `:root`, tablas de *Paleta y uso de tokens*); el **oscuro** son overrides de los **mismos alias** bajo el selector `[data-theme="dark"]`. (Los tokens `@theme` de Tailwind no soportan theming dinámico, así que el dark vive sobre los alias `:root` / sombras / focus; el cómo técnico es de `control-frontend` — acá se definen solo los **valores y reglas**.)
+- **Qué tokens cambian:** **todos** los neutros, **todos** los semánticos (income/expense/warning con sus `-soft`/`-ink`), **toda** la familia de acento, las **tres sombras** compuestas, y el **focus ring** (que es `--accent-soft`) y su variante de error (`--expense-soft`). Nada queda sin valor dark.
+- **Qué NO cambia:** los **hex canónicos de categoría** (la matriz de 70 + el pool) son identificadores fijos — los mismos valores en ambos modos; cambia solo su **presentación** (ver *Categorías y gráficos en oscuro*). Tipografía, radios, densidad y la semántica de las reglas duras 1–3 son invariantes.
+
+### Principios de calibración del oscuro
+
+- **No es un negro puro.** El fondo de app es un gris-azulado muy oscuro (no `#000`), con la misma familia de hue neutro (`270`) que el claro, para que la app no vibre ni "queme". Las superficies suben de luminosidad por capas (`paper` < `panel` < `panel-2` < `panel-3`), igual que en claro pero en sentido ascendente desde un piso oscuro.
+- **El texto baja de croma y sube de luminosidad.** `--ink` no llega a blanco puro (reduce halación sobre fondo oscuro); los terciarios mantienen su jerarquía relativa (ink > ink-2 > muted > faint).
+- **Los bordes se invierten de polaridad.** En claro, líneas/bordes son `ink` con baja alfa (oscuro sobre claro). En oscuro pasan a ser **blanco con baja alfa** (claro sobre oscuro) — mismo rol, polaridad invertida — para que se lean como separadores sutiles, no como rayas negras invisibles.
+- **Semánticos recalibrados, mismo significado.** Verde sigue siendo verde y rojo sigue siendo rojo (regla dura 1), pero sobre fondo oscuro necesitan **más luminosidad** para legibilidad de texto/swatch, y los `-soft` (fondos tintados) dejan de ser casi-blancos: pasan a **tintes oscuros saturados** del mismo hue, sutiles sobre el panel. Los `-ink` (texto sobre `-soft`) suben de luminosidad para contrastar contra el `-soft` oscuro.
+- **Sombras dependen más del borde.** En oscuro, una sombra negra "desaparece" sobre fondo oscuro; la elevación se comunica sobre todo por **el escalón de superficie** (`panel` más claro que `paper`) + el **borde superior** sutil. Las sombras se conservan pero con **más opacidad y negro más puro**, como refuerzo, no como única señal de elevación.
+
+### Paleta dark — valores completos (oklch)
+
+> Override de los alias bajo `[data-theme="dark"]`. La columna **Light** repite el valor base (referencia); **Dark** es lo nuevo a portar. Racional breve por grupo arriba de cada tabla.
+
+**Neutros** — piso oscuro hue `270`, superficies ascendentes, texto sin blanco puro, bordes en blanco con alfa.
+
+| Token | Light | **Dark** | Rol |
+|---|---|---|---|
+| `--paper` | `oklch(0.965 0.004 270)` | `oklch(0.18 0.008 270)` | fondo de app (piso oscuro, no negro) |
+| `--panel` | `#ffffff` | `oklch(0.225 0.009 270)` | tarjetas / superficies (escalón sobre paper) |
+| `--panel-2` | `oklch(0.975 0.004 270)` | `oklch(0.265 0.010 270)` | hover sutil (un paso más claro) |
+| `--panel-3` | `oklch(0.955 0.005 270)` | `oklch(0.305 0.011 270)` | chips / fills (el más claro de las superficies) |
+| `--ink` | `oklch(0.22 0.012 270)` | `oklch(0.95 0.006 270)` | texto principal (casi blanco, no `#fff`) |
+| `--ink-2` | `oklch(0.40 0.012 270)` | `oklch(0.78 0.008 270)` | texto secundario |
+| `--muted` | `oklch(0.55 0.012 270)` | `oklch(0.62 0.009 270)` | texto terciario |
+| `--faint` | `oklch(0.70 0.010 270)` | `oklch(0.48 0.009 270)` | placeholders |
+| `--hair` | `ink/0.10` → `oklch(0.22 0.012 270 / 0.10)` | `oklch(1 0 0 / 0.07)` | divisores internos (blanco/alfa) |
+| `--line` | `ink/0.17` → `oklch(0.22 0.012 270 / 0.17)` | `oklch(1 0 0 / 0.12)` | bordes de tarjeta (blanco/alfa) |
+| `--line-strong` | `ink/0.28` → `oklch(0.22 0.012 270 / 0.28)` | `oklch(1 0 0 / 0.20)` | bordes de input (blanco/alfa) |
+
+**Semánticos income / expense / warning** — verde/rojo/ámbar recalibrados para fondo oscuro; los `-soft` pasan a tintes oscuros; los `-ink` suben para contrastar sobre el `-soft`.
+
+| Token | Light | **Dark** | Rol |
+|---|---|---|---|
+| `--income` | `oklch(0.58 0.12 158)` | `oklch(0.70 0.13 158)` | verde de ingreso (más luminoso) |
+| `--income-soft` | `oklch(0.95 0.04 158)` | `oklch(0.32 0.05 158)` | fondo tintado verde (oscuro sutil) |
+| `--income-ink` | `oklch(0.45 0.11 158)` | `oklch(0.80 0.12 158)` | texto verde sobre `-soft` oscuro |
+| `--expense` | `oklch(0.57 0.16 27)` | `oklch(0.66 0.17 27)` | rojo de gasto (más luminoso) |
+| `--expense-soft` | `oklch(0.95 0.035 27)` | `oklch(0.33 0.06 27)` | fondo tintado rojo (oscuro sutil) |
+| `--expense-ink` | `oklch(0.47 0.15 27)` | `oklch(0.78 0.15 27)` | texto rojo sobre `-soft` oscuro |
+| `--warning` | `oklch(0.72 0.15 75)` | `oklch(0.78 0.15 75)` | ámbar de aviso |
+| `--warning-soft` | `oklch(0.95 0.05 75)` | `oklch(0.34 0.06 75)` | fondo tintado ámbar (oscuro sutil) |
+| `--warning-ink` | `oklch(0.52 0.12 75)` | `oklch(0.84 0.13 75)` | texto ámbar sobre `-soft` oscuro |
+
+> **Regla dura 1 en oscuro:** el color del monto lo sigue dando el **tipo** (verde=ingreso, rojo=gasto), con estos valores recalibrados; nunca el signo ni la decoración. Los `-soft` siguen siendo solo **fondos tintados** de badges/estados (badge de tipo del calculado, ring de error), nunca superficies grandes saturadas.
+
+**Acento índigo** — el acento es **solo marca** (regla dura 2): nunca tiñe montos. En oscuro sube de luminosidad para destacar sobre el panel oscuro; el `-soft` pasa a tinte índigo oscuro (sigue sirviendo de focus ring); el `-ink` sube para texto sobre `-soft` oscuro. Se controla por el mismo `--accent-h: 264`.
+
+| Token | Light | **Dark** | Rol |
+|---|---|---|---|
+| `--accent` | `oklch(0.52 0.17 264)` | `oklch(0.66 0.17 264)` | acción primaria / marca (más luminoso) |
+| `--accent-press` | `oklch(0.45 0.17 264)` | `oklch(0.58 0.17 264)` | pressed |
+| `--accent-soft` | `oklch(0.95 0.035 264)` | `oklch(0.34 0.07 264)` | fondos suaves + **focus ring** (tinte índigo oscuro) |
+| `--accent-ink` | `oklch(0.40 0.16 264)` | `oklch(0.82 0.14 264)` | texto índigo sobre fondo oscuro/`-soft` |
+
+> El **botón primario** sigue con su inset highlight, pero en oscuro el highlight superior baja de opacidad (`white/0.12` aprox.) para no quemar; el cómo exacto es de `control-frontend`. **El índigo no tiñe ninguna cifra de dinero en ningún modo** (regla dura 2).
+
+**Sombras compuestas** — en oscuro suben de opacidad y usan negro más puro; la elevación se apoya sobre todo en el escalón de superficie + borde.
+
+| Token | **Dark** |
+|---|---|
+| `--shadow-sm` | `0 1px 2px oklch(0 0 0 / 0.30), 0 1px 3px oklch(0 0 0 / 0.24)` |
+| `--shadow-md` | `0 4px 16px oklch(0 0 0 / 0.40), 0 2px 6px oklch(0 0 0 / 0.30)` |
+| `--shadow-lg` | `0 18px 50px oklch(0 0 0 / 0.55), 0 6px 18px oklch(0 0 0 / 0.40)` |
+
+**Focus ring (dark):** sigue siendo el anillo de 3px en `--accent-soft` (ahora tinte índigo oscuro `oklch(0.34 0.07 264)`) — visible sobre panel oscuro. La variante de **error** usa `--expense-soft` dark (`oklch(0.33 0.06 27)`). Mismo grosor y geometría que en claro.
+
+### Categorías y gráficos en oscuro
+
+Los **hex canónicos de categoría no cambian** (la matriz de 70 + el pool son identificadores fijos, fuente de verdad compartida con el backend; cambiarlos rompería el back-compat). Lo que se define es **cómo se presentan** sobre superficie oscura:
+
+- **Swatch de color sólido (lista de categorías, bandas del apilado, swatch de leyenda):** se usa el **hex tal cual** en ambos modos. Sobre panel oscuro, los hex **oscuros** de la matriz (filas T5–T7) pierden separación del fondo; por eso **todo swatch lleva un hairline de contorno** en dark: borde `1px` `--line` (blanco/alfa 0.12) alrededor del swatch. Ese contorno ya existe como recurso del DS; en oscuro es **obligatorio** para garantizar que el swatch se lea como ficha y no se funda con el panel. (En claro el contorno es opcional/sutil; en oscuro es regla.)
+- **Filas claras T1–T3 como fondo de chip:** siguen funcionando — son pasteles claros, contrastan bien sobre panel oscuro. El **texto** que va sobre un chip pintado con un hex de categoría se calcula por contraste contra **ese hex** (no contra el modo): un fondo T1–T3 (claro) lleva texto oscuro; un fondo T5–T7 (oscuro) lleva texto claro. El cálculo de contraste es **independiente del modo** (depende del hex del swatch), por eso el chip de categoría se ve igual de legible en claro y oscuro.
+- **Series de gráfico (Forma 2, apilado por categoría):** las bandas usan el hex de cada categoría sin cambio; sobre fondo de gráfico oscuro, las bandas de hex oscuros se separan entre sí y del fondo con el **gridline/hairline** del propio gráfico. No se recolorea ninguna serie por modo.
+- **Ejes, gridlines y tooltips del gráfico:** son **cromo neutro** → consumen tokens (`--line`, `--hair`, `--muted`, `--panel`, `--ink`), así que se adaptan solos al modo. La **Forma 1** (área ingresos vs. gastos) usa `--income`/`--expense` recalibrados; el relleno de área baja su opacidad sobre fondo oscuro (mismo recurso que en claro, ajustado por `control-frontend`).
+
+### Panel de marca de auth en oscuro
+
+El **panel de marca** del login/registro (`.auth-grid-bg` + `.auth-glow`) ya está construido **sobre un fondo oscuro de marca** (la grilla y el glow son blanco con baja alfa sobre un panel índigo/oscuro). Por eso ese panel **no cambia entre modos**: es una superficie de marca con su propio fondo, no una superficie de contenido que dependa de los tokens neutros. La grilla (`oklch(1 0 0 / 0.07)`) y el glow (`oklch(1 0 0 / 0.18)`) se mantienen idénticos. La **columna de formulario** del auth (la otra mitad) sí es superficie de contenido y **sigue los tokens** (paper/panel/ink), por lo que se oscurece con el modo como cualquier pantalla.
+
+### Transición de cambio de modo
+
+- **El cambio de modo es instantáneo en estructura, suave en color.** Al togglear (o al cambiar `prefers-color-scheme` en modo Sistema), los tokens de color cruzan con una **transición corta de `background-color` / `color` / `border-color` de ~0.18–0.20s ease**, aplicada a nivel raíz, para que el flip no sea un corte brusco. No se animan tamaños, posiciones ni layout — solo color.
+- **Respeta `prefers-reduced-motion`:** con reduced-motion el cambio de modo es **instantáneo** (sin transición de color).
+- **Sin flash en carga (FOUC):** el modo resuelto debe aplicarse **antes del primer paint** para que nunca se vea un destello de claro antes de pasar a oscuro (ni viceversa). El mecanismo exacto es de `control-frontend`; el comportamiento a cumplir es: la primera pintura ya está en el modo correcto.
+
+### Selector de modo de color (chrome global)
+
+El control del modo de color vive en el **chrome global** (el sidebar / `AppSidebar`), no en una pantalla. Es un control de **chrome persistente**, siempre alcanzable desde cualquier vista. Su forma es un **toggle compacto de 3 iconos** (`Sistema · Claro · Oscuro`).
+
+- **Ubicación — fila propia en el bloque inferior del sidebar, justo encima del `UserMenu`.** El bloque inferior del sidebar queda, de arriba a abajo: CTA "+ Nuevo movimiento" → **fila del toggle de tema** → `UserMenu`. La fila es de ancho completo del contenido del sidebar (248px menos padding lateral), con el toggle **alineado a la derecha** y una etiqueta `--faint` a la izquierda. Va **separada del `UserMenu` por el patrón del DS** (un `--hair` o gap), de modo que se lea como su propio control y no como parte del bloque de cuenta.
+  - **Por qué fila propia y no dentro del dropdown del `UserMenu` ni un segmented de labels inline:** (1) el dropdown del `UserMenu` es para acciones de cuenta (un solo ítem, "Cerrar sesión") y abre hacia arriba con poco alto; meter un control de 3 estados ahí lo vuelve un menú denso y esconde el modo tras dos clics. (2) Un segmented con labels de 3 (`Sistema · Claro · Oscuro`) en un track de ~200px quedaría **apretado** dentro de los ~216px útiles del sidebar (248px − padding), y competiría visualmente con los nav-links. El **toggle de iconos** ocupa ~108px, respira en la fila, queda siempre visible (un clic) y no compite con la navegación.
+- **Forma — toggle de iconos de 3 segmentos (variante compacta del segmented neutro).** Mismo cromo neutro que el segmented del DS, pero los segmentos muestran **solo un icono** (sin label visible):
+  - **Track:** `--panel-3`, radio `--r-pill`, padding interno `2px`, `inline-flex`. Ancho intrínseco al contenido (no estira a 100%): 3 segmentos cuadrados.
+  - **Segmentos:** 3 botones de **ancho igual**, cada uno `~32–34px` de lado (target táctil ≥32px en el lado corto), icono lucide centrado `size 16`, radio `--r-pill`.
+  - **Iconos (orden fijo izq → der):** `Monitor` (Sistema) · `Sun` (Claro) · `Moon` (Oscuro). El icono **es** el control acá: no hay label textual visible.
+  - **Thumb deslizante:** `--panel` + `--shadow-sm`, entre 3 posiciones (`left = calc((i/3)*100% + 2px)`, `width = calc(33.33% - 4px)`), transición `[left,width]` 140ms ease-out; instantánea con `prefers-reduced-motion`.
+  - **Color del icono:** *seleccionado* = `--ink`; *no seleccionado* = `--muted` → `--ink-2` en hover. **Sin color semántico ni índigo** en los iconos (cromo neutro de control); el índigo solo aparece como focus ring.
+- **Etiqueta de la fila:** a la izquierda del toggle, label corto `--faint` `text-[10.5px] font-semibold uppercase tracking-[0.12em]` "Tema" (mismo molde que el label "Menú" del sidebar). Es opcional visualmente pero recomendado para anclar la fila; el toggle queda alineado a la derecha (`justify-between`).
+- **Cómo se rotula "Sistema" (modo resuelto):** el toggle muestra siempre los 3 iconos; el seleccionado es el que el usuario fijó (incluido `Monitor` para Sistema). El **modo efectivo** cuando está en Sistema **no se rotula visualmente en el chrome** (no hay descripción larga acá): se comunica por **a11y**. El `aria-label` de cada segmento dice su modo (`"Tema del sistema"` / `"Tema claro"` / `"Tema oscuro"`); cuando Sistema está activo, su `aria-label` resuelto incluye el modo efectivo: `"Tema del sistema (ahora: claro)"` / `"…(ahora: oscuro)"`, recalculado si cambia `prefers-color-scheme`. La verdad legible del modo efectivo vive en el lector de pantalla, no en texto visible del chrome.
+- **Estados (idénticos al segmented neutro del DS):** *seleccionado* = thumb `--panel` + `--shadow-sm`, icono `--ink`. *No seleccionado* = icono `--muted` → `--ink-2` en hover. *Focus (teclado)* = ring `--accent-soft` 3px sobre el segmento activo. *Disabled* = `opacity-50` + `cursor-not-allowed` mientras persiste el cambio. El índigo aparece **solo** como focus ring (cromo de interacción), nunca tiñendo iconos.
+- **A11y:** `role="radiogroup"` con `aria-label="Modo de color"` + 3 `role="radio"` con `aria-checked` y `aria-label` por opción (con el modo resuelto en Sistema, arriba); flechas ←/→ ciclan por los 3. Como no hay texto visible, **cada segmento debe tener su `aria-label`** (no basta el `aria-label` del grupo).
+- **Persistencia:** persiste **en vivo** al seleccionar (sin botón Guardar). El cambio aplica el nuevo modo a toda la app de inmediato (con la transición de color de ~0.18s descrita arriba). Mientras persiste, el toggle queda *disabled* (estado de arriba). **No** lleva toast: es un control de chrome de feedback inmediato, donde el flip de color **es** la confirmación.
+- **Responsive (drawer mobile ≤940px):** el toggle vive en el **mismo bloque inferior** del drawer overlay (que reusa el `sidebarContent`), en su fila propia encima del `UserMenu`. Mismo tamaño y forma que en desktop (el drawer también es de 248px). No hay variante mobile separada del control; cambia solo el contenedor (drawer vs. sidebar fijo). El toggle de iconos cabe holgado en ambos.
+- **Skeleton:** si el bloque inferior del sidebar tiene estado de carga, el placeholder del toggle es un `SkeletonPill` (radio `--r-pill`) del alto del control (~36px) y ancho del toggle de 3 iconos (~108px). En la práctica el tema se resuelve antes del primer paint (sin FOUC), así que el toggle no suele requerir skeleton propio.
+
+> **Resumen.** El control de modo de color **es** un toggle de iconos (`Monitor` Sistema · `Sun` Claro · `Moon` Oscuro, sin label visible) que vive en el bloque inferior de `AppSidebar`, en fila propia encima del `UserMenu`, con label "Tema" `--faint` a la izquierda y el toggle alineado a la derecha. Sus valores visuales (track, thumb, focus ring, estados, transición y a11y) son los descritos arriba en esta sección.
 
 ---
 

@@ -1,6 +1,7 @@
 /**
  * Tests del AppSidebar (RF-NAV-001).
  * Fase 1.1.5: renombre /anual → /reportes, "Anual" → "Reportes".
+ * Ola 4: toggle de tema (ThemeIconToggle) en el bloque inferior del sidebar.
  *
  * Verifica:
  * - Renderiza el logo "Control" con link al dashboard.
@@ -12,10 +13,12 @@
  * - El botón hamburguesa aparece (accesible por aria-label).
  * - Renderiza el botón "Nuevo movimiento".
  * - Renderiza el UserMenu con el email recibido.
+ * - Toggle de tema: label "Tema" visible, radiogroup "Modo de color" con 3 opciones,
+ *   click en una opción llama setTheme, deshabilitado mientras isSaving.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 
@@ -51,6 +54,28 @@ vi.mock("@/components/layout/user-menu", () => ({
   ),
 }));
 
+// Mock de useTheme
+const mockSetTheme = vi.fn();
+vi.mock("@/hooks/use-theme", () => ({
+  useTheme: vi.fn(),
+}));
+
+import { useTheme } from "@/hooks/use-theme";
+const mockUseTheme = vi.mocked(useTheme);
+
+function setupTheme({
+  theme = "system" as const,
+  resolvedTheme = "light" as const,
+  isSaving = false,
+} = {}) {
+  mockUseTheme.mockReturnValue({
+    theme,
+    resolvedTheme,
+    setTheme: mockSetTheme,
+    isSaving,
+  });
+}
+
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
 function renderSidebar(email = "test@example.com") {
@@ -62,6 +87,7 @@ function renderSidebar(email = "test@example.com") {
 describe("AppSidebar", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setupTheme();
   });
 
   it("renderiza el logo 'Control' con enlace a /", () => {
@@ -168,5 +194,59 @@ describe("AppSidebar", () => {
 
     // Al abrir el drawer, aparece el botón de cerrar
     expect(screen.getByRole("button", { name: /cerrar menú/i })).toBeInTheDocument();
+  });
+
+  // ── Toggle de tema (Ola 4) ────────────────────────────────────────────────
+
+  describe("Toggle de tema", () => {
+    it("muestra el label 'Tema' en el bloque inferior", () => {
+      mockUsePathname.mockReturnValue("/");
+      renderSidebar();
+      expect(screen.getByText("Tema")).toBeInTheDocument();
+    });
+
+    it("renderiza el radiogroup 'Modo de color' con 3 opciones", () => {
+      mockUsePathname.mockReturnValue("/");
+      renderSidebar();
+      expect(screen.getByRole("radiogroup", { name: "Modo de color" })).toBeInTheDocument();
+      expect(screen.getAllByRole("radio")).toHaveLength(3);
+    });
+
+    it("Sistema seleccionado: aria-checked=true en el segmento de sistema", () => {
+      setupTheme({ theme: "system", resolvedTheme: "light" });
+      mockUsePathname.mockReturnValue("/");
+      renderSidebar();
+      expect(
+        screen.getByRole("radio", { name: /tema del sistema/i }),
+      ).toHaveAttribute("aria-checked", "true");
+      expect(screen.getByRole("radio", { name: "Tema claro" })).toHaveAttribute("aria-checked", "false");
+      expect(screen.getByRole("radio", { name: "Tema oscuro" })).toHaveAttribute("aria-checked", "false");
+    });
+
+    it("Oscuro seleccionado: aria-checked=true en el segmento oscuro", () => {
+      setupTheme({ theme: "dark", resolvedTheme: "dark" });
+      mockUsePathname.mockReturnValue("/");
+      renderSidebar();
+      expect(screen.getByRole("radio", { name: "Tema oscuro" })).toHaveAttribute("aria-checked", "true");
+    });
+
+    it("click en 'Tema oscuro' llama setTheme con 'dark'", () => {
+      mockSetTheme.mockResolvedValue({ success: true });
+      setupTheme({ theme: "system", resolvedTheme: "light" });
+      mockUsePathname.mockReturnValue("/");
+      renderSidebar();
+
+      fireEvent.click(screen.getByRole("radio", { name: "Tema oscuro" }));
+      expect(mockSetTheme).toHaveBeenCalledWith("dark");
+    });
+
+    it("toggle deshabilitado mientras isSaving=true", () => {
+      setupTheme({ isSaving: true });
+      mockUsePathname.mockReturnValue("/");
+      renderSidebar();
+
+      const radios = screen.getAllByRole("radio");
+      radios.forEach((radio) => expect(radio).toBeDisabled());
+    });
   });
 });
