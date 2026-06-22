@@ -1,13 +1,16 @@
 /**
- * Tipos del contrato de serie de reportes — GET /movements/reports?year=YYYY[&categories=id1,id2,...]
+ * Tipos del contrato de serie de reportes — GET /movements/reports?year=YYYY[&categories=id1,id2,...][&currency=XXX]
  *
  * Fuente de verdad: docs/data-model.md, sección "Contrato de serie de reportes".
  * Renombre de annual.ts (Fase 1.1.5): el endpoint pasó de /movements/annual a /movements/reports
  * y se le agregó el param `categories` para filtrar por subconjunto de categorías.
+ * Ola 3 (P3): se agrega el param `currency` para override de moneda de display por card.
  *
  * El frontend define sus propios tipos reflejando el contrato; no hay paquete
  * compartido con el backend.
  */
+
+import type { CurrencyCode } from "@/types/settings";
 
 /** Un mes del año con sus totales de ingreso y gasto. Siempre 12, ene→dic. */
 export interface ReportMonth {
@@ -99,4 +102,15 @@ export interface ReportCardConfig {
    * En by-category e income-expense "Por categoría" usa categoryIds (filtro de categorías).
    */
   hiddenSeries?: Array<"income" | "expense">;
+  /**
+   * Moneda de display de la card (Ola 3, P3).
+   * Ausente / undefined = usa la default global del usuario (back-compat: cards viejas sin
+   * este campo caen a la default global automáticamente por el ?? del ReportCard).
+   * Presente = override local; el backend convierte la serie a esa moneda antes de devolverla.
+   * Persistido por card. Al crear, nace con la default actual del usuario.
+   */
+  currency?: CurrencyCode;
 }
+
+// Re-export para conveniencia de los consumidores de este módulo
+export type { CurrencyCode };

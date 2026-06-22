@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { FormulaOperator, MovementType, RecurringFrequency } from '@prisma/client';
+import { Currency, FormulaOperator, MovementType, RecurringFrequency } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { CategoryValidatorService } from '../categories/category-validator.service';
 import {
@@ -261,7 +261,7 @@ export class RecurringService {
       );
     } else {
       // UPDATE IN-PLACE: currentMonth <= startMonth, no hay meses pasados
-      let inPlaceAnchor = undefined;
+      let inPlaceAnchor: Currency | undefined = undefined;
       if (dto.exchangeRate !== undefined || dto.currency !== undefined) {
         const s = await this.settingsService.getSettings(userId);
         inPlaceAnchor = s.defaultCurrency;

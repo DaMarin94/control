@@ -1,12 +1,17 @@
 "use client";
 
 /**
- * Hook de datos para el endpoint GET /movements/reports?year=YYYY[&categories=...].
+ * Hook de datos para el endpoint GET /movements/reports?year=YYYY[&categories=...][&currency=XXX].
  *
  * Fase 1.1.5: renombre de use-annual. El endpoint pasó de /movements/annual a
  * /movements/reports y se le agregó el param `categories` para filtrar.
  *
  * Fase 1.1.6: alineación al contrato de 3 estados del backend.
+ *
+ * Ola 3 (P3): se agrega el param `currency` (CurrencyCode opcional).
+ *   - Ausente / undefined → el backend usa la default del usuario (comportamiento actual).
+ *   - Presente y válido   → la serie viene convertida a esa moneda.
+ *   Se suma a la query key para que React Query refetche al cambiar la moneda.
  *
  * Semántica de `categoryIds` (3 estados):
  *   - null   → param `categories` AUSENTE (= todas).
@@ -18,12 +23,14 @@
  *   (el backend lo interpretaba como "todas"). Ahora `[]` manda `&categories=`
  *   vacío explícito → el backend devuelve resultado vacío / totales en cero.
  *
- * Query key: REPORTS_QUERY_KEY(year, categoriesKey)
- *   - varía por año Y por el string de categorías para que React Query
- *     refetche cuando cambia el filtro de categorías.
- *   - null  → omite el param (= todas).
- *   - ""    → `&categories=` vacío (= ninguna). Distinto de null en la key.
- *   - string no vacío → subconjunto serializado "id1,id2,...".
+ * Query key: REPORTS_QUERY_KEY(year, categoriesKey, currency)
+ *   - varía por año, por el string de categorías y por la moneda para que React Query
+ *     refetche cuando cambia cualquiera de esos tres valores.
+ *   - categoriesKey null  → omite el param (= todas).
+ *   - categoriesKey ""    → `&categories=` vacío (= ninguna). Distinto de null en la key.
+ *   - categoriesKey string no vacío → subconjunto serializado "id1,id2,...".
+ *   - currency undefined → param `currency` ausente; undefined en la key.
+ *   - currency "ARS"|"USD"|"EUR"|"BRL" → param `&currency=XXX`; string en la key.
  *
  * Patrón de autenticación: enabled: isAuthenticated (obligatorio para queries
  * de lectura al montar una pantalla autenticada, igual que useMovements).
@@ -34,6 +41,7 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useApi } from "@/hooks/use-api";
 import type { ReportsMovementsResponse } from "@/types/reports";
+import type { CurrencyCode } from "@/types/settings";
 import { createLogger } from "@/lib/logger";
 
 const logger = createLogger("useReports");
@@ -41,19 +49,23 @@ const logger = createLogger("useReports");
 // ─── Query key ─────────────────────────────────────────────────────────────────
 
 /**
- * Query key para la serie de reportes de un año y filtro de categorías.
- * Es una FUNCIÓN porque varía por año y por el filtro de categorías.
+ * Query key para la serie de reportes de un año, filtro de categorías y moneda.
+ * Es una FUNCIÓN porque varía por año, por el filtro de categorías y por la moneda.
  *
  * @param year          El año a consultar (ej. 2026).
  * @param categoriesKey null = todas (param ausente); "" = ninguna (param vacío);
  *                      string no vacío = subconjunto "id1,id2,...".
  *   La key DEBE variar entre los 3 estados para que React Query refetche
  *   al pasar de "todas" a "ninguna" o a un subconjunto.
+ * @param currency      undefined = default del usuario (param ausente);
+ *                      string = código de moneda (param presente). Incluido en la
+ *                      key para que React Query refetche al cambiar la moneda.
  */
 export const REPORTS_QUERY_KEY = (
   year: number,
-  categoriesKey: string | null
-) => ["reports", year, categoriesKey] as const;
+  categoriesKey: string | null,
+  currency?: CurrencyCode,
+) => ["reports", year, categoriesKey, currency ?? null] as const;
 
 // ─── Serialización del filtro ──────────────────────────────────────────────────
 
@@ -87,27 +99,36 @@ function serializeCategoryFilter(categoryIds: string[] | null): {
  *
  * @param year        El año a consultar (ej. 2026).
  * @param categoryIds null = todas; [] = ninguna; lista = subconjunto explícito.
+ * @param currency    undefined = default del usuario (sin param); presente = override de moneda por card.
  */
-export function useReports(year: number, categoryIds: string[] | null = null) {
+export function useReports(
+  year: number,
+  categoryIds: string[] | null = null,
+  currency?: CurrencyCode,
+) {
   const { api, isAuthenticated } = useApi();
 
   const { categoriesKey, urlParam } = serializeCategoryFilter(categoryIds);
 
+  // Serializar el param de moneda (solo si está presente)
+  const currencyParam = currency ? `&currency=${currency}` : "";
+
   const query = useQuery<ReportsMovementsResponse>({
-    queryKey: REPORTS_QUERY_KEY(year, categoriesKey),
+    queryKey: REPORTS_QUERY_KEY(year, categoriesKey, currency),
     queryFn: () => {
       // Construir URL manualmente para evitar que URLSearchParams
       // encodee las comas de la lista de categoryIds (RFC 3986: coma es reservada).
       // El backend espera "categories=id1,id2,..." sin encoding.
       // Con [] (ninguna), urlParam = "&categories=" → se manda param vacío explícito.
-      const url = `/movements/reports?year=${year}${urlParam}`;
-      logger.debug("Cargando serie de reportes", { year, categoriesKey });
+      // El código de moneda es plano (ARS/USD/EUR/BRL), no necesita encoding.
+      const url = `/movements/reports?year=${year}${urlParam}${currencyParam}`;
+      logger.debug("Cargando serie de reportes", { year, categoriesKey, currency });
       return api.get<ReportsMovementsResponse>(url);
     },
     // No disparar hasta que la sesión resolvió y el token está presente.
     // Evita 401 espurios durante el loading inicial de Auth.js.
     enabled: Boolean(year) && isAuthenticated,
-    // Al cambiar el filtro (año o categorías), mantiene los datos previos visibles
+    // Al cambiar el filtro (año, categorías o moneda), mantiene los datos previos visibles
     // mientras refetcha: isLoading queda false → el skeleton no parpadea en cada toggle.
     // El skeleton solo aparece en la primera carga (sin datos cacheados para esa key).
     placeholderData: keepPreviousData,

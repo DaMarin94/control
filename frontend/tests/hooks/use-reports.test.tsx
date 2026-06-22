@@ -1,12 +1,15 @@
 /**
- * Tests del hook useReports (Fase 1.1.5 / Fase 1.1.6).
+ * Tests del hook useReports (Fase 1.1.5 / Fase 1.1.6 / Ola 3 P3).
  *
  * Verifica:
- * - REPORTS_QUERY_KEY genera la query key correcta (varía por año y por categoriesKey)
+ * - REPORTS_QUERY_KEY genera la query key correcta (varía por año, categoriesKey y currency)
  * - Fase 1.1.6: distingue null (todas), "" (ninguna), string (subconjunto) en la key
- * - useReports llama a GET /movements/reports?year=YYYY (sin filtro)
+ * - Ola 3 P3: currency en la key y en la URL
+ * - useReports llama a GET /movements/reports?year=YYYY (sin filtro ni moneda)
  * - useReports incluye categories= en la URL cuando hay filtro
  * - Fase 1.1.6: categoryIds=[] manda &categories= vacío (= ninguna)
+ * - Ola 3 P3: currency presente → agrega &currency=XXX a la URL
+ * - Ola 3 P3: currency ausente → NO agrega el param (comportamiento actual)
  * - Estados isLoading/data/isError
  * - enabled: isAuthenticated (no dispara sin autenticación)
  * - El contrato de la respuesta (months × 12, categories con monthlyExpenseCents × 12)
@@ -89,12 +92,13 @@ function createWrapper() {
 // ─── Tests REPORTS_QUERY_KEY ─────────────────────────────────────────────────
 
 describe("REPORTS_QUERY_KEY", () => {
-  it("genera la query key correcta para año sin filtro (null)", () => {
-    expect(REPORTS_QUERY_KEY(2026, null)).toEqual(["reports", 2026, null]);
+  it("genera la query key correcta para año sin filtro ni moneda (null)", () => {
+    // 4 elementos: ["reports", year, categoriesKey, currency ?? null]
+    expect(REPORTS_QUERY_KEY(2026, null)).toEqual(["reports", 2026, null, null]);
   });
 
-  it("genera la query key correcta para año con filtro de categorías", () => {
-    expect(REPORTS_QUERY_KEY(2026, "cat-1,cat-2")).toEqual(["reports", 2026, "cat-1,cat-2"]);
+  it("genera la query key correcta para año con filtro de categorías (sin moneda)", () => {
+    expect(REPORTS_QUERY_KEY(2026, "cat-1,cat-2")).toEqual(["reports", 2026, "cat-1,cat-2", null]);
   });
 
   it("query keys de años distintos son distintas", () => {
@@ -122,6 +126,31 @@ describe("REPORTS_QUERY_KEY", () => {
   it("el tercer elemento es la clave de categorías", () => {
     expect(REPORTS_QUERY_KEY(2026, "abc")[2]).toBe("abc");
     expect(REPORTS_QUERY_KEY(2026, null)[2]).toBeNull();
+  });
+
+  // ── Ola 3 P3: currency en la query key ──────────────────────────────────────
+
+  it("el cuarto elemento es null cuando no se pasa currency (default global)", () => {
+    expect(REPORTS_QUERY_KEY(2026, null)[3]).toBeNull();
+  });
+
+  it("el cuarto elemento es el código de moneda cuando se pasa currency", () => {
+    expect(REPORTS_QUERY_KEY(2026, null, "USD")[3]).toBe("USD");
+    expect(REPORTS_QUERY_KEY(2026, null, "EUR")[3]).toBe("EUR");
+    expect(REPORTS_QUERY_KEY(2026, null, "BRL")[3]).toBe("BRL");
+    expect(REPORTS_QUERY_KEY(2026, null, "ARS")[3]).toBe("ARS");
+  });
+
+  it("query keys con distinta moneda son distintas (refetch al cambiar moneda)", () => {
+    expect(REPORTS_QUERY_KEY(2026, null, "ARS")).not.toEqual(
+      REPORTS_QUERY_KEY(2026, null, "USD"),
+    );
+  });
+
+  it("query key sin moneda es distinta de con moneda (refetch al agregar override)", () => {
+    expect(REPORTS_QUERY_KEY(2026, null)).not.toEqual(
+      REPORTS_QUERY_KEY(2026, null, "ARS"),
+    );
   });
 });
 
@@ -223,6 +252,92 @@ describe("useReports", () => {
 
     const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
     expect(callUrl).toContain("categories=cat-1,cat-2");
+  });
+
+  // ── Ola 3 P3: currency en la URL ────────────────────────────────────────────
+
+  it("NO agrega &currency= cuando currency es undefined (default global)", async () => {
+    mockApiGet.mockResolvedValue(mockReportsResponse);
+
+    const { result } = renderHook(() => useReports(2026, null, undefined), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
+    expect(callUrl).not.toContain("currency=");
+  });
+
+  it("agrega &currency=USD cuando currency='USD'", async () => {
+    mockApiGet.mockResolvedValue(mockReportsResponse);
+
+    const { result } = renderHook(() => useReports(2026, null, "USD"), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
+    expect(callUrl).toContain("&currency=USD");
+  });
+
+  it("agrega &currency=EUR cuando currency='EUR'", async () => {
+    mockApiGet.mockResolvedValue(mockReportsResponse);
+
+    const { result } = renderHook(() => useReports(2026, null, "EUR"), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
+    expect(callUrl).toContain("&currency=EUR");
+  });
+
+  it("combina categories= y &currency= en la URL correctamente", async () => {
+    mockApiGet.mockResolvedValue(mockReportsResponse);
+
+    const { result } = renderHook(
+      () => useReports(2026, ["cat-1"], "BRL"),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
+    expect(callUrl).toContain("year=2026");
+    expect(callUrl).toContain("categories=cat-1");
+    expect(callUrl).toContain("&currency=BRL");
+  });
+
+  it("refetcha al cambiar currency (query keys distintas)", async () => {
+    mockApiGet.mockResolvedValue(mockReportsResponse);
+
+    const { result, rerender } = renderHook(
+      ({ curr }: { curr: "ARS" | "USD" | undefined }) => useReports(2026, null, curr),
+      { wrapper: createWrapper(), initialProps: { curr: "ARS" as const } }
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(mockApiGet).toHaveBeenCalledTimes(1);
+    expect(mockApiGet.mock.calls[0]?.[0]).toContain("&currency=ARS");
+
+    // Cambiar a USD → nueva query key → nuevo fetch
+    mockApiGet.mockResolvedValue(mockReportsResponse);
+    rerender({ curr: "USD" });
+
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledTimes(2));
+    const secondUrl = mockApiGet.mock.calls[1]?.[0] as string;
+    expect(secondUrl).toContain("&currency=USD");
   });
 
   it("expone los datos tras la carga exitosa", async () => {

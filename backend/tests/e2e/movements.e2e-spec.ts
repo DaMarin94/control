@@ -1126,4 +1126,44 @@ describe('Movements (e2e)', () => {
       expect(res.body.statusCode).toBe(401);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // GET /movements/reports — override de moneda (P3)
+  // -------------------------------------------------------------------------
+
+  describe('GET /movements/reports — override de currency (P3)', () => {
+    // Los happy-path de currency (200) se cubren en el unit spec de reports
+    // (movements.reports.service.spec.ts) donde loadPivotRatesForYear ya está mockeado.
+    // Aquí solo se validan los casos de rechazo 400 que no dependen del repo.
+
+    it('currency inválido → 400 con sobre de error', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=2026&currency=GBP')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(400);
+    });
+
+    it('currency en minúsculas (ars) → 400 (enum es case-sensitive)', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=2026&currency=ars')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(400);
+    });
+
+    it('currency vacío ("") → 400 (no es un valor del enum)', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=2026&currency=')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(400);
+    });
+  });
 });

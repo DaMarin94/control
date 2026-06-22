@@ -5,6 +5,7 @@ import {
   Query,
   Request,
 } from '@nestjs/common';
+import { Currency } from '@prisma/client';
 import { MovementsService } from './movements.service';
 
 interface AuthRequest extends Request {
@@ -87,7 +88,7 @@ export class MovementsController {
   }
 
   /**
-   * GET /movements/reports?year=YYYY&categories=<id1,id2,...>
+   * GET /movements/reports?year=YYYY[&categories=<id1,id2,...>][&currency=<ARS|USD|EUR|BRL>]
    *
    * Devuelve la serie anual de reportes de movimientos del usuario (RF-REP-001/002/005).
    * Responde con los 12 meses del año (siempre presentes, en cero si no hay datos),
@@ -98,6 +99,11 @@ export class MovementsController {
    * - categories (opcional): lista de categoryIds separados por comas.
    *   Omitido o vacío = todas las categorías. El filtro afecta ambas formas
    *   (totales mensuales y desglose por categoría). earliestYear IGNORA el filtro.
+   * - currency (opcional): override de moneda de display para la serie.
+   *   Valores: ARS | USD | EUR | BRL.
+   *   Ausente (omitido) → usa la moneda default vigente del usuario.
+   *   Presente → usa esa moneda como displayCurrency para todas las conversiones del reporte.
+   *   Inválido (valor fuera del enum) → 400.
    *
    * Criterio de imputación por mes (RN-015):
    * - Únicos: mes local (AT TIME ZONE propia del registro)
@@ -105,12 +111,14 @@ export class MovementsController {
    *
    * 200 + sobre con ReportsMovementsResponse.
    * 400 si "year" falta, no es exactamente 4 dígitos, o no es un año razonable.
+   * 400 si "currency" está presente pero no es un valor válido del enum.
    */
   @Get('reports')
   getReports(
     @Request() req: AuthRequest,
     @Query('year') yearParam: string | undefined,
     @Query('categories') categoriesParam: string | undefined,
+    @Query('currency') currencyParam: string | undefined,
   ) {
     // Validar presencia y formato exacto YYYY
     if (!yearParam || !/^\d{4}$/.test(yearParam)) {
@@ -125,6 +133,18 @@ export class MovementsController {
       throw new BadRequestException(
         `El año debe estar entre ${YEAR_MIN} y ${YEAR_MAX}`,
       );
+    }
+
+    // Validar currency (solo si está presente)
+    let currencyOverride: Currency | undefined;
+    if (currencyParam !== undefined) {
+      const validCurrencies: string[] = Object.values(Currency);
+      if (!validCurrencies.includes(currencyParam)) {
+        throw new BadRequestException(
+          `El parámetro "currency" debe ser uno de: ${validCurrencies.join(', ')}`,
+        );
+      }
+      currencyOverride = currencyParam as Currency;
     }
 
     // Parseo de categorías con semántica de 3 estados:
@@ -146,6 +166,7 @@ export class MovementsController {
       req.user.userId,
       year,
       categoryIds,
+      currencyOverride,
     );
   }
 }

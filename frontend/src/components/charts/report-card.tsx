@@ -46,7 +46,9 @@ import { useSettings } from "@/hooks/use-settings";
 import { formatCurrency, CURRENCY_SYMBOLS } from "@/lib/format";
 import { ChartTooltipContent } from "@/components/ui/chart";
 import { ChartLegend } from "@/components/ui/chart";
+import { CardCurrencySelect } from "@/components/ui/card-currency-select";
 import type { ReportsMovementsResponse, ReportCardType } from "@/types/reports";
+import type { CurrencyCode } from "@/types/settings";
 import { cn } from "@/lib/utils";
 import { SkeletonBlock, SkeletonLine } from "@/components/ui/skeleton";
 
@@ -808,6 +810,19 @@ export interface ReportCardProps {
    * Solo relevante si removable=true.
    */
   onRemove?: () => void;
+  /**
+   * Moneda de display de esta card (Ola 3, P3).
+   * undefined → usa la default global del usuario (comportamiento actual / Dashboard).
+   * CurrencyCode → override local; la serie se solicita convertida a esa moneda.
+   */
+  currency?: CurrencyCode;
+  /**
+   * Callback al cambiar la moneda de la card (Ola 3, P3).
+   * Cuando está presente → se monta el CardCurrencyTrigger en la cabecera.
+   * Cuando está ausente (undefined) → no se monta el selector (ej. Dashboard).
+   * La condición de montaje es la PRESENCIA del callback, no el flag removable.
+   */
+  onCurrencyChange?: (c: CurrencyCode) => void;
 }
 
 /**
@@ -834,10 +849,20 @@ export function ReportCard({
   onHiddenSeriesChange,
   removable = false,
   onRemove,
+  currency,
+  onCurrencyChange,
 }: ReportCardProps) {
   const reducedMotion = useReducedMotion();
-  const { data, isLoading, isError, refetch } = useReports(year, categoryIds);
   const { defaultCurrency } = useSettings();
+
+  // Moneda efectiva para formatters/charts/eje Y/tooltips:
+  //   - Si hay override de card (currency prop presente) → usa ese override.
+  //   - Si no → usa la default global del usuario.
+  // Para el param del backend se pasa `currency` tal cual (undefined si no hay override),
+  // así el backend aplica la default del usuario sin param explícito (back-compat).
+  const effectiveCurrency = currency ?? defaultCurrency;
+
+  const { data, isLoading, isError, refetch } = useReports(year, categoryIds, currency);
 
   const [removeOpen, setRemoveOpen] = useState(false);
   const removeButtonRef = useRef<HTMLButtonElement>(null);
@@ -1034,7 +1059,13 @@ export function ReportCard({
           </div>
         )}
 
-        {/* Derecha: controles (stepper + quitar) — el filtro de categorías lo hace la leyenda */}
+        {/* Derecha: controles (stepper + moneda + quitar) — el filtro de categorías lo hace la leyenda */}
+        {/*
+          Orden (≥941px): [YearStepper] [divisor] [CardCurrencyTrigger] [divisor] [X]
+          El selector de moneda solo se monta cuando onCurrencyChange está presente (cards de /reportes).
+          En el dashboard (sin onCurrencyChange) la barra queda como hoy: solo el stepper.
+          Spec: docs/design.md §"Moneda por reporte — selector embebido en la cabecera de la card (Ola 3, P3)".
+        */}
         <div className="flex items-center gap-2 flex-wrap justify-end">
           {/* Control de año embebido (stepper pill) */}
           <YearStepper
@@ -1045,10 +1076,25 @@ export function ReportCard({
             onNext={handleNext}
           />
 
+          {/* Selector de moneda por card (solo cuando hay callback — /reportes) */}
+          {onCurrencyChange && (
+            <>
+              {/* Mini-divisor --hair entre stepper y selector de moneda */}
+              <span
+                className="block h-[16px] w-px bg-hair shrink-0"
+                aria-hidden="true"
+              />
+              <CardCurrencySelect
+                value={effectiveCurrency}
+                onChange={onCurrencyChange}
+              />
+            </>
+          )}
+
           {/* Divisor y botón quitar (solo en /reportes) */}
           {removable && (
             <>
-              {/* Mini-divisor --hair entre stepper y X */}
+              {/* Mini-divisor --hair entre moneda/stepper y X */}
               <span
                 className="block h-[16px] w-px bg-hair shrink-0"
                 aria-hidden="true"
@@ -1101,7 +1147,7 @@ export function ReportCard({
                     year={year}
                     height={height}
                     reducedMotion={reducedMotion}
-                    currency={defaultCurrency}
+                    currency={effectiveCurrency}
                     hiddenSeries={hiddenSeries}
                   />
                 );
@@ -1114,7 +1160,7 @@ export function ReportCard({
                     year={year}
                     height={height}
                     reducedMotion={reducedMotion}
-                    currency={defaultCurrency}
+                    currency={effectiveCurrency}
                   />
                 );
               }
@@ -1125,7 +1171,7 @@ export function ReportCard({
                   year={year}
                   height={height}
                   reducedMotion={reducedMotion}
-                  currency={defaultCurrency}
+                  currency={effectiveCurrency}
                 />
               );
             }}

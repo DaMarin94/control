@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { MovementType } from '@prisma/client';
+import { Currency, MovementType } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { CategoryValidatorService } from '../categories/category-validator.service';
 import {
@@ -132,7 +132,7 @@ export class InstallmentsService {
     }
 
     // Si se actualiza la cotización o moneda, actualizar el anchor (Fase 1.2.4)
-    let updateAnchor = undefined;
+    let updateAnchor: Currency | undefined = undefined;
     if (dto.exchangeRate !== undefined || dto.currency !== undefined) {
       const s = await this.settingsService.getSettings(userId);
       updateAnchor = s.defaultCurrency;

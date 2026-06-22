@@ -1458,6 +1458,28 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 
 ---
 
+#### RF-REP-007 — Moneda por card de reporte
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Cada card de `/reportes` tiene su **propia moneda de display**, independiente de las demás y persistida junto al resto de su config (clave `reports`, RF-REP-004). La card re-expresa sus cifras a esa moneda **al vuelo** (capa de display, igual que la moneda default; no toca ningún movimiento guardado, RF-CUR-005). La card de reporte del **dashboard** no tiene esta opción: queda siempre en la moneda default global del usuario. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | Existe una card de reporte en `/reportes`. |
+
+**Criterios de aceptación:**
+- [ ] Cada card de `/reportes` expone un **selector de moneda** en su cabecera, con las 4 monedas del set (RF-CUR-001).
+- [ ] Al **crear** una card, su moneda nace con la **moneda default global vigente** del usuario (RF-CUR-002), sin preguntar ni ofrecer elección.
+- [ ] Cambiar la moneda de una card **re-expresa sus cifras al vuelo** y **no afecta a las demás cards** ni a la moneda default global; no toca ningún movimiento guardado.
+- [ ] La moneda elegida se **persiste por card** (clave `reports`, campo `currency`, RF-REP-004; shape en `docs/data-model.md`). Una card sin el campo usa la **default global vigente** del usuario.
+- [ ] El **chip de moneda del header** de `/reportes` refleja la **moneda default global** del usuario (RF-CUR-002), no la de ninguna card en particular.
+- [ ] La card de reporte del **dashboard** **no** expone selector de moneda: muestra siempre la moneda default global.
+
+**Notas:**
+- El detalle visual del selector lo define `control-design` (`docs/design.md`).
+
+---
+
 ### 3.10 Módulo: Multi-moneda
 
 > La moneda es **explícita**: cada movimiento lleva su **moneda + cotización**; los totales se expresan en una **única moneda default** del usuario, convertida en vivo. La cotización del movimiento se **pre-carga desde una tabla de cotizaciones de referencia** (interna, no editable por UI). Modelo de datos en `data-model.md`, §Moneda explícita, set curado, §Contrato de configuración del usuario (settings) y §Tabla de cotizaciones de referencia.

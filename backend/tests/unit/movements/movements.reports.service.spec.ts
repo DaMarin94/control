@@ -1111,4 +1111,122 @@ describe('MovementsService — getReportsMovements', () => {
       expect(result.availableCategories).toHaveLength(0);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Override de currency (P3 — currencyOverride)
+  // -------------------------------------------------------------------------
+
+  describe('override de currency (currencyOverride)', () => {
+    /**
+     * currencyOverride ausente/undefined → displayCurrency = defaultCurrency del usuario.
+     * El beforeEach mockea getSettings con defaultCurrency=ARS.
+     * Un único en ARS de 1000 centavos: currency===displayCurrency → devuelve sin cambio.
+     */
+    it('sin currencyOverride → usa defaultCurrency del usuario (ARS)', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', type: 'EXPENSE', totalCents: BigInt(1000), currency: 'ARS', exchangeRate: '1', anchorCurrency: 'ARS' }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+      // defaultCurrency=ARS ya está configurado en beforeEach
+      // loadPivotRatesForYear retorna Map vacío (mock global)
+
+      const result = await service.getReportsMovements(USER_A, 2026);
+
+      // ARS único en ARS → sin conversión → 1000 centavos
+      expect(result.months[5].expenseCents).toBe(1000);
+    });
+
+    /**
+     * currencyOverride=ARS con movimiento en ARS:
+     * convertToDisplayCurrency: currency===displayCurrency → devuelve amountCents sin cambio.
+     */
+    it('currencyOverride=ARS con único en ARS → sin conversión, amount intacto', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', type: 'EXPENSE', totalCents: BigInt(5000), currency: 'ARS', exchangeRate: '1', anchorCurrency: 'ARS' }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, Currency.ARS);
+
+      expect(result.months[0].expenseCents).toBe(5000);
+    });
+
+    /**
+     * currencyOverride=USD con único en ARS (currency=ARS, anchorCurrency=ARS, exchangeRate=1):
+     * - currency !== displayCurrency (ARS !== USD)
+     * - anchorCurrency !== displayCurrency (ARS !== USD)
+     * - pivotRates = Map vacío → pivotRates[ARS] === undefined → rateAnchor===null → no re-ruteo
+     * - Fallback: currency===anchorCurrency → devuelve amountCents sin cambio (degradado defensivo)
+     * El test verifica que el override activa la ruta USD y no lanza error.
+     */
+    it('currencyOverride=USD con único en ARS y sin pivot rates → fallback defensivo, amount intacto', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-03', type: 'EXPENSE', totalCents: BigInt(2000), currency: 'ARS', exchangeRate: '1', anchorCurrency: 'ARS' }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+      // loadPivotRatesForYear retorna Map vacío → sin rates para re-ruteo
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, Currency.USD);
+
+      // Fallback: currency===anchorCurrency → retorna amountCents sin cambio
+      expect(result.months[2].expenseCents).toBe(2000);
+    });
+
+    /**
+     * currencyOverride=USD con pivot rates disponibles:
+     * Movimiento en ARS (currency=ARS, anchorCurrency=ARS, exchangeRate=1).
+     * pivotRates: { ARS: 1500 } (1 USD = 1500 ARS).
+     * convertToDisplayCurrency:
+     *   - currency===ARS, displayCurrency===USD → no corto circuito.
+     *   - anchorCurrency===ARS !== USD → no caso simple.
+     *   - pivotRates.get('2026-01') = { ARS: 1500 }.
+     *   - rateAnchor = pivotRates.ARS = 1500, rateDisplay = USD → 1 (pivote implícito).
+     *   - valueInAnchor = 1500000 (currency===anchorCurrency).
+     *   - resultado = round(1500000 * (1 / 1500)) = 1000.
+     */
+    it('currencyOverride=USD con pivot rates → convierte ARS→USD correctamente', async () => {
+      // pivotRatesForYear: Map<monthKey, Partial<PivotRates>>
+      // El movimiento está en '2026-01', así que esa key debe tener el rate de ARS.
+      const pivotMap = new Map<string, { ARS: number }>([['2026-01', { ARS: 1500 }]]);
+      mockRepo.loadPivotRatesForYear.mockResolvedValueOnce(pivotMap);
+
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', type: 'EXPENSE', totalCents: BigInt(1500000), currency: 'ARS', exchangeRate: '1', anchorCurrency: 'ARS' }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, Currency.USD);
+
+      // 1500000 ARS / 1500 (rate ARS/USD) = 1000 USD
+      expect(result.months[0].expenseCents).toBe(1000);
+    });
+
+    /**
+     * currencyOverride no cambia el defaultCurrency del usuario (no persiste).
+     * Dos llamadas sucesivas con distintos overrides deben dar resultados independientes.
+     */
+    it('currencyOverride no afecta la defaultCurrency del usuario (no persiste entre llamadas)', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', type: 'EXPENSE', totalCents: BigInt(1000), currency: 'ARS', exchangeRate: '1', anchorCurrency: 'ARS' }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      // Primera llamada con override USD
+      await service.getReportsMovements(USER_A, 2026, null, Currency.USD);
+      // getSettings no debe haber cambiado
+      expect(mockSettingsService.getSettings).toHaveBeenCalledWith(USER_A);
+      // updateLastExchangeRate nunca debe llamarse desde getReportsMovements
+      expect(mockSettingsService.updateLastExchangeRate).not.toHaveBeenCalled();
+    });
+  });
 });

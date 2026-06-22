@@ -209,6 +209,7 @@ Endpoint **agregado** para los reportes (RF-REP-001/002/005), scopeado por `user
 
 - **`year` (`YYYY`) obligatorio:** exactamente **4 dígitos**, rango **1900–2200**. Si falta, no tiene 4 dígitos o cae fuera de rango → `400`. `401` global por JWT inválido/ausente.
 - **`categories` (lista de `categoryId`s separados por comas) opcional:** **omitido = todas las categorías** (sin filtro). El front lo manda con la **coma literal** (`categories=id1,id2`).
+- **`currency` opcional (override de display, RF-REP-007):** una de las 4 monedas, **case-sensitive**. En `getReportsMovements`, el `displayCurrency` que alimenta todas las conversiones es `currencyOverride ?? userSettings.defaultCurrency`: omitido convierte a la default del usuario; presente y válido convierte a esa moneda. **Presente vacío o fuera del set → `400`.** El resto de la conversión (re-ruteo por pivote USD con la tabla de referencia del mes) es idéntico al de la default. Contrato del param en `docs/data-model.md`, §Contrato de serie de reportes.
 
 > Shape de la respuesta (`ReportMovementsResponse` / `ReportMonth` / `ReportCategory`), invariante de consistencia y reglas de `months` / `categories` / `earliestYear` en `docs/data-model.md`, §Contrato de serie de reportes. Abajo solo cómo se calcula cada parte en el backend.
 

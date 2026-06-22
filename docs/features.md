@@ -30,6 +30,7 @@
 | Crear categoría desde el formulario de movimiento | RF-MU-004 | Implementado |
 | Reportes — pantalla configurable por cards + widget en dashboard | RF-REP-001..005 | Implementado |
 | Reportes — toggle "Total / Por categoría" en la card Ingresos y gastos | RF-REP-006 | Implementado |
+| Reportes — moneda de display por card (selector por card, nace con la default global) | RF-REP-007 | Implementado |
 | Multi-moneda — set curado 4 (ARS/USD/EUR/BRL) + tabla de cotizaciones de referencia + pantalla `/configuracion` | RF-CUR-001..006, RN-009 | Implementado |
 | Preferencias de usuario — cimiento (blob JSON + sesión) | — | Implementado (sin UI de producto) |
 

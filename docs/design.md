@@ -279,6 +279,7 @@ Unidad que `/reportes` apila y que el Dashboard monta una vez. Es la **tarjeta `
 
 - **Identidad (izquierda):** eyebrow *Eyebrow/labels* `--muted` **"Reporte"** + título 16px/600 `--ink` ("Ingresos y gastos" / "Por categoría").
 - **Control de año embebido:** el `.stepper` de **PeriodNav** (forma compacta, arriba), año en **mono tabular**, con su estado **disabled** atado a `earliestYear` / año en curso. Navegación **activa** también en el Dashboard.
+- **Selector de moneda de la card (solo `/reportes`):** override de display por card, persistido. Ver *Moneda por reporte — selector embebido en la cabecera de la card* abajo. **No aparece en la card del Dashboard.**
 - **Filtro de categorías embebido:** ver *Filtro de categorías* abajo.
 - **Quitar card (solo `/reportes`):** botón icon-only ghost `X` (16px), `--muted` → `--ink` sobre `--panel-2`, al final de la barra de controles, separado por un divisor `--hair` vertical. Abre una **confirmación inline** (popover `--panel`/`--line`/`--r-ctl`/`--shadow-lg`, "¿Quitar este reporte?", botón **danger** "Quitar" + ghost "Cancelar"). La card del Dashboard **no** es removible.
 
@@ -289,6 +290,68 @@ Unidad que `/reportes` apila y que el Dashboard monta una vez. Es la **tarjeta `
 **Dashboard:** monta una card `income-expense` efímera con navegación de año activa, junto al resumen mensual (que es fijo en el mes en curso). La distinción la dan: bloques de forma distinta (resumen sin `.card` de gráfico vs. card de gráfico), distinto grano temporal (mes-rótulo fijo vs. año-stepper navegable) y el stepper scoped a la card.
 
 > Las **gráficas** que montan estas cards se definen en *Gráficos — Forma 1 y Forma 2* (abajo).
+
+### Moneda por reporte — selector embebido en la cabecera de la card (Ola 3, P3)
+
+Cada card de `/reportes` tiene **su propia moneda de display**, override persistido e independiente de la default global del usuario (nace con la default global al crear la card). El control vive **dentro de la barra de controles de la cabecera de la card**. Es un selector de moneda más del DS — extiende el patrón ya cerrado en *Monedas configurables — set curado ARS/USD/EUR/BRL* a un tercer lugar de uso (form, `/configuracion`, y ahora la cabecera de card). **No inventa cromo nuevo:** reusa el lenguaje neutro de moneda y respeta las tres reglas duras (cromo neutro, índigo solo de marca/focus, cifra/código en mono tabular).
+
+> **El chip de moneda del header de `/reportes` (`CurrencyChip`) NO cambia:** sigue reflejando la **default global** y sigue siendo el ancla de contexto de la pantalla (Link a `/configuracion`). La moneda por card es un override **local a cada card**; el chip del header es el **default global**. Son dos cosas distintas y conviven: el chip dice "tu default es X", cada card dice "esta card se muestra en Y".
+
+#### 1. Qué control — chip-dropdown in-situ (NO el segmented de 4)
+
+El control es un **chip-disparador que abre un popover con las 4 monedas**, **no** el `CurrencySegmented`. Racional de la elección, dado el espacio de la cabecera:
+
+- **El segmented de 4 no entra.** La barra de controles derecha ya carga `YearStepper` (pill ~150px) + divisor + `X`, y en `income-expense` la izquierda lleva las tabs "Total / Por categoría". Meter un segmented de 4 segmentos (`~180–200px`) a la derecha **rompe el balance** de la cabecera y fuerza wrap permanente aun en desktop. El segmented está pensado para superficies con holgura (fila de ajuste de `/configuracion`, columna de form), no para una barra de controles ya densa.
+- **El chip-dropdown es compacto y del mismo sistema.** Un disparador del tamaño de un chip (código `mono` + chevron, ~52px) **convive** con el stepper y el `X` sin desbalancear, y mantiene **todas las opciones a un clic** (el popover muestra las 4). Es coherente con el lenguaje del `CurrencyChip` del header (glifo/código mono neutro), pero **acciona in-situ** (no es Link): abre un popover y cambia la moneda de la card sin salir de pantalla.
+- **Por qué popover y no segmented acá, si en el form sí usamos segmented:** la decisión "segmented, no dropdown" de *Monedas configurables §1* aplica a superficies donde **caben** los 4 visibles sin comprometer el layout. La cabecera de card es el caso opuesto (densa, compartida con año + quitar + tabs): acá el criterio del DS de "no romper el balance de la barra de controles" pesa más, y el dropdown es la forma correcta. **No es una contradicción:** es el mismo set de 4 monedas neutras, distinto envase según el espacio.
+
+#### 2. El disparador (`CardCurrencyTrigger`) — anatomía
+
+`<button type="button">` con `aria-haspopup="listbox"` / `aria-expanded`. Anatomía, de izq → der:
+
+- **Código de moneda** en `mono` **12px / 600** `tracking-[0.04em]`, color `--ink-2`, con `tnum` (regla dura 3). Muestra `"ARS" / "USD" / "EUR" / "BRL"` — el de la card.
+- **Chevron:** `ChevronDown` (lucide) **12px** `--faint`, a la derecha del código, `aria-hidden`. Indica "abre opciones" (a diferencia del `ChevronRight` del `CurrencyChip`, que indica "se gestiona en otro lado"). Rota a ▲ (`-180°`, 0.14s) cuando el popover está abierto.
+- **Caja:** `inline-flex items-center gap-[6px]`, `bg-panel-3`, radio `--r-chip` 7px, `px-[8px] py-[3px]` — **idéntica caja al `CurrencyChip`** para que se lea del mismo sistema. **Sin** glifo `Wallet`: el `Wallet` es la marca del default global (header); el disparador de card omite el glifo para diferenciarse y porque la cabecera ya tiene suficiente densidad icónica (stepper, `X`).
+- **Estados:**
+  - **Reposo:** caja `--panel-3`, código `--ink-2`, chevron `--faint`.
+  - **Hover:** caja → `--panel-2`, código → `--ink`, chevron → `--muted`. Transición `0.14s`.
+  - **Abierto (activo):** caja `--panel-2` mantenida, chevron rotado a ▲. El feedback real del cambio es que, al elegir, el código del disparador y las cifras del gráfico/leyenda/tooltip pasan al símbolo de la nueva moneda.
+  - **Focus (teclado):** ring `--accent-soft` 3px, radio `--r-chip` 7px (`focus-visible`). Acento = cromo de foco, no estado de datos (no viola reglas duras).
+- **Sin color semántico ni índigo** en código/chevron/caja (regla dura "la moneda es cromo neutro"). Cromo estrictamente neutro.
+
+#### 3. El popover — lista de las 4 monedas
+
+Popover anclado al disparador (mismo mecanismo y reglas de cierre que el resto de popovers del DS — *Cierre de overlays*: cierra por selección, Esc, click fuera y re-clic en el disparador; este popover **sí** cierra por click fuera porque es una elección simple, no un form). Forma:
+
+- **Caja:** `--panel`, borde `--line`, radio `--r-ctl` 10px, `--shadow-lg`, padding `p-[4px]`. Ancho mínimo que acomode `"ARS"` + check (~96px); se alinea al **borde derecho del disparador** (la barra de controles está pegada al borde derecho de la card; el popover crece hacia adentro). Animación `pop` del DS; `prefers-reduced-motion` → aparición instantánea.
+- **Ítems:** 4 filas, `role="option"`. Cada una: código en `mono` 13px / 600 `--ink-2` (`tnum`), `px-[10px] py-[6px]`, radio `--r-chip` 7px, `cursor:pointer`. Orden canónico `ARS → USD → EUR → BRL` (mismo orden que el segmented).
+  - **Ítem seleccionado (la moneda actual de la card):** código `--ink` + glifo `Check` (lucide) **14px** `--ink-2` a la derecha (`aria-hidden`; el estado lo da `aria-selected`). **Sin** fondo de acento ni tinte semántico — el seleccionado se marca con peso de color + check, neutro.
+  - **No seleccionado:** código `--ink-2`; hover → fondo `--panel-2`, código `--ink`.
+  - **Focus (teclado):** ring `--accent-soft` 3px (`focus-visible`), radio `--r-chip` 7px.
+- **A11y:** disparador `aria-haspopup="listbox"`; popover `role="listbox"` con `aria-label="Moneda del reporte"`; ítems `role="option"` + `aria-selected`. Flechas ↑/↓ recorren, Enter/Espacio eligen, Esc cierra y devuelve foco al disparador.
+- **Al elegir:** cierra el popover, persiste la moneda de la card, y el gráfico/leyenda/tooltip/cifras reflowean al símbolo de la nueva moneda. **No** hay skeleton al cambiar de moneda (es re-display de dato ya presente, no carga inicial — regla de *Skeletons*: skeleton solo con área vacía de dato).
+
+#### 4. Ubicación exacta y responsive
+
+- **Orden en la barra de controles derecha (≥941px):** `[ YearStepper ] [ divisor --hair ] [ CardCurrencyTrigger ] [ divisor --hair ] [ X ]`. El selector de moneda va **después** del stepper de año y **antes** del botón quitar, cada bloque separado por el **mini-divisor `--hair` vertical** (`h-[16px] w-px bg-hair`) ya existente. Racional del orden: año (el control más usado y de mayor jerarquía) primero; moneda (ajuste menos frecuente) en el medio; quitar (acción destructiva, terminal) al final. El divisor **antes** del trigger lo separa visualmente del stepper; el divisor **después** (el que hoy precede al `X`) se mantiene.
+- **Cuando la card NO es removible** (no debería pasar en `/reportes`, pero por robustez): el selector queda como último elemento de la barra, sin divisor colgando a su derecha (el divisor pertenece al `X`, igual que hoy el divisor del `X` solo se renderiza con `removable`).
+- **Responsive (≤940px — la cabecera hace wrap):** el selector de moneda **viaja junto con el stepper y el `X`** en el bloque de controles derecho (`flex flex-wrap justify-end`), que ya envuelve a la segunda línea bajo las tabs/identidad. **No** se separa en su propia línea ni cambia de forma: el chip es lo bastante compacto para fluir con el resto. Mantiene la caja, el orden relativo (stepper → moneda → X) y los divisores; el `flex-wrap` reacomoda si la línea no alcanza. El popover sigue anclado a su disparador y, si no hay lugar abajo, **flipea hacia arriba** (mismo mecanismo de colisión que los demás popovers; lo resuelve `control-frontend`).
+
+#### 5. Jerarquía visual
+
+De más a menos peso en la barra de controles derecha:
+
+1. **`YearStepper`** — pieza dominante: pill con borde `--line` + `--shadow-sm` + año en mono 14.5px. Es el control de navegación principal de la card. **Conserva su peso; el selector de moneda no compite.**
+2. **`CardCurrencyTrigger`** — secundario: chip plano `--panel-3` (sin borde ni sombra), código 12px. Lee como "ajuste de display", subordinado al stepper. Su menor peso (caja plana vs. pill con sombra, fuente más chica) lo posiciona como un control de segundo orden, coherente con que se toca menos que el año.
+3. **Botón `X` (quitar)** — terminal: icon-only ghost, `--muted`, sin caja en reposo (solo `--panel-2` en hover). Acción destructiva, deliberadamente discreta hasta el hover.
+
+El selector de moneda **nunca** usa borde, sombra ni fondo de acento que lo eleve por encima del stepper: su tratamiento plano es intencional para preservar la jerarquía año > moneda > quitar.
+
+#### 6. Card del Dashboard — sin selector (condición visual)
+
+La card del Dashboard usa el **mismo `ReportCard`** pero **NO** renderiza el `CardCurrencyTrigger`. Se condiciona por la **misma señal que ya distingue Dashboard de `/reportes`**: la card del Dashboard es **no removible** (`removable=false`) y usa la **default global efímera**. El selector de moneda se renderiza **bajo la misma condición que habilita el override persistido** (las cards de `/reportes`), no bajo `removable` per se — `control-frontend` recibe la moneda como prop opcional con su callback; cuando no hay callback de cambio de moneda (Dashboard), el trigger no se monta y la barra de controles queda como hoy: `[ YearStepper ]` (sin divisor ni moneda ni `X`). Visualmente: en el Dashboard la cabecera de la card queda **idéntica a la actual** (stepper solo), las cifras siguen en la default global, sin chrome de moneda agregado.
+
+> **Reglas duras reafirmadas:** el código de moneda va en **mono tabular** (regla dura 3); ningún elemento del disparador, popover o ítems se tiñe de income/expense (regla dura 1) ni de índigo de marca (regla dura 2); el índigo aparece **solo** como focus ring (cromo de interacción). El selector de moneda **no** cambia qué es ingreso/gasto ni recolorea cifras: solo cambia el **símbolo** con el que se presentan (vía el mapa `código → símbolo` de *Símbolos de moneda por código*).
 
 ### Gráficos — Forma 1 y Forma 2
 

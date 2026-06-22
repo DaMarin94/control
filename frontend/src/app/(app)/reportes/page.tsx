@@ -24,6 +24,7 @@ import { usePreferences } from "@/hooks/use-preferences";
 import { useSettings } from "@/hooks/use-settings";
 import { ReportCard } from "@/components/charts/report-card";
 import type { ReportCardConfig, ReportCardType } from "@/types/reports";
+import type { CurrencyCode } from "@/types/settings";
 import { cn } from "@/lib/utils";
 import { getCurrentMonth } from "@/lib/format";
 import { createLogger } from "@/lib/logger";
@@ -278,6 +279,10 @@ function ReportesPageContent() {
       type,
       year: getCurrentYear(),
       categoryIds: null,
+      // La card nace con la moneda default del usuario (Ola 3, P3).
+      // Al cambiar la default global, las cards existentes sin override
+      // caen a la nueva default por el ?? del ReportCard (back-compat).
+      currency: defaultCurrency,
     };
     const newCards = [...cards, newCard];
     void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
@@ -323,6 +328,15 @@ function ReportesPageContent() {
     );
     void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
       logger.error("Error al persistir series ocultas de card", { error: err, cardId: id });
+    });
+  }
+
+  function handleCurrencyChange(id: string, newCurrency: CurrencyCode) {
+    const newCards = cards.map((c) =>
+      c.id === id ? { ...c, currency: newCurrency } : c
+    );
+    void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
+      logger.error("Error al persistir moneda de card", { error: err, cardId: id });
     });
   }
 
@@ -375,6 +389,8 @@ function ReportesPageContent() {
               onHiddenSeriesChange={(hidden) => handleHiddenSeriesChange(card.id, hidden)}
               removable={true}
               onRemove={() => handleRemoveCard(card.id)}
+              currency={card.currency}
+              onCurrencyChange={(c) => handleCurrencyChange(card.id, c)}
             />
           ))}
 

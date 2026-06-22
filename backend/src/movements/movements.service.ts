@@ -216,12 +216,18 @@ export class MovementsService {
    * - [] = ninguna (resultado vacío/cero).
    * - [...ids] = subconjunto.
    *
+   * Override de moneda (P3):
+   * - currencyOverride presente → displayCurrency = currencyOverride.
+   * - currencyOverride ausente/undefined → displayCurrency = userSettings.defaultCurrency.
+   * El shape de la respuesta no cambia: la serie ya viene convertida.
+   *
    * CRÍTICO: earliestYear ignora el filtro.
    */
   async getReportsMovements(
     userId: string,
     year: number,
     categoryIds?: string[] | null,
+    currencyOverride?: Currency | null,
   ): Promise<ReportsMovementsResponse> {
     // Normalizar el filtro de categorías
     const EMPTY_SET = new Set<string>();
@@ -237,7 +243,9 @@ export class MovementsService {
       this.settingsService.getSettings(userId),
       this.repo.loadPivotRatesForYear(year),
     ]);
-    const displayCurrency = userSettings.defaultCurrency;
+    // P3: si viene currencyOverride usa esa moneda; si no, la default del usuario.
+    const displayCurrency: Currency =
+      currencyOverride != null ? currencyOverride : userSettings.defaultCurrency;
 
     const yearStr = String(year).padStart(4, '0');
     const months12: string[] = Array.from({ length: 12 }, (_, i) => {
