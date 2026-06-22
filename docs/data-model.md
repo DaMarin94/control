@@ -122,7 +122,8 @@ ReportCardConfig = {
   type: "income-expense" | "by-category",       // tipo de reporte (RF-REP-001)
   year: number,                                 // año que muestra la card
   categoryIds: string[] | null,                 // null = todas las categorías; lista = subconjunto explícito de categoryIds
-  categoryBreakdown?: boolean                    // modo de vista de la card income-expense (RF-REP-006)
+  categoryBreakdown?: boolean,                   // modo de vista de la card income-expense (RF-REP-006)
+  hiddenSeries?: Array<"income" | "expense">     // series ocultas en modo Total (income-expense); omitido = ambas visibles
 }
 ```
 
@@ -130,6 +131,7 @@ ReportCardConfig = {
 - **`year`** — el año que la card grafica; lo cambia la navegación de año embebida del widget.
 - **`categoryIds`** — filtro de categorías de la card. **`null` = todas** (default al crear); una **lista** = subconjunto explícito de `categoryId`s seleccionados. Aplica a ambos tipos (en `income-expense` restringe qué categorías cuentan en los totales; en `by-category`, qué bandas se apilan). Lo que el front manda al endpoint como `categories` deriva de este campo (ver contrato `GET /movements/reports`).
 - **`categoryBreakdown`** (RF-REP-006) — modo de vista **solo de las cards `income-expense`**: `true` = vista "Por categoría" (gastos descompuestos por categoría apilada, reutilizando el array `categories`); `false`/ausente = vista "Total" (dos series agregadas). **Default `false`; ausencia = `false`**. Irrelevante para `by-category` (que no tiene toggle). En el dashboard el modo es **efímero** (estado local) y no usa este campo.
+- **`hiddenSeries`** — series de la card ocultas por la leyenda-filtro: subconjunto de `["income", "expense"]`. **Omitido = ambas visibles.** Solo aplica a `type: "income-expense"` en **modo Total** (`categoryBreakdown` false/ausente); en modo "Por categoría" y en `by-category` la leyenda togglea categorías (`categoryIds`), no series. Puede ocultar **ambas** (canvas vacío). Persistido por card.
 - **Orden del array = orden de despliegue** de las cards en pantalla.
 - **Ausente / vacío = pantalla vacía.** Clave ausente o `reports: []` → `/reportes` muestra solo el recuadro "[+]" (estado vacío inicial, RF-REP-003).
 - **Back-compat / normalización.** Un blob previo **sin** `reports` se interpreta como `[]` (pantalla vacía). La normalización (entradas malformadas, `type` desconocido, `categoryIds` que apunten a categorías inexistentes/eliminadas) es responsabilidad del front; un blob viejo o parcial nunca rompe la pantalla.
@@ -138,6 +140,18 @@ ReportCardConfig = {
 #### `monthListFilters` — filtros por listado de la Vista del mes (RF-VM-006)
 
 Filtros **por sección** de `/mes` (tipo + categoría por cada una de Únicos/Fijos/Cuotas), persistidos por usuario. Shape, semántica y back-compat en §Filtro de categorías → `monthListFilters` (más abajo).
+
+#### `unicosSort` — orden de la sección Únicos (RF-VM-001)
+
+Orden de los movimientos únicos de `/mes` (`"amount"` / `"date"`, default `"amount"`). Estado de UI frontend-puro; el backend no lo interpreta. Detalle en §`unicosSort` (más abajo).
+
+#### `unicosSort` — orden de la sección Únicos de la Vista del mes (RF-VM-001)
+
+```
+unicosSort: "amount" | "date"
+```
+
+- Orden de los movimientos de la sección **Únicos** de `/mes`: `"amount"` (por monto descendente) o `"date"` (por fecha, más reciente primero). **Default `"amount"`** (clave ausente = `"amount"`). Solo aplica a Únicos (Fijos y Cuotas no tienen fecha). Estado de **UI frontend-puro**: el backend **NO lo interpreta** (blob opaco, igual que el resto de las claves). Regla funcional en `requirements.md`, RF-VM-001.
 
 #### `monthCategoryFilter` — filtro de categorías de la Vista del mes (RF-VM-006) — **DEPRECADA**
 
@@ -403,7 +417,14 @@ ReportsMovementsResponse = {
   year: number,                       // el año pedido
   months: ReportMonth[],              // SIEMPRE 12 entradas, ene→dic, en orden; filtradas al set pedido
   categories: ReportCategory[],       // desglose de GASTOS: solo categorías con gasto EXPENSE en el año, dentro del set pedido
+  availableCategories: AvailableCategory[],  // universo de categorías con gasto EXPENSE del año, SIN el filtro; superconjunto de `categories`
   earliestYear: number | null         // año más antiguo con algún movimiento del usuario; NO afectado por el filtro
+}
+
+AvailableCategory = {
+  categoryId: string,
+  name: string,
+  color: string                       // "#rrggbb"
 }
 
 ReportMonth = {
@@ -424,6 +445,7 @@ ReportCategory = {
 
 - **`months` — siempre 12, ene→dic.** Los meses sin datos (incluidos los **futuros** del año en curso) vienen con `incomeCents` / `expenseCents` en **cero**, nunca omitidos. Con filtro de categorías, los totales mensuales suman **solo los movimientos de las categorías pedidas** (un mes sin movimientos en el set queda en cero). El mes de cada movimiento se determina con el mismo bucketeo que el mensual (RN-015): únicos por la zona propia del registro (`AT TIME ZONE`), fijos y cuotas a nivel mes. Para los **fijos**, la proyección respeta la **frecuencia** (un fijo solo se imputa a los meses que dicta su `frequency`, RF-MF-006 / RN-016) y **excluye los meses anulados** (RF-MF-005): un mes con skip no suma a ese mes del año.
 - **`categories` — desglose de gasto (`EXPENSE`), dentro del filtro.** Es el **único** desglose por categoría del contrato y es **solo de gastos** (`EXPENSE`). Una categoría aparece si tuvo gasto en algún mes del año, **está dentro del set pedido** (si hay filtro) e **incluye categorías soft-deleted** con gasto histórico (RF-CAT-004; el desglose no filtra por `deletedAt`). Orden: por **gasto anual total DESC**, desempate por `categoryId` ASC. Alimenta tanto la Forma 2 (`by-category`) como el modo "Por categoría" de la card `income-expense` (RF-REP-006), que desglosa **solo gastos**.
+- **`availableCategories` — universo estable de la leyenda-filtro, SIN el filtro.** Universo de categorías con gasto (`EXPENSE`) del año, computado **ignorando el filtro `categories`** (es un **superconjunto** de `categories`). **Siempre presente**; `[]` si no hay gasto en el año. Incluye categorías **soft-deleted** con gasto histórico (no filtra por `deletedAt`). Orden: por **gasto anual DESC**, desempate por `categoryId` ASC. Es el universo que consume la **leyenda-filtro** de la card en el frontend: no se achica al filtrar (mismo criterio de estabilidad que `earliestYear`), de modo que destildar una categoría no la quita de la leyenda.
 - **Invariante de consistencia.** Para cada mes `i`, la suma de `categories[*].monthlyExpenseCents[i]` **es igual a** `months[i].expenseCents`. El front puede confiar en que las bandas de gasto apiladas por categoría suman exactamente el total de gastos del mes (dentro del set filtrado). **Calculados:** la suma respeta la imputación por **magnitud al bucket del tipo derivado** de RN-019 — un movimiento calculado tiene `type` derivado del signo de su `amountCents` (RN-018), así que un calculado de monto negativo es `EXPENSE` y suma su **magnitud** (`\|amountCents\|`) tanto a `months[i].expenseCents` como a la banda `monthlyExpenseCents[i]` de su categoría, conservando la invariante. Como cada movimiento suma magnitud (nunca resta) al bucket que le corresponde, los totales y las bandas **no pueden quedar negativos** por la presencia de calculados.
 - **`earliestYear` — NO afectado por el filtro.** Año más antiguo con **cualquier** movimiento del usuario (mínimo entre el año del mes local de cualquier único y el año del `startMonth` de cualquier fijo/cuota), **calculado sobre todos los movimientos, ignorando el filtro `categories`**; `null` si el usuario no tiene ningún movimiento. El front lo usa para deshabilitar la navegación ‹ antes del primer año con datos (RF-REP-002); que sea independiente del filtro evita que los límites de navegación salten al filtrar categorías.
 

@@ -42,6 +42,13 @@ export interface ReportsMovementsResponse {
   /** Solo categorías con gasto EXPENSE en el año, dentro del set pedido. Ordenadas por gasto anual total DESC. */
   categories: ReportCategory[];
   /**
+   * Universo ESTABLE de categorías con gasto en el año, SIN aplicar el filtro de categorías.
+   * Superconjunto de `categories`: siempre incluye todas las categorías con gasto del año,
+   * independientemente del filtro activo. Siempre presente (puede ser []). Ordenado por gasto anual DESC.
+   * El front lo usa como universo de la leyenda-filtro (P2_b) en lugar de useCategories.
+   */
+  availableCategories: Array<{ categoryId: string; name: string; color: string }>;
+  /**
    * Año más antiguo con algún movimiento del usuario.
    * null si el usuario no tiene ningún movimiento.
    * NO afectado por el filtro de categorías.
@@ -83,4 +90,13 @@ export interface ReportCardConfig {
    * Solo aplica cuando type === "income-expense". En by-category, ignorado.
    */
   categoryBreakdown?: boolean;
+  /**
+   * Series ocultas en la vista "Total" de la card income-expense (vista A).
+   * Omitido / undefined = ambas visibles (default).
+   * Permite ocultar una o ambas series; si están todas ocultas → canvas vacío
+   * que reutiliza el empty "Sin movimientos en {año}.".
+   * Solo aplica a type === "income-expense" && categoryBreakdown === false.
+   * En by-category e income-expense "Por categoría" usa categoryIds (filtro de categorías).
+   */
+  hiddenSeries?: Array<"income" | "expense">;
 }

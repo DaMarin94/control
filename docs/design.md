@@ -334,6 +334,8 @@ Debajo del área del gráfico, alineada a la izquierda, `margin-top` 14px (separ
 - **Forma 1:** dos ítems — "Ingresos" (swatch `--income`) / "Gastos" (swatch `--expense`).
 - **Forma 2:** un ítem por categoría con gasto en el año, en el mismo orden del apilado (mayor a menor), cada swatch con su `category.color`; sin agrupar ni colapsar.
 
+> **La leyenda es interactiva: es el filtro.** Desde la Ola 2 (P1), la leyenda **no es decorativa** — cada ítem es un toggle clickeable que activa/desactiva su serie (Forma 1 modo Total) o su categoría (Forma 1 modo Por categoría y Forma 2). **Reemplaza** al disparador+popover de categorías embebido, que se elimina de la card. El detalle de estados, a11y y layout interactivo vive en *Leyenda interactiva (la leyenda es el filtro)*, abajo.
+
 #### Tooltip / hover (ambas formas)
 
 - **Cursor de hover:** franja vertical `--accent-soft` translúcida (en barras) o guía vertical `--hair` 1px (en área). El `--accent-soft` acá es fondo de UI (resaltado de interacción), no tiñe montos.
@@ -457,7 +459,64 @@ Heredan el comportamiento ya vigente de la card de reporte; sin tokens nuevos.
 
 > Reutiliza: las **líneas/degradés income/expense** de la Forma 1; los **separadores 1px `--panel`** y el **orden de apilado mayor→menor estable** de la Forma 2; `ChartLegend` y `ChartTooltipContent` (patrón `Form2Tooltip`) tal cual. Aporta: el patrón de **tabs underline neutras** en la cabecera de la card y la **vista B de un único stack de gastos por categoría** (línea de contorno rojo = firma de gasto; bandas = `category.color` identificador).
 
+### Leyenda interactiva (la leyenda es el filtro)
+
+La leyenda del gráfico **es** el filtro. Cada ítem de leyenda es un **toggle clickeable** que muestra/oculta su serie o categoría en el canvas. **Reemplaza** al disparador `FilterButton` + `CategoryFilterPopover` embebido, que se elimina de la cabecera de la card. Aplica **idéntico** en `/reportes` y en la card del Dashboard, y sirve **igual para los tres casos** (mismo componente `ChartLegend` interactivo, distinto contenido):
+
+| Caso | Ítems de la leyenda | Qué togglea cada ítem |
+|---|---|---|
+| **Forma 1 — modo "Total" (vista A)** | dos: **Ingresos** (`--income`) / **Gastos** (`--expense`) | esa serie de área. **No hay filtro de categorías** acá. |
+| **Forma 1 — modo "Por categoría" (vista B)** | una por **categoría** de gasto (swatch `category.color` + nombre), orden del apilado | esa banda del stack |
+| **Forma 2 — by-category** | una por **categoría** de gasto (swatch `category.color` + nombre), orden del apilado | esa banda apilada |
+
+**La lógica de tres estados NO cambia.** El filtro sigue siendo `null`=todas / `[]`=ninguna / lista (subconjunto) para categorías; en Forma 1 Total son dos series independientes que se prenden/apagan. La leyenda solo cambia la **piel** (de decorativa a interactiva) y el **lugar** donde se acciona (deja de haber popover).
+
+#### Anatomía del ítem interactivo
+
+Cada ítem deja de ser un `<div>` y pasa a ser un **`<button type="button">`**. Mantiene el contenido visual del ítem decorativo (swatch 10px radio 3px + etiqueta UI 12.5px/500), pero gana área de hit, padding propio y estados:
+
+- **Caja del botón:** `inline-flex items-center gap-[6px]`, padding `px-[6px] py-[4px]`, radio `--r-chip` 7px, `cursor: pointer`, `transition` de color/opacidad/fondo `0.14s`. El padding agranda el área de hit (el swatch+texto solos son un target chico) y da espacio para el fondo de hover sin que el texto toque el borde. **Margen negativo `-mx-[6px]` en el contenedor de la leyenda** para que el padding del primer/último ítem no desalinee la leyenda respecto del eje del gráfico (el swatch del primer ítem sigue alineado a la izquierda como en la leyenda decorativa).
+- **Swatch:** cuadrado 10px radio 3px, `shrink-0`. Su tratamiento por estado se detalla abajo (es la pieza que más comunica "activo vs. apagado").
+- **Etiqueta:** UI 12.5px/500. Color por estado (abajo). `select-none`. **No** se trunca; la leyenda usa `flex-wrap`.
+
+#### Estados del ítem
+
+Cinco estados; el par crítico es **activo** (incluido en el gráfico) vs. **apagado** (excluido).
+
+- **Activo (reposo) — incluido:** es el estado "encendido" y el default de todos los ítems. Swatch a **color pleno** (`--income`/`--expense`/`category.color`, opacidad 1). Etiqueta `--ink-2` (igual que la leyenda decorativa de hoy). Sin fondo.
+- **Hover (sobre un ítem activo):** fondo `--panel-2`, etiqueta sube a `--ink`. Transición 0.14s. Comunica clickeabilidad sin mover el layout.
+- **Apagado — excluido:** el estado "off". Tres señales simultáneas, ninguna sola alcanza (mismo principio que el ítem anulado de `/mes`):
+  1. **Etiqueta `line-through`** (tachado), color a **`--muted`** (baja un escalón de jerarquía respecto del `--ink-2` activo). Se elige **`line-through` y no `underline`**: el subrayado se confunde con afordancia de link y compite con los underlines de las tabs de la cabecera; el tachado lee inequívocamente como "esto está descartado / fuera del cómputo", coherente con el `line-through` del monto anulado del DS.
+  2. **Swatch a `outline` en vez de relleno:** el swatch apagado **pierde el relleno de color** y queda como un cuadrado con **borde 1.5px del propio color** (`category.color` / `--income` / `--expense`) e interior `--panel` (vacío). Mantiene la identidad del color (sigue siendo "esta" serie/categoría) pero comunica "vacío / no pintado en el gráfico", en eco directo de que su banda/área desapareció del canvas. **No** se atenúa el swatch a gris neutro: perdería la asociación color↔ítem que el usuario necesita para re-activarlo.
+  3. **Opacidad del conjunto a `0.7`** sobre el botón entero (atenúa parejo swatch-outline + etiqueta tachada sin borrarlos). No baja de 0.7 para que el ítem siga siendo legible y re-clickeable.
+- **Hover (sobre un ítem apagado):** mismo fondo `--panel-2`; la etiqueta sube de `--muted` a `--ink-2` (sigue tachada); opacidad del conjunto sube a `0.85`. Comunica "podés volver a activarlo" sin quitar aún el tachado.
+- **Focus (teclado):** ring `--accent-soft` 3px (`focus-visible`, mismo focus ring del DS), radio `--r-chip` 7px. Cromo de interacción — el acento acá es foco, no estado de datos ni monto (no viola reglas duras). Vale igual en activo y apagado.
+- **Active/pressed (clic sostenido):** fondo `--panel-3` (un escalón más que el `--panel-2` del hover), 0.14s. Feedback táctil del toggle.
+
+> **Por qué el swatch va a outline y no se desatura:** el color del swatch es el **identificador** de la serie/categoría (regla dura de color de categoría / semánticos). Si al apagar se volviera gris, el usuario perdería la pista de **cuál** está re-activando. El outline conserva el hue (identidad) y comunica el "off" por la **ausencia de relleno**, espejo de que la banda/área salió del canvas. El `line-through` de la etiqueta refuerza el "off" en el texto. Las dos señales (swatch hueco + label tachada) más la atenuación son redundantes a propósito.
+
+#### A11y — grupo de toggles
+
+La leyenda interactiva es semánticamente un **grupo de controles de dos estados** (cada ítem prende/apaga una serie/categoría), no una sola elección excluyente:
+
+- **Contenedor:** `role="group"` con `aria-label` por caso — **"Filtrar series"** (Forma 1 Total) / **"Filtrar categorías"** (Forma 1 Por categoría y Forma 2). Reemplaza el `aria-label="Leyenda del gráfico"` decorativo actual.
+- **Ítem:** `<button type="button">` con **`aria-pressed`** = `true` (activo/incluido) / `false` (apagado/excluido). El patrón toggle-button (`aria-pressed`) lee mejor que checkboxes acá: el control **es** el ítem visual (swatch+label), no una casilla aparte, y un grupo de toggle buttons es la semántica ARIA canónica de "mostrar/ocultar esta serie".
+- **Texto accesible:** el contenido del botón ya es la etiqueta (nombre de serie/categoría); el swatch va `aria-hidden`. El estado lo comunica `aria-pressed`, no el color (no dependemos del verde/rojo/`category.color` para transmitir on/off a lectores).
+- **Navegación por teclado:** cada ítem es tabbable (es un `<button>`); `Enter`/`Espacio` togglea. No se exige roving-tabindex (no es un `tablist`); es un grupo de botones independientes, cada uno en el orden de tab natural.
+- **Borde "todas apagadas":** apagar el último ítem (todas las categorías off, o ambas series off) deja la leyenda con todos los ítems en estado apagado y el canvas vacío → **el mismo empty "Sin movimientos en {año}."** que ya cubre el filtro vacío (sin error). La leyenda **no se bloquea**: el usuario reactiva clickeando cualquier ítem. No hay un mínimo forzado de "al menos uno encendido".
+
+#### Layout y espaciado al volverse interactiva
+
+- **Posición y separación entre ítems sin cambios estructurales:** la leyenda sigue debajo del canvas, `margin-top` 14px, alineada a la izquierda, `flex-wrap`. La separación visual entre ítems se mantiene en ~16px: como cada ítem ahora trae `px-[6px]` propio, el `gap` del contenedor baja de 16px a **`gap-x-[10px] gap-y-[6px]`** (10 de gap + 6+6 de paddings vecinos ≈ 16 de aire entre swatches, igual densidad percibida que la leyenda decorativa). El `-mx-[6px]` del contenedor compensa el padding de los ítems de los extremos para no perder la alineación izquierda.
+- **Sin línea divisoria ni caja:** la leyenda interactiva **no** gana borde, fondo de grupo ni separador — sigue siendo ítems "al aire", como la decorativa. La interactividad la comunican el cursor, el hover y el focus, no chrome estructural.
+- **Skeleton de carga sin cambios:** durante loading la leyenda sigue mostrando 2–3 chips fantasma (`bg-panel-3 animate-pulse`), inertes; no se renderizan como botones hasta que hay datos.
+- **`prefers-reduced-motion`:** las transiciones de color/fondo/opacidad del toggle son ≤0.14s y sobrias; igual respetan `prefers-reduced-motion` (sin transición). El cambio del canvas al togglear hereda el comportamiento ya vigente (las áreas/barras reaniman su grow salvo reduced-motion).
+
+> Reutiliza: el componente `ChartLegend` (swatch 10px + etiqueta 12.5px/500) ahora en variante interactiva; el `line-through` + atenuación del **ítem anulado de `/mes`** como lenguaje de "fuera del cómputo"; el **focus ring `--accent-soft` 3px** del DS; el **empty "Sin movimientos…"** para el borde de todo apagado. Aporta: el **swatch hueco (outline) como señal de "off"** que preserva la identidad de color, y la semántica de **grupo de toggle buttons (`aria-pressed`)** que hace de la leyenda el filtro, retirando el popover de categorías de la card.
+
 ### Filtro de categorías embebido (checklist en popover)
+
+> **Estado vigente (Ola 2, P1):** este patrón disparador+popover **ya NO se usa en la card de reporte** — en `/reportes` y en el Dashboard el filtro de categorías pasó a ser la **leyenda interactiva** (ver *Leyenda interactiva (la leyenda es el filtro)*, abajo), y el `FilterButton` + `CategoryFilterPopover` se **eliminaron de la cabecera de la card**. El patrón **sigue vigente y se reutiliza** dentro del *Filtro por listado en `/mes`* (bloque categorías del popover de sección), donde sí hay un disparador. La lógica de tres estados (`null`=todas / `[]`=ninguna / lista) **no cambia**; lo que cambia es la piel y el lugar donde se acciona en la card.
 
 Control reutilizable para filtrar por categorías sin tapar el contenido. Botón disparador + popover con checklist.
 
@@ -498,6 +557,42 @@ Cada sección tiene **dos controles propios**:
 **Responsive (≤940px).** El disparador es icon-only (no crece de ancho), así que entra en la fila igual que en desktop; el popover (260px, portaleado, anclado a la derecha) no depende del ancho de la sección. No hay cambio de forma en ≤940px más allá del re-anclaje natural del popover al disparador.
 
 > Reutiliza el *Filtro de categorías embebido* (popover de categorías) y el lenguaje del punto indicador `--accent` del `FilterButton`. Aporta el **triple switch de tipo** (segmented neutro con semánticos solo en el texto del seleccionado) y la decisión de **alojar los dos controles tras un único disparador en la cabecera del acordeón, fuera del `<button>` disclosure**.
+
+### Control de orden de la sección Únicos (toggle monto ↔ fecha)
+
+Control **ligero/disimulado** que vive **solo en la cabecera de la sección Únicos** de `/mes`, hermano del `SectionFilterButton` (*Filtros por listado en `/mes`*, arriba). Únicos es la **única** sección con columna fecha ("DD Mmm"); Fijos y Cuotas no tienen día, así que **no llevan este control** (no se renderiza en sus cabeceras). El criterio de orden por defecto del listado es **magnitud `|monto| DESC`** (el mismo del backend, ver *Metadatos de relación…*); este control permite **alternar** ese orden con un orden **por fecha**.
+
+**Es un toggle de dos órdenes, no un menú.** Dos estados mutuamente excluyentes: **(a) por monto** (`|monto| DESC`, el default de la sección) y **(b) por fecha**. No hay un tercer estado ni dirección configurable por el usuario: cada orden tiene **una** dirección fija (ver default abajo). Un solo clic alterna entre a↔b.
+
+**Default de la dirección por fecha — descendente (más reciente primero, `fecha DESC`).** Justificación: en un diario de gastos del mes en curso, lo último cargado/gastado es lo que el usuario acaba de hacer y lo que más consulta; "lo más nuevo arriba" es la convención de un feed/registro temporal. Desempate dentro del mismo día: `|monto| DESC` (cae al criterio base), para que dos movimientos del mismo día queden ordenados de forma estable y predecible. El orden **por monto** conserva su dirección histórica (`DESC`, mayor magnitud arriba).
+
+**Ubicación en la fila.** Se inserta **a la izquierda del `SectionFilterButton`**, ambos pegados al borde derecho junto al subtotal. Orden de la fila en Únicos: `[handle] [chevron] [rótulo] [pill] [divisor flex-1] [control de orden] [filtro] [subtotal]`. Aire entre los dos disparadores: `gap-1` (4px), para que se lean como un par de affordances de UI sin fundirse. Como el `SectionFilterButton`, se renderiza **fuera del `<button>` disclosure** (hermano), con `stopPropagation` en el clic para no disparar el colapso. En Fijos/Cuotas la fila no incluye este slot (queda solo `[… divisor] [filtro] [subtotal]`).
+
+**Tratamiento visual — mismo molde icon-only que el `SectionFilterButton`.** Botón ghost icon-only del DS, **sin rótulo de texto** (mismo argumento: poco lugar en la fila y la sección ya está rotulada; el par con el filtro debe leerse parejo). Padding `px-[7px] py-[5px]`, radio `--r-ctl`, transición `colors` 0.14s.
+
+- **Ícono — un único glifo que comunica el orden vigente** (igual que el chevron del acordeón rota para comunicar estado, acá el glifo cambia según el orden activo, no se acumulan dos íconos):
+  - **Orden por monto (default):** `ArrowDownWideNarrow` (lucide, 15px, `stroke-width 2`, `aria-hidden`). Las barras decrecientes leen "ordenado de mayor a menor" (la magnitud).
+  - **Orden por fecha:** `ArrowDownNarrowWide` (lucide, 15px) — barras crecientes, par visual del anterior, que lee "otro criterio de orden". (Alternativa aceptable si frontend prefiere reforzar el dominio temporal: `CalendarArrowDown`. Canónico: el par `ArrowDownWideNarrow` ↔ `ArrowDownNarrowWide`, porque mantiene la familia "flecha de orden" y evita sugerir un date-picker.)
+
+**Estado activo / no-default — mismo lenguaje del punto indicador del filtro.** El **default es "por monto"**; "por fecha" es el estado **≠ default**. Cuando el orden es **por fecha** (no-default), se aplican las dos señales del `SectionFilterButton`: (1) el ícono sube a `--ink` en reposo, y (2) aparece el **punto indicador 6px `--accent`** como badge en la esquina superior derecha (offset `-top-[2px] -right-[2px]`, borde `2px --panel`, `pointer-events-none`, `aria-hidden`) — cromo de UI, no monto. En el estado **por monto (default)** no hay punto y el ícono está en `--muted` (reposo). Así, de un vistazo, dos puntos `--accent` posibles en la cabecera de Únicos comunican "esta sección está modulada" (uno por orden ≠ default, otro por filtro activo), con el mismo vocabulario.
+
+**Estados (reposo / hover / activo-abierto-no aplica / focus)** — idénticos al `SectionFilterButton`, salvo que este es un toggle sin popover (no tiene estado "abierto"):
+
+- **Reposo (orden por monto = default):** ícono `--muted`, sin fondo, sin punto.
+- **Reposo (orden por fecha ≠ default):** ícono `--ink`, sin fondo, **con** punto `--accent`.
+- **Hover (cualquier orden):** ícono → `--ink`, fondo `--panel-2`. Transición 0.14s.
+- **Active (`:active`, mientras se presiona):** fondo `--panel-3` (consistente con el active de los controles del DS).
+- **Focus (teclado):** ring `--accent-soft` 3px (`focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]`), sin outline.
+
+**a11y.** Es un **botón toggle**, no un grupo: `<button type="button">` con `aria-pressed` reflejando "por fecha" (`aria-pressed={true}` cuando el orden es por fecha, `false` cuando es por monto). `aria-label` **dinámico que anuncia la acción del próximo clic**: en orden por monto → `aria-label="Ordenar por fecha"`; en orden por fecha → `aria-label="Ordenar por monto"`. (No usa `aria-haspopup` ni `aria-expanded` — no abre overlay.) El punto indicador y los íconos son `aria-hidden`; el estado lo comunican `aria-pressed` + el label.
+
+**Comportamiento en modo orden — se oculta, igual que el filtro.** En modo orden de secciones la cabecera está dedicada a arrastrar; el control de orden **no se renderiza** (mismo criterio que el `SectionFilterButton`). Vuelve al salir del modo ("Listo").
+
+**Persistencia / scope.** El orden elegido es **estado de UI de la sección Únicos**; que persista entre navegaciones de mes o entre sesiones es **decisión funcional**, no visual — fuera del scope de esta guía (a definir por análisis si se requiere). Visualmente, el control refleja el orden vigente sea cual sea su origen.
+
+**Responsive (≤940px).** Icon-only, no crece de ancho: entra en la fila igual que en desktop, en par con el filtro. Sin cambio de forma.
+
+> Reutiliza el molde icon-only y el lenguaje del punto indicador `--accent` del `SectionFilterButton`. Aporta el patrón **toggle de orden** (un glifo que muta según el criterio activo, `aria-pressed`, sin popover) y la regla de que **solo Únicos** (sección con columna fecha) lo lleva.
 
 ### Picker de color de categoría (matriz de swatches)
 

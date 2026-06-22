@@ -957,4 +957,158 @@ describe('MovementsService — getReportsMovements', () => {
       expect(mockRepo.getEarliestYear).toHaveBeenCalledTimes(1);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // availableCategories (universo estable, sin filtro)
+  // -------------------------------------------------------------------------
+
+  describe('availableCategories', () => {
+    it('sin filtro: availableCategories == categories (mismas entradas, solo shape liviano)', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_A, totalCents: BigInt(1000) }),
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6', totalCents: BigInt(2000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null);
+
+      expect(result.availableCategories).toHaveLength(2);
+      // Shape liviano: solo categoryId, name, color (sin monthlyExpenseCents)
+      expect(result.availableCategories[0]).toEqual(
+        expect.objectContaining({ categoryId: expect.any(String), name: expect.any(String), color: expect.any(String) }),
+      );
+      expect((result.availableCategories[0] as any).monthlyExpenseCents).toBeUndefined();
+    });
+
+    it('con filtro activo: availableCategories NO se achica (incluye categorías fuera del filtro)', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_A, totalCents: BigInt(1000) }),
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6', totalCents: BigInt(2000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, [CAT_A]);
+
+      // categories se achica al filtro (solo CAT_A)
+      expect(result.categories).toHaveLength(1);
+      expect(result.categories[0].categoryId).toBe(CAT_A);
+
+      // availableCategories sigue teniendo ambas
+      expect(result.availableCategories).toHaveLength(2);
+      const ids = result.availableCategories.map((c) => c.categoryId);
+      expect(ids).toContain(CAT_A);
+      expect(ids).toContain(CAT_B);
+    });
+
+    it('filtro vacío []: categories vacío pero availableCategories tiene las del año', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_A, totalCents: BigInt(1000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, []);
+
+      expect(result.categories).toHaveLength(0);
+      expect(result.availableCategories).toHaveLength(1);
+      expect(result.availableCategories[0].categoryId).toBe(CAT_A);
+    });
+
+    it('availableCategories orden: mayor gasto anual (sin filtro) DESC, desempate categoryId ASC', async () => {
+      // CAT_B gasta más que CAT_A sin filtro
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_A, totalCents: BigInt(1000) }),
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6', totalCents: BigInt(5000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      // Filtrar solo CAT_A → categories tiene 1, pero availableCategories ordena por gasto real
+      const result = await service.getReportsMovements(USER_A, 2026, [CAT_A]);
+
+      expect(result.availableCategories[0].categoryId).toBe(CAT_B); // 5000 > 1000
+      expect(result.availableCategories[1].categoryId).toBe(CAT_A);
+    });
+
+    it('availableCategories desempate por categoryId ASC cuando gasto es igual', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', categoryId: CAT_A, totalCents: BigInt(2000) }),
+        makeUnicoRow({ monthKey: '2026-01', categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6', totalCents: BigInt(2000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null);
+
+      // cat-a-id < cat-b-id léxicamente → CAT_A primero
+      expect(result.availableCategories[0].categoryId).toBe(CAT_A);
+      expect(result.availableCategories[1].categoryId).toBe(CAT_B);
+    });
+
+    it('availableCategories: fijos EXPENSE del año sin filtro suman al universo', async () => {
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 3000, startMonth: '2026-01', deletedFrom: null, categoryId: CAT_A, type: 'EXPENSE' as any }),
+        makeFijo({ id: 'fijo-002', amountCents: 9000, startMonth: '2026-01', deletedFrom: null, categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6', type: 'EXPENSE' as any }),
+      ]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      // Filtrar solo CAT_A
+      const result = await service.getReportsMovements(USER_A, 2026, [CAT_A]);
+
+      // availableCategories debe tener ambas, ordenadas por gasto anual sin filtro
+      expect(result.availableCategories).toHaveLength(2);
+      // CAT_B gasta 9000*12=108000, CAT_A gasta 3000*12=36000 → CAT_B primero
+      expect(result.availableCategories[0].categoryId).toBe(CAT_B);
+      expect(result.availableCategories[1].categoryId).toBe(CAT_A);
+    });
+
+    it('availableCategories: cuotas EXPENSE del año sin filtro suman al universo', async () => {
+      setupEmptyUnicosMock();
+      setupEmptyFijosMock();
+      mockRepo.getAllCuotasForAnnual.mockResolvedValue([
+        makeCuota({ amountCents: 500, totalInstallments: 6, startMonth: '2026-01', categoryId: CAT_A, type: 'EXPENSE' as any }),
+        makeCuota({ id: 'grupo-002', amountCents: 2000, totalInstallments: 6, startMonth: '2026-01', categoryId: CAT_B, type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      // Filtrar solo CAT_A
+      const result = await service.getReportsMovements(USER_A, 2026, [CAT_A]);
+
+      // availableCategories tiene ambas
+      expect(result.availableCategories).toHaveLength(2);
+      // CAT_B gasta 2000*6=12000, CAT_A gasta 500*6=3000 → CAT_B primero
+      expect(result.availableCategories[0].categoryId).toBe(CAT_B);
+      expect(result.availableCategories[1].categoryId).toBe(CAT_A);
+    });
+
+    it('sin movimientos en el año: availableCategories vacío', async () => {
+      setupEmptyMocks();
+
+      const result = await service.getReportsMovements(USER_A, 2026, null);
+
+      expect(result.availableCategories).toEqual([]);
+    });
+
+    it('categorías INCOME no aparecen en availableCategories (solo EXPENSE)', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_A, type: 'INCOME', totalCents: BigInt(5000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null);
+
+      expect(result.availableCategories).toHaveLength(0);
+    });
+  });
 });

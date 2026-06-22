@@ -220,11 +220,12 @@ Endpoint **agregado** para los reportes (RF-REP-001/002/005), scopeado por `user
   - **cuotas** por `startMonth <= mes < addMonths(startMonth, totalInstallments)`.
 - **`categories[*]`.** El desglose por categoría **no filtra por `Category.deletedAt`** (incluye soft-deleted con gasto histórico, igual que el mensual). Orden por gasto anual total DESC, desempate por `categoryId` ASC.
 - **`earliestYear`.** Mínimo entre el año del mes local de cualquier único (`AT TIME ZONE`) y el año del `startMonth` de cualquier fijo o cuota; `null` si el usuario no tiene movimientos.
+- **`availableCategories`.** Universo de categorías con gasto `EXPENSE` del año, computado **independiente del filtro `categories`** (igual que `earliestYear`): es el superconjunto estable que alimenta la leyenda-filtro del front. Incluye soft-deleted con gasto histórico; orden por gasto anual DESC, desempate `categoryId` ASC. Shape en `docs/data-model.md`, §Contrato de serie de reportes.
 
 #### Filtro de categorías (RF-REP-005)
 
 - **Afecta Forma 1 y Forma 2.** El filtro restringe qué movimientos cuentan: en `months[*]` (Forma 1: `incomeCents`/`expenseCents`) **y** en `categories[*]` (Forma 2: las bandas apiladas). Una categoría omitida no aparece en ninguna de las dos.
-- **`earliestYear` IGNORA el filtro** — se calcula sobre **todos** los movimientos del usuario, para que los límites de navegación de año (RF-REP-002) no salten al cambiar el filtro.
+- **`earliestYear` y `availableCategories` IGNORAN el filtro** — se calculan sobre **todos** los movimientos del usuario (del año, en el caso de `availableCategories`), para que ni los límites de navegación de año (RF-REP-002) ni la leyenda-filtro salten al cambiar el filtro.
 - **Filtrado in-memory, NO en SQL/ORM:** se trae el universo de movimientos del año y se filtra en JS con un **`Set` de `categoryId`s** pedidos (omitido = sin filtrar). El invariante `SUM(bandas por categoría) == expenseCents del mes` **se mantiene con el filtro activo** (ambos lados se computan sobre el mismo conjunto filtrado).
 
 ## Movimientos fijos (RecurringModule)

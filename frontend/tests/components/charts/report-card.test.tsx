@@ -100,6 +100,10 @@ const mockData: ReportsMovementsResponse = {
       monthlyExpenseCents: Array.from({ length: 12 }, (_, i) => i < 6 ? 10000 : 0),
     },
   ],
+  availableCategories: [
+    { categoryId: "cat-1", name: "Alimentación", color: "#4F86C6" },
+    { categoryId: "cat-2", name: "Transporte", color: "#E07B54" },
+  ],
   earliestYear: 2025,
 };
 
@@ -111,6 +115,7 @@ const emptyData: ReportsMovementsResponse = {
     expenseCents: 0,
   })),
   categories: [],
+  availableCategories: [],
   earliestYear: null,
 };
 
@@ -177,9 +182,24 @@ describe("ReportCard — cabecera", () => {
     expect(screen.getByRole("button", { name: /año siguiente/i })).toBeInTheDocument();
   });
 
-  it("muestra el botón de filtro de categorías", () => {
+  it("la leyenda-filtro es un group de toggle buttons (no hay botón 'Filtrar categorías' aparte)", () => {
+    // Ola 2: el FilterButton y CategoryFilterPopover fueron eliminados de la card.
+    // La leyenda interactiva (ChartLegend) ES el filtro.
+    // En la vista "Total" de income-expense, la leyenda es un role="group" aria-label="Filtrar series"
+    // con un button aria-pressed por cada serie (Ingresos / Gastos).
     renderCard({ type: "income-expense" });
-    expect(screen.getByRole("button", { name: /filtrar categorías/i })).toBeInTheDocument();
+
+    // No debe existir un botón suelto "Filtrar categorías"
+    expect(screen.queryByRole("button", { name: /^filtrar categorías$/i })).not.toBeInTheDocument();
+
+    // En cambio, la leyenda de la vista Total expone un grupo "Filtrar series"
+    expect(screen.getByRole("group", { name: /filtrar series/i })).toBeInTheDocument();
+
+    // Y los ítems de la leyenda son botones con aria-pressed
+    const ingresoBtn = screen.getByRole("button", { name: "Ingresos" });
+    const gastosBtn = screen.getByRole("button", { name: "Gastos" });
+    expect(ingresoBtn).toHaveAttribute("aria-pressed", "true");
+    expect(gastosBtn).toHaveAttribute("aria-pressed", "true");
   });
 
   it("NO muestra el botón quitar cuando removable=false", () => {

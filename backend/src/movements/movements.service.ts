@@ -56,12 +56,23 @@ export interface ReportCategory {
 }
 
 /**
+ * Shape de una categoría disponible (universo estable del año, SIN aplicar filtro).
+ * Metadata liviana: sin breakdown mensual.
+ */
+export interface AvailableCategory {
+  categoryId: string;
+  name: string;
+  color: string;
+}
+
+/**
  * Shape completo de la respuesta de GET /movements/reports.
  */
 export interface ReportsMovementsResponse {
   year: number;
   months: ReportMonth[];
   categories: ReportCategory[];
+  availableCategories: AvailableCategory[];
   earliestYear: number | null;
 }
 
@@ -251,12 +262,16 @@ export class MovementsService {
 
     const catMeta = new Map<string, AnnualCategoryMeta>();
 
+    // Universo estable de categorías: calculado SIN aplicar filterSet.
+    // Se usa para poblar availableCategories en la respuesta.
+    const catMetaAll = new Map<string, AnnualCategoryMeta>();
+    // Gasto anual por categoría SIN filtro (para ordenar availableCategories).
+    const annualExpenseAll = new Map<string, number>();
+
     // 1. Únicos
     const unicosRows = await this.repo.getAnnualUnicosAggregated(userId, year);
 
     for (const row of unicosRows) {
-      if (filterSet !== null && !filterSet.has(row.categoryId)) continue;
-
       const idx = monthIndex(row.monthKey);
       if (idx < 0 || idx > 11) continue;
 
@@ -271,6 +286,23 @@ export class MovementsService {
         displayCurrency,
         pivotRates,
       );
+
+      // Acumular en el universo estable (sin filtro) para EXPENSE
+      if (row.type === 'EXPENSE') {
+        if (!catMetaAll.has(row.categoryId)) {
+          catMetaAll.set(row.categoryId, {
+            categoryId: row.categoryId,
+            name: row.categoryName,
+            color: row.categoryColor,
+          });
+        }
+        annualExpenseAll.set(
+          row.categoryId,
+          (annualExpenseAll.get(row.categoryId) ?? 0) + cents,
+        );
+      }
+
+      if (filterSet !== null && !filterSet.has(row.categoryId)) continue;
 
       if (row.type === 'INCOME') {
         agg[idx].incomeCents += cents;
@@ -372,8 +404,6 @@ export class MovementsService {
 
       // Procesar fijos normales
       for (const fijo of normalesForAnnual) {
-        if (filterSet !== null && !filterSet.has(fijo.categoryId)) continue;
-
         const inRange =
           fijo.startMonth <= mes &&
           (fijo.deletedFrom === null || fijo.deletedFrom > mes);
@@ -390,6 +420,23 @@ export class MovementsService {
           displayCurrency,
           pivotRates,
         );
+
+        // Acumular en el universo estable (sin filtro) para EXPENSE
+        if (fijo.type === 'EXPENSE') {
+          if (!catMetaAll.has(fijo.categoryId)) {
+            catMetaAll.set(fijo.categoryId, {
+              categoryId: fijo.categoryId,
+              name: fijo.categoryName,
+              color: fijo.categoryColor,
+            });
+          }
+          annualExpenseAll.set(
+            fijo.categoryId,
+            (annualExpenseAll.get(fijo.categoryId) ?? 0) + convertedAmount,
+          );
+        }
+
+        if (filterSet !== null && !filterSet.has(fijo.categoryId)) continue;
 
         if (fijo.type === 'INCOME') {
           agg[i].incomeCents += convertedAmount;
@@ -410,8 +457,6 @@ export class MovementsService {
 
       // Procesar calculados de fijo (Fase 1.1.7)
       for (const calc of calculadosDeFijoAnual) {
-        if (filterSet !== null && !filterSet.has(calc.categoryId)) continue;
-
         const inRange =
           calc.startMonth <= mes &&
           (calc.deletedFrom === null || calc.deletedFrom > mes);
@@ -442,6 +487,23 @@ export class MovementsService {
           pivotRates,
         );
 
+        // Acumular en el universo estable (sin filtro) para EXPENSE
+        if (derivedType === MovementType.EXPENSE) {
+          if (!catMetaAll.has(calc.categoryId)) {
+            catMetaAll.set(calc.categoryId, {
+              categoryId: calc.categoryId,
+              name: calc.categoryName,
+              color: calc.categoryColor,
+            });
+          }
+          annualExpenseAll.set(
+            calc.categoryId,
+            (annualExpenseAll.get(calc.categoryId) ?? 0) + magnitude,
+          );
+        }
+
+        if (filterSet !== null && !filterSet.has(calc.categoryId)) continue;
+
         if (derivedType === MovementType.INCOME) {
           agg[i].incomeCents += magnitude;
         } else {
@@ -463,8 +525,6 @@ export class MovementsService {
       // El rango ya está autolimitado (1 mes), así que el inRange garantiza que solo aparece
       // en el mes del único. No hay skip (los únicos no tienen skip).
       for (const calc of calculadosDeUnicoAnual) {
-        if (filterSet !== null && !filterSet.has(calc.categoryId)) continue;
-
         const inRange =
           calc.startMonth <= mes &&
           (calc.deletedFrom === null || calc.deletedFrom > mes);
@@ -492,6 +552,23 @@ export class MovementsService {
           pivotRates,
         );
 
+        // Acumular en el universo estable (sin filtro) para EXPENSE
+        if (derivedType === MovementType.EXPENSE) {
+          if (!catMetaAll.has(calc.categoryId)) {
+            catMetaAll.set(calc.categoryId, {
+              categoryId: calc.categoryId,
+              name: calc.categoryName,
+              color: calc.categoryColor,
+            });
+          }
+          annualExpenseAll.set(
+            calc.categoryId,
+            (annualExpenseAll.get(calc.categoryId) ?? 0) + magnitude,
+          );
+        }
+
+        if (filterSet !== null && !filterSet.has(calc.categoryId)) continue;
+
         if (derivedType === MovementType.INCOME) {
           agg[i].incomeCents += magnitude;
         } else {
@@ -512,8 +589,6 @@ export class MovementsService {
       // Procesar calculados de cuota (Fase 1.1.7.ext)
       // El rango on-the-fly del grupo limita los meses de aparición.
       for (const calc of calculadosDeCuotaAnual) {
-        if (filterSet !== null && !filterSet.has(calc.categoryId)) continue;
-
         const inRange =
           calc.startMonth <= mes &&
           (calc.deletedFrom === null || calc.deletedFrom > mes);
@@ -547,6 +622,23 @@ export class MovementsService {
           pivotRates,
         );
 
+        // Acumular en el universo estable (sin filtro) para EXPENSE
+        if (derivedType === MovementType.EXPENSE) {
+          if (!catMetaAll.has(calc.categoryId)) {
+            catMetaAll.set(calc.categoryId, {
+              categoryId: calc.categoryId,
+              name: calc.categoryName,
+              color: calc.categoryColor,
+            });
+          }
+          annualExpenseAll.set(
+            calc.categoryId,
+            (annualExpenseAll.get(calc.categoryId) ?? 0) + magnitude,
+          );
+        }
+
+        if (filterSet !== null && !filterSet.has(calc.categoryId)) continue;
+
         if (derivedType === MovementType.INCOME) {
           agg[i].incomeCents += magnitude;
         } else {
@@ -569,8 +661,6 @@ export class MovementsService {
     const cuotas = await this.repo.getAllCuotasForAnnual(userId);
 
     for (const grupo of cuotas) {
-      if (filterSet !== null && !filterSet.has(grupo.categoryId)) continue;
-
       const endMonth = addMonths(grupo.startMonth, grupo.totalInstallments);
 
       for (let i = 0; i < 12; i++) {
@@ -587,6 +677,23 @@ export class MovementsService {
           displayCurrency,
           pivotRates,
         );
+
+        // Acumular en el universo estable (sin filtro) para EXPENSE
+        if (grupo.type === 'EXPENSE') {
+          if (!catMetaAll.has(grupo.categoryId)) {
+            catMetaAll.set(grupo.categoryId, {
+              categoryId: grupo.categoryId,
+              name: grupo.categoryName,
+              color: grupo.categoryColor,
+            });
+          }
+          annualExpenseAll.set(
+            grupo.categoryId,
+            (annualExpenseAll.get(grupo.categoryId) ?? 0) + convertedAmount,
+          );
+        }
+
+        if (filterSet !== null && !filterSet.has(grupo.categoryId)) continue;
 
         if (grupo.type === 'INCOME') {
           agg[i].incomeCents += convertedAmount;
@@ -646,6 +753,14 @@ export class MovementsService {
     // 6. Año más antiguo (ignora el filtro)
     const earliestYear = await this.repo.getEarliestYear(userId);
 
+    // 7. Universo estable de categorías (sin filtro), ordenado por gasto anual DESC, desempate categoryId ASC
+    const availableCategories: AvailableCategory[] = Array.from(catMetaAll.values()).sort((a, b) => {
+      const totalA = annualExpenseAll.get(a.categoryId) ?? 0;
+      const totalB = annualExpenseAll.get(b.categoryId) ?? 0;
+      if (totalB !== totalA) return totalB - totalA;
+      return a.categoryId.localeCompare(b.categoryId);
+    });
+
     this.logger.debug(
       {
         userId,
@@ -655,6 +770,7 @@ export class MovementsService {
           (m) => m.incomeCents > 0 || m.expenseCents > 0,
         ).length,
         categoriesCount: categoriesResult.length,
+        availableCategoriesCount: availableCategories.length,
         earliestYear,
       },
       'Serie de reportes de movimientos calculada',
@@ -664,6 +780,7 @@ export class MovementsService {
       year,
       months: monthsResult,
       categories: categoriesResult,
+      availableCategories,
       earliestYear,
     };
   }

@@ -37,6 +37,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, ArrowUpDown, Check } from "lucide-react";
+import { SectionSortButton } from "@/components/ui/section-sort-button";
 import {
   MonthJumpPanel,
   MonthJumpTriggerDesktop,
@@ -83,7 +84,7 @@ import {
   nextMonth,
   getCurrentMonth,
 } from "@/lib/format";
-import { sumMovementTotals, groupSubtotalCents } from "@/lib/movements";
+import { sumMovementTotals, groupSubtotalCents, sortUnicosBySort } from "@/lib/movements";
 import type { MovementItem } from "@/types/movement";
 import type { Transaction } from "@/types/transaction";
 import type { Recurring } from "@/types/recurring";
@@ -93,6 +94,7 @@ import type {
   MonthSectionsPreferences,
   MonthListFilters,
   MonthListFilterState,
+  UnicosSort,
 } from "@/types/auth";
 
 // ─── Constantes de sección ────────────────────────────────────────────────────
@@ -190,6 +192,17 @@ function normalizeMonthListFilters(raw: unknown): MonthListFilters {
     fijos: normalizeSection(r.fijos),
     cuotas: normalizeSection(r.cuotas),
   };
+}
+
+// ─── Normalización de unicosSort (Ola 2, Sub-fase C) ─────────────────────────
+
+/**
+ * Normaliza el valor de unicosSort del blob de preferencias.
+ * Back-compat: ausente o inválido → "amount" (default).
+ */
+function normalizeUnicosSort(raw: unknown): UnicosSort {
+  if (raw === "amount" || raw === "date") return raw;
+  return "amount";
 }
 
 // ─── Mapeo MovementItem → Transaction (únicos) ─────────────────────────────────
@@ -372,6 +385,22 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
     listFiltersRef.current = listFilters;
   }, [listFilters]);
 
+  // ── Orden de únicos (Ola 2, Sub-fase C) ──────────────────────────────────
+
+  // Normalizar desde preferencias (back-compat: ausente → "amount")
+  const [unicosSort, setUnicosSort] = useState<UnicosSort>(
+    normalizeUnicosSort(preferences.unicosSort),
+  );
+
+  // Sincronizar con preferencias cuando lleguen del servidor (solo primer mount)
+  const [hasSyncedSort, setHasSyncedSort] = useState(false);
+  useEffect(() => {
+    if (!hasSyncedSort && preferences.unicosSort !== undefined) {
+      setUnicosSort(normalizeUnicosSort(preferences.unicosSort));
+      setHasSyncedSort(true);
+    }
+  }, [preferences.unicosSort, hasSyncedSort]);
+
   // ── Configuración de sensores dnd-kit ────────────────────────────────────
 
   const sensors = useSensors(
@@ -390,9 +419,46 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   const rawFijos = data?.movements.fijos ?? [];
   const rawCuotas = data?.movements.cuotas ?? [];
 
+  // ── Universo de categorías por sección (P2_b, Ola 2) ─────────────────────
+  // Derivado de los movimientos CRUDOS (antes de applyFilter) para que la lista
+  // sea estable y no se achique al filtrar. Deduplicado por category.id.
+  // Solo categorías PRESENTES en la sección; NO usa useCategories().
+
+  function extractSectionCategories(
+    items: MovementItem[],
+  ): { id: string; name: string; color: string }[] {
+    const seen = new Set<string>();
+    const result: { id: string; name: string; color: string }[] = [];
+    for (const item of items) {
+      if (!seen.has(item.category.id)) {
+        seen.add(item.category.id);
+        result.push({
+          id: item.category.id,
+          name: item.category.name,
+          color: item.category.color,
+        });
+      }
+    }
+    return result;
+  }
+
+  const unicosCategories = extractSectionCategories(rawUnicos);
+  const fijosCategories = extractSectionCategories(rawFijos);
+  const cuotasCategories = extractSectionCategories(rawCuotas);
+
+  const sectionCategoriesMap: Record<
+    MonthSectionKey,
+    { id: string; name: string; color: string }[]
+  > = {
+    unicos: unicosCategories,
+    fijos: fijosCategories,
+    cuotas: cuotasCategories,
+  };
+
   // ── Filtrado en el frontend (Fase 1.2.1) ─────────────────────────────────
 
-  const unicos = applyFilter(rawUnicos, listFilters.unicos);
+  // El orden de únicos se aplica DESPUÉS del filtro (Ola 2, Sub-fase C).
+  const unicos = sortUnicosBySort(applyFilter(rawUnicos, listFilters.unicos), unicosSort);
   const fijos = applyFilter(rawFijos, listFilters.fijos);
   const cuotas = applyFilter(rawCuotas, listFilters.cuotas);
 
@@ -556,6 +622,20 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
     },
     [preferences, setPreferences],
   );
+
+  // ── Toggle orden de únicos (Ola 2, Sub-fase C) ───────────────────────────
+
+  const handleToggleUnicosSort = useCallback(() => {
+    setUnicosSort((prev) => {
+      const next: UnicosSort = prev === "amount" ? "date" : "amount";
+      // Persistir en background (merge manual con el resto de preferencias)
+      void setPreferences({
+        ...preferences,
+        unicosSort: next,
+      });
+      return next;
+    });
+  }, [preferences, setPreferences]);
 
   // ── Modo orden (Fase 1.1.4 P6, revisado Fase 1.2.0) ──────────────────────
 
@@ -922,14 +1002,25 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                         isOrderMode={isOrderMode}
                         isActive={activeId === key}
                         filterSlot={
-                          <SectionFilterButton
-                            sectionKey={key}
-                            sectionLabel={label}
-                            selectedType={filter.type}
-                            selectedCategories={filter.categories}
-                            onTypeChange={(type) => handleSectionTypeChange(key, type)}
-                            onCategoriesChange={(ids) => handleSectionCategoriesChange(key, ids)}
-                          />
+                          // Únicos: [control de orden] [filtro] (gap-1 entre ambos)
+                          // Fijos / Cuotas: solo [filtro] (sin control de orden)
+                          <div className="flex items-center gap-1">
+                            {key === "unicos" && (
+                              <SectionSortButton
+                                sort={unicosSort}
+                                onToggle={handleToggleUnicosSort}
+                              />
+                            )}
+                            <SectionFilterButton
+                              sectionKey={key}
+                              sectionLabel={label}
+                              sectionCategories={sectionCategoriesMap[key]}
+                              selectedType={filter.type}
+                              selectedCategories={filter.categories}
+                              onTypeChange={(type) => handleSectionTypeChange(key, type)}
+                              onCategoriesChange={(ids) => handleSectionCategoriesChange(key, ids)}
+                            />
+                          </div>
                         }
                       >
                         {/* Contenido de la sección: lista o empty inline */}

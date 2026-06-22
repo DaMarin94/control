@@ -56,3 +56,33 @@ export function groupSubtotalCents(items: MovementItem[]): number {
   const { expense, income } = sumMovementTotals(items);
   return income - expense;
 }
+
+/**
+ * Ordena los ítems únicos según el criterio elegido (client-side, Ola 2 Sub-fase C).
+ * Se aplica DESPUÉS del filtro, sobre el array ya filtrado.
+ *
+ * - "amount" (default): |amountCents| DESC (mayor magnitud arriba).
+ *   El backend ya entrega los únicos en este orden; devolvemos una copia sin cambiar.
+ * - "date": occurredAt DESC (más reciente arriba); desempate por |amountCents| DESC.
+ *   `occurredAt` es un string ISO 8601 presente en todos los MovementItem únicos.
+ *
+ * No muta el array original — devuelve siempre una copia.
+ */
+export function sortUnicosBySort(
+  items: MovementItem[],
+  sort: "amount" | "date",
+): MovementItem[] {
+  if (sort === "amount") {
+    // Orden original del backend; devolver copia sin re-ordenar.
+    return [...items];
+  }
+  // sort === "date": occurredAt DESC, desempate |amountCents| DESC
+  return [...items].sort((a, b) => {
+    const dateA = a.occurredAt ?? "";
+    const dateB = b.occurredAt ?? "";
+    if (dateA > dateB) return -1;
+    if (dateA < dateB) return 1;
+    // Mismo día: |amountCents| DESC
+    return Math.abs(b.amountCents) - Math.abs(a.amountCents);
+  });
+}

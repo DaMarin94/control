@@ -54,6 +54,10 @@ const mockReportsResponse: ReportsMovementsResponse = {
       monthlyExpenseCents: Array.from({ length: 12 }, (_, i) => i < 6 ? 10000 : 0),
     },
   ],
+  availableCategories: [
+    { categoryId: "cat-1", name: "Alimentación", color: "#4F86C6" },
+    { categoryId: "cat-2", name: "Transporte", color: "#E07B54" },
+  ],
   earliestYear: 2025,
 };
 
@@ -65,6 +69,7 @@ const mockEmptyReportsResponse: ReportsMovementsResponse = {
     expenseCents: 0,
   })),
   categories: [],
+  availableCategories: [],
   earliestYear: null,
 };
 

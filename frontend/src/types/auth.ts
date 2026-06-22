@@ -49,6 +49,13 @@ export interface MonthListFilters {
 }
 
 /**
+ * Criterio de orden de la sección Únicos en /mes (Ola 2, Sub-fase C).
+ * - "amount" (default): |amountCents| DESC (mayor magnitud arriba).
+ * - "date": occurredAt DESC (más reciente arriba); desempate por |amountCents| DESC.
+ */
+export type UnicosSort = "amount" | "date";
+
+/**
  * Blob de preferencias del usuario.
  * Es un objeto abierto/extensible: en Fase 1.1.0 está vacío ({}).
  * Cada fase posterior agrega sus claves sin cambiar el tipo base.
@@ -73,6 +80,11 @@ export interface UserPreferences {
    * Ausente / inválido → default: cada sección con type "ALL" + categories null.
    */
   monthListFilters?: MonthListFilters;
+  /**
+   * Ola 2 Sub-fase C: orden de la sección Únicos en /mes.
+   * Ausente / inválido → default: "amount" (|amountCents| DESC).
+   */
+  unicosSort?: UnicosSort;
   [key: string]: unknown;
 }
 

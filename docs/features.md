@@ -25,6 +25,7 @@
 | Skeletons — sistema unificado de estados de carga (primitivas `Skeleton*` + regla) | — | Implementado |
 | Vista del mes — secciones colapsables + reordenables (persistidas) | RF-VM-005 | Implementado |
 | Vista del mes — filtros por listado (tipo + categoría por sección, filtrado en front) | RF-VM-006 | Implementado |
+| Reportes + listado — filtro vía leyenda interactiva en cards y orden configurable de Únicos | RF-REP-002/006, RF-VM-001 | Implementado |
 | Navegación global — sidebar persistente | RF-NAV-001 | Implementado |
 | Crear categoría desde el formulario de movimiento | RF-MU-004 | Implementado |
 | Reportes — pantalla configurable por cards + widget en dashboard | RF-REP-001..005 | Implementado |

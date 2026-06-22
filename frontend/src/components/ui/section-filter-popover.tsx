@@ -24,16 +24,23 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { SlidersHorizontal } from "lucide-react";
-import { useCategories } from "@/hooks/use-categories";
 import { cn } from "@/lib/utils";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 export type SectionFilterType = "ALL" | "EXPENSE" | "INCOME";
 
+export interface CategoryOption {
+  id: string;
+  name: string;
+  color: string;
+}
+
 export interface SectionFilterPopoverProps {
   sectionKey: string;
   sectionLabel: string;
+  /** Universo de categorías presentes en los movimientos crudos de la sección. */
+  sectionCategories: CategoryOption[];
   selectedType: SectionFilterType;
   selectedCategories: string[] | null;
   onTypeChange: (type: SectionFilterType) => void;
@@ -258,7 +265,6 @@ function InlineCategoryBlock({
 // ─── Panel del popover (portaleado) ──────────────────────────────────────────
 
 interface SectionFilterPanelProps extends SectionFilterPopoverProps {
-  allCategories: { id: string; name: string; color: string }[];
   anchorRef: React.RefObject<HTMLButtonElement | null>;
   onClose: () => void;
 }
@@ -268,7 +274,7 @@ function SectionFilterPanel({
   sectionLabel,
   selectedType,
   selectedCategories,
-  allCategories,
+  sectionCategories,
   onTypeChange,
   onCategoriesChange,
   anchorRef,
@@ -356,7 +362,7 @@ function SectionFilterPanel({
 
       {/* Bloque 2: Categorías embebidas */}
       <InlineCategoryBlock
-        allCategories={allCategories}
+        allCategories={sectionCategories}
         selectedCategories={selectedCategories}
         onChange={onCategoriesChange}
       />
@@ -382,6 +388,7 @@ function SectionFilterPanel({
 export function SectionFilterButton({
   sectionKey,
   sectionLabel,
+  sectionCategories,
   selectedType,
   selectedCategories,
   onTypeChange,
@@ -389,15 +396,6 @@ export function SectionFilterButton({
 }: SectionFilterPopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
-
-  // Cargar las categorías en el nivel del componente (no dentro del panel)
-  // para seguir las reglas de hooks y facilitar el testing.
-  const { categories } = useCategories();
-  const allCategories = (categories ?? []).map((c) => ({
-    id: c.id,
-    name: c.name,
-    color: c.color,
-  }));
 
   const isFiltered = selectedType !== "ALL" || selectedCategories !== null;
 
@@ -444,9 +442,9 @@ export function SectionFilterButton({
         <SectionFilterPanel
           sectionKey={sectionKey}
           sectionLabel={sectionLabel}
+          sectionCategories={sectionCategories}
           selectedType={selectedType}
           selectedCategories={selectedCategories}
-          allCategories={allCategories}
           onTypeChange={onTypeChange}
           onCategoriesChange={onCategoriesChange}
           anchorRef={buttonRef}

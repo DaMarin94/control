@@ -7,12 +7,19 @@
  *   - ReportCard: widget autónomo que engloba controles + gráfico.
  *     Acepta tipo (income-expense / by-category), año, categoryIds, callbacks.
  *
- * Spec visual: docs/design.md, sección "Reportes configurables — spec visual (Fase 1.1.5)".
+ * Spec visual: docs/design.md, sección "Reportes configurables — spec visual (Fase 1.1.5)"
+ *   y "Leyenda interactiva (la leyenda es el filtro)" (Ola 2, P1).
+ *
+ * Ola 2 — Sub-fase A:
+ *   - La leyenda es el filtro (P1): ChartLegend interactivo con toggle buttons (aria-pressed).
+ *   - Elimina FilterButton + CategoryFilterPopover de la card (el popover sigue en /mes).
+ *   - Categorías relevantes (P2_b): universo de leyenda sale de availableCategories, no de useCategories.
+ *   - Toggle Ingresos/Gastos persistido (hiddenSeries) en vista "Total" de income-expense.
  *
  * prefers-reduced-motion: isAnimationActive={false} cuando está activo.
  */
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   AreaChart,
@@ -33,12 +40,10 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { useReports } from "@/hooks/use-reports";
-import { useCategories } from "@/hooks/use-categories";
 import { useSettings } from "@/hooks/use-settings";
 import { formatCurrency, CURRENCY_SYMBOLS } from "@/lib/format";
 import { ChartTooltipContent } from "@/components/ui/chart";
 import { ChartLegend } from "@/components/ui/chart";
-import { CategoryFilterPopover, FilterButton } from "@/components/ui/category-filter";
 import type { ReportsMovementsResponse, ReportCardType } from "@/types/reports";
 import { cn } from "@/lib/utils";
 import { SkeletonBlock, SkeletonLine } from "@/components/ui/skeleton";
@@ -131,20 +136,34 @@ interface Form1TooltipProps {
   label?: string | number;
   year: number;
   currency: string;
+  hiddenSeries: Array<"income" | "expense">;
 }
 
-function Form1Tooltip({ active, payload, label, year, currency }: Form1TooltipProps) {
+function Form1Tooltip({ active, payload, label, year, currency, hiddenSeries }: Form1TooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
   const labelStr = String(label ?? "");
   const monthIndex = MONTH_LABELS_SHORT.indexOf(labelStr);
   if (monthIndex === -1) return null;
   const fullLabel = `${MONTH_LABELS_FULL[monthIndex] ?? label} ${year}`;
-  const incomeVal = payload.find((p) => p.dataKey === "incomeCents")?.value ?? 0;
-  const expenseVal = payload.find((p) => p.dataKey === "expenseCents")?.value ?? 0;
   const rows = [
-    { color: "var(--income)", label: "Ingresos", formattedValue: formatCurrency(incomeVal, currency), valueColor: "var(--income-ink)" },
-    { color: "var(--expense)", label: "Gastos", formattedValue: formatCurrency(expenseVal, currency), valueColor: "var(--expense-ink)" },
+    ...(!hiddenSeries.includes("income")
+      ? [{
+          color: "var(--income)",
+          label: "Ingresos",
+          formattedValue: formatCurrency(payload.find((p) => p.dataKey === "incomeCents")?.value ?? 0, currency),
+          valueColor: "var(--income-ink)",
+        }]
+      : []),
+    ...(!hiddenSeries.includes("expense")
+      ? [{
+          color: "var(--expense)",
+          label: "Gastos",
+          formattedValue: formatCurrency(payload.find((p) => p.dataKey === "expenseCents")?.value ?? 0, currency),
+          valueColor: "var(--expense-ink)",
+        }]
+      : []),
   ];
+  if (rows.length === 0) return null;
   return <ChartTooltipContent monthLabel={fullLabel} rows={rows} />;
 }
 
@@ -331,10 +350,14 @@ interface Form1ChartInnerProps {
   height: number;
   reducedMotion: boolean;
   currency: string;
+  /** Series ocultas — no se renderizan en el chart. */
+  hiddenSeries: Array<"income" | "expense">;
 }
 
-function Form1ChartInner({ chartData, year, height, reducedMotion, currency }: Form1ChartInnerProps) {
+function Form1ChartInner({ chartData, year, height, reducedMotion, currency, hiddenSeries }: Form1ChartInnerProps) {
   const formatYAxisTick = makeYAxisTickFormatter(currency);
+  const showIncome = !hiddenSeries.includes("income");
+  const showExpense = !hiddenSeries.includes("expense");
   return (
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={chartData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
@@ -354,11 +377,23 @@ function Form1ChartInner({ chartData, year, height, reducedMotion, currency }: F
         <Tooltip
           cursor={{ stroke: "var(--hair)", strokeWidth: 1 }}
           content={({ active, payload, label }) => (
-            <Form1Tooltip active={active} payload={payload as unknown as Array<{ dataKey: string; value: number }>} label={label} year={year} currency={currency} />
+            <Form1Tooltip
+              active={active}
+              payload={payload as unknown as Array<{ dataKey: string; value: number }>}
+              label={label}
+              year={year}
+              currency={currency}
+              hiddenSeries={hiddenSeries}
+            />
           )}
         />
-        <Area type="monotone" dataKey="expenseCents" stroke="var(--expense)" strokeWidth={2} fill="url(#areaExpenseRep)" dot={false} activeDot={{ r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 }} isAnimationActive={!reducedMotion} animationDuration={400} animationEasing="ease-out" />
-        <Area type="monotone" dataKey="incomeCents" stroke="var(--income)" strokeWidth={2} fill="url(#areaIncomeRep)" dot={false} activeDot={{ r: 4, fill: "var(--income)", stroke: "var(--panel)", strokeWidth: 2 }} isAnimationActive={!reducedMotion} animationDuration={400} animationEasing="ease-out" />
+        {/* Gastos primero (debajo), ingresos encima — spec design.md */}
+        {showExpense && (
+          <Area type="monotone" dataKey="expenseCents" stroke="var(--expense)" strokeWidth={2} fill="url(#areaExpenseRep)" dot={false} activeDot={{ r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 }} isAnimationActive={!reducedMotion} animationDuration={400} animationEasing="ease-out" />
+        )}
+        {showIncome && (
+          <Area type="monotone" dataKey="incomeCents" stroke="var(--income)" strokeWidth={2} fill="url(#areaIncomeRep)" dot={false} activeDot={{ r: 4, fill: "var(--income)", stroke: "var(--panel)", strokeWidth: 2 }} isAnimationActive={!reducedMotion} animationDuration={400} animationEasing="ease-out" />
+        )}
       </AreaChart>
     </ResponsiveContainer>
   );
@@ -646,26 +681,24 @@ export interface ReportCardProps {
   year: number;
   /**
    * Categorías seleccionadas. null = todas. Controlado externamente.
-   * Solo aplica si isEphemeral === false (modo persistido) para que el estado
-   * venga de props; en modo efímero se gestiona internamente.
+   * En los casos de categorías (Forma 1 Vista B + Forma 2), la leyenda togglea
+   * ítems de availableCategories y escribe en categoryIds.
    */
   categoryIds?: string[] | null;
   /** Alto del canvas en desktop (px). 280 en dashboard, 300 en /reportes. */
   chartHeight?: number;
   /**
    * Callback al cambiar de año (el widget llama aquí para que el padre persista).
-   * No aplica en modo efímero.
    */
   onYearChange?: (year: number) => void;
   /**
    * Callback al cambiar el filtro de categorías.
-   * No aplica en modo efímero.
    */
   onCategoryIdsChange?: (ids: string[] | null) => void;
   /**
    * Modo de visualización de la card income-expense.
    * false (default) = vista "Total" (áreas superpuestas, vista A).
-   * true = vista "Por categoría" (doble stack apilado, vista B).
+   * true = vista "Por categoría" (stack apilado, vista B).
    * Solo aplica cuando type === "income-expense". Ignorado en by-category.
    */
   categoryBreakdown?: boolean;
@@ -674,6 +707,18 @@ export interface ReportCardProps {
    * El padre persiste (en /reportes) o gestiona efímero (dashboard).
    */
   onCategoryBreakdownChange?: (v: boolean) => void;
+  /**
+   * Series ocultas en la vista "Total" de income-expense (vista A).
+   * Persistido en ReportCardConfig.hiddenSeries.
+   * undefined / [] = ambas visibles (default).
+   * Solo aplica a type === "income-expense" && !categoryBreakdown.
+   */
+  hiddenSeries?: Array<"income" | "expense">;
+  /**
+   * Callback al togglear una serie en la vista "Total" de income-expense.
+   * Recibe el array actualizado de series ocultas.
+   */
+  onHiddenSeriesChange?: (hidden: Array<"income" | "expense">) => void;
   /**
    * Si se muestra el botón X para quitar la card.
    * Solo en /reportes (no en el dashboard).
@@ -688,13 +733,14 @@ export interface ReportCardProps {
 
 /**
  * Widget de reporte autónomo.
- * Encapsula: cabecera (identidad + stepper de año + filtro + [quitar]) + gráfico.
+ * Encapsula: cabecera (identidad + stepper de año + [quitar]) + gráfico + leyenda-filtro.
  *
- * Modo persistido: año y categoryIds vienen por props; los cambios se reportan
- * via callbacks (onYearChange, onCategoryIdsChange). El padre persiste.
+ * Modo persistido: año, categoryIds e hiddenSeries vienen por props; los cambios se reportan
+ * via callbacks (onYearChange, onCategoryIdsChange, onHiddenSeriesChange). El padre persiste.
  *
- * No tiene "modo efímero" propio — el padre que lo use en el dashboard simplemente
- * gestiona estado local sin persistir (el widget no distingue; recibe props).
+ * La leyenda-filtro (Ola 2, P1) reemplaza al FilterButton + CategoryFilterPopover.
+ * - Forma 1 Total: togglea series income/expense → hiddenSeries persistido.
+ * - Forma 1 Por cat + Forma 2: togglea categorías de availableCategories → categoryIds.
  */
 export function ReportCard({
   type,
@@ -705,18 +751,16 @@ export function ReportCard({
   onCategoryIdsChange,
   categoryBreakdown = false,
   onCategoryBreakdownChange,
+  hiddenSeries = [],
+  onHiddenSeriesChange,
   removable = false,
   onRemove,
 }: ReportCardProps) {
   const reducedMotion = useReducedMotion();
   const { data, isLoading, isError, refetch } = useReports(year, categoryIds);
-  const { categories: allCategories } = useCategories();
   const { defaultCurrency } = useSettings();
-  const totalCategories = allCategories?.length ?? 0;
 
-  const [filterOpen, setFilterOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
-  const filterButtonRef = useRef<HTMLButtonElement>(null);
   const removeButtonRef = useRef<HTMLButtonElement>(null);
 
   // Año actual (límite navegación hacia adelante)
@@ -732,12 +776,102 @@ export function ReportCard({
   const earliestYear = data?.earliestYear ?? null;
   const chartData = data ? buildChartData(data) : [];
 
+  // Universo estable de categorías para la leyenda-filtro (P2_b).
+  // Viene de availableCategories (sin aplicar filtro), no de useCategories.
+  // Fallback a [] si el backend aún no envía el campo (compatibilidad transitoria).
+  // Memoizado para estabilizar la referencia del array (evita re-crear callbacks en cada render).
+  const availableCategories = useMemo(
+    () => data?.availableCategories ?? [],
+    [data?.availableCategories],
+  );
+
+  // ── Lógica de toggle de la leyenda-filtro ──────────────────────────────────
+
+  /**
+   * Toggle de categorías (Forma 1 Vista B + Forma 2).
+   * Universo = availableCategories. Escribe en categoryIds.
+   * Lógica de 3 estados: null=todas / lista=subconjunto / []=ninguna.
+   *
+   * Si el universo es vacío o el campo no llegó aún → no hace nada.
+   */
+  const handleCategoryLegendToggle = useCallback(
+    (categoryId: string) => {
+      if (availableCategories.length === 0) return;
+      const allIds = availableCategories.map((c) => c.categoryId);
+
+      // Estado actual: null = todas activas; lista = activas; [] = ninguna activa
+      const currentActive: string[] =
+        categoryIds === null ? allIds : categoryIds;
+
+      const isCurrentlyActive = currentActive.includes(categoryId);
+
+      let newIds: string[] | null;
+      if (isCurrentlyActive) {
+        // Apagar: remover del subconjunto activo
+        const remaining = currentActive.filter((id) => id !== categoryId);
+        // Si quedan todas → null (estado "todas")
+        newIds = remaining.length === allIds.length ? null : remaining;
+      } else {
+        // Encender: agregar al subconjunto activo
+        const added = [...currentActive, categoryId];
+        // Si están todas → null (estado "todas")
+        newIds = added.length === allIds.length ? null : added;
+      }
+
+      onCategoryIdsChange?.(newIds);
+    },
+    [availableCategories, categoryIds, onCategoryIdsChange],
+  );
+
+  /**
+   * Toggle de series income/expense (Forma 1 Total).
+   * Escribe en hiddenSeries persistido.
+   */
+  const handleSeriesLegendToggle = useCallback(
+    (seriesId: string) => {
+      const id = seriesId as "income" | "expense";
+      const currentHidden = hiddenSeries ?? [];
+      const isHidden = currentHidden.includes(id);
+      const newHidden: Array<"income" | "expense"> = isHidden
+        ? currentHidden.filter((s) => s !== id)
+        : [...currentHidden, id];
+      onHiddenSeriesChange?.(newHidden);
+    },
+    [hiddenSeries, onHiddenSeriesChange],
+  );
+
+  // ── Derivar el estado "oculto" para la leyenda ─────────────────────────────
+
+  /**
+   * Ids de categorías OCULTAS para la leyenda de categorías.
+   * Si categoryIds === null → ninguna oculta (todas visibles).
+   * Si categoryIds es lista → las que NO están en la lista son las ocultas.
+   */
+  const hiddenCategoryIds: string[] = (() => {
+    if (categoryIds === null) return [];
+    const activeSet = new Set(categoryIds);
+    return availableCategories
+      .filter((c) => !activeSet.has(c.categoryId))
+      .map((c) => c.categoryId);
+  })();
+
   // Vacío (sin movimientos en el año para esta forma)
-  const isYearEmpty =
-    data !== undefined &&
-    (type === "income-expense"
-      ? data.months.every((m) => m.incomeCents === 0 && m.expenseCents === 0)
-      : data.months.every((m) => m.expenseCents === 0));
+  // En vista "Total" con series ocultas: si ambas están ocultas → empty también.
+  const isYearEmpty = (() => {
+    if (!data) return false;
+    if (type === "income-expense" && !categoryBreakdown) {
+      // Si ambas series ocultas → empty visual
+      if (hiddenSeries.includes("income") && hiddenSeries.includes("expense")) {
+        return true;
+      }
+      return data.months.every((m) => {
+        const incomeZero = hiddenSeries.includes("income") || m.incomeCents === 0;
+        const expenseZero = hiddenSeries.includes("expense") || m.expenseCents === 0;
+        return incomeZero && expenseZero;
+      });
+    }
+    return data.months.every((m) => m.expenseCents === 0);
+  })();
 
   // Para la vista B: el título es el mismo ("Ingresos y gastos") pero el modo cambia
   const isViewB = type === "income-expense" && categoryBreakdown;
@@ -756,15 +890,39 @@ export function ReportCard({
     }
   }
 
-  const handleCategoryChange = useCallback(
-    (ids: string[] | null) => {
-      onCategoryIdsChange?.(ids);
-    },
-    [onCategoryIdsChange]
-  );
-
   // Título y eyebrow de la card según tipo
   const title = type === "income-expense" ? "Ingresos y gastos" : "Por categoría";
+
+  // ── Ítems de leyenda según caso ────────────────────────────────────────────
+
+  /**
+   * Caso A: Forma 1, modo "Total" — dos ítems: Ingresos / Gastos.
+   * Toggle persistido en hiddenSeries.
+   */
+  const legendItemsTotalF1 = [
+    { id: "income", color: "var(--income)", label: "Ingresos" },
+    { id: "expense", color: "var(--expense)", label: "Gastos" },
+  ];
+
+  /**
+   * Caso B: Forma 1, modo "Por categoría" (vista B) — ítems de availableCategories.
+   * Toggle en categoryIds.
+   */
+  const legendItemsCategoryB = availableCategories.map((cat) => ({
+    id: cat.categoryId,
+    color: cat.color,
+    label: cat.name,
+  }));
+
+  /**
+   * Caso C: Forma 2 (by-category) — ítems de availableCategories.
+   * Toggle en categoryIds.
+   */
+  const legendItemsF2 = availableCategories.map((cat) => ({
+    id: cat.categoryId,
+    color: cat.color,
+    label: cat.name,
+  }));
 
   return (
     <div
@@ -797,7 +955,7 @@ export function ReportCard({
           </div>
         )}
 
-        {/* Derecha: controles (stepper + filtro + quitar) */}
+        {/* Derecha: controles (stepper + quitar) — el filtro de categorías lo hace la leyenda */}
         <div className="flex items-center gap-2 flex-wrap justify-end">
           {/* Control de año embebido (stepper pill) */}
           <YearStepper
@@ -808,22 +966,10 @@ export function ReportCard({
             onNext={handleNext}
           />
 
-          {/* Botón filtro de categorías */}
-          <FilterButton
-            selectedIds={categoryIds}
-            totalCategories={totalCategories}
-            isOpen={filterOpen}
-            buttonRef={filterButtonRef}
-            onClick={() => {
-              setFilterOpen((o) => !o);
-              setRemoveOpen(false);
-            }}
-          />
-
           {/* Divisor y botón quitar (solo en /reportes) */}
           {removable && (
             <>
-              {/* Mini-divisor --hair entre filtro y X */}
+              {/* Mini-divisor --hair entre stepper y X */}
               <span
                 className="block h-[16px] w-px bg-hair shrink-0"
                 aria-hidden="true"
@@ -833,7 +979,6 @@ export function ReportCard({
                 type="button"
                 onClick={() => {
                   setRemoveOpen((o) => !o);
-                  setFilterOpen(false);
                 }}
                 aria-label="Quitar reporte"
                 className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
@@ -878,6 +1023,7 @@ export function ReportCard({
                     height={height}
                     reducedMotion={reducedMotion}
                     currency={defaultCurrency}
+                    hiddenSeries={hiddenSeries}
                   />
                 );
               }
@@ -906,50 +1052,41 @@ export function ReportCard({
             }}
           </ChartResponsiveArea>
 
-          {/* Leyenda — Vista A (income-expense, Total): Ingresos / Gastos */}
+          {/* ─ Leyendas interactivas ─ */}
+
+          {/* Caso A: Forma 1 — modo "Total" (vista A): Ingresos / Gastos */}
           {data && type === "income-expense" && !isViewB && (
             <ChartLegend
-              items={[
-                { color: "var(--income)", label: "Ingresos" },
-                { color: "var(--expense)", label: "Gastos" },
-              ]}
+              items={legendItemsTotalF1}
+              hiddenIds={hiddenSeries}
+              onToggle={handleSeriesLegendToggle}
+              groupLabel="Filtrar series"
             />
           )}
 
-          {/* Leyenda — Vista B (income-expense, Por categoría): grupo plano de categorías de gasto */}
-          {data && isViewB && data.categories.length > 0 && (
+          {/* Caso B: Forma 1 — modo "Por categoría" (vista B): categorías de gasto */}
+          {data && isViewB && availableCategories.length > 0 && (
             <ChartLegend
-              items={data.categories.map((cat) => ({
-                color: cat.color,
-                label: cat.name,
-              }))}
+              items={legendItemsCategoryB}
+              hiddenIds={hiddenCategoryIds}
+              onToggle={handleCategoryLegendToggle}
+              groupLabel="Filtrar categorías"
             />
           )}
 
-          {/* Leyenda — Forma 2 (by-category): categorías de gasto */}
-          {data && type === "by-category" && data.categories.length > 0 && (
+          {/* Caso C: Forma 2 (by-category): categorías de gasto */}
+          {data && type === "by-category" && availableCategories.length > 0 && (
             <ChartLegend
-              items={data.categories.map((cat) => ({
-                color: cat.color,
-                label: cat.name,
-              }))}
+              items={legendItemsF2}
+              hiddenIds={hiddenCategoryIds}
+              onToggle={handleCategoryLegendToggle}
+              groupLabel="Filtrar categorías"
             />
           )}
         </div>
       )}
 
       {/* ── Popovers (portaled a body) ── */}
-      {filterOpen && (
-        <CategoryFilterPopover
-          selectedIds={categoryIds ?? null}
-          onSelectionChange={(ids) => {
-            handleCategoryChange(ids);
-          }}
-          onClose={() => setFilterOpen(false)}
-          anchorRef={filterButtonRef}
-        />
-      )}
-
       {removeOpen && removable && (
         <RemoveConfirmPopover
           onConfirm={() => {

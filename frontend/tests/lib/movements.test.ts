@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { sumMovementTotals, groupSubtotalCents } from "@/lib/movements";
+import { sumMovementTotals, groupSubtotalCents, sortUnicosBySort } from "@/lib/movements";
 import type { MovementItem } from "@/types/movement";
 
 // ─── Fixtures mínimos ──────────────────────────────────────────────────────────
@@ -50,6 +50,34 @@ function makeItem(
     currency: convertedAmountCents !== undefined ? "USD" : "ARS",
     exchangeRate: convertedAmountCents !== undefined ? 1200 : 1,
     convertedAmountCents: convertedAmountCents ?? amountCents,
+  };
+}
+
+/**
+ * Crea un MovementItem único con occurredAt para tests de sortUnicosBySort.
+ */
+function makeUnico(
+  id: string,
+  occurredAt: string | null,
+  amountCents: number,
+): MovementItem {
+  return {
+    id,
+    origin: "unico",
+    type: "EXPENSE",
+    amountCents,
+    description: null,
+    occurredAt,
+    timezone: null,
+    installment: null,
+    frequency: null,
+    skipped: false,
+    category: { id: "cat-1", name: "Test", color: "#000", scope: "BOTH" },
+    calculated: null,
+    hasCalculated: false,
+    currency: "ARS",
+    exchangeRate: 1,
+    convertedAmountCents: amountCents,
   };
 }
 
@@ -179,5 +207,73 @@ describe("groupSubtotalCents", () => {
     const result = groupSubtotalCents([usdIncome, arsExpense]);
     expect(result).toBe(24000000 - 15000);
     expect(result).not.toBe(20000 - 15000);
+  });
+});
+
+// ─── sortUnicosBySort ──────────────────────────────────────────────────────────
+
+describe("sortUnicosBySort", () => {
+  // Tres ítems con distintos occurredAt (timestamps completos)
+  const A = makeUnico("a", "2026-06-10T10:00:00.000Z", 50000); // 10 jun 10:00, $500
+  const B = makeUnico("b", "2026-06-15T08:00:00.000Z", 20000); // 15 jun 08:00, $200
+  const C = makeUnico("c", "2026-06-01T09:00:00.000Z", 80000); // 01 jun 09:00, $800
+  // Mismo timestamp exacto, distintos montos (para testear desempate por monto)
+  const TS = "2026-06-10T10:00:00.000Z";
+  const D = makeUnico("d", TS, 30000); // mismo ts que A, $300
+  const E = makeUnico("e", TS, 70000); // mismo ts que A, $700
+
+  it("sort='amount': devuelve copia sin cambiar el orden (el backend ya ordena)", () => {
+    const input = [A, B, C];
+    const result = sortUnicosBySort(input, "amount");
+    expect(result.map((m) => m.id)).toEqual(["a", "b", "c"]);
+    // Debe ser una copia, no la misma referencia
+    expect(result).not.toBe(input);
+  });
+
+  it("sort='amount': lista vacía → array vacío", () => {
+    expect(sortUnicosBySort([], "amount")).toEqual([]);
+  });
+
+  it("sort='date': ordena por occurredAt DESC (más reciente primero)", () => {
+    const result = sortUnicosBySort([A, B, C], "date");
+    // B (15 jun 08:00) > A (10 jun 10:00) > C (01 jun 09:00)
+    expect(result.map((m) => m.id)).toEqual(["b", "a", "c"]);
+  });
+
+  it("sort='date': devuelve copia (no muta el original)", () => {
+    const input = [A, B, C];
+    const result = sortUnicosBySort(input, "date");
+    expect(result).not.toBe(input);
+    // El original no debe mutarse
+    expect(input.map((m) => m.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("sort='date': desempate por |amountCents| DESC cuando occurredAt es idéntico", () => {
+    // D y E tienen el MISMO timestamp exacto; E ($700) > D ($300) en magnitud
+    const result = sortUnicosBySort([D, E], "date");
+    expect(result.map((m) => m.id)).toEqual(["e", "d"]);
+  });
+
+  it("sort='date': ordenamiento con desempate por monto entre ítems de mismo timestamp", () => {
+    // A (TS, $500), D (TS, $300), E (TS, $700), B (15 jun, $200), C (01 jun, $800)
+    // Resultado esperado: B (15 jun) > E (TS, $700) > A (TS, $500) > D (TS, $300) > C (01 jun)
+    const result = sortUnicosBySort([A, B, C, D, E], "date");
+    expect(result.map((m) => m.id)).toEqual(["b", "e", "a", "d", "c"]);
+  });
+
+  it("sort='date': items con occurredAt null se ordenan al final (string vacío < ISO date)", () => {
+    const nullDate = makeUnico("n", null, 10000);
+    const result = sortUnicosBySort([nullDate, B], "date");
+    // B (2026-06-15) > "" (null → ""), así B primero
+    expect(result.map((m) => m.id)).toEqual(["b", "n"]);
+  });
+
+  it("sort='date': lista de un solo elemento → mismo elemento", () => {
+    const result = sortUnicosBySort([A], "date");
+    expect(result.map((m) => m.id)).toEqual(["a"]);
+  });
+
+  it("sort='date': lista vacía → array vacío", () => {
+    expect(sortUnicosBySort([], "date")).toEqual([]);
   });
 });
