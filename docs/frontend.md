@@ -53,6 +53,15 @@ Lo visual se define **una sola vez**. Stack: **shadcn/ui + cva** sobre Tailwind 
 - **`PeriodNav` (`components/ui/period-nav.tsx`)** — primitiva **genérica de navegación de período**: envuelve un contenido y le pone **flechas gigantes a los costados** (`‹ contenido ›`). La usa **`/mes`** para navegar el mes. (Reportes **no** la usa: navega el año con un stepper pill embebido per-card — ver sección Reportes.) El spec visual vive en `docs/design.md`. API y gotcha de uso en la sección Navegación de período (`PeriodNav`).
 - **`KebabMenu` (`components/ui/kebab-menu.tsx`)** — menú de tres puntos para las acciones de fila **editar / eliminar** en listas. Es el **componente estándar para esas acciones**: toda lista nueva que las necesite lo usa, en lugar de botones inline en la fila. Se renderiza **por portal a `document.body` con posición `fixed`** (coordenadas tomadas del `getBoundingClientRect()` del trigger) por DOS razones estructurales: (a) las tarjetas de lista tienen `overflow-hidden`, que recortaría un menú `absolute`; (b) el portal lo saca del ancestro transformado (ver "Modales y diálogos: portal a `body`"). API: `ariaLabel`, `items` (`{ label, icon?, onSelect, danger? }`), `className`. El ítem `danger: true` se pinta en `text-expense-ink`. El trigger se mantiene visible mientras el menú está abierto; el menú se cierra en select / click afuera / Escape / scroll / resize (no recalcula posición en movimiento: cierra limpio).
 
+### Estados de carga: skeletons (regla)
+
+**Todo estado de carga del frontend se renderiza con un skeleton** construido con las primitivas del sistema, **imitando el layout real** del contenido que reemplaza (mismas medidas y posiciones, sin saltos al cargar). Aplica también a desarrollos futuros: no se usan spinners genéricos ni placeholders ad-hoc.
+
+- **Primitivas en `components/ui/skeleton.tsx`:** `SkeletonLine` / `SkeletonBlock` / `SkeletonCircle` / `SkeletonPill`. Una feature compone estas primitivas para reconstruir su propio layout de carga.
+- **Animación:** utilidad `.animate-shimmer` (en `globals.css`), desactivada bajo `prefers-reduced-motion`.
+- **Accesibilidad:** el contenedor de carga lleva `role="status"` + `aria-label`; los placeholders internos van `aria-hidden`.
+- El detalle visual (tokens, medidas, animación, mapeo por pantalla) vive en `docs/design.md` §Skeletons — referenciar, no duplicar.
+
 ### Modales y diálogos: portal a `body` (regla)
 
 **Todo componente con scrim `fixed inset-0` (modales, diálogos de confirmación) se monta vía `createPortal(<scrim/>, document.body)`.** Los contenedores de página usan `animate-screen-fade`, cuyo keyframe aplica `transform`; un ancestro con `transform` (también `filter` o `will-change`) crea un containing block que atrapa a los descendientes `position: fixed` — el scrim deja de medirse contra el viewport y queda confinado al contenedor, corrido y sin cubrir la pantalla. El portal extrae el modal de ese árbol y lo monta directo en `body`. **No alcanza con `fixed inset-0` solo.**

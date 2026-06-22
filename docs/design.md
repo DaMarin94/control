@@ -706,6 +706,175 @@ El bloque del form (`CurrencyExchangeBlock`, compartido por transaction-form / r
 
 > **Lo que este bloque NO toca (por diseño):** no hay UI para la tabla de cotizaciones de referencia (es interna); `/configuracion` tiene una sola tarjeta ("Moneda por defecto", con 4 opciones en el segmented); no hay tokens, colores ni reglas propios. Todo el cromo de las 4 monedas sale del **mapa de símbolos** y el **array de monedas del segmented** — puntos únicos ya centralizados.
 
+### Selector de salto de mes/año en `/mes` (popover "rueda")
+
+Hace **interactivo el rótulo de período** de `/mes` para **saltar rápido** a cualquier mes/año, sin reemplazar la navegación secuencial (flechas desktop / pill stepper mobile). Es **solo UI nueva**: al confirmar reusa la navegación de período existente (RF-VM-004) — navega al mes elegido. Convive con `PeriodNav` (flechas laterales gigantes ≥941px y forma `.stepper` ≤940px) como **atajo de salto largo**, no como reemplazo del "anterior/siguiente".
+
+#### 1. Affordance — el rótulo de período se vuelve disparador
+
+El rótulo del período es el disparador. **No** se agrega un botón aparte ni un ícono suelto que compita; el propio período (que ya es el elemento de mayor jerarquía del header) toma la afordancia, con un glifo de apoyo que comunica "esto despliega".
+
+- **Desktop (≥941px) — el `<h1>` "Junio 2026" pasa a `<button>`-like.** El H1 (32px/700, tracking `-.02em`, `--ink`) se envuelve en un disparador (`<button>` con el H1 adentro, `inline-flex items-center gap-[8px]`), conservando exactamente su tipografía y tamaño. A su derecha, un glifo **`ChevronsUpDown`** (lucide, **18px**, `stroke-width 2`, `--faint` en reposo, `shrink-0`, `aria-hidden`) — el glifo de doble flecha ↕ comunica "valores que suben/bajan", coherente con la metáfora de "rueda". El eyebrow ("Tu mes" + `CurrencyChip`) y el sub-label de estado ("Mes en curso"/"Histórico") **no cambian** y **quedan fuera** del disparador (el botón envuelve solo el H1 + chevron).
+- **Mobile (≤940px) — el centro del pill `.stepper` se vuelve disparador.** El bloque central del `.stepper` (el texto `{mes} {año}` + sub-label de estado, hoy un `<div>` inerte entre las dos flechas) pasa a ser un `<button>` que abre el mismo popover. Las **flechas ‹ › del pill no cambian** (siguen navegando anterior/siguiente). Se suma el mismo glifo `ChevronsUpDown` **15px** `--faint` a la derecha del texto del mes, dentro del botón central, `gap-[6px]`. El sub-label "Mes en curso/Histórico" sigue debajo, dentro del botón. El centro deja de ser `aria-hidden`: ahora es accionable (label real). El pill conserva su molde (`--r-pill`, `--panel`, borde `--line`, `--shadow-sm`, padding 4px).
+- **Por qué `ChevronsUpDown` y no `ChevronDown`/`Calendar`:** el popover **no** es un menú desplegable plano (sería `ChevronDown`) ni un date-picker de calendario (sería `Calendar`): es un **selector de dos ruedas** (mes y año que suben/bajan). El doble chevron vertical ↕ es la afordancia exacta del patrón "stepper/rueda" y no se confunde con el chevron lateral ‹ › de navegación secuencial ni con el chevron de disclosure ▶.
+
+**Estados del disparador (desktop e mobile, comunes):**
+
+- **Reposo:** H1/label en su color normal (`--ink`); chevron `--faint`; `cursor: pointer`.
+- **Hover:** chevron sube a `--ink-2`; el H1 **no** cambia de color (se mantiene `--ink` para no parpadear el título). Transición 0.14s. En mobile, el botón central **no** toma fondo (el pill ya es la superficie); el chevron a `--ink-2` es la única señal.
+- **Focus (teclado):** ring `--accent-soft` 3px (`focus-visible`), radio `--r-chip` 7px ajustado al box del disparador (envuelve H1 + chevron sin recortar el descender de la tipografía).
+- **Abierto:** el chevron pasa a `--ink-2` (mismo que hover) y se mantiene mientras el popover está abierto (señal de "activo"); el disparador lleva `aria-expanded="true"` + `aria-haspopup="dialog"`.
+
+#### 2. El popover — dos ruedas mes / año
+
+Superficie flotante portaleada a body, anclada al disparador. **No** es un calendario: son **dos columnas de selección** ("ruedas"), una de mes y una de año, cada una con su valor central y sus controles ▲▼ de subir/bajar. **Las dos ruedas son independientes:** la de Mes hace **wrap circular** sin tocar el Año, y el Año solo cambia con su propia rueda (ver wrap abajo y §3).
+
+**Principio de diseño (corrección visual, Ola 1):** cada rueda debe **leerse de inmediato como UNA pieza integrada** (un stepper/rueda cohesivo), **no** como tres barras grises sueltas (▲ / display / ▼ desconectados). El error del diseño anterior fue dar a los tres elementos el mismo fondo `--panel-2` con esquinas independientes: se leían como tres chips apilados sin relación. La pieza ahora es **un contenedor único con borde envolvente y divisores internos**, donde ▲, valor y ▼ son **zonas de la misma caja**, no cajas separadas.
+
+- **Caja del popover:** `--panel`, borde `--line`, radio **`--r-ctl` 10px**, `--shadow-lg`, padding `p-[14px]`. Ancho **fijo 240px** (entran las dos ruedas + el footer sin apretar). Animación de entrada `pop` (scale .98→1, 0.18s ease-out; instantáneo con `prefers-reduced-motion`).
+- **Layout interno (de arriba abajo):**
+  1. **Fila de las dos ruedas:** `grid grid-cols-2 gap-[10px]`. Columna izquierda = **Mes**, columna derecha = **Año**. Cada columna es una **rueda vertical cohesiva** (ver abajo). El mes va a la izquierda por orden de lectura natural ("Junio 2026").
+  2. **Divisor:** `--hair` 1px horizontal, `my-[12px]`.
+  3. **Footer de acciones:** ver §4 (Cancelar ghost + Ir primario).
+
+**Cada rueda (mes / año) — UNA pieza, no tres:**
+
+```
+┌─────────┐   ← contenedor único: borde --line-strong envolvente,
+│   ▲     │     radio --r-ctl 10px, bg-panel, overflow-hidden.
+├─────────┤   ← divisor interno --hair (no borde-caja): separa ▲ del valor
+│  valor  │
+├─────────┤   ← divisor interno --hair: separa valor del ▼
+│   ▼     │
+└─────────┘
+```
+
+- **Label de la rueda:** sobre el contenedor, eyebrow *Eyebrow/labels* (12px/600, `.1em`, uppercase, `--muted`): **"Mes"** / **"Año"**. `mb-[6px]`.
+- **Contenedor de la rueda (la pieza cohesiva):** un único `<div>` con **borde `--line-strong` 1px en los cuatro lados**, radio **`--r-ctl` 10px**, `bg-panel`, `overflow-hidden` (para que las zonas internas respeten el radio). Adentro, tres zonas apiladas separadas por **divisores internos `--hair` 1px** (no bordes de caja propios): la zona ▲ arriba, la zona valor al medio, la zona ▼ abajo. **Las zonas NO llevan fondo propio en reposo** (heredan el `bg-panel` del contenedor): el borde envolvente + los dos divisores `--hair` son lo único que estructura la pieza. Así se lee como un stepper integrado, no como tres chips. **Sin radios independientes por zona** (el único radio es el del contenedor).
+- **Zona ▲ / ▼ (subir/bajar):** ocupa el ancho completo de la rueda, alto **28px**, **sin fondo en reposo** (transparente sobre el `bg-panel` del contenedor). Glifo `ChevronUp` / `ChevronDown` (lucide, **16px**, `stroke-width 2`, `--ink-2`). **Hover:** fondo `--panel-2` (solo la zona hovereada toma fondo — la afordancia de "este botón se aprieta"), glifo `--ink`. **Active:** fondo `--panel-3`, sin `scale` (escalar despegaría la zona de la pieza). **Focus (teclado):** ring `--accent-soft` 3px **inset** (`inset` para que el ring no rompa el borde envolvente de la pieza). Hold/repeat (mantener apretado para avanzar rápido) es opcional — lo resuelve `control-frontend`; el spec no lo exige. `aria-label="Mes siguiente/anterior"` / `"Año siguiente/anterior"` (según rueda).
+- **Zona valor (el centro de la rueda):** alto **40px**, `bg-panel`, texto **centrado**. **Sin bordes propios** (los divisores `--hair` arriba y abajo, parte del contenedor, la delimitan). Es la zona dominante de la pieza (más alta que las zonas ▲▼ de 28px, para que el valor sea el foco visual).
+  - **Rueda Año:** input numérico. Valor en **mono tabular** (IBM Plex Mono + `tnum`, **regla dura 3** — es una cifra), **17px/600**, `--ink`, `text-center`. Editable por teclado (escribir el año). `inputMode="numeric"`, `maxLength=4`. **Focus del input** (escribiendo): ring `--accent-soft` 3px **inset** sobre la zona valor (no rompe el borde de la pieza).
+  - **Rueda Mes:** el mes se muestra como **nombre** ("Junio"), no número. Por eso **no** es un `<input type=number>`: es un campo de texto que muestra el nombre del mes (UI **15px/600** Space Grotesk, `--ink`, `text-center`) y se cambia con ▲▼; opcionalmente escribible (escribir "jun" autocompleta a Junio) — la escritura del mes es **secundaria**, los ▲▼ son el camino primario para el mes. El nombre del mes es UI (no cifra), por eso va en Space Grotesk, **no** en mono (la rueda Año sí es mono por ser número). `aria-label="Mes"` con `aria-valuetext` = nombre del mes.
+  - **Wrap del mes — circular, NO toca el año (decisión cerrada Ola 1).** Las dos ruedas son **independientes**: ▲ en Diciembre pasa a **Enero** y ▼ en Enero pasa a **Diciembre**, **sin modificar el año** (wrap circular, la rueda de mes gira sobre sí misma). El año **solo cambia con su propia rueda** (sus ▲▼ o escribiéndolo). **Eliminado** el comportamiento de odómetro/arrastre del año por el wrap del mes que tenía el diseño anterior.
+
+#### 3. Estados de valor — válido, foco, incompleto
+
+**Sin rango de año.** En `/mes` la navegación de meses es **ilimitada** (las flechas no restringen), así que el selector **no impone rango de año**: no existe "año fuera de rango", no hay límites `earliestYear`/año en curso, y los steppers ▲▼ del año **no tienen estado disabled por límite**. El input Año solo valida que sea un **año numérico plausible de 4 dígitos** (forma, no negocio).
+
+- **Reposo (válido):** input con borde `--line-strong`, valor `--ink`.
+- **Focus en el input (escribiendo):** borde del input sube a `--accent` (o se mantiene `--line-strong` con) ring `--accent-soft` 3px alrededor del input — mismo focus ring del DS para inputs de form. El valor sigue `--ink`.
+- **Incompleto — año aún no válido (no es estado de error).** Mientras el usuario **escribe** el año y todavía **no hay 4 dígitos** (ej. `20`, `202`, o el campo vacío), el valor está **incompleto**, no en error:
+  - El input **no** se tiñe de error: **no** se usa `--expense` ni el error ring `--expense-soft`. Conserva el borde `--line-strong` (o el focus ring `--accent-soft` si está enfocado). No hay color semántico de gasto, no hay mensaje de error, no hay `aria-live`.
+  - **El botón "Ir" se deshabilita** mientras el año no tenga **4 dígitos numéricos** (estado disabled del primario, ver §4). Es el único feedback de "todavía no podés saltar": el primario apagado, sin pintar el input de rojo.
+  - **Entrada no numérica:** el input es `inputMode="numeric"` `maxLength=4`; caracteres no numéricos se **descartan** (no se aceptan), no producen estado de error. El campo solo contiene dígitos.
+- **Steppers ▲▼ del año — siempre activos.** Como no hay rango, los ▲▼ del año **nunca** se ven disabled: siempre suben/bajan el año en ±1 sin tope. (El wrap circular del mes —§2— no toca el año, así que el año solo se mueve con su propia rueda; tampoco encuentra límite.) Los ▲▼ siempre producen un año de 4 dígitos válido, así que "Ir" nunca queda deshabilitado por usar los steppers; el disabled de "Ir" solo aparece por **escritura incompleta** del año.
+
+#### 4. Footer y comportamiento de cierre
+
+**Regla dura vigente (Ola 0, P6): los popovers/modales NO se cierran por click afuera.** Aunque este overlay es funcionalmente un popover, **acá no se descarta por click fuera**: demanda una decisión explícita (saltar de mes es una acción de navegación, no un filtro liviano que se revierte solo). Cierre **explícito**:
+
+- **Footer:** fila `flex items-center justify-end gap-[8px]`. Dos botones del DS:
+  - **"Cancelar"** — botón **ghost** del DS (`.btn.ghost`, texto 13px/600 `--ink-2` → `--ink` sobre `--panel-2`, radio `--r-ctl`). Cierra **sin navegar** (descarta el cambio de mes/año tentativo).
+  - **"Ir"** — botón **primario índigo** del DS (`bg-accent` → `--accent-press`, texto blanco 13px/600, radio `--r-ctl`, `shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0_/_0.2)]`, focus ring `--accent-soft` 3px). **Confirma**: navega al mes/año elegido (reusa RF-VM-004) y cierra. Glifo opcional `ArrowRight` 15px. **Disabled** mientras el año está **incompleto** (no tiene 4 dígitos numéricos, §3): `opacity-50`, `cursor-not-allowed`, sin hover.
+- **Vías de cierre (las tres explícitas):**
+  - **"Ir"** → confirma + navega + cierra.
+  - **"Cancelar"** → cierra sin navegar.
+  - **`Esc`** → cierra sin navegar (equivale a Cancelar).
+  - **Re-clic en el disparador** → cierra sin navegar (toggle).
+  - **Click fuera (scrim/resto de la página) → NO cierra** (regla dura P6). No se monta scrim oscuro; el popover flota sobre la pantalla y se descarta solo por una de las vías de arriba.
+- **`Enter` dentro de un input** equivale a "Ir" (si el año está completo —4 dígitos—; si está incompleto, `Enter` no navega, igual que "Ir" disabled).
+- **a11y del popover:** `role="dialog"` `aria-label="Saltar a mes y año"`, foco entra al popover al abrir (primer control: input Año o ▲ del mes), `Esc` lo cierra, foco vuelve al disparador al cerrar. **Focus trap** dentro del popover mientras está abierto (coherente con que no se cierra por click fuera).
+
+#### 5. Ubicación, anclaje y flip
+
+- **Desktop (≥941px):** el popover se ancla **bajo el disparador (el H1)**, alineado a la **izquierda** del H1 (su borde izquierdo coincide con el inicio de "Junio 2026"), con `gap` vertical **8px** entre el H1 y el borde superior del popover. Como el header de `/mes` vive en la columna central de `PeriodNav` (régimen ≥941px), el popover queda dentro del ancho de contenido, sin colisionar con las flechas laterales gigantes.
+- **Mobile (≤940px):** se ancla **bajo el pill `.stepper`**, **centrado** respecto del botón central del pill (no respecto del viewport), `gap` 8px. Si el centrado lo sacaría del viewport, se alinea al borde con margen mínimo 12px (clamp horizontal).
+- **Flip vertical (sin lugar abajo):** si no hay espacio suficiente debajo del disparador para los 240px de alto aproximado del popover (cerca del borde inferior del viewport), **flipea hacia arriba** y se ancla **sobre** el disparador (mismo `gap` 8px, ahora por encima), con la animación `pop` desde el borde inferior. El mecanismo (medición/colisión) lo resuelve `control-frontend`; el comportamiento a cumplir: el popover **siempre queda completamente visible** dentro del viewport, flipeando arriba/abajo y clampeando horizontal según haga falta.
+
+#### 6. Convivencia con la navegación existente
+
+- **No reemplaza nada.** Las **flechas laterales gigantes de `PeriodNav`** (≥941px) y el **pill stepper** (≤940px) siguen siendo el camino para "mes anterior / siguiente" (saltos de a uno). El popover es el atajo para **saltos largos** (cambiar de año, ir a un mes lejano) sin clickear muchas veces.
+- **Mismo destino, misma navegación.** Confirmar en el popover navega exactamente como las flechas (RF-VM-004): no hay un segundo mecanismo de carga de mes. El popover solo **elige** el período; la navegación es la de siempre.
+- **El disparador sigue accionable durante el "modo orden de secciones"** (decisión funcional cerrada). El disparador **no** se deshabilita en ese modo: saltar de mes no rompe el modo orden, **consistente con las flechas de `PeriodNav`** (que también navegan sin salir del modo). El popover abre, navega y cierra con normalidad mientras el header está en modo orden.
+
+> Reutiliza: el rótulo de período (H1 ≥941px / centro del `.stepper` ≤940px) como superficie, sin cambiar su tipografía; el **focus ring `--accent-soft`** del DS; el patrón de **input del form** (`border-line-strong`, `bg-panel`, mono tabular para cifras); el botón **primario índigo** (con su estado **disabled** mientras el año está incompleto) y el **ghost**. Aporta: el **patrón de dos ruedas mes/año cohesivas** (cada rueda = UNA pieza: contenedor único con borde `--line-strong` envolvente + divisores internos `--hair`, zonas ▲/valor/▼ sin fondo propio en reposo; año en mono tabular, mes como nombre en UI), su **affordance `ChevronsUpDown`** en el rótulo de período, y la aplicación de la **regla dura P6** (no cierra por click fuera; cierre por Ir / Cancelar / Esc / re-clic). **Ruedas independientes:** el Mes hace wrap circular sin tocar el año; el año solo cambia con su propia rueda (sin odómetro). **Sin rango de año** (navegación de `/mes` ilimitada): no hay estado de error ni steppers disabled por límite; el único feedback de "todavía no" es "Ir" disabled mientras el año no tenga 4 dígitos.
+
+### Skeletons — sistema unificado de estados de carga
+
+Sistema **único y reutilizable** para todos los estados de carga del frontend. Hoy los skeletons son **ad-hoc e inconsistentes** (cada pantalla arma el suyo con `animate-pulse rounded-… bg-panel-3` inline); esta sección define **un solo lenguaje** y un conjunto de **primitivas** que **todos** los procesos de carga —presentes y futuros— deben usar. Un skeleton no es un spinner: es un **fantasma del contenido real** que reserva el layout para que, al llegar el dato, no haya salto.
+
+#### Principio rector
+
+- **El skeleton imita el layout real, no lo aproxima.** Cada placeholder ocupa **las mismas dimensiones y posiciones** (alto, ancho, radio, gaps, columnas) que el elemento real que reemplaza, para que el contenido aterrice **sin reflow ni salto**. La estructura **estable** de la pantalla (la que no depende del dato: títulos fijos, controles inertes, chrome de card) puede renderizarse **ya presente** mientras solo el área de datos muestra fantasmas. Un skeleton que no respeta las medidas reales es peor que ninguno: introduce el salto que venía a evitar.
+- **Fantasma sobrio, no decorativo.** El skeleton es **superficie neutra animada**, sin íconos, sin texto, sin color semántico. **Nunca** usa income/expense, índigo de marca ni `category.color` (regla dura 1/2): un skeleton no comunica tipo ni marca, comunica "esto está por llegar".
+- **Skeleton solo en la carga inicial; nunca con dato ya presente.** El skeleton se muestra **únicamente cuando aún no hay datos** (carga inicial de la pantalla o de un bloque). Cualquier interacción o refetch **con dato ya en pantalla** —refetch silencioso en background, colapsar/expandir una sección, reordenar secciones, cambiar de filtro manteniendo resultados— **no** vuelve a skeleton (evita el parpadeo); a lo sumo deja el dato viejo mientras llega el nuevo. La **regla visual** es: skeleton solo cuando el área está vacía de dato (el "cuándo exacto" por pantalla lo decide la implementación según haya o no dato previo).
+
+#### Tokens del skeleton
+
+Un único set, derivado de los neutros del DS:
+
+| Aspecto | Valor | Racional |
+|---|---|---|
+| **Color base (fill)** | `--panel-3` | el fill gris de chips/superficies; sobre `--panel`/`--paper` lee como "hueco por llenar" sin gritar. Es el valor canónico del skeleton, sobre el que late la opacidad. |
+| **Radio — bloque/card** | `--r-card` (14px) | placeholders que reemplazan tarjetas/áreas grandes (canvas de gráfico, card de total, área de lista). |
+| **Radio — control** | `--r-ctl` (10px) | placeholders de inputs/botones. |
+| **Radio — pill** | `--r-pill` (999px) | placeholders de pills/steppers/segmented redondeado. |
+| **Radio — texto/línea** | `--r-chip` (7px) | líneas de texto y chips fantasma (sus extremos redondeados leen como "renglón"). |
+| **Radio — círculo/avatar** | `50%` | avatares, swatches circulares, glifos redondos. |
+
+No se introducen tokens de color nuevos: el sistema **se construye sobre `--panel-3`**, ya existente.
+
+#### Animación — pulse y reduced-motion
+
+- **Animación canónica: pulse.** La **opacidad del placeholder oscila** en bucle (~`1` → ~`0.6` → `1`) sobre el fill `--panel-3`. Lee como "esto está por llegar" sin decorar: es un latido sobrio, sin banda, sin gradiente, sin tinte. Un único neutro del DS (`--panel-3`); el movimiento viene de la opacidad, no del color.
+- **Parámetros:** duración **~1.5s**, en bucle infinito, con la curva de easing estándar de `pulse`. Dentro del "movimiento sobrio" del DS.
+- **`prefers-reduced-motion` (obligatorio):** con reduced-motion, **la animación se desactiva por completo**: el placeholder queda como **bloque estático** `--panel-3`. El layout fantasma sigue reservando el espacio sin movimiento. Regla dura del DS (igual que el resto de las animaciones).
+- **Implementación (para `control-frontend`, no normativa de diseño):** el mecanismo es la utilidad **`animate-pulse` (Tailwind)** sobre **`bg-panel-3`**; desactivada bajo `@media (prefers-reduced-motion: reduce)` (queda `--panel-3` estático). El diseño fija el **comportamiento** (opacidad latiendo ~1→~0.6→1 sobre `--panel-3`, ~1.5s, off en reduced-motion); el mecanismo exacto es del frontend.
+
+#### Primitivas — los building blocks del componente reutilizable
+
+`control-frontend` arma **un componente `Skeleton` reutilizable** (con variantes) que expone estas primitivas. Toda pantalla compone su skeleton **a partir de estas piezas**; no se vuelve a escribir `animate-pulse bg-panel-3` inline en ningún lado.
+
+| Primitiva | Reemplaza | Radio | Medidas / variantes |
+|---|---|---|---|
+| **`SkeletonLine`** | una línea de texto (título, label, nombre, meta) | `--r-chip` 7px | **alto = el `font-size` real del texto** que reemplaza (p.ej. 12px para meta, 14.5px para nombre de movimiento, 32px para H1); **ancho** parametrizable (porcentaje o px) para imitar largos distintos. Una línea de meta debe ser **más corta** que la de título. |
+| **`SkeletonBlock`** | superficie rectangular (card, canvas de gráfico, área de lista, input, botón) | `--r-card` por default; `--r-ctl` para controles | alto/ancho explícitos = los del elemento real. Es la primitiva más usada (todo lo que no es línea ni círculo). |
+| **`SkeletonCircle`** | avatar, swatch circular, glifo redondo | `50%` | un solo parámetro de **diámetro** (= el del círculo real: 32px avatar de sidebar, etc.). |
+| **`SkeletonPill`** | pill / stepper / segmented / chip-contador | `--r-pill` | alto/ancho del control real (p.ej. stepper ~36px alto). Es un `SkeletonBlock` con radio pill; se nombra aparte por frecuencia de uso. |
+
+- **Densidad/espaciado entre primitivas:** los placeholders se separan con **el mismo gap que separa los elementos reales** que imitan (la escala de espaciado del DS: `--gap` 18px entre cards, `--row-pad` 14px de fila, el `gap` real entre líneas de un ítem). No hay un "gap de skeleton" propio: hereda el ritmo del layout real.
+- **Cuántos placeholders en una lista:** una lista fantasma muestra **un número fijo y razonable de filas** (**5–7** para una lista de movimientos/categorías), no una ni infinitas. Suficientes para llenar el viewport sin scroll inicial y comunicar "viene una lista"; no tantas que el aterrizaje de una lista corta genere salto al colapsar. Cada fila fantasma replica la **estructura de columnas** de la fila real (p.ej. en `/mes`: `[círculo ícono] [línea nombre + línea meta] [línea fecha] [línea monto]`).
+
+#### Accesibilidad (obligatoria en todo skeleton)
+
+- El **contenedor** lleva **`role="status"`** + **`aria-label`** descriptivo del contenido en carga (p.ej. `"Cargando movimientos"`, `"Cargando totales"`, `"Cargando configuración"`, `"Cargando gráfico"`).
+- Los **placeholders internos** (líneas, bloques, círculos) son **decorativos**: `aria-hidden="true"`. El `role="status"` del contenedor ya anuncia el estado.
+- **No** se usa `role="alert"` (eso es para error, que tiene su propio patrón). El skeleton es `status` (información, no urgencia).
+
+#### Cómo construir el skeleton de una pantalla (lineamiento)
+
+1. **Identificá la estructura estable vs. la dependiente del dato.** Lo estable (chrome de card, títulos fijos, controles que no dependen del dato) puede renderizarse **ya, inerte**; solo el área de dato se reemplaza por fantasmas.
+2. **Mapeá cada elemento real a una primitiva** con sus medidas reales (línea→`SkeletonLine` del alto del texto; card→`SkeletonBlock` del alto de la card; avatar→`SkeletonCircle` del diámetro; pill→`SkeletonPill`).
+3. **Respetá columnas, gaps y radios reales** para que no haya salto al aterrizar.
+4. **Envolvé** en un contenedor `role="status"` + `aria-label`; los placeholders `aria-hidden`.
+5. **La animación es `pulse`** (opacidad latiendo sobre `--panel-3`), off en reduced-motion.
+6. **Mostralo solo en la carga inicial**, cuando aún no hay datos: nunca en refetch ni en interacciones con el dato ya presente (colapsar/expandir o reordenar secciones no muestra skeleton).
+
+#### Mapeo de casos (unificación)
+
+Todos los estados de carga se componen sobre las primitivas (mismo resultado visual o mejor, mismo lenguaje). Las medidas reales se conservan; cambia el **cómo** (primitivas + pulse + a11y consistente), no el layout. Los primeros cuatro casos reescriben los skeletons ad-hoc originales; los dos últimos (**filas de sección en `/mes`** y **Dashboard**) son **mapeos nuevos** (Ola 1) — antes no tenían skeleton o lo tenían incompleto.
+
+| Caso | Hoy (ad-hoc) | Pasa a usar |
+|---|---|---|
+| **Totales de `/mes`** (`month-view-client.tsx`, 3 cards de total) | `div.h-[90px] animate-pulse rounded-card bg-panel-3` ×3 en grid `1fr 1fr 1.1fr`, ya con `role="status"` `aria-label="Cargando totales"` | **3× `SkeletonBlock`** radio `--r-card`, alto **90px**, en el **mismo grid `1fr 1fr 1.1fr` con `--gap`**. Conserva el `role="status"`/`aria-label` (ya correcto). Solo cambia el fill ad-hoc por la primitiva (`animate-pulse` sobre `bg-panel-3`). |
+| **Card de reporte** (`report-card.tsx`, `ChartSkeleton`) | bloque `animate-pulse rounded-ctl bg-panel-3` del alto del canvas + 3 chips `rounded-chip bg-panel-3` (70/56/80 ×14px) de leyenda; hijos `aria-hidden` | **1× `SkeletonBlock`** radio `--r-ctl` del **alto del canvas** (300/280/220) + **3× `SkeletonLine`/`SkeletonPill`** de leyenda (anchos 70/56/80, alto 14, radio `--r-chip`). **Cambio a11y:** envolver en contenedor **`role="status"` `aria-label="Cargando gráfico"`** (hoy los hijos son `aria-hidden` pero falta el `status` contenedor). La cabecera/tabs de la card ya está presente e inerte (correcto). |
+| **`/configuracion`** (`settings-client.tsx`, skeleton del segmented) | `div.rounded-pill bg-panel-3 animate-pulse` 220×36, `aria-hidden` | **1× `SkeletonPill`** radio `--r-pill`, 220×36, dentro de la fila de ajuste real (título + descripción reales presentes; solo el control es fantasma). **Cambio a11y:** el área de carga debe quedar bajo un `role="status"` `aria-label="Cargando configuración"`. |
+| **`/categorias`** (`categories-list.tsx`, skeleton de pantalla) | header fantasma (`h-3 w-24` eyebrow + `h-8 w-36` H1 + `h-10 w-36` botón) + `h-[200px]` área lista, todo `animate-pulse rounded-… bg-panel-3` | **Header:** `SkeletonLine` eyebrow (alto ~12px, ancho ~96px, radio chip) + `SkeletonLine` H1 (alto ~32px, ancho ~144px) + `SkeletonBlock` botón (`--r-ctl`, 40×144). **Lista:** en vez de un único bloque `h-[200px]`, **5–7 filas fantasma** que replican la estructura del `catrow` real (`[SkeletonBlock swatch 14px] [SkeletonLine nombre] [SkeletonLine uso]`) dentro de la `.cat-list`, para que el aterrizaje de la lista real no salte. **Cambio a11y:** contenedor `role="status"` `aria-label="Cargando categorías"`. |
+| **Filas de sección en `/mes`** (`month-view-client.tsx`, secciones Únicos/Fijos/Cuotas) — **mapeo nuevo (Ola 1)** | hoy durante la carga **solo** se ven los 3 `SkeletonBlock` de los totales; las secciones **no muestran nada** (el área de lista queda vacía hasta que llega el dato). | Mientras `isLoading`, las **tres secciones se renderizan ya** con su cabecera fantasma y su cuerpo de filas fantasma (en vez del listado vacío). Por sección: **(a) Cabecera** — imitar la `.ghead` real (`accordion-section.tsx`): `SkeletonBlock` chevron 16×16 (radio `--r-chip`) + `SkeletonLine` rótulo (alto **13px**, ancho ~80px) + `SkeletonPill` contador (alto ~16px, ancho ~26px, radio `--r-pill`) + línea divisora `--hair` real (no fantasma, es chrome estable) + `SkeletonLine` subtotal mono (alto **13px**, ancho ~72px, alineado a la derecha). El **chevron va estático en ▶ (colapsado-look) o se omite la rotación** — es fantasma, no acciona. Sin handle de drag (el modo orden no existe en carga). **(b) Cuerpo** — la tarjeta-lista real (`bg-panel border-line rounded-card --shadow-sm overflow-hidden`, chrome estable presente) con **3 filas fantasma por sección** (no 5–7: son tres secciones a la vez; 3×3 = 9 filas llenan el viewport sin exceso y el aterrizaje de listas cortas no salta). Cada fila fantasma replica el grid real del `MovementItemRow` (`40px 1fr auto auto auto`, `padding var(--row-pad) 18px`, divisor `--hair` entre filas): **`SkeletonCircle` ícono 40px** + columna texto (`SkeletonLine` nombre alto **14.5px** ancho ~60% + `SkeletonLine` meta alto **12.5px** ancho ~40%, gap real entre ambas) + `SkeletonLine` fecha (alto 12.5px, ancho ~52px, alineada derecha) + `SkeletonLine` monto (alto **15.5px**, ancho ~84px, alineada derecha) + **sin** col de kebab (aparece solo en hover). **a11y:** el área de secciones bajo carga va en contenedor `role="status"` `aria-label="Cargando movimientos"` (distinto del `"Cargando totales"` de los 3 totales — son dos bloques de carga). |
+| **Dashboard** (`/`, `dashboard-client.tsx`) — **mapeo nuevo (Ola 1)** | hoy ad-hoc: 2 bloques `h-[120px] animate-pulse rounded-card bg-panel-3` en grid `1fr 1fr` + 1 bloque `h-[160px]` debajo, todo bajo `role="status" aria-label="Cargando totales"`. **No imita** el layout cargado real (faltan la card de reporte y el footer; los altos no coinciden con las stat-cards/hero reales). | Imitar el layout cargado real del resumen + widget, para que no salte al aterrizar. Bajo `role="status" aria-label="Cargando totales"`, **`space-y-[var(--gap)]`**: **(1)** grid `grid-cols-2 gap-[var(--gap)]` con **2× `SkeletonBlock`** (radio `--r-card`) del alto de las stat-cards reales Gastos/Ingresos — **~120px** (el alto real lo fija el contenido: eyebrow + cifra 30px + meta; 120px es la aproximación vigente, mantener). **(2)** **1× `SkeletonBlock`** radio `--r-card` para el **balance hero** — alto **~160px** (eyebrow + cifra 46px + barra de proporción + leyenda). **(3)** **1× `SkeletonBlock`** radio `--r-card` para la **card de reporte** del dashboard (hoy ausente del skeleton): alto ≈ chrome de card-pad + cabecera + **canvas 280px** + leyenda ≈ **~380px** — `control-frontend` ajusta al alto real montado de `ReportCard` con `chartHeight={280}` para evitar salto. La cabecera/controles de esa card pueden alternativamente renderizarse inertes (chrome estable) con solo el canvas como `SkeletonBlock` radio `--r-ctl` 280px + 2–3 `SkeletonLine` de leyenda — preferible si el alto exacto del bloque único es difícil de clavar. El **footer "Ver todos"** no necesita fantasma (es link, no dato). El **header `.phead`** (eyebrow + H1 + botón "+ Nuevo") **ya se renderiza presente e inerte** fuera del bloque de carga (correcto — es estructura estable). |
+
+> **Regla viva derivada:** ningún componente nuevo escribe `animate-pulse bg-panel-3` inline. Todo estado de carga compone las **primitivas** (`SkeletonLine` / `SkeletonBlock` / `SkeletonCircle` / `SkeletonPill`) del componente `Skeleton`, imitando las medidas reales, con pulse (`animate-pulse` sobre `bg-panel-3`, off en reduced-motion) y `role="status"` + `aria-label` en el contenedor. El fill es `--panel-3`; nunca color semántico ni de marca. El skeleton se muestra **solo en la carga inicial** —nunca en refetch ni en interacciones con dato ya presente.
+
 ---
 
 ## Specs de fase

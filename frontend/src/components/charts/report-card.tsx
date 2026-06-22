@@ -41,6 +41,7 @@ import { ChartLegend } from "@/components/ui/chart";
 import { CategoryFilterPopover, FilterButton } from "@/components/ui/category-filter";
 import type { ReportsMovementsResponse, ReportCardType } from "@/types/reports";
 import { cn } from "@/lib/utils";
+import { SkeletonBlock, SkeletonLine } from "@/components/ui/skeleton";
 
 // ─── Constantes ────────────────────────────────────────────────────────────────
 
@@ -273,11 +274,11 @@ const CHART_PANEL_ID = "report-chart-panel";
 
 function ChartSkeleton({ height }: { height: number }) {
   return (
-    <div>
-      <div className="animate-pulse rounded-ctl bg-panel-3" style={{ height }} aria-hidden="true" />
+    <div role="status" aria-label="Cargando gráfico">
+      <SkeletonBlock height={height} radius="ctl" />
       <div className="mt-[14px] flex gap-4">
         {[70, 56, 80].map((w, i) => (
-          <div key={i} className="animate-pulse rounded-chip bg-panel-3" style={{ width: w, height: 14 }} aria-hidden="true" />
+          <SkeletonLine key={i} height={14} width={w} />
         ))}
       </div>
     </div>

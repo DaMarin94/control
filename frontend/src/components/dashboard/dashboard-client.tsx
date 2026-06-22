@@ -15,12 +15,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, Plus } from "lucide-react";
 import { useMovements } from "@/hooks/use-movements";
+import { useApi } from "@/hooks/use-api";
 import { useSettings } from "@/hooks/use-settings";
 import { getCurrentMonth, formatMonthLabel, formatCurrency } from "@/lib/format";
 import { NewTransactionButton } from "@/components/movements/new-transaction-button";
 import { TransactionModal } from "@/components/movements/transaction-modal";
 import { ReportCard } from "@/components/charts/report-card";
 import { CurrencyChip } from "@/components/ui/currency-chip";
+import { SkeletonBlock } from "@/components/ui/skeleton";
 
 /** Deriva el año actual del helper getCurrentMonth para no usar new Date() directamente. */
 function getCurrentYear(): number {
@@ -31,6 +33,7 @@ function getCurrentYear(): number {
 export function DashboardClient() {
   const month = getCurrentMonth();
   const currentYear = getCurrentYear();
+  const { isAuthenticated } = useApi();
   const { data, isLoading, isError } = useMovements(month);
   const { defaultCurrency } = useSettings();
 
@@ -105,13 +108,22 @@ export function DashboardClient() {
       </div>
 
       {/* ── Resumen financiero ── */}
-      {isLoading ? (
+      {/*
+       * Skeleton solo en carga inicial (Ola 1, corrección):
+       * - Si ya hay `data` nunca se muestra el skeleton (evita flash en refetch).
+       * - Guard !isAuthenticated cubre sesión aún resolviendo (Auth.js status="loading").
+       */}
+      {(!data && (!isAuthenticated || isLoading)) ? (
         <div className="space-y-[var(--gap)]" aria-label="Cargando totales" role="status">
+          {/* Grid 2 stat-cards: Gastos / Ingresos (~120px cada una) */}
           <div className="grid grid-cols-2 gap-[var(--gap)]">
-            <div className="h-[120px] animate-pulse rounded-card bg-panel-3" />
-            <div className="h-[120px] animate-pulse rounded-card bg-panel-3" />
+            <SkeletonBlock height={120} />
+            <SkeletonBlock height={120} />
           </div>
-          <div className="h-[160px] animate-pulse rounded-card bg-panel-3" />
+          {/* Balance hero (~160px) */}
+          <SkeletonBlock height={160} />
+          {/* Card de reporte del dashboard (~380px: chrome + canvas 280px + leyenda) */}
+          <SkeletonBlock height={380} />
         </div>
       ) : isError ? (
         <div

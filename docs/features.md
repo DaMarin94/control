@@ -21,6 +21,8 @@
 | Categorías — defaults + CRUD + soft delete | RF-CAT-001..006 | Implementado |
 | Color de categoría editable — matriz de 70 colores | RF-CAT-005, RN-013 | Implementado |
 | Vista del mes — lista + totales + navegación | RF-VM-001..004 | Implementado |
+| Vista del mes — salto rápido mes/año (popover de dos ruedas) + navegación ilimitada | RF-VM-004 | Implementado |
+| Skeletons — sistema unificado de estados de carga (primitivas `Skeleton*` + regla) | — | Implementado |
 | Vista del mes — secciones colapsables + reordenables (persistidas) | RF-VM-005 | Implementado |
 | Vista del mes — filtros por listado (tipo + categoría por sección, filtrado en front) | RF-VM-006 | Implementado |
 | Navegación global — sidebar persistente | RF-NAV-001 | Implementado |

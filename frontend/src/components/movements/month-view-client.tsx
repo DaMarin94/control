@@ -38,6 +38,12 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, ArrowUpDown, Check } from "lucide-react";
 import {
+  MonthJumpPanel,
+  MonthJumpTriggerDesktop,
+  MonthJumpTriggerMobile,
+  useMonthJump,
+} from "./month-jump-popover";
+import {
   DndContext,
   closestCenter,
   KeyboardSensor,
@@ -54,10 +60,12 @@ import {
   verticalListSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
+import { useApi } from "@/hooks/use-api";
 import { useMovements } from "@/hooks/use-movements";
 import { usePreferences } from "@/hooks/use-preferences";
 import { useSettings } from "@/hooks/use-settings";
 import { SortableSection } from "@/components/ui/sortable-section";
+import { SkeletonBlock, SkeletonLine, SkeletonCircle, SkeletonPill } from "@/components/ui/skeleton";
 import { SectionFilterButton } from "@/components/ui/section-filter-popover";
 import type { SectionFilterType } from "@/components/ui/section-filter-popover";
 import { MovementItemRow } from "@/components/movements/movement-item-row";
@@ -281,6 +289,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
 
   // ── Fetch sin filtro de backend (Fase 1.2.1) ─────────────────────────────
   // El filtrado se hace en el frontend; el hook trae todo el mes.
+  const { isAuthenticated } = useApi();
   const { data, isLoading, isError } = useMovements(month);
   const { defaultCurrency } = useSettings();
 
@@ -600,6 +609,13 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   const periodLabel = `${mesName} ${yearName}`;
   const statusLabel = isCurrentMonth ? "Mes en curso" : "Histórico";
 
+  // ── Selector de salto mes/año (Ola 1, P4) ────────────────────────────────
+
+  const monthJump = useMonthJump({
+    currentMonth: month,
+    onNavigate: (ym: string) => router.push(`/mes?month=${ym}`),
+  });
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -617,16 +633,24 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
 
           {/* Bloque de título — desktop (≥941px) */}
           <div className="hidden [@media(min-width:941px)]:flex flex-col gap-0">
-            {/* Fila del eyebrow: label + chip de moneda default (a la derecha del eyebrow) */}
+            {/* Fila del eyebrow: label + chip de moneda default (a la derecha del eyebrow).
+                Quedan FUERA del disparador (per spec §1). */}
             <div className="flex items-center gap-[10px] mb-0.5">
               <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
                 Tu mes
               </span>
               <CurrencyChip currency={defaultCurrency} />
             </div>
-            <h1 className="text-[32px] font-bold tracking-[-0.02em] leading-none text-ink mt-0.5 mb-1">
-              {periodLabel}
-            </h1>
+            {/* H1 envuelto en disparador — el eyebrow y sub-label quedan fuera */}
+            <div className="mt-0.5 mb-1">
+              <MonthJumpTriggerDesktop
+                periodLabel={periodLabel}
+                isOpen={monthJump.isOpen}
+                onClick={monthJump.toggle}
+                triggerRef={monthJump.triggerRefDesktop}
+              />
+            </div>
+            {/* Sub-label estado — fuera del disparador */}
             <span className="text-[12.5px] font-medium text-muted">
               {statusLabel}
             </span>
@@ -640,7 +664,11 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
            * lo baja a su propia línea alineado a la derecha (spec).
            */}
           <div className="[@media(min-width:941px)]:hidden flex items-center gap-[10px] flex-wrap">
-            {/* Pill stepper — aria-hidden para evitar duplicados de botones en jsdom */}
+            {/*
+             * Pill stepper — aria-hidden para evitar duplicados de botones en jsdom.
+             * El disparador accesible del selector mes/año es el botón desktop (que
+             * existe en el DOM aunque esté oculto por CSS en mobile).
+             */}
             <div aria-hidden="true" className="inline-flex items-center gap-0.5 bg-panel border border-line rounded-pill px-1 py-1 shadow-[var(--shadow-sm)]">
               <button
                 onClick={goToPrevMonth}
@@ -649,14 +677,15 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
               >
                 <ChevronLeft size={18} aria-hidden="true" />
               </button>
-              <div className="min-w-[124px] text-center px-1">
-                <span className="block text-[14.5px] font-semibold text-ink">
-                  {mesName} {yearName}
-                </span>
-                <span className="block text-[11px] font-medium text-muted tracking-[0.02em] -mt-0.5">
-                  {statusLabel}
-                </span>
-              </div>
+              {/* Centro del pill: ahora es el disparador del selector de salto */}
+              <MonthJumpTriggerMobile
+                mesName={mesName}
+                yearName={yearName}
+                statusLabel={statusLabel}
+                isOpen={monthJump.isOpen}
+                onClick={monthJump.toggle}
+                triggerRef={monthJump.triggerRefMobile}
+              />
               <button
                 onClick={goToNextMonth}
                 aria-label="Mes siguiente"
@@ -722,12 +751,83 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
         </div>
 
         {/* ── Totales / error / loading ── */}
-        {isLoading ? (
-          <div className="grid gap-[var(--gap)] mb-6" style={{ gridTemplateColumns: "1fr 1fr 1.1fr" }} aria-label="Cargando totales" role="status">
-            <div className="h-[90px] animate-pulse rounded-card bg-panel-3" />
-            <div className="h-[90px] animate-pulse rounded-card bg-panel-3" />
-            <div className="h-[90px] animate-pulse rounded-card bg-panel-3" />
-          </div>
+        {/*
+         * Skeleton solo en carga inicial (Ola 1, corrección):
+         * - Si ya hay `data` (aunque sea stale) nunca se muestra el skeleton,
+         *   evitando el flash al colapsar/expandir/reordenar secciones
+         *   (esas acciones persisten preferencias y pueden provocar un refetch
+         *   que pone isLoading=true brevemente aunque los datos ya estén presentes).
+         * - El guard !isAuthenticated cubre el caso de sesión aún resolviendo
+         *   (Auth.js status="loading" → isAuthenticated=false → query disabled →
+         *   React Query devuelve data=undefined sin isLoading=true).
+         */}
+        {(!data && (!isAuthenticated || isLoading)) ? (
+          <>
+            {/* Skeleton de totales */}
+            <div className="grid gap-[var(--gap)] mb-6" style={{ gridTemplateColumns: "1fr 1fr 1.1fr" }} aria-label="Cargando totales" role="status">
+              <SkeletonBlock height={90} />
+              <SkeletonBlock height={90} />
+              <SkeletonBlock height={90} />
+            </div>
+
+            {/* Skeleton de las 3 secciones (Únicos / Fijos / Cuotas) — Ola 1, P5.
+                Imita el layout real: cabecera fantasma imitando .ghead + tarjeta-lista
+                con 3 filas fantasma que replican el grid del MovementItemRow. */}
+            <div
+              role="status"
+              aria-label="Cargando movimientos"
+              className="space-y-[30px] mt-1"
+            >
+              {(["Únicos", "Fijos", "Cuotas"] as const).map((label) => (
+                <div key={label}>
+                  {/* ─ Cabecera fantasma (imita .ghead) ─ */}
+                  <div className="flex items-center gap-[8px] pb-[10px] px-1">
+                    {/* Chevron fantasma */}
+                    <SkeletonBlock height={16} width={16} radius="ctl" className="shrink-0" />
+                    {/* Rótulo de sección */}
+                    <SkeletonLine height={13} width={80} />
+                    {/* Pill contador */}
+                    <SkeletonPill height={16} width={26} className="shrink-0" />
+                    {/* Divisor flex */}
+                    <div className="flex-1" aria-hidden="true" />
+                    {/* Subtotal mono */}
+                    <SkeletonLine height={13} width={72} />
+                  </div>
+
+                  {/* ─ Tarjeta-lista con 3 filas fantasma ─
+                      Chrome estable (bg-panel border rounded-card shadow) presente ya. */}
+                  <div className="bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] overflow-hidden">
+                    {([0, 1, 2] as const).map((i) => (
+                      <div key={i}>
+                        {/* Fila fantasma — replica grid MovementItemRow:
+                            40px 1fr auto auto auto, padding var(--row-pad) 18px */}
+                        <div
+                          className="flex items-center gap-[10px]"
+                          style={{ padding: "14px 18px" }}
+                        >
+                          {/* Col 1: ícono circular 40px */}
+                          <SkeletonCircle diameter={40} />
+                          {/* Col 2: nombre + meta apiladas */}
+                          <div className="flex flex-col gap-[6px] flex-1 min-w-0">
+                            <SkeletonLine height={14.5} width="60%" />
+                            <SkeletonLine height={12.5} width="40%" />
+                          </div>
+                          {/* Col 3: fecha */}
+                          <SkeletonLine height={12.5} width={52} className="shrink-0" />
+                          {/* Col 4: monto */}
+                          <SkeletonLine height={15.5} width={84} className="shrink-0" />
+                        </div>
+                        {/* Divisor entre filas (no en la última) */}
+                        {i < 2 && (
+                          <div aria-hidden="true" className="mx-[18px] h-px bg-hair" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         ) : isError ? (
           <div
             role="alert"
@@ -938,6 +1038,11 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
           onClose={() => setEditingCalculated(null)}
           viewMonth={month}
         />
+      )}
+
+      {/* ── Selector de salto mes/año (Ola 1, P4) ── */}
+      {monthJump.isOpen && (
+        <MonthJumpPanel {...monthJump.panelProps} />
       )}
     </PeriodNav>
   );

@@ -22,6 +22,7 @@ import { type Category, SCOPE_LABELS } from "@/types/category";
 import { CategoryFormModal } from "./category-form-modal";
 import { DeleteCategoryDialog } from "./delete-category-dialog";
 import { cn } from "@/lib/utils";
+import { SkeletonLine, SkeletonBlock } from "@/components/ui/skeleton";
 
 // ─── Scope badge ──────────────────────────────────────────────────────────────
 
@@ -64,16 +65,36 @@ export function CategoriesList() {
 
   if (isLoading) {
     return (
-      <div>
+      <div role="status" aria-label="Cargando categorías">
         {/* Header skeleton */}
         <div className="flex items-end justify-between gap-5 mb-6">
-          <div>
-            <div className="h-3 w-24 animate-pulse rounded bg-panel-3 mb-2" />
-            <div className="h-8 w-36 animate-pulse rounded-card bg-panel-3" />
+          <div className="flex flex-col gap-2">
+            {/* Eyebrow ~12px, ~96px */}
+            <SkeletonLine height={12} width={96} />
+            {/* H1 ~32px, ~144px */}
+            <SkeletonLine height={32} width={144} />
           </div>
-          <div className="h-10 w-36 animate-pulse rounded-ctl bg-panel-3" />
+          {/* Botón "+ Nueva categoría" ~40×144 */}
+          <SkeletonBlock height={40} width={144} radius="ctl" />
         </div>
-        <div className="h-[200px] animate-pulse rounded-card bg-panel-3" />
+
+        {/* Lista fantasma: 6 filas que replican la estructura del catrow */}
+        <div className="bg-panel border border-line rounded-card overflow-hidden shadow-[var(--shadow-sm)]">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="grid items-center gap-4 px-5 py-[15px] [&+div]:border-t [&+div]:border-hair"
+              style={{ gridTemplateColumns: "16px 1fr auto" }}
+            >
+              {/* Swatch de color (14×14, radio 5px igual al swatch real) */}
+              <SkeletonBlock height={14} width={14} radius="custom" className="rounded-[5px]" />
+              {/* Nombre de categoría */}
+              <SkeletonLine height={15} width="55%" />
+              {/* Uso / contador */}
+              <SkeletonLine height={12} width={80} />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

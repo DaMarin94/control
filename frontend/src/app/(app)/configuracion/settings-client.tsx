@@ -21,6 +21,7 @@ import { CurrencySegmented } from "@/components/ui/currency-segmented";
 import { useSettings } from "@/hooks/use-settings";
 import { useToast } from "@/hooks/use-toast";
 import type { CurrencyCode } from "@/types/settings";
+import { SkeletonPill } from "@/components/ui/skeleton";
 
 export function SettingsClient() {
   const { defaultCurrency, isLoading, isError, updateSettings, isSaving } =
@@ -59,11 +60,9 @@ export function SettingsClient() {
           {/* Derecha: control */}
           {isLoading ? (
             /* Skeleton del segmented mientras carga — ancho para 4 segmentos */
-            <div
-              className="rounded-pill bg-panel-3 animate-pulse shrink-0"
-              style={{ width: "220px", height: "36px" }}
-              aria-hidden="true"
-            />
+            <div role="status" aria-label="Cargando configuración">
+              <SkeletonPill width={220} height={36} />
+            </div>
           ) : isError ? (
             /* Error al cargar — el mensaje de error global cubre la pantalla */
             null
