@@ -31,7 +31,7 @@
  * y React Query dispararía la request sin Authorization → 401 espurio.
  */
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useApi } from "@/hooks/use-api";
 import type { ReportsMovementsResponse } from "@/types/reports";
 import { createLogger } from "@/lib/logger";
@@ -107,6 +107,10 @@ export function useReports(year: number, categoryIds: string[] | null = null) {
     // No disparar hasta que la sesión resolvió y el token está presente.
     // Evita 401 espurios durante el loading inicial de Auth.js.
     enabled: Boolean(year) && isAuthenticated,
+    // Al cambiar el filtro (año o categorías), mantiene los datos previos visibles
+    // mientras refetcha: isLoading queda false → el skeleton no parpadea en cada toggle.
+    // El skeleton solo aparece en la primera carga (sin datos cacheados para esa key).
+    placeholderData: keepPreviousData,
   });
 
   return query;

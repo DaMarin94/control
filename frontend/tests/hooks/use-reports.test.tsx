@@ -342,6 +342,39 @@ describe("useReports", () => {
     expect(result.current.data!.earliestYear).toBe(2025);
   });
 
+  it("mantiene datos previos (keepPreviousData) al cambiar la query key — no isLoading durante refetch", async () => {
+    // Simula el escenario de toggle de categoría:
+    // 1. Primera carga con categoryIds=null → datos llegan.
+    // 2. Toggle a categoryIds=["cat-1"] → nueva query key, pero con keepPreviousData:
+    //    isLoading queda false y data tiene los datos anteriores (no undefined).
+    // Nota: en los tests de renderHook no tenemos acceso directo a keepPreviousData,
+    // pero verificamos que tras el primer render exitoso el hook no vuelve a isLoading=true
+    // al cambiar el parámetro (comportamiento garantizado por keepPreviousData en TQ v5).
+    mockApiGet.mockResolvedValue(mockReportsResponse);
+
+    const { result, rerender } = renderHook(
+      ({ catIds }: { catIds: string[] | null }) => useReports(2026, catIds),
+      { wrapper: createWrapper(), initialProps: { catIds: null } }
+    );
+
+    // Primera carga exitosa
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.data).toBeDefined();
+
+    // Cambiar filtro → nueva query key; con keepPreviousData isLoading NO sube a true
+    // porque hay datos en placeholder (los datos previos)
+    mockApiGet.mockResolvedValue({
+      ...mockReportsResponse,
+      categories: [mockReportsResponse.categories[0]!],
+    });
+    rerender({ catIds: ["cat-1"] });
+
+    // Con keepPreviousData: isLoading permanece false (datos previos disponibles como placeholder)
+    expect(result.current.isLoading).toBe(false);
+    // Y data sigue siendo los datos previos mientras refetcha
+    expect(result.current.data).toBeDefined();
+  });
+
   it("invariante: suma de monthlyExpenseCents[i] == months[i].expenseCents", async () => {
     mockApiGet.mockResolvedValue(mockReportsResponse);
 

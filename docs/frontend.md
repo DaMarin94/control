@@ -456,11 +456,14 @@ El gráfico se separa en una **primitiva reutilizable** (motor de charting, agn�
 - **`ChartLegend` (`components/ui/chart.tsx`) tiene dos modos:**
   - **Decorativo** — solo color + label (leyenda no interactiva).
   - **Interactivo** — con props `hiddenIds` / `onToggle` / `groupLabel`: los ítems se renderizan como `<button aria-pressed>` dentro de un `role="group"`, con estado visual apagado para el ítem oculto. **Reportes usa el modo interactivo** para que la leyenda funcione como filtro (series o categorías según el modo de la card).
+  - Acepta además dos props para las leyendas de **categorías** (Forma 1 "Por categoría" y Forma 2): **`scrollable`** confina los chips a una región con alto máximo (≈3 renglones) y **scroll interno**, con un **fade** que señala cuando hay más contenido; **`commandSlot`** inyecta un control en un **carril fijo** debajo del scroll, siempre accesible — lo usa el atajo "Todas/Ninguna" (`LegendAllChip`). El `role="group"` envuelve solo los chips, no el `commandSlot`.
+  - La leyenda de **series** Ingresos/Gastos (Forma 1 "Total", 2 ítems) es una fila plana: no usa `scrollable` ni `commandSlot`.
 
 ### Datos (`use-reports`)
 
 - Hook **`useReports(year, categoryIds)`** sobre `GET /movements/reports?year=&categories=`. Sin mutaciones (solo lectura). Aplica el patrón obligatorio **`enabled: isAuthenticated`** (ver Queries de lectura gate-adas en Autenticación).
 - **Query key varía por año Y por filtro de categorías:** `["reports", year, categoriesKey]`, donde `categoriesKey` es la serialización del filtro (`null` → todas; lista ordenada → subconjunto). Sin incluir el filtro en la key, React Query no refetchearía al cambiar el checklist.
+- **`placeholderData: keepPreviousData`.** Al cambiar el filtro de categorías o el año, el gráfico mantiene visibles los datos previos durante el refetch; el skeleton de carga aparece solo en la primera carga (sin caché), no en cada cambio de filtro. Es deliberado para evitar el parpadeo del gráfico.
 - **GOTCHA — el query param `categories` se construye por concatenación de string, NO con `URLSearchParams`.** El backend espera la coma **literal** (`categories=id1,id2,id3`); `URLSearchParams` encodea la coma a `%2C` y el filtro deja de matchear. Patrón reusable para **cualquier endpoint que acepte listas separadas por coma**: armar el query string a mano, no con `URLSearchParams`.
 - Tipos del contrato en **`types/reports.ts`**: `ReportMovementsResponse` / `ReportMonth` / `ReportCategory`.
 

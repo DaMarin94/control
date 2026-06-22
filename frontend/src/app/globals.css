@@ -241,3 +241,27 @@
   background: radial-gradient(circle, oklch(1 0 0 / 0.18), transparent 65%);
   pointer-events: none;
 }
+
+/* ============================================================
+   Leyenda de gráfico scrolleable — fade inferior condicional
+   Aplica cuando data-overflow="true" en la región .legend-scroll-region.
+   El fade desvanece los últimos ~16px de chips hacia el fondo del panel.
+   No afecta al carril del comando (LegendAllChip), que está fuera del scroll.
+   ============================================================ */
+.legend-scroll-region[data-overflow="true"] {
+  mask-image: linear-gradient(
+    to bottom,
+    black calc(100% - 16px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black calc(100% - 16px),
+    transparent 100%
+  );
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Transiciones de color/opacidad del toggle ≤0.14s ya en los elementos;
+     nada adicional que animar en la región scroll. */
+}

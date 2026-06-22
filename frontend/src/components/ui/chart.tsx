@@ -168,6 +168,23 @@ interface ChartLegendProps {
    */
   groupLabel?: string;
   className?: string;
+  /**
+   * Nodo que se renderiza en el carril fijo DEBAJO de la región scrolleable.
+   * Solo aplica a leyendas de categorías (scrollable=true).
+   *
+   * Contiene: [divisor horizontal --hair] + [LegendAllChip].
+   * Si se omite, no se renderiza carril de comando.
+   */
+  commandSlot?: React.ReactNode;
+  /**
+   * Cuando true, los chips de categoría se envuelven en una región scrolleable
+   * (max-h-[84px] overflow-y-auto) con fade inferior condicional y el commandSlot
+   * va en un carril fijo debajo.
+   *
+   * Usar solo para leyendas de categorías (Forma 1 Por cat + Forma 2).
+   * La leyenda de series (Forma 1 Total, 2 ítems) NO usa esto.
+   */
+  scrollable?: boolean;
 }
 
 /**
@@ -175,6 +192,12 @@ interface ChartLegendProps {
  *
  * Modo decorativo (sin hiddenIds): divs, aria-label "Leyenda del gráfico".
  * Modo interactivo (con hiddenIds): grupo de toggle buttons aria-pressed.
+ *
+ * Cuando scrollable=true: estructura de dos partes —
+ *   [región scrolleable max-h-84px con group de chips]
+ *   [carril fijo con divisor horizontal + commandSlot]
+ *
+ * Cuando scrollable=false (default): fila plana flex-wrap sin scroll.
  *
  * Estados del ítem interactivo (spec design.md §"Leyenda interactiva"):
  * - Activo: swatch color pleno, etiqueta --ink-2.
@@ -184,12 +207,43 @@ interface ChartLegendProps {
  * - Active/pressed: fondo --panel-3.
  * - Focus: ring --accent-soft 3px, radio --r-chip (7px).
  *
- * Layout: -mx-[6px] en el contenedor para compensar el padding lateral de los botones
+ * Layout: -mx-[6px] en el contenedor de chips para compensar el padding lateral de los botones
  * (el swatch del primer ítem queda alineado al eje del gráfico, igual que la leyenda decorativa).
  * gap-x-[10px] + px-[6px] de cada botón ≈ 16px de aire visual entre swatches (misma densidad).
  */
-export function ChartLegend({ items, hiddenIds, onToggle, groupLabel, className }: ChartLegendProps) {
+export function ChartLegend({
+  items,
+  hiddenIds,
+  onToggle,
+  groupLabel,
+  className,
+  commandSlot,
+  scrollable = false,
+}: ChartLegendProps) {
   const isInteractive = hiddenIds !== undefined;
+
+  // Ref para la región scrolleable (medir overflow para el fade)
+  const scrollRegionRef = React.useRef<HTMLDivElement>(null);
+  const [hasOverflow, setHasOverflow] = React.useState(false);
+
+  // Medir overflow: activo cuando scrollable=true e interactiva
+  React.useEffect(() => {
+    if (!scrollable || !isInteractive) return;
+
+    const el = scrollRegionRef.current;
+    if (!el) return;
+
+    function measure() {
+      if (!el) return;
+      setHasOverflow(el.scrollHeight > el.clientHeight);
+    }
+
+    measure();
+
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [scrollable, isInteractive, items]);
 
   if (!isInteractive) {
     // ── Modo decorativo (comportamiento anterior) ──
@@ -215,15 +269,13 @@ export function ChartLegend({ items, hiddenIds, onToggle, groupLabel, className 
     );
   }
 
-  // ── Modo interactivo (toggle buttons) ──
-  return (
+  // ── Grupo de chips de toggle (reutilizado en ambas variantes) ──
+
+  const chipsGroup = (
     <div
       role="group"
       aria-label={groupLabel ?? "Filtrar series"}
-      className={cn(
-        "flex flex-wrap items-center gap-x-[10px] gap-y-[6px] mt-[14px] -mx-[6px]",
-        className,
-      )}
+      className="flex flex-wrap items-center gap-x-[10px] gap-y-[6px] -mx-[6px]"
     >
       {items.map((item) => {
         const isOff = hiddenIds.includes(item.id);
@@ -279,6 +331,49 @@ export function ChartLegend({ items, hiddenIds, onToggle, groupLabel, className 
           </button>
         );
       })}
+    </div>
+  );
+
+  // ── Modo NO scrollable: fila plana (Forma 1 Total — 2 ítems) ──
+  if (!scrollable) {
+    return (
+      <div
+        className={cn("mt-[14px]", className)}
+      >
+        {chipsGroup}
+      </div>
+    );
+  }
+
+  // ── Modo scrollable: stack vertical (leyendas de categorías) ──
+  //
+  // Estructura:
+  //   <bloque-leyenda mt-[14px] stack vertical>
+  //     <región-scroll max-h-[84px] overflow-y-auto overflow-x-hidden data-overflow>
+  //       <div role="group" flex-wrap -mx-[6px]> …chips… </div>
+  //     </región-scroll>
+  //     <carril-comando -ml-[8px]>  [divisor hr][LegendAllChip]  </carril-comando>
+  //   </bloque-leyenda>
+  //
+  // El fade inferior se implementa con mask-image sobre la región scrolleable,
+  // atado al atributo data-overflow="true" vía CSS en globals.css.
+  return (
+    <div className={cn("mt-[14px]", className)}>
+      {/* Región scrolleable — los chips viven acá */}
+      <div
+        ref={scrollRegionRef}
+        className="max-h-[84px] overflow-y-auto overflow-x-hidden pr-[2px] legend-scroll-region"
+        data-overflow={hasOverflow ? "true" : "false"}
+      >
+        {chipsGroup}
+      </div>
+
+      {/* Carril fijo del comando (divisor + LegendAllChip) — nunca scrollea */}
+      {commandSlot && (
+        <div className="-ml-[8px]">
+          {commandSlot}
+        </div>
+      )}
     </div>
   );
 }

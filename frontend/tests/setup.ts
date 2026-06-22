@@ -28,3 +28,15 @@ if (!window.matchMedia) {
     }),
   });
 }
+
+// jsdom no implementa ResizeObserver — requerido por ChartLegend (scrollable)
+// para detectar overflow de la región de chips. El stub no-op es suficiente para
+// los tests que no necesitan medir layout real; los tests que necesitan el callback
+// inyectan su propio mock por test (globalThis.ResizeObserver = class {...}).
+if (!globalThis.ResizeObserver) {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}

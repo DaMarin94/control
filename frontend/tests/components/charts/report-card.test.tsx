@@ -4,15 +4,22 @@
  * Verifica:
  * - Cabecera: eyebrow "Reporte", título "Ingresos y gastos" / "Por categoría"
  * - Control de año embebido (stepper): ‹ / › con límites
- * - Botón de filtro de categorías (estado neutro vs filtro activo)
  * - Botón quitar (solo si removable=true) + confirmación
  * - Estado de carga (skeleton)
  * - Estado de error + botón Reintentar
  * - Estado vacío (año sin movimientos)
  * - Leyenda según tipo
+ * - LegendAllChip (chip-comando icónico) en leyendas de categoría (Forma 1 Vista B + Forma 2):
+ *   - presencia, label/aria dinámico, emisión de callbacks
+ *   - está en el CARRIL FIJO (fuera del role="group" y fuera de la región scrolleable)
+ *   - orden DOM: group → chip (group precede al chip en el DOM)
+ * - AUSENCIA del chip en la leyenda de series (Forma 1 Total)
+ * - Región scrolleable con max-h-[84px] en leyendas de categorías
+ * - data-overflow: lógica de medición de scrollHeight > clientHeight
+ * - La leyenda de series (Forma 1 Total) NO usa región scrolleable ni carril fijo
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -355,6 +362,216 @@ describe("ReportCard — leyenda", () => {
     renderCard({ type: "by-category" });
     expect(screen.getByText("Alimentación")).toBeInTheDocument();
     expect(screen.getByText("Transporte")).toBeInTheDocument();
+  });
+});
+
+// ─── Tests: estructura scrolleable de leyendas de categorías ─────────────────
+
+describe("ReportCard — región scrolleable en leyendas de categorías", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseReports.mockReturnValue(makeSuccessReturn());
+  });
+
+  it("Forma 2: existe una región scrolleable (.legend-scroll-region) con los chips de categoría", () => {
+    const { container } = renderCard({ type: "by-category" });
+    const scrollRegion = container.querySelector(".legend-scroll-region");
+    expect(scrollRegion).toBeTruthy();
+  });
+
+  it("Forma 2: el region tiene data-overflow atributo", () => {
+    const { container } = renderCard({ type: "by-category" });
+    const scrollRegion = container.querySelector(".legend-scroll-region");
+    expect(scrollRegion).toHaveAttribute("data-overflow");
+  });
+
+  it("Forma 2: el role='group' de chips está DENTRO de la región scrolleable", () => {
+    const { container } = renderCard({ type: "by-category" });
+    const scrollRegion = container.querySelector(".legend-scroll-region");
+    const group = scrollRegion?.querySelector('[role="group"][aria-label="Filtrar categorías"]');
+    expect(group).toBeTruthy();
+  });
+
+  it("Forma 1 Vista B: existe una región scrolleable (.legend-scroll-region)", () => {
+    const { container } = renderCard({ type: "income-expense", categoryBreakdown: true });
+    const scrollRegion = container.querySelector(".legend-scroll-region");
+    expect(scrollRegion).toBeTruthy();
+  });
+
+  it("Forma 1 Vista B: el role='group' de chips está DENTRO de la región scrolleable", () => {
+    const { container } = renderCard({ type: "income-expense", categoryBreakdown: true });
+    const scrollRegion = container.querySelector(".legend-scroll-region");
+    const group = scrollRegion?.querySelector('[role="group"][aria-label="Filtrar categorías"]');
+    expect(group).toBeTruthy();
+  });
+
+  it("Forma 1 Total (2 series): NO existe región scrolleable", () => {
+    const { container } = renderCard({ type: "income-expense", categoryBreakdown: false });
+    const scrollRegion = container.querySelector(".legend-scroll-region");
+    expect(scrollRegion).toBeNull();
+  });
+
+  it("data-overflow='true' cuando scrollHeight > clientHeight (mock de medición)", () => {
+    // jsdom no calcula layout real; mockeamos scrollHeight/clientHeight sobre el prototipo
+    // para simular el caso de overflow.
+    const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(200);
+    const clientHeightSpy = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(84);
+
+    // También mockeamos ResizeObserver para que llame al callback inmediatamente
+    const originalRO = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      private cb: ResizeObserverCallback;
+      constructor(cb: ResizeObserverCallback) { this.cb = cb; }
+      observe(target: Element) { this.cb([{ target } as ResizeObserverEntry], this as unknown as ResizeObserver); }
+      unobserve() {}
+      disconnect() {}
+    };
+
+    const { container } = renderCard({ type: "by-category" });
+    const scrollRegion = container.querySelector(".legend-scroll-region");
+    expect(scrollRegion).toHaveAttribute("data-overflow", "true");
+
+    scrollHeightSpy.mockRestore();
+    clientHeightSpy.mockRestore();
+    globalThis.ResizeObserver = originalRO;
+  });
+
+  it("data-overflow='false' cuando scrollHeight <= clientHeight (sin overflow)", () => {
+    // jsdom tiene ambas en 0 por defecto → no overflow
+    const { container } = renderCard({ type: "by-category" });
+    const scrollRegion = container.querySelector(".legend-scroll-region");
+    // En jsdom ambos son 0 → 0 > 0 es false → data-overflow="false"
+    expect(scrollRegion).toHaveAttribute("data-overflow", "false");
+  });
+});
+
+// ─── Tests: LegendAllChip — chip-comando "Todas / Ninguna" ───────────────────
+
+describe("ReportCard — LegendAllChip en leyendas de categoría", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseReports.mockReturnValue(makeSuccessReturn());
+  });
+
+  // ── Forma 2 (by-category) ─────────────────────────────────────────────────
+
+  it("Forma 2: chip muestra aria-label 'Ocultar...' y rótulo 'Ninguna' cuando todas activas", () => {
+    renderCard({ type: "by-category" });
+    // hiddenCategoryIds vacío → todas activas → label "Ninguna"
+    expect(screen.getByRole("button", { name: "Ocultar todas las categorías" })).toBeInTheDocument();
+    expect(screen.getByText("Ninguna")).toBeInTheDocument();
+  });
+
+  it("Forma 2: chip muestra aria-label 'Mostrar...' y rótulo 'Todas' cuando hay alguna apagada", () => {
+    // cat-1 oculta → hiddenCategoryIds = ["cat-1"]
+    renderCard({ type: "by-category", categoryIds: ["cat-2"] });
+    expect(screen.getByRole("button", { name: "Mostrar todas las categorías" })).toBeInTheDocument();
+    expect(screen.getByText("Todas")).toBeInTheDocument();
+  });
+
+  it("Forma 2: chip muestra 'Todas' cuando ninguna categoría está activa (todas apagadas)", () => {
+    renderCard({ type: "by-category", categoryIds: [] });
+    expect(screen.getByRole("button", { name: "Mostrar todas las categorías" })).toBeInTheDocument();
+    expect(screen.getByText("Todas")).toBeInTheDocument();
+  });
+
+  it("Forma 2: clic en chip (Ninguna) llama onCategoryIdsChange con []", () => {
+    const onCategoryIdsChange = vi.fn();
+    renderCard({ type: "by-category", onCategoryIdsChange });
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar todas las categorías" }));
+    expect(onCategoryIdsChange).toHaveBeenCalledWith([]);
+  });
+
+  it("Forma 2: clic en chip (Todas) llama onCategoryIdsChange con null", () => {
+    const onCategoryIdsChange = vi.fn();
+    renderCard({ type: "by-category", categoryIds: ["cat-2"], onCategoryIdsChange });
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar todas las categorías" }));
+    expect(onCategoryIdsChange).toHaveBeenCalledWith(null);
+  });
+
+  // ── Forma 1 Vista B (income-expense + categoryBreakdown) ──────────────────
+
+  it("Forma 1 Vista B: chip muestra 'Ninguna' cuando todas están activas", () => {
+    renderCard({ type: "income-expense", categoryBreakdown: true });
+    expect(screen.getByRole("button", { name: "Ocultar todas las categorías" })).toBeInTheDocument();
+    expect(screen.getByText("Ninguna")).toBeInTheDocument();
+  });
+
+  it("Forma 1 Vista B: chip muestra 'Todas' cuando hay alguna apagada", () => {
+    renderCard({ type: "income-expense", categoryBreakdown: true, categoryIds: ["cat-2"] });
+    expect(screen.getByRole("button", { name: "Mostrar todas las categorías" })).toBeInTheDocument();
+    expect(screen.getByText("Todas")).toBeInTheDocument();
+  });
+
+  it("Forma 1 Vista B: clic en chip (Ninguna) llama onCategoryIdsChange con []", () => {
+    const onCategoryIdsChange = vi.fn();
+    renderCard({ type: "income-expense", categoryBreakdown: true, onCategoryIdsChange });
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar todas las categorías" }));
+    expect(onCategoryIdsChange).toHaveBeenCalledWith([]);
+  });
+
+  it("Forma 1 Vista B: clic en chip (Todas) llama onCategoryIdsChange con null", () => {
+    const onCategoryIdsChange = vi.fn();
+    renderCard({ type: "income-expense", categoryBreakdown: true, categoryIds: ["cat-1"], onCategoryIdsChange });
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar todas las categorías" }));
+    expect(onCategoryIdsChange).toHaveBeenCalledWith(null);
+  });
+
+  // ── Forma 1 Total (income-expense, !categoryBreakdown) — SIN chip ─────────
+
+  it("Forma 1 Total: NO muestra el chip (leyenda de 2 series, no categorías)", () => {
+    renderCard({ type: "income-expense", categoryBreakdown: false });
+    // El chip no debe aparecer en la leyenda de series
+    expect(screen.queryByRole("button", { name: "Ocultar todas las categorías" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mostrar todas las categorías" })).not.toBeInTheDocument();
+    // Los ítems de leyenda siguen siendo toggle buttons de series
+    expect(screen.getByRole("button", { name: "Ingresos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Gastos" })).toBeInTheDocument();
+  });
+
+  // ── El chip está FUERA del role="group" y DESPUÉS en el DOM ──────────────
+  // Spec: LegendAllChip está en el carril fijo, fuera de la región scroll y
+  // fuera del role="group". El order DOM es: [región-scroll(group)] → [carril-chip].
+
+  it("Forma 2: el chip aparece DESPUÉS del group 'Filtrar categorías' en el DOM", () => {
+    const { container } = renderCard({ type: "by-category" });
+    const chip = screen.getByRole("button", { name: "Ocultar todas las categorías" });
+    const group = container.querySelector('[role="group"][aria-label="Filtrar categorías"]');
+    expect(group).toBeTruthy();
+    if (group) {
+      // compareDocumentPosition: 2 = Node.DOCUMENT_POSITION_PRECEDING (group está antes que chip)
+      const position = chip.compareDocumentPosition(group);
+      expect(position & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    }
+  });
+
+  it("Forma 2: el chip NO está dentro del role='group'", () => {
+    const { container } = renderCard({ type: "by-category" });
+    const chip = screen.getByRole("button", { name: "Ocultar todas las categorías" });
+    const group = container.querySelector('[role="group"][aria-label="Filtrar categorías"]');
+    expect(group).toBeTruthy();
+    if (group) {
+      // El chip NO debe ser descendiente del group
+      expect(group.contains(chip)).toBe(false);
+    }
+  });
+
+  it("Forma 2: el chip NO está dentro de la región scrolleable", () => {
+    const { container } = renderCard({ type: "by-category" });
+    const chip = screen.getByRole("button", { name: "Ocultar todas las categorías" });
+    const scrollRegion = container.querySelector(".legend-scroll-region");
+    expect(scrollRegion).toBeTruthy();
+    if (scrollRegion) {
+      // El chip NO debe ser descendiente de la región scroll
+      expect(scrollRegion.contains(chip)).toBe(false);
+    }
+  });
+
+  it("Forma 1 Total: el group de series NO está dentro de una región scrolleable", () => {
+    const { container } = renderCard({ type: "income-expense", categoryBreakdown: false });
+    const scrollRegion = container.querySelector(".legend-scroll-region");
+    // No debe existir en la leyenda de series
+    expect(scrollRegion).toBeNull();
   });
 });
 

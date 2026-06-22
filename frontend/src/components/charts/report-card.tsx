@@ -38,6 +38,8 @@ import {
   ChevronRight,
   X,
   AlertTriangle,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useReports } from "@/hooks/use-reports";
 import { useSettings } from "@/hooks/use-settings";
@@ -672,6 +674,83 @@ function RemoveConfirmPopover({ onConfirm, onCancel, anchorRef }: RemoveConfirmP
   return createPortal(content, document.body);
 }
 
+// ─── LegendAllChip — atajo "Todas / Ninguna" (chip-comando icónico) ──────────
+
+/**
+ * Chip-comando "Todas / Ninguna" para las leyendas de categorías.
+ *
+ * Spec: docs/design.md §"Leyenda interactiva" → "Atajo Todas / Ninguna" y
+ *       §"Escalado de la leyenda con muchas categorías".
+ *
+ * - Solo aplica a leyendas de categorías (Forma 1 Vista B + Forma 2).
+ * - Vive en el CARRIL FIJO debajo de la región scrolleable, FUERA del role="group".
+ * - Precedido por un divisor HORIZONTAL --hair 1px (my-[8px]) que separa
+ *   el área de chips del carril del comando.
+ * - Si hiddenCategoryIds.length === 0 (todas activas) → "Ninguna" + EyeOff → emite [].
+ * - Si hiddenCategoryIds.length > 0 (alguna apagada) → "Todas" + Eye → emite null.
+ */
+interface LegendAllChipProps {
+  hiddenCategoryIds: string[];
+  onCategoryIdsChange?: (ids: string[] | null) => void;
+}
+
+function LegendAllChip({
+  hiddenCategoryIds,
+  onCategoryIdsChange,
+}: LegendAllChipProps) {
+  const allVisible = hiddenCategoryIds.length === 0;
+  const label = allVisible ? "Ninguna" : "Todas";
+  const ariaLabel = allVisible
+    ? "Ocultar todas las categorías"
+    : "Mostrar todas las categorías";
+  const Icon = allVisible ? EyeOff : Eye;
+
+  function handleClick() {
+    // Todas activas → apagar todas → []; alguna apagada → encender todas → null
+    onCategoryIdsChange?.(allVisible ? [] : null);
+  }
+
+  return (
+    // Subárbol: [divisor horizontal][chip]. Si el chip no se renderiza, no hay divisor.
+    <>
+      {/* Divisor horizontal --hair: separa el área de chips del carril del comando */}
+      <div
+        aria-hidden="true"
+        className="my-[8px]"
+        style={{ borderTop: "1px solid var(--hair)", width: "100%" }}
+      />
+      {/* Chip-comando: inline-flex, mismo alto/alineación que los chips de categoría */}
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        onClick={handleClick}
+        className={cn(
+          "group inline-flex items-center gap-[6px] px-[8px] py-[4px] rounded-[7px]",
+          "cursor-pointer transition-colors duration-[140ms]",
+          "bg-panel-2 hover:bg-panel-3 active:bg-panel-3",
+          "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+        )}
+      >
+        {/* Ícono 13px aria-hidden — no swatch de color */}
+        <Icon
+          size={13}
+          aria-hidden="true"
+          className="shrink-0 text-muted transition-colors duration-[140ms] group-hover:text-ink"
+        />
+        {/* Rótulo 12px/600 neutro, select-none */}
+        <span
+          className={cn(
+            "text-[12px] font-semibold select-none",
+            "text-ink-2 group-hover:text-ink transition-colors duration-[140ms]",
+          )}
+        >
+          {label}
+        </span>
+      </button>
+    </>
+  );
+}
+
 // ─── ReportCard — widget autónomo ─────────────────────────────────────────────
 
 export interface ReportCardProps {
@@ -1055,6 +1134,7 @@ export function ReportCard({
           {/* ─ Leyendas interactivas ─ */}
 
           {/* Caso A: Forma 1 — modo "Total" (vista A): Ingresos / Gastos */}
+          {/* SIN scroll, SIN atajo Todas/Ninguna: son 2 ítems fijos — fila plana. */}
           {data && type === "income-expense" && !isViewB && (
             <ChartLegend
               items={legendItemsTotalF1}
@@ -1065,22 +1145,38 @@ export function ReportCard({
           )}
 
           {/* Caso B: Forma 1 — modo "Por categoría" (vista B): categorías de gasto */}
+          {/* CON scroll (max-h-84px) + LegendAllChip en carril fijo debajo. */}
           {data && isViewB && availableCategories.length > 0 && (
             <ChartLegend
               items={legendItemsCategoryB}
               hiddenIds={hiddenCategoryIds}
               onToggle={handleCategoryLegendToggle}
               groupLabel="Filtrar categorías"
+              scrollable
+              commandSlot={
+                <LegendAllChip
+                  hiddenCategoryIds={hiddenCategoryIds}
+                  onCategoryIdsChange={onCategoryIdsChange}
+                />
+              }
             />
           )}
 
           {/* Caso C: Forma 2 (by-category): categorías de gasto */}
+          {/* CON scroll (max-h-84px) + LegendAllChip en carril fijo debajo. */}
           {data && type === "by-category" && availableCategories.length > 0 && (
             <ChartLegend
               items={legendItemsF2}
               hiddenIds={hiddenCategoryIds}
               onToggle={handleCategoryLegendToggle}
               groupLabel="Filtrar categorías"
+              scrollable
+              commandSlot={
+                <LegendAllChip
+                  hiddenCategoryIds={hiddenCategoryIds}
+                  onCategoryIdsChange={onCategoryIdsChange}
+                />
+              }
             />
           )}
         </div>
