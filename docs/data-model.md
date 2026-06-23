@@ -17,7 +17,10 @@
 | **Movimiento calculado** | Caso de **movimiento fijo** cuyo monto **no se ingresa**: se deriva del monto de **otro fijo de origen** mediante una **fórmula** (operador + operando), mes a mes y al vuelo (on-the-fly, no se persiste). Es un fijo a todos los efectos (cadena de filas `Recurring`, frecuencia, split, skip), con dos datos extra: el **vínculo a la identidad de cadena del fijo de origen** y la **fórmula** (operador + operando + signo). Su categoría y descripción son propias; su **tipo se deriva del signo del monto** (no es elegible — RN-018), no se toma del origen. Lo único que toma del origen es el monto. Su `amountCents` puede ser **negativo o cero** (excepción a "monto > 0"). Ver `requirements.md`, submódulo 3.4.b (RF-MCALC-001..007) y RN-017/018/019. |
 | **Grupo de cuotas** | Compra o cobro dividido en N pagos mensuales iguales desde un mes de inicio. |
 | **Preferencias de usuario** | Conjunto de preferencias del usuario (estado de UI que sobrevive a la navegación y al cierre de sesión). Una fila por usuario (1:1 con Usuario), con el contenido guardado como **blob JSON** en lugar de una columna por preferencia. La consumen las secciones colapsadas / orden de `/mes`, la config de reportes y el filtro por categoría. |
-| **Cotización de referencia (`ReferenceRate`)** | Tabla **global** (sin `userId`), **interna y no editable por UI**, de cotizaciones de referencia por `(moneda, mes)`. Sirve de **default por copia (no FK)** para pre-cargar la cotización de un movimiento según su mes; el movimiento conserva su propia cotización editable. Sembrada por seed idempotente. Ver §Tabla de cotizaciones de referencia. |
+| **Cotización de referencia (`ReferenceRate`)** | Tabla **global** (sin `userId`), **interna y no editable por UI**, de cotizaciones de referencia por `(moneda, mes)`. Sirve de **default por copia (no FK)** para pre-cargar la cotización de un movimiento según su mes; el movimiento conserva su propia cotización editable. Sembrada por seed idempotente y alimentada por el sync externo con la variante oficial. Ver §Tabla de cotizaciones de referencia. |
+| **Cotización externa por variante (`CurrencyQuote`)** | Tabla **global**, interna, no editable por UI. Histórico crudo de **variantes** de cotización FX capturadas de fuentes externas (oficial, blue, …) por `(moneda, variante, mes)`. `variant` es **string libre** (no enum), por mente abierta a variantes futuras. La conversión interna no la consume todavía. Ver §Cotizaciones externas y sincronización. |
+| **Inflación (`InflationRate`)** | Tabla **global**, interna, no editable por UI. IPC nacional (INDEC) por mes (variación mensual + nivel del índice). Se almacena ahora; ningún reporte lo consume aún. Ver §Cotizaciones externas y sincronización. |
+| **Log de sincronización (`RateSyncLog`)** | Tabla **global** de auditoría: una fila por intento de ingesta externa (aceptado/rechazado + motivo + payload crudo). El secret nunca se loguea. Ver §Cotizaciones externas y sincronización. |
 
 ---
 
@@ -214,6 +217,95 @@ Tabla **global** (sin `userId`), **interna y no editable por UI**, que guarda un
 - **`rate` (`Decimal`) = unidades de la moneda por 1 `USD`.** El **pivote es `USD`**: cada fila expresa cuántas unidades de esa moneda vale 1 USD en ese mes. **`USD` NO tiene fila** (pivote implícito, `rate = 1`).
 - **Derivación de cualquier cruce vía el pivote `USD`.** Para obtener "unidades de A por 1 unidad de B" en un mes, se combinan `rate(A)` y `rate(B)` del mes (con `USD` = 1 implícito). De ahí salen tanto los pares triviales (los que tocan USD) como los no triviales (EUR↔BRL, etc.). Si falta alguna de las filas necesarias del mes → el cruce no se puede derivar → `null`.
 - **Sembrada por seed idempotente** (`backend/prisma/seed-reference-rates.ts`): **54 filas** = 3 monedas (ARS, EUR, BRL; USD no lleva fila) × 18 meses (2025-01 … 2026-06). Idempotente (upsert por la clave única). En **producción** se corre con `pnpm seed:rates` (directo, sin gate ni dry-run). En **desarrollo** ya queda incluido en `pnpm db:seed` (y en `prisma migrate dev`), porque `prisma/seed.ts` invoca `seedReferenceRates`. Ver agente backend.
+- **`ReferenceRate` se alimenta del oficial.** La sincronización externa (`POST /settings/reference-rates/sync`, RF-FX-001) escribe `ReferenceRate.rate` con la cotización **oficial** del mes (ARS oficial de dolarapi; EUR/BRL de Frankfurter). La conversión interna del producto sigue usando **solo** `ReferenceRate` (sin tocar su semántica ni su clave única); las **variantes** (blue, etc.) se guardan aparte en `CurrencyQuote` (abajo) y **no** alimentan la conversión todavía (no hay UI para elegir variante). Ver §Cotizaciones externas y sincronización.
+
+---
+
+## Cotizaciones externas y sincronización (P7a / P7b)
+
+> Captura de cotizaciones FX y de IPC desde fuentes oficiales externas, vía un trigger sin datos en el body (`POST /settings/reference-rates/sync`). El sync captura **solo el mes corriente** (FX e IPC); no puebla histórico. El histórico de IPC viene sembrado por una data migration (`20260623000000_seed_historical_ipc`, ver §`InflationRate`). Tres tablas nuevas —`CurrencyQuote` (variantes FX), `InflationRate` (IPC), `RateSyncLog` (auditoría)— **globales** (sin `userId`), internas, no editables por UI. Reglas funcionales en `requirements.md`, módulo 3.12 (RF-FX-001, RF-IPC-001). Decisiones técnicas de seguridad de la ingesta en `.claude/agents/control-backend.md`, §Sincronización de cotizaciones externas.
+
+### `CurrencyQuote` — variantes de cotización FX (tabla relacional)
+
+Tabla **global**, **interna y no editable por UI**, que guarda **una fila por variante de cotización** capturada de las fuentes externas. Desacoplada de `ReferenceRate`: `ReferenceRate` guarda **el** valor que usa la conversión interna (el oficial); `CurrencyQuote` guarda **todas** las variantes publicadas (oficial, blue, y cualquiera futura) como histórico crudo de fuente.
+
+- **Modelo elegido: tabla relacional, NO blob JSON.** Una fila por `(currency, variant, yearMonth)`, no un objeto de variantes embebido. **Por qué tabla y no JSON:** (1) la unidad de escritura del sync es una variante puntual (upsert idempotente por clave única, circuit breaker por variante) — un blob obligaría a leer-modificar-reescribir el objeto entero en cada sync; (2) cada variante necesita sus propios `source` / `fetchedAt` / `compra` / `venta`, que en JSON quedarían como sub-objetos sin tipado ni constraint; (3) el histórico se consulta por `(moneda, variante, mes)`, patrón natural de fila+índice. El blob `UserPreferences` usa JSON porque es **estado de UI por usuario sin consulta relacional**; esto es lo opuesto (dato de dominio global, consultable, escrito por variante).
+- **`variant` es string libre, NO enum.** Decisión deliberada de "mente abierta a variantes futuras" (RF-FX-001): Argentina publica cotizaciones nuevas sin aviso (blue, MEP, CCL, tarjeta…) y un enum obligaría una migración por cada una. Se valida en el borde contra una **allowlist hardcodeada de variantes conocidas** (`"oficial"`, `"blue"` hoy) en el código del sync, no con un constraint de DB: agregar una variante es editar la allowlist, sin migración. La columna admite cualquier string; el control de qué se escribe vive en la capa de aplicación.
+- **Campos:**
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `currency` | `Currency` | una de las 4 monedas (en la práctica las que tienen fuente: ARS, EUR, BRL) |
+| `variant` | `String` | identificador de variante, minúsculas (`"oficial"`, `"blue"`, …). String libre; allowlist en código |
+| `yearMonth` | `String` | `"YYYY-MM"` |
+| `compra` | `Decimal` | precio de compra (bid). Unidades de la moneda por 1 USD, igual semántica de pivote que `ReferenceRate` |
+| `venta` | `Decimal` | precio de venta (ask). Para fuentes con un único valor (Frankfurter), `compra == venta` |
+| `source` | `String` | host de origen (`"dolarapi.com"`, `"api.frankfurter.dev"`) |
+| `fetchedAt` | `DateTime` | instante de captura (UTC) |
+
+- **Clave única `(currency, variant, yearMonth)`.** Un solo registro por moneda/variante/mes; el sync hace **upsert** sobre esta clave (idempotente). Índice por `(currency, yearMonth)` para listar variantes de un mes.
+- **Relación con `ReferenceRate`.** El sync, además de escribir la variante en `CurrencyQuote`, **propaga la variante `oficial` a `ReferenceRate.rate`** del mismo `(currency, yearMonth)` (upsert), porque es la que consume la conversión interna. EUR/BRL (Frankfurter, valor único) se guardan como `variant: "oficial"` y propagan igual. **USD nunca tiene fila** (pivote implícito = 1), en ninguna de las dos tablas.
+
+### `InflationRate` — IPC argentino (P7b)
+
+Tabla **global**, **interna y no editable por UI**, que guarda el IPC nacional (INDEC) por mes. Se **almacena ahora**; ningún reporte lo consume todavía (feature futura no planificada). Fuente: `apis.datos.gob.ar` (series de tiempo INDEC).
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `yearMonth` | `String` | `"YYYY-MM"`. **Clave única.** |
+| `monthlyVariation` | `Decimal` | variación mensual del IPC, en puntos porcentuales (serie `145.3_INGNACUAL_DICI_M_38`) |
+| `indexValue` | `Decimal` | nivel del índice IPC (serie `148.3_INIVELNAL_DICI_M_26`) |
+| `source` | `String` | host de origen (`"apis.datos.gob.ar"`) |
+| `fetchedAt` | `DateTime` | instante de captura (UTC) |
+
+- **Clave única `yearMonth`.** El IPC nacional es un único valor por mes (sin moneda ni variante). Upsert idempotente por esta clave.
+- **Sin consumo en v1.** No alimenta conversión ni totales. Es captura adelantada para una feature futura de ajuste por inflación en reportes.
+- **Histórico sembrado por data migration (`20260623000000_seed_historical_ipc`).** El histórico de IPC viene horneado por esta migración de Prisma: **113 meses (2017-01 … 2026-05)** de la serie completa de INDEC (`apis.datos.gob.ar`, variación e índice) insertados con `ON CONFLICT ("yearMonth") DO NOTHING`. Idempotente y convive con el sync diario sin pisarse: el sync solo cubre el **mes corriente**, la migración cubre el pasado.
+
+### `RateSyncLog` — auditoría de la sincronización
+
+Tabla **global** que registra **cada intento** de sync (aceptado o rechazado), para auditar la ingesta externa y diagnosticar anomalías (circuit breaker, dato malformado, fuente caída).
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `id` | `String` (cuid) | PK |
+| `source` | `String` | host consultado |
+| `target` | `String` | qué se intentó escribir, con la clave afectada: FX = `"CurrencyQuote:{CURRENCY}:{variant}:{YYYY-MM}"` (ej. `CurrencyQuote:ARS:oficial:2026-06`); IPC = `"InflationRate:{YYYY-MM}"` |
+| `rawPayload` | `Json` | respuesta cruda de la fuente (o el fragmento relevante), para reproducir el caso |
+| `accepted` | `Boolean` | `true` si pasó validación y se escribió; `false` si se rechazó |
+| `reason` | `String?` | motivo del rechazo (`"circuit-breaker"`, `"schema"`, `"out-of-range"`, `"http-error"`, …); `null` si `accepted` |
+| `createdAt` | `DateTime` | instante del intento (UTC) |
+
+- **Una fila por intento de escritura.** Un sync que toca varias monedas/variantes deja **varias** filas (una por target). El **secret nunca se loguea** acá ni en ningún campo.
+- **No expuesta por UI.** Solo lectura interna / operación.
+
+### Contrato — `POST /settings/reference-rates/sync`
+
+Dispara el fetch server-side a las fuentes oficiales y persiste lo capturado. **El body NO lleva valores de cotización** (el caller no puede inyectar números): el endpoint solo gatilla la ingesta.
+
+| Endpoint | Auth | Body | Éxito | Errores |
+|---|---|---|---|---|
+| `POST /settings/reference-rates/sync` | **`CRON_SECRET`** vía `Authorization: Bearer <CRON_SECRET>` (no el JWT de usuario) | sin datos de cotización (a lo sumo un selector de scope, abajo) | `200` · `data: SyncResult` | `400` · `401` · `422` · `429` · `502` |
+
+- **Auth por `CRON_SECRET`, no por JWT de usuario.** El secret viaja en el header `Authorization: Bearer <CRON_SECRET>`. Endpoint de operación/cron, no de usuario final. Secret de 256 bits, comparación de **tiempo constante**, rate-limit (`429` si se excede, ver abajo), solo HTTPS. **`401`** si el secret falta o no coincide. Detalle de seguridad en el agente backend.
+- **`429` — rate-limit.** Tope de **10 req/min por IP**; al excederlo el endpoint responde `429`.
+- **Body sin datos de cotización.** No acepta `rate`/`compra`/`venta`/valores de IPC. Opcionalmente puede aceptar un **selector de scope** (`{ scope?: "fx" | "ipc" | "all" }`, default `"all"`) para correr solo FX o solo IPC; **nunca** valores. Cualquier campo de valor que llegue se descarta (whitelist).
+- **`200` + `SyncResult`** — resumen de lo procesado. Shape:
+
+  ```
+  SyncResult = {
+    scope: "fx" | "ipc" | "all",
+    results: Array<{ target: string, accepted: boolean, reason?: string }>,
+    acceptedCount: number,
+    rejectedCount: number
+  }
+  ```
+
+  Un elemento de `results` por intento (`target`/`accepted`/`reason?`), más los agregados `acceptedCount`/`rejectedCount`. Formato de `target`: FX = `"CurrencyQuote:{CURRENCY}:{variant}:{YYYY-MM}"` (ej. `CurrencyQuote:ARS:oficial:2026-06`); IPC = `"InflationRate:{YYYY-MM}"`. **El éxito HTTP del endpoint no implica que todo se escribió**: una variante puede haber sido rechazada por el circuit breaker y aun así el endpoint responde `200` con ese detalle en `SyncResult` (rechazo *parcial*, esperado).
+- **Semántica de anomalía — falla ruidosa.** Si la **fuente** está caída, devuelve no-JSON, o el dato no pasa el schema/cotas de cordura, el endpoint responde **no-2xx** (`422` dato inválido / `502` fuente inalcanzable o respuesta no-JSON) y **no escribe** ese target. El **circuit breaker** (desvío > 15% del último valor guardado) **no sobrescribe**, marca la anomalía en `RateSyncLog` (`accepted: false`, `reason: "circuit-breaker"`) y se refleja en `SyncResult`; si **toda** la corrida queda bloqueada por anomalías, el endpoint **falla con no-2xx** (no devuelve un `200` silencioso). El criterio: un rechazo aislado entre varios targets → `200` con detalle; una corrida sin ningún target aceptado → no-2xx.
+- **Idempotente.** Re-disparar el sync para un mes ya capturado hace upsert por la clave única, sin duplicar (y vuelve a loguear el intento).
+
+---
 
 Toda respuesta exitosa de los endpoints de categorías devuelve, dentro del sobre `{ success, statusCode, data }`, este shape:
 

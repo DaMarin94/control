@@ -379,6 +379,74 @@ model RecurringSkip {
 }
 
 // ---------------------------------------------------------------------------
+// CurrencyQuote — variantes de cotización FX (P7a — Fase 1.2.5)
+// ---------------------------------------------------------------------------
+
+// Histórico crudo de variantes de cotización FX capturadas de fuentes externas.
+// Desacoplada de ReferenceRate: esta tabla guarda TODAS las variantes publicadas
+// (oficial, blue, etc.); ReferenceRate guarda la que usa la conversión interna (oficial).
+//
+// variant: string libre (NO enum) — allowlist de variantes conocidas ("oficial", "blue")
+// en el código del sync, sin constraint de DB. Agregar variante = editar la allowlist.
+//
+// compra/venta: unidades de la moneda por 1 USD (mismo pivote que ReferenceRate).
+// Para fuentes con valor único (Frankfurter), compra == venta.
+//
+// Clave única: (currency, variant, yearMonth) — upsert idempotente.
+// Índice: (currency, yearMonth) para listar variantes de un mes.
+model CurrencyQuote {
+  id         String   @id @default(cuid())
+  currency   Currency
+  variant    String   // string libre: "oficial", "blue", etc. Allowlist en código
+  yearMonth  String   // "YYYY-MM"
+  compra     Decimal  @db.Decimal(18, 6)
+  venta      Decimal  @db.Decimal(18, 6)
+  source     String   // host de origen
+  fetchedAt  DateTime @db.Timestamptz
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([currency, variant, yearMonth])
+  @@index([currency, yearMonth])
+}
+
+// ---------------------------------------------------------------------------
+// InflationRate — IPC argentino (P7b — Fase 1.2.5)
+// ---------------------------------------------------------------------------
+
+// IPC nacional (INDEC) por mes. Se almacena ahora; ningún reporte lo consume aún.
+// Fuente: apis.datos.gob.ar (series de tiempo INDEC).
+// Clave única: yearMonth (un único valor de IPC por mes).
+model InflationRate {
+  id               String   @id @default(cuid())
+  yearMonth        String   @unique // "YYYY-MM"
+  monthlyVariation Decimal  @db.Decimal(18, 6) // variación mensual en puntos porcentuales
+  indexValue       Decimal  @db.Decimal(18, 6) // nivel del índice IPC
+  source           String   // host de origen
+  fetchedAt        DateTime @db.Timestamptz
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// RateSyncLog — auditoría de la sincronización (P7 — Fase 1.2.5)
+// ---------------------------------------------------------------------------
+
+// Una fila por intento de escritura (aceptado o rechazado), para auditar la ingesta.
+// El secret NUNCA se loguea en ningún campo.
+model RateSyncLog {
+  id         String   @id @default(cuid())
+  source     String   // host consultado
+  target     String   // qué se intentó escribir, ej. "CurrencyQuote:ARS:oficial:2026-06"
+  rawPayload Json     // respuesta cruda de la fuente (sin el secret)
+  accepted   Boolean  // true si pasó validación y se escribió
+  reason     String?  // motivo del rechazo; null si accepted = true
+  createdAt  DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
 // InstallmentGroup (grupo de cuotas)
 // ---------------------------------------------------------------------------
 

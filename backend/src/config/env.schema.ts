@@ -20,6 +20,12 @@ export const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   // CORS_ORIGIN: origin del frontend permitido para CORS. Default: http://localhost:3000.
   CORS_ORIGIN: z.string().optional().default('http://localhost:3000'),
+  // CRON_SECRET: secret de operación para el endpoint POST /settings/reference-rates/sync.
+  // Debe ser un string de al menos 32 caracteres (256 bits en hex = 64 chars recomendado).
+  // No es JWT de usuario — protege solo el endpoint de sincronización de cotizaciones.
+  CRON_SECRET: z
+    .string()
+    .min(32, 'CRON_SECRET debe tener al menos 32 caracteres'),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

@@ -1634,6 +1634,72 @@ El alcance es un **set curado de 4 monedas (ARS / USD / EUR / BRL)**, sin alta d
 
 ---
 
+### 3.12 Módulo: Sincronización de cotizaciones externas
+
+> El sistema captura **automáticamente** cotizaciones FX (P7a) e IPC argentino (P7b) desde fuentes oficiales externas, vía un trigger sin datos. Es la única excepción a "sin APIs externas en v1". No tiene UI de producto: alimenta la tabla de cotizaciones de referencia (FX) y guarda IPC para una feature futura. Modelo de datos en `data-model.md`, §Cotizaciones externas y sincronización; seguridad de la ingesta en `.claude/agents/control-backend.md`.
+
+P7 se parte en dos requerimientos independientes (fuentes distintas): **P7a = FX** (RF-FX-001), **P7b = IPC** (RF-IPC-001). Ambos se disparan por el **mismo endpoint** `POST /settings/reference-rates/sync`, que **no recibe valores** en el body —solo gatilla el fetch server-side— y está protegido por un secret de operación (`CRON_SECRET`), no por el JWT de usuario.
+
+---
+
+#### RF-FX-001 — Captura de cotizaciones FX desde fuentes externas (P7a)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El sistema obtiene de fuentes oficiales las cotizaciones de las monedas del set curado contra USD, las guarda como variantes (`CurrencyQuote`) y propaga la variante **oficial** a la tabla de cotizaciones de referencia (`ReferenceRate`, RF-CUR-006). |
+| **Actor** | Sistema (disparado por un proceso de operación / cron) |
+| **Prioridad** | Diferida |
+| **Precondiciones** | El disparador presenta el secret de operación válido. Hay conectividad con las fuentes. |
+
+**Fuentes:**
+- **ARS por USD → `dolarapi.com`** (Frankfurter no cubre ARS de forma confiable). Se guardan **ambas** variantes publicadas, **oficial y blue**; la conversión interna usa **siempre la oficial** (no hay UI para elegir variante todavía).
+- **EUR por USD y BRL por USD → `api.frankfurter.dev`** (base USD, valor directo, sin derivar). Valor único por moneda → se guarda como variante `oficial` con `compra == venta`.
+
+**Criterios de aceptación:**
+- [ ] El sync escribe cada cotización capturada en `CurrencyQuote` por `(moneda, variante, mes)` (upsert idempotente) y propaga la variante **oficial** a `ReferenceRate.rate` del mismo `(moneda, mes)`.
+- [ ] Se guardan **oficial y blue** para ARS; la **conversión interna del producto usa solo la oficial** (la variante no es elegible por UI en v1).
+- [ ] El conjunto de variantes es **extensible sin migración**: `variant` es string libre validado contra una allowlist en código (`data-model.md`, §`CurrencyQuote`). Sumar una variante futura es editar la allowlist, no el esquema.
+- [ ] La semántica de pivote no cambia: cada valor es **unidades de la moneda por 1 USD**; **USD no tiene fila** (pivote implícito = 1).
+- [ ] La conversión interna (`/mes`, dashboard, reportes) **sigue leyendo solo `ReferenceRate`**; las variantes no-oficiales no afectan ningún total en v1.
+- [ ] Un dato externo que no pasa validación (schema, cotas de cordura, circuit breaker > 15%) **no sobrescribe** el valor vigente y se registra en `RateSyncLog` (ver RF-SYNC-001 y agente backend).
+
+---
+
+#### RF-IPC-001 — Captura del IPC argentino (P7b)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El sistema obtiene el IPC nacional (INDEC) por mes desde `apis.datos.gob.ar` y lo guarda en `InflationRate`. Se almacena ahora; **ningún reporte lo consume todavía**. |
+| **Actor** | Sistema (disparado por un proceso de operación / cron) |
+| **Prioridad** | Diferida |
+| **Precondiciones** | El disparador presenta el secret de operación válido. Hay conectividad con la fuente. |
+
+**Criterios de aceptación:**
+- [ ] La fuente es `apis.datos.gob.ar` (series de tiempo INDEC): variación mensual (`145.3_INGNACUAL_DICI_M_38`) y nivel del índice (`148.3_INIVELNAL_DICI_M_26`).
+- [ ] Cada mes se guarda en `InflationRate` por `yearMonth` (clave única, upsert idempotente): variación mensual + nivel del índice + fuente + instante de captura.
+- [ ] El IPC **no alimenta** ninguna conversión, total ni reporte en v1: es captura adelantada para una feature futura de ajuste por inflación (sin definir aún).
+- [ ] Mismas garantías de ingesta segura que RF-FX-001 (schema estricto, cotas, log de auditoría).
+
+---
+
+#### RF-SYNC-001 — Trigger de sincronización sin datos
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | La ingesta se dispara con `POST /settings/reference-rates/sync`, que **no recibe valores de cotización** en el body —solo gatilla el fetch server-side a las fuentes oficiales— y está protegido por un secret de operación. El caller no puede inyectar números. |
+| **Actor** | Sistema (proceso de operación / cron autorizado) |
+| **Prioridad** | Diferida |
+| **Precondiciones** | El request presenta el secret de operación (`CRON_SECRET`) válido. |
+
+**Criterios de aceptación:**
+- [ ] El endpoint **no acepta valores** de cotización ni de IPC en el body (a lo sumo un selector de scope `fx`/`ipc`/`all`); cualquier valor que llegue se descarta.
+- [ ] Está protegido por **`CRON_SECRET`** (no por el JWT de usuario): sin secret válido responde `401`. El secret nunca se loguea.
+- [ ] El proceso aplica **validación estricta** del dato externo (schema, cotas de cordura) y un **circuit breaker al 15%** (un valor que se desvía > 15% del último guardado **no** sobrescribe, se marca anomalía y se refleja en la respuesta).
+- [ ] Cada intento de escritura (aceptado o rechazado) queda registrado en `RateSyncLog` con su motivo.
+- [ ] La respuesta es **ruidosa ante la anomalía**: un rechazo aislado entre varios targets devuelve `200` con el detalle; una corrida sin ningún target aceptado (fuente caída, dato inválido) responde **no-2xx** (`422`/`502`). Contrato completo en `data-model.md`, §Contrato — `POST /settings/reference-rates/sync`; detalle de seguridad en `.claude/agents/control-backend.md`.
+
+---
+
 ## 4. Reglas de negocio
 
 | ID | Regla |

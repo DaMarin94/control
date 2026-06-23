@@ -1,17 +1,28 @@
 import {
   BadRequestException,
+  BadGatewayException,
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Patch,
+  Post,
   Query,
   Req,
+  UnprocessableEntityException,
+  UseGuards,
 } from '@nestjs/common';
 import { Currency } from '@prisma/client';
 import { Request } from 'express';
 import { SettingsService } from './settings.service';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { ReferenceRatesService } from './reference-rates.service';
+import { RateSyncService } from './rate-sync.service';
+import { SyncRatesDto, SyncScope } from './dto/sync-rates.dto';
+import { CronSecretGuard } from './cron-secret.guard';
+import { SyncRateLimitGuard } from './sync-rate-limit.guard';
+import { Public } from '../auth/public.decorator';
 
 /**
  * Controlador de settings del usuario.
@@ -30,6 +41,7 @@ export class SettingsController {
   constructor(
     private readonly settingsService: SettingsService,
     private readonly referenceRatesService: ReferenceRatesService,
+    private readonly rateSyncService: RateSyncService,
   ) {}
 
   /**
@@ -54,6 +66,53 @@ export class SettingsController {
   ) {
     const userId = (req.user as { userId: string }).userId;
     return this.settingsService.updateSettings(userId, dto);
+  }
+
+  /**
+   * POST /settings/reference-rates/sync
+   *
+   * Dispara la ingesta server-side de cotizaciones FX e IPC desde fuentes externas.
+   *
+   * Auth: CRON_SECRET en header Authorization (NO JWT de usuario).
+   * Body: { scope?: "fx" | "ipc" | "all" } — sin valores de cotización.
+   *
+   * Respuestas:
+   *   200 + SyncResult — con detalle de cada target (incluyendo rechazos parciales)
+   *   401 — secret inválido o ausente
+   *   422 — dato inválido en fuente (schema/cotas/circuit-breaker; toda la corrida rechazada)
+   *   502 — fuente externa caída o respuesta no-JSON (toda la corrida rechazada)
+   *   429 — rate limit excedido
+   *
+   * Una corrida con rechazos PARCIALES responde 200 con el detalle.
+   * Una corrida sin NINGÚN target aceptado responde no-2xx.
+   */
+  @Public() // fuera del JwtAuthGuard global — protegido por CronSecretGuard
+  @UseGuards(SyncRateLimitGuard, CronSecretGuard)
+  @Post('reference-rates/sync')
+  @HttpCode(HttpStatus.OK)
+  async syncRates(@Body() dto: SyncRatesDto) {
+    const scope = dto.scope ?? SyncScope.ALL;
+    const result = await this.rateSyncService.sync(scope);
+
+    // Si NINGÚN target fue aceptado → no-2xx
+    if (result.acceptedCount === 0 && result.rejectedCount > 0) {
+      // Determinar el código según el motivo predominante
+      const hasHttpError = result.results.some(
+        (r) => r.reason === 'http-error',
+      );
+      if (hasHttpError) {
+        throw new BadGatewayException({
+          message: 'Fuente(s) externa(s) inalcanzable(s) o respuesta no-JSON',
+          syncResult: result,
+        });
+      }
+      throw new UnprocessableEntityException({
+        message: 'Todos los targets rechazados por validación o circuit breaker',
+        syncResult: result,
+      });
+    }
+
+    return result;
   }
 
   /**

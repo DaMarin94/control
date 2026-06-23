@@ -33,6 +33,7 @@
 | Reportes — moneda de display por card (selector por card, nace con la default global) | RF-REP-007 | Implementado |
 | Multi-moneda — set curado 4 (ARS/USD/EUR/BRL) + tabla de cotizaciones de referencia + pantalla `/configuracion` | RF-CUR-001..006, RN-009 | Implementado |
 | Modo de color — toggle Sistema/Claro/Oscuro en el chrome global (sidebar), persistido (blob `theme`) | RF-APP-001 | Implementado |
+| Sincronización de cotizaciones externas — FX (dolarapi/Frankfurter) + IPC (datos.gob.ar) vía trigger sin datos | RF-FX-001, RF-IPC-001, RF-SYNC-001 | Definido (no implementado) |
 | Preferencias de usuario — cimiento (blob JSON + sesión) | — | Implementado (sin UI de producto) |
 
 ---
