@@ -15,6 +15,7 @@ import { Currency } from '@prisma/client';
 import {
   convertToDefaultCurrency,
   convertToDisplayCurrency,
+  convertToDisplayCurrencyByMonth,
   deriveExchangeRate,
   buildPivotRates,
   resolveNearestYearMonth,
@@ -643,6 +644,185 @@ describe('buildPivotRates', () => {
 // ---------------------------------------------------------------------------
 // Consistencia entre convertToDefaultCurrency y deriveExchangeRate
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// convertToDisplayCurrencyByMonth (Ola 1 / P3 — TC por mes para fijos/cuotas)
+// ---------------------------------------------------------------------------
+//
+// La función ignora el exchangeRate/anchorCurrency guardados y deriva la
+// cotización al vuelo desde los pivotRates del mes. Esto garantiza que cada
+// instancia mensual de un fijo/cuota se convierte con el TC oficial del mes,
+// no con el TC congelado al momento de la carga.
+
+describe('convertToDisplayCurrencyByMonth', () => {
+  // ── Caso 1: misma moneda → sin conversión ──────────────────────────────
+
+  it('currency === displayCurrency (ARS→ARS): devuelve amountCents sin cambio', () => {
+    // El exchangeRate guardado es irrelevante cuando la moneda ya es la del display.
+    const result = convertToDisplayCurrencyByMonth(
+      150000, Currency.ARS, Currency.ARS,
+      SAMPLE_PIVOT, 9999, Currency.USD, // fallback con basura — no debe usarse
+    );
+    expect(result).toBe(150000);
+  });
+
+  it('currency === displayCurrency (USD→USD): devuelve amountCents sin cambio', () => {
+    const result = convertToDisplayCurrencyByMonth(
+      1000, Currency.USD, Currency.USD,
+      SAMPLE_PIVOT, 1432, Currency.ARS,
+    );
+    expect(result).toBe(1000);
+  });
+
+  // ── Caso clave P3: TC del mes ignora el exchangeRate guardado ───────────
+  //
+  // Un fijo en USD cargado hace 6 meses con TC=1000 ARS/USD, pero hoy el
+  // TC oficial del mes es 1432 ARS/USD. La función debe usar 1432, no 1000.
+
+  it('[P3] USD fijo, TC mes=1432, TC guardado=1000: usa el TC del mes (1432)', () => {
+    const pivotDelMes: PivotRates = { ARS: 1432, BRL: 5.11, EUR: 0.865 };
+    const result = convertToDisplayCurrencyByMonth(
+      1000,            // 10 USD
+      Currency.USD,
+      Currency.ARS,
+      pivotDelMes,
+      1000,            // TC guardado VIEJO — no debe usarse
+      Currency.ARS,
+    );
+    // Debe derivar: rate_ARS / rate_USD = 1432 / 1 = 1432
+    // 1000 centavos USD × 1432 = 1_432_000 centavos ARS
+    expect(result).toBe(1_432_000);
+  });
+
+  it('[P3] USD cuota, TC mes=1600, TC guardado=1200: usa el TC del mes (1600)', () => {
+    const pivotDelMes: PivotRates = { ARS: 1600, BRL: 5.20, EUR: 0.90 };
+    const result = convertToDisplayCurrencyByMonth(
+      500,             // 5 USD
+      Currency.USD,
+      Currency.ARS,
+      pivotDelMes,
+      1200,            // TC guardado VIEJO
+      Currency.ARS,
+    );
+    // 500 × (1600/1) = 800_000
+    expect(result).toBe(800_000);
+  });
+
+  it('[P3] EUR fijo: TC mes distinto del guardado, usa el del mes', () => {
+    // TC actual del mes: EUR/USD=0.90, ARS/USD=1500
+    // TC guardado: 1432/0.865 ≈ 1655 ARS/EUR (viejo)
+    const pivotDelMes: PivotRates = { ARS: 1500, BRL: 5.20, EUR: 0.90 };
+    const guardadoExchangeRate = 1432 / 0.865; // ~1655 (viejo)
+    const result = convertToDisplayCurrencyByMonth(
+      1000,            // 10 EUR
+      Currency.EUR,
+      Currency.ARS,
+      pivotDelMes,
+      guardadoExchangeRate,
+      Currency.ARS,
+    );
+    // Debe usar TC del mes: ARS/EUR = 1500 / 0.90 = 1666.67 → round
+    expect(result).toBe(Math.round(1000 * (1500 / 0.90)));
+    // NO debe usar el guardado (1655)
+    expect(result).not.toBe(Math.round(1000 * guardadoExchangeRate));
+  });
+
+  it('[P3] ARS fijo, display=USD: usa TC del mes, ignora el guardado', () => {
+    const pivotDelMes: PivotRates = { ARS: 1432, BRL: 5.11, EUR: 0.865 };
+    const result = convertToDisplayCurrencyByMonth(
+      143200,          // 1432 ARS
+      Currency.ARS,
+      Currency.USD,
+      pivotDelMes,
+      1,               // exchangeRate guardado (ARS/ARS = 1)
+      Currency.ARS,
+    );
+    // ARS → USD: rate_USD / rate_ARS = 1 / 1432 → 143200 × (1/1432) = 100
+    expect(result).toBe(100); // 1 USD exacto
+  });
+
+  // ── El exchangeRate guardado no afecta el resultado con pivotRates ──────
+
+  it('el resultado es idéntico independientemente del exchangeRate guardado', () => {
+    const pivot: PivotRates = { ARS: 1432, BRL: 5.11, EUR: 0.865 };
+    // Con TC guardado 1000 (viejo)
+    const r1 = convertToDisplayCurrencyByMonth(1000, Currency.USD, Currency.ARS, pivot, 1000, Currency.ARS);
+    // Con TC guardado 1500 (también viejo, distinto)
+    const r2 = convertToDisplayCurrencyByMonth(1000, Currency.USD, Currency.ARS, pivot, 1500, Currency.ARS);
+    // Con anchorCurrency distinto
+    const r3 = convertToDisplayCurrencyByMonth(1000, Currency.USD, Currency.ARS, pivot, 1000, Currency.USD);
+    // Todos deben dar el mismo resultado: 1000 × (1432/1) = 1_432_000
+    expect(r1).toBe(1_432_000);
+    expect(r2).toBe(1_432_000);
+    expect(r3).toBe(1_432_000);
+  });
+
+  // ── Fallback cuando pivotRates es null (tabla vacía) ────────────────────
+
+  it('fallback (pivotRates null, currency≠anchor): delega a convertToDisplayCurrency con guardado', () => {
+    // Sin rates, delega al comportamiento anterior
+    // currency=USD, anchor=ARS, exchangeRate=1432, display=ARS → amount × 1432
+    const result = convertToDisplayCurrencyByMonth(
+      1000, Currency.USD, Currency.ARS,
+      null,    // tabla vacía
+      1432,    // fallback exchangeRate
+      Currency.ARS,  // fallback anchor
+    );
+    expect(result).toBe(Math.round(1000 * 1432));
+  });
+
+  it('fallback (pivotRates null, currency===anchor): devuelve amountCents sin inflar', () => {
+    // ARS con anchor ARS sin rates → el monto ya está en ARS
+    const result = convertToDisplayCurrencyByMonth(
+      8_441_697, Currency.ARS, Currency.USD,
+      null,      // tabla vacía
+      1450,      // exchangeRate basura
+      Currency.ARS,
+    );
+    // No debe inflar: el fallback de convertToDisplayCurrency detecta currency===anchor
+    expect(result).toBe(8_441_697);
+  });
+
+  // ── Fallback cuando pivotRates parcial (falta la moneda) ────────────────
+
+  it('fallback (pivotRates sin la moneda display): delega al comportamiento guardado', () => {
+    // pivotRates tiene solo ARS, falta EUR (display)
+    const partialPivot: Partial<PivotRates> = { ARS: 1432 }; // sin EUR
+    // USD → EUR: deriveExchangeRate no puede completar el cruce → fallback
+    const result = convertToDisplayCurrencyByMonth(
+      1000, Currency.USD, Currency.EUR,
+      partialPivot,
+      1432,           // fallback exchangeRate (USD→ARS guardado)
+      Currency.ARS,   // fallback anchor
+    );
+    // Fallback: convertToDisplayCurrency(1000, USD, 1432, ARS, EUR, null)
+    // → currency≠anchor, sin pivotRates → Math.round(1000 × 1432) (comportamiento viejo)
+    expect(result).toBe(Math.round(1000 * 1432));
+  });
+
+  // ── Redondeo ─────────────────────────────────────────────────────────────
+
+  it('redondea a centavos enteros', () => {
+    const pivot: PivotRates = { ARS: 1432, BRL: 5.11, EUR: 0.865 };
+    const result = convertToDisplayCurrencyByMonth(3, Currency.EUR, Currency.ARS, pivot, 1, Currency.ARS);
+    // 3 × (1432/0.865) no es entero → debe redondear
+    expect(Number.isInteger(result)).toBe(true);
+  });
+
+  // ── Cruce no trivial (EUR → BRL) por mes ─────────────────────────────────
+
+  it('[P3] EUR cuota, display=BRL: cruza vía pivote USD usando TC del mes', () => {
+    const pivotDelMes: PivotRates = { ARS: 1432, BRL: 5.11, EUR: 0.865 };
+    const result = convertToDisplayCurrencyByMonth(
+      1000, Currency.EUR, Currency.BRL,
+      pivotDelMes,
+      9999,  // TC guardado basura
+      Currency.ARS,
+    );
+    // EUR → BRL: rate_BRL / rate_EUR = 5.11 / 0.865 ≈ 5.907
+    expect(result).toBe(Math.round(1000 * (5.11 / 0.865)));
+  });
+});
 
 describe('consistencia: deriveExchangeRate + convertToDefaultCurrency', () => {
   it('10 USD → ARS con rate de referencia', () => {

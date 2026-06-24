@@ -181,6 +181,85 @@ export function convertToDisplayCurrency(
   return Math.round(amountCents * exchangeRate);
 }
 
+// ---------------------------------------------------------------------------
+// Conversión por-mes para fijos y cuotas (Ola 1 / P3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Convierte un monto de fijo/cuota a displayCurrency usando SOLO los pivotRates
+ * del mes de la instancia. Ignora el exchangeRate/anchorCurrency guardados en la
+ * fila porque esos corresponden al momento de la carga, no al mes que se está
+ * mostrando.
+ *
+ * Diseño:
+ *   Fijos y cuotas pueden vivir durante meses/años; su `exchangeRate` queda
+ *   congelado al valor del día en que el usuario los creó. Usar ese valor para
+ *   cada instancia mensual produciría siempre el mismo importe en display,
+ *   ignorando la evolución real del TC. La solución es derivar la cotización
+ *   al vuelo desde la tabla ReferenceRate (variante oficial) del mes de la
+ *   instancia, que el sync actualiza mensualmente.
+ *
+ *   La fórmula es:
+ *     amount_display = amountCents × deriveExchangeRate(currency, displayCurrency, pivotRates)
+ *   donde deriveExchangeRate reutea por el pivote USD igual que el resto del sistema.
+ *
+ * Casos directos:
+ *   currency === displayCurrency → sin conversión (devuelve amountCents tal cual).
+ *
+ * Fallback (tabla vacía o rate faltante para la moneda):
+ *   Degradado de último recurso al comportamiento anterior: convierte con el
+ *   exchangeRate/anchorCurrency guardados. Con el clamp de resolveNearestYearMonth
+ *   aplicado por el caller, esto casi nunca ocurre. Cuando sí ocurre garantiza
+ *   que no produce valores fuera de escala (nunca infla), igual que convertToDisplayCurrency.
+ *   NOTA: el fallback usa los valores guardados del movimiento, no del mes.
+ *
+ * @param amountCents      Monto en centavos de la moneda original.
+ * @param currency         Moneda original del fijo/cuota.
+ * @param displayCurrency  Moneda de display del usuario.
+ * @param pivotRates       Cotizaciones de referencia del mes de la instancia.
+ *                         Si null (tabla vacía), se aplica el fallback.
+ * @param fallbackExchangeRate  Cotización guardada en la fila (usado SOLO en fallback).
+ * @param fallbackAnchorCurrency Anchor guardado en la fila (usado SOLO en fallback).
+ * @returns Monto convertido en centavos enteros de displayCurrency.
+ */
+export function convertToDisplayCurrencyByMonth(
+  amountCents: number,
+  currency: Currency,
+  displayCurrency: Currency,
+  pivotRates: Partial<PivotRates> | null,
+  fallbackExchangeRate: number,
+  fallbackAnchorCurrency: Currency,
+): number {
+  // Sin conversión: ya está en la moneda de display
+  if (currency === displayCurrency) {
+    return amountCents;
+  }
+
+  // Caso normal: derivar la cotización del mes desde los pivotRates
+  if (pivotRates) {
+    const derived = deriveExchangeRate(currency, displayCurrency, pivotRates);
+    if (derived !== null) {
+      return Math.round(amountCents * derived);
+    }
+    // pivotRates presente pero falta alguna moneda necesaria → caer al fallback
+  }
+
+  // Fallback de último recurso: sin datos de referencia para el mes.
+  //
+  // IMPORTANTE: este path es un degradado. Con el clamp de resolveNearestYearMonth
+  // casi nunca se ejecuta. Cuando lo hace (tabla vacía o moneda faltante), delega
+  // a convertToDisplayCurrency con los valores guardados, que garantiza no inflar
+  // (en particular, currency === anchorCurrency → devuelve amountCents).
+  return convertToDisplayCurrency(
+    amountCents,
+    currency,
+    fallbackExchangeRate,
+    fallbackAnchorCurrency,
+    displayCurrency,
+    null, // sin pivotRates ya confirmado que son nulos/insuficientes
+  );
+}
+
 /**
  * @deprecated Usar convertToDisplayCurrency con anchorCurrency.
  * Mantenida por compatibilidad con código que no necesita re-ruteo

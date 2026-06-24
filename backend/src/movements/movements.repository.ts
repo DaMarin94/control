@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { CategoryScope, Currency, FormulaOperator, MovementType, RecurringFrequency, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { applyFormula } from '../recurring/formula.helper';
-import { convertToDisplayCurrency, PivotRates, buildPivotRates, resolveNearestYearMonth } from '../common/currency.helper';
+import { convertToDisplayCurrency, convertToDisplayCurrencyByMonth, PivotRates, buildPivotRates, resolveNearestYearMonth } from '../common/currency.helper';
 
 // ---------------------------------------------------------------------------
 // Interfaces para la agregación anual
@@ -672,13 +672,14 @@ export class MovementsRepository {
     for (const r of normales) {
       const skipped = r.skips.length > 0;
       const exchangeRate = Number(r.exchangeRate);
-      const convertedAmountCents = convertToDisplayCurrency(
+      // P3: fijos usan TC oficial del mes (pivotRates), no el exchangeRate guardado.
+      const convertedAmountCents = convertToDisplayCurrencyByMonth(
         r.amountCents,
         r.currency,
-        exchangeRate,
-        r.anchorCurrency,
         displayCurrency,
         pivotRates,
+        exchangeRate,
+        r.anchorCurrency,
       );
       result.push({
         id: r.id,
@@ -721,14 +722,14 @@ export class MovementsRepository {
       const derivedType: MovementType =
         derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
 
-      // Calculados heredan moneda, cotización y anchor del origen
-      const convertedAmountCents = convertToDisplayCurrency(
+      // P3: calculados de fijo usan TC oficial del mes (pivotRates), no el exchangeRate del origen.
+      const convertedAmountCents = convertToDisplayCurrencyByMonth(
         Math.abs(derivedAmount),
         originData.currency,
-        originData.exchangeRate,
-        originData.anchorCurrency,
         displayCurrency,
         pivotRates,
+        originData.exchangeRate,
+        originData.anchorCurrency,
       );
 
       result.push({
@@ -819,13 +820,14 @@ export class MovementsRepository {
 
       const number = monthDiff(g.startMonth, month) + 1;
       const exchangeRate = Number(g.exchangeRate);
-      const convertedAmountCents = convertToDisplayCurrency(
+      // P3: cuotas usan TC oficial del mes de la instancia (pivotRates), no el exchangeRate guardado.
+      const convertedAmountCents = convertToDisplayCurrencyByMonth(
         g.amountCents,
         g.currency,
-        exchangeRate,
-        g.anchorCurrency,
         displayCurrency,
         pivotRates,
+        exchangeRate,
+        g.anchorCurrency,
       );
 
       result.push({
@@ -933,14 +935,15 @@ export class MovementsRepository {
         const derivedType: MovementType =
           derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
 
-        // Calculados heredan moneda, cotización y anchor del origen
-        const convertedAmountCents = convertToDisplayCurrency(
+        // P3: calculados de cuota usan TC oficial del mes de la instancia (pivotRates),
+        // no el exchangeRate del grupo origen.
+        const convertedAmountCents = convertToDisplayCurrencyByMonth(
           Math.abs(derivedAmount),
           groupData.currency,
-          groupData.exchangeRate,
-          groupData.anchorCurrency,
           displayCurrency,
           pivotRates,
+          groupData.exchangeRate,
+          groupData.anchorCurrency,
         );
 
         result.push({

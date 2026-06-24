@@ -40,7 +40,7 @@ El detalle estructural (contratos, gotchas, decisiones) vive en `docs/`. Leé la
 | Categorías, pool de colores, validación de categoría | `docs/backend.md` §Categorías, §CategoryValidatorService |
 | Auth, JWT, categorías por defecto al alta | `docs/backend.md` §Autenticación |
 | Preferencias | `docs/backend.md` §Preferencias de usuario |
-| Multi-moneda, cotizaciones de referencia, conversión | `docs/data-model.md` §Moneda explícita / §Tabla de cotizaciones de referencia |
+| Multi-moneda, cotizaciones de referencia, conversión | `docs/data-model.md` §Moneda explícita / §Tabla de cotizaciones de referencia. **Gotcha:** el display de **fijos, cuotas y sus calculados** se deriva del **TC oficial del mes de la instancia** (`convertToDisplayCurrencyByMonth`), **NO** del `exchangeRate` guardado en la fila — no lo "arregles" para que use el rate guardado. Solo **únicos** y **calculados-de-único** usan su `exchangeRate` guardado. Ver §Conversión = capa de display. |
 | Sincronización de cotizaciones externas (FX + IPC) | `docs/data-model.md` §Cotizaciones externas y sincronización + §Sincronización de cotizaciones externas (abajo) |
 | Shapes de request/response y contratos de API | `docs/data-model.md` |
 | Reglas funcionales (RF / RN / RNF) | `docs/requirements.md` |

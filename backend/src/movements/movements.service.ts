@@ -10,7 +10,7 @@ import {
   isOnFrequency,
 } from './movements.repository';
 import { applyFormula } from '../recurring/formula.helper';
-import { convertToDisplayCurrency, PivotRates, buildPivotRates } from '../common/currency.helper';
+import { convertToDisplayCurrency, convertToDisplayCurrencyByMonth, PivotRates, buildPivotRates } from '../common/currency.helper';
 import { SettingsService } from '../settings/settings.service';
 
 /**
@@ -419,14 +419,14 @@ export class MovementsService {
         if (!isOnFrequency(fijo.startMonth, fijo.frequency, mes)) continue;
         if (fijo.skippedMonths.has(mes)) continue;
 
-        // Fase 1.2.4: re-rutear vía pivot rates del mes
-        const convertedAmount = convertToDisplayCurrency(
+        // P3: fijos usan TC oficial del mes (pivotRates), no el exchangeRate guardado.
+        const convertedAmount = convertToDisplayCurrencyByMonth(
           fijo.amountCents,
           fijo.currency,
-          fijo.exchangeRate,
-          fijo.anchorCurrency,
           displayCurrency,
           pivotRates,
+          fijo.exchangeRate,
+          fijo.anchorCurrency,
         );
 
         // Acumular en el universo estable (sin filtro) para EXPENSE
@@ -486,14 +486,14 @@ export class MovementsService {
         const derivedType =
           derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
 
-        // Calculados heredan moneda/cotización/anchor del origen; re-rutear vía pivot rates
-        const magnitude = convertToDisplayCurrency(
+        // P3: calculados de fijo usan TC oficial del mes (pivotRates), no el exchangeRate del origen.
+        const magnitude = convertToDisplayCurrencyByMonth(
           Math.abs(derivedAmount),
           originData.currency,
-          originData.exchangeRate,
-          originData.anchorCurrency,
           displayCurrency,
           pivotRates,
+          originData.exchangeRate,
+          originData.anchorCurrency,
         );
 
         // Acumular en el universo estable (sin filtro) para EXPENSE
@@ -621,14 +621,14 @@ export class MovementsService {
         const derivedType =
           derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
 
-        // Calculados heredan moneda/cotización/anchor del origen; re-rutear vía pivot rates
-        const magnitude = convertToDisplayCurrency(
+        // P3: calculados de cuota usan TC oficial del mes (pivotRates), no el exchangeRate del grupo.
+        const magnitude = convertToDisplayCurrencyByMonth(
           Math.abs(derivedAmount),
           groupData.currency,
-          groupData.exchangeRate,
-          groupData.anchorCurrency,
           displayCurrency,
           pivotRates,
+          groupData.exchangeRate,
+          groupData.anchorCurrency,
         );
 
         // Acumular en el universo estable (sin filtro) para EXPENSE
@@ -676,15 +676,15 @@ export class MovementsService {
         const mes = months12[i];
         if (grupo.startMonth > mes || mes >= endMonth) continue;
 
-        // Fase 1.2.4: re-rutear vía pivot rates del mes correspondiente a cada cuota
+        // P3: cuotas usan TC oficial del mes de la instancia (pivotRates), no el exchangeRate guardado.
         const pivotRates = pivotRatesForYear.get(mes) ?? null;
-        const convertedAmount = convertToDisplayCurrency(
+        const convertedAmount = convertToDisplayCurrencyByMonth(
           grupo.amountCents,
           grupo.currency,
-          grupo.exchangeRate,
-          grupo.anchorCurrency,
           displayCurrency,
           pivotRates,
+          grupo.exchangeRate,
+          grupo.anchorCurrency,
         );
 
         // Acumular en el universo estable (sin filtro) para EXPENSE
