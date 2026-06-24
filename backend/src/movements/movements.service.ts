@@ -474,7 +474,8 @@ export class MovementsService {
           ? normalesActivosMes.get(calc.sourceChainId)
           : undefined;
         if (!originData) continue;
-        if (originData.skipped) continue;
+        // Skip heredado del origen OR skip propio del calculado en este mes (RF-MF-005)
+        if (originData.skipped || calc.skippedMonths.has(mes)) continue;
 
         const derivedAmount = applyFormula(
           originData.amountCents,

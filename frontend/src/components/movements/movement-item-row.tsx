@@ -77,21 +77,25 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
       ? formatDate(movement.occurredAt, movement.timezone)
       : null;
 
-  // Monto principal: convertedAmountCents (en la moneda default del usuario).
-  // Para calculados puede ser negativo o cero (RN-018, spec 1.c).
-  // Color siempre por TIPO (no por signo). Prefijo − si negativo.
+  // Monto principal: convertedAmountCents (en la moneda default del usuario) como CIFRA;
+  // el SIGNO se deriva de amountCents (con signo real; negativo ⇒ EXPENSE con signo −).
+  // Para calculados: el backend devuelve convertedAmountCents como magnitud absoluta (≥ 0);
+  // el signo real vive en amountCents (negativo cuando formulaSign=-1).
   // Para no calculados: gastos con −$, ingresos con +$.
   // Fase 1.2.3 / 1.2.3-ext: usar convertedAmountCents como cifra dominante;
   // símbolo de la moneda default (todos los convertidos van en la default del usuario).
   function buildAmountDisplay(): string {
-    const cents = movement.convertedAmountCents;
     if (isCalculated) {
-      // Monto calculado puede ser negativo, cero o positivo
-      if (cents === 0) return formatCurrency(0, defaultCurrency); // "$0,00" sin signo
-      if (cents < 0) return `−${formatCurrency(Math.abs(cents), defaultCurrency)}`; // "−$1.234,56"
-      return formatCurrency(cents, defaultCurrency); // positivo sin prefijo (es el valor derivado)
+      // convertedAmountCents es siempre magnitud (≥ 0) para calculados;
+      // el signo real lo indica amountCents (con signo).
+      const magnitude = Math.abs(movement.convertedAmountCents);
+      const signedCents = movement.amountCents;
+      if (signedCents === 0) return formatCurrency(0, defaultCurrency); // "$0,00" sin signo
+      if (signedCents < 0) return `−${formatCurrency(magnitude, defaultCurrency)}`; // "−$1.234,56"
+      return formatCurrency(magnitude, defaultCurrency); // positivo sin prefijo (valor derivado)
     }
-    // Movimiento normal: gastos con −$, ingresos con +$ (Math.abs porque puede ser negativo por tipo)
+    // Movimiento normal: gastos con −$, ingresos con +$ (Math.abs de convertedAmountCents)
+    const cents = movement.convertedAmountCents;
     const amountFormatted = formatCurrency(Math.abs(cents), defaultCurrency);
     return isExpense ? `−${amountFormatted}` : `+${amountFormatted}`;
   }
@@ -138,8 +142,10 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
     // Si tiene éxito, React Query invalida la query del mes y la lista se refresca sola
   }
 
-  // Ítems del KebabMenu — para fijos se añade el toggle skip entre Editar y Eliminar.
-  // "Crear movimiento desde este" solo en fijos NO calculados (spec sección 2).
+  // Ítems del KebabMenu — para fijos (incluidos calculados de fijo) se añade el toggle skip
+  // entre Editar y Eliminar (RF-MF-005). Un calculado de fijo puede anularse por su cuenta
+  // (su skipped = skip propio OR skip del padre); los calculados de único/cuota no tienen skip.
+  // "Crear movimiento desde este" solo en ítems NO calculados (spec sección 2).
   const menuItems = [
     {
       label: "Editar",

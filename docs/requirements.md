@@ -591,7 +591,7 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 - *A1 — Des-anular (toggle):* sobre un fijo ya anulado en ese mes, la acción se rotula **"Des-anular este mes"**; al activarla, la aparición vuelve a contar y el ítem pierde la diferenciación visual de anulado.
 
 **Criterios de aceptación:**
-- [ ] La acción de anular / des-anular está disponible **solo en los ítems fijos** de `/mes`; los movimientos únicos y las cuotas no la tienen.
+- [ ] La acción de anular / des-anular está disponible en los ítems de la sección **Fijos**: tanto en los **fijos** como en los **calculados de fijo** (los que tienen `origin: "fijo"`). Un **calculado de fijo se puede anular por su cuenta** y **además** queda anulado si su fijo de origen está anulado ese mes: su estado resultante es `skip propio del calculado **OR** skip del fijo de origen` (RF-MCALC-005: la herencia del estado del origen se mantiene; sobre ella se suma el skip propio). Los movimientos **únicos**, las **cuotas** y los **calculados de único o de cuota** **no** se anulan: su `skipped` es siempre `false` y no ofrecen la acción.
 - [ ] La acción es un **toggle reversible**: anular crea la anulación del mes; des-anular la quita. Sobre el mismo fijo y mes se puede ir y volver indefinidamente.
 - [ ] El mes anulado se distingue de los demás (`deletedFrom`, RF-MF-004): anular **no** elimina el fijo ni afecta otros meses — solo esa única aparición. El fijo sigue vivo y aparece en las demás apariciones que dicta su frecuencia.
 - [ ] Un fijo anulado para un mes **se sigue mostrando** en la lista de ese mes, con diferenciación visual.

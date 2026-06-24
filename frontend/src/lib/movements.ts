@@ -27,6 +27,10 @@ import type { MovementItem } from "@/types/movement";
  * en lugar de `amountCents` (moneda original). Math.abs() normaliza el signo de
  * los calculados EXPENSE (que almacenan convertedAmountCents negativo).
  *
+ * Los ítems anulados (`skipped === true`) se excluyen de la suma: un fijo anulado
+ * no aporta al total del mes (el backend también los excluye de `totals`).
+ * Únicos y cuotas nunca tienen `skipped: true`, así que no se ven afectados.
+ *
  * @returns { expense, income } — ambos siempre positivos (magnitudes, no signed).
  */
 export function sumMovementTotals(items: MovementItem[]): {
@@ -35,6 +39,7 @@ export function sumMovementTotals(items: MovementItem[]): {
 } {
   return items.reduce(
     (acc, m) => {
+      if (m.skipped) return acc;
       const magnitude = Math.abs(m.convertedAmountCents);
       if (m.type === "EXPENSE") acc.expense += magnitude;
       else acc.income += magnitude;

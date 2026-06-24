@@ -710,7 +710,8 @@ export class MovementsRepository {
       const originData = calc.sourceChainId ? originMap.get(calc.sourceChainId) : undefined;
       if (!originData) continue; // origen no activo en este mes
 
-      const skipped = originData.skipped;
+      // Skip propio del calculado de fijo OR skip heredado del origen (RF-MF-005)
+      const skipped = originData.skipped || (calc.skips.length > 0);
       const derivedAmount = applyFormula(
         originData.amountCents,
         calc.formulaOperator as FormulaOperator,
@@ -1108,7 +1109,8 @@ export class MovementsRepository {
         // Calculado de fijo
         const originData = normalesMap.get(r.sourceChainId);
         if (!originData) continue;
-        if (originData.skipped) continue;
+        // Skip heredado del origen OR skip propio del calculado en este mes (RF-MF-005)
+        if (originData.skipped || r.skips.length > 0) continue;
         effectiveAmount = applyFormula(
           originData.amountCents,
           r.formulaOperator as FormulaOperator,

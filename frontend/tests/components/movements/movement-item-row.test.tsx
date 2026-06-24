@@ -6,7 +6,8 @@
  * - Render del ítem fijo anulado (skipped=true): badge, tachado, opacity (P1 — Fase 1.1.1).
  * - Acción "Anular este mes" en el KebabMenu de fijos activos (P1 — Fase 1.1.1).
  * - Acción "Des-anular este mes" en el KebabMenu de fijos anulados (P1 — Fase 1.1.1).
- * - Únicos y cuotas NO tienen la acción de anular en su KebabMenu.
+ * - Únicos y cuotas (y sus calculados) NO tienen la acción de anular en su KebabMenu.
+ * - Calculados de fijo SÍ tienen la acción de anular (RF-MF-005: skip propio del calculado).
  * - Fase 1.1.7: chip "Calculado" para hijos, indicador GitBranch para padres,
  *   monto negativo/cero, acción "Crear movimiento desde este".
  * - Fase 1.1.8: chip/marca padre en único y cuota; acción kebab en único/cuota no calculados.
@@ -173,16 +174,32 @@ const fijoCalculado: MovementItem = {
   hasCalculated: false,
 };
 
-/** Fijo calculado con monto negativo */
+/** Fijo calculado con monto negativo (moneda ARS = default, sin cross-rate) */
 const fijoCalculadoNegativo: MovementItem = {
   ...fijoCalculado,
   id: "calc-neg",
   amountCents: -5000,
-  convertedAmountCents: -5000,
+  // El backend devuelve convertedAmountCents como magnitud (≥ 0); el signo viene de amountCents.
+  convertedAmountCents: 5000,
   calculated: {
     ...fijoCalculado.calculated!,
     formulaSign: -1,
   },
+};
+
+/**
+ * Fijo calculado negativo cross-rate (bug P6):
+ * amountCents < 0 (signo real) y convertedAmountCents > 0 (magnitud en moneda default).
+ * Antes del fix, el monto se mostraba sin el signo −.
+ */
+const fijoCalculadoNegativoCrossRate: MovementItem = {
+  ...fijoCalculadoNegativo,
+  id: "calc-neg-xrate",
+  currency: "USD",
+  // USD 10,00 → ARS 12.000,00 (exchange 1200,00 ARS/USD, escalado ×100)
+  exchangeRate: 120000,
+  amountCents: -1000,        // −USD 10,00 (con signo, negativo)
+  convertedAmountCents: 120000, // ARS 1.200,00 (magnitud, siempre ≥ 0)
 };
 
 /** Fijo calculado con monto cero */
@@ -587,9 +604,9 @@ describe("MovementItemRow — Fase 1.1.7: indicadores calculado/padre", () => {
 });
 
 describe("MovementItemRow — Fase 1.1.7: monto negativo/cero", () => {
-  it("monto negativo en calculado muestra prefijo −", () => {
+  it("monto negativo en calculado (ARS) muestra prefijo −", () => {
     renderRow(fijoCalculadoNegativo);
-    // amountCents = -5000 → "−$50,00"
+    // amountCents = -5000, convertedAmountCents = 5000 → "−$50,00"
     expect(screen.getByText("−$50,00")).toBeInTheDocument();
   });
 
@@ -602,6 +619,15 @@ describe("MovementItemRow — Fase 1.1.7: monto negativo/cero", () => {
     renderRow(fijoCalculado);
     // amountCents = 15000 → "$150,00" (sin prefijo +/−)
     expect(screen.getByText("$150,00")).toBeInTheDocument();
+  });
+
+  it("bug P6 — calculado negativo cross-rate: amountCents < 0 y convertedAmountCents > 0 muestra prefijo −", () => {
+    // Regresión: el backend devuelve convertedAmountCents como magnitud (≥ 0).
+    // El signo debe derivarse de amountCents, no de convertedAmountCents.
+    // amountCents = -1000 (−USD 10,00), convertedAmountCents = 120000 (ARS 1.200,00 positivo)
+    // Resultado esperado: "−$1.200,00" (con prefijo −, cifra de convertedAmountCents)
+    renderRow(fijoCalculadoNegativoCrossRate);
+    expect(screen.getByText("−$1.200,00")).toBeInTheDocument();
   });
 });
 
@@ -809,5 +835,79 @@ describe("MovementItemRow — Fase 1.2.3: display cross-rate", () => {
     // No debe mostrarse badge de moneda porque currency === defaultCurrency (USD)
     // El único texto "USD" que podría aparecer sería en el badge, que no debe existir
     expect(screen.queryByText("USD")).not.toBeInTheDocument();
+  });
+});
+
+// ─── Tests: skip/kebab — calculado de fijo SÍ tiene toggle anular (RF-MF-005) ─
+
+describe("MovementItemRow — calculado de fijo: acción 'Anular este mes' disponible", () => {
+  it("fijo calculado activo (origin=fijo, calculated presente) SÍ muestra 'Anular este mes' en el KebabMenu", () => {
+    // El backend soporta skip propio en calculados de fijo (skipped = skip propio OR del padre).
+    renderRow(fijoCalculado);
+
+    const trigger = screen.getByRole("button", { name: /acciones de ahorro/i });
+    fireEvent.click(trigger);
+
+    expect(
+      screen.getByRole("menuitem", { name: /anular este mes/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("fijo calculado anulado (skipped=true, calculated presente) muestra 'Des-anular este mes'", () => {
+    const fijoCalculadoAnulado: MovementItem = {
+      ...fijoCalculado,
+      skipped: true,
+    };
+    renderRow(fijoCalculadoAnulado);
+
+    const trigger = screen.getByRole("button", { name: /acciones de ahorro/i });
+    fireEvent.click(trigger);
+
+    expect(
+      screen.getByRole("menuitem", { name: /des-anular este mes/i }),
+    ).toBeInTheDocument();
+    // "Anular este mes" (sin "Des-") no debe aparecer cuando ya está anulado
+    expect(
+      screen.queryByRole("menuitem", { name: /^anular este mes$/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("fijo NO calculado (origin=fijo, calculated=null) sigue mostrando 'Anular este mes' (regresión)", () => {
+    renderRow(fijoActivo);
+
+    const trigger = screen.getByRole("button", { name: /acciones de alquiler/i });
+    fireEvent.click(trigger);
+
+    expect(
+      screen.getByRole("menuitem", { name: /anular este mes/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("calculado de único (origin=unico, calculated presente) NO muestra 'Anular este mes'", () => {
+    renderRow(unicoCalculado);
+
+    const trigger = screen.getByRole("button", { name: /acciones de ahorro rápido/i });
+    fireEvent.click(trigger);
+
+    expect(
+      screen.queryByRole("menuitem", { name: /anular este mes/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: /des-anular este mes/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("calculado de cuota (origin=cuota, calculated presente) NO muestra 'Anular este mes'", () => {
+    renderRow(cuotaCalculada);
+
+    const trigger = screen.getByRole("button", { name: /acciones de ahorro cuota/i });
+    fireEvent.click(trigger);
+
+    expect(
+      screen.queryByRole("menuitem", { name: /anular este mes/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: /des-anular este mes/i }),
+    ).not.toBeInTheDocument();
   });
 });

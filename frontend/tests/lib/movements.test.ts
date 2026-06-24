@@ -165,6 +165,31 @@ describe("sumMovementTotals", () => {
     expect(result.expense).not.toBe(100);
     expect(result.expense).not.toBe(-120000);
   });
+
+  // ── Ítems anulados (skipped) — bug de anulación ──
+
+  it("fijo skipped=true no suma en expense", () => {
+    const skippedFijo: MovementItem = {
+      ...makeItem("EXPENSE", 150000, "fijo-skip"),
+      origin: "fijo",
+      skipped: true,
+    };
+    const result = sumMovementTotals([skippedFijo]);
+    expect(result).toEqual({ expense: 0, income: 0 });
+  });
+
+  it("lista mixta: el fijo anulado no suma pero los demás sí", () => {
+    const skippedFijo: MovementItem = {
+      ...makeItem("EXPENSE", 150000, "fijo-skip"),
+      origin: "fijo",
+      skipped: true,
+    };
+    const activoExpense = makeItem("EXPENSE", 50000, "exp-activo");
+    const activoIncome = makeItem("INCOME", 200000, "inc-activo");
+    const result = sumMovementTotals([skippedFijo, activoExpense, activoIncome]);
+    // El anulado no debe sumarse: expense = 50000, income = 200000
+    expect(result).toEqual({ expense: 50000, income: 200000 });
+  });
 });
 
 // ─── groupSubtotalCents ────────────────────────────────────────────────────────
@@ -207,6 +232,17 @@ describe("groupSubtotalCents", () => {
     const result = groupSubtotalCents([usdIncome, arsExpense]);
     expect(result).toBe(24000000 - 15000);
     expect(result).not.toBe(20000 - 15000);
+  });
+
+  it("fijo anulado (skipped) no contribuye al subtotal de sección", () => {
+    const skippedFijo: MovementItem = {
+      ...makeItem("EXPENSE", 150000, "fijo-skip"),
+      origin: "fijo",
+      skipped: true,
+    };
+    const activoIncome = makeItem("INCOME", 200000, "inc-activo");
+    // Solo el income activo debe contar: 200000 − 0 = 200000
+    expect(groupSubtotalCents([skippedFijo, activoIncome])).toBe(200000);
   });
 });
 
