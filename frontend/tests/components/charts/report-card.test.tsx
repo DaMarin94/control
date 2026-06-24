@@ -2,7 +2,7 @@
  * Tests de ReportCard (Fase 1.1.5 — widget de reporte autónomo).
  *
  * Verifica:
- * - Cabecera: eyebrow "Reporte", título "Ingresos y gastos" / "Por categoría"
+ * - Cabecera: título editable (sin eyebrow "Reporte"), tabs "Total" / "Por categoría"
  * - Control de año embebido (stepper): ‹ / › con límites
  * - Botón quitar (solo si removable=true) + confirmación
  * - Estado de carga (skeleton)
@@ -167,19 +167,29 @@ describe("ReportCard — cabecera", () => {
     mockUseReports.mockReturnValue(makeSuccessReturn());
   });
 
-  it("income-expense muestra las tabs 'Total' y 'Por categoría' (no eyebrow/título identidad)", () => {
+  it("income-expense muestra las tabs 'Total' y 'Por categoría' (sin eyebrow 'Reporte')", () => {
     renderCard({ type: "income-expense" });
-    // Las tabs reemplazan la identidad en income-expense
+    // Spec P4 actualizado: la identidad es solo el título editable — sin eyebrow.
     expect(screen.getByRole("tab", { name: "Total" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Por categoría" })).toBeInTheDocument();
-    // El eyebrow "Reporte" y el título no se muestran en la cabecera de income-expense
-    expect(screen.queryByText("Reporte")).not.toBeInTheDocument();
+    // El eyebrow "Reporte" ya NO se renderiza. Solo aparece el placeholder del título.
+    // Con titlePlaceholder default "Reporte", el placeholder se muestra en --faint.
+    const reporteNodes = screen.getAllByText("Reporte");
+    // El único nodo "Reporte" es el placeholder del título (sin eyebrow adicional).
+    expect(reporteNodes).toHaveLength(1);
+    // El tablist está en la línea 2 (debajo de la identidad).
+    expect(screen.getByRole("tablist", { name: /vista del reporte/i })).toBeInTheDocument();
   });
 
-  it("muestra eyebrow 'Reporte' y título 'Por categoría' para by-category", () => {
+  it("by-category muestra solo el título editable en la cabecera (sin eyebrow 'Reporte')", () => {
     renderCard({ type: "by-category" });
-    expect(screen.getByText("Reporte")).toBeInTheDocument();
-    expect(screen.getByText("Por categoría")).toBeInTheDocument();
+    // Spec P4 actualizado: la identidad es solo el título editable — sin eyebrow.
+    // Sin título propio ni titlePlaceholder explícito, el placeholder default es "Reporte".
+    const reporteNodes = screen.getAllByText("Reporte");
+    // Solo el placeholder del título (un único nodo), no un eyebrow adicional.
+    expect(reporteNodes).toHaveLength(1);
+    // La card by-category NO tiene tablist de vista.
+    expect(screen.queryByRole("tablist", { name: /vista del reporte/i })).not.toBeInTheDocument();
   });
 
   it("muestra el stepper de año", () => {
@@ -619,9 +629,14 @@ describe("ReportCard — tabs de vista (income-expense)", () => {
     expect(screen.queryByRole("tablist", { name: /vista del reporte/i })).not.toBeInTheDocument();
   });
 
-  it("by-category muestra 'Reporte' y el título 'Por categoría' en la cabecera de identidad", () => {
+  it("by-category muestra solo el título editable en la cabecera (sin eyebrow, sin tablist de vista)", () => {
     renderCard({ type: "by-category" });
-    expect(screen.getByText("Reporte")).toBeInTheDocument();
+    // Spec P4 actualizado: sin eyebrow. Solo el placeholder del título (default "Reporte").
+    const reporteNodes = screen.getAllByText("Reporte");
+    // Exactamente un nodo: el placeholder del título editable.
+    expect(reporteNodes).toHaveLength(1);
+    // by-category NO tiene tablist de vista (solo income-expense lo tiene).
+    expect(screen.queryByRole("tablist", { name: /vista del reporte/i })).not.toBeInTheDocument();
   });
 
   it("default (categoryBreakdown=false): tab 'Total' aria-selected=true", () => {

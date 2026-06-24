@@ -124,6 +124,7 @@ reports: ReportCardConfig[]
 
 ReportCardConfig = {
   id: string,                                   // id local de la card (key de React / quitar); generado en el front
+  title?: string,                               // título de la card (RF-REP-008); ausente = placeholder "Reporte N" (display)
   type: "income-expense" | "by-category",       // tipo de reporte (RF-REP-001)
   year: number,                                 // año que muestra la card
   categoryIds: string[] | null,                 // null = todas las categorías; lista = subconjunto explícito de categoryIds
@@ -133,6 +134,7 @@ ReportCardConfig = {
 }
 ```
 
+- **`title`** (RF-REP-008) — título de la card, máx. 60 caracteres, trimmeado al confirmar. Aplica a ambos `type`. **Ausente o vacío** → la card muestra el placeholder **"Reporte N"** (N = posición 1-based de la card en la columna, contando todas las cards; **display puro, no se persiste** y se recalcula en vivo al quitar/reordenar). Si el usuario confirma un título vacío, el campo se **omite** del objeto (back-compat: cards sin `title` muestran el placeholder).
 - **`type`** — `"income-expense"` (Forma 1, Ingresos vs. Gastos) o `"by-category"` (Forma 2, Gastos por categoría apilado). Son los dos únicos tipos (RF-REP-001).
 - **`year`** — el año que la card grafica; lo cambia la navegación de año embebida del widget.
 - **`categoryIds`** — filtro de categorías de la card. **`null` = todas** (default al crear); una **lista** = subconjunto explícito de `categoryId`s seleccionados. Aplica a ambos tipos (en `income-expense` restringe qué categorías cuentan en los totales; en `by-category`, qué bandas se apilan). Lo que el front manda al endpoint como `categories` deriva de este campo (ver contrato `GET /movements/reports`).

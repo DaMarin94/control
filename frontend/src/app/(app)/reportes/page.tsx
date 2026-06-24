@@ -340,6 +340,20 @@ function ReportesPageContent() {
     });
   }
 
+  function handleTitleChange(id: string, title: string) {
+    const newCards = cards.map((c) => {
+      if (c.id !== id) return c;
+      // Si el título queda vacío, omitir el campo (vuelve al placeholder display).
+      if (title) return { ...c, title };
+      const updated = { ...c };
+      delete updated.title;
+      return updated;
+    });
+    void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
+      logger.error("Error al persistir título de card", { error: err, cardId: id });
+    });
+  }
+
   const hasCards = cards.length > 0;
 
   return (
@@ -374,7 +388,7 @@ function ReportesPageContent() {
       {/* ── Con cards: columna de cards + "[+]" compacto al final ── */}
       {hasCards && (
         <div className="flex flex-col gap-[var(--gap)]">
-          {cards.map((card) => (
+          {cards.map((card, index) => (
             <ReportCard
               key={card.id}
               type={card.type}
@@ -391,6 +405,9 @@ function ReportesPageContent() {
               onRemove={() => handleRemoveCard(card.id)}
               currency={card.currency}
               onCurrencyChange={(c) => handleCurrencyChange(card.id, c)}
+              title={card.title}
+              titlePlaceholder={`Reporte ${index + 1}`}
+              onTitleChange={(t) => handleTitleChange(card.id, t)}
             />
           ))}
 

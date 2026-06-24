@@ -40,6 +40,7 @@ import {
   AlertTriangle,
   Eye,
   EyeOff,
+  Pencil,
 } from "lucide-react";
 import { useReports } from "@/hooks/use-reports";
 import { useSettings } from "@/hooks/use-settings";
@@ -823,7 +824,240 @@ export interface ReportCardProps {
    * La condición de montaje es la PRESENCIA del callback, no el flag removable.
    */
   onCurrencyChange?: (c: CurrencyCode) => void;
+  /**
+   * Título propio de la card (Ola 2, P4).
+   * undefined → se muestra el placeholder calculado por el padre (titlePlaceholder).
+   */
+  title?: string;
+  /**
+   * Placeholder de título "Reporte N" calculado por el padre (1-based, no monotónico).
+   * La card lo pasa al input nativo como placeholder y lo renderiza en idle cuando
+   * no hay título propio. La numeración N la calcula el padre, no la card.
+   * Default "Reporte" para uso en el dashboard (donde no hay índice ni edición).
+   */
+  titlePlaceholder?: string;
+  /**
+   * Callback al confirmar un cambio de título.
+   * Recibe el título trimmeado; si queda vacío, el padre debe omitir el campo.
+   * Solo se invoca desde /reportes (removable=true). En el Dashboard no aplica.
+   */
+  onTitleChange?: (title: string) => void;
 }
+
+// ─── EditableTitle — título editable in-situ de la card (Ola 2, P4) ───────────
+
+interface EditableTitleProps {
+  titleProp: string | undefined;
+  titlePlaceholder: string;
+  displayTitle: string;
+  isEditing: boolean;
+  editingValue: string;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  onEdit: () => void;
+  onCommit: () => void;
+  onCancel: () => void;
+  onEditingValueChange: (v: string) => void;
+  canEdit: boolean;
+}
+
+/**
+ * Título editable in-situ de la cabecera de la card de reporte.
+ * Spec: docs/design.md §"Título editable de la card de reporte (Ola 2, P4)".
+ *
+ * Estados:
+ *  - idle (título propio o placeholder): botón con cursor:text + lápiz on-hover.
+ *  - editando: input inline del DS con misma tipografía.
+ *
+ * La lógica de confirmar/cancelar y el estado de edición viven en ReportCard;
+ * este componente es puro presentación.
+ */
+function EditableTitle({
+  titleProp,
+  titlePlaceholder,
+  displayTitle,
+  isEditing,
+  editingValue,
+  inputRef,
+  onEdit,
+  onCommit,
+  onCancel,
+  onEditingValueChange,
+  canEdit,
+}: EditableTitleProps) {
+  if (isEditing) {
+    return (
+      /* ── Estado EDITANDO: input inline del DS ── */
+      <input
+        ref={inputRef}
+        type="text"
+        maxLength={60}
+        value={editingValue}
+        placeholder={titlePlaceholder}
+        onChange={(e) => onEditingValueChange(e.target.value)}
+        onBlur={onCommit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onCommit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onCancel();
+          }
+        }}
+        aria-label="Título del reporte"
+        className={cn(
+          // Tipografía idéntica al título display (16px/600 Space Grotesk)
+          "text-[16px] font-semibold leading-tight text-ink",
+          // Caja del input DS: bg-panel, borde line-strong, radio r-ctl, padding compacto
+          "bg-panel border border-[var(--line-strong)] rounded-[var(--r-ctl,10px)]",
+          "px-[8px] py-[3px]",
+          // Ancho: ocupa la zona de identidad disponible sin empujar controles
+          "min-w-0 flex-1",
+          // Focus ring acento (cromo de interacción)
+          "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+          // Placeholder en --faint
+          "placeholder:text-[var(--faint)]",
+        )}
+      />
+    );
+  }
+
+  return (
+    /* ── Estado IDLE: botón con el texto del título (o placeholder) ── */
+    <button
+      type="button"
+      onClick={canEdit ? onEdit : undefined}
+      onKeyDown={(e) => {
+        if (canEdit && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onEdit();
+        }
+      }}
+      aria-label={canEdit ? "Editar título del reporte" : undefined}
+      disabled={!canEdit}
+      className={cn(
+        "group/title flex items-center gap-[6px] min-w-0",
+        // cursor:text solo cuando es editable
+        canEdit ? "cursor-text" : "cursor-default",
+        // Quitamos estilos de botón nativo
+        "bg-transparent border-0 p-0 text-left",
+        // Focus ring acento cuando el botón recibe foco de teclado
+        canEdit && "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:rounded-[var(--r-ctl,10px)]",
+      )}
+    >
+      {/* Texto del título o placeholder */}
+      <span
+        title={displayTitle}
+        className={cn(
+          "block text-[16px] font-semibold leading-tight truncate",
+          // Título propio → --ink; placeholder → --faint
+          titleProp ? "text-ink" : "text-[var(--faint)]",
+        )}
+      >
+        {displayTitle}
+      </span>
+      {/* Lápiz on-hover (y en focus de teclado): oculto en reposo */}
+      {canEdit && (
+        <Pencil
+          size={14}
+          aria-hidden="true"
+          className={cn(
+            "shrink-0 text-muted",
+            // Oculto en reposo; visible en hover del grupo y en focus del botón
+            "opacity-0 transition-opacity duration-[140ms]",
+            "group-hover/title:opacity-100 group-focus-visible/title:opacity-100",
+            // prefers-reduced-motion: sin transición
+            "motion-reduce:transition-none",
+          )}
+        />
+      )}
+    </button>
+  );
+}
+
+// ─── CardControls — barra de controles derecha de la cabecera ─────────────────
+
+interface CardControlsProps {
+  year: number;
+  currentYear: number;
+  earliestYear: number | null;
+  onPrev: () => void;
+  onNext: () => void;
+  onCurrencyChange?: (c: CurrencyCode) => void;
+  effectiveCurrency: CurrencyCode;
+  removable: boolean;
+  removeButtonRef: React.RefObject<HTMLButtonElement | null>;
+  onRemoveOpen: () => void;
+}
+
+/**
+ * Barra de controles derecha de la cabecera de la card:
+ * [YearStepper] [divisor] [CardCurrencySelect?] [divisor] [X?].
+ * Extraído para reutilizar en los dos bloques de cabecera (by-category e income-expense).
+ * Spec: docs/design.md §"Moneda por reporte — selector embebido en la cabecera de la card (Ola 3, P3)".
+ */
+function CardControls({
+  year,
+  currentYear,
+  earliestYear,
+  onPrev,
+  onNext,
+  onCurrencyChange,
+  effectiveCurrency,
+  removable,
+  removeButtonRef,
+  onRemoveOpen,
+}: CardControlsProps) {
+  return (
+    <div className="flex items-center gap-2 flex-wrap justify-end">
+      {/* Control de año embebido (stepper pill) */}
+      <YearStepper
+        year={year}
+        currentYear={currentYear}
+        earliestYear={earliestYear}
+        onPrev={onPrev}
+        onNext={onNext}
+      />
+
+      {/* Selector de moneda por card (solo cuando hay callback — /reportes) */}
+      {onCurrencyChange && (
+        <>
+          {/* Mini-divisor --hair entre stepper y selector de moneda */}
+          <span
+            className="block h-[16px] w-px bg-hair shrink-0"
+            aria-hidden="true"
+          />
+          <CardCurrencySelect
+            value={effectiveCurrency}
+            onChange={onCurrencyChange}
+          />
+        </>
+      )}
+
+      {/* Divisor y botón quitar (solo en /reportes) */}
+      {removable && (
+        <>
+          {/* Mini-divisor --hair entre moneda/stepper y X */}
+          <span
+            className="block h-[16px] w-px bg-hair shrink-0"
+            aria-hidden="true"
+          />
+          <button
+            ref={removeButtonRef}
+            type="button"
+            onClick={onRemoveOpen}
+            aria-label="Quitar reporte"
+            className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── ReportCard — widget autónomo ─────────────────────────────────────────────
 
 /**
  * Widget de reporte autónomo.
@@ -851,6 +1085,9 @@ export function ReportCard({
   onRemove,
   currency,
   onCurrencyChange,
+  title: titleProp,
+  titlePlaceholder = "Reporte",
+  onTitleChange,
 }: ReportCardProps) {
   const reducedMotion = useReducedMotion();
   const { defaultCurrency } = useSettings();
@@ -866,6 +1103,40 @@ export function ReportCard({
 
   const [removeOpen, setRemoveOpen] = useState(false);
   const removeButtonRef = useRef<HTMLButtonElement>(null);
+
+  // ── Estado de edición del título ───────────────────────────────────────────
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  /** Valor del input mientras se edita; arranca en el título actual (o vacío si no hay). */
+  const [editingValue, setEditingValue] = useState("");
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  /** Abre el modo edición: inicializa el input con el título actual (o vacío). */
+  function startTitleEdit() {
+    if (!onTitleChange) return;
+    setEditingValue(titleProp ?? "");
+    setIsEditingTitle(true);
+  }
+
+  /** Confirma la edición: persiste el título trimmeado (o lo quita si vacío). */
+  function commitTitleEdit() {
+    if (!isEditingTitle) return;
+    setIsEditingTitle(false);
+    const trimmed = editingValue.trim();
+    onTitleChange?.(trimmed);
+  }
+
+  /** Cancela la edición: descarta el cambio y restaura el valor previo. */
+  function cancelTitleEdit() {
+    setIsEditingTitle(false);
+    setEditingValue(titleProp ?? "");
+  }
+
+  // Foco automático al input cuando entra a modo edición
+  useEffect(() => {
+    if (isEditingTitle) {
+      titleInputRef.current?.focus();
+    }
+  }, [isEditingTitle]);
 
   // Año actual (límite navegación hacia adelante)
   const [currentYear, setCurrentYear] = useState(() => {
@@ -994,8 +1265,8 @@ export function ReportCard({
     }
   }
 
-  // Título y eyebrow de la card según tipo
-  const title = type === "income-expense" ? "Ingresos y gastos" : "Por categoría";
+  // Título display de la card: el título propio si existe, o el placeholder "Reporte N".
+  const displayTitle = titleProp ?? titlePlaceholder;
 
   // ── Ítems de leyenda según caso ────────────────────────────────────────────
 
@@ -1031,89 +1302,100 @@ export function ReportCard({
   return (
     <div
       className="bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] p-[var(--card-pad)] animate-screen-fade"
-      aria-label={`${title} ${year}`}
+      aria-label={`${displayTitle} ${year}`}
     >
       {/* ── Cabecera de la card ── */}
       {/*
-        Layout responsive:
-        ≥941px: fila única flex justify-between — tabs a la izq, controles a la der.
-        ≤940px: wrap natural — tabs ocupan toda la línea primero, controles en la segunda.
-        Las tabs solo aparecen en income-expense; en by-category la cabecera queda igual que antes.
-      */}
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-[18px]">
-        {/* Izquierda: tabs de vista (income-expense) o identidad (by-category) */}
-        {type === "income-expense" ? (
-          <ViewTabs
-            value={categoryBreakdown}
-            onChange={(v) => onCategoryBreakdownChange?.(v)}
-            panelId={CHART_PANEL_ID}
-          />
-        ) : (
-          <div>
-            <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
-              Reporte
-            </p>
-            <p className="text-[16px] font-semibold leading-tight mt-[3px] text-ink">
-              {title}
-            </p>
-          </div>
-        )}
+        Spec visual: docs/design.md §"Título editable de la card de reporte (Ola 2, P4)".
 
-        {/* Derecha: controles (stepper + moneda + quitar) — el filtro de categorías lo hace la leyenda */}
-        {/*
-          Orden (≥941px): [YearStepper] [divisor] [CardCurrencyTrigger] [divisor] [X]
-          El selector de moneda solo se monta cuando onCurrencyChange está presente (cards de /reportes).
-          En el dashboard (sin onCurrencyChange) la barra queda como hoy: solo el stepper.
-          Spec: docs/design.md §"Moneda por reporte — selector embebido en la cabecera de la card (Ola 3, P3)".
-        */}
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          {/* Control de año embebido (stepper pill) */}
-          <YearStepper
+        by-category (≥941px):
+          Fila única flex justify-between:
+            Izq: [título editable]
+            Der: [stepper · moneda · X]
+          ≤940px: wrap natural — controles bajan a segunda línea.
+
+        income-expense (≥941px):
+          Línea 1 (ancho completo): [título editable]
+          Línea 2 flex justify-between: [ViewTabs] / [stepper · moneda · X]
+          ≤940px: wrap natural — orden vertical: [título] → [ViewTabs] → [controles].
+      */}
+
+      {/* ── BLOQUE by-category: una sola fila justify-between ── */}
+      {type === "by-category" && (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-[18px]">
+          {/* Identidad: solo el título editable (izquierda) — sin eyebrow */}
+          <div className="min-w-0 flex-1">
+            <EditableTitle
+              titleProp={titleProp}
+              titlePlaceholder={titlePlaceholder}
+              displayTitle={displayTitle}
+              isEditing={isEditingTitle}
+              editingValue={editingValue}
+              inputRef={titleInputRef}
+              onEdit={startTitleEdit}
+              onCommit={commitTitleEdit}
+              onCancel={cancelTitleEdit}
+              onEditingValueChange={setEditingValue}
+              canEdit={!!onTitleChange}
+            />
+          </div>
+          {/* Controles: stepper + moneda + X (derecha) */}
+          <CardControls
             year={year}
             currentYear={currentYear}
             earliestYear={earliestYear}
             onPrev={handlePrev}
             onNext={handleNext}
+            onCurrencyChange={onCurrencyChange}
+            effectiveCurrency={effectiveCurrency}
+            removable={removable}
+            removeButtonRef={removeButtonRef}
+            onRemoveOpen={() => setRemoveOpen((o) => !o)}
           />
-
-          {/* Selector de moneda por card (solo cuando hay callback — /reportes) */}
-          {onCurrencyChange && (
-            <>
-              {/* Mini-divisor --hair entre stepper y selector de moneda */}
-              <span
-                className="block h-[16px] w-px bg-hair shrink-0"
-                aria-hidden="true"
-              />
-              <CardCurrencySelect
-                value={effectiveCurrency}
-                onChange={onCurrencyChange}
-              />
-            </>
-          )}
-
-          {/* Divisor y botón quitar (solo en /reportes) */}
-          {removable && (
-            <>
-              {/* Mini-divisor --hair entre moneda/stepper y X */}
-              <span
-                className="block h-[16px] w-px bg-hair shrink-0"
-                aria-hidden="true"
-              />
-              <button
-                ref={removeButtonRef}
-                type="button"
-                onClick={() => {
-                  setRemoveOpen((o) => !o);
-                }}
-                aria-label="Quitar reporte"
-                className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
-              >
-                <X size={16} aria-hidden="true" />
-              </button>
-            </>
-          )}
         </div>
-      </div>
+      )}
+
+      {/* ── BLOQUE income-expense: línea 1 (identidad) + línea 2 (tabs+controles) ── */}
+      {type === "income-expense" && (
+        <>
+          {/* Línea 1: solo el título editable (ancho completo) — sin eyebrow */}
+          <div className="w-full mb-[6px]">
+            <EditableTitle
+              titleProp={titleProp}
+              titlePlaceholder={titlePlaceholder}
+              displayTitle={displayTitle}
+              isEditing={isEditingTitle}
+              editingValue={editingValue}
+              inputRef={titleInputRef}
+              onEdit={startTitleEdit}
+              onCommit={commitTitleEdit}
+              onCancel={cancelTitleEdit}
+              onEditingValueChange={setEditingValue}
+              canEdit={!!onTitleChange}
+            />
+          </div>
+          {/* Línea 2: [ViewTabs izq] / [controles der] — idéntica a antes de P4 */}
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-[18px]">
+            <ViewTabs
+              value={categoryBreakdown}
+              onChange={(v) => onCategoryBreakdownChange?.(v)}
+              panelId={CHART_PANEL_ID}
+            />
+            <CardControls
+              year={year}
+              currentYear={currentYear}
+              earliestYear={earliestYear}
+              onPrev={handlePrev}
+              onNext={handleNext}
+              onCurrencyChange={onCurrencyChange}
+              effectiveCurrency={effectiveCurrency}
+              removable={removable}
+              removeButtonRef={removeButtonRef}
+              onRemoveOpen={() => setRemoveOpen((o) => !o)}
+            />
+          </div>
+        </>
+      )}
 
       {/* ── Área del gráfico ── */}
       {isError ? (

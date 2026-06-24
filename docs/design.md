@@ -398,7 +398,7 @@ Patrón **genérico reutilizable** de "sección de acordeón" = **cabecera (`.gh
 
 Unidad que `/reportes` apila y que el Dashboard monta una vez. Es la **tarjeta `.card` de gráfico** (panel, `--line`, `--r-card` 14px, `--shadow-sm`, padding `--card-pad` 22px) con **controles embebidos**. Estructura: cabecera (identidad a la izquierda; barra de controles a la derecha) → área de gráfico → leyenda. Altos de canvas vigentes: **300px** (cards de `/reportes`) / **280px** (Dashboard); **220px** en ≤940px.
 
-- **Identidad (izquierda):** eyebrow *Eyebrow/labels* `--muted` **"Reporte"** + título 16px/600 `--ink` ("Ingresos y gastos" / "Por categoría").
+- **Identidad (izquierda):** **únicamente el título editable por card** (16px/600 `--ink`), sin eyebrow ni rótulo "Reporte" encima. El título es **definido por el usuario** y reemplaza al subtítulo fijo de tipo; cuando está vacío muestra el placeholder *"Reporte N"* (`--faint`). Ver *Título editable de la card de reporte* abajo para anatomía, edición, estados y placeholder. En la card `income-expense` (que lleva los `ViewTabs`) la identidad se ubica según esa misma sección.
 - **Control de año embebido:** el `.stepper` de **PeriodNav** (forma compacta, arriba), año en **mono tabular**, con su estado **disabled** atado a `earliestYear` / año en curso. Navegación **activa** también en el Dashboard.
 - **Selector de moneda de la card (solo `/reportes`):** override de display por card, persistido. Ver *Moneda por reporte — selector embebido en la cabecera de la card* abajo. **No aparece en la card del Dashboard.**
 - **Filtro de categorías embebido:** ver *Filtro de categorías* abajo.
@@ -411,6 +411,75 @@ Unidad que `/reportes` apila y que el Dashboard monta una vez. Es la **tarjeta `
 **Dashboard:** monta una card `income-expense` efímera con navegación de año activa, junto al resumen mensual (que es fijo en el mes en curso). La distinción la dan: bloques de forma distinta (resumen sin `.card` de gráfico vs. card de gráfico), distinto grano temporal (mes-rótulo fijo vs. año-stepper navegable) y el stepper scoped a la card.
 
 > Las **gráficas** que montan estas cards se definen en *Gráficos — Forma 1 y Forma 2* (abajo).
+
+### Título editable de la card de reporte (Ola 2, P4)
+
+Cada card de `/reportes` tiene un **título definido por el usuario**, mostrado en la cabecera y **editable in-situ**. Es la **única** pieza de identidad de la card: **no hay eyebrow ni rótulo "Reporte"** encima del título. Reemplaza al subtítulo fijo de tipo ("Ingresos y gastos" / "Por categoría") que antes ocupaba la línea de identidad: pasa a ser **texto del usuario**, no una etiqueta derivada del tipo. Aplica a **ambos** tipos de card (`income-expense` y `by-category`). **No inventa cromo nuevo:** reusa la escala *Nombre de movimiento / título de card 16px*, el lenguaje de input del DS y el focus ring de acento; respeta las tres reglas duras (el título es texto neutro, nunca tiñe ni comunica montos).
+
+> **Es texto libre del usuario, no marca ni semántica.** El título va en **Space Grotesk** (UI), **nunca** en mono (no es cifra), **nunca** teñido de income/expense ni de índigo (regla dura 1/2). El índigo aparece **solo** como focus ring al editar (cromo de interacción).
+
+#### 1. Default placeholder — "Reporte N" (sin título)
+
+Cuando el título está **vacío**, la card muestra el placeholder **"Reporte N"**, donde **N = posición 1-based de la card en la columna** (recalculado según las cards existentes; **no monotónico** — si se quita una card intermedia, las de abajo recorren su N). Es un **placeholder visual, no texto persistido**: nunca se guarda "Reporte 3" como título; es lo que se pinta mientras no haya título propio.
+
+- **Tono del placeholder:** color `--faint` (el neutro de placeholders del DS), mismo size/weight/tracking que un título real (16px/600 Space Grotesk, `leading-tight`) — solo cambia el **color** a `--faint` para leerse como "sin nombre todavía", no como un título tenue elegido. Distingue de un título real (`--ink`) por contraste de color, no por tamaño ni estilo.
+- **Al entrar a editar con título vacío:** el campo arranca **vacío** (no precargado con "Reporte N" — ese N es solo display); el `placeholder` nativo del input muestra `Reporte N` en `--faint`, de modo que el usuario ve qué nombre tomará si deja el campo en blanco. Si confirma vacío, vuelve al placeholder "Reporte N" de display.
+
+#### 2. Ubicación en la cabecera — el título es la única identidad
+
+La identidad de la card es **solo el título editable** (sin eyebrow). El título ocupa **la zona de identidad (izquierda)** de la cabecera; la barra de controles derecha (stepper · moneda · X) **no cambia**. Difiere por tipo de card:
+
+- **`by-category` — el título es la identidad, en la fila `justify-between`.** La cabecera es de **una sola línea**: identidad izquierda (**el título editable**, antes el texto fijo "Por categoría", y antes precedido por un eyebrow que ya no existe) ⟷ controles derecha (`stepper · moneda · X`). El título queda inline con los controles en la misma fila `flex justify-between` y trunca contra su ancho disponible (la identidad cede ancho a los controles, no al revés).
+- **`income-expense` — el título en su propia línea encima de las tabs.** Los `ViewTabs` ("Total" / "Por categoría") ya ocupan el lado izquierdo y son el control de **mayor jerarquía de interacción** (definen qué se ve); el título es **identidad**, no control. Para no competir, la identidad se apila **encima** de la zona de tabs+controles:
+  - **Línea 1 (ancho completo de la cabecera):** **solo el título editable** (`--ink`, o placeholder "Reporte N" en `--faint`). Es la **identidad** de la card; arranca pegada a la izquierda.
+  - **Línea 2 (la fila actual sin cambios):** `[ViewTabs]  ⟷  [stepper · moneda · X]` — exactamente como hoy (`flex justify-between`).
+  - **Por qué encima y no inline con las tabs:** meter el título en la misma fila que las tabs lo haría competir con el underline activo y empujaría las tabs hacia el centro, rompiendo su alineación a la izquierda. Apilarlo arriba da al título su propia línea de identidad y deja las tabs intactas en su fila. **El título es el ancla común** de ambos tipos: en los dos, lo que se lee arriba a la izquierda es el título; lo único que cambia es que `income-expense` suma debajo la fila de tabs y `by-category` no.
+- **Resultado:** en **los dos tipos** el usuario lee, arriba a la izquierda, el **título** en 16px/600 (o su placeholder "Reporte N"), sin rótulo encima. El único delta entre tipos es la fila de tabs que `income-expense` suma debajo del título.
+
+#### 3. Affordance de edición — click directo + lápiz on-hover
+
+El título se edita **in-situ** (no abre diálogo). La afordancia combina **dos señales**, sin ícono fijo permanente que ensucie la identidad en reposo:
+
+- **El texto del título es clickeable.** El nodo del título es un `<button type="button">` (display: el texto) con `cursor:text`; un clic entra en modo edición. `aria-label="Editar título del reporte"`.
+- **Lápiz `Pencil` (lucide, 14px `--muted`) que aparece en hover**, a la derecha del título con `gap-[6px]`, `aria-hidden` (la afordancia accesible la da el `aria-label` del botón). En reposo el lápiz está **oculto** (la identidad queda limpia: solo el título); aparece (`opacity 0→1`, transición 0.14s) al hacer hover **sobre la zona del título**. Refuerza "esto se edita" sin agregar peso permanente.
+- **Foco por teclado:** el botón de título es tabbable; al recibir foco de teclado muestra el lápiz (igual que hover) y un focus ring `--accent-soft` 3px sobre el nodo. Enter/Espacio entran a edición.
+- **Por qué click directo + lápiz on-hover y no un lápiz permanente:** un ícono lápiz siempre visible junto a cada título se repite N veces en la columna, recargando. El click directo sobre el texto es el gesto primario (descubrible por `cursor:text` + hover state); el lápiz on-hover es el refuerzo explícito para quien no lo intuye. Es el mismo principio del DS de "afordancia que aparece en hover" (ej. el `X` de quitar, que solo toma caja en hover).
+
+#### 4. Estados
+
+- **Idle (título propio):** texto 16px/600 Space Grotesk `--ink`, `leading-tight`, sin caja ni borde (es texto plano en la identidad). Lápiz oculto.
+- **Idle (placeholder "Reporte N"):** igual molde, color `--faint` (§1). Lápiz oculto.
+- **Hover (sobre la zona del título):** aparece el lápiz `Pencil` 14px `--muted`; el texto **no** cambia de color ni toma caja (se evita un fondo que lo confunda con un input ya activo). `cursor:text`. Transición 0.14s.
+- **Focus de teclado (sin editar aún):** lápiz visible + focus ring `--accent-soft` 3px sobre el nodo del título (radio `--r-ctl` 10px para el ring). Es el estado "enfocado, listo para entrar a editar".
+- **Editando (input activo):** el texto se reemplaza por un **input de texto inline** del DS, en su lugar exacto (sin saltos de layout):
+  - **Caja del input:** `bg-panel`, borde `--line-strong` (borde de input del DS), radio `--r-ctl` 10px, padding compacto `px-[8px] py-[3px]` para no engordar la línea de identidad. Ancho: se ajusta a la zona de identidad disponible (ver §5 truncado).
+  - **Texto del input:** **misma tipografía que el título** — 16px/600 Space Grotesk `--ink`, para que editar se sienta "sobre el mismo texto", sin reflow de tamaño.
+  - **Placeholder del input:** `Reporte N` en `--faint` (§1).
+  - **Focus ring:** `--accent-soft` 3px (`focus-visible`), radio `--r-ctl` 10px. El acento es cromo de foco, no estado de datos (no viola reglas duras).
+  - **El lápiz se oculta mientras se edita** (el input ya comunica el modo); el input queda en la zona de identidad, a la izquierda.
+  - **Confirmar / cancelar:** **Enter** o **blur** confirman (persisten el título; si quedó vacío → vuelve al placeholder "Reporte N"); **Esc** cancela y restaura el valor previo. (El comportamiento de persistencia/validación de longitud es funcional — lo define el analista; acá se define solo la presentación de los estados.)
+- **Sin estado de error visual propio** en v1 (es texto libre; no hay validación que pinte error en la cabecera). Si más adelante se define un límite con feedback, reusará el ring `--expense-soft` del DS.
+
+#### 5. Tipografía, ancho y truncado
+
+- **Tipografía:** rol *Nombre de movimiento / título de card* — **16px / 600**, Space Grotesk, `leading-tight`, `tracking` normal. **Nunca mono** (no es cifra), **nunca semántico ni índigo** (regla dura 1/2). Idéntico en claro y oscuro (toma `--ink` / `--faint`, que ya cambian por modo).
+- **Ancho máximo (idle/display):** el título ocupa el ancho disponible de la zona de identidad y **trunca con elipsis** (`truncate`: `overflow:hidden; text-overflow:ellipsis; white-space:nowrap`) si excede. **No envuelve a varias líneas** (mantiene la cabecera en su alto): un título largo se corta con `…` y el valor completo queda en `title=` (tooltip nativo) + en el input al editar.
+  - En `by-category` el título trunca contra el ancho de su columna de identidad (la cabecera es de una línea, `justify-between`: título izquierda / controles derecha; la identidad cede ancho a los controles, no al revés).
+  - En `income-expense` el título (línea 1, ancho completo de la cabecera) trunca contra el ancho de la cabecera completa, que es más holgado que la zona de tabs.
+- **Ancho al editar:** el input crece hasta el ancho disponible de la zona de identidad y hace scroll horizontal interno del texto si el contenido excede (comportamiento nativo del input). No empuja la barra de controles.
+
+#### 6. Responsive (≤940px — la cabecera hace wrap)
+
+- **`by-category`:** la identidad (el título) ya está a la izquierda y los controles envuelven a la segunda línea por el `flex-wrap` existente; el título sigue truncando contra su ancho disponible, que se ensancha al pasar los controles abajo. Sin cambios de forma.
+- **`income-expense`:** la **línea 1 de identidad** (el título) queda **arriba de todo**; debajo, la fila de tabs baja a su propia línea sobre la barra de controles (comportamiento ya definido en *Toggle de vista … Responsive*). Orden vertical resultante en angosto: `[título]` → `[ViewTabs]` → `[stepper · moneda · X]`. El título trunca contra el ancho completo de la cabecera angosta.
+- El **lápiz on-hover** se mantiene (en táctil sin hover, la afordancia primaria es el tap directo sobre el texto, que entra a edición; el lápiz es refuerzo de hover/foco para puntero/teclado).
+- **`prefers-reduced-motion`:** la aparición del lápiz y la transición de entrada/salida del input son instantáneas (sin fade); el resto del comportamiento es idéntico.
+
+#### Restricciones duras reafirmadas
+
+- El título es **texto de UI en Space Grotesk**, nunca mono (no es cifra) — la regla dura 3 (mono tabular) no aplica porque no es dinero.
+- El título **nunca** se tiñe de income/expense (regla dura 1) ni de índigo de marca (regla dura 2); usa `--ink` (título propio) / `--faint` (placeholder). El índigo aparece **solo** como focus ring al editar/enfocar (cromo de interacción).
+- El placeholder "Reporte N" es **display, no dato**: nunca se persiste; N es la posición 1-based recalculada en vivo.
 
 ### Moneda por reporte — selector embebido en la cabecera de la card (Ola 3, P3)
 

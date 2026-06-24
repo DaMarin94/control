@@ -110,6 +110,15 @@ export interface ReportCardConfig {
    * Persistido por card. Al crear, nace con la default actual del usuario.
    */
   currency?: CurrencyCode;
+  /**
+   * Título editable de la card (Ola 2, P4).
+   * Ausente / undefined = la card muestra el placeholder "Reporte N" (N = posición 1-based
+   * en el array de cards, recalculado en vivo). El placeholder es solo display: nunca se
+   * persiste "Reporte N" como título; si el usuario confirma sin escribir nada, el campo
+   * se omite del objeto persistido (queda ausente / undefined).
+   * Presente = título propio del usuario (máx. 60 caracteres, trimmeado al persistir).
+   */
+  title?: string;
 }
 
 // Re-export para conveniencia de los consumidores de este módulo

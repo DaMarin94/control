@@ -247,23 +247,27 @@ describe("ReportesPage — estado con cards", () => {
     expect(screen.getByRole("button", { name: /agregar reporte/i })).toBeInTheDocument();
   });
 
-  it("muestra el eyebrow 'Reporte' en la card by-category (income-expense usa tabs)", () => {
+  it("las cards muestran sus placeholders de título y el tablist solo en income-expense", () => {
     renderPage();
-    // Solo la card by-category tiene el eyebrow "Reporte" en texto visible.
-    // La card income-expense tiene tabs ("Total" / "Por categoría") en lugar del bloque de identidad.
-    const eyebrows = screen.getAllByText("Reporte");
-    expect(eyebrows).toHaveLength(1);
-    // La card income-expense tiene el tablist
+    // Spec P4 actualizado: sin eyebrow. La identidad es solo el título editable.
+    // Las dos cards sin título propio muestran sus placeholders "Reporte 1" / "Reporte 2".
+    expect(screen.getByText("Reporte 1")).toBeInTheDocument();
+    expect(screen.getByText("Reporte 2")).toBeInTheDocument();
+    // No aparece el texto aislado "Reporte" como eyebrow (ya no existe).
+    // (Los nodos de texto son "Reporte 1" y "Reporte 2", no "Reporte".)
+    // Solo la card income-expense tiene el tablist de vista.
     expect(screen.getByRole("tablist", { name: /vista del reporte/i })).toBeInTheDocument();
+    // La card by-category NO tiene tablist propio (hay exactamente uno en la pantalla).
+    expect(screen.getAllByRole("tablist", { name: /vista del reporte/i })).toHaveLength(1);
   });
 
   it("muestra los títulos de las cards", () => {
     renderPage();
-    // income-expense: el título "Ingresos y gastos" es solo aria-label del wrapper (no texto visible).
-    // Lo que sí es visible: las tabs "Total" y "Por categoría" del tablist.
+    // income-expense: las tabs "Total" / "Por categoría" son el control de vista visible.
+    // Spec P4: el título de identidad es editable; el placeholder se muestra en --faint.
     expect(screen.getByRole("tab", { name: "Total" })).toBeInTheDocument();
-    // "Por categoría" aparece como título de la card by-category Y como tab
-    // del tablist de vista en la card income-expense — usar getAllByText.
+    // "Por categoría" aparece al menos como tab del tablist de la card income-expense.
+    // (En by-category ya no es el texto fijo del subtítulo — fue reemplazado por el título editable.)
     expect(screen.getAllByText("Por categoría").length).toBeGreaterThanOrEqual(1);
   });
 });

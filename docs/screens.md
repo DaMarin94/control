@@ -334,6 +334,7 @@ Pantalla **configurable** donde el usuario arma su propia vista de reportes a lo
 - **Header** con el **chip de moneda default** en la fila del eyebrow (ver Convenciones).
 - **Recuadro "[+]"** — siempre presente; agrega una card de reporte nueva.
 - **Cards de reporte** — una por cada entrada de la clave `reports`, en el orden del array. Cada card monta un **widget de reporte autónomo** (pantalla 8) en **modo persistido**, con sus flechas de año y su filtro de categorías embebidos. Una card es de tipo `income-expense` (Ingresos vs. Gastos) o `by-category` (Gastos por categoría apilado), según RF-REP-001.
+- **Título de la card** (RF-REP-008) — en la cabecera de cada card, un **título editable**. Si la card no tiene título, muestra el placeholder **"Reporte N"** (N = posición 1-based de la card en la columna, recalculado en vivo).
 - El layout, tamaños y disposición de las cards y del "[+]" los define `control-design`.
 
 ### Acciones disponibles
@@ -341,6 +342,7 @@ Pantalla **configurable** donde el usuario arma su propia vista de reportes a lo
 - **Agregar card** — desde el "[+]": el usuario elige el tipo de reporte (RF-REP-001); la card nace con el **año en curso** y **todas las categorías**, se agrega al final y se persiste (RF-REP-004).
 - **Quitar card** — elimina la card de la vista y de la persistencia.
 - **Navegar el año de una card** y **filtrar sus categorías** — embebidos en cada card (widget autónomo, pantalla 8); cada cambio se persiste. Son **independientes por card**: no hay control de año ni filtro compartidos.
+- **Editar el título de una card** (RF-REP-008) — desde la cabecera; máx. 60 caracteres, **Enter o blur** confirman, **Esc** cancela. Confirmar un título vacío vuelve a mostrar el placeholder "Reporte N".
 - Acciones globales del sidebar.
 
 ### Navegación

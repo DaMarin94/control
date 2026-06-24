@@ -1480,6 +1480,24 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 **Notas:**
 - El detalle visual del selector lo define `control-design` (`docs/design.md`).
 
+#### RF-REP-008 — Título editable por card de reporte
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Cada card de `/reportes` tiene un **título editable** en su cabecera, persistido junto al resto de su config (clave `reports`, campo `title`, RF-REP-004). Aplica a **ambos** tipos de card (`income-expense` y `by-category`). Una card sin título muestra el placeholder **"Reporte N"**. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | Existe una card de reporte en `/reportes`. |
+
+**Criterios de aceptación:**
+- [ ] Cada card de `/reportes` expone un **título editable** en su cabecera.
+- [ ] Una card **sin título** (campo ausente o vacío) muestra el placeholder **"Reporte N"**, donde **N = posición 1-based de la card en la columna**, contando **todas** las cards (tengan título o no). El N se **recalcula en vivo** según las cards existentes: al quitar o reordenar cards, el placeholder de las demás cambia (es **no monotónico**). Este "Reporte N" es **display, no dato**: no se persiste.
+- [ ] La edición admite **máximo 60 caracteres**. **Enter** o **blur** confirman (se persiste el título trimmeado); **Esc** cancela y descarta el cambio en curso.
+- [ ] El título confirmado se **persiste por card** (clave `reports`, campo `title`, RF-REP-004; shape en `docs/data-model.md`). Si el usuario confirma un título **vacío**, el campo se **omite** del objeto (la card vuelve a mostrar el placeholder).
+
+**Notas:**
+- El detalle visual del título y su modo de edición lo define `control-design` (`docs/design.md`).
+
 ---
 
 ### 3.10 Módulo: Multi-moneda
