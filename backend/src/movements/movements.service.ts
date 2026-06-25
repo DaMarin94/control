@@ -8,9 +8,10 @@ import {
   RecurringForAnnual,
   addMonths,
   isOnFrequency,
+  RawDailyUnicoRow,
 } from './movements.repository';
 import { applyFormula } from '../recurring/formula.helper';
-import { convertToDisplayCurrency, convertToDisplayCurrencyByMonth, PivotRates, buildPivotRates } from '../common/currency.helper';
+import { convertToDisplayCurrency, convertToDisplayCurrencyByMonth, PivotRates, buildPivotRates, deriveExchangeRate } from '../common/currency.helper';
 import { SettingsService } from '../settings/settings.service';
 
 /**
@@ -74,6 +75,89 @@ export interface ReportsMovementsResponse {
   categories: ReportCategory[];
   availableCategories: AvailableCategory[];
   earliestYear: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Shapes para el reporte anual de únicos (grilla día×mes) — Ola 3 / P2
+// ---------------------------------------------------------------------------
+
+/**
+ * Footer por mes en el reporte anual de únicos.
+ *
+ * Todas las métricas monetarias en centavos de displayCurrency.
+ *
+ * Campos:
+ *   total           — total de gastos únicos EXPENSE del mes, en centavos.
+ *   dailyAvg        — promedio por día: total ÷ divisor.
+ *                     Divisor = día actual si es el mes en curso del año pedido;
+ *                     días del mes si ya terminó; 0 si el mes es futuro.
+ *                     null cuando no hay datos (total=0 y no hay divisor útil).
+ *   pctVsPrev       — %dif vs mes anterior: ROUNDDOWN((avgActual*100/avgPrev)-100, 2).
+ *                     null si promedio anterior = 0 o si avgActual es null.
+ *   inflationPct    — puntos % de inflación mensual (InflationRate.monthlyVariation).
+ *                     null si no hay dato para el mes.
+ *   pctVsPrevAdj    — mismo que pctVsPrev pero inflando el promedio anterior por inflationPct.
+ *                     null si falta inflationPct o si avgPrev=0 o avgActual=null.
+ */
+export interface AnnualUnicosMonthFooter {
+  total: number;
+  dailyAvg: number | null;
+  pctVsPrev: number | null;
+  inflationPct: number | null;
+  pctVsPrevAdj: number | null;
+}
+
+/**
+ * Entrada del desglose por categoría de una celda del grid.
+ * amount está en centavos de displayCurrency (misma conversión que grid[d][m]).
+ * Ordenado por amount DESC para que el front no reordene.
+ */
+export interface CellCategoryBreakdown {
+  categoryId: string;
+  amount: number;
+}
+
+/**
+ * Shape completo de la respuesta de GET /movements/reports/annual-unicos.
+ *
+ * grid: matriz [día 1..31][mes 1..12] de totales diarios en centavos.
+ *       grid[d][m] = total de gastos únicos EXPENSE del día d+1 del mes m+1
+ *       (índices base-0). Días inválidos para el mes (ej: día 29 en febrero
+ *       sin año bisiesto) tienen el valor 0.
+ *       Unidades: centavos enteros de displayCurrency.
+ *
+ * breakdown: matriz paralela a grid, mismos índices [d][m].
+ *       breakdown[d][m] = array de { categoryId, amount } ordenado por amount DESC,
+ *       con el desglose por categoría de esa celda en centavos de displayCurrency.
+ *       Respeta el mismo filtro de categorías que grid.
+ *       Celdas sin gasto o días inexistentes del mes → array vacío ([]).
+ *       El front no necesita name/color porque ya tiene el universo de categorías.
+ *
+ * footer: array de 12 entradas (índice = mes − 1) con las métricas del footer.
+ *
+ * availableCategories: universo de categorías del año (sin filtro) ordenado
+ *   por gasto anual DESC, para poblar el selector de filtro del frontend.
+ *
+ * currency: la moneda de display usada en este resultado (para que el front
+ *   formatee correctamente sin volver a pedirla).
+ *
+ * year: el año pedido.
+ *
+ * colorAnchorCents: ancla de escala de color de la grilla.
+ *   Equivale a 15 USD (1500 centavos de USD) convertidos a `currency`
+ *   usando el TC del primer mes disponible del año pedido en ReferenceRate
+ *   (con clamp al mes más cercano si el año no tiene datos).
+ *   Cuando currency == USD, siempre es 1500 (sin conversión).
+ *   El front usa este valor para anclar su paleta de colores de celdas.
+ */
+export interface AnnualUnicosResponse {
+  year: number;
+  currency: Currency;
+  grid: number[][];
+  breakdown: CellCategoryBreakdown[][][];
+  footer: AnnualUnicosMonthFooter[];
+  availableCategories: AvailableCategory[];
+  colorAnchorCents: number;
 }
 
 @Injectable()
@@ -795,6 +879,327 @@ export class MovementsService {
   }
 
   // ---------------------------------------------------------------------------
+  // Reporte anual de únicos — grilla día×mes (Ola 3 / P2)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Devuelve la grilla día×mes de gastos únicos EXPENSE del año, con footer por mes.
+   *
+   * Parámetros:
+   *   userId         — scopea todos los datos.
+   *   year           — año pedido (4 dígitos).
+   *   categoryIds    — null = todas; [] = ninguna (todo en 0); [...] = subconjunto.
+   *   currencyOverride — override de display; null/undefined = default del usuario.
+   *   today          — fecha actual para el cálculo del divisor del mes en curso
+   *                    (YYYY-MM-DD). Si no viene, se usa la fecha UTC del sistema.
+   *
+   * Reglas de footer:
+   *   (a) total: suma de gastos únicos EXPENSE del mes (en centavos de displayCurrency).
+   *   (b) dailyAvg: total ÷ divisor.
+   *       - mes futuro (mes > hoy): divisor = 0 → dailyAvg = null.
+   *       - mes en curso del año actual: divisor = día actual.
+   *       - mes pasado: divisor = días del mes.
+   *       (Si el año pedido < año actual, todos los meses son "pasados".)
+   *   (c) pctVsPrev = ROUNDDOWN((avgActual * 100 / avgAnterior) - 100, 2).
+   *       - avgAnterior = dailyAvg del mes anterior; para enero = dailyAvg de dic año previo.
+   *       - si avgAnterior = 0 o avgActual = null → null.
+   *   (d) inflationPct: monthlyVariation del mes (InflationRate). null si no hay dato.
+   *   (e) pctVsPrevAdj: igual que (c) pero avgAnterior se multiplica por (1 + inflationPct/100).
+   *       - null si falta inflationPct, o si avgAnterior = 0, o si avgActual = null.
+   */
+  async getAnnualUnicosReport(
+    userId: string,
+    year: number,
+    categoryIds?: string[] | null,
+    currencyOverride?: Currency | null,
+    today?: string,
+  ): Promise<AnnualUnicosResponse> {
+    // Normalizar filtro de categorías (misma semántica que getReportsMovements)
+    const filterSet: Set<string> | null =
+      categoryIds === null || categoryIds === undefined
+        ? null
+        : categoryIds.length === 0
+          ? new Set<string>()
+          : new Set(categoryIds);
+
+    // Determinar fecha "hoy" para el divisor del mes en curso
+    const todayDate = today ? new Date(today + 'T00:00:00Z') : new Date();
+    const todayYear = todayDate.getUTCFullYear();
+    const todayMonth = todayDate.getUTCMonth() + 1; // 1-based
+    const todayDay = todayDate.getUTCDate();
+
+    // Cargar moneda de display y pivot rates del año en paralelo
+    const [userSettings, pivotRatesForYear, inflationRates] = await Promise.all([
+      this.settingsService.getSettings(userId),
+      this.repo.loadPivotRatesForYear(year),
+      this.repo.loadInflationRatesForYear(year),
+    ]);
+    const displayCurrency: Currency =
+      currencyOverride != null ? currencyOverride : userSettings.defaultCurrency;
+
+    const yearStr = String(year).padStart(4, '0');
+
+    // Cargar datos de únicos del año y de diciembre del año previo (para el footer de enero)
+    const [unicosYear, unicosPrevDec] = await Promise.all([
+      this.repo.getDailyUnicosExpenseForYear(userId, year),
+      this.repo.getDailyUnicosExpenseForPrevDecember(userId, year),
+    ]);
+
+    // ---------------------------------------------------------------------------
+    // Función auxiliar: convertir una fila diaria a centavos de displayCurrency
+    // ---------------------------------------------------------------------------
+    const convertRow = (row: RawDailyUnicoRow, monthKey: string): number => {
+      const pivotRates = pivotRatesForYear.get(monthKey) ?? null;
+      return convertToDisplayCurrency(
+        Number(row.totalCents),
+        row.currency as Currency,
+        Number(row.exchangeRate),
+        row.anchorCurrency as Currency,
+        displayCurrency,
+        pivotRates,
+      );
+    };
+
+    // ---------------------------------------------------------------------------
+    // Construir el universo de categorías disponibles (sin filtro, para el selector)
+    // ---------------------------------------------------------------------------
+    const catMetaAll = new Map<string, AnnualCategoryMeta>();
+    const annualExpenseAll = new Map<string, number>();
+
+    // ---------------------------------------------------------------------------
+    // Inicializar la grilla: [día 0..30][mes 0..11] → centavos (0 initial)
+    // grid[dayIndex][monthIndex] donde dayIndex = day − 1
+    // ---------------------------------------------------------------------------
+    const grid: number[][] = Array.from({ length: 31 }, () => new Array(12).fill(0));
+
+    // ---------------------------------------------------------------------------
+    // Inicializar breakdown paralela a grid.
+    // breakdown[dayIndex][monthIndex] = Map<categoryId, amount> (acumulación temporal).
+    // Se convierte a array ordenado por amount DESC al final.
+    // ---------------------------------------------------------------------------
+    const breakdownMaps: Array<Array<Map<string, number>>> =
+      Array.from({ length: 31 }, () =>
+        Array.from({ length: 12 }, () => new Map<string, number>()),
+      );
+
+    // Mapa auxiliar: monthKey → total de gastos del mes (con filtro de categorías)
+    const monthTotals: number[] = new Array(12).fill(0);
+
+    // ---------------------------------------------------------------------------
+    // Procesar únicos del año pedido
+    // ---------------------------------------------------------------------------
+    for (const row of unicosYear) {
+      const monthNum = parseInt(row.monthKey.split('-')[1], 10);
+      const monthIdx = monthNum - 1; // 0-based
+      if (monthIdx < 0 || monthIdx > 11) continue;
+      if (row.day < 1 || row.day > 31) continue;
+      const dayIdx = row.day - 1;
+
+      const cents = convertRow(row, row.monthKey);
+
+      // Acumular al universo estable (sin filtro)
+      if (!catMetaAll.has(row.categoryId)) {
+        // Solo tenemos categoryId aquí; la metadata de nombre/color requiere un JOIN.
+        // Para no hacer un JOIN en la query de la grilla (que agrega), se carga de forma
+        // diferida. Guardamos un marker y lo resolveremos al final si necesitamos nombre.
+        // Por ahora solo el gasto anual:
+        catMetaAll.set(row.categoryId, { categoryId: row.categoryId, name: '', color: '' });
+      }
+      annualExpenseAll.set(
+        row.categoryId,
+        (annualExpenseAll.get(row.categoryId) ?? 0) + cents,
+      );
+
+      // Aplicar filtro de categorías
+      if (filterSet !== null && !filterSet.has(row.categoryId)) continue;
+
+      grid[dayIdx][monthIdx] += cents;
+      monthTotals[monthIdx] += cents;
+
+      // Acumular en breakdown (misma conversión y mismo filtro que grid)
+      const cellMap = breakdownMaps[dayIdx][monthIdx];
+      cellMap.set(row.categoryId, (cellMap.get(row.categoryId) ?? 0) + cents);
+    }
+
+    // ---------------------------------------------------------------------------
+    // Acumular el total de diciembre del año previo (para el footer de enero)
+    // Usamos el mismo filterSet.
+    // ---------------------------------------------------------------------------
+    let prevDecTotal = 0;
+    let prevDecDays = 31; // diciembre siempre tiene 31 días
+    for (const row of unicosPrevDec) {
+      if (filterSet !== null && !filterSet.has(row.categoryId)) continue;
+      const monthKey = row.monthKey; // YYYY-12
+      const pivotRatesPrevDec = pivotRatesForYear.get(monthKey) ?? null;
+      const cents = convertToDisplayCurrency(
+        Number(row.totalCents),
+        row.currency as Currency,
+        Number(row.exchangeRate),
+        row.anchorCurrency as Currency,
+        displayCurrency,
+        pivotRatesPrevDec,
+      );
+      prevDecTotal += cents;
+    }
+    // Pivot rates para diciembre del año previo: usar el más cercano disponible
+    // (ya lo resuelve loadPivotRatesForYear del año actual — usamos clave '${year}-01'
+    // como proxy al más antiguo disponible del año; para conversión de prevDec usamos
+    // la misma pivotRatesForYear que ya clampa al mínimo disponible si falta).
+
+    // ---------------------------------------------------------------------------
+    // Enriquecer catMetaAll con nombre/color: necesitamos cargar las categorías.
+    // Estrategia: leer categoryIds de catMetaAll y hacer findMany en una sola query.
+    // ---------------------------------------------------------------------------
+    if (catMetaAll.size > 0) {
+      const catIds = Array.from(catMetaAll.keys());
+      const catRows = await this.repo.findCategoriesByIds(catIds);
+      for (const cat of catRows) {
+        catMetaAll.set(cat.id, { categoryId: cat.id, name: cat.name, color: cat.color });
+      }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Construir footer (12 entradas)
+    // ---------------------------------------------------------------------------
+    const footer: AnnualUnicosMonthFooter[] = [];
+
+    // dailyAvg del mes anterior para el cálculo de pctVsPrev
+    // Para enero (mes 1): mes anterior = diciembre del año previo
+    let prevMonthDailyAvg: number | null = null;
+
+    // Pre-calcular dailyAvg de diciembre del año previo
+    const prevDecAvg = prevDecTotal > 0 ? prevDecTotal / prevDecDays : 0;
+
+    for (let monthIdx = 0; monthIdx < 12; monthIdx++) {
+      const monthNum = monthIdx + 1;
+      const monthKey = `${yearStr}-${String(monthNum).padStart(2, '0')}`;
+      const total = monthTotals[monthIdx];
+
+      // --- (b) dailyAvg: calcular divisor ---
+      let divisor: number;
+      const daysInMonth = getDaysInMonth(year, monthNum);
+
+      if (year < todayYear) {
+        // Año pasado: todos los meses son pasados
+        divisor = daysInMonth;
+      } else if (year > todayYear) {
+        // Año futuro: todos los meses son futuros
+        divisor = 0;
+      } else {
+        // Año actual
+        if (monthNum < todayMonth) {
+          // Mes ya terminado
+          divisor = daysInMonth;
+        } else if (monthNum === todayMonth) {
+          // Mes en curso
+          divisor = todayDay;
+        } else {
+          // Mes futuro
+          divisor = 0;
+        }
+      }
+
+      const dailyAvg: number | null = divisor > 0 ? total / divisor : null;
+
+      // --- (c) pctVsPrev ---
+      // Para enero (monthIdx=0): prevMonthDailyAvg = prevDecAvg
+      const avgPrev: number = monthIdx === 0 ? prevDecAvg : (prevMonthDailyAvg ?? 0);
+      const pctVsPrev: number | null =
+        dailyAvg !== null && avgPrev > 0
+          ? roundDown((dailyAvg * 100) / avgPrev - 100, 2)
+          : null;
+
+      // --- (d) inflationPct ---
+      const inflationPct: number | null = inflationRates.get(monthKey) ?? null;
+
+      // --- (e) pctVsPrevAdj ---
+      let pctVsPrevAdj: number | null = null;
+      if (dailyAvg !== null && avgPrev > 0 && inflationPct !== null) {
+        const avgPrevInflated = avgPrev * (1 + inflationPct / 100);
+        pctVsPrevAdj = avgPrevInflated > 0
+          ? roundDown((dailyAvg * 100) / avgPrevInflated - 100, 2)
+          : null;
+      }
+
+      footer.push({ total, dailyAvg, pctVsPrev, inflationPct, pctVsPrevAdj });
+
+      // Actualizar prevMonthDailyAvg para el siguiente mes
+      prevMonthDailyAvg = dailyAvg;
+    }
+
+    // ---------------------------------------------------------------------------
+    // Convertir breakdownMaps a la matriz final con arrays ordenados por amount DESC
+    // ---------------------------------------------------------------------------
+    const breakdown: CellCategoryBreakdown[][][] = breakdownMaps.map((dayRow) =>
+      dayRow.map((cellMap) => {
+        if (cellMap.size === 0) return [];
+        return Array.from(cellMap.entries())
+          .map(([categoryId, amount]) => ({ categoryId, amount }))
+          .sort((a, b) => b.amount - a.amount);
+      }),
+    );
+
+    // ---------------------------------------------------------------------------
+    // Construir availableCategories ordenado por gasto anual DESC, desempate ASC
+    // ---------------------------------------------------------------------------
+    const availableCategories: AvailableCategory[] = Array.from(catMetaAll.values())
+      .sort((a, b) => {
+        const totalA = annualExpenseAll.get(a.categoryId) ?? 0;
+        const totalB = annualExpenseAll.get(b.categoryId) ?? 0;
+        if (totalB !== totalA) return totalB - totalA;
+        return a.categoryId.localeCompare(b.categoryId);
+      });
+
+    // ---------------------------------------------------------------------------
+    // colorAnchorCents — ancla de escala de color para el frontend
+    //
+    // Equivalente a 15 USD (1500 centavos) en la moneda de display, usando el TC
+    // del primer mes del año pedido disponible en ReferenceRate (con clamp).
+    // Criterio: enero del año (`${year}-01`) resuelto vía pivotRatesForYear,
+    // que ya clampea al mes más cercano si enero no tiene datos en la tabla.
+    //
+    // Cuando displayCurrency == USD → 1500 directos (sin conversión).
+    // Para otras monedas → deriveExchangeRate(USD, displayCurrency, pivotRates)
+    // aplicado sobre 1500 centavos de USD, redondeado a centavos enteros.
+    // ---------------------------------------------------------------------------
+    const COLOR_ANCHOR_USD_CENTS = 1500; // 15 USD en centavos
+    let colorAnchorCents: number;
+
+    if (displayCurrency === Currency.USD) {
+      colorAnchorCents = COLOR_ANCHOR_USD_CENTS;
+    } else {
+      // Usar el TC de enero del año pedido (ya clampeado por loadPivotRatesForYear)
+      const januaryKey = `${yearStr}-01`;
+      const pivotRatesJanuary = pivotRatesForYear.get(januaryKey) ?? null;
+      const rate = deriveExchangeRate(Currency.USD, displayCurrency, pivotRatesJanuary);
+      // Si no hay datos de referencia (tabla vacía), usar 1500 como fallback defensivo.
+      colorAnchorCents = rate !== null ? Math.round(COLOR_ANCHOR_USD_CENTS * rate) : COLOR_ANCHOR_USD_CENTS;
+    }
+
+    this.logger.debug(
+      {
+        userId,
+        year,
+        displayCurrency,
+        filterCount: filterSet?.size ?? null,
+        availableCategoriesCount: availableCategories.length,
+        colorAnchorCents,
+      },
+      'Reporte anual de únicos calculado',
+    );
+
+    return {
+      year,
+      currency: displayCurrency,
+      grid,
+      breakdown,
+      footer,
+      availableCategories,
+      colorAnchorCents,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // Helpers privados
   // ---------------------------------------------------------------------------
 
@@ -812,4 +1217,29 @@ export class MovementsService {
       );
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers de módulo (no exportados)
+// ---------------------------------------------------------------------------
+
+/**
+ * Devuelve la cantidad de días en un mes dado.
+ * Tiene en cuenta años bisiestos para febrero.
+ */
+export function getDaysInMonth(year: number, month: number): number {
+  // El día 0 del mes siguiente = último día del mes dado
+  return new Date(year, month, 0).getDate();
+}
+
+/**
+ * Aplica ROUNDDOWN con N decimales (equivale a truncar hacia cero con N decimales).
+ * Equivalente al ROUNDDOWN de Excel: redondea hacia el cero (trunca).
+ *
+ * Para valores negativos: ROUNDDOWN(-2.9, 0) = -2 (no -3).
+ * Math.trunc(x * 10^n) / 10^n implementa esto correctamente.
+ */
+export function roundDown(value: number, decimals: number): number {
+  const factor = Math.pow(10, decimals);
+  return Math.trunc(value * factor) / factor;
 }

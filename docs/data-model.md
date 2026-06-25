@@ -19,7 +19,7 @@
 | **Preferencias de usuario** | Conjunto de preferencias del usuario (estado de UI que sobrevive a la navegación y al cierre de sesión). Una fila por usuario (1:1 con Usuario), con el contenido guardado como **blob JSON** en lugar de una columna por preferencia. La consumen las secciones colapsadas / orden de `/mes`, la config de reportes y el filtro por categoría. |
 | **Cotización de referencia (`ReferenceRate`)** | Tabla **global** (sin `userId`), **interna y no editable por UI**, de cotizaciones de referencia por `(moneda, mes)`. Sirve de **default por copia (no FK)** para pre-cargar la cotización de un movimiento según su mes; el movimiento conserva su propia cotización editable. Sembrada por seed idempotente y alimentada por el sync externo con la variante oficial. Ver §Tabla de cotizaciones de referencia. |
 | **Cotización externa por variante (`CurrencyQuote`)** | Tabla **global**, interna, no editable por UI. Histórico crudo de **variantes** de cotización FX capturadas de fuentes externas (oficial, blue, …) por `(moneda, variante, mes)`. `variant` es **string libre** (no enum), por mente abierta a variantes futuras. La conversión interna no la consume todavía. Ver §Cotizaciones externas y sincronización. |
-| **Inflación (`InflationRate`)** | Tabla **global**, interna, no editable por UI. IPC nacional (INDEC) por mes (variación mensual + nivel del índice). Se almacena ahora; ningún reporte lo consume aún. Ver §Cotizaciones externas y sincronización. |
+| **Inflación (`InflationRate`)** | Tabla **global**, interna, no editable por UI. IPC nacional (INDEC) por mes (variación mensual + nivel del índice). La consume el **reporte anual de gastos Únicos** (RF-REP-010), para las métricas de inflación y % ajustado del footer. Ver §Cotizaciones externas y sincronización. |
 | **Log de sincronización (`RateSyncLog`)** | Tabla **global** de auditoría: una fila por intento de ingesta externa (aceptado/rechazado + motivo + payload crudo). El secret nunca se loguea. Ver §Cotizaciones externas y sincronización. |
 
 ---
@@ -125,17 +125,19 @@ reports: ReportCardConfig[]
 ReportCardConfig = {
   id: string,                                   // id local de la card (key de React / quitar); generado en el front
   title?: string,                               // título de la card (RF-REP-008); ausente = placeholder "Reporte N" (display)
-  type: "income-expense" | "by-category",       // tipo de reporte (RF-REP-001)
+  type: ReportCardType,                          // tipo de reporte (RF-REP-001 / RF-REP-010)
   year: number,                                 // año que muestra la card
   categoryIds: string[] | null,                 // null = todas las categorías; lista = subconjunto explícito de categoryIds
   categoryBreakdown?: boolean,                   // modo de vista de la card income-expense (RF-REP-006)
   hiddenSeries?: Array<"income" | "expense">,    // series ocultas en modo Total (income-expense); omitido = ambas visibles
   currency?: "ARS" | "USD" | "EUR" | "BRL"       // moneda de display de la card (RF-REP-007); ausente = default global vigente
 }
+
+ReportCardType = "income-expense" | "by-category" | "unique-grid"
 ```
 
 - **`title`** (RF-REP-008) — título de la card, máx. 60 caracteres, trimmeado al confirmar. Aplica a ambos `type`. **Ausente o vacío** → la card muestra el placeholder **"Reporte N"** (N = posición 1-based de la card en la columna, contando todas las cards; **display puro, no se persiste** y se recalcula en vivo al quitar/reordenar). Si el usuario confirma un título vacío, el campo se **omite** del objeto (back-compat: cards sin `title` muestran el placeholder).
-- **`type`** — `"income-expense"` (Forma 1, Ingresos vs. Gastos) o `"by-category"` (Forma 2, Gastos por categoría apilado). Son los dos únicos tipos (RF-REP-001).
+- **`type`** (`ReportCardType`) — `"income-expense"` (Forma 1, Ingresos vs. Gastos, RF-REP-001), `"by-category"` (Forma 2, Gastos por categoría apilado, RF-REP-001) o `"unique-grid"` (grilla anual de gastos Únicos día × mes, RF-REP-010). La card `unique-grid` persiste **los mismos** campos que las otras (`year`, `categoryIds`, `currency`, `title`); **no** agrega campos propios (no usa `categoryBreakdown` ni `hiddenSeries`). Su fuente de datos es `GET /movements/reports/annual-unicos` (ver §Contrato de reporte anual de Únicos), distinta de `GET /movements/reports`.
 - **`year`** — el año que la card grafica; lo cambia la navegación de año embebida del widget.
 - **`categoryIds`** — filtro de categorías de la card. **`null` = todas** (default al crear); una **lista** = subconjunto explícito de `categoryId`s seleccionados. Aplica a ambos tipos (en `income-expense` restringe qué categorías cuentan en los totales; en `by-category`, qué bandas se apilan). Lo que el front manda al endpoint como `categories` deriva de este campo (ver contrato `GET /movements/reports`).
 - **`categoryBreakdown`** (RF-REP-006) — modo de vista **solo de las cards `income-expense`**: `true` = vista "Por categoría" (gastos descompuestos por categoría apilada, reutilizando el array `categories`); `false`/ausente = vista "Total" (dos series agregadas). **Default `false`; ausencia = `false`**. Irrelevante para `by-category` (que no tiene toggle). En el dashboard el modo es **efímero** (estado local) y no usa este campo.
@@ -252,7 +254,7 @@ Tabla **global**, **interna y no editable por UI**, que guarda **una fila por va
 
 ### `InflationRate` — IPC argentino (P7b)
 
-Tabla **global**, **interna y no editable por UI**, que guarda el IPC nacional (INDEC) por mes. Se **almacena ahora**; ningún reporte lo consume todavía (feature futura no planificada). Fuente: `apis.datos.gob.ar` (series de tiempo INDEC).
+Tabla **global**, **interna y no editable por UI**, que guarda el IPC nacional (INDEC) por mes. La consume el **reporte anual de gastos Únicos** (RF-REP-010): el footer de la grilla usa `monthlyVariation` del mes para la métrica de inflación y para el % de diferencia ajustado por inflación. Fuente: `apis.datos.gob.ar` (series de tiempo INDEC).
 
 | Campo | Tipo | Notas |
 |---|---|---|
@@ -263,7 +265,7 @@ Tabla **global**, **interna y no editable por UI**, que guarda el IPC nacional (
 | `fetchedAt` | `DateTime` | instante de captura (UTC) |
 
 - **Clave única `yearMonth`.** El IPC nacional es un único valor por mes (sin moneda ni variante). Upsert idempotente por esta clave.
-- **Sin consumo en v1.** No alimenta conversión ni totales. Es captura adelantada para una feature futura de ajuste por inflación en reportes.
+- **Consumo.** No alimenta la conversión de monedas ni los totales del mes. Lo consume el reporte anual de gastos Únicos (RF-REP-010, footer de inflación y % ajustado); ver §Contrato de reporte anual de Únicos.
 - **Histórico sembrado por data migration (`20260623000000_seed_historical_ipc`).** El histórico de IPC viene horneado por esta migración de Prisma: **113 meses (2017-01 … 2026-05)** de la serie completa de INDEC (`apis.datos.gob.ar`, variación e índice) insertados con `ON CONFLICT ("yearMonth") DO NOTHING`. Idempotente y convive con el sync diario sin pisarse: el sync solo cubre el **mes corriente**, la migración cubre el pasado.
 
 ### `RateSyncLog` — auditoría de la sincronización
@@ -558,9 +560,58 @@ ReportCategory = {
 
 ---
 
+## Contrato de reporte anual de Únicos (respuesta de `GET /movements/reports/annual-unicos`)
+
+`GET /movements/reports/annual-unicos?year=YYYY&categories=<...>&currency=XXX&today=YYYY-MM-DD` devuelve, dentro del sobre `{ success, statusCode, data }`, la **grilla anual día × mes de gastos Únicos** y el **footer de métricas mensuales** que alimentan la card `unique-grid` (RF-REP-010). Solo agrega **movimientos Únicos de tipo gasto (`EXPENSE`)**: fijos, cuotas y calculados no entran. Es un endpoint **distinto** de `GET /movements/reports` (no comparte shape). Reglas de cálculo (divisor del promedio, fórmulas de %, ajuste por inflación) en `docs/backend.md`, §Serie de reportes → Reporte anual de Únicos.
+
+**Query params:**
+
+- **`year`** (`YYYY`, requerido) — el año a graficar.
+- **`categories`** (opcional) — filtro por categoría, **tres estados** (tabla "Filtro de categorías" abajo): **ausente = todas**, **`categories=` (presente y vacío) = ninguna** (grilla en cero), **lista `id1,id2` = subconjunto**. Comas **sin URL-encode**. El front lo deriva del `categoryIds` de la card.
+- **`currency`** (opcional) — override de la moneda de display de la grilla (RF-REP-007), una de las 4 monedas, **case-sensitive**. **Ausente → la default global del usuario**; **presente y válido → esa moneda**; **vacío o fuera del set → `400`**. Misma capa de display que el resto (no toca lo guardado).
+- **`today`** (opcional, `YYYY-MM-DD`) — la **fecha local del usuario**, que el front envía para que el backend calcule el **divisor del promedio diario del mes en curso** (día actual) en la zona del usuario. **Si falta, el backend cae a `new Date()` (UTC).**
+
+```
+AnnualUnicosResponse = {
+  year: number,
+  currency: "ARS" | "USD" | "EUR" | "BRL",   // moneda de display usada
+  grid: number[][],                          // SIEMPRE 31 filas × 12 columnas; grid[day-1][month-1]
+  breakdown: BreakdownCell[][][],            // misma indexación que grid: breakdown[day-1][month-1]
+  footer: AnnualUnicosFooter[],              // SIEMPRE 12 entradas; índice = mes-1
+  availableCategories: AvailableCategory[],  // universo del filtro (igual shape que en §Contrato de serie de reportes)
+  colorAnchorCents: number                   // tope de la escala de color de las celdas; ver abajo (nunca null)
+}
+
+BreakdownCell = { categoryId: string, amount: number }
+
+AnnualUnicosFooter = {
+  total: number,                  // total de gastos Únicos del mes, en centavos de `currency`
+  dailyAvg: number | null,        // promedio diario; null si el mes es futuro
+  pctVsPrev: number | null,       // % de diferencia del promedio diario vs. el mes anterior
+  inflationPct: number | null,    // variación IPC (puntos %) del mes; null si no hay dato
+  pctVsPrevAdj: number | null     // % vs. mes anterior ajustado por la inflación del mes en curso
+}
+```
+
+donde `AvailableCategory = { categoryId, name, color }` (mismo shape que en §Contrato de serie de reportes).
+
+- **`grid` — siempre 31 × 12.** `grid[day-1][month-1]` = total de gastos Únicos imputados a ese día y mes, en **centavos enteros** de `currency` (ya convertidos a la moneda de display). Vale **0** tanto si no hubo gasto **como** si el día **no existe** en el mes (ej. `grid[30][1]` = 30 de febrero): el contrato **no** distingue ambos casos — el front lo resuelve por calendario (ver `docs/frontend.md`, §Reportes). El bucketeo del día/mes usa la **zona propia de cada registro** (RN-015), igual que el resto de los reportes.
+- **`breakdown` — desglose por categoría de cada celda.** Misma forma y misma indexación que `grid` (`breakdown[day-1][month-1]`): por cada celda, el detalle del gasto de **ese día** repartido por categoría. Cada ítem es `{ categoryId, amount }`, con `amount` en **centavos de `currency`** (misma conversión que `grid`/`total`), **ordenado por `amount` DESC**. Celda sin gasto y día inexistente → `[]`. **No trae `name` ni `color`:** el front resuelve la paleta y el nombre por `categoryId` contra `availableCategories`, que ya los expone; duplicarlos por celda repetiría la misma paleta N veces sin agregar información.
+- **`footer` — siempre 12, índice = mes-1.** Una entrada por mes:
+  - **`total`** — suma de gastos Únicos del mes (centavos de `currency`).
+  - **`dailyAvg`** — `total` dividido por el divisor de días (día en curso si es el mes corriente del año en curso; días del mes si ya terminó; ver `docs/backend.md`). **`null` para un mes futuro.**
+  - **`pctVsPrev`** — % de diferencia del promedio diario respecto del mes anterior (el de **enero** es **diciembre del año previo**). **`null`** si el promedio del mes anterior es cero.
+  - **`inflationPct`** — `InflationRate.monthlyVariation` (puntos %) del mes. **`null`** si no hay dato de IPC.
+  - **`pctVsPrevAdj`** — `pctVsPrev` ajustado: el promedio del mes anterior se infla por la variación IPC **del mes en curso** antes de comparar. **`null`** si falta el IPC, si el promedio anterior es cero, o si el mes en curso no tiene dato.
+- **`availableCategories`** — universo del filtro: categorías con **gasto Único** del año, computado **sin** aplicar el filtro `categories` (superconjunto estable). Mismo criterio de estabilidad que en la serie de reportes; alimenta la leyenda-filtro de la card.
+- **`colorAnchorCents`** — entero, **centavos de `currency`**. Es el equivalente de **15 USD** reconvertido a `currency` con el TC de **enero del año del reporte** (mecanismo `pivotRatesForYear`, con clamp al mes disponible más cercano; si `currency` es USD = `1500`). **Nunca `null`.** Es el **tope de la escala de color** de las celdas de la grilla: el front pinta cada celda con `t = clamp(total / colorAnchorCents, 0, 1)`. Es referencia de **paleta visual**, **no** una cotización de negocio (no entra en totales ni conversiones).
+- **NO incluye `earliestYear`** (a diferencia de `GET /movements/reports`): este contrato no expone el primer año con datos. Consecuencia funcional: la card `unique-grid` permite navegación de año hacia atrás **sin tope** (RF-REP-010; ver `docs/frontend.md`, §Reportes).
+
+---
+
 ## Filtro de categorías — query param `categories`
 
-> Destino canónico del contrato del param `categories`. Lo consume **`GET /movements/reports?year=YYYY`** (filtro de reportes, RF-REP-002). `GET /movements?month=YYYY-MM` lo **acepta** con la misma semántica, pero **`/mes` no lo envía**: el filtro de la Vista del mes vive en el frontend (filtros por listado, RF-VM-006; ver §Preferencia `monthListFilters`).
+> Destino canónico del contrato del param `categories`. Lo consumen **`GET /movements/reports?year=YYYY`** (filtro de reportes, RF-REP-002) y **`GET /movements/reports/annual-unicos?year=YYYY`** (filtro de la grilla anual de Únicos, RF-REP-010), con la misma semántica de tres estados. `GET /movements?month=YYYY-MM` lo **acepta** también, pero **`/mes` no lo envía**: el filtro de la Vista del mes vive en el frontend (filtros por listado, RF-VM-006; ver §Preferencia `monthListFilters`).
 
 El param distingue **tres estados** —y, en particular, distingue **"ausente" de "presente y vacío"**:
 

@@ -36,6 +36,7 @@ El detalle estructural (contratos, gotchas, decisiones) vive en `docs/`. Leé la
 | Sobre de respuesta, exception filter, logging, env, deploy | `docs/technical.md` |
 | Endpoints (rutas, bodies, códigos de error) | `docs/backend.md` §Endpoints y la sección de cada módulo |
 | Movimientos del mes (bucketeo SQL, totales, integración de orígenes) | `docs/backend.md` §Movimientos del mes |
+| Serie de reportes + reporte anual de Únicos (consume `InflationRate`; param `today` = fecha local del usuario para el divisor del promedio) | `docs/backend.md` §Serie de reportes |
 | Únicos / fijos / cuotas / calculados | `docs/backend.md` (sección de cada módulo) |
 | Categorías, pool de colores, validación de categoría | `docs/backend.md` §Categorías, §CategoryValidatorService |
 | Auth, JWT, categorías por defecto al alta | `docs/backend.md` §Autenticación |

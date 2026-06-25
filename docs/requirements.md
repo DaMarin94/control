@@ -1296,7 +1296,7 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 
 El módulo de Reportes visualiza los movimientos del usuario a lo largo de un año, mes a mes. El eje X son los 12 meses del año; el eje Y es el monto. Ofrece **dos tipos de reporte** —ingresos vs. gastos por mes, y gastos por categoría apilados— implementados como un **widget de reporte autónomo, configurable por props**, que lleva embebidos su propia navegación de año y su propio filtro de categorías. La pantalla `/reportes` es **configurable**: el usuario arma su vista agregando y quitando **cards de reporte**; el dashboard monta una sola instancia del widget (ver RF-DASH-001/002).
 
-> **Alcance:** solo los dos tipos de reporte descritos en RF-REP-001 (ingresos/gastos y apilado por categoría de gastos). Otros tipos de reporte/gráfico (torta, barras, línea) quedan fuera de alcance (ver sección 6).
+> **Alcance:** los tipos de reporte descritos en RF-REP-001 (ingresos/gastos y apilado por categoría de gastos) y RF-REP-010 (grilla anual de gastos Únicos día × mes). Otros tipos de reporte/gráfico (torta, barras, línea) quedan fuera de alcance (ver sección 6).
 
 ---
 
@@ -1522,6 +1522,46 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 
 ---
 
+#### RF-REP-010 — Reporte anual de gastos Únicos (grilla día × mes)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Tercer tipo de card de reporte (`unique-grid`): una **grilla de gastos Únicos del año**, con un **día por fila (1–31)** y un **mes por columna (ene–dic)**. Cada celda muestra el total de **gastos Únicos** (`EXPENSE`) imputados a ese día y mes, en la moneda de display de la card. Bajo la grilla, un **footer de métricas mensuales** por columna. Solo considera **movimientos Únicos de tipo gasto**: fijos, cuotas y calculados no entran. Es un widget de reporte autónomo (RF-REP-002) con su año, su filtro de categorías y su moneda propios, persistidos en la clave `reports` (RF-REP-004). |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Contenido de la grilla:**
+
+- **31 filas × 12 columnas, siempre.** Fila = día del mes (1–31), columna = mes (ene–dic). Una celda agrega los gastos Únicos del usuario cuyo día y mes (en la zona propia de cada registro, RN-015) caen en esa posición.
+- **Días inexistentes del mes** (ej. 30/31 de febrero) se distinguen de un día sin gasto: la celda de un día que no existe en ese mes **no aplica**, distinta de un día existente con **$0** de gasto.
+- El **filtro de categorías** (RF-REP-002) restringe qué gastos Únicos entran en la grilla y en el footer; el universo ofrecido es **solo las categorías con gasto Único del año** (estable, no se achica al destildar).
+- **Hover de celda de día** — revela, además de fecha y total, el **desglose por categoría** del gasto de ese día. **Hover del footer de un mes** — revela las cinco métricas mensuales en detalle. Spec visual de ambos tooltips en `docs/design.md` (§4b y §8).
+
+**Footer de métricas mensuales** (una entrada por mes/columna):
+
+- **Total del mes** — suma de los gastos Únicos del mes (la columna).
+- **Promedio diario** — total del mes dividido por el divisor de días: el **día en curso** si la columna es el mes corriente del año en curso; los **días del mes** si el mes ya terminó (incluye meses de años pasados); **no aplica** (sin valor) para un mes **futuro**.
+- **% de diferencia vs. mes anterior** — variación del promedio diario respecto del mes anterior. El mes anterior de **enero es diciembre del año previo** (continuidad temporal). Sin valor si el promedio del mes anterior es cero.
+- **Inflación del mes** — variación mensual del IPC nacional (RF-IPC-001) de ese mes; sin valor si no hay dato de IPC.
+- **% de diferencia ajustado por inflación** — el mismo % vs. mes anterior, pero descontando la inflación del mes en curso del promedio del mes anterior antes de comparar; sin valor si falta el IPC, si el promedio anterior es cero o si el mes en curso no tiene dato.
+
+**Criterios de aceptación:**
+- [ ] La card `unique-grid` muestra una grilla de **31 filas (días 1–31) × 12 columnas (meses ene–dic)** con el total de gastos **Únicos** (`EXPENSE`) por día y mes, en la moneda de display de la card (RF-REP-007).
+- [ ] **Solo** gastos Únicos de tipo `EXPENSE` entran en la grilla y el footer: fijos, cuotas y calculados se excluyen.
+- [ ] Un día que **no existe** en un mes se muestra distinto de un día existente con **$0** de gasto.
+- [ ] El footer muestra, por mes: total, promedio diario, % vs. mes anterior, inflación del mes y % ajustado por inflación, con la semántica de divisor y de "sin valor" descrita arriba.
+- [ ] El **promedio diario** usa como divisor el día en curso (mes corriente), los días del mes (mes terminado) o no aplica (mes futuro).
+- [ ] El **% vs. mes anterior** trata diciembre del año previo como anterior de enero; queda sin valor si el promedio anterior es cero.
+- [ ] La card es un widget autónomo (RF-REP-002): año, filtro de categorías y moneda propios, persistidos en la clave `reports` (RF-REP-004). El universo del filtro son **solo las categorías con gasto Único del año**.
+- [ ] La navegación de año hacia atrás del widget **no tiene tope** en esta card (la fuente de datos no expone `earliestYear`); hacia adelante se bloquean los años futuros (RF-REP-002).
+
+**Notas:**
+- Las decisiones de presentación visual (escala de color de las celdas, tipografía, layout del footer) son responsabilidad de `control-design` (`docs/design.md`), no de este RF.
+- Las fórmulas exactas de cada métrica del footer (truncado, ajuste por inflación) y el contrato del endpoint viven en `docs/backend.md` §Serie de reportes y `docs/data-model.md` §Contrato de reporte anual de Únicos.
+
+---
+
 ### 3.10 Módulo: Multi-moneda
 
 > La moneda es **explícita**: cada movimiento lleva su **moneda + cotización**; los totales se expresan en una **única moneda default** del usuario, convertida en vivo. La cotización del movimiento se **pre-carga desde una tabla de cotizaciones de referencia** (interna, no editable por UI). Modelo de datos en `data-model.md`, §Moneda explícita, set curado, §Contrato de configuración del usuario (settings) y §Tabla de cotizaciones de referencia.
@@ -1709,7 +1749,7 @@ P7 se parte en dos requerimientos independientes (fuentes distintas): **P7a = FX
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El sistema obtiene el IPC nacional (INDEC) por mes desde `apis.datos.gob.ar` y lo guarda en `InflationRate`. Se almacena ahora; **ningún reporte lo consume todavía**. |
+| **Descripción** | El sistema obtiene el IPC nacional (INDEC) por mes desde `apis.datos.gob.ar` y lo guarda en `InflationRate`. El histórico ya está sembrado por data migration; la **captura por sync** del mes corriente es la parte diferida de este RF. El dato de `InflationRate` **lo consume el reporte anual de gastos Únicos** (RF-REP-010, métricas de inflación del footer). |
 | **Actor** | Sistema (disparado por un proceso de operación / cron) |
 | **Prioridad** | Diferida |
 | **Precondiciones** | El disparador presenta el secret de operación válido. Hay conectividad con la fuente. |
@@ -1717,7 +1757,7 @@ P7 se parte en dos requerimientos independientes (fuentes distintas): **P7a = FX
 **Criterios de aceptación:**
 - [ ] La fuente es `apis.datos.gob.ar` (series de tiempo INDEC): variación mensual (`145.3_INGNACUAL_DICI_M_38`) y nivel del índice (`148.3_INIVELNAL_DICI_M_26`).
 - [ ] Cada mes se guarda en `InflationRate` por `yearMonth` (clave única, upsert idempotente): variación mensual + nivel del índice + fuente + instante de captura.
-- [ ] El IPC **no alimenta** ninguna conversión, total ni reporte en v1: es captura adelantada para una feature futura de ajuste por inflación (sin definir aún).
+- [ ] El IPC **no alimenta** la conversión de monedas ni los totales del mes; sí lo consume el **reporte anual de gastos Únicos** (RF-REP-010) para las métricas de inflación y % ajustado del footer.
 - [ ] Mismas garantías de ingesta segura que RF-FX-001 (schema estricto, cotas, log de auditoría).
 
 ---
@@ -1787,7 +1827,7 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 
 | Feature | Motivo de exclusión |
 |---|---|
-| Reportes: otros tipos (torta, barras de comparación, etc.) | Los dos tipos de reporte (ingresos/gastos y apilado por categoría de gastos) **sí** entran (RF-REP-001). Sumar nuevos tipos de reporte queda fuera de alcance: es una mini-fase futura que requiere definición de UX y no es bloqueante |
+| Reportes: otros tipos (torta, barras de comparación, etc.) | Los tipos de reporte que **sí** entran son ingresos/gastos y apilado por categoría de gastos (RF-REP-001) y la grilla anual de gastos Únicos día × mes (RF-REP-010). Sumar nuevos tipos de reporte queda fuera de alcance: es una mini-fase futura que requiere definición de UX y no es bloqueante |
 | Tarjetas con fecha de corte | Requiere flujo propio; demasiado complejo para v1 |
 | Edición retroactiva de mes pasado de un fijo | Complejidad en el modelo de datos |
 | Cancelación parcial de cuotas restantes | Pendiente de definición |

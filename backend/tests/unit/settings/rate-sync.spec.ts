@@ -183,8 +183,16 @@ describe('validateFrankfurterRate', () => {
 // ---------------------------------------------------------------------------
 
 describe('validateIpcValues', () => {
-  it('acepta variación y índice válidos', () => {
+  // Los valores recibidos en validateIpcValues son en PUNTOS PORCENTUALES
+  // (ya convertidos del fraccionario de INDEC ×100 por el servicio).
+  // Ej: 2.5 = 2.5% mensual; -5 = deflación del 5%; 0.027 también pasa (es 0.027%)
+
+  it('acepta variación y índice válidos en puntos %', () => {
     expect(validateIpcValues(2.5, 150.3)).toBeNull();
+  });
+
+  it('acepta variación típica real del IPC argentino (ej: 3.7 pts %)', () => {
+    expect(validateIpcValues(3.7, 4200)).toBeNull();
   });
 
   it('acepta variación negativa dentro de cotas', () => {
@@ -537,6 +545,33 @@ describe('RateSyncService — upsert transaccional via sync()', () => {
 
     // Debe haber llamado $transaction para el upsert
     expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('sync IPC — convierte fracción INDEC a puntos %: API 0.027 → guarda 2.7 (no 0.027)', async () => {
+    // La API de INDEC devuelve la variación como fracción decimal (ej. 0.027 para 2.7%).
+    // El servicio debe multiplicar ×100 antes de persistir, para que la DB almacene
+    // puntos porcentuales (2.7) — unidad canónica del sistema (post-migración).
+    mockFetch({
+      '145.3_INGNACUAL_DICI_M_38': {
+        data: [['2026-05-01', 0.027]], // fracción: 2.7%
+      },
+      '148.3_INIVELNAL_DICI_M_26': {
+        data: [['2026-05-01', 3825.4]],
+      },
+    });
+
+    await service.sync(SyncScope.IPC);
+
+    // El upsert debe haberse llamado dentro de $transaction.
+    // Como el mock de $transaction ejecuta el callback con el mismo mock,
+    // inflationRate.upsert fue llamado con monthlyVariation = 2.7 (no 0.027).
+    const upsertCalls = mockPrisma.inflationRate.upsert.mock.calls;
+    expect(upsertCalls).toHaveLength(1);
+    const upsertArg = upsertCalls[0][0] as {
+      create: { monthlyVariation: { toNumber(): number } };
+    };
+    // Prisma.Decimal.toNumber() devuelve el valor numérico
+    expect(Number(upsertArg.create.monthlyVariation)).toBeCloseTo(2.7, 5);
   });
 
   it('sync IPC — rechaza si variación mensual supera cotas (>500%)', async () => {

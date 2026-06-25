@@ -439,9 +439,9 @@ Logo/nombre "Control" → `/`; links **Dashboard** (`/`), **Vista del mes** (`/m
 - **Sección activa — match EXACTO para `/`:** el link Dashboard compara `pathname === "/"`. Con `startsWith("/")` quedaría activo en **todas** las rutas. Los links `/mes` y `/categorias` usan `startsWith` (no hay subrutas que colisionen).
 - **`<Suspense>` en `(app)/mes/page.tsx`:** se mantiene envolviendo `MonthViewWrapper` (que usa `useSearchParams()`); sin él el build de Next 15 falla. El cambio de carpeta al route group no lo altera (ver gotcha de `<Suspense>` en la sección Vista del mes).
 
-## Reportes (RF-REP-001..005)
+## Reportes (RF-REP-001..010)
 
-Visualización de reportes de ingresos/gastos en `/reportes`. El spec visual (color, alturas, jerarquía, transición) vive en `docs/design.md` — acá solo arquitectura y gotchas técnicos.
+Visualización de reportes en `/reportes` (ingresos/gastos, apilado por categoría y grilla anual de gastos Únicos). El spec visual (color, alturas, jerarquía, transición) vive en `docs/design.md` — acá solo arquitectura y gotchas técnicos.
 
 ### Arquitectura en dos capas (enfoque shadcn charts)
 
@@ -484,6 +484,17 @@ Para que un agente futuro que toque gráficos no los re-tropiece:
 - **Alto responsive — por prop `height`, no CSS var:** Recharts necesita el alto como **valor numérico en el prop `height`** (no acepta una CSS var de altura). Se resuelve con **dos `<div>` + media queries de Tailwind v4** (`[@media(max-width:940px)]:hidden` / `[@media(min-width:941px)]:hidden`).
 - **`prefers-reduced-motion`:** las tarjetas usan un detector interno de reduced-motion. **jsdom no implementa `window.matchMedia`**, así que se agregó un **mock global de `matchMedia` en `tests/setup.ts`** — necesario para cualquier componente futuro que detecte reduced-motion.
 - **Dedupe de `useReports` por query key — no es doble fetch:** cuando `useReports(year, categoryIds)` se invoca **varias veces a la vez** con los mismos argumentos, React Query lo resuelve como **una sola request** por compartir la misma key (dedupe por key). No es N peticiones simultáneas.
+
+### Card `unique-grid` — grilla anual de gastos Únicos (RF-REP-010)
+
+Tercer tipo de card (`ReportCardType = "unique-grid"`). Renderiza la grilla anual día × mes de gastos Únicos sobre `GET /movements/reports/annual-unicos` (contrato en `docs/data-model.md`, §Contrato de reporte anual de Únicos). Spec visual en `docs/design.md`. Lo no obvio:
+
+- **Tabla semántica + CSS Grid, NO Recharts.** Esta card se renderiza con una **`<table>` nativa** (días × meses) + CSS Grid, no con el motor de charting. En `/reportes` **coexisten dos motores**: Recharts para `income-expense`/`by-category` y tabla nativa para `unique-grid`. Un agente que toque charts no debe asumir que toda card pasa por `components/ui/chart.tsx`.
+- **Días inexistentes — distinguir por calendario, no por valor.** El contrato envía `0` tanto para un día sin gasto como para un día que no existe en el mes (ej. 30/feb). El front los separa con `getDaysInMonth(year, month)`: una celda de día inexistente se pinta **nula** (sin número), distinta de un `$0` real (que lleva el tinte de piso de la escala). **No** inferir "inexistente" del valor `0`.
+- **Escala de color anclada a `colorAnchorCents` del response.** El tinte de cada celda usa `t = clamp(total / colorAnchorCents, 0, 1)`, donde `colorAnchorCents` lo trae la propia respuesta (15 USD reconvertido al TC de enero del año; contrato en `docs/data-model.md`). El front **no** calcula el ancla ni la hardcodea: la consume del payload.
+- **Navegación de año libre hacia atrás.** El control ‹ está **siempre habilitado** (sin tope) porque el contrato de este endpoint **no expone `earliestYear`**. Decisión cerrada (RF-REP-010). El tope hacia adelante (año en curso) sí aplica, como en las otras cards.
+- **El param `today`** se manda con la **fecha local del usuario** (`YYYY-MM-DD`) para que el backend calcule el divisor del promedio del mes en curso en la zona del usuario (ver contrato).
+- **Tooltip de celda — desglose por categoría.** El hover de una celda muestra fecha + total + el desglose por categoría que trae `breakdown[day-1][month-1]` (contrato en `docs/data-model.md`). El breakdown llega **sin `name`/`color`**: el front los resuelve por `categoryId` contra `availableCategories` de la misma respuesta. El hover del footer despliega las cinco métricas del mes. Spec visual en `docs/design.md` (§4b y §8).
 
 ## Design system "Precise Ledger" — tokens
 

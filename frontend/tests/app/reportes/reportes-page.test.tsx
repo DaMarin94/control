@@ -53,7 +53,19 @@ vi.mock("@/hooks/use-reports", () => ({
     fetchStatus: "fetching",
     refetch: vi.fn(),
   })),
+  useUnicoGrid: vi.fn(() => ({
+    data: undefined,
+    isLoading: true,
+    isError: false,
+    isPending: true,
+    isSuccess: false,
+    error: null,
+    status: "loading",
+    fetchStatus: "fetching",
+    refetch: vi.fn(),
+  })),
   REPORTS_QUERY_KEY: (year: number, key: string | null) => ["reports", year, key],
+  UNICO_GRID_QUERY_KEY: (year: number, key: string | null) => ["reports-unico-grid", year, key],
 }));
 
 vi.mock("@/hooks/use-categories", () => ({
@@ -517,6 +529,61 @@ describe("ReportesPage — modo orden (P1)", () => {
     fireEvent.click(screen.getByRole("button", { name: /ordenar reportes/i }));
 
     expect(screen.getByText("Mi reporte")).toBeInTheDocument();
+  });
+});
+
+describe("ReportesPage — agregar card unique-grid (Ola 3, P2)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    uuidCounter = 0;
+  });
+
+  it("el menú de tipo muestra la opción 'Únicos'", () => {
+    makePreferencesHook([]);
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /agregar primer reporte/i }));
+    expect(screen.getByText("Únicos")).toBeInTheDocument();
+    expect(screen.getByText("Grilla día × mes de gastos únicos")).toBeInTheDocument();
+  });
+
+  it("al elegir 'Únicos' llama a setPreferences con una card unique-grid", async () => {
+    const setPreferences = vi.fn().mockResolvedValue({ success: true });
+    makePreferencesHook([], setPreferences);
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /agregar primer reporte/i }));
+    fireEvent.click(screen.getByText("Únicos"));
+
+    await waitFor(() => {
+      expect(setPreferences).toHaveBeenCalledTimes(1);
+    });
+
+    const callArg = setPreferences.mock.calls[0]?.[0] as UserPreferences;
+    expect(Array.isArray(callArg.reports)).toBe(true);
+    expect(callArg.reports?.[0]?.type).toBe("unique-grid");
+    expect(callArg.reports?.[0]?.year).toBe(2026);
+    expect(callArg.reports?.[0]?.categoryIds).toBeNull();
+  });
+});
+
+describe("ReportesPage — modo orden con unique-grid (Ola 3, P2)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    uuidCounter = 0;
+  });
+
+  it("el mini-ítem de unique-grid muestra la etiqueta 'Únicos'", () => {
+    const cardsWithUnicoGrid: ReportCardConfig[] = [
+      { id: "card-1", type: "unique-grid", year: 2026, categoryIds: null },
+      { id: "card-2", type: "income-expense", year: 2026, categoryIds: null },
+    ];
+    makePreferencesHook(cardsWithUnicoGrid);
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /ordenar reportes/i }));
+
+    expect(screen.getByText("Únicos")).toBeInTheDocument();
+    expect(screen.getByText("Ingresos y gastos")).toBeInTheDocument();
   });
 });
 

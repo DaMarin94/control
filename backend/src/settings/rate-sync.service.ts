@@ -467,7 +467,11 @@ export class RateSyncService {
       return [{ target, accepted: false, reason: 'schema' }];
     }
 
-    const variation = varData.value;
+    // La API de INDEC devuelve la variación como fracción (ej. 0.0158 para 1.58%).
+    // La unidad canónica del sistema es PUNTOS PORCENTUALES (ej. 1.58).
+    // Convertimos aquí, antes de la validación de cotas y del circuit breaker,
+    // para que todas las comparaciones sean en la misma unidad que la DB (post-migración).
+    const variation = varData.value * 100;
     const indexValue = idxData.value;
 
     const sanityError = validateIpcValues(variation, indexValue);
@@ -575,8 +579,10 @@ export class RateSyncService {
     });
     if (!last) return { ok: true };
 
+    // monthlyVariation está en PUNTOS PORCENTUALES en la DB (post-migración).
+    // El umbral de "casi-cero" es 0.1 puntos % para evitar divisiones inestables.
     const lastValue = Number(last.monthlyVariation);
-    if (Math.abs(lastValue) < 0.01) return { ok: true };
+    if (Math.abs(lastValue) < 0.1) return { ok: true };
 
     const deviation = Math.abs(newVariation - lastValue) / Math.abs(lastValue);
     return deviation > CIRCUIT_BREAKER_THRESHOLD

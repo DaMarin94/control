@@ -66,8 +66,85 @@ export interface ReportsMovementsResponse {
  * Tipo de reporte de una card.
  * - "income-expense": Forma 1, Ingresos vs. Gastos (AreaChart)
  * - "by-category": Forma 2, Gastos por categoría apilado (BarChart)
+ * - "unique-grid": Ola 3 P2, grilla día×mes de Únicos (heatmap calendario nativo)
  */
-export type ReportCardType = "income-expense" | "by-category";
+export type ReportCardType = "income-expense" | "by-category" | "unique-grid";
+
+// ─── Tipos del endpoint de reporte anual de Únicos (Ola 3, P2) ───────────────
+
+/**
+ * Métricas del footer de un mes en el reporte de grilla de Únicos.
+ * Siempre 12 entradas, índice = mes-1.
+ */
+export interface UnicoGridFooterMonth {
+  /** Suma de gastos únicos del mes en centavos (en la currency de display). */
+  total: number;
+  /**
+   * Promedio diario del mes en centavos.
+   * null si el mes es futuro (divisor = 0).
+   */
+  dailyAvg: number | null;
+  /**
+   * %dif vs mes anterior (ROUNDDOWN a 2 decimales).
+   * null si mes anterior tiene avg=0 o es el primero con dato → mostrar "—".
+   */
+  pctVsPrev: number | null;
+  /**
+   * Puntos % de IPC del mes (inflación).
+   * null si no hay dato de inflación.
+   */
+  inflationPct: number | null;
+  /**
+   * %dif ajustado por inflación.
+   * null si falta IPC o avgPrev=0.
+   */
+  pctVsPrevAdj: number | null;
+}
+
+/**
+ * Respuesta de GET /movements/reports/annual-unicos?year=YYYY[&categories=...][&currency=XXX][&today=YYYY-MM-DD]
+ * (dentro del sobre { success, statusCode, data }).
+ *
+ * Fuente de verdad: contrato del backend (Ola 3, P2 — actualizado con breakdown).
+ */
+export interface UnicoGridResponse {
+  /** El año pedido. */
+  year: number;
+  /** Moneda de display usada (la pedida por ?currency= o la default del usuario). */
+  currency: "ARS" | "USD" | "EUR" | "BRL";
+  /**
+   * Ancla de la rampa de color en centavos de la moneda de display.
+   * Equivale a 15 USD de poder adquisitivo, reconvertido con el TC de enero del año del reporte.
+   * El front lo usa para calcular t = clamp(totalDía / colorAnchorCents, 0, 1).
+   * Es solo referencia de paleta visual; nunca se muestra como cifra.
+   * Si la moneda es USD, ronda 1500 (15 USD en centavos).
+   */
+  colorAnchorCents: number;
+  /**
+   * Grilla SIEMPRE 31 filas × 12 columnas.
+   * grid[day-1][month-1] = total de gastos únicos de ese día en centavos (currency).
+   * 0 si no hay gasto O si el día no existe en ese mes (feb 30, abr 31, etc.).
+   * El frontend distingue "día inexistente" via calendario, no por el valor.
+   */
+  grid: number[][];
+  /**
+   * Desglose por categoría, paralelo a `grid`.
+   * breakdown[day-1][month-1] = array de { categoryId, amount } ordenado por amount DESC.
+   * Celda sin gasto → []. Día inexistente → [] (no iterar: distinguir por calendario igual que grid).
+   * amount en cents de la moneda de display. Color y nombre se resuelven desde availableCategories.
+   */
+  breakdown: Array<Array<Array<{ categoryId: string; amount: number }>>>;
+  /**
+   * Footer de métricas. SIEMPRE 12 entradas, índice = mes-1.
+   */
+  footer: UnicoGridFooterMonth[];
+  /**
+   * Universo de categorías con gasto único en el año (sin aplicar filtro).
+   * El front lo usa como universo del filtro de chips de categoría y para resolver
+   * color/nombre de las entradas del breakdown.
+   */
+  availableCategories: Array<{ categoryId: string; name: string; color: string }>;
+}
 
 /**
  * Configuración persistida de una card de reporte (clave `reports` del blob de preferencias).

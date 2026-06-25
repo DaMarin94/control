@@ -19,8 +19,9 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, AreaChart, BarChart3 } from "lucide-react";
+import { GripVertical, AreaChart, BarChart3, CalendarDays } from "lucide-react";
 import { ReportCard } from "@/components/charts/report-card";
+import { UniqueGridCard } from "@/components/charts/unique-grid-card";
 import type { ReportCardConfig, ReportCardType } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
 
@@ -41,9 +42,14 @@ function ReportCardMini({
   gripAttributes,
   gripListeners,
 }: ReportCardMiniProps) {
-  const TypeIcon = type === "income-expense" ? AreaChart : BarChart3;
+  const TypeIcon =
+    type === "income-expense" ? AreaChart
+    : type === "by-category" ? BarChart3
+    : CalendarDays;
   const typeLabel =
-    type === "income-expense" ? "Ingresos y gastos" : "Por categoría";
+    type === "income-expense" ? "Ingresos y gastos"
+    : type === "by-category" ? "Por categoría"
+    : "Únicos";
 
   const hasTitle = Boolean(title);
 
@@ -162,6 +168,20 @@ export function SortableReportCard({
             gripListeners={listeners}
           />
         </div>
+      ) : config.type === "unique-grid" ? (
+        <UniqueGridCard
+          year={config.year}
+          categoryIds={config.categoryIds}
+          currency={config.currency}
+          title={config.title}
+          titlePlaceholder={titlePlaceholder}
+          removable={true}
+          onYearChange={onYearChange}
+          onCategoryIdsChange={onCategoryIdsChange}
+          onCurrencyChange={onCurrencyChange}
+          onRemove={onRemove}
+          onTitleChange={onTitleChange}
+        />
       ) : (
         <ReportCard
           type={config.type}

@@ -9,6 +9,27 @@ import { convertToDisplayCurrency, convertToDisplayCurrencyByMonth, PivotRates, 
 // ---------------------------------------------------------------------------
 
 /**
+ * Fila devuelta por el SQL raw de agregación diaria de únicos EXPENSE.
+ * Una fila por (mes local, día local, categoryId, currency, exchangeRate, anchorCurrency).
+ * Usada por la grilla día×mes del reporte anual de únicos (Ola 3 / P2).
+ */
+export interface RawDailyUnicoRow {
+  /** Mes en formato YYYY-MM (calculado con AT TIME ZONE del registro) */
+  monthKey: string;
+  /** Día del mes (1-31) calculado con AT TIME ZONE del registro */
+  day: number;
+  categoryId: string;
+  /** Moneda original del grupo */
+  currency: string;
+  /** Cotización como string (Postgres Decimal → string) */
+  exchangeRate: string;
+  /** Moneda de referencia del exchangeRate guardado */
+  anchorCurrency: string;
+  /** BigInt de JS — resultado de SUM de Postgres */
+  totalCents: bigint;
+}
+
+/**
  * Fila devuelta por el SQL raw de agregación anual de únicos.
  * Una fila por (mes local, categoryId, type, currency, exchangeRate, anchorCurrency).
  * Fase 1.2.4: agrupar también por anchorCurrency para aplicar la conversión correcta.
@@ -1204,6 +1225,133 @@ export class MovementsRepository {
   // ---------------------------------------------------------------------------
 
   /**
+   * Devuelve la agregación diaria de movimientos únicos EXPENSE del año,
+   * para la grilla día×mes del reporte anual de únicos (Ola 3 / P2).
+   *
+   * Agrupa por (mes local, día local, categoryId, currency, exchangeRate, anchorCurrency).
+   * La conversión a displayCurrency se aplica en el service.
+   *
+   * El día local se calcula con AT TIME ZONE t.timezone (igual que el bucketing mensual).
+   * Devuelve solo EXPENSE (la grilla no muestra ingresos).
+   */
+  async getDailyUnicosExpenseForYear(
+    userId: string,
+    year: number,
+  ): Promise<RawDailyUnicoRow[]> {
+    const rows = await this.prisma.$queryRaw<RawDailyUnicoRow[]>`
+      SELECT
+        to_char(
+          date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone),
+          'YYYY-MM'
+        )                                    AS "monthKey",
+        EXTRACT(day FROM (t."occurredAt" AT TIME ZONE t.timezone))::int
+                                             AS "day",
+        t."categoryId"                       AS "categoryId",
+        t.currency::text                     AS "currency",
+        t."exchangeRate"::text               AS "exchangeRate",
+        t."anchorCurrency"::text             AS "anchorCurrency",
+        SUM(t."amountCents")                 AS "totalCents"
+      FROM "Transaction" t
+      WHERE
+        t."userId" = ${userId}
+        AND t.type = 'EXPENSE'
+        AND EXTRACT(year FROM
+              date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
+            ) = ${year}
+      GROUP BY
+        date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone),
+        EXTRACT(day FROM (t."occurredAt" AT TIME ZONE t.timezone)),
+        t."categoryId",
+        t.currency,
+        t."exchangeRate",
+        t."anchorCurrency"
+      ORDER BY
+        date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone),
+        EXTRACT(day FROM (t."occurredAt" AT TIME ZONE t.timezone))
+    `;
+    return rows;
+  }
+
+  /**
+   * Devuelve la agregación diaria de movimientos únicos EXPENSE del mes anterior
+   * al mes de inicio del año pedido (diciembre del año previo), necesaria para el
+   * %dif del mes de enero (continuidad temporal del footer de la grilla anual).
+   *
+   * Devuelve TODAS las categorías sin filtrar; el filtro de categorías lo aplica
+   * el service sobre el resultado (consistente con el resto del sistema).
+   *
+   * Agrupa por (día local, categoryId, currency, exchangeRate, anchorCurrency).
+   */
+  async getDailyUnicosExpenseForPrevDecember(
+    userId: string,
+    year: number,
+  ): Promise<RawDailyUnicoRow[]> {
+    const prevYear = year - 1;
+    const monthStart = `${prevYear}-12-01`;
+    const rows = await this.prisma.$queryRaw<RawDailyUnicoRow[]>`
+      SELECT
+        to_char(
+          date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone),
+          'YYYY-MM'
+        )                                    AS "monthKey",
+        EXTRACT(day FROM (t."occurredAt" AT TIME ZONE t.timezone))::int
+                                             AS "day",
+        t."categoryId"                       AS "categoryId",
+        t.currency::text                     AS "currency",
+        t."exchangeRate"::text               AS "exchangeRate",
+        t."anchorCurrency"::text             AS "anchorCurrency",
+        SUM(t."amountCents")                 AS "totalCents"
+      FROM "Transaction" t
+      WHERE
+        t."userId" = ${userId}
+        AND t.type = 'EXPENSE'
+        AND date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
+            = date_trunc('month', ${monthStart}::timestamp)
+      GROUP BY
+        date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone),
+        EXTRACT(day FROM (t."occurredAt" AT TIME ZONE t.timezone)),
+        t."categoryId",
+        t.currency,
+        t."exchangeRate",
+        t."anchorCurrency"
+      ORDER BY
+        EXTRACT(day FROM (t."occurredAt" AT TIME ZONE t.timezone))
+    `;
+    return rows;
+  }
+
+  /**
+   * Carga los registros de InflationRate para los meses del año pedido y diciembre
+   * del año previo (para el footer del mes de enero).
+   *
+   * Devuelve un Map<"YYYY-MM", number> donde el valor es monthlyVariation (puntos %).
+   */
+  async loadInflationRatesForYear(
+    year: number,
+  ): Promise<Map<string, number>> {
+    const yearStr = String(year).padStart(4, '0');
+    const prevYearStr = String(year - 1).padStart(4, '0');
+    // Pedir los 12 meses del año + diciembre del año anterior (para el %dif de enero)
+    const monthsToLoad = [
+      `${prevYearStr}-12`,
+      ...Array.from({ length: 12 }, (_, i) => `${yearStr}-${String(i + 1).padStart(2, '0')}`),
+    ];
+    const rows = await this.prisma.inflationRate.findMany({
+      where: { yearMonth: { in: monthsToLoad } },
+      select: { yearMonth: true, monthlyVariation: true },
+    });
+    const map = new Map<string, number>();
+    for (const r of rows) {
+      // monthlyVariation ya está guardado en PUNTOS PORCENTUALES en la DB
+      // (la migración 20260625000000_fix_inflation_rate_units multiplicó ×100
+      // los registros históricos, y la ingesta del sync ahora también guarda
+      // en puntos %). No se aplica ninguna conversión aquí.
+      map.set(r.yearMonth, Number(r.monthlyVariation));
+    }
+    return map;
+  }
+
+  /**
    * Devuelve la agregación de movimientos únicos del año.
    */
   async getAnnualUnicosAggregated(
@@ -1419,6 +1567,20 @@ export class MovementsRepository {
       exchangeRate: Number(r.exchangeRate),
       anchorCurrency: r.anchorCurrency,
     }));
+  }
+
+  /**
+   * Devuelve la metadata de las categorías con los ids dados.
+   * Incluye categorías soft-deleted (RF-CAT-004).
+   * Usado por getAnnualUnicosReport para enriquecer catMetaAll con nombre/color.
+   */
+  async findCategoriesByIds(ids: string[]): Promise<Array<{ id: string; name: string; color: string }>> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.category.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true, color: true },
+    });
+    return rows;
   }
 
   /**

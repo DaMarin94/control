@@ -86,7 +86,7 @@ La fuente de verdad de tipos, campos y constraints es `backend/prisma/schema.pri
 
 | Módulo | Ruta base | Descripción |
 |--------|-----------|-------------|
-| `movements` | `GET /movements`, `GET /movements/reports` | Lista unificada del mes + serie de reportes agregada (transacciones + recurrentes + cuotas) |
+| `movements` | `GET /movements`, `GET /movements/reports`, `GET /movements/reports/annual-unicos` | Lista unificada del mes + serie de reportes agregada + grilla anual de Únicos (transacciones + recurrentes + cuotas) |
 | `transactions` | `/transactions` | Movimientos únicos (CRUD) |
 | `recurring` | `/recurring` | Movimientos fijos (crear, editar, eliminar) |
 | `installments` | `/installments` | Grupos de cuotas (crear, editar, eliminar) |
@@ -112,6 +112,9 @@ Devuelve todos los movimientos del mes **más los totales**: transacciones únic
 
 ### `GET /movements/reports?year=YYYY&categories=`
 Devuelve la serie **anual agregada** del usuario para los reportes (RF-REP-001/002/005): ingreso/gasto por cada uno de los 12 meses y el gasto mensual desglosado por categoría. Acepta un **filtro de categorías** opcional (`categories`, lista separada por comas; omitido = todas). No devuelve movimientos individuales. **Renombre de `GET /movements/annual`** (RF-REP-005). Contrato completo en la sección **Movimientos del mes (MovementsModule)**.
+
+### `GET /movements/reports/annual-unicos?year=YYYY&categories=&currency=&today=`
+Devuelve la **grilla anual día × mes de gastos Únicos** y el footer de métricas mensuales para la card `unique-grid` (RF-REP-010). Solo agrega **Únicos de tipo gasto (`EXPENSE`)**. Contrato (params y shape) en `docs/data-model.md`, §Contrato de reporte anual de Únicos; reglas de cálculo en la sección **Movimientos del mes (MovementsModule)** → Reporte anual de Únicos.
 
 ### `POST /transactions` · `PATCH /transactions/:id` · `DELETE /transactions/:id`
 CRUD de movimientos únicos. El monto siempre en centavos (entero > 0). El instante se guarda en UTC más la zona original del registro (ver fechas/timezone en `docs/technical.md`).
@@ -228,6 +231,24 @@ Endpoint **agregado** para los reportes (RF-REP-001/002/005), scopeado por `user
 - **Afecta Forma 1 y Forma 2.** El filtro restringe qué movimientos cuentan: en `months[*]` (Forma 1: `incomeCents`/`expenseCents`) **y** en `categories[*]` (Forma 2: las bandas apiladas). Una categoría omitida no aparece en ninguna de las dos.
 - **`earliestYear` y `availableCategories` IGNORAN el filtro** — se calculan sobre **todos** los movimientos del usuario (del año, en el caso de `availableCategories`), para que ni los límites de navegación de año (RF-REP-002) ni la leyenda-filtro salten al cambiar el filtro.
 - **Filtrado in-memory, NO en SQL/ORM:** se trae el universo de movimientos del año y se filtra en JS con un **`Set` de `categoryId`s** pedidos (omitido = sin filtrar). El invariante `SUM(bandas por categoría) == expenseCents del mes` **se mantiene con el filtro activo** (ambos lados se computan sobre el mismo conjunto filtrado).
+
+### Reporte anual de Únicos (`GET /movements/reports/annual-unicos`)
+
+Grilla anual día × mes y footer de métricas mensuales para la card `unique-grid` (RF-REP-010), scopeado por `userId` del JWT. Contrato (params, shape `AnnualUnicosResponse` / `AnnualUnicosFooter`) en `docs/data-model.md`, §Contrato de reporte anual de Únicos. Reglas de negocio:
+
+- **Solo Únicos de tipo gasto (`EXPENSE`).** La grilla y el footer suman **únicamente** movimientos únicos (`Transaction`) con `type = EXPENSE`. **Fijos, cuotas y calculados no entran** (a diferencia de `GET /movements/reports`, que agrega los tres orígenes). Las cifras vienen **convertidas a la moneda de display** (`currency` del param o la default del usuario) con el mismo re-ruteo por pivote USD que el resto.
+- **Bucketeo día/mes por la zona propia del registro** (RN-015), igual que el resto de los reportes: el día y el mes de un único se determinan con su `timezone` guardada (`AT TIME ZONE`).
+- **Grilla 31 × 12 (`grid[day-1][month-1]`).** Centavos enteros en `currency`. Un día inexistente del mes (ej. 30/feb) queda en **0**, indistinguible de un día sin gasto (el front lo resuelve por calendario).
+- **Breakdown por celda.** Además de `grid`, el endpoint emite `breakdown[day-1][month-1]` con el desglose por categoría (`{ categoryId, amount }`, centavos de `currency`, DESC) de cada día; sin `name`/`color` (los resuelve el front por `availableCategories`). Shape en `docs/data-model.md`, §Contrato de reporte anual de Únicos.
+- **Divisor del promedio diario (`dailyAvg`):**
+  - mes **en curso** del año en curso → **día actual** (del param `today`, fecha local del usuario; sin `today`, el back cae a `new Date()` UTC);
+  - mes ya **terminado** (incluye meses de años pasados) → **cantidad de días del mes**;
+  - mes **futuro** → `dailyAvg = null`.
+- **`pctVsPrev` — % de diferencia vs. mes anterior.** `ROUNDDOWN((promDiarioActual × 100 / promDiarioPrevio) − 100, 2)` — **trunca hacia cero** (no redondea). El mes anterior de **enero es diciembre del año previo** (continuidad temporal; requiere consultar datos **fuera del año pedido**). Si `promDiarioPrevio == 0` → `null`.
+- **`inflationPct`.** `InflationRate.monthlyVariation` (puntos %) del mes; `null` si no hay fila de IPC para ese mes. **Primer consumidor de `InflationRate`** en el producto.
+- **Unidad de inflación.** `InflationRate.monthlyVariation` es la **unidad canónica del sistema: puntos porcentuales** (ej. `3.5` = 3,5 %). La serie de INDEC (`apis.datos.gob.ar`) entrega la variación en **fracción** (ej. `0.035`); la ingesta del IPC la convierte **×100 al persistir**, antes de cotas y circuit breaker, de modo que DB, validaciones y comparaciones quedan todas en puntos %. El endpoint expone `inflationPct` directamente en puntos %; el cálculo de `pctVsPrevAdj` usa `inflationPct/100`.
+- **`pctVsPrevAdj` — % ajustado por inflación.** Igual que `pctVsPrev`, pero el promedio del mes anterior se **infla por la variación IPC del mes en curso** antes de comparar. `null` si falta el IPC, si el promedio previo es 0, o si el mes en curso no tiene dato de IPC.
+- **`colorAnchorCents`.** El endpoint emite el ancla de la escala de color de las celdas: **15 USD reconvertido a `currency` con el TC de enero del año del reporte** (`pivotRatesForYear`, clamp al mes disponible; USD = 1500). Tope de la rampa de color, no una cotización de negocio. Shape en `docs/data-model.md`, §Contrato de reporte anual de Únicos.
 
 ## Movimientos fijos (RecurringModule)
 

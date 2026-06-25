@@ -29,6 +29,92 @@ export class MovementsController {
   constructor(private readonly movementsService: MovementsService) {}
 
   /**
+   * GET /movements/reports/annual-unicos?year=YYYY[&categories=<id1,id2,...>][&currency=<ARS|USD|EUR|BRL>][&today=YYYY-MM-DD]
+   *
+   * Devuelve la grilla día×mes de gastos únicos EXPENSE del año y el footer por mes.
+   * Solo movimientos Únicos de tipo EXPENSE. Fijos y cuotas NO entran.
+   *
+   * Parámetros:
+   * - year (obligatorio): año en formato YYYY.
+   * - categories (opcional): lista de categoryIds separados por comas.
+   *   Misma semántica de 3 estados que /movements/reports.
+   * - currency (opcional): override de moneda de display (ARS|USD|EUR|BRL).
+   *   Ausente → usa la default del usuario.
+   * - today (opcional): fecha actual en formato YYYY-MM-DD, para determinar
+   *   el divisor del promedio del mes en curso. Ausente → se usa la fecha UTC
+   *   del sistema (new Date()).
+   *
+   * Respuesta: AnnualUnicosResponse dentro del sobre { success, statusCode, data }.
+   * 200 con la grilla y el footer.
+   * 400 si year falta, formato inválido, fuera de rango, o currency inválido.
+   */
+  @Get('reports/annual-unicos')
+  getAnnualUnicosReport(
+    @Request() req: AuthRequest,
+    @Query('year') yearParam: string | undefined,
+    @Query('categories') categoriesParam: string | undefined,
+    @Query('currency') currencyParam: string | undefined,
+    @Query('today') todayParam: string | undefined,
+  ) {
+    // Validar presencia y formato exacto YYYY
+    if (!yearParam || !/^\d{4}$/.test(yearParam)) {
+      throw new BadRequestException(
+        'El parámetro "year" es obligatorio y debe tener exactamente 4 dígitos (ej: 2026)',
+      );
+    }
+
+    const year = parseInt(yearParam, 10);
+
+    if (year < YEAR_MIN || year > YEAR_MAX) {
+      throw new BadRequestException(
+        `El año debe estar entre ${YEAR_MIN} y ${YEAR_MAX}`,
+      );
+    }
+
+    // Validar currency (solo si está presente)
+    let currencyOverride: Currency | undefined;
+    if (currencyParam !== undefined) {
+      const validCurrencies: string[] = Object.values(Currency);
+      if (!validCurrencies.includes(currencyParam)) {
+        throw new BadRequestException(
+          `El parámetro "currency" debe ser uno de: ${validCurrencies.join(', ')}`,
+        );
+      }
+      currencyOverride = currencyParam as Currency;
+    }
+
+    // Validar today (solo si está presente)
+    let todayStr: string | undefined;
+    if (todayParam !== undefined) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(todayParam)) {
+        throw new BadRequestException(
+          'El parámetro "today" debe tener formato YYYY-MM-DD (ej: 2026-06-24)',
+        );
+      }
+      todayStr = todayParam;
+    }
+
+    // Parseo de categorías con semántica de 3 estados
+    const categoryIds: string[] | null =
+      categoriesParam === undefined
+        ? null
+        : categoriesParam.trim().length === 0
+          ? []
+          : categoriesParam
+              .split(',')
+              .map((id) => id.trim())
+              .filter((id) => id.length > 0);
+
+    return this.movementsService.getAnnualUnicosReport(
+      req.user.userId,
+      year,
+      categoryIds,
+      currencyOverride,
+      todayStr,
+    );
+  }
+
+  /**
    * GET /movements?month=YYYY-MM[&categories=<id1,id2,...>]
    *
    * Devuelve los movimientos del mes agrupados por origen (unicos/fijos/cuotas)

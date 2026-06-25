@@ -40,7 +40,7 @@
 
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useApi } from "@/hooks/use-api";
-import type { ReportsMovementsResponse } from "@/types/reports";
+import type { ReportsMovementsResponse, UnicoGridResponse } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
 import { createLogger } from "@/lib/logger";
 
@@ -131,6 +131,57 @@ export function useReports(
     // Al cambiar el filtro (año, categorías o moneda), mantiene los datos previos visibles
     // mientras refetcha: isLoading queda false → el skeleton no parpadea en cada toggle.
     // El skeleton solo aparece en la primera carga (sin datos cacheados para esa key).
+    placeholderData: keepPreviousData,
+  });
+
+  return query;
+}
+
+// ─── Hook para la grilla de Únicos (Ola 3, P2) ────────────────────────────────
+
+/**
+ * Query key para la grilla anual de Únicos.
+ * Varía por año, filtro de categorías, moneda y fecha de hoy.
+ */
+export const UNICO_GRID_QUERY_KEY = (
+  year: number,
+  categoriesKey: string | null,
+  currency?: CurrencyCode,
+  today?: string,
+) => ["reports-unico-grid", year, categoriesKey, currency ?? null, today ?? null] as const;
+
+/**
+ * Hook para obtener la grilla día×mes de gastos Únicos.
+ *
+ * GET /movements/reports/annual-unicos?year=YYYY[&categories=...][&currency=XXX][&today=YYYY-MM-DD]
+ *
+ * @param year        El año a consultar.
+ * @param categoryIds null=todas; []=ninguna; lista=subconjunto.
+ * @param currency    undefined=default del usuario; presente=override de moneda.
+ * @param today       Fecha local del usuario (YYYY-MM-DD). DEBE mandarse para que el
+ *                    backend calcule el promedio diario del mes en curso con el divisor
+ *                    correcto. Si se omite, el back usa new Date() UTC (subóptimo).
+ */
+export function useUnicoGrid(
+  year: number,
+  categoryIds: string[] | null = null,
+  currency?: CurrencyCode,
+  today?: string,
+) {
+  const { api, isAuthenticated } = useApi();
+
+  const { categoriesKey, urlParam } = serializeCategoryFilter(categoryIds);
+  const currencyParam = currency ? `&currency=${currency}` : "";
+  const todayParam = today ? `&today=${today}` : "";
+
+  const query = useQuery<UnicoGridResponse>({
+    queryKey: UNICO_GRID_QUERY_KEY(year, categoriesKey, currency, today),
+    queryFn: () => {
+      const url = `/movements/reports/annual-unicos?year=${year}${urlParam}${currencyParam}${todayParam}`;
+      logger.debug("Cargando grilla de Únicos", { year, categoriesKey, currency, today });
+      return api.get<UnicoGridResponse>(url);
+    },
+    enabled: Boolean(year) && isAuthenticated,
     placeholderData: keepPreviousData,
   });
 
