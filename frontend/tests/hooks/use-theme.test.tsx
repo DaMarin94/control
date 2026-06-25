@@ -10,10 +10,11 @@
  * - setTheme llama a setPreferences con el blob completo (merge)
  * - setTheme aplica applyTheme al DOM (data-theme)
  * - isSaving refleja el estado de mutación de usePreferences
+ * - tras refresh (prefs cargadas desde backend), theme y resolvedTheme reflejan el blob real
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import { useTheme } from "@/hooks/use-theme";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
@@ -222,6 +223,70 @@ describe("useTheme", () => {
       });
 
       expect(setResult!.success).toBe(false);
+    });
+  });
+
+  // ─── Escenario refresh: prefs cargadas desde backend ─────────────────────────
+  // Simula que usePreferences resolvió el blob real del backend tras un refresh
+  // (el fix en use-preferences con initialDataUpdatedAt=0 dispara el fetch).
+  // useTheme es un consumidor reactivo: cuando usePreferences cambia de {} a {theme:"dark"},
+  // theme y resolvedTheme deben actualizarse.
+
+  describe("tras refresh — blob del backend", () => {
+    it("refleja theme='dark' cuando usePreferences actualiza el blob desde el backend", async () => {
+      // Simular el estado inicial: prefs vacías (sesión en loading → initialData={})
+      setupPrefs({});
+      const { result, rerender } = renderHook(() => useTheme());
+
+      expect(result.current.theme).toBe("system");
+
+      // Simular que usePreferences terminó el fetch y tiene el blob real
+      setupPrefs({ theme: "dark" });
+      rerender();
+
+      await waitFor(() => {
+        expect(result.current.theme).toBe("dark");
+      });
+    });
+
+    it("refleja resolvedTheme='dark' cuando el blob del backend tiene theme='dark'", async () => {
+      setupPrefs({});
+      const { result, rerender } = renderHook(() => useTheme());
+
+      expect(result.current.resolvedTheme).toBe("light"); // system + matchMedia=false → light
+
+      setupPrefs({ theme: "dark" });
+      rerender();
+
+      await waitFor(() => {
+        expect(result.current.resolvedTheme).toBe("dark");
+      });
+    });
+
+    it("aplica data-theme='dark' al DOM cuando el blob del backend tiene theme='dark'", async () => {
+      setupPrefs({});
+      const { rerender } = renderHook(() => useTheme());
+
+      // Prefs del backend llegan
+      setupPrefs({ theme: "dark" });
+      rerender();
+
+      await waitFor(() => {
+        expect(document.documentElement.dataset.theme).toBe("dark");
+      });
+    });
+
+    it("refleja theme='light' cuando el blob del backend tiene theme='light'", async () => {
+      setupPrefs({});
+      const { result, rerender } = renderHook(() => useTheme());
+
+      setupPrefs({ theme: "light" });
+      rerender();
+
+      await waitFor(() => {
+        expect(result.current.theme).toBe("light");
+        expect(result.current.resolvedTheme).toBe("light");
+      });
     });
   });
 });

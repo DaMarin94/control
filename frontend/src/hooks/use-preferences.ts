@@ -65,6 +65,13 @@ export function usePreferences() {
     // Inicializar con el blob que ya vino en la sesión (evita flash de undefined).
     // Si la sesión no tiene el campo (sesión antigua antes de Fase 1.1.0), usa {}.
     initialData: session?.preferences ?? {},
+    // Marca el initialData como inmediatamente stale (epoch 0) para que React Query
+    // dispare el queryFn en background en cuanto `enabled` sea true.
+    // Sin esto: al refrescar, la sesión está en "loading" → initialData se siembra con {}
+    // y se marca como fresh (staleTime=5min) → cuando la sesión resuelve e isAuthenticated
+    // pasa a true, la caché ya está "fresca" → nunca se dispara GET /preferences →
+    // reportes vacíos y tema "system" en cada refresh aunque estaban guardados en DB.
+    initialDataUpdatedAt: 0,
     // No disparar hasta que la sesión resolvió y el token está presente.
     enabled: isAuthenticated,
     // Las preferencias no se volatizan frecuentemente; cache largo evita refetches innecesarios.

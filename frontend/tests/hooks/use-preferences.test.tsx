@@ -7,6 +7,7 @@
  * - setPreferences retorna success=true con las preferencias persistidas en éxito
  * - setPreferences retorna el error adecuado en 400 / 401 / error de red
  * - Las preferences iniciales se toman de la sesión (initialData)
+ * - Tras refresh (sesión que resuelve tarde), GET /preferences se dispara y sirve el blob real del backend
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -233,5 +234,111 @@ describe("usePreferences", () => {
     const { result } = renderHook(() => usePreferences(), { wrapper: createWrapper() });
 
     expect(result.current.isSaving).toBe(false);
+  });
+
+  // ─── Escenario refresh: sesión que resuelve tarde ───────────────────────────
+  // Reproduce el bug: al refrescar, la sesión está en "loading" (isAuthenticated=false),
+  // luego resuelve con el token. Con initialDataUpdatedAt=0 React Query trata el
+  // initialData como stale → dispara GET /preferences en cuanto enabled=true.
+
+  it("dispara GET /preferences cuando la sesión resuelve tras un refresh (initialDataUpdatedAt=0)", async () => {
+    const blobFromBackend: UserPreferences = { theme: "dark", reports: [{ id: "r1", type: "unicos-grid" }] };
+    mockApiGet.mockResolvedValue(blobFromBackend);
+    mockUpdateSession.mockResolvedValue(null);
+
+    // Arrancar con sesión en loading (no autenticado aún)
+    mockUseApi.mockReturnValue({
+      api: { get: mockApiGet, post: vi.fn(), patch: vi.fn(), delete: vi.fn(), put: mockApiPut },
+      token: undefined,
+      isAuthenticated: false,
+    });
+    mockUseSession.mockReturnValue({
+      data: null,
+      status: "loading",
+      update: mockUpdateSession,
+    } as unknown as ReturnType<typeof useSession>);
+
+    const wrapper = createWrapper();
+    const { result, rerender } = renderHook(() => usePreferences(), { wrapper });
+
+    // En loading: preferences es {} (initialData), GET no disparado
+    expect(result.current.preferences).toEqual({});
+    expect(mockApiGet).not.toHaveBeenCalled();
+
+    // Simular que la sesión resuelve (isAuthenticated pasa a true)
+    mockUseApi.mockReturnValue({
+      api: { get: mockApiGet, post: vi.fn(), patch: vi.fn(), delete: vi.fn(), put: mockApiPut },
+      token: "test-token",
+      isAuthenticated: true,
+    });
+    mockUseSession.mockReturnValue({
+      data: {
+        preferences: {},
+        accessToken: "test-token",
+        expires: "2099-01-01T00:00:00.000Z",
+        user: { id: "user-1", email: "test@example.com" },
+      },
+      status: "authenticated",
+      update: mockUpdateSession,
+    } as ReturnType<typeof useSession>);
+
+    rerender();
+
+    // GET /preferences debe dispararse y las preferencias deben reflejar el blob del backend
+    await waitFor(() => {
+      expect(mockApiGet).toHaveBeenCalledWith("/preferences");
+    });
+
+    await waitFor(() => {
+      expect(result.current.preferences).toEqual(blobFromBackend);
+    });
+  });
+
+  it("tras refresh, las claves de reportes y tema reflejan el blob del backend", async () => {
+    const blobFromBackend: UserPreferences = {
+      theme: "dark",
+      reports: [{ id: "r1", type: "unicos-grid", title: "Gastos" }],
+    };
+    mockApiGet.mockResolvedValue(blobFromBackend);
+    mockUpdateSession.mockResolvedValue(null);
+
+    // Sesión en loading al montar
+    mockUseApi.mockReturnValue({
+      api: { get: mockApiGet, post: vi.fn(), patch: vi.fn(), delete: vi.fn(), put: mockApiPut },
+      token: undefined,
+      isAuthenticated: false,
+    });
+    mockUseSession.mockReturnValue({
+      data: null,
+      status: "loading",
+      update: mockUpdateSession,
+    } as unknown as ReturnType<typeof useSession>);
+
+    const wrapper = createWrapper();
+    const { result, rerender } = renderHook(() => usePreferences(), { wrapper });
+
+    // La sesión resuelve
+    mockUseApi.mockReturnValue({
+      api: { get: mockApiGet, post: vi.fn(), patch: vi.fn(), delete: vi.fn(), put: mockApiPut },
+      token: "test-token",
+      isAuthenticated: true,
+    });
+    mockUseSession.mockReturnValue({
+      data: {
+        preferences: {},
+        accessToken: "test-token",
+        expires: "2099-01-01T00:00:00.000Z",
+        user: { id: "user-1", email: "test@example.com" },
+      },
+      status: "authenticated",
+      update: mockUpdateSession,
+    } as ReturnType<typeof useSession>);
+
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current.preferences.theme).toBe("dark");
+      expect(result.current.preferences.reports).toEqual([{ id: "r1", type: "unicos-grid", title: "Gastos" }]);
+    });
   });
 });

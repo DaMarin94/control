@@ -133,6 +133,7 @@ const { preferences, isLoading, isSaving, setPreferences } = usePreferences()
 ```
 
 - **`preferences`** — el blob actual. La query usa **`initialData: session?.preferences ?? {}`** para evitar el flash de `undefined` en el primer render de la consumidora.
+  - El `initialData` se siembra con **`initialDataUpdatedAt: 0`** (epoch), que lo marca como stale de entrada: apenas `enabled: isAuthenticated` pasa a `true` (sesión resuelta), React Query dispara **`GET /preferences`** en background y reemplaza el blob sembrado por el real del backend. Sin esto, con `staleTime` de 5 min React Query trataría el `initialData` como fresco y no refetchearía, dejando las preferencias en el valor del primer render (que tras un refresh es `{}` mientras la sesión está en `loading`). El `staleTime` de 5 min rige los refetches posteriores; `initialDataUpdatedAt: 0` solo afecta la primera evaluación de frescura y no toca la actualización optimista de `setPreferences` (`setQueryData`).
 - **`setPreferences(newBlob)`** — persiste con **`PUT /preferences`** y, al confirmar, actualiza la sesión con **`useSession().update()`** (dispara el `trigger === "update"` del callback `jwt`). Devuelve `{ success, preferences?, error? }`.
 - **El llamador hace el merge.** Como la semántica del backend es **reemplazo total** (no merge), para cambiar una sola clave el consumidor parte del blob actual y manda el objeto completo: `setPreferences({ ...preferences, clave: valor })`. Omitir una clave la **borra**.
 

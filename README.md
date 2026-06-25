@@ -51,7 +51,6 @@ pnpm dev
 > En Windows, los scripts del backend apuntan directo al binario en `node_modules` en lugar de los shims de `.bin/` (los shims son scripts bash que Node no ejecuta en Windows). Es la convención del proyecto; ver `docs/technical.md`.
 
 ## TODO
-P2_ Los reportes no se estan cargando al refrezcar la pantalla. lo mismo con el modo oscuro/claro. Esa informacion deberia mantenerse desde la base de datos y cargarse entonces automaticamente los reportes y toda su configuracion.
 
 ## Tests
 
