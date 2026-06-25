@@ -208,15 +208,17 @@ describe("ReportesPage — agregar card", () => {
     uuidCounter = 0;
   });
 
-  it("al hacer clic en '[+]' muestra el menú de tipo", () => {
+  it("al hacer clic en '[+]' muestra el menú de tipo con los nuevos labels", () => {
     makePreferencesHook([]);
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: /agregar primer reporte/i }));
-    expect(screen.getByText("Ingresos y gastos")).toBeInTheDocument();
-    expect(screen.getByText("Por categoría")).toBeInTheDocument();
+    expect(screen.getByText("Ingresos vs Gastos")).toBeInTheDocument();
+    expect(screen.getByText("Gastos por categoría")).toBeInTheDocument();
+    expect(screen.getByText("Gastos Únicos")).toBeInTheDocument();
+    expect(screen.getByText("Gastos en Cuotas")).toBeInTheDocument();
   });
 
-  it("al elegir 'Ingresos y gastos' llama a setPreferences con una card income-expense", async () => {
+  it("al elegir 'Ingresos vs Gastos' llama a setPreferences con una card income-expense", async () => {
     const setPreferences = vi.fn().mockResolvedValue({ success: true });
     makePreferencesHook([], setPreferences);
     renderPage();
@@ -224,7 +226,7 @@ describe("ReportesPage — agregar card", () => {
     // Abrir menú
     fireEvent.click(screen.getByRole("button", { name: /agregar primer reporte/i }));
     // Elegir tipo
-    fireEvent.click(screen.getAllByText("Ingresos y gastos")[0]!);
+    fireEvent.click(screen.getAllByText("Ingresos vs Gastos")[0]!);
 
     await waitFor(() => {
       expect(setPreferences).toHaveBeenCalledTimes(1);
@@ -238,13 +240,13 @@ describe("ReportesPage — agregar card", () => {
     expect(callArg.reports?.[0]?.categoryIds).toBeNull();
   });
 
-  it("al elegir 'Por categoría' llama a setPreferences con una card by-category", async () => {
+  it("al elegir 'Gastos por categoría' llama a setPreferences con una card by-category", async () => {
     const setPreferences = vi.fn().mockResolvedValue({ success: true });
     makePreferencesHook([], setPreferences);
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: /agregar primer reporte/i }));
-    fireEvent.click(screen.getAllByText("Por categoría")[0]!);
+    fireEvent.click(screen.getAllByText("Gastos por categoría")[0]!);
 
     await waitFor(() => {
       expect(setPreferences).toHaveBeenCalledTimes(1);
@@ -277,28 +279,25 @@ describe("ReportesPage — estado con cards", () => {
     expect(screen.getByRole("button", { name: /agregar reporte/i })).toBeInTheDocument();
   });
 
-  it("las cards muestran sus placeholders de título y el tablist solo en income-expense", () => {
+  it("las cards muestran sus placeholders de título", () => {
     renderPage();
-    // Spec P4 actualizado: sin eyebrow. La identidad es solo el título editable.
+    // Spec actualizado: income-expense es Total-only (sin tablist de vista);
+    // by-category tiene tablist "Representación del reporte" con tabs Barra/Línea.
     // Las dos cards sin título propio muestran sus placeholders "Reporte 1" / "Reporte 2".
     expect(screen.getByText("Reporte 1")).toBeInTheDocument();
     expect(screen.getByText("Reporte 2")).toBeInTheDocument();
     // No aparece el texto aislado "Reporte" como eyebrow (ya no existe).
-    // (Los nodos de texto son "Reporte 1" y "Reporte 2", no "Reporte".)
-    // Solo la card income-expense tiene el tablist de vista.
-    expect(screen.getByRole("tablist", { name: /vista del reporte/i })).toBeInTheDocument();
-    // La card by-category NO tiene tablist propio (hay exactamente uno en la pantalla).
-    expect(screen.getAllByRole("tablist", { name: /vista del reporte/i })).toHaveLength(1);
+    // income-expense no tiene tablist; by-category tiene "Representación del reporte".
+    expect(screen.queryByRole("tablist", { name: /vista del reporte/i })).not.toBeInTheDocument();
+    // by-category SÍ tiene el tablist de Barra/Línea.
+    expect(screen.getByRole("tablist", { name: /representación del reporte/i })).toBeInTheDocument();
   });
 
-  it("muestra los títulos de las cards", () => {
+  it("la card by-category tiene tabs Barra y Línea", () => {
     renderPage();
-    // income-expense: las tabs "Total" / "Por categoría" son el control de vista visible.
-    // Spec P4: el título de identidad es editable; el placeholder se muestra en --faint.
-    expect(screen.getByRole("tab", { name: "Total" })).toBeInTheDocument();
-    // "Por categoría" aparece al menos como tab del tablist de la card income-expense.
-    // (En by-category ya no es el texto fijo del subtítulo — fue reemplazado por el título editable.)
-    expect(screen.getAllByText("Por categoría").length).toBeGreaterThanOrEqual(1);
+    // by-category tiene los tabs Barra/Línea.
+    expect(screen.getByRole("tab", { name: "Barra" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Línea" })).toBeInTheDocument();
   });
 });
 
@@ -466,15 +465,15 @@ describe("ReportesPage — modo orden (P1)", () => {
     expect(grips).toHaveLength(2);
   });
 
-  it("en modo orden los mini-ítems muestran las etiquetas de tipo", () => {
+  it("en modo orden los mini-ítems muestran las etiquetas de tipo actualizadas", () => {
     makePreferencesHook(twoCards);
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: /ordenar reportes/i }));
 
-    // Etiquetas de tipo del mini-ítem (sentence-case)
-    expect(screen.getByText("Ingresos y gastos")).toBeInTheDocument();
-    expect(screen.getByText("Por categoría")).toBeInTheDocument();
+    // Etiquetas de tipo del mini-ítem (actualizadas)
+    expect(screen.getByText("Ingresos vs Gastos")).toBeInTheDocument();
+    expect(screen.getByText("Gastos por categoría")).toBeInTheDocument();
   });
 
   it("en modo orden el '[+]' compacto tiene opacity-45 (atenuado)", () => {
@@ -490,24 +489,24 @@ describe("ReportesPage — modo orden (P1)", () => {
     expect(wrapper?.className).toContain("pointer-events-none");
   });
 
-  it("en modo orden NO se muestran los controles internos de las cards (tablist de vista)", () => {
+  it("en modo orden NO se muestran los controles internos de las cards (tablist de by-category)", () => {
     makePreferencesHook(twoCards);
     renderPage();
 
-    // Fuera del modo orden, la card income-expense tiene el tablist
+    // Fuera del modo orden, la card by-category tiene el tablist "Representación del reporte"
     expect(
-      screen.queryByRole("tablist", { name: /vista del reporte/i }),
+      screen.queryByRole("tablist", { name: /representación del reporte/i }),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /ordenar reportes/i }));
 
     // En modo orden las cards están colapsadas al mini — sin tablist
     expect(
-      screen.queryByRole("tablist", { name: /vista del reporte/i }),
+      screen.queryByRole("tablist", { name: /representación del reporte/i }),
     ).not.toBeInTheDocument();
   });
 
-  it("al salir del modo orden los controles internos de las cards vuelven", () => {
+  it("al salir del modo orden los controles internos de las cards vuelven (by-category)", () => {
     makePreferencesHook(twoCards);
     renderPage();
 
@@ -515,7 +514,7 @@ describe("ReportesPage — modo orden (P1)", () => {
     fireEvent.click(screen.getByRole("button", { name: /listo/i }));
 
     expect(
-      screen.getByRole("tablist", { name: /vista del reporte/i }),
+      screen.getByRole("tablist", { name: /representación del reporte/i }),
     ).toBeInTheDocument();
   });
 
@@ -550,21 +549,21 @@ describe("ReportesPage — agregar card unique-grid (Ola 3, P2)", () => {
     uuidCounter = 0;
   });
 
-  it("el menú de tipo muestra la opción 'Únicos'", () => {
+  it("el menú de tipo muestra la opción 'Gastos Únicos'", () => {
     makePreferencesHook([]);
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: /agregar primer reporte/i }));
-    expect(screen.getByText("Únicos")).toBeInTheDocument();
+    expect(screen.getByText("Gastos Únicos")).toBeInTheDocument();
     expect(screen.getByText("Grilla día × mes de gastos únicos")).toBeInTheDocument();
   });
 
-  it("al elegir 'Únicos' llama a setPreferences con una card unique-grid", async () => {
+  it("al elegir 'Gastos Únicos' llama a setPreferences con una card unique-grid", async () => {
     const setPreferences = vi.fn().mockResolvedValue({ success: true });
     makePreferencesHook([], setPreferences);
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: /agregar primer reporte/i }));
-    fireEvent.click(screen.getByText("Únicos"));
+    fireEvent.click(screen.getByText("Gastos Únicos"));
 
     await waitFor(() => {
       expect(setPreferences).toHaveBeenCalledTimes(1);
@@ -584,7 +583,7 @@ describe("ReportesPage — modo orden con unique-grid (Ola 3, P2)", () => {
     uuidCounter = 0;
   });
 
-  it("el mini-ítem de unique-grid muestra la etiqueta 'Únicos'", () => {
+  it("el mini-ítem de unique-grid muestra la etiqueta 'Gastos Únicos'", () => {
     const cardsWithUnicoGrid: ReportCardConfig[] = [
       { id: "card-1", type: "unique-grid", year: 2026, categoryIds: null },
       { id: "card-2", type: "income-expense", year: 2026, categoryIds: null },
@@ -594,8 +593,75 @@ describe("ReportesPage — modo orden con unique-grid (Ola 3, P2)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /ordenar reportes/i }));
 
-    expect(screen.getByText("Únicos")).toBeInTheDocument();
-    expect(screen.getByText("Ingresos y gastos")).toBeInTheDocument();
+    expect(screen.getByText("Gastos Únicos")).toBeInTheDocument();
+    expect(screen.getByText("Ingresos vs Gastos")).toBeInTheDocument();
+  });
+});
+
+// ─── Migración del blob (categoryBreakdown → categoryChartMode) ────────────────
+
+describe("ReportesPage — migración del blob categoryBreakdown", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    uuidCounter = 0;
+  });
+
+  it("income-expense con categoryBreakdown=true se migra a by-category con categoryChartMode='line'", () => {
+    // Simular un blob viejo con una card income-expense + categoryBreakdown=true
+    const oldCards = [
+      {
+        id: "card-old",
+        type: "income-expense" as const,
+        year: 2026,
+        categoryIds: null,
+        categoryBreakdown: true,
+        title: "Mi reporte viejo",
+      },
+    ];
+    makePreferencesHook(oldCards as ReportCardConfig[]);
+    renderPage();
+
+    // La card migrada debe ser by-category con tablist "Representación del reporte"
+    // (ya que la normalización la convirtió en by-category + line al leer el blob)
+    expect(screen.getByRole("tablist", { name: /representación del reporte/i })).toBeInTheDocument();
+    // El título propio se conserva
+    expect(screen.getByText("Mi reporte viejo")).toBeInTheDocument();
+  });
+
+  it("income-expense con categoryBreakdown=false queda como income-expense (Total-only)", () => {
+    const oldCards = [
+      {
+        id: "card-old",
+        type: "income-expense" as const,
+        year: 2026,
+        categoryIds: null,
+        categoryBreakdown: false,
+      },
+    ];
+    makePreferencesHook(oldCards as ReportCardConfig[]);
+    renderPage();
+
+    // income-expense Total-only: sin tablist de vista
+    expect(screen.queryByRole("tablist", { name: /vista del reporte/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: /representación del reporte/i })).not.toBeInTheDocument();
+  });
+
+  it("by-category sin categoryChartMode se trata como 'bar' (default)", () => {
+    const oldCards = [
+      {
+        id: "card-old",
+        type: "by-category" as const,
+        year: 2026,
+        categoryIds: null,
+        // sin categoryChartMode
+      },
+    ];
+    makePreferencesHook(oldCards as ReportCardConfig[]);
+    renderPage();
+
+    // by-category sin categoryChartMode → default "bar" → tab Barra aria-selected=true
+    expect(screen.getByRole("tab", { name: "Barra" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Línea" })).toHaveAttribute("aria-selected", "false");
   });
 });
 

@@ -180,7 +180,7 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
       role="menu"
       aria-label="Tipo de reporte"
     >
-      {/* Opción 1: Ingresos y gastos */}
+      {/* Opción 1: Ingresos vs Gastos */}
       <button
         type="button"
         role="menuitem"
@@ -189,12 +189,12 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
       >
         <AreaChart size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
         <div>
-          <p className="text-[13px] font-semibold text-ink">Ingresos y gastos</p>
+          <p className="text-[13px] font-semibold text-ink">Ingresos vs Gastos</p>
           <p className="text-[11.5px] text-muted mt-[1px]">Ingresos vs. gastos por mes</p>
         </div>
       </button>
 
-      {/* Opción 2: Por categoría */}
+      {/* Opción 2: Gastos por categoría */}
       <button
         type="button"
         role="menuitem"
@@ -203,12 +203,12 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
       >
         <BarChart3 size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
         <div>
-          <p className="text-[13px] font-semibold text-ink">Por categoría</p>
+          <p className="text-[13px] font-semibold text-ink">Gastos por categoría</p>
           <p className="text-[11.5px] text-muted mt-[1px]">Gastos por categoría, apilado</p>
         </div>
       </button>
 
-      {/* Opción 3: Únicos (grilla día × mes) */}
+      {/* Opción 3: Gastos Únicos (grilla día × mes) */}
       <button
         type="button"
         role="menuitem"
@@ -217,12 +217,12 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
       >
         <CalendarDays size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
         <div>
-          <p className="text-[13px] font-semibold text-ink">Únicos</p>
+          <p className="text-[13px] font-semibold text-ink">Gastos Únicos</p>
           <p className="text-[11.5px] text-muted mt-[1px]">Grilla día × mes de gastos únicos</p>
         </div>
       </button>
 
-      {/* Opción 4: Cuotas (gantt de barras horizontales) */}
+      {/* Opción 4: Gastos en Cuotas (gantt de barras horizontales) */}
       <button
         type="button"
         role="menuitem"
@@ -231,7 +231,7 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
       >
         <CalendarRange size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
         <div>
-          <p className="text-[13px] font-semibold text-ink">Cuotas</p>
+          <p className="text-[13px] font-semibold text-ink">Gastos en Cuotas</p>
           <p className="text-[11.5px] text-muted mt-[1px]">Gantt anual de gastos en cuotas</p>
         </div>
       </button>
@@ -364,9 +364,39 @@ function ReportesPageContent() {
     });
   }
 
-  // Normalizar las cards del blob de preferencias
+  // Normalizar y migrar las cards del blob de preferencias.
+  //
+  // Reglas de migración:
+  //   - income-expense con categoryBreakdown=true → type "by-category" + categoryChartMode "line"
+  //     (conserva id, title, year, categoryIds, currency; quita categoryBreakdown y hiddenSeries).
+  //   - income-expense con categoryBreakdown=false/ausente → queda income-expense sin ese campo.
+  //   - by-category sin categoryChartMode → queda by-category, se lee como "bar" en runtime.
+  //   - hiddenSeries solo aplica a income-expense; ignorado en otros tipos.
   const rawReports = preferences?.reports;
-  const cards: ReportCardConfig[] = Array.isArray(rawReports) ? rawReports : [];
+  const cards: ReportCardConfig[] = Array.isArray(rawReports)
+    ? rawReports.map((raw): ReportCardConfig => {
+        // Migrar income-expense con categoryBreakdown=true → by-category + line
+        if (
+          raw.type === "income-expense" &&
+          (raw as ReportCardConfig).categoryBreakdown === true
+        ) {
+          const { categoryBreakdown: _cb, hiddenSeries: _hs, ...rest } = raw as ReportCardConfig;
+          void _cb; void _hs; // suprimir unused
+          return { ...rest, type: "by-category", categoryChartMode: "line" };
+        }
+        // income-expense con categoryBreakdown=false/ausente: limpiar campo si existe
+        if (
+          raw.type === "income-expense" &&
+          "categoryBreakdown" in raw
+        ) {
+          const { categoryBreakdown: _cb, ...rest } = raw as ReportCardConfig;
+          void _cb;
+          return rest as ReportCardConfig;
+        }
+        // by-category sin categoryChartMode: queda tal cual (runtime lo trata como "bar")
+        return raw as ReportCardConfig;
+      })
+    : [];
 
   function handleAddCard(type: ReportCardType) {
     setMenuOpen(false);
@@ -409,12 +439,12 @@ function ReportesPageContent() {
     });
   }
 
-  function handleCategoryBreakdownChange(id: string, v: boolean) {
+  function handleCategoryChartModeChange(id: string, mode: "bar" | "line") {
     const newCards = cards.map((c) =>
-      c.id === id ? { ...c, categoryBreakdown: v } : c
+      c.id === id ? { ...c, categoryChartMode: mode } : c
     );
     void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
-      logger.error("Error al persistir modo de vista de card", { error: err, cardId: id });
+      logger.error("Error al persistir modo de gráfico de card", { error: err, cardId: id });
     });
   }
 
@@ -548,7 +578,7 @@ function ReportesPageContent() {
                   isActive={activeId === card.id}
                   onYearChange={(year) => handleYearChange(card.id, year)}
                   onCategoryIdsChange={(ids) => handleCategoryIdsChange(card.id, ids)}
-                  onCategoryBreakdownChange={(v) => handleCategoryBreakdownChange(card.id, v)}
+                  onCategoryChartModeChange={(mode) => handleCategoryChartModeChange(card.id, mode)}
                   onHiddenSeriesChange={(hidden) => handleHiddenSeriesChange(card.id, hidden)}
                   onRemove={() => handleRemoveCard(card.id)}
                   onCurrencyChange={(c) => handleCurrencyChange(card.id, c)}

@@ -49,10 +49,10 @@ function ReportCardMini({
     : type === "unique-grid" ? CalendarDays
     : CalendarRange;
   const typeLabel =
-    type === "income-expense" ? "Ingresos y gastos"
-    : type === "by-category" ? "Por categoría"
-    : type === "unique-grid" ? "Únicos"
-    : "Cuotas";
+    type === "income-expense" ? "Ingresos vs Gastos"
+    : type === "by-category" ? "Gastos por categoría"
+    : type === "unique-grid" ? "Gastos Únicos"
+    : "Gastos en Cuotas";
 
   const hasTitle = Boolean(title);
 
@@ -111,7 +111,7 @@ interface SortableReportCardProps {
   // Props que pasan al ReportCard completo
   onYearChange: (year: number) => void;
   onCategoryIdsChange: (ids: string[] | null) => void;
-  onCategoryBreakdownChange: (v: boolean) => void;
+  onCategoryChartModeChange: (mode: "bar" | "line") => void;
   onHiddenSeriesChange: (hidden: Array<"income" | "expense">) => void;
   onRemove: () => void;
   onCurrencyChange: (c: CurrencyCode) => void;
@@ -125,7 +125,7 @@ export function SortableReportCard({
   isActive,
   onYearChange,
   onCategoryIdsChange,
-  onCategoryBreakdownChange,
+  onCategoryChartModeChange,
   onHiddenSeriesChange,
   onRemove,
   onCurrencyChange,
@@ -204,13 +204,13 @@ export function SortableReportCard({
           type={config.type}
           year={config.year}
           categoryIds={config.categoryIds}
-          categoryBreakdown={config.categoryBreakdown ?? false}
-          hiddenSeries={config.hiddenSeries ?? []}
+          categoryChartMode={config.type === "by-category" ? (config.categoryChartMode ?? "bar") : undefined}
+          hiddenSeries={config.type === "income-expense" ? (config.hiddenSeries ?? []) : undefined}
           chartHeight={300}
           onYearChange={onYearChange}
           onCategoryIdsChange={onCategoryIdsChange}
-          onCategoryBreakdownChange={onCategoryBreakdownChange}
-          onHiddenSeriesChange={onHiddenSeriesChange}
+          onCategoryChartModeChange={config.type === "by-category" ? onCategoryChartModeChange : undefined}
+          onHiddenSeriesChange={config.type === "income-expense" ? onHiddenSeriesChange : undefined}
           removable={true}
           onRemove={onRemove}
           currency={config.currency}

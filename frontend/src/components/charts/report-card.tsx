@@ -202,26 +202,34 @@ function Form2Tooltip({ active, payload, label, data, year, currency }: Form2Too
   return <ChartTooltipContent monthLabel={fullLabel} rows={catRows} totalRow={totalRow} />;
 }
 
-// ─── Toggle de vista — tabs underline neutras (Fase 1.2.2) ──────────────────
+// ─── Toggle de vista — tabs underline neutras ────────────────────────────────
 
-const VIEW_TABS = [
-  { label: "Total", val: false, id: "tab-total" },
-  { label: "Por categoría", val: true, id: "tab-porcategoria" },
-] as const;
-
-interface ViewTabsProps {
-  value: boolean; // false = "Total", true = "Por categoría"
-  onChange: (v: boolean) => void;
+/**
+ * Tabs underline neutras genéricas. Usadas por:
+ *   - by-category: toggle Barra/Línea (categoryChartMode).
+ * Eliminadas de income-expense (queda Total-only).
+ *
+ * Props:
+ *   tabs: array de { label, id, val: T }
+ *   value: valor activo
+ *   onChange: callback con el nuevo valor
+ *   panelId: aria-controls del tabpanel del canvas
+ *   ariaLabel: aria-label del role="tablist"
+ */
+interface ViewTabsProps<T extends string | boolean> {
+  tabs: ReadonlyArray<{ label: string; id: string; val: T }>;
+  value: T;
+  onChange: (v: T) => void;
   panelId: string;
+  ariaLabel: string;
 }
 
-function ViewTabs({ value, onChange, panelId }: ViewTabsProps) {
-  // Underline deslizante: mide los botones del tab activo para posicionar el indicador.
-  const tabRefs = useRef<Array<HTMLButtonElement | null>>([null, null]);
+function ViewTabs<T extends string | boolean>({ tabs, value, onChange, panelId, ariaLabel }: ViewTabsProps<T>) {
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [underline, setUnderline] = useState<{ left: number; width: number } | null>(null);
   const reducedMotionTabs = useReducedMotion();
 
-  const selectedIndex = value ? 1 : 0;
+  const selectedIndex = tabs.findIndex((t) => t.val === value);
 
   useEffect(() => {
     const btn = tabRefs.current[selectedIndex];
@@ -232,17 +240,19 @@ function ViewTabs({ value, onChange, panelId }: ViewTabsProps) {
   function handleKeyDown(e: React.KeyboardEvent, idx: number) {
     if (e.key === "ArrowRight") {
       e.preventDefault();
-      onChange(idx === 0);
+      const next = tabs[(idx + 1) % tabs.length];
+      if (next) onChange(next.val);
     } else if (e.key === "ArrowLeft") {
       e.preventDefault();
-      onChange(idx === 1);
+      const prev = tabs[(idx - 1 + tabs.length) % tabs.length];
+      if (prev) onChange(prev.val);
     }
   }
 
   return (
     <div
       role="tablist"
-      aria-label="Vista del reporte"
+      aria-label={ariaLabel}
       className="relative flex items-end gap-[18px] pb-[2px]"
     >
       {/* Underline deslizante — posicionado con left/width medidos del tab activo */}
@@ -258,7 +268,7 @@ function ViewTabs({ value, onChange, panelId }: ViewTabsProps) {
           style={{ left: underline.left, width: underline.width }}
         />
       )}
-      {VIEW_TABS.map((tab, i) => {
+      {tabs.map((tab, i) => {
         const isSelected = tab.val === value;
         return (
           <button
@@ -289,10 +299,14 @@ function ViewTabs({ value, onChange, panelId }: ViewTabsProps) {
   );
 }
 
+// Tabs para by-category (Barra / Línea)
+const BY_CATEGORY_TABS = [
+  { label: "Barra", val: "bar" as const, id: "tab-barra" },
+  { label: "Línea", val: "line" as const, id: "tab-linea" },
+] as const;
+
 // ID del panel de gráfico (para aria-controls de tabs)
 const CHART_PANEL_ID = "report-chart-panel";
-
-// (FormBTooltip y TooltipCategoryBlock eliminados en Fase 1.2.2 — Vista B usa Form2Tooltip directamente)
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
@@ -763,8 +777,8 @@ export interface ReportCardProps {
   year: number;
   /**
    * Categorías seleccionadas. null = todas. Controlado externamente.
-   * En los casos de categorías (Forma 1 Vista B + Forma 2), la leyenda togglea
-   * ítems de availableCategories y escribe en categoryIds.
+   * En by-category, la leyenda togglea ítems de availableCategories y escribe en categoryIds.
+   * En income-expense Total-only, no se usa (la leyenda togglea hiddenSeries).
    */
   categoryIds?: string[] | null;
   /** Alto del canvas en desktop (px). 280 en dashboard, 300 en /reportes. */
@@ -778,26 +792,27 @@ export interface ReportCardProps {
    */
   onCategoryIdsChange?: (ids: string[] | null) => void;
   /**
-   * Modo de visualización de la card income-expense.
-   * false (default) = vista "Total" (áreas superpuestas, vista A).
-   * true = vista "Por categoría" (stack apilado, vista B).
-   * Solo aplica cuando type === "income-expense". Ignorado en by-category.
+   * Modo de visualización del gráfico de la card `by-category`.
+   * "bar" (default) = barras apiladas por categoría (Forma 2 histórica).
+   * "line" = stack de áreas apiladas por categoría (geometría continua).
+   * Solo aplica cuando type === "by-category". Ignorado en income-expense y otros.
    */
-  categoryBreakdown?: boolean;
+  categoryChartMode?: "bar" | "line";
   /**
-   * Callback al cambiar el modo de visualización (toggle Total / Por categoría).
-   * El padre persiste (en /reportes) o gestiona efímero (dashboard).
+   * Callback al cambiar el modo Barra↔Línea de by-category.
+   * El padre persiste (en /reportes).
+   * Solo relevante cuando type === "by-category".
    */
-  onCategoryBreakdownChange?: (v: boolean) => void;
+  onCategoryChartModeChange?: (mode: "bar" | "line") => void;
   /**
-   * Series ocultas en la vista "Total" de income-expense (vista A).
+   * Series ocultas en la card income-expense (Total-only).
    * Persistido en ReportCardConfig.hiddenSeries.
    * undefined / [] = ambas visibles (default).
-   * Solo aplica a type === "income-expense" && !categoryBreakdown.
+   * Solo aplica a type === "income-expense".
    */
   hiddenSeries?: Array<"income" | "expense">;
   /**
-   * Callback al togglear una serie en la vista "Total" de income-expense.
+   * Callback al togglear una serie en income-expense.
    * Recibe el array actualizado de series ocultas.
    */
   onHiddenSeriesChange?: (hidden: Array<"income" | "expense">) => void;
@@ -1077,8 +1092,8 @@ export function ReportCard({
   chartHeight = 300,
   onYearChange,
   onCategoryIdsChange,
-  categoryBreakdown = false,
-  onCategoryBreakdownChange,
+  categoryChartMode = "bar",
+  onCategoryChartModeChange,
   hiddenSeries = [],
   onHiddenSeriesChange,
   removable = false,
@@ -1231,10 +1246,10 @@ export function ReportCard({
   })();
 
   // Vacío (sin movimientos en el año para esta forma)
-  // En vista "Total" con series ocultas: si ambas están ocultas → empty también.
+  // En income-expense con series ocultas: si ambas están ocultas → empty también.
   const isYearEmpty = (() => {
     if (!data) return false;
-    if (type === "income-expense" && !categoryBreakdown) {
+    if (type === "income-expense") {
       // Si ambas series ocultas → empty visual
       if (hiddenSeries.includes("income") && hiddenSeries.includes("expense")) {
         return true;
@@ -1247,9 +1262,6 @@ export function ReportCard({
     }
     return data.months.every((m) => m.expenseCents === 0);
   })();
-
-  // Para la vista B: el título es el mismo ("Ingresos y gastos") pero el modo cambia
-  const isViewB = type === "income-expense" && categoryBreakdown;
 
   function handlePrev() {
     if (earliestYear !== null && year > earliestYear) {
@@ -1271,29 +1283,19 @@ export function ReportCard({
   // ── Ítems de leyenda según caso ────────────────────────────────────────────
 
   /**
-   * Caso A: Forma 1, modo "Total" — dos ítems: Ingresos / Gastos.
+   * Caso A: income-expense Total-only — dos ítems: Ingresos / Gastos.
    * Toggle persistido en hiddenSeries.
    */
-  const legendItemsTotalF1 = [
+  const legendItemsIncomeExpense = [
     { id: "income", color: "var(--income)", label: "Ingresos" },
     { id: "expense", color: "var(--expense)", label: "Gastos" },
   ];
 
   /**
-   * Caso B: Forma 1, modo "Por categoría" (vista B) — ítems de availableCategories.
-   * Toggle en categoryIds.
+   * Caso B: by-category (modo Barra o Línea) — ítems de availableCategories.
+   * La leyenda es la misma en ambos modos; toggle en categoryIds.
    */
-  const legendItemsCategoryB = availableCategories.map((cat) => ({
-    id: cat.categoryId,
-    color: cat.color,
-    label: cat.name,
-  }));
-
-  /**
-   * Caso C: Forma 2 (by-category) — ítems de availableCategories.
-   * Toggle en categoryIds.
-   */
-  const legendItemsF2 = availableCategories.map((cat) => ({
+  const legendItemsByCategory = availableCategories.map((cat) => ({
     id: cat.categoryId,
     color: cat.color,
     label: cat.name,
@@ -1306,24 +1308,26 @@ export function ReportCard({
     >
       {/* ── Cabecera de la card ── */}
       {/*
-        Spec visual: docs/design.md §"Título editable de la card de reporte (Ola 2, P4)".
+        Spec visual: docs/design.md §"Título editable de la card de reporte (Ola 2, P4)"
+        y §"Toggle Barra ↔ Línea en la card by-category".
 
-        by-category (≥941px):
+        income-expense (Total-only, ≥941px):
           Fila única flex justify-between:
             Izq: [título editable]
             Der: [stepper · moneda · X]
           ≤940px: wrap natural — controles bajan a segunda línea.
 
-        income-expense (≥941px):
+        by-category (con toggle Barra/Línea, ≥941px):
           Línea 1 (ancho completo): [título editable]
-          Línea 2 flex justify-between: [ViewTabs] / [stepper · moneda · X]
-          ≤940px: wrap natural — orden vertical: [título] → [ViewTabs] → [controles].
+          Línea 2 flex justify-between: [ViewTabs Barra/Línea izq] / [stepper · moneda · X der]
+            items-start para alinear los controles al tope de la columna identidad.
+          ≤940px: wrap natural — orden vertical: [título] → [tabs] → [controles].
       */}
 
-      {/* ── BLOQUE by-category: una sola fila justify-between ── */}
-      {type === "by-category" && (
+      {/* ── BLOQUE income-expense: fila única justify-between (Total-only, sin tabs) ── */}
+      {type === "income-expense" && (
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-[18px]">
-          {/* Identidad: solo el título editable (izquierda) — sin eyebrow */}
+          {/* Identidad: solo el título editable (izquierda) */}
           <div className="min-w-0 flex-1">
             <EditableTitle
               titleProp={titleProp}
@@ -1355,11 +1359,11 @@ export function ReportCard({
         </div>
       )}
 
-      {/* ── BLOQUE income-expense: línea 1 (identidad) + línea 2 (tabs+controles) ── */}
-      {type === "income-expense" && (
+      {/* ── BLOQUE by-category: línea 1 (título) + línea 2 (tabs + controles) ── */}
+      {type === "by-category" && (
         <>
-          {/* Línea 1: solo el título editable (ancho completo) — sin eyebrow */}
-          <div className="w-full mb-[6px]">
+          {/* Línea 1: solo el título editable (ancho completo) */}
+          <div className="w-full mb-[8px]">
             <EditableTitle
               titleProp={titleProp}
               titlePlaceholder={titlePlaceholder}
@@ -1374,12 +1378,14 @@ export function ReportCard({
               canEdit={!!onTitleChange}
             />
           </div>
-          {/* Línea 2: [ViewTabs izq] / [controles der] — idéntica a antes de P4 */}
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-[18px]">
+          {/* Línea 2: [ViewTabs Barra/Línea izq] / [controles der], items-start */}
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-[18px]">
             <ViewTabs
-              value={categoryBreakdown}
-              onChange={(v) => onCategoryBreakdownChange?.(v)}
+              tabs={BY_CATEGORY_TABS}
+              value={categoryChartMode}
+              onChange={(v) => onCategoryChartModeChange?.(v)}
               panelId={CHART_PANEL_ID}
+              ariaLabel="Representación del reporte"
             />
             <CardControls
               year={year}
@@ -1404,12 +1410,15 @@ export function ReportCard({
         <ChartSkeleton height={chartHeight} />
       ) : (
         <div
+          id={CHART_PANEL_ID}
+          role="tabpanel"
           className="relative"
-          {...(type === "income-expense" ? {
-            id: CHART_PANEL_ID,
-            role: "tabpanel" as const,
-            "aria-labelledby": categoryBreakdown ? "tab-porcategoria" : "tab-total",
-          } : {})}
+          {...(type === "by-category"
+            ? {
+                "aria-labelledby":
+                  categoryChartMode === "line" ? "tab-linea" : "tab-barra",
+              }
+            : {})}
         >
           {isYearEmpty && (
             <div
@@ -1422,7 +1431,7 @@ export function ReportCard({
 
           <ChartResponsiveArea desktopHeight={chartHeight}>
             {(height) => {
-              if (type === "income-expense" && !categoryBreakdown) {
+              if (type === "income-expense") {
                 return (
                   <Form1ChartInner
                     chartData={chartData}
@@ -1434,7 +1443,8 @@ export function ReportCard({
                   />
                 );
               }
-              if (type === "income-expense" && categoryBreakdown) {
+              // by-category — modo Línea
+              if (type === "by-category" && categoryChartMode === "line") {
                 return (
                   <FormBChartInner
                     chartData={chartData}
@@ -1446,6 +1456,7 @@ export function ReportCard({
                   />
                 );
               }
+              // by-category — modo Barra (default)
               return (
                 <Form2ChartInner
                   chartData={chartData}
@@ -1461,40 +1472,20 @@ export function ReportCard({
 
           {/* ─ Leyendas interactivas ─ */}
 
-          {/* Caso A: Forma 1 — modo "Total" (vista A): Ingresos / Gastos */}
-          {/* SIN scroll, SIN atajo Todas/Ninguna: son 2 ítems fijos — fila plana. */}
-          {data && type === "income-expense" && !isViewB && (
+          {/* income-expense Total-only: dos ítems Ingresos/Gastos, fila plana sin scroll. */}
+          {data && type === "income-expense" && (
             <ChartLegend
-              items={legendItemsTotalF1}
+              items={legendItemsIncomeExpense}
               hiddenIds={hiddenSeries}
               onToggle={handleSeriesLegendToggle}
               groupLabel="Filtrar series"
             />
           )}
 
-          {/* Caso B: Forma 1 — modo "Por categoría" (vista B): categorías de gasto */}
-          {/* CON scroll (max-h-84px) + LegendAllChip en carril fijo debajo. */}
-          {data && isViewB && availableCategories.length > 0 && (
-            <ChartLegend
-              items={legendItemsCategoryB}
-              hiddenIds={hiddenCategoryIds}
-              onToggle={handleCategoryLegendToggle}
-              groupLabel="Filtrar categorías"
-              scrollable
-              commandSlot={
-                <LegendAllChip
-                  hiddenCategoryIds={hiddenCategoryIds}
-                  onCategoryIdsChange={onCategoryIdsChange}
-                />
-              }
-            />
-          )}
-
-          {/* Caso C: Forma 2 (by-category): categorías de gasto */}
-          {/* CON scroll (max-h-84px) + LegendAllChip en carril fijo debajo. */}
+          {/* by-category (modos Barra y Línea): leyenda de categorías idéntica en ambos modos. */}
           {data && type === "by-category" && availableCategories.length > 0 && (
             <ChartLegend
-              items={legendItemsF2}
+              items={legendItemsByCategory}
               hiddenIds={hiddenCategoryIds}
               onToggle={handleCategoryLegendToggle}
               groupLabel="Filtrar categorías"

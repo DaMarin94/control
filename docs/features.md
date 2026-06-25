@@ -29,7 +29,7 @@
 | Navegación global — sidebar persistente | RF-NAV-001 | Implementado |
 | Crear categoría desde el formulario de movimiento | RF-MU-004 | Implementado |
 | Reportes — pantalla configurable por cards + widget en dashboard | RF-REP-001..005 | Implementado |
-| Reportes — toggle "Total / Por categoría" en la card Ingresos y gastos | RF-REP-006 | Implementado |
+| Reportes — toggle de representación Barra / Línea en la card Gastos por categoría | RF-REP-006 | Implementado |
 | Reportes — moneda de display por card (selector por card, nace con la default global) | RF-REP-007 | Implementado |
 | Reportes — título editable por card (placeholder "Reporte N" si vacío) | RF-REP-008 | Implementado |
 | Reportes — cards reordenables por drag & drop (modo orden, ≥2 cards) | RF-REP-009 | Implementado |
@@ -54,7 +54,7 @@
 - **Fijos.** Inmutabilidad del pasado vía split (cadena de filas `Recurring`). Anular por mes (toggle `RecurringSkip`) y periodicidad (`frequency`, set cerrado, inmutable). Detalle en `docs/backend.md` §Movimientos fijos.
 - **Cuotas.** Solo Gasto en v1 (el tab no ofrece selector de tipo; el backend rechaza `INCOME` con `400`). Editar es in-place del grupo completo; eliminar es hard delete del grupo entero. Detalle en `docs/backend.md` §Movimientos en cuotas.
 - **Calculados.** Fijo cuyo monto/tipo se derivan al vuelo del monto de un origen (fijo, único o cuota) vía fórmula. Creación solo desde la acción "crear movimiento desde este" del kebab. Vínculo al origen por `chainId` (fijo) o FK (`onDelete: Cascade`) para único/cuota. Reglas en `requirements.md` §3.4.b; contrato en `docs/data-model.md` §Contrato de movimientos calculados.
-- **Reportes** (`/reportes`): pantalla configurable por cards persistidas (clave `reports`); cada card es un widget autónomo con año y filtro de categorías embebidos. El dashboard monta solo la card Ingresos vs. Gastos en modo efímero. Card `income-expense` con toggle "Total / Por categoría" (RF-REP-006). Backend `GET /movements/reports`. Detalle en `docs/frontend.md` §Reportes, `docs/backend.md` §Serie de reportes.
+- **Reportes** (`/reportes`): pantalla configurable por cards persistidas (clave `reports`); cada card es un widget autónomo con año y filtro de categorías embebidos. El dashboard monta solo la card Ingresos vs Gastos (Total-only) en modo efímero. Card `by-category` con toggle de representación Barra / Línea (RF-REP-006). Backend `GET /movements/reports`. Detalle en `docs/frontend.md` §Reportes, `docs/backend.md` §Serie de reportes.
 - **Multi-moneda.** Moneda + cotización por movimiento sobre un set curado de 4 (ARS/USD/EUR/BRL); totales convertidos a la `defaultCurrency` del usuario (capa de display, no toca lo guardado). Conversión vía pivote USD con la tabla de cotizaciones de referencia (global, interna, no editable por UI). Pantalla `/configuracion` edita la moneda default. Reglas en `requirements.md` §3.10; contrato en `docs/data-model.md` §Moneda explícita / §Tabla de cotizaciones de referencia.
 - **Preferencias de usuario.** Blob JSON 1:1 con el usuario, cargado en la sesión de Auth.js al loguear; semántica de reemplazo total en `PUT /preferences`. Lo consumen `monthSections`, `monthListFilters` y `reports`. Detalle en `docs/data-model.md` §Contrato de preferencias.
 - **Mes contexto.** Abrir "Nuevo movimiento" desde `/mes` propaga el mes navegado como default del "mes de inicio" en los tabs Fijo y Cuotas (el tab Único lo ignora). El mes de inicio admite meses pasados.

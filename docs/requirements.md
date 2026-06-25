@@ -1304,27 +1304,27 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El módulo ofrece **dos tipos de reporte** sobre los 12 meses de un año (eje X: los meses del año; eje Y: monto): (Forma 1) ingresos vs. gastos por mes, y (Forma 2) gastos del mes descompuestos por categoría. Son los únicos tipos disponibles; sumar tipos nuevos queda fuera de alcance. |
+| **Descripción** | El módulo ofrece **dos tipos de reporte** sobre los 12 meses de un año (eje X: los meses del año; eje Y: monto): **Ingresos vs Gastos** por mes, y **Gastos por categoría** (gastos del mes descompuestos por categoría). Son los únicos tipos disponibles; sumar tipos nuevos queda fuera de alcance. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | El usuario tiene sesión activa. |
 
 **Tipos de reporte:**
 
-- **Forma 1 — Ingresos vs. Gastos** (`income-expense`). Dos series por mes a lo largo del año: el **total de ingresos** del mes y el **total de gastos** del mes. Cada mes del eje X tiene su par de valores (ingresos, gastos). Los totales por mes suman los tres tipos de movimiento que caen en el mes (únicos + fijos activos + cuotas), con el mismo criterio que los totales de la Vista del mes (RF-VM-002) y el Dashboard (RF-DASH-002). La card de este tipo tiene un **toggle de dos modos de vista** (RF-REP-006): **"Total"** (las dos series agregadas, descrito acá) y **"Por categoría"** (el total de gastos descompuesto por categoría apilada). El toggle es un modo de la card, **no** un tipo de reporte nuevo.
-- **Forma 2 — Gastos por categoría (apilado)** (`by-category`). Toma el **total de gastos** de cada mes y lo descompone en bandas apiladas, una por **categoría**, cada una con el **color propio de su categoría** (RF-CAT-005 / RN-013). Las bandas de un mes se apilan y suman exactamente el total de gastos de ese mes (el mismo valor que la serie "gastos" de la Forma 1). **La Forma 2 es solo de gastos** (`EXPENSE`): los ingresos no se descomponen por categoría en este reporte; viven únicamente en la Forma 1.
+- **Ingresos vs Gastos** (`income-expense`). Dos series por mes a lo largo del año: el **total de ingresos** del mes y el **total de gastos** del mes. Cada mes del eje X tiene su par de valores (ingresos, gastos). Los totales por mes suman los tres tipos de movimiento que caen en el mes (únicos + fijos activos + cuotas), con el mismo criterio que los totales de la Vista del mes (RF-VM-002) y el Dashboard (RF-DASH-002). Es **Total-only**: muestra únicamente las dos series agregadas, sin sub-vista por categoría ni toggle.
+- **Gastos por categoría** (`by-category`). Toma el **total de gastos** de cada mes y lo descompone, una porción por **categoría**, cada una con el **color propio de su categoría** (RF-CAT-005 / RN-013). Las porciones de un mes suman exactamente el total de gastos de ese mes (el mismo valor que la serie "gastos" de Ingresos vs Gastos). Es **solo de gastos** (`EXPENSE`): los ingresos no se descomponen por categoría en este reporte. La card ofrece un **toggle de representación Barra ↔ Línea** (RF-REP-006): mismo dato, geometría distinta.
 
 **Criterios de aceptación:**
-- [ ] El módulo ofrece exactamente **dos tipos de reporte**: `income-expense` (Forma 1) y `by-category` (Forma 2). No hay tipos adicionales.
+- [ ] El módulo ofrece exactamente **dos tipos de reporte**: `income-expense` (Ingresos vs Gastos) y `by-category` (Gastos por categoría). No hay tipos adicionales.
 - [ ] El eje X representa los 12 meses del año configurado; el eje Y representa el monto.
 - [ ] Los **12 meses están siempre presentes** en el eje X; un mes sin datos se grafica en **cero** (no se omite ni deja hueco). Esto incluye los meses futuros del año en curso, que también se muestran en cero salvo lo que proyecten los fijos activos y las cuotas en tramo (RN-006). La representación visual concreta de un mes en cero la define `control-design`.
-- [ ] La Forma 1 muestra, por mes, el total de ingresos y el total de gastos del mes; ambos totales suman únicos + fijos activos + cuotas del mes (mismo criterio que RF-VM-002).
-- [ ] La Forma 2 muestra, por mes, el total de gastos del mes descompuesto en bandas apiladas por categoría, cada banda con el color de su categoría; la suma de las bandas de un mes iguala el total de gastos de ese mes.
-- [ ] La Forma 2 considera **solo gastos** (`EXPENSE`); los ingresos no aparecen descompuestos por categoría.
-- [ ] La Forma 2 muestra **una banda por cada categoría con gasto, sin agrupar ni colapsar** ninguna en una banda "Otras"; no hay tope de categorías visibles. La agrupación "Otras" para la cola de categorías queda como candidato futuro.
-- [ ] Los colores de las bandas de la Forma 2 son los colores ya asignados a cada categoría (RF-CAT-005); el reporte no inventa ni reasigna colores.
+- [ ] Ingresos vs Gastos muestra, por mes, el total de ingresos y el total de gastos del mes; ambos totales suman únicos + fijos activos + cuotas del mes (mismo criterio que RF-VM-002).
+- [ ] Gastos por categoría muestra, por mes, el total de gastos del mes descompuesto por categoría, cada porción con el color de su categoría; la suma de las porciones de un mes iguala el total de gastos de ese mes.
+- [ ] Gastos por categoría considera **solo gastos** (`EXPENSE`); los ingresos no aparecen descompuestos por categoría.
+- [ ] Gastos por categoría muestra **una porción por cada categoría con gasto, sin agrupar ni colapsar** ninguna en una porción "Otras"; no hay tope de categorías visibles. La agrupación "Otras" para la cola de categorías queda como candidato futuro.
+- [ ] Los colores de las porciones de Gastos por categoría son los colores ya asignados a cada categoría (RF-CAT-005); el reporte no inventa ni reasigna colores.
 - [ ] El mes al que pertenece cada movimiento, para la agregación anual, se determina con el mismo criterio de zona horaria ya definido (RN-015): la zona propia de cada registro para los únicos, y el `startMonth` `YYYY-MM` para fijos y cuotas.
-- [ ] Un movimiento cuya categoría fue eliminada (soft delete) sigue contando en los totales y, en la Forma 2, sigue apareciendo bajo su categoría con su color (consistente con RF-CAT-004 / RF-VM-002).
+- [ ] Un movimiento cuya categoría fue eliminada (soft delete) sigue contando en los totales y, en `by-category`, sigue apareciendo bajo su categoría con su color (consistente con RF-CAT-004 / RF-VM-002).
 
 **Notas:**
 - Las decisiones de presentación visual del reporte (tipo de trazo, relleno de áreas, leyenda, ejes, interacción de hover/tooltip, comportamiento responsivo) son responsabilidad de `control-design` (`docs/design.md`), no de este RF.
@@ -1342,12 +1342,12 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 
 **Props funcionales:**
 
-- **Tipo de reporte.** `income-expense` (Forma 1) o `by-category` (Forma 2). Define qué visualización monta la instancia.
+- **Tipo de reporte.** `income-expense` (Ingresos vs Gastos) o `by-category` (Gastos por categoría). Define qué visualización monta la instancia.
 - **Año a mostrar.** Define el año cuyos 12 meses se grafican. La navegación de año (flechas embebidas en el widget) está **siempre activa** e **independiente por instancia**: cambiar el año de un widget no afecta a ningún otro. Límites de navegación: hacia atrás el control ‹ se deshabilita antes del **primer año con CUALQUIER movimiento del usuario** (`earliestYear`, no afectado por el filtro de categorías — ver RF-REP-005); hacia adelante se **bloquean los años futuros** (máximo navegable: el año en curso).
 - **Categorías seleccionadas (filtro).** Subconjunto de categorías que el reporte considera; default **todas**. El filtro tiene **tres estados**: **todas** (default, sin filtro), **subconjunto** (solo las tildadas) y **ninguna** (todas destildadas) → la serie/bandas se grafican en **cero** (igual que el filtro de `/mes`, RF-VM-006). El universo de categorías ofrecido es **solo las categorías con gasto del año** (no el catálogo completo del usuario): cualquier filtro de categorías de un reporte lista únicamente las categorías que aportan a lo que se muestra ahí. Ese universo es **estable**: no se achica al destildar categorías (igual criterio que `earliestYear`).
-- **La leyenda del gráfico ES el filtro.** El widget **no** tiene un control de filtro separado: la **leyenda interactiva** es el único disparador. Clic en un ítem de la leyenda lo activa/desactiva. Qué togglea depende del modo:
-  - **Forma 1, modo "Total"** (RF-REP-006): la leyenda togglea las **series Ingresos / Gastos** (RF-REP-006). Estado persistido por card.
-  - **Forma 1, modo "Por categoría"** y **Forma 2**: la leyenda togglea **categorías** (usa el filtro de categorías persistido de la card, con su lógica de tres estados — todas / subconjunto / ninguna).
+- **La leyenda del gráfico ES el filtro.** El widget **no** tiene un control de filtro separado: la **leyenda interactiva** es el único disparador. Clic en un ítem de la leyenda lo activa/desactiva. Qué togglea depende del tipo:
+  - **Ingresos vs Gastos** (`income-expense`): la leyenda togglea las **series Ingresos / Gastos** (estado `hiddenSeries`, persistido por card).
+  - **Gastos por categoría** (`by-category`): la leyenda togglea **categorías** (usa el filtro de categorías persistido de la card, con su lógica de tres estados — todas / subconjunto / ninguna).
 - **Persistencia (modo).** Define qué hace la instancia con sus cambios de año y de filtro:
   - **Persistida** — en `/reportes`: cada cambio de año y de filtro de la card se persiste en la clave `reports` de preferencias (RF-REP-004).
   - **Efímera** — en el dashboard: el año y el filtro son de sesión; **no** se persisten (al recargar, el widget vuelve a su estado inicial — año en curso, todas las categorías). Ver RF-DASH-001/002.
@@ -1356,7 +1356,7 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 - [ ] El widget es un componente reutilizable; tipo, año, categorías seleccionadas y modo de persistencia se controlan por props, no por lógica interna distinta en cada pantalla.
 - [ ] La navegación de año está **embebida en el widget** y es **independiente por instancia**: mover el año de una instancia no mueve el de ninguna otra (no hay control de año compartido).
 - [ ] El filtro de categorías está **embebido en el widget** y ofrece **solo las categorías con gasto del año** (las que aportan a lo que se muestra), con default **todas seleccionadas**; el universo es estable (no se achica al destildar).
-- [ ] La **leyenda del gráfico es el filtro**: no hay un control de filtro separado. Clic en un ítem de la leyenda lo activa/desactiva. En Forma 1 modo "Total" togglea las series Ingresos/Gastos; en Forma 1 modo "Por categoría" y en Forma 2 togglea categorías. La lógica de tres estados del filtro de categorías (todas / subconjunto / ninguna) se mantiene.
+- [ ] La **leyenda del gráfico es el filtro**: no hay un control de filtro separado. Clic en un ítem de la leyenda lo activa/desactiva. En `income-expense` togglea las series Ingresos/Gastos; en `by-category` togglea categorías. La lógica de tres estados del filtro de categorías (todas / subconjunto / ninguna) se mantiene.
 - [ ] El filtro aplica a ambos tipos: en `income-expense` restringe qué categorías cuentan en los totales de ingresos y de gastos; en `by-category` restringe qué bandas se apilan (ver contrato del endpoint en data-model.md).
 - [ ] Los límites de navegación de año respetan `earliestYear` (primer año con cualquier movimiento del usuario, **independiente del filtro**) hacia atrás y el año en curso hacia adelante.
 - [ ] En modo **persistido** (cards de `/reportes`), los cambios de año y de filtro de la instancia se persisten vía clave `reports` (RF-REP-004).
@@ -1424,39 +1424,38 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 **Criterios de aceptación:**
 - [ ] El endpoint es `GET /movements/reports` (renombre de `GET /movements/annual`); la mecánica de agregación anual no cambia.
 - [ ] Acepta el año y un **filtro de categorías** como query param que distingue **tres estados**: **ausente = todas**, **presente y vacío = ninguna** (serie en cero), **lista = subconjunto** (contrato exacto en `docs/data-model.md`).
-- [ ] El filtro afecta a **ambas formas**: en la Forma 1, qué categorías cuentan en los totales de ingresos y de gastos por mes; en la Forma 2, qué bandas por categoría se incluyen.
+- [ ] El filtro afecta a **ambos tipos**: en `income-expense`, qué categorías cuentan en los totales de ingresos y de gastos por mes; en `by-category`, qué porciones por categoría se incluyen.
 - [ ] El campo **`earliestYear` NO se ve afectado por el filtro**: siempre refleja el primer año con CUALQUIER movimiento del usuario, para que los límites de navegación de año (RF-REP-002) no salten al filtrar.
 - [ ] La respuesta mantiene el shape `{ year, months, categories, earliestYear }`, con `months` y `categories` filtrados al set pedido (`earliestYear` no).
 - [ ] El endpoint filtra siempre por el `userId` del JWT (RNF-002).
-- [ ] El array `categories` (desglose de gastos `EXPENSE`) alimenta tanto la Forma 2 (`by-category`) como el modo "Por categoría" de la card `income-expense` (RF-REP-006), que desglosa **solo gastos**.
+- [ ] El array `categories` (desglose de gastos `EXPENSE`) alimenta la card `by-category` en **ambas representaciones** (barra y línea, RF-REP-006): es el mismo dato, distinta geometría de render. El backend no distingue barra de línea; eso es solo render del front.
 
 ---
 
-#### RF-REP-006 — Toggle "Total / Por categoría" en la card Ingresos y gastos
+#### RF-REP-006 — Toggle de representación Barra / Línea en la card Gastos por categoría
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | La card de reporte de tipo `income-expense` (Ingresos y gastos, Forma 1) ofrece un **toggle de dos modos de vista**: **"Total"** y **"Por categoría"**. Es un **modo de la card existente**, no un tipo de reporte nuevo: ambos modos comparten el mismo tipo, año y filtro de categorías. La card `by-category` (Forma 2) **no** tiene este toggle. |
+| **Descripción** | La card de reporte de tipo `by-category` (Gastos por categoría) ofrece un **toggle de representación**: **Barra** y **Línea**. Es la **misma data** (gastos del mes descompuestos por categoría) graficada con **geometría distinta**; no cambia el tipo, el año ni el filtro de categorías de la card. La card `income-expense` (Ingresos vs Gastos) **no** tiene este toggle (es Total-only). |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
-| **Precondiciones** | Existe una card de tipo `income-expense` (en `/reportes` o en el dashboard). |
+| **Precondiciones** | Existe una card de tipo `by-category` (en `/reportes`). |
 
-**Modos de vista:**
+**Representaciones:**
 
-- **Total** (default). La vista de la Forma 1 (RF-REP-001): dos series por mes, total de ingresos y total de gastos del mes.
-- **Por categoría.** El total de **gastos** de cada mes se descompone en bandas apiladas por categoría (igual que la Forma 2, `by-category`). La suma de las bandas en un mes iguala el total de gastos de ese mes. Cada banda usa el color propio de su categoría (RF-CAT-005 / RN-013). **Solo desglosa gastos; los ingresos no se descomponen** (siguen como serie agregada o no se muestran, según define `control-design`).
+- **Barra** (default). Barras **apiladas** por categoría: una porción por categoría con gasto, cada una con el color propio de su categoría (RF-CAT-005 / RN-013). La suma de las porciones de un mes iguala el total de gastos de ese mes.
+- **Línea.** Áreas **apiladas** por categoría (mismo apilado que Barra, geometría continua): las mismas categorías con los mismos colores, más una **línea de contorno = total de gasto** del mes.
 
 **Criterios de aceptación:**
-- [ ] La card `income-expense` expone un toggle de dos opciones: **"Total"** (default) y **"Por categoría"**.
-- [ ] La card `by-category` **no** expone este toggle.
-- [ ] En modo "Por categoría", los gastos se descomponen por categoría apilada (igual que la Forma 2); la suma de las bandas iguala el total de gastos del mes. Los ingresos **no** se descomponen por categoría.
-- [ ] El toggle **no** cambia el tipo, el año ni el filtro de categorías de la card: el filtro de categorías (RF-REP-002) aplica al desglose de gastos en el modo "Por categoría".
-- [ ] **Persistencia del modo:** en `/reportes` el modo elegido se **persiste por card** (junto al año y al filtro, clave `reports`, RF-REP-004); en el dashboard el modo es **efímero** (estado local; al recargar vuelve a "Total"), coherente con el año y el filtro efímeros del widget del dashboard (RF-DASH-001).
-- [ ] El desglose de gastos por categoría se sirve mediante el array **`categories`** de `GET /movements/reports` (RF-REP-005).
-- [ ] En modo **"Total"** la **leyenda es el filtro de series** (RF-REP-002): clic en "Ingresos" o "Gastos" oculta/muestra esa serie. Puede ocultar **ambas** (gráfico vacío). El estado de series ocultas se **persiste por card** (clave `reports`, campo `hiddenSeries`; shape en `docs/data-model.md`). En modo "Por categoría" la leyenda togglea categorías, no series.
+- [ ] La card `by-category` expone un toggle de dos opciones: **Barra** (default) y **Línea**.
+- [ ] La card `income-expense` **no** expone este toggle.
+- [ ] Ambas representaciones grafican el **mismo dato** (gastos por categoría apilados); solo difiere la geometría de render. La suma de las porciones/áreas de un mes iguala el total de gastos del mes.
+- [ ] El toggle **no** cambia el tipo, el año ni el filtro de categorías de la card.
+- [ ] **Persistencia:** en `/reportes` la representación elegida se **persiste por card** (clave `reports`, campo `categoryChartMode`; **ausente = "bar"**, ver `docs/data-model.md`).
+- [ ] El desglose de gastos por categoría se sirve mediante el array **`categories`** de `GET /movements/reports` (RF-REP-005); barra vs línea es solo render del front (sin cambio de backend).
 
 **Notas:**
-- El detalle visual del toggle (dos tabs) lo define `control-design` (`docs/design.md`).
+- El detalle visual del toggle y de cada representación lo define `control-design` (`docs/design.md`).
 
 ---
 
@@ -1839,7 +1838,7 @@ P7 se parte en dos requerimientos independientes (fuentes distintas): **P7a = FX
 | RN-016 | **Frecuencia y anulación de movimientos fijos (RF-MF-005, RF-MF-006).** Un movimiento fijo con mes de inicio `S` y frecuencia `F` aparece en el mes `M` si y solo si: `S <= M` **y** (`deletedFrom` es null **o** `deletedFrom > M`) **y** `monthDiff(S, M) % step(F) === 0`, donde el paso por frecuencia es `MONTHLY=1`, `BIMONTHLY=2`, `QUARTERLY=3`, `BIANNUAL=6`, `ANNUAL=12`. La frecuencia está **anclada al mes de inicio** (no al mes consultado). Una **anulación** `(fijo, mes)` no cambia si el fijo aparece o no según esta regla: un fijo anulado para un mes **se sigue listando** en `GET /movements` con la marca de anulado, pero su monto **no suma** a los totales del mes ni a la serie anual de los reportes. La anulación es **reversible** (toggle) y solo tiene sentido sobre meses donde el fijo efectivamente aparece según `F`. El cálculo sigue siendo on-the-fly (RN-006): no se generan filas por instancia mensual. |
 | RN-017 | **Fórmula y redondeo del movimiento calculado (RF-MCALC-002).** El monto de un movimiento calculado se deriva del monto del fijo de origen **del mes en cuestión** aplicando **una** operación: un operador de `{ +, −, ×, ÷, % }` y un **operando** numérico común. El cálculo por operador es: `+` → `origen + operando`; `−` → `origen − operando`; `×` → `origen × operando`; `÷` → `origen ÷ operando`; `%` → `origen × operando ÷ 100`. El **operando 0 no se acepta** en `÷` ni en `%` (división por cero); el resto acepta cualquier operando numérico. El resultado se **redondea a centavos enteros** (`round`, mantiene RN-002): **no** se persiste ni propaga precisión sub-centavo. La presentación siempre muestra 2 decimales. El signo final lo aplica RN-018, no la fórmula. El cálculo es **on-the-fly por mes** (RN-006): el monto **no se persiste**, se deriva al vuelo del origen en cada lectura, así que sigue automáticamente cualquier cambio del origen (RF-MCALC-004). |
 | RN-018 | **Signo, monto y tipo derivado del movimiento calculado — excepción a RN-001 (RF-MCALC-003).** El movimiento calculado tiene un **switch de signo** que multiplica el resultado de la fórmula por `+1` o `−1`. Por eso su `amountCents` **puede ser negativo o cero**, a diferencia de todo otro movimiento (RN-001, monto > 0). Esta excepción aplica **únicamente** a movimientos calculados; únicos, fijos "normales" y cuotas siguen exigiendo monto > 0. El `type` (`EXPENSE`/`INCOME`) **no se elige**: se **deriva del signo del monto final** —`final < 0` → `EXPENSE`; `final > 0` → `INCOME`; `final == 0` → `EXPENSE` por convención de borde (no afecta totales, RN-019)—. Así signo y tipo son siempre consistentes (positivo = ingreso, negativo = gasto). |
-| RN-019 | **Imputación a totales y reportes por el tipo derivado (RF-MCALC-003).** Cada movimiento suma su **magnitud** (`\|amountCents\|`) al bucket que le corresponde **según su `type`**: un `INCOME` suma a `incomeCents`; un `EXPENSE`, a `expenseCents`. Para movimientos normales el `type` es fijo y `amountCents > 0`. Para un **calculado**, como el `type` se deriva del signo del monto (RN-018), la imputación queda siempre consistente: un calculado de monto `−2000` es `EXPENSE` (tipo derivado) y suma **2000** a `expenseCents`; uno de `+2000` es `INCOME` y suma **2000** a `incomeCents`; un monto 0 no aporta a ningún bucket. No hay restas a un bucket ni reasignación: signo y tipo nunca se contradicen. El balance del mes (`incomeCents − expenseCents`, RF-VM-002 / RF-DASH-002) y la serie anual de reportes (RF-REP-001, ambas formas) se calculan con esta suma de magnitudes, sin lógica especial. En la Forma 2 de reportes (gastos apilados por categoría) la banda de la categoría de un calculado `EXPENSE` suma su magnitud, preservando la invariante "suma de bandas del mes = `expenseCents` del mes" (`docs/data-model.md`, §Contrato de serie de reportes). |
+| RN-019 | **Imputación a totales y reportes por el tipo derivado (RF-MCALC-003).** Cada movimiento suma su **magnitud** (`\|amountCents\|`) al bucket que le corresponde **según su `type`**: un `INCOME` suma a `incomeCents`; un `EXPENSE`, a `expenseCents`. Para movimientos normales el `type` es fijo y `amountCents > 0`. Para un **calculado**, como el `type` se deriva del signo del monto (RN-018), la imputación queda siempre consistente: un calculado de monto `−2000` es `EXPENSE` (tipo derivado) y suma **2000** a `expenseCents`; uno de `+2000` es `INCOME` y suma **2000** a `incomeCents`; un monto 0 no aporta a ningún bucket. No hay restas a un bucket ni reasignación: signo y tipo nunca se contradicen. El balance del mes (`incomeCents − expenseCents`, RF-VM-002 / RF-DASH-002) y la serie anual de reportes (RF-REP-001, ambos tipos) se calculan con esta suma de magnitudes, sin lógica especial. En `by-category` (gastos apilados por categoría) la porción de la categoría de un calculado `EXPENSE` suma su magnitud, preservando la invariante "suma de porciones del mes = `expenseCents` del mes" (`docs/data-model.md`, §Contrato de serie de reportes). |
 
 ---
 

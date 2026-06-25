@@ -43,8 +43,6 @@ export function DashboardClient() {
   // Estado efímero del widget de reporte (no se persiste — RF-DASH-001)
   const [reportYear, setReportYear] = useState(currentYear);
   const [reportCategoryIds, setReportCategoryIds] = useState<string[] | null>(null);
-  // Toggle Total / Por categoría — efímero (al recargar vuelve a "Total")
-  const [reportCategoryBreakdown, setReportCategoryBreakdown] = useState(false);
   // Series ocultas en vista "Total" — efímero (al recargar vuelven ambas visibles)
   const [reportHiddenSeries, setReportHiddenSeries] = useState<Array<"income" | "expense">>([]);
 
@@ -261,12 +259,10 @@ export function DashboardClient() {
               type="income-expense"
               year={reportYear}
               categoryIds={reportCategoryIds}
-              categoryBreakdown={reportCategoryBreakdown}
               hiddenSeries={reportHiddenSeries}
               chartHeight={280}
               onYearChange={setReportYear}
               onCategoryIdsChange={setReportCategoryIds}
-              onCategoryBreakdownChange={setReportCategoryBreakdown}
               onHiddenSeriesChange={setReportHiddenSeries}
               removable={false}
             />

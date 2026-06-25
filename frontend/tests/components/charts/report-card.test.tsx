@@ -2,24 +2,26 @@
  * Tests de ReportCard (Fase 1.1.5 — widget de reporte autónomo).
  *
  * Verifica:
- * - Cabecera: título editable (sin eyebrow "Reporte"), tabs "Total" / "Por categoría"
+ * - Cabecera: título editable (sin eyebrow "Reporte"), income-expense Total-only (sin tablist),
+ *   by-category con tabs Barra/Línea
  * - Control de año embebido (stepper): ‹ / › con límites
  * - Botón quitar (solo si removable=true) + confirmación
  * - Estado de carga (skeleton)
  * - Estado de error + botón Reintentar
  * - Estado vacío (año sin movimientos)
  * - Leyenda según tipo
- * - LegendAllChip (chip-comando icónico) en leyendas de categoría (Forma 1 Vista B + Forma 2):
+ * - LegendAllChip (chip-comando icónico) en leyenda de by-category:
  *   - presencia, label/aria dinámico, emisión de callbacks
  *   - está en el CARRIL FIJO (fuera del role="group" y fuera de la región scrolleable)
  *   - orden DOM: group → chip (group precede al chip en el DOM)
- * - AUSENCIA del chip en la leyenda de series (Forma 1 Total)
- * - Región scrolleable con max-h-[84px] en leyendas de categorías
+ * - AUSENCIA del chip en la leyenda de series (income-expense Total-only)
+ * - Región scrolleable con max-h-[84px] en leyenda de by-category
  * - data-overflow: lógica de medición de scrollHeight > clientHeight
- * - La leyenda de series (Forma 1 Total) NO usa región scrolleable ni carril fijo
+ * - La leyenda de series (income-expense Total-only) NO usa región scrolleable ni carril fijo
+ * - Toggle Barra/Línea en by-category (categoryChartMode + onCategoryChartModeChange)
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -167,29 +169,25 @@ describe("ReportCard — cabecera", () => {
     mockUseReports.mockReturnValue(makeSuccessReturn());
   });
 
-  it("income-expense muestra las tabs 'Total' y 'Por categoría' (sin eyebrow 'Reporte')", () => {
+  it("income-expense (Total-only) muestra solo el título editable sin tablist de vista", () => {
     renderCard({ type: "income-expense" });
-    // Spec P4 actualizado: la identidad es solo el título editable — sin eyebrow.
-    expect(screen.getByRole("tab", { name: "Total" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Por categoría" })).toBeInTheDocument();
-    // El eyebrow "Reporte" ya NO se renderiza. Solo aparece el placeholder del título.
-    // Con titlePlaceholder default "Reporte", el placeholder se muestra en --faint.
+    // Spec actualizado: income-expense es Total-only, sin tabs "Total"/"Por categoría".
+    // Solo el placeholder del título editable (default "Reporte").
     const reporteNodes = screen.getAllByText("Reporte");
-    // El único nodo "Reporte" es el placeholder del título (sin eyebrow adicional).
     expect(reporteNodes).toHaveLength(1);
-    // El tablist está en la línea 2 (debajo de la identidad).
-    expect(screen.getByRole("tablist", { name: /vista del reporte/i })).toBeInTheDocument();
+    // income-expense NO tiene tablist de vista (Total-only).
+    expect(screen.queryByRole("tablist", { name: /vista del reporte/i })).not.toBeInTheDocument();
   });
 
-  it("by-category muestra solo el título editable en la cabecera (sin eyebrow 'Reporte')", () => {
+  it("by-category muestra el tablist 'Representación del reporte' con tabs Barra/Línea", () => {
     renderCard({ type: "by-category" });
-    // Spec P4 actualizado: la identidad es solo el título editable — sin eyebrow.
-    // Sin título propio ni titlePlaceholder explícito, el placeholder default es "Reporte".
+    // by-category tiene el tablist de Barra/Línea.
+    expect(screen.getByRole("tablist", { name: /representación del reporte/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Barra" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Línea" })).toBeInTheDocument();
+    // El placeholder del título (default "Reporte") aparece una sola vez.
     const reporteNodes = screen.getAllByText("Reporte");
-    // Solo el placeholder del título (un único nodo), no un eyebrow adicional.
     expect(reporteNodes).toHaveLength(1);
-    // La card by-category NO tiene tablist de vista.
-    expect(screen.queryByRole("tablist", { name: /vista del reporte/i })).not.toBeInTheDocument();
   });
 
   it("muestra el stepper de año", () => {
@@ -199,17 +197,15 @@ describe("ReportCard — cabecera", () => {
     expect(screen.getByRole("button", { name: /año siguiente/i })).toBeInTheDocument();
   });
 
-  it("la leyenda-filtro es un group de toggle buttons (no hay botón 'Filtrar categorías' aparte)", () => {
-    // Ola 2: el FilterButton y CategoryFilterPopover fueron eliminados de la card.
-    // La leyenda interactiva (ChartLegend) ES el filtro.
-    // En la vista "Total" de income-expense, la leyenda es un role="group" aria-label="Filtrar series"
+  it("la leyenda-filtro de income-expense es un group de toggle buttons 'Filtrar series'", () => {
+    // income-expense Total-only: la leyenda es un role="group" aria-label="Filtrar series"
     // con un button aria-pressed por cada serie (Ingresos / Gastos).
     renderCard({ type: "income-expense" });
 
     // No debe existir un botón suelto "Filtrar categorías"
     expect(screen.queryByRole("button", { name: /^filtrar categorías$/i })).not.toBeInTheDocument();
 
-    // En cambio, la leyenda de la vista Total expone un grupo "Filtrar series"
+    // En cambio, la leyenda expone un grupo "Filtrar series"
     expect(screen.getByRole("group", { name: /filtrar series/i })).toBeInTheDocument();
 
     // Y los ítems de la leyenda son botones con aria-pressed
@@ -362,13 +358,13 @@ describe("ReportCard — leyenda", () => {
     mockUseReports.mockReturnValue(makeSuccessReturn());
   });
 
-  it("Forma 1 (income-expense) muestra leyenda con Ingresos y Gastos", () => {
+  it("income-expense (Total-only) muestra leyenda con Ingresos y Gastos", () => {
     renderCard({ type: "income-expense" });
     expect(screen.getByText("Ingresos")).toBeInTheDocument();
     expect(screen.getByText("Gastos")).toBeInTheDocument();
   });
 
-  it("Forma 2 (by-category) muestra leyenda con nombres de categorías", () => {
+  it("by-category muestra leyenda con nombres de categorías", () => {
     renderCard({ type: "by-category" });
     expect(screen.getByText("Alimentación")).toBeInTheDocument();
     expect(screen.getByText("Transporte")).toBeInTheDocument();
@@ -377,46 +373,33 @@ describe("ReportCard — leyenda", () => {
 
 // ─── Tests: estructura scrolleable de leyendas de categorías ─────────────────
 
-describe("ReportCard — región scrolleable en leyendas de categorías", () => {
+describe("ReportCard — región scrolleable en leyenda de by-category", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseReports.mockReturnValue(makeSuccessReturn());
   });
 
-  it("Forma 2: existe una región scrolleable (.legend-scroll-region) con los chips de categoría", () => {
+  it("by-category: existe una región scrolleable (.legend-scroll-region) con los chips de categoría", () => {
     const { container } = renderCard({ type: "by-category" });
     const scrollRegion = container.querySelector(".legend-scroll-region");
     expect(scrollRegion).toBeTruthy();
   });
 
-  it("Forma 2: el region tiene data-overflow atributo", () => {
+  it("by-category: el region tiene data-overflow atributo", () => {
     const { container } = renderCard({ type: "by-category" });
     const scrollRegion = container.querySelector(".legend-scroll-region");
     expect(scrollRegion).toHaveAttribute("data-overflow");
   });
 
-  it("Forma 2: el role='group' de chips está DENTRO de la región scrolleable", () => {
+  it("by-category: el role='group' de chips está DENTRO de la región scrolleable", () => {
     const { container } = renderCard({ type: "by-category" });
     const scrollRegion = container.querySelector(".legend-scroll-region");
     const group = scrollRegion?.querySelector('[role="group"][aria-label="Filtrar categorías"]');
     expect(group).toBeTruthy();
   });
 
-  it("Forma 1 Vista B: existe una región scrolleable (.legend-scroll-region)", () => {
-    const { container } = renderCard({ type: "income-expense", categoryBreakdown: true });
-    const scrollRegion = container.querySelector(".legend-scroll-region");
-    expect(scrollRegion).toBeTruthy();
-  });
-
-  it("Forma 1 Vista B: el role='group' de chips está DENTRO de la región scrolleable", () => {
-    const { container } = renderCard({ type: "income-expense", categoryBreakdown: true });
-    const scrollRegion = container.querySelector(".legend-scroll-region");
-    const group = scrollRegion?.querySelector('[role="group"][aria-label="Filtrar categorías"]');
-    expect(group).toBeTruthy();
-  });
-
-  it("Forma 1 Total (2 series): NO existe región scrolleable", () => {
-    const { container } = renderCard({ type: "income-expense", categoryBreakdown: false });
+  it("income-expense Total-only: NO existe región scrolleable", () => {
+    const { container } = renderCard({ type: "income-expense" });
     const scrollRegion = container.querySelector(".legend-scroll-region");
     expect(scrollRegion).toBeNull();
   });
@@ -457,80 +440,52 @@ describe("ReportCard — región scrolleable en leyendas de categorías", () => 
 
 // ─── Tests: LegendAllChip — chip-comando "Todas / Ninguna" ───────────────────
 
-describe("ReportCard — LegendAllChip en leyendas de categoría", () => {
+describe("ReportCard — LegendAllChip en leyenda de by-category", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseReports.mockReturnValue(makeSuccessReturn());
   });
 
-  // ── Forma 2 (by-category) ─────────────────────────────────────────────────
+  // ── by-category ───────────────────────────────────────────────────────────
 
-  it("Forma 2: chip muestra aria-label 'Ocultar...' y rótulo 'Ninguna' cuando todas activas", () => {
+  it("by-category: chip muestra aria-label 'Ocultar...' y rótulo 'Ninguna' cuando todas activas", () => {
     renderCard({ type: "by-category" });
     // hiddenCategoryIds vacío → todas activas → label "Ninguna"
     expect(screen.getByRole("button", { name: "Ocultar todas las categorías" })).toBeInTheDocument();
     expect(screen.getByText("Ninguna")).toBeInTheDocument();
   });
 
-  it("Forma 2: chip muestra aria-label 'Mostrar...' y rótulo 'Todas' cuando hay alguna apagada", () => {
+  it("by-category: chip muestra aria-label 'Mostrar...' y rótulo 'Todas' cuando hay alguna apagada", () => {
     // cat-1 oculta → hiddenCategoryIds = ["cat-1"]
     renderCard({ type: "by-category", categoryIds: ["cat-2"] });
     expect(screen.getByRole("button", { name: "Mostrar todas las categorías" })).toBeInTheDocument();
     expect(screen.getByText("Todas")).toBeInTheDocument();
   });
 
-  it("Forma 2: chip muestra 'Todas' cuando ninguna categoría está activa (todas apagadas)", () => {
+  it("by-category: chip muestra 'Todas' cuando ninguna categoría está activa (todas apagadas)", () => {
     renderCard({ type: "by-category", categoryIds: [] });
     expect(screen.getByRole("button", { name: "Mostrar todas las categorías" })).toBeInTheDocument();
     expect(screen.getByText("Todas")).toBeInTheDocument();
   });
 
-  it("Forma 2: clic en chip (Ninguna) llama onCategoryIdsChange con []", () => {
+  it("by-category: clic en chip (Ninguna) llama onCategoryIdsChange con []", () => {
     const onCategoryIdsChange = vi.fn();
     renderCard({ type: "by-category", onCategoryIdsChange });
     fireEvent.click(screen.getByRole("button", { name: "Ocultar todas las categorías" }));
     expect(onCategoryIdsChange).toHaveBeenCalledWith([]);
   });
 
-  it("Forma 2: clic en chip (Todas) llama onCategoryIdsChange con null", () => {
+  it("by-category: clic en chip (Todas) llama onCategoryIdsChange con null", () => {
     const onCategoryIdsChange = vi.fn();
     renderCard({ type: "by-category", categoryIds: ["cat-2"], onCategoryIdsChange });
     fireEvent.click(screen.getByRole("button", { name: "Mostrar todas las categorías" }));
     expect(onCategoryIdsChange).toHaveBeenCalledWith(null);
   });
 
-  // ── Forma 1 Vista B (income-expense + categoryBreakdown) ──────────────────
+  // ── income-expense Total-only — SIN chip ──────────────────────────────────
 
-  it("Forma 1 Vista B: chip muestra 'Ninguna' cuando todas están activas", () => {
-    renderCard({ type: "income-expense", categoryBreakdown: true });
-    expect(screen.getByRole("button", { name: "Ocultar todas las categorías" })).toBeInTheDocument();
-    expect(screen.getByText("Ninguna")).toBeInTheDocument();
-  });
-
-  it("Forma 1 Vista B: chip muestra 'Todas' cuando hay alguna apagada", () => {
-    renderCard({ type: "income-expense", categoryBreakdown: true, categoryIds: ["cat-2"] });
-    expect(screen.getByRole("button", { name: "Mostrar todas las categorías" })).toBeInTheDocument();
-    expect(screen.getByText("Todas")).toBeInTheDocument();
-  });
-
-  it("Forma 1 Vista B: clic en chip (Ninguna) llama onCategoryIdsChange con []", () => {
-    const onCategoryIdsChange = vi.fn();
-    renderCard({ type: "income-expense", categoryBreakdown: true, onCategoryIdsChange });
-    fireEvent.click(screen.getByRole("button", { name: "Ocultar todas las categorías" }));
-    expect(onCategoryIdsChange).toHaveBeenCalledWith([]);
-  });
-
-  it("Forma 1 Vista B: clic en chip (Todas) llama onCategoryIdsChange con null", () => {
-    const onCategoryIdsChange = vi.fn();
-    renderCard({ type: "income-expense", categoryBreakdown: true, categoryIds: ["cat-1"], onCategoryIdsChange });
-    fireEvent.click(screen.getByRole("button", { name: "Mostrar todas las categorías" }));
-    expect(onCategoryIdsChange).toHaveBeenCalledWith(null);
-  });
-
-  // ── Forma 1 Total (income-expense, !categoryBreakdown) — SIN chip ─────────
-
-  it("Forma 1 Total: NO muestra el chip (leyenda de 2 series, no categorías)", () => {
-    renderCard({ type: "income-expense", categoryBreakdown: false });
+  it("income-expense Total-only: NO muestra el chip (leyenda de 2 series, no categorías)", () => {
+    renderCard({ type: "income-expense" });
     // El chip no debe aparecer en la leyenda de series
     expect(screen.queryByRole("button", { name: "Ocultar todas las categorías" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mostrar todas las categorías" })).not.toBeInTheDocument();
@@ -543,7 +498,7 @@ describe("ReportCard — LegendAllChip en leyendas de categoría", () => {
   // Spec: LegendAllChip está en el carril fijo, fuera de la región scroll y
   // fuera del role="group". El order DOM es: [región-scroll(group)] → [carril-chip].
 
-  it("Forma 2: el chip aparece DESPUÉS del group 'Filtrar categorías' en el DOM", () => {
+  it("by-category: el chip aparece DESPUÉS del group 'Filtrar categorías' en el DOM", () => {
     const { container } = renderCard({ type: "by-category" });
     const chip = screen.getByRole("button", { name: "Ocultar todas las categorías" });
     const group = container.querySelector('[role="group"][aria-label="Filtrar categorías"]');
@@ -555,7 +510,7 @@ describe("ReportCard — LegendAllChip en leyendas de categoría", () => {
     }
   });
 
-  it("Forma 2: el chip NO está dentro del role='group'", () => {
+  it("by-category: el chip NO está dentro del role='group'", () => {
     const { container } = renderCard({ type: "by-category" });
     const chip = screen.getByRole("button", { name: "Ocultar todas las categorías" });
     const group = container.querySelector('[role="group"][aria-label="Filtrar categorías"]');
@@ -566,7 +521,7 @@ describe("ReportCard — LegendAllChip en leyendas de categoría", () => {
     }
   });
 
-  it("Forma 2: el chip NO está dentro de la región scrolleable", () => {
+  it("by-category: el chip NO está dentro de la región scrolleable", () => {
     const { container } = renderCard({ type: "by-category" });
     const chip = screen.getByRole("button", { name: "Ocultar todas las categorías" });
     const scrollRegion = container.querySelector(".legend-scroll-region");
@@ -577,8 +532,8 @@ describe("ReportCard — LegendAllChip en leyendas de categoría", () => {
     }
   });
 
-  it("Forma 1 Total: el group de series NO está dentro de una región scrolleable", () => {
-    const { container } = renderCard({ type: "income-expense", categoryBreakdown: false });
+  it("income-expense Total-only: el group de series NO está dentro de una región scrolleable", () => {
+    const { container } = renderCard({ type: "income-expense" });
     const scrollRegion = container.querySelector(".legend-scroll-region");
     // No debe existir en la leyenda de series
     expect(scrollRegion).toBeNull();
@@ -611,92 +566,87 @@ describe("ReportCard — quitar card", () => {
   });
 });
 
-// ─── Tests: Tabs de vista (Fase 1.2.2) ───────────────────────────────────────
+// ─── Tests: Toggle Barra/Línea en by-category ────────────────────────────────
 
-describe("ReportCard — tabs de vista (income-expense)", () => {
+describe("ReportCard — toggle Barra/Línea en by-category (categoryChartMode)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseReports.mockReturnValue(makeSuccessReturn());
   });
 
-  it("muestra el tablist 'Vista del reporte' solo en income-expense", () => {
+  it("muestra el tablist 'Representación del reporte' solo en by-category", () => {
+    renderCard({ type: "by-category" });
+    expect(screen.getByRole("tablist", { name: /representación del reporte/i })).toBeInTheDocument();
+  });
+
+  it("income-expense Total-only NO tiene tablist de vista", () => {
     renderCard({ type: "income-expense" });
-    expect(screen.getByRole("tablist", { name: /vista del reporte/i })).toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: /representación del reporte/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
   });
 
-  it("NO muestra el tablist en by-category", () => {
-    renderCard({ type: "by-category" });
-    expect(screen.queryByRole("tablist", { name: /vista del reporte/i })).not.toBeInTheDocument();
+  it("default (categoryChartMode='bar'): tab 'Barra' aria-selected=true", () => {
+    renderCard({ type: "by-category", categoryChartMode: "bar" });
+    const barraTab = screen.getByRole("tab", { name: "Barra" });
+    expect(barraTab).toHaveAttribute("aria-selected", "true");
+    const lineaTab = screen.getByRole("tab", { name: "Línea" });
+    expect(lineaTab).toHaveAttribute("aria-selected", "false");
   });
 
-  it("by-category muestra solo el título editable en la cabecera (sin eyebrow, sin tablist de vista)", () => {
-    renderCard({ type: "by-category" });
-    // Spec P4 actualizado: sin eyebrow. Solo el placeholder del título (default "Reporte").
-    const reporteNodes = screen.getAllByText("Reporte");
-    // Exactamente un nodo: el placeholder del título editable.
-    expect(reporteNodes).toHaveLength(1);
-    // by-category NO tiene tablist de vista (solo income-expense lo tiene).
-    expect(screen.queryByRole("tablist", { name: /vista del reporte/i })).not.toBeInTheDocument();
+  it("cuando categoryChartMode='line', tab 'Línea' aria-selected=true", () => {
+    renderCard({ type: "by-category", categoryChartMode: "line" });
+    const lineaTab = screen.getByRole("tab", { name: "Línea" });
+    expect(lineaTab).toHaveAttribute("aria-selected", "true");
+    const barraTab = screen.getByRole("tab", { name: "Barra" });
+    expect(barraTab).toHaveAttribute("aria-selected", "false");
   });
 
-  it("default (categoryBreakdown=false): tab 'Total' aria-selected=true", () => {
-    renderCard({ type: "income-expense", categoryBreakdown: false });
-    const totalTab = screen.getByRole("tab", { name: "Total" });
-    expect(totalTab).toHaveAttribute("aria-selected", "true");
-    const porCatTab = screen.getByRole("tab", { name: "Por categoría" });
-    expect(porCatTab).toHaveAttribute("aria-selected", "false");
-  });
-
-  it("cuando categoryBreakdown=true, tab 'Por categoría' aria-selected=true", () => {
-    renderCard({ type: "income-expense", categoryBreakdown: true });
-    const porCatTab = screen.getByRole("tab", { name: "Por categoría" });
-    expect(porCatTab).toHaveAttribute("aria-selected", "true");
-    const totalTab = screen.getByRole("tab", { name: "Total" });
-    expect(totalTab).toHaveAttribute("aria-selected", "false");
-  });
-
-  it("al hacer clic en tab 'Por categoría', llama onCategoryBreakdownChange(true)", () => {
+  it("al hacer clic en tab 'Línea', llama onCategoryChartModeChange('line')", () => {
     const onChange = vi.fn();
-    renderCard({ type: "income-expense", categoryBreakdown: false, onCategoryBreakdownChange: onChange });
-    fireEvent.click(screen.getByRole("tab", { name: "Por categoría" }));
-    expect(onChange).toHaveBeenCalledWith(true);
+    renderCard({ type: "by-category", categoryChartMode: "bar", onCategoryChartModeChange: onChange });
+    fireEvent.click(screen.getByRole("tab", { name: "Línea" }));
+    expect(onChange).toHaveBeenCalledWith("line");
   });
 
-  it("al hacer clic en tab 'Total', llama onCategoryBreakdownChange(false)", () => {
+  it("al hacer clic en tab 'Barra', llama onCategoryChartModeChange('bar')", () => {
     const onChange = vi.fn();
-    renderCard({ type: "income-expense", categoryBreakdown: true, onCategoryBreakdownChange: onChange });
-    fireEvent.click(screen.getByRole("tab", { name: "Total" }));
-    expect(onChange).toHaveBeenCalledWith(false);
+    renderCard({ type: "by-category", categoryChartMode: "line", onCategoryChartModeChange: onChange });
+    fireEvent.click(screen.getByRole("tab", { name: "Barra" }));
+    expect(onChange).toHaveBeenCalledWith("bar");
   });
 
-  it("en vista B, el gráfico renderiza (FormBChartInner)", () => {
-    renderCard({ type: "income-expense", categoryBreakdown: true });
+  it("el gráfico renderiza en modo Barra (by-category, categoryChartMode='bar')", () => {
+    renderCard({ type: "by-category", categoryChartMode: "bar" });
     expect(screen.getAllByTestId("recharts-chart").length).toBeGreaterThan(0);
   });
 
-  it("en vista B, la leyenda muestra nombres de categorías de GASTO", () => {
-    renderCard({ type: "income-expense", categoryBreakdown: true });
+  it("el gráfico renderiza en modo Línea (by-category, categoryChartMode='line')", () => {
+    renderCard({ type: "by-category", categoryChartMode: "line" });
+    expect(screen.getAllByTestId("recharts-chart").length).toBeGreaterThan(0);
+  });
+
+  it("en modo Barra, la leyenda muestra nombres de categorías de GASTO", () => {
+    renderCard({ type: "by-category", categoryChartMode: "bar" });
     expect(screen.getByText("Alimentación")).toBeInTheDocument();
     expect(screen.getByText("Transporte")).toBeInTheDocument();
   });
 
-  it("en vista B, NO hay rótulos de grupo 'Gastos'/'Ingresos' en la leyenda (es un grupo plano)", () => {
-    renderCard({ type: "income-expense", categoryBreakdown: true });
-    // La leyenda es un grupo plano sin rótulos de tipo
-    // "Ingresos" y "Gastos" ya NO aparecen en la leyenda de la vista B
+  it("en modo Barra, NO hay rótulos 'Gastos'/'Ingresos' en la leyenda (grupo plano de categorías)", () => {
+    renderCard({ type: "by-category", categoryChartMode: "bar" });
+    // La leyenda es un grupo plano de categorías sin rótulos de tipo
     expect(screen.queryByText("Ingresos")).not.toBeInTheDocument();
     expect(screen.queryByText("Gastos")).not.toBeInTheDocument();
   });
 
-  it("en vista A (default), leyenda muestra 'Ingresos' y 'Gastos' sin nombres de categoría", () => {
-    renderCard({ type: "income-expense", categoryBreakdown: false });
+  it("income-expense Total-only: leyenda muestra 'Ingresos' y 'Gastos' sin nombres de categoría", () => {
+    renderCard({ type: "income-expense" });
     expect(screen.getByText("Ingresos")).toBeInTheDocument();
     expect(screen.getByText("Gastos")).toBeInTheDocument();
     expect(screen.queryByText("Alimentación")).not.toBeInTheDocument();
     expect(screen.queryByText("Transporte")).not.toBeInTheDocument();
   });
 
-  it("tabs presentes e inertes durante carga (isLoading=true)", () => {
+  it("tabs presentes en by-category durante carga (isLoading=true)", () => {
     mockUseReports.mockReturnValue({
       ...makeSuccessReturn(),
       data: undefined,
@@ -704,7 +654,7 @@ describe("ReportCard — tabs de vista (income-expense)", () => {
       isPending: true,
       isSuccess: false,
     } as unknown as ReturnType<typeof useReports>);
-    renderCard({ type: "income-expense" });
-    expect(screen.getByRole("tablist", { name: /vista del reporte/i })).toBeInTheDocument();
+    renderCard({ type: "by-category" });
+    expect(screen.getByRole("tablist", { name: /representación del reporte/i })).toBeInTheDocument();
   });
 });

@@ -165,19 +165,28 @@ export interface ReportCardConfig {
    */
   categoryIds: string[] | null;
   /**
-   * Modo de visualización de la card income-expense.
-   * false (default) = vista "Total" (áreas superpuestas agregadas, vista A).
-   * true = vista "Por categoría" (stacks de áreas apiladas, vista B).
-   * Solo aplica cuando type === "income-expense". En by-category, ignorado.
+   * @deprecated Usado por `income-expense` para el modo "Por categoría" (pre-reagrupamiento).
+   * La normalización del blob lo migra:
+   *   - income-expense con categoryBreakdown=true → { type: "by-category", categoryChartMode: "line" }
+   *   - income-expense con categoryBreakdown=false/absent → queda income-expense sin este campo
+   * No debe usarse en código nuevo. Se preserva en el tipo para que la normalización lo lea.
    */
   categoryBreakdown?: boolean;
   /**
-   * Series ocultas en la vista "Total" de la card income-expense (vista A).
+   * Modo de visualización del gráfico de la card `by-category`.
+   * "bar" (default / ausente) = barras apiladas por categoría (Forma 2 histórica).
+   * "line" = stack de áreas apiladas por categoría (mismo dato, geometría continua).
+   * Solo aplica cuando type === "by-category". Ignorado en otros tipos.
+   * Ausente equivale a "bar" (back-compat: cards existentes mantienen comportamiento actual).
+   */
+  categoryChartMode?: "bar" | "line";
+  /**
+   * Series ocultas en la vista "Total" de la card income-expense.
    * Omitido / undefined = ambas visibles (default).
    * Permite ocultar una o ambas series; si están todas ocultas → canvas vacío
    * que reutiliza el empty "Sin movimientos en {año}.".
-   * Solo aplica a type === "income-expense" && categoryBreakdown === false.
-   * En by-category e income-expense "Por categoría" usa categoryIds (filtro de categorías).
+   * Solo aplica a type === "income-expense".
+   * En by-category usa categoryIds (filtro de categorías); hiddenSeries no aplica.
    */
   hiddenSeries?: Array<"income" | "expense">;
   /**
