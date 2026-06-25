@@ -1,5 +1,6 @@
 /**
  * Tests de la pantalla /reportes (Fase 1.1.5, RF-REP-003/004).
+ * Ola 2, P1: modo orden de cards (reordenables con dnd-kit).
  *
  * Verifica:
  * - Estado vacío inicial: H1 "Reportes", eyebrow, recuadro "[+]" grande
@@ -7,6 +8,11 @@
  * - Al elegir un tipo se agrega una card y se llama a setPreferences
  * - Con cards: cards renderizadas + "[+]" compacto al final
  * - Quitar card llama a setPreferences con el array sin esa card
+ * - Modo orden: toggle "Ordenar reportes" / "Listo" (P1)
+ * - Modo orden: solo visible con 2+ cards (P1)
+ * - Modo orden: mini-ítems en lugar de cards completas (P1)
+ * - Modo orden: grips de arrastre visibles (P1)
+ * - Modo orden: "[+]" compacto atenuado (P1)
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -352,6 +358,165 @@ describe("ReportesPage — navegación de año de card", () => {
 
     const callArg = setPreferences.mock.calls[0]?.[0] as UserPreferences;
     expect(callArg.reports?.[0]?.year).toBe(2025);
+  });
+});
+
+// ─── Modo orden de cards (Ola 2, P1) ─────────────────────────────────────────
+
+describe("ReportesPage — modo orden (P1)", () => {
+  const twoCards: ReportCardConfig[] = [
+    { id: "card-1", type: "income-expense", year: 2026, categoryIds: null },
+    { id: "card-2", type: "by-category", year: 2026, categoryIds: null },
+  ];
+  const oneCard: ReportCardConfig[] = [
+    { id: "card-1", type: "income-expense", year: 2026, categoryIds: null },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    uuidCounter = 0;
+  });
+
+  it("NO muestra el toggle 'Ordenar reportes' en estado vacío", () => {
+    makePreferencesHook([]);
+    renderPage();
+    expect(
+      screen.queryByRole("button", { name: /ordenar reportes/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("NO muestra el toggle 'Ordenar reportes' con una sola card", () => {
+    makePreferencesHook(oneCard);
+    renderPage();
+    expect(
+      screen.queryByRole("button", { name: /ordenar reportes/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("SÍ muestra el toggle 'Ordenar reportes' con 2+ cards", () => {
+    makePreferencesHook(twoCards);
+    renderPage();
+    expect(
+      screen.getByRole("button", { name: /ordenar reportes/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("al clicar 'Ordenar reportes', el botón cambia a 'Listo'", () => {
+    makePreferencesHook(twoCards);
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /ordenar reportes/i }));
+
+    expect(screen.getByRole("button", { name: /listo/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /ordenar reportes/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("al clicar 'Listo', el botón vuelve a 'Ordenar reportes'", () => {
+    makePreferencesHook(twoCards);
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /ordenar reportes/i }));
+    fireEvent.click(screen.getByRole("button", { name: /listo/i }));
+
+    expect(
+      screen.getByRole("button", { name: /ordenar reportes/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /listo/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("en modo orden aparecen los grips 'Arrastrar reporte'", () => {
+    makePreferencesHook(twoCards);
+    renderPage();
+
+    // Fuera del modo orden no hay grips
+    expect(screen.queryByLabelText("Arrastrar reporte")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /ordenar reportes/i }));
+
+    // En modo orden aparece uno por card
+    const grips = screen.getAllByLabelText("Arrastrar reporte");
+    expect(grips).toHaveLength(2);
+  });
+
+  it("en modo orden los mini-ítems muestran las etiquetas de tipo", () => {
+    makePreferencesHook(twoCards);
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /ordenar reportes/i }));
+
+    // Etiquetas de tipo del mini-ítem (sentence-case)
+    expect(screen.getByText("Ingresos y gastos")).toBeInTheDocument();
+    expect(screen.getByText("Por categoría")).toBeInTheDocument();
+  });
+
+  it("en modo orden el '[+]' compacto tiene opacity-45 (atenuado)", () => {
+    makePreferencesHook(twoCards);
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /ordenar reportes/i }));
+
+    // El wrapper del [+] compacto debe tener la clase de atenuación
+    const addBtn = screen.getByRole("button", { name: /agregar reporte/i });
+    const wrapper = addBtn.parentElement;
+    expect(wrapper?.className).toContain("opacity-45");
+    expect(wrapper?.className).toContain("pointer-events-none");
+  });
+
+  it("en modo orden NO se muestran los controles internos de las cards (tablist de vista)", () => {
+    makePreferencesHook(twoCards);
+    renderPage();
+
+    // Fuera del modo orden, la card income-expense tiene el tablist
+    expect(
+      screen.queryByRole("tablist", { name: /vista del reporte/i }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /ordenar reportes/i }));
+
+    // En modo orden las cards están colapsadas al mini — sin tablist
+    expect(
+      screen.queryByRole("tablist", { name: /vista del reporte/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("al salir del modo orden los controles internos de las cards vuelven", () => {
+    makePreferencesHook(twoCards);
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /ordenar reportes/i }));
+    fireEvent.click(screen.getByRole("button", { name: /listo/i }));
+
+    expect(
+      screen.getByRole("tablist", { name: /vista del reporte/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("en modo orden los títulos/placeholders se muestran en los mini-ítems", () => {
+    makePreferencesHook(twoCards);
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /ordenar reportes/i }));
+
+    // Los placeholders "Reporte 1" y "Reporte 2" deben aparecer en los mini-ítems
+    expect(screen.getByText("Reporte 1")).toBeInTheDocument();
+    expect(screen.getByText("Reporte 2")).toBeInTheDocument();
+  });
+
+  it("con título propio, el mini-ítem muestra el título del usuario", () => {
+    const cardsWithTitle: ReportCardConfig[] = [
+      { id: "card-1", type: "income-expense", year: 2026, categoryIds: null, title: "Mi reporte" },
+      { id: "card-2", type: "by-category", year: 2026, categoryIds: null },
+    ];
+    makePreferencesHook(cardsWithTitle);
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /ordenar reportes/i }));
+
+    expect(screen.getByText("Mi reporte")).toBeInTheDocument();
   });
 });
 

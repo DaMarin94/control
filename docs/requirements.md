@@ -1500,6 +1500,28 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 
 ---
 
+#### RF-REP-009 — Reordenar las cards de reporte
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Las cards de `/reportes` son reordenables entre sí mediante drag & drop, con el **mismo mecanismo que el "modo orden" de las secciones de `/mes`** (RF-VM-005). El orden de las cards es el orden del array de la clave `reports` de preferencias (RF-REP-004): se persiste por usuario y se aplica en vivo. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario está en `/reportes` con **2 o más** cards de reporte. |
+
+**Flujo principal:**
+1. El usuario activa el **"modo orden"** desde el header ("Ordenar reportes"); en ese modo cada card colapsa a una representación **mini** y se arrastra para reordenarla entre las demás.
+2. El usuario sale del modo orden ("Listo"). El nuevo orden ya quedó aplicado en vivo.
+
+**Criterios de aceptación:**
+- [ ] El usuario puede reordenar **las cards entre sí** mediante drag, dentro de un **modo orden** explícito que se activa/desactiva con un botón del header ("Ordenar reportes" / "Listo").
+- [ ] El botón "Ordenar reportes" se muestra **solo cuando hay 2 o más cards** (con 0 o 1 no hay nada que reordenar).
+- [ ] En modo orden, cada card colapsa a su representación **mini** y se arrastra como una unidad; los controles internos de cada card (navegación de año, moneda, quitar, título editable) y el recuadro **"[+]"** quedan **deshabilitados**.
+- [ ] El **orden de las cards** es el orden del array `reports`; se **persiste por usuario** (clave `reports`, RF-REP-004; shape en `docs/data-model.md`) y se **aplica en vivo**. No hay acción de "cancelar" (espejo de RF-VM-005).
+- [ ] Al reordenar, el placeholder **"Reporte N"** de las cards sin título se recalcula en vivo según la nueva posición (RF-REP-008).
+
+---
+
 ### 3.10 Módulo: Multi-moneda
 
 > La moneda es **explícita**: cada movimiento lleva su **moneda + cotización**; los totales se expresan en una **única moneda default** del usuario, convertida en vivo. La cotización del movimiento se **pre-carga desde una tabla de cotizaciones de referencia** (interna, no editable por UI). Modelo de datos en `data-model.md`, §Moneda explícita, set curado, §Contrato de configuración del usuario (settings) y §Tabla de cotizaciones de referencia.

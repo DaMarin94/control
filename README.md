@@ -50,6 +50,10 @@ pnpm dev
 
 > En Windows, los scripts del backend apuntan directo al binario en `node_modules` en lugar de los shims de `.bin/` (los shims son scripts bash que Node no ejecuta en Windows). Es la convención del proyecto; ver `docs/technical.md`.
 
+## TODO
+P1_ Actualmente el reporte de gastos - ingresos y categorias ambos en lineas horzontales son un tipo de un mismo reporte y liuego tenemos el de categorias pero en barras tambien, bueno quisiera que ahora los tipos de reportes unidos en un mismo reporte sean los de categorias, y el cambio sea entre modos barra o linea, se entiende? tiene mas sentido cambiar ese agrupamiento asi. cambiemos el nombre de los reportes adenmas por algo mejor descriptivo
+P2_ 
+
 ## Tests
 
 Cada app guarda sus tests en una carpeta `tests/` separada de `src/` (`src/` solo contiene código; ver `docs/technical.md`).

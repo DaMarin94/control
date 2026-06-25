@@ -3,26 +3,47 @@
 /**
  * Pantalla configurable de Reportes — /reportes (RF-REP-003/004, Pantalla 7).
  * Fase 1.1.5: renombre de /anual.
+ * Ola 2, P1: modo orden de cards (reordenables con dnd-kit).
  *
  * La pantalla es una grilla de cards de reporte configurables:
  *   - El usuario agrega cards con el recuadro "[+]".
  *   - Cada card es un ReportCard autónomo con su propio año y filtro de categorías.
  *   - Cada card se puede quitar con el botón X + confirmación inline.
+ *   - El orden de las cards es configurable por drag (modo orden explícito).
  *   - El estado se persiste en la clave `reports` del blob de preferencias (RF-REP-004).
  *
  * Spec visual: docs/design.md, secciones C (recuadro "[+]"), D (estado vacío),
- *              E (grilla con cards), F (dashboard).
+ *              E (grilla con cards), F (dashboard),
+ *              "Reportes reordenables — modo orden de cards (Ola 2, P1)".
  *
  * prefers-reduced-motion: las animaciones de las cards usan animate-screen-fade
  * (fade + translateY) que ya respeta reduced-motion a través del keyframe del DS.
+ * El colapso a mini en modo orden es instantáneo (sin transición de altura).
  */
 
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Plus, AreaChart, BarChart3 } from "lucide-react";
+import { Plus, AreaChart, BarChart3, ArrowUpDown, Check } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  MeasuringStrategy,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
+import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
 import { usePreferences } from "@/hooks/use-preferences";
 import { useSettings } from "@/hooks/use-settings";
-import { ReportCard } from "@/components/charts/report-card";
+import { SortableReportCard } from "@/components/charts/sortable-report-card";
 import type { ReportCardConfig, ReportCardType } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
 import { cn } from "@/lib/utils";
@@ -268,6 +289,53 @@ function ReportesPageContent() {
   const addButtonRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // ── Modo orden (Ola 2, P1) ─────────────────────────────────────────────────
+  const [isOrderMode, setIsOrderMode] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  function handleEnterOrderMode() {
+    // Cerrar el menú de tipo si estaba abierto
+    setMenuOpen(false);
+    setIsOrderMode(true);
+  }
+
+  function handleExitOrderMode() {
+    setIsOrderMode(false);
+    setActiveId(null);
+  }
+
+  // ── Configuración de sensores dnd-kit ────────────────────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  // ── Handlers drag dnd-kit ─────────────────────────────────────────────────
+  function handleDragStart(event: DragStartEvent) {
+    setActiveId(event.active.id as string);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = cards.findIndex((c) => c.id === active.id);
+    const newIndex = cards.findIndex((c) => c.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newCards = arrayMove(cards, oldIndex, newIndex);
+    // Persistir en background (merge manual con el resto de preferencias)
+    void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
+      logger.error("Error al persistir orden de cards", { error: err });
+    });
+  }
+
   // Normalizar las cards del blob de preferencias
   const rawReports = preferences?.reports;
   const cards: ReportCardConfig[] = Array.isArray(rawReports) ? rawReports : [];
@@ -372,7 +440,50 @@ function ReportesPageContent() {
             Reportes
           </h1>
         </div>
-        {/* La zona derecha del .phead queda vacía (no hay control de año compartido) */}
+
+        {/* Zona derecha del .phead: toggle "Ordenar reportes" / "Listo" */}
+        {/* Solo se muestra cuando hay 2 o más cards */}
+        {cards.length >= 2 && (
+          isOrderMode ? (
+            <button
+              type="button"
+              onClick={handleExitOrderMode}
+              className={[
+                // Primario índigo (señala modo activo)
+                "inline-flex items-center gap-1.5 px-3 py-2",
+                "text-[13px] font-semibold text-white",
+                "rounded-[var(--r-ctl)]",
+                "bg-accent hover:bg-accent-press",
+                "transition-colors duration-[140ms]",
+                "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+                "shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0_/_0.2)]",
+                "hover:shadow-[var(--shadow-md)]",
+              ].join(" ")}
+            >
+              <Check size={15} aria-hidden="true" />
+              Listo
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleEnterOrderMode}
+              aria-label="Ordenar reportes"
+              className={[
+                // Ghost del DS
+                "inline-flex items-center gap-1.5 px-3 py-2",
+                "text-[13px] font-semibold text-ink-2",
+                "rounded-[var(--r-ctl)]",
+                "bg-panel border border-line",
+                "hover:bg-panel-2 hover:text-ink",
+                "transition-colors duration-[140ms]",
+                "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+              ].join(" ")}
+            >
+              <ArrowUpDown size={15} aria-hidden="true" />
+              Ordenar reportes
+            </button>
+          )
+        )}
       </div>
 
       {/* ── Estado vacío: solo el "[+]" grande centrado ── */}
@@ -387,42 +498,58 @@ function ReportesPageContent() {
 
       {/* ── Con cards: columna de cards + "[+]" compacto al final ── */}
       {hasCards && (
-        <div className="flex flex-col gap-[var(--gap)]">
-          {cards.map((card, index) => (
-            <ReportCard
-              key={card.id}
-              type={card.type}
-              year={card.year}
-              categoryIds={card.categoryIds}
-              categoryBreakdown={card.categoryBreakdown ?? false}
-              hiddenSeries={card.hiddenSeries ?? []}
-              chartHeight={300}
-              onYearChange={(year) => handleYearChange(card.id, year)}
-              onCategoryIdsChange={(ids) => handleCategoryIdsChange(card.id, ids)}
-              onCategoryBreakdownChange={(v) => handleCategoryBreakdownChange(card.id, v)}
-              onHiddenSeriesChange={(hidden) => handleHiddenSeriesChange(card.id, hidden)}
-              removable={true}
-              onRemove={() => handleRemoveCard(card.id)}
-              currency={card.currency}
-              onCurrencyChange={(c) => handleCurrencyChange(card.id, c)}
-              title={card.title}
-              titlePlaceholder={`Reporte ${index + 1}`}
-              onTitleChange={(t) => handleTitleChange(card.id, t)}
-            />
-          ))}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+          measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={cards.map((c) => c.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="flex flex-col gap-[var(--gap)]">
+              {cards.map((card, index) => (
+                <SortableReportCard
+                  key={card.id}
+                  config={card}
+                  index={index + 1}
+                  isOrderMode={isOrderMode}
+                  isActive={activeId === card.id}
+                  onYearChange={(year) => handleYearChange(card.id, year)}
+                  onCategoryIdsChange={(ids) => handleCategoryIdsChange(card.id, ids)}
+                  onCategoryBreakdownChange={(v) => handleCategoryBreakdownChange(card.id, v)}
+                  onHiddenSeriesChange={(hidden) => handleHiddenSeriesChange(card.id, hidden)}
+                  onRemove={() => handleRemoveCard(card.id)}
+                  onCurrencyChange={(c) => handleCurrencyChange(card.id, c)}
+                  onTitleChange={(t) => handleTitleChange(card.id, t)}
+                />
+              ))}
 
-          {/* "[+]" compacto al final */}
-          <AddCardButton
-            variant="compact"
-            buttonRef={addButtonRef}
-            isMenuOpen={menuOpen}
-            onClick={() => setMenuOpen((o) => !o)}
-          />
-        </div>
+              {/* "[+]" compacto al final — atenuado y deshabilitado en modo orden */}
+              <div
+                className={cn(
+                  isOrderMode ? "opacity-45 pointer-events-none cursor-default" : "",
+                )}
+              >
+                <AddCardButton
+                  variant="compact"
+                  buttonRef={addButtonRef}
+                  isMenuOpen={menuOpen && !isOrderMode}
+                  onClick={() => {
+                    if (!isOrderMode) setMenuOpen((o) => !o);
+                  }}
+                />
+              </div>
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
 
-      {/* Popover-menú de tipo (portaled a body) */}
-      {menuOpen && (
+      {/* Popover-menú de tipo (portaled a body) — no en modo orden */}
+      {menuOpen && !isOrderMode && (
         <AddCardMenu
           anchorRef={addButtonRef}
           onSelect={handleAddCard}

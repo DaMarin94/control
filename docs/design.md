@@ -404,13 +404,64 @@ Unidad que `/reportes` apila y que el Dashboard monta una vez. Es la **tarjeta `
 - **Filtro de categorías embebido:** ver *Filtro de categorías* abajo.
 - **Quitar card (solo `/reportes`):** botón icon-only ghost `X` (16px), `--muted` → `--ink` sobre `--panel-2`, al final de la barra de controles, separado por un divisor `--hair` vertical. Abre una **confirmación inline** (popover `--panel`/`--line`/`--r-ctl`/`--shadow-lg`, "¿Quitar este reporte?", botón **danger** "Quitar" + ghost "Cancelar"). La card del Dashboard **no** es removible.
 
-**Grilla en `/reportes`:** una sola columna a 1120px, cards separadas por `--gap` (18px); el **"[+]"** (recuadro dashed, ver abajo) siempre al final. Sin reordenar cards en v1.1.
+**Grilla en `/reportes`:** una sola columna a 1120px, cards separadas por `--gap` (18px); el **"[+]"** (recuadro dashed, ver abajo) siempre al final. El orden de las cards es **reordenable por el usuario vía un modo orden explícito** — ver *Reportes reordenables — modo orden de cards (Ola 2, P1)* abajo.
 
 **Recuadro "[+]" para agregar card:** recuadro **placeholder dashed** (`--panel-2`, borde dashed `--line`, `--r-card`, sin sombra), ícono `Plus` en círculo `--panel-3`, label "Agregar reporte". Compacto cuando hay cards (~120px); en versión grande preside el **estado vacío inicial** (~280px alto, ~480px ancho, centrado, "Armá tu primer reporte"). Al activarlo, **popover-menú de 2 opciones** (Ingresos y gastos / Por categoría) ancla la elección de tipo; la card nace en el año en curso con todas las categorías.
 
 **Dashboard:** monta una card `income-expense` efímera con navegación de año activa, junto al resumen mensual (que es fijo en el mes en curso). La distinción la dan: bloques de forma distinta (resumen sin `.card` de gráfico vs. card de gráfico), distinto grano temporal (mes-rótulo fijo vs. año-stepper navegable) y el stepper scoped a la card.
 
 > Las **gráficas** que montan estas cards se definen en *Gráficos — Forma 1 y Forma 2* (abajo).
+
+### Reportes reordenables — modo orden de cards (Ola 2, P1)
+
+Las cards de `/reportes` se **reordenan** entre sí por drag, vía el **mismo lenguaje de "modo orden" que `/mes`** (ver *Acordeón — sección colapsable + reordenable* → "Modo orden"). Es el análogo visual de aquel modo, trasladado de cabeceras de acordeón a cards de reporte: un **modo explícito** (no handles permanentes), con **colapso transitorio** de las cards a una representación "mini" mientras dura, y **drag in-place sin overlay flotante**. **No inventa cromo nuevo:** reusa el botón ghost↔primario del header, el `GripVertical`, el feedback del ítem activo de `SortableSection` y el dashed transversal. El motor es **dnd-kit** con `restrictToVerticalAxis` + `restrictToParentElement` (igual que `/mes`).
+
+> **Espejo deliberado de `/mes`.** Donde `/mes` colapsa cada sección a su `.ghead`, `/reportes` colapsa cada card a un **mini-ítem** identificable por **título (P4) + tipo**. Todo lo demás (disparador, grip, drag in-place, feedback del activo, salida en vivo) es **idéntico al modo orden de `/mes`**: si una decisión vale para uno, vale para el otro.
+
+#### 1. Disparador — toggle "Ordenar reportes" / "Listo"
+
+- **Ubicación:** en la **zona derecha del `.phead`** de `/reportes`, hoy vacía (la izquierda lleva el eyebrow "Tu actividad" + chip de moneda default + H1 "Reportes"). El toggle es **el único habitante** de esa zona derecha. El header pasa a `flex items-end justify-between`: identidad izquierda ⟷ toggle derecha.
+- **Estilo — espejo exacto de `/mes`:**
+  - **Fuera de modo orden:** botón **ghost del DS** — `inline-flex items-center gap-1.5 px-3 py-2`, `text-[13px] font-semibold text-ink-2`, `rounded-[var(--r-ctl)]`, `bg-panel border border-line`, hover `bg-panel-2`+`text-ink`, transición 0.14s, focus ring `--accent-soft` 3px. Ícono `ArrowUpDown` **15px** a la izquierda del label. Label exacto: **"Ordenar reportes"** (no "Ordenar secciones": acá son reportes). `aria-label="Ordenar reportes"`.
+  - **En modo orden:** se transforma en el botón **primario índigo** "Listo" — `bg-accent` hover `bg-accent-press`, `text-white`, mismo `px-3 py-2` y `rounded-[var(--r-ctl)]`, sombra `--shadow-sm` + inset highlight, hover `--shadow-md`, focus ring `--accent-soft`. Ícono `Check` **15px** + label **"Listo"**. El botón "Listo" (primario índigo) es la **única señal** de "modo orden activo" — sin banner, sin borde de página (idéntico a `/mes`).
+- **Visibilidad del toggle:** solo cuando **hay cards** (`cards.length > 0`). En el **estado vacío** (solo el "[+]" grande) no se muestra: no hay nada que ordenar. Con **una sola card** el criterio queda a definición funcional del analista; visualmente el toggle no estorba si se muestra (no hay reordenamiento posible, pero el modo es inocuo). **Frená y consultá al analista si una card debe ocultar el toggle** — no es decisión de diseño.
+
+#### 2. Representación "mini" de la card en modo orden
+
+Al **entrar** en modo orden, **cada card colapsa a un mini-ítem** (análogo al colapso transitorio de las cabeceras en `/mes`). El mini-ítem es la **fila de identidad arrastrable**: ni gráfico, ni leyenda, ni controles internos. Es **puramente visual y transitorio**: no se persiste, no toca ninguna preferencia; al salir ("Listo") las cards vuelven a su forma plena. La animación de colapso/expansión usa la transición del DS (0.22s ease-out; instantánea con `prefers-reduced-motion`).
+
+- **Caja del mini-ítem:** mantiene la **superficie de card** (`bg-panel`, `border border-line`, `--r-card` 14px) para que la lista de minis se lea como "las mismas cards, compactadas" y no como otro componente. Padding interno **vertical reducido**: `px-[var(--card-pad)] py-[14px]` (el `--card-pad` 22px horizontal se mantiene para alinear con la card plena; el alto baja a una fila). **Alto objetivo ~56px** (una fila cómoda: grip + ícono + título). Separación entre minis: el mismo `--gap` 18px de la columna.
+- **Layout de la fila (de izquierda a derecha):** `[grip] · [ícono de tipo] · [título] · ——— · [etiqueta de tipo]`
+  - **Grip** (`GripVertical`, ver §4) — primer elemento, punto de arrastre.
+  - **Ícono de tipo** — `AreaChart` (16px) para `income-expense`, `BarChart3` (16px) para `by-category`, `--muted`, `aria-hidden`. Es el **mismo glifo** que el popover-menú de tipo usa al crear la card (`AddCardMenu`), así el ícono ya está asociado al tipo en el modelo mental del usuario. `gap-3` entre grip→ícono→título (mismo ritmo que la `.ghead` de `/mes`).
+  - **Título** — el **título P4 de la card** (16px/600 Space Grotesk `--ink` si es propio; placeholder "Reporte N" en `--faint` si no hay título), `truncate` contra el ancho disponible (no se edita en modo orden — ver §3; es texto de display). Mismo `title=` nativo para el valor completo. La numeración "Reporte N" sigue el 1-based **vigente** según el orden actual (mientras se arrastra, N puede cambiar al reordenar — es display, consistente con P4).
+  - **Etiqueta de texto del tipo** — a la **derecha**, tras un divisor: **"Ingresos y gastos"** (para `income-expense`) / **"Por categoría"** (para `by-category`), en **12px/600 `--muted`, uppercase NO** (texto sentence-case, no rótulo de sección). Refuerza la identificación por tipo en palabras, no solo por ícono. Precedida por una **línea divisoria** `flex-1 h-px bg-hair` que empuja la etiqueta al extremo derecho (mismo patrón que el subtotal de la `.ghead`: `[contenido izquierda] ——— [meta derecha]`).
+- **Jerarquía tipográfica del mini:** el **título manda** (16px/600 `--ink`/`--faint`), la **etiqueta de tipo es metadato** (12px/600 `--muted`), el **ícono es señal de apoyo** (16px `--muted`). Sin cifras de dinero en el mini → ninguna regla dura de mono aplica acá.
+- **Sin mini-preview del gráfico — decisión de diseño cerrada.** La regla del roadmap es "incluir un thumbnail del gráfico **solo si resulta barato**". **No es barato:** cada mini-preview exigiría montar un Recharts (`useReports` con su fetch por año/moneda/categorías, `ResponsiveContainer`, gradientes) por card, lo que (a) reintroduce carga/skeleton/error dentro de una fila que debe ser estable e instantánea, y (b) le da a dnd-kit rects de altura variable/asincrónica, justo lo que el modo orden de `/mes` evita con el colapso instantáneo (`noTransition` para medir rects estables). El costo de robustez supera el beneficio. **La identificación la dan ícono + etiqueta de tipo + título**, que es exactamente el espejo de `/mes` (donde el mini tampoco muestra el contenido, solo la cabecera). Si más adelante existiera un thumbnail estático y barato (un sprite/snapshot precomputado), se reevalúa; **no** en P1.
+- **Feedback del ítem activo (la card que se arrastra) — reusa `SortableSection`:** elevación `--shadow-md`, fondo `--panel`, radio `--r-ctl` 10px, `cursor: grabbing`, **sin** `scale`, opacidad plena. Padding interno `10px` mientras está activo (igual que `SortableSection`). Las **demás minis** se desplazan suave (0.14–0.22s) para abrir el hueco; **no se atenúan**. **El desplazamiento de las demás minis ES la indicación de inserción** — no se dibuja caja-hueco dashed separada (in-place, ancho completo). Drag in-place: la mini no flota, **sin `DragOverlay`**, traslación solo en Y dentro del box de la columna.
+
+#### 3. Estado del resto de controles en modo orden
+
+Espejo del criterio de `/mes` ("+ Nuevo movimiento" se deshabilita; el contenido de sección se atenúa):
+
+- **Controles internos de cada card** (stepper de año · selector de moneda · X de quitar · **título editable P4**): **no se renderizan** en modo orden, porque la card entera colapsa al mini-ítem (§2) que solo lleva grip + ícono + título de display + etiqueta. El título en el mini es **display puro, no editable** (sin lápiz on-hover, sin entrar a edición) — el modo orden está dedicado a arrastrar, igual que la `.ghead` de `/mes` no colapsa al clic en ese modo. Al salir ("Listo"), la card vuelve a su forma plena con todos sus controles y el título recupera su edición in-situ.
+- **Recuadro "[+]" (AddCardButton compacto):** se **atenúa y deshabilita** mientras dura el modo — `opacity-45 pointer-events-none cursor-default` (exactamente el tratamiento de "+ Nuevo movimiento" en `/mes`). Permanece visible al final de la columna (no se quita: agregar una card es una acción que no aplica mientras se reordena, pero su ausencia repentina sacaría un ancla visual). **No** participa del sortable (no es arrastrable; queda fijo al pie).
+- **Sin chrome adicional de "modo activo":** la única señal es el botón "Listo" primario índigo (§1), idéntico a `/mes`. No se agrega banner, borde de página ni overlay.
+
+#### 4. Grip handle
+
+Idéntico al de `SortableSection` / `AccordionSection`:
+
+- **Ícono:** `GripVertical` (lucide) **16px**, `aria-hidden`. Color `--muted` (en reposo y en hover; el grip no cambia de color — el feedback de "agarrable" lo da el cursor).
+- **Posición:** **primer elemento** de la fila del mini-ítem, a la izquierda del ícono de tipo. `gap-3` hasta el siguiente elemento.
+- **Cursor:** `grab` en reposo, `grabbing` al arrastrar (`cursor-grab active:cursor-grabbing`).
+- **Área de toque:** el grip se envuelve en un `span` con `touch-action: none` (`touch-none`) que porta los `listeners`/`attributes` de dnd-kit; `aria-label="Arrastrar reporte"`. El área accionable abarca el glifo + su padding de fila (la fila del mini es cómoda a ~56px de alto, dando blanco de toque suficiente). En `/mes` el handle vive **dentro** del `<button>` de disclosure; acá el mini-ítem **no es un disclosure** (no colapsa nada al clic), así que el grip puede vivir como control de arrastre directo en la fila, sin botón contenedor que herede semántica de disclosure.
+
+#### Restricciones duras reafirmadas
+
+- El modo orden **no muestra cifras de dinero** (ni en el mini, ni en el toggle): ninguna regla dura de mono/income/expense entra en juego. El título es texto de UI (Space Grotesk), nunca mono.
+- El **índigo** aparece **solo** en el botón "Listo" (señal de modo activo = cromo de interacción) y en los focus rings — **nunca** tiñe títulos, íconos ni etiquetas del mini (regla dura 2).
+- Los íconos de tipo (`AreaChart`/`BarChart3`) y la etiqueta de tipo van en **neutro `--muted`** — no se colorean por semántica ni por marca.
 
 ### Título editable de la card de reporte (Ola 2, P4)
 
