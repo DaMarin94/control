@@ -86,7 +86,7 @@ La fuente de verdad de tipos, campos y constraints es `backend/prisma/schema.pri
 
 | Módulo | Ruta base | Descripción |
 |--------|-----------|-------------|
-| `movements` | `GET /movements`, `GET /movements/reports`, `GET /movements/reports/annual-unicos` | Lista unificada del mes + serie de reportes agregada + grilla anual de Únicos (transacciones + recurrentes + cuotas) |
+| `movements` | `GET /movements`, `GET /movements/reports`, `GET /movements/reports/annual-unicos`, `GET /movements/reports/annual-cuotas` | Lista unificada del mes + serie de reportes agregada + grilla anual de Únicos + gantt anual de Cuotas (transacciones + recurrentes + cuotas) |
 | `transactions` | `/transactions` | Movimientos únicos (CRUD) |
 | `recurring` | `/recurring` | Movimientos fijos (crear, editar, eliminar) |
 | `installments` | `/installments` | Grupos de cuotas (crear, editar, eliminar) |
@@ -115,6 +115,9 @@ Devuelve la serie **anual agregada** del usuario para los reportes (RF-REP-001/0
 
 ### `GET /movements/reports/annual-unicos?year=YYYY&categories=&currency=&today=`
 Devuelve la **grilla anual día × mes de gastos Únicos** y el footer de métricas mensuales para la card `unique-grid` (RF-REP-010). Solo agrega **Únicos de tipo gasto (`EXPENSE`)**. Contrato (params y shape) en `docs/data-model.md`, §Contrato de reporte anual de Únicos; reglas de cálculo en la sección **Movimientos del mes (MovementsModule)** → Reporte anual de Únicos.
+
+### `GET /movements/reports/annual-cuotas?year=YYYY&categories=&currency=`
+Devuelve el **gantt anual de gastos en Cuotas** (una barra por compra en cuotas que intersecta el año, empaquetadas en renglones) para la card `installment-gantt` (RF-REP-011). Solo agrega **cuotas de tipo gasto (`EXPENSE`)**. **No usa `today`.** Contrato (params y shape) en `docs/data-model.md`, §Contrato de reporte anual de Cuotas; reglas de cálculo en la sección **Movimientos del mes (MovementsModule)** → Reporte anual de Cuotas.
 
 ### `POST /transactions` · `PATCH /transactions/:id` · `DELETE /transactions/:id`
 CRUD de movimientos únicos. El monto siempre en centavos (entero > 0). El instante se guarda en UTC más la zona original del registro (ver fechas/timezone en `docs/technical.md`).
@@ -249,6 +252,16 @@ Grilla anual día × mes y footer de métricas mensuales para la card `unique-gr
 - **Unidad de inflación.** `InflationRate.monthlyVariation` es la **unidad canónica del sistema: puntos porcentuales** (ej. `3.5` = 3,5 %). La serie de INDEC (`apis.datos.gob.ar`) entrega la variación en **fracción** (ej. `0.035`); la ingesta del IPC la convierte **×100 al persistir**, antes de cotas y circuit breaker, de modo que DB, validaciones y comparaciones quedan todas en puntos %. El endpoint expone `inflationPct` directamente en puntos %; el cálculo de `pctVsPrevAdj` usa `inflationPct/100`.
 - **`pctVsPrevAdj` — % ajustado por inflación.** Igual que `pctVsPrev`, pero el promedio del mes anterior se **infla por la variación IPC del mes en curso** antes de comparar. `null` si falta el IPC, si el promedio previo es 0, o si el mes en curso no tiene dato de IPC.
 - **`colorAnchorCents`.** El endpoint emite el ancla de la escala de color de las celdas: **15 USD reconvertido a `currency` con el TC de enero del año del reporte** (`pivotRatesForYear`, clamp al mes disponible; USD = 1500). Tope de la rampa de color, no una cotización de negocio. Shape en `docs/data-model.md`, §Contrato de reporte anual de Únicos.
+
+### Reporte anual de Cuotas (`GET /movements/reports/annual-cuotas`)
+
+Gantt anual de barras horizontales para la card `installment-gantt` (RF-REP-011), scopeado por `userId` del JWT. Contrato (params, shape `CuotasGanttResponse` / `CuotasGanttBar`) en `docs/data-model.md`, §Contrato de reporte anual de Cuotas. Reglas de negocio:
+
+- **Solo cuotas de tipo gasto (`EXPENSE`) que intersectan el año.** Entra todo plan de cuotas que **toca** el año pedido: el que empieza antes y sigue dentro, o el que empieza dentro y sigue (o termina) después. Fijos, únicos y calculados no entran. Las cifras vienen **convertidas a la moneda de display** (`currency` del param o la default del usuario).
+- **Filtro de categorías antes del packing.** El subconjunto de `categories` (tres estados, RF-REP-002) se aplica **antes** de calcular renglones: el packing opera sobre las barras ya filtradas.
+- **Packing (asignación de renglones).** Las barras se ordenan por **origen de la cuota** (`startMonth` ASC, mes de la primera cuota; desempate `createdAt` ASC) y se ubican en renglones; `rowIndex` arranca en `0` (renglón pegado al eje). Una barra **reusa** un renglón si **no entra en conflicto con ninguno** de los intervalos ya asignados a ese renglón —conflicto = menos de 1 mes de descanso a cualquiera de los dos lados—, **aprovechando huecos intermedios** (una barra puede ubicarse entre dos ya colocadas si hay ≥1 mes de descanso a cada lado). Se elige el renglón **más bajo** que la admita; si ninguno sirve, se abre uno nuevo por encima. Por el orden por `startMonth` ASC, la de origen más temprano queda en el renglón más cercano al eje. Calculado en el backend sobre el subconjunto ya filtrado. El front invierte el eje al renderizar (ver `docs/frontend.md`).
+- **Rango real de la barra.** Cada barra emite `realStartMonth`/`realEndMonth` (`YYYY-MM`) con el período **completo** del plan (primera y última cuota), **sin recortar al año** —distinto de `startMonthIndex`/`endMonthIndex`, que se clampean a 0–11—; el front los usa para el rango del tooltip. Ver `docs/data-model.md`, §Contrato de reporte anual de Cuotas.
+- **Conversión del monto por cuota — TC del primer mes visible de la barra.** Si `startMonth` del plan cae **dentro** del año, se usa el TC de **ese mes**; si es **anterior** al año, se usa el TC de **enero del año** (`YYYY-01`). Vía `pivotRatesForYear` con clamp al mes disponible. Coherente con la regla de que las cuotas usan el TC oficial del mes de la instancia.
 
 ## Movimientos fijos (RecurringModule)
 

@@ -133,11 +133,11 @@ ReportCardConfig = {
   currency?: "ARS" | "USD" | "EUR" | "BRL"       // moneda de display de la card (RF-REP-007); ausente = default global vigente
 }
 
-ReportCardType = "income-expense" | "by-category" | "unique-grid"
+ReportCardType = "income-expense" | "by-category" | "unique-grid" | "installment-gantt"
 ```
 
 - **`title`** (RF-REP-008) — título de la card, máx. 60 caracteres, trimmeado al confirmar. Aplica a ambos `type`. **Ausente o vacío** → la card muestra el placeholder **"Reporte N"** (N = posición 1-based de la card en la columna, contando todas las cards; **display puro, no se persiste** y se recalcula en vivo al quitar/reordenar). Si el usuario confirma un título vacío, el campo se **omite** del objeto (back-compat: cards sin `title` muestran el placeholder).
-- **`type`** (`ReportCardType`) — `"income-expense"` (Forma 1, Ingresos vs. Gastos, RF-REP-001), `"by-category"` (Forma 2, Gastos por categoría apilado, RF-REP-001) o `"unique-grid"` (grilla anual de gastos Únicos día × mes, RF-REP-010). La card `unique-grid` persiste **los mismos** campos que las otras (`year`, `categoryIds`, `currency`, `title`); **no** agrega campos propios (no usa `categoryBreakdown` ni `hiddenSeries`). Su fuente de datos es `GET /movements/reports/annual-unicos` (ver §Contrato de reporte anual de Únicos), distinta de `GET /movements/reports`.
+- **`type`** (`ReportCardType`) — `"income-expense"` (Forma 1, Ingresos vs. Gastos, RF-REP-001), `"by-category"` (Forma 2, Gastos por categoría apilado, RF-REP-001), `"unique-grid"` (grilla anual de gastos Únicos día × mes, RF-REP-010) o `"installment-gantt"` (gantt anual de gastos en Cuotas, RF-REP-011). Las cards `unique-grid` y `installment-gantt` persisten **los mismos** campos que las otras (`year`, `categoryIds`, `currency`, `title`); **no** agregan campos propios (no usan `categoryBreakdown` ni `hiddenSeries`). Su fuente de datos es un endpoint propio (`GET /movements/reports/annual-unicos` y `GET /movements/reports/annual-cuotas` respectivamente; ver §Contrato de reporte anual de Únicos y §Contrato de reporte anual de Cuotas), distinto de `GET /movements/reports`.
 - **`year`** — el año que la card grafica; lo cambia la navegación de año embebida del widget.
 - **`categoryIds`** — filtro de categorías de la card. **`null` = todas** (default al crear); una **lista** = subconjunto explícito de `categoryId`s seleccionados. Aplica a ambos tipos (en `income-expense` restringe qué categorías cuentan en los totales; en `by-category`, qué bandas se apilan). Lo que el front manda al endpoint como `categories` deriva de este campo (ver contrato `GET /movements/reports`).
 - **`categoryBreakdown`** (RF-REP-006) — modo de vista **solo de las cards `income-expense`**: `true` = vista "Por categoría" (gastos descompuestos por categoría apilada, reutilizando el array `categories`); `false`/ausente = vista "Total" (dos series agregadas). **Default `false`; ausencia = `false`**. Irrelevante para `by-category` (que no tiene toggle). En el dashboard el modo es **efímero** (estado local) y no usa este campo.
@@ -609,9 +609,58 @@ donde `AvailableCategory = { categoryId, name, color }` (mismo shape que en §Co
 
 ---
 
+## Contrato de reporte anual de Cuotas (respuesta de `GET /movements/reports/annual-cuotas`)
+
+`GET /movements/reports/annual-cuotas?year=YYYY&categories=<...>&currency=XXX` devuelve, dentro del sobre `{ success, statusCode, data }`, el **gantt anual de gastos en Cuotas**: una barra horizontal por compra en cuotas que intersecta el año, ubicada en su rango de meses y empaquetada en renglones. Alimenta la card `installment-gantt` (RF-REP-011). Solo agrega **cuotas de tipo gasto (`EXPENSE`)**; es un endpoint **distinto** de `GET /movements/reports` y de `GET /movements/reports/annual-unicos` (no comparte shape). Reglas de cálculo (qué entra, packing, conversión del monto por cuota) en `docs/backend.md`, §Serie de reportes → Reporte anual de Cuotas.
+
+**Query params:**
+
+- **`year`** (`YYYY`, requerido) — el año a graficar.
+- **`categories`** (opcional) — filtro por categoría, **tres estados** (§Filtro de categorías — query param `categories`): **ausente = todas**, **`categories=` = ninguna** (gantt vacío), **lista `id1,id2` = subconjunto**. Comas **sin URL-encode**. El front lo deriva del `categoryIds` de la card. **El filtro se aplica ANTES del packing** (los renglones se calculan sobre el subconjunto ya filtrado).
+- **`currency`** (opcional) — override de la moneda de display (RF-REP-007), una de las 4 monedas, **case-sensitive**. **Ausente → la default global del usuario**; **presente y válido → esa moneda**; **vacío o fuera del set → `400`**.
+- **NO usa `today`** (a diferencia de `annual-unicos`): el gantt no tiene métricas dependientes de la fecha local del usuario.
+
+```
+CuotasGanttResponse = {
+  year: number,
+  currency: "ARS" | "USD" | "EUR" | "BRL",   // moneda de display usada
+  bars: CuotasGanttBar[],                     // ordenadas por rowIndex ASC, dentro por startMonthIndex ASC
+  rowCount: number,                           // total de renglones; 0 si no hay barras
+  availableCategories: AvailableCategory[]    // universo del filtro (igual shape que §Contrato de serie de reportes)
+}
+
+CuotasGanttBar = {
+  id: string,                  // id del movimiento de cuota
+  description: string | null,  // descripción de la compra
+  categoryId: string,          // para resolver name/color desde availableCategories
+  amountCents: number,         // monto POR CUOTA, en centavos de `currency`
+  startMonthIndex: number,     // mes de inicio visible en el año (0–11, 0 = enero)
+  endMonthIndex: number,       // mes de fin visible en el año (0–11, INCLUSIVO)
+  realStartMonth: string,      // "YYYY-MM" de la primera cuota del plan (período REAL, sin recortar al año)
+  realEndMonth: string,        // "YYYY-MM" de la última cuota (= realStartMonth + totalInstallments - 1; sin recortar al año)
+  continuesBefore: boolean,    // la compra empezó antes de enero del año (chevron ‹)
+  continuesAfter: boolean,     // la compra termina después de diciembre del año (chevron ›)
+  installmentFrom: number,     // nº de cuota (1-based) que cae en startMonthIndex
+  installmentTo: number,       // nº de cuota (1-based) que cae en endMonthIndex
+  totalInstallments: number,   // total de cuotas del plan
+  rowIndex: number             // renglón asignado por el packing; 0 = pegado al eje, crece hacia arriba
+}
+```
+
+donde `AvailableCategory = { categoryId, name, color }` (mismo shape que en §Contrato de serie de reportes).
+
+- **`bars` — una barra por compra en cuotas que intersecta el año.** Cada barra es el tramo **visible** de un plan de cuotas dentro del año pedido: `startMonthIndex`/`endMonthIndex` son los meses (0–11) de inicio y fin **dentro del año** (clamp a ene/dic si el plan se extiende fuera), con `endMonthIndex` **inclusivo**. `continuesBefore`/`continuesAfter` marcan que el plan se prolonga fuera del año (el front pinta los chevrons ‹ / ›). `installmentFrom`/`installmentTo` son los números de cuota (1-based) que caen en el primer y último mes visible; `totalInstallments`, el largo del plan. `realStartMonth`/`realEndMonth` (`YYYY-MM`) son el **período REAL completo** de la compra —primera y última cuota del plan, **sin recortar al año pedido** (a diferencia de `startMonthIndex`/`endMonthIndex`, que sí se clampean a 0–11); pueden caer fuera del año visible y alimentan el rango del tooltip. **La barra NO trae `name` ni `color`:** el front los resuelve por `categoryId` contra `availableCategories`.
+- **`amountCents` — monto por cuota, no total del plan.** En centavos de `currency`, ya convertido. La conversión usa el TC del **primer mes visible de la barra** (ver `docs/backend.md`).
+- **`rowIndex` y orden.** El backend resuelve el **packing** (asignación de renglones) y emite `bars` ordenado por `rowIndex` ASC y, dentro de cada renglón, por `startMonthIndex` ASC. `rowIndex = 0` es el renglón **pegado al eje**; crece hacia arriba. La **inversión visual** (renglón 0 abajo) la hace el front (ver `docs/frontend.md`, §Reportes).
+- **`rowCount`** — total de renglones ocupados; **0** si no hay barras (gantt vacío).
+- **`availableCategories`** — universo del filtro: categorías con **cuota gasto** del año, computado **sin** aplicar el filtro `categories` (superconjunto estable). Mismo criterio que en la serie de reportes; alimenta la leyenda-filtro de la card.
+- **NO incluye `earliestYear`** (igual que `annual-unicos`): la card `installment-gantt` permite navegación de año hacia atrás **sin tope** (RF-REP-011; ver `docs/frontend.md`, §Reportes).
+
+---
+
 ## Filtro de categorías — query param `categories`
 
-> Destino canónico del contrato del param `categories`. Lo consumen **`GET /movements/reports?year=YYYY`** (filtro de reportes, RF-REP-002) y **`GET /movements/reports/annual-unicos?year=YYYY`** (filtro de la grilla anual de Únicos, RF-REP-010), con la misma semántica de tres estados. `GET /movements?month=YYYY-MM` lo **acepta** también, pero **`/mes` no lo envía**: el filtro de la Vista del mes vive en el frontend (filtros por listado, RF-VM-006; ver §Preferencia `monthListFilters`).
+> Destino canónico del contrato del param `categories`. Lo consumen **`GET /movements/reports?year=YYYY`** (filtro de reportes, RF-REP-002), **`GET /movements/reports/annual-unicos?year=YYYY`** (filtro de la grilla anual de Únicos, RF-REP-010) y **`GET /movements/reports/annual-cuotas?year=YYYY`** (filtro del gantt anual de Cuotas, RF-REP-011), con la misma semántica de tres estados. `GET /movements?month=YYYY-MM` lo **acepta** también, pero **`/mes` no lo envía**: el filtro de la Vista del mes vive en el frontend (filtros por listado, RF-VM-006; ver §Preferencia `monthListFilters`).
 
 El param distingue **tres estados** —y, en particular, distingue **"ausente" de "presente y vacío"**:
 

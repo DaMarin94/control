@@ -117,6 +117,31 @@ export interface InstallmentGroupForAnnual {
 }
 
 /**
+ * Shape de una fila de InstallmentGroup para el gantt anual (Ola 3 / P2).
+ * Extiende InstallmentGroupForAnnual con description y createdAt,
+ * necesarios para el packing (orden por createdAt asc) y la etiqueta de barra.
+ */
+export interface InstallmentGroupForGantt {
+  id: string;
+  type: MovementType;
+  amountCents: number;
+  description: string | null;
+  /** Moneda original del grupo de cuotas. */
+  currency: Currency;
+  /** Cotización (unidades de anchorCurrency por 1 unidad de currency). */
+  exchangeRate: number;
+  /** Moneda default del usuario al guardar el grupo (Fase 1.2.4). */
+  anchorCurrency: Currency;
+  totalInstallments: number;
+  startMonth: string;
+  categoryId: string;
+  categoryName: string;
+  categoryColor: string;
+  /** Fecha de creación del grupo — usada para el orden del packing (asc). */
+  createdAt: Date;
+}
+
+/**
  * Agregado intermedio de un mes para el cálculo anual.
  * Clave: "YYYY-MM".
  */
@@ -1512,6 +1537,57 @@ export class MovementsRepository {
       categoryName: g.category.name,
       categoryColor: g.category.color,
       categoryScope: g.category.scope as string,
+    }));
+  }
+
+  /**
+   * Devuelve todos los grupos de cuotas EXPENSE del usuario para el gantt anual (Ola 3 / P2).
+   *
+   * A diferencia de getAllCuotasForAnnual, incluye description y createdAt,
+   * necesarios para el algoritmo de packing (orden por createdAt asc) y la etiqueta de barra.
+   * Solo devuelve filas sin filtrar por año; el service aplica la intersección con el año.
+   */
+  async getAllCuotasForGantt(
+    userId: string,
+  ): Promise<InstallmentGroupForGantt[]> {
+    const rows = await this.prisma.installmentGroup.findMany({
+      where: { userId, type: 'EXPENSE' },
+      select: {
+        id: true,
+        type: true,
+        amountCents: true,
+        description: true,
+        currency: true,
+        exchangeRate: true,
+        anchorCurrency: true,
+        totalInstallments: true,
+        startMonth: true,
+        categoryId: true,
+        createdAt: true,
+        category: {
+          select: {
+            name: true,
+            color: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return rows.map((g) => ({
+      id: g.id,
+      type: g.type,
+      amountCents: g.amountCents,
+      description: g.description,
+      currency: g.currency,
+      exchangeRate: Number(g.exchangeRate),
+      anchorCurrency: g.anchorCurrency,
+      totalInstallments: g.totalInstallments,
+      startMonth: g.startMonth,
+      categoryId: g.categoryId,
+      categoryName: g.category.name,
+      categoryColor: g.category.color,
+      createdAt: g.createdAt,
     }));
   }
 

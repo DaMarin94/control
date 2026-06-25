@@ -67,8 +67,9 @@ export interface ReportsMovementsResponse {
  * - "income-expense": Forma 1, Ingresos vs. Gastos (AreaChart)
  * - "by-category": Forma 2, Gastos por categoría apilado (BarChart)
  * - "unique-grid": Ola 3 P2, grilla día×mes de Únicos (heatmap calendario nativo)
+ * - "installment-gantt": Ola 3 P2, gantt anual de barras horizontales de Cuotas
  */
-export type ReportCardType = "income-expense" | "by-category" | "unique-grid";
+export type ReportCardType = "income-expense" | "by-category" | "unique-grid" | "installment-gantt";
 
 // ─── Tipos del endpoint de reporte anual de Únicos (Ola 3, P2) ───────────────
 
@@ -196,6 +197,77 @@ export interface ReportCardConfig {
    * Presente = título propio del usuario (máx. 60 caracteres, trimmeado al persistir).
    */
   title?: string;
+}
+
+// ─── Tipos del endpoint de reporte anual de Cuotas (Ola 3, P2) ───────────────
+
+/**
+ * Una barra del gantt de cuotas.
+ * El backend calcula el packing; el front hace layout, clipping e indicadores ‹/›.
+ */
+export interface CuotasGanttBar {
+  /** Id del movimiento de cuota. */
+  id: string;
+  /** Descripción de la compra (puede ser null). */
+  description: string | null;
+  /** Id de la categoría (para resolver color/nombre desde availableCategories). */
+  categoryId: string;
+  /** Monto POR CUOTA en la moneda de display (en centavos). */
+  amountCents: number;
+  /** Mes de inicio visible en el año pedido (0-based, 0=enero, 11=diciembre). */
+  startMonthIndex: number;
+  /** Mes de fin visible en el año pedido (0-based, INCLUSIVO). */
+  endMonthIndex: number;
+  /** true si la compra empezó antes de enero del año → mostrar chevron ‹. */
+  continuesBefore: boolean;
+  /** true si la compra termina después de diciembre del año → mostrar chevron ›. */
+  continuesAfter: boolean;
+  /** Nº de cuota (1-based) que cae en startMonthIndex. */
+  installmentFrom: number;
+  /** Nº de cuota (1-based) que cae en endMonthIndex. */
+  installmentTo: number;
+  /** Total de cuotas del plan de pagos. */
+  totalInstallments: number;
+  /** Renglón asignado por el packing (0 = más cercano al eje, crece hacia arriba). */
+  rowIndex: number;
+  /**
+   * Mes de inicio REAL de la compra en formato "YYYY-MM" (sin recortar al año visible).
+   * Ej.: "2025-11" si la compra empezó en noviembre 2025, aunque el año mostrado sea 2026.
+   * Entregado por el backend — usado en el tooltip para mostrar el rango real.
+   */
+  realStartMonth: string;
+  /**
+   * Mes de fin REAL de la compra en formato "YYYY-MM" (sin recortar al año visible).
+   * Ej.: "2027-03" si la compra termina en marzo 2027, aunque el año mostrado sea 2026.
+   * Entregado por el backend — usado en el tooltip para mostrar el rango real.
+   */
+  realEndMonth: string;
+}
+
+/**
+ * Respuesta de GET /movements/reports/annual-cuotas?year=YYYY[&categories=...][&currency=XXX]
+ * (dentro del sobre { success, statusCode, data }).
+ *
+ * Fuente de verdad: contrato del backend (Ola 3, P2).
+ * Nota: sin parámetro `today` (diferencia con annual-unicos).
+ */
+export interface CuotasGanttResponse {
+  /** El año pedido. */
+  year: number;
+  /** Moneda de display usada. */
+  currency: "ARS" | "USD" | "EUR" | "BRL";
+  /**
+   * Barras del gantt, ordenadas por rowIndex ASC y dentro por startMonthIndex ASC.
+   * rowIndex=0 = renglón pegado al eje → el front lo renderiza ABAJO (inversión del eje visual).
+   */
+  bars: CuotasGanttBar[];
+  /** Total de renglones (0 si sin barras). */
+  rowCount: number;
+  /**
+   * Universo de categorías con cuotas EXPENSE en el año (sin aplicar filtro).
+   * El front resuelve color/nombre de cada barra desde aquí por categoryId.
+   */
+  availableCategories: Array<{ categoryId: string; name: string; color: string }>;
 }
 
 // Re-export para conveniencia de los consumidores de este módulo

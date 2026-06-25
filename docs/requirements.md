@@ -1296,7 +1296,7 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 
 El módulo de Reportes visualiza los movimientos del usuario a lo largo de un año, mes a mes. El eje X son los 12 meses del año; el eje Y es el monto. Ofrece **dos tipos de reporte** —ingresos vs. gastos por mes, y gastos por categoría apilados— implementados como un **widget de reporte autónomo, configurable por props**, que lleva embebidos su propia navegación de año y su propio filtro de categorías. La pantalla `/reportes` es **configurable**: el usuario arma su vista agregando y quitando **cards de reporte**; el dashboard monta una sola instancia del widget (ver RF-DASH-001/002).
 
-> **Alcance:** los tipos de reporte descritos en RF-REP-001 (ingresos/gastos y apilado por categoría de gastos) y RF-REP-010 (grilla anual de gastos Únicos día × mes). Otros tipos de reporte/gráfico (torta, barras, línea) quedan fuera de alcance (ver sección 6).
+> **Alcance:** los tipos de reporte descritos en RF-REP-001 (ingresos/gastos y apilado por categoría de gastos), RF-REP-010 (grilla anual de gastos Únicos día × mes) y RF-REP-011 (gantt anual de gastos en Cuotas). Otros tipos de reporte/gráfico (torta, barras, línea) quedan fuera de alcance (ver sección 6).
 
 ---
 
@@ -1559,6 +1559,43 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 **Notas:**
 - Las decisiones de presentación visual (escala de color de las celdas, tipografía, layout del footer) son responsabilidad de `control-design` (`docs/design.md`), no de este RF.
 - Las fórmulas exactas de cada métrica del footer (truncado, ajuste por inflación) y el contrato del endpoint viven en `docs/backend.md` §Serie de reportes y `docs/data-model.md` §Contrato de reporte anual de Únicos.
+
+---
+
+#### RF-REP-011 — Reporte anual de gastos en Cuotas (gantt de barras horizontales)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Cuarto tipo de card de reporte (`installment-gantt`): un **gantt de gastos en Cuotas del año**. El eje X son los 12 meses (ene–dic); cada **gasto en cuotas** se dibuja como una **barra horizontal** que abarca los meses que ocupa la cuota (desde su mes de inicio por su cantidad de cuotas). Solo considera **gastos en cuotas** (`EXPENSE` en cuotas); los ingresos en cuotas no se muestran. Es un widget de reporte autónomo (RF-REP-002) con su año, su filtro de categorías y su moneda propios, persistidos en la clave `reports` (RF-REP-004). |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Contenido del gantt:**
+
+- **Una barra por gasto en cuotas** que toca el año, sobre un eje X de los 12 meses (ene–dic). La barra abarca desde el mes de inicio de la cuota por su cantidad de cuotas.
+- **Solo gastos en cuotas** (`EXPENSE` en cuotas). Únicos, fijos, calculados e **ingresos en cuotas** no entran.
+- **Monto mostrado** — el **monto por cuota** (no el total de la compra), en la moneda de display de la card (RF-REP-007).
+- **Disposición en renglones (packing)** — las barras se ordenan por **mes de origen de la cuota** (las que arrancan antes en el tiempo, más cerca del eje). Una barra reusa un renglón existente si no entra en conflicto con ninguna de las barras ya colocadas ahí —**al menos 1 mes de descanso** a cada lado—, **aprovechando huecos intermedios**; si ningún renglón la admite, sube a uno nuevo por encima.
+- **Barras que cruzan el borde del año** — se recortan a los 12 meses visibles y muestran un **indicador de continuación**: `‹` si la cuota empezó antes del año, `›` si sigue después.
+- El **filtro de categorías** (RF-REP-002) restringe qué gastos en cuotas entran y, por lo tanto, también el packing; el universo ofrecido es **solo las categorías con gasto en cuotas del año** (estable, no se achica al destildar).
+- **Hover de barra** — revela descripción, categoría, monto por cuota, rango de meses que ocupa, cantidad de cuotas y progreso (qué cuotas caen en el año). El rango del tooltip es el **período real** de la cuota con mes + año (ej. "nov 2025 – feb 2027"), aunque empiece antes o termine después del año visible (`realStartMonth`/`realEndMonth`, ver `docs/data-model.md`). Spec visual del tooltip en `docs/design.md`.
+- **Etiqueta dentro de la barra** — prioriza el **monto por cuota** (pieza primaria); el nombre es secundario y se omite antes que el monto; en barras de 1 mes se muestra solo el monto. Degradación visual en `docs/design.md` §4.
+
+**Criterios de aceptación:**
+- [ ] La card `installment-gantt` muestra, para el año configurado, una **barra horizontal por gasto en cuotas** sobre el eje X de los 12 meses (ene–dic), con el **monto por cuota** en la moneda de display de la card (RF-REP-007).
+- [ ] **Solo** gastos en cuotas de tipo `EXPENSE` entran: Únicos, fijos, calculados e ingresos en cuotas se excluyen.
+- [ ] Las barras se disponen en renglones por **mes de origen de la cuota** (las que arrancan antes en el tiempo, pegadas al eje); una barra reusa un renglón solo si deja **al menos 1 mes de descanso** a cada lado respecto de todas las barras ya colocadas ahí (aprovechando huecos intermedios), y sube a un renglón nuevo si ninguno la admite.
+- [ ] Una barra que **cruza el borde del año** se recorta a los 12 meses visibles y muestra el indicador de continuación (`‹` antes del año, `›` después).
+- [ ] El **hover de barra** revela descripción, categoría, monto por cuota, rango de meses, cantidad de cuotas y progreso de cuotas del año; el rango mostrado es el **período real** con mes + año, aunque caiga fuera del año visible.
+- [ ] La **etiqueta dentro de la barra** prioriza el monto por cuota: el nombre se omite antes que el monto y, en barras de 1 mes, se muestra solo el monto (degradación visual en `docs/design.md` §4).
+- [ ] La card es un widget autónomo (RF-REP-002): año, filtro de categorías y moneda propios, persistidos en la clave `reports` (RF-REP-004). El filtro afecta el set de barras y el packing; su universo son **solo las categorías con gasto en cuotas del año**.
+- [ ] La navegación de año (RF-REP-002) cambia el set de barras visibles; un año **sin gastos en cuotas** muestra el estado **empty** de la card.
+
+**Notas:**
+- Las decisiones de presentación visual (alto y color de las barras, indicador de continuación, layout del eje) son responsabilidad de `control-design` (`docs/design.md`), no de este RF.
+- Las reglas de negocio del packing en renglones y la conversión de moneda, y el contrato del endpoint, viven en `docs/backend.md` y `docs/data-model.md` §Contrato de reporte anual de Cuotas.
+- **Fuera de alcance (futuro):** alertas de renglón.
 
 ---
 
@@ -1827,7 +1864,7 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 
 | Feature | Motivo de exclusión |
 |---|---|
-| Reportes: otros tipos (torta, barras de comparación, etc.) | Los tipos de reporte que **sí** entran son ingresos/gastos y apilado por categoría de gastos (RF-REP-001) y la grilla anual de gastos Únicos día × mes (RF-REP-010). Sumar nuevos tipos de reporte queda fuera de alcance: es una mini-fase futura que requiere definición de UX y no es bloqueante |
+| Reportes: otros tipos (torta, barras de comparación, etc.) | Los tipos de reporte que **sí** entran son ingresos/gastos y apilado por categoría de gastos (RF-REP-001), la grilla anual de gastos Únicos día × mes (RF-REP-010) y el gantt anual de gastos en Cuotas (RF-REP-011). Sumar nuevos tipos de reporte queda fuera de alcance: es una mini-fase futura que requiere definición de UX y no es bloqueante |
 | Tarjetas con fecha de corte | Requiere flujo propio; demasiado complejo para v1 |
 | Edición retroactiva de mes pasado de un fijo | Complejidad en el modelo de datos |
 | Cancelación parcial de cuotas restantes | Pendiente de definición |

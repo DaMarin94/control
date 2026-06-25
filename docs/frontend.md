@@ -439,9 +439,9 @@ Logo/nombre "Control" → `/`; links **Dashboard** (`/`), **Vista del mes** (`/m
 - **Sección activa — match EXACTO para `/`:** el link Dashboard compara `pathname === "/"`. Con `startsWith("/")` quedaría activo en **todas** las rutas. Los links `/mes` y `/categorias` usan `startsWith` (no hay subrutas que colisionen).
 - **`<Suspense>` en `(app)/mes/page.tsx`:** se mantiene envolviendo `MonthViewWrapper` (que usa `useSearchParams()`); sin él el build de Next 15 falla. El cambio de carpeta al route group no lo altera (ver gotcha de `<Suspense>` en la sección Vista del mes).
 
-## Reportes (RF-REP-001..010)
+## Reportes (RF-REP-001..011)
 
-Visualización de reportes en `/reportes` (ingresos/gastos, apilado por categoría y grilla anual de gastos Únicos). El spec visual (color, alturas, jerarquía, transición) vive en `docs/design.md` — acá solo arquitectura y gotchas técnicos.
+Visualización de reportes en `/reportes` (ingresos/gastos, apilado por categoría, grilla anual de gastos Únicos y gantt anual de gastos en Cuotas). El spec visual (color, alturas, jerarquía, transición) vive en `docs/design.md` — acá solo arquitectura y gotchas técnicos.
 
 ### Arquitectura en dos capas (enfoque shadcn charts)
 
@@ -495,6 +495,17 @@ Tercer tipo de card (`ReportCardType = "unique-grid"`). Renderiza la grilla anua
 - **Navegación de año libre hacia atrás.** El control ‹ está **siempre habilitado** (sin tope) porque el contrato de este endpoint **no expone `earliestYear`**. Decisión cerrada (RF-REP-010). El tope hacia adelante (año en curso) sí aplica, como en las otras cards.
 - **El param `today`** se manda con la **fecha local del usuario** (`YYYY-MM-DD`) para que el backend calcule el divisor del promedio del mes en curso en la zona del usuario (ver contrato).
 - **Tooltip de celda — desglose por categoría.** El hover de una celda muestra fecha + total + el desglose por categoría que trae `breakdown[day-1][month-1]` (contrato en `docs/data-model.md`). El breakdown llega **sin `name`/`color`**: el front los resuelve por `categoryId` contra `availableCategories` de la misma respuesta. El hover del footer despliega las cinco métricas del mes. Spec visual en `docs/design.md` (§4b y §8).
+
+### Card `installment-gantt` — gantt anual de gastos en Cuotas (RF-REP-011)
+
+Cuarto tipo de card (`ReportCardType = "installment-gantt"`). Renderiza el gantt anual de barras horizontales de Cuotas sobre `GET /movements/reports/annual-cuotas` (contrato en `docs/data-model.md`, §Contrato de reporte anual de Cuotas). Spec visual en `docs/design.md`. Lo no obvio:
+
+- **CSS nativo, NO Recharts.** Las barras se posicionan con **`position: absolute`** (`left`/`width` en **% por mes**) sobre una grilla de 12 columnas; no usa el motor de charting. En `/reportes` conviven tres formas de render: Recharts (`income-expense`/`by-category`), tabla nativa (`unique-grid`) y este gantt CSS. Un agente que toque charts no debe asumir que toda card pasa por `components/ui/chart.tsx`.
+- **Inversión del eje.** El backend entrega `rowIndex = 0` como el renglón **pegado al eje**; el front lo renderiza **abajo** con `visualRowIndex = rowCount - 1 - rowIndex`. No reordenar `bars`: ya vienen ordenadas por `rowIndex`/`startMonthIndex`; la inversión es solo de layout.
+- **Packing resuelto en el backend.** El renglón (`rowIndex`) lo asigna el endpoint; el front **no** recalcula colisiones ni descansos. El front hace layout, clipping de las barras al borde del año y los indicadores ‹ / › (`continuesBefore`/`continuesAfter`).
+- **Color/nombre por `categoryId`.** Las barras llegan **sin `name`/`color`**: el front los resuelve por `categoryId` contra `availableCategories` de la misma respuesta (igual que el breakdown de `unique-grid`).
+- **Tooltip con rango real.** El rango del tooltip usa `realStartMonth`/`realEndMonth` (período completo del plan, sin recortar al año; ver `docs/data-model.md`), **no** los `startMonthIndex`/`endMonthIndex` clampeados que rigen el layout de la barra.
+- **Navegación de año libre hacia atrás.** El control ‹ está **siempre habilitado** (sin tope) porque el contrato **no expone `earliestYear`**, igual que la card de Únicos. El tope hacia adelante (año en curso) sí aplica. **No** manda `today` (el endpoint no lo usa).
 
 ## Design system "Precise Ledger" — tokens
 

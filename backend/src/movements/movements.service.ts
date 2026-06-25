@@ -7,6 +7,7 @@ import {
   AnnualCategoryMeta,
   RecurringForAnnual,
   addMonths,
+  monthDiff,
   isOnFrequency,
   RawDailyUnicoRow,
 } from './movements.repository';
@@ -158,6 +159,77 @@ export interface AnnualUnicosResponse {
   footer: AnnualUnicosMonthFooter[];
   availableCategories: AvailableCategory[];
   colorAnchorCents: number;
+}
+
+// ---------------------------------------------------------------------------
+// Shapes para el reporte anual de cuotas (gantt) — Ola 3 / P2
+// ---------------------------------------------------------------------------
+
+/**
+ * Una barra del gantt de cuotas.
+ *
+ * Campos:
+ *   id                — id del InstallmentGroup.
+ *   description       — descripción del grupo; null si no tiene.
+ *   categoryId        — id de la categoría (el front resuelve nombre/color desde availableCategories).
+ *   amountCents       — monto POR CUOTA convertido a displayCurrency.
+ *                       TC usado: el del primer mes visible de la barra en el año:
+ *                         - si startMonth está dentro del año → TC del startMonth
+ *                         - si startMonth está antes del año  → TC de enero del año (YYYY-01)
+ *                       Coherente con P3 (cuotas usan TC oficial del mes de la instancia).
+ *   startMonthIndex   — índice 0-based del primer mes visible en el año (0=ene, 11=dic),
+ *                       recortado al año pedido. Si la cuota empieza antes de enero → 0.
+ *   endMonthIndex     — índice 0-based del último mes visible (inclusivo), recortado al año.
+ *                       Si la cuota termina después de diciembre → 11.
+ *   continuesBefore   — true si la cuota empieza ANTES de enero del año pedido.
+ *   continuesAfter    — true si la cuota termina DESPUÉS de diciembre del año pedido.
+ *   installmentFrom   — número de cuota que cae en startMonthIndex (1-based).
+ *   installmentTo     — número de cuota que cae en endMonthIndex (1-based).
+ *   totalInstallments — total de cuotas del grupo.
+ *   rowIndex          — renglón asignado por el packing (0 = más cercano al eje, crece hacia arriba).
+ *   realStartMonth    — "YYYY-MM" del mes de la primera cuota (= startMonth del InstallmentGroup).
+ *                       NO recortado al año pedido; puede ser de un año anterior.
+ *   realEndMonth      — "YYYY-MM" del mes de la última cuota (= startMonth + totalInstallments - 1 meses).
+ *                       NO recortado al año pedido; puede ser de un año posterior.
+ */
+export interface GanttBar {
+  id: string;
+  description: string | null;
+  categoryId: string;
+  amountCents: number;
+  startMonthIndex: number;
+  endMonthIndex: number;
+  continuesBefore: boolean;
+  continuesAfter: boolean;
+  installmentFrom: number;
+  installmentTo: number;
+  totalInstallments: number;
+  rowIndex: number;
+  realStartMonth: string;
+  realEndMonth: string;
+}
+
+/**
+ * Shape completo de la respuesta de GET /movements/reports/annual-cuotas.
+ *
+ * bars: barras del gantt, ya empacadas (packing calculado sobre el subconjunto filtrado).
+ *       Ordenadas por rowIndex ASC y dentro de cada renglón por startMonthIndex ASC.
+ *
+ * rowCount: total de renglones usados por el packing (max rowIndex + 1; 0 si bars vacío).
+ *
+ * availableCategories: universo de categorías con cuotas EXPENSE en el año, SIN aplicar
+ *   el filtro de categorías. El front resuelve nombre/color de cada barra desde aquí.
+ *   Ordenado por amountCents DESC (suma de meses visibles en el año), desempate ASC por categoryId.
+ *
+ * currency: moneda de display usada (para que el front formatee sin re-pedirla).
+ * year: el año pedido.
+ */
+export interface AnnualCuotasResponse {
+  year: number;
+  currency: Currency;
+  bars: GanttBar[];
+  rowCount: number;
+  availableCategories: AvailableCategory[];
 }
 
 @Injectable()
@@ -1196,6 +1268,283 @@ export class MovementsService {
       footer,
       availableCategories,
       colorAnchorCents,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Reporte anual de cuotas — gantt (Ola 3 / P2)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Devuelve el gantt anual de cuotas EXPENSE del usuario para el año dado.
+   *
+   * Parámetros:
+   *   userId           — scopea todos los datos.
+   *   year             — año pedido (4 dígitos).
+   *   categoryIds      — null = todas; [] = ninguna (bars vacío); [...] = subconjunto.
+   *                      El filtro se aplica ANTES del packing.
+   *   currencyOverride — override de display; null/undefined = default del usuario.
+   *
+   * Algoritmo de packing:
+   *   1. Filtrar barras que intersectan el año (startMonth < endMonth del año,
+   *      con endMonth = addMonths(startMonth, totalInstallments)).
+   *   2. Ordenar por createdAt ASC (ya vienen ordenadas desde el repo).
+   *   3. Asignar rowIndex empezando en 0. Cada renglón mantiene la lista de todos
+   *      sus intervalos [s, e] ya asignados. Una barra [s, e] cabe en un renglón
+   *      si no entra en conflicto con NINGÚN intervalo existente: sin conflicto con
+   *      [s2, e2] significa s >= e2 + 2 (va después, ≥1 mes de descanso) o
+   *      e <= s2 - 2 (va antes, ≥1 mes de descanso). Aprovecha huecos intermedios.
+   *      Si ningún renglón existente la admite, sube a un renglón nuevo.
+   *
+   * TC de conversión del amountCents por cuota:
+   *   - Si startMonth cae dentro del año pedido → TC del startMonth.
+   *   - Si startMonth es anterior al año pedido → TC de enero del año (YYYY-01).
+   *   Coherente con P3: cuotas usan TC oficial del mes de la instancia.
+   */
+  async getAnnualCuotasReport(
+    userId: string,
+    year: number,
+    categoryIds?: string[] | null,
+    currencyOverride?: Currency | null,
+  ): Promise<AnnualCuotasResponse> {
+    // Normalizar filtro de categorías (misma semántica que los otros reportes)
+    const filterSet: Set<string> | null =
+      categoryIds === null || categoryIds === undefined
+        ? null
+        : categoryIds.length === 0
+          ? new Set<string>()
+          : new Set(categoryIds);
+
+    const yearStr = String(year).padStart(4, '0');
+    // Primer y último mes del año (YYYY-MM), para cálculo de intersección
+    const yearStart = `${yearStr}-01`; // enero del año
+    const yearEnd = `${yearStr}-12`;   // diciembre del año (último mes visible)
+    // Mes siguiente al último del año (exclusivo superior de rango)
+    const yearAfter = `${String(year + 1).padStart(4, '0')}-01`;
+
+    // Cargar moneda de display y pivot rates del año en paralelo
+    const [userSettings, pivotRatesForYear, allGroups] = await Promise.all([
+      this.settingsService.getSettings(userId),
+      this.repo.loadPivotRatesForYear(year),
+      this.repo.getAllCuotasForGantt(userId),
+    ]);
+    const displayCurrency: Currency =
+      currencyOverride != null ? currencyOverride : userSettings.defaultCurrency;
+
+    // ---------------------------------------------------------------------------
+    // 1. Filtrar grupos que intersectan el año pedido
+    //    Condición: startMonth <= yearEnd && endMonth (exclusivo) > yearStart
+    //    (equivale a: la cuota ocupa al menos un mes dentro del año)
+    // ---------------------------------------------------------------------------
+    const intersecting = allGroups.filter((g) => {
+      const endMonth = addMonths(g.startMonth, g.totalInstallments); // exclusivo
+      return g.startMonth <= yearEnd && endMonth > yearStart;
+    });
+
+    // ---------------------------------------------------------------------------
+    // 2. Construir el universo estable de categorías (SIN aplicar filterSet),
+    //    para poblar availableCategories. Acumulamos la suma de meses visibles
+    //    del año en displayCurrency por categoría.
+    // ---------------------------------------------------------------------------
+    const catMetaAll = new Map<string, { name: string; color: string }>();
+    const annualAmountAll = new Map<string, number>();
+
+    for (const g of intersecting) {
+      // Primer mes visible: max(startMonth, yearStart)
+      const firstVisibleMonth = g.startMonth >= yearStart ? g.startMonth : yearStart;
+      // TC: primer mes visible de la barra en el año
+      const tcMonth = firstVisibleMonth <= yearEnd ? firstVisibleMonth : yearStart;
+      const pivotRates = pivotRatesForYear.get(tcMonth) ?? null;
+      const convertedAmount = convertToDisplayCurrencyByMonth(
+        g.amountCents,
+        g.currency,
+        displayCurrency,
+        pivotRates,
+        g.exchangeRate,
+        g.anchorCurrency,
+      );
+
+      if (!catMetaAll.has(g.categoryId)) {
+        catMetaAll.set(g.categoryId, { name: g.categoryName, color: g.categoryColor });
+      }
+      // Sumar el monto convertido × meses visibles en el año (para ranking)
+      const endMonth = addMonths(g.startMonth, g.totalInstallments);
+      const visibleStart = g.startMonth >= yearStart ? g.startMonth : yearStart;
+      const visibleEnd = endMonth <= yearAfter ? endMonth : yearAfter;
+      const visibleMonths = monthDiff(visibleStart, visibleEnd);
+      annualAmountAll.set(
+        g.categoryId,
+        (annualAmountAll.get(g.categoryId) ?? 0) + convertedAmount * visibleMonths,
+      );
+    }
+
+    // ---------------------------------------------------------------------------
+    // 3. Aplicar filtro de categorías al conjunto intersectante
+    // ---------------------------------------------------------------------------
+    const filtered =
+      filterSet === null
+        ? intersecting
+        : filterSet.size === 0
+          ? []
+          : intersecting.filter((g) => filterSet.has(g.categoryId));
+
+    // ---------------------------------------------------------------------------
+    // 4. Packing: ordenado por startMonth ASC (origen real de la cuota = mes de la
+    //    primera cuota del grupo), desempate secundario por createdAt ASC para
+    //    determinismo cuando dos grupos tienen el mismo startMonth.
+    //    Las cuotas que arrancan antes en el tiempo quedan en el renglón más
+    //    cercano al eje (row0); las que arrancan después suben.
+    //
+    //    IMPORTANTE: el orden de procesamiento usa g.startMonth (puede ser de un
+    //    año anterior al pedido), mientras que startMonthIndex/endMonthIndex
+    //    (usados para verificar conflictos/descanso) están recortados al año visible
+    //    (0–11). Son dos cosas distintas; el sort se hace ANTES de calcular los
+    //    índices recortados.
+    //
+    //    Algoritmo de huecos: cada renglón mantiene la lista de TODOS los
+    //    intervalos [s, e] ya asignados. Una barra [s, e] cabe en un renglón si
+    //    no entra en conflicto con NINGÚN intervalo existente. Sin conflicto con
+    //    [s2, e2] significa:
+    //      s >= e2 + 2  (va después con ≥1 mes de descanso)  o
+    //      e <= s2 - 2  (va antes con ≥1 mes de descanso)
+    //    Esto aprovecha los huecos entre barras ya asignadas (el algoritmo anterior
+    //    solo comparaba contra el último end, ignorando huecos intermedios).
+    // ---------------------------------------------------------------------------
+    // Reordenar por origen real de la cuota (startMonth ASC), desempate createdAt ASC.
+    // No confiar en el orden createdAt del repo para el packing.
+    const sortedForPacking = [...filtered].sort((a, b) => {
+      if (a.startMonth < b.startMonth) return -1;
+      if (a.startMonth > b.startMonth) return 1;
+      // Desempate: createdAt ASC (o id si no tienen createdAt)
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    });
+
+    // rowIntervals[rowIndex] = lista de intervalos [s, e] (ambos inclusivos, 0–11)
+    //                          asignados a ese renglón.
+    const rowIntervals: Array<Array<[number, number]>> = [];
+
+    const bars: GanttBar[] = [];
+
+    for (const g of sortedForPacking) {
+      const endMonth = addMonths(g.startMonth, g.totalInstallments); // exclusivo
+
+      // Índices de mes en el año (0-based, recortados a 0–11)
+      const continuesBefore = g.startMonth < yearStart;
+      const continuesAfter = endMonth > yearAfter;
+
+      // Primer y último mes VISIBLE dentro del año pedido
+      const visibleStartMonth = continuesBefore ? yearStart : g.startMonth;
+      const visibleEndMonthExclusive = continuesAfter ? yearAfter : endMonth;
+
+      // startMonthIndex: 0-based dentro del año
+      const startMonthIndex = monthDiff(yearStart, visibleStartMonth); // 0..11
+      // endMonthIndex: último mes visible, inclusivo (0-based)
+      const endMonthIndex = monthDiff(yearStart, visibleEndMonthExclusive) - 1; // 0..11
+
+      // Número de cuota visible en startMonthIndex e endMonthIndex
+      const installmentFrom = monthDiff(g.startMonth, visibleStartMonth) + 1;
+      const installmentTo = monthDiff(g.startMonth, visibleEndMonthExclusive); // last cuota inclusiva
+
+      // Rango real de la cuota (no recortado al año pedido).
+      // realStartMonth = mes de la primera cuota = startMonth del grupo.
+      // realEndMonth   = mes de la última cuota  = startMonth + (totalInstallments - 1) meses.
+      const realStartMonth = g.startMonth;
+      const realEndMonth = addMonths(g.startMonth, g.totalInstallments - 1);
+
+      // TC: primer mes visible en el año
+      const tcMonth = visibleStartMonth;
+      const pivotRates = pivotRatesForYear.get(tcMonth) ?? null;
+      const convertedAmount = convertToDisplayCurrencyByMonth(
+        g.amountCents,
+        g.currency,
+        displayCurrency,
+        pivotRates,
+        g.exchangeRate,
+        g.anchorCurrency,
+      );
+
+      // Asignar renglón: elegir el renglón más bajo (índice menor) donde la barra
+      // no entre en conflicto con ningún intervalo ya asignado a ese renglón.
+      // Sin conflicto con [s2, e2]: s >= e2 + 2 (va después) o e <= s2 - 2 (va antes).
+      let assignedRow = -1;
+      for (let r = 0; r < rowIntervals.length; r++) {
+        const intervals = rowIntervals[r];
+        const fits = intervals.every(
+          ([s2, e2]) =>
+            startMonthIndex >= e2 + 2 || endMonthIndex <= s2 - 2,
+        );
+        if (fits) {
+          assignedRow = r;
+          break;
+        }
+      }
+      if (assignedRow === -1) {
+        // No cabe en ningún renglón existente → nuevo renglón
+        assignedRow = rowIntervals.length;
+        rowIntervals.push([[startMonthIndex, endMonthIndex]]);
+      } else {
+        rowIntervals[assignedRow].push([startMonthIndex, endMonthIndex]);
+      }
+
+      bars.push({
+        id: g.id,
+        description: g.description,
+        categoryId: g.categoryId,
+        amountCents: convertedAmount,
+        startMonthIndex,
+        endMonthIndex,
+        continuesBefore,
+        continuesAfter,
+        installmentFrom,
+        installmentTo,
+        totalInstallments: g.totalInstallments,
+        rowIndex: assignedRow,
+        realStartMonth,
+        realEndMonth,
+      });
+    }
+
+    // Ordenar barras por rowIndex ASC, luego startMonthIndex ASC (para comodidad del front)
+    bars.sort((a, b) =>
+      a.rowIndex !== b.rowIndex
+        ? a.rowIndex - b.rowIndex
+        : a.startMonthIndex - b.startMonthIndex,
+    );
+
+    const rowCount = rowIntervals.length;
+
+    // ---------------------------------------------------------------------------
+    // 5. Construir availableCategories (universo sin filtro, sin conversión doble)
+    // ---------------------------------------------------------------------------
+    const availableCategories: AvailableCategory[] = Array.from(catMetaAll.entries())
+      .map(([categoryId, meta]) => ({ categoryId, name: meta.name, color: meta.color }))
+      .sort((a, b) => {
+        const totalA = annualAmountAll.get(a.categoryId) ?? 0;
+        const totalB = annualAmountAll.get(b.categoryId) ?? 0;
+        if (totalB !== totalA) return totalB - totalA;
+        return a.categoryId.localeCompare(b.categoryId);
+      });
+
+    this.logger.debug(
+      {
+        userId,
+        year,
+        displayCurrency,
+        filterCount: filterSet?.size ?? null,
+        intersectingCount: intersecting.length,
+        filteredCount: filtered.length,
+        rowCount,
+        availableCategoriesCount: availableCategories.length,
+      },
+      'Reporte anual de cuotas (gantt) calculado',
+    );
+
+    return {
+      year,
+      currency: displayCurrency,
+      bars,
+      rowCount,
+      availableCategories,
     };
   }
 

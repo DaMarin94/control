@@ -64,8 +64,20 @@ vi.mock("@/hooks/use-reports", () => ({
     fetchStatus: "fetching",
     refetch: vi.fn(),
   })),
+  useCuotasGantt: vi.fn(() => ({
+    data: undefined,
+    isLoading: true,
+    isError: false,
+    isPending: true,
+    isSuccess: false,
+    error: null,
+    status: "loading",
+    fetchStatus: "fetching",
+    refetch: vi.fn(),
+  })),
   REPORTS_QUERY_KEY: (year: number, key: string | null) => ["reports", year, key],
   UNICO_GRID_QUERY_KEY: (year: number, key: string | null) => ["reports-unico-grid", year, key],
+  CUOTAS_GANTT_QUERY_KEY: (year: number, key: string | null) => ["reports-cuotas-gantt", year, key],
 }));
 
 vi.mock("@/hooks/use-categories", () => ({

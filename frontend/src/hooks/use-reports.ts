@@ -40,7 +40,7 @@
 
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useApi } from "@/hooks/use-api";
-import type { ReportsMovementsResponse, UnicoGridResponse } from "@/types/reports";
+import type { ReportsMovementsResponse, UnicoGridResponse, CuotasGanttResponse } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
 import { createLogger } from "@/lib/logger";
 
@@ -180,6 +180,52 @@ export function useUnicoGrid(
       const url = `/movements/reports/annual-unicos?year=${year}${urlParam}${currencyParam}${todayParam}`;
       logger.debug("Cargando grilla de Únicos", { year, categoriesKey, currency, today });
       return api.get<UnicoGridResponse>(url);
+    },
+    enabled: Boolean(year) && isAuthenticated,
+    placeholderData: keepPreviousData,
+  });
+
+  return query;
+}
+
+// ─── Hook para el gantt de Cuotas (Ola 3, P2) ────────────────────────────────
+
+/**
+ * Query key para el gantt anual de Cuotas.
+ * Varía por año, filtro de categorías y moneda.
+ * Sin parámetro `today` (diferencia con annual-unicos).
+ */
+export const CUOTAS_GANTT_QUERY_KEY = (
+  year: number,
+  categoriesKey: string | null,
+  currency?: CurrencyCode,
+) => ["reports-cuotas-gantt", year, categoriesKey, currency ?? null] as const;
+
+/**
+ * Hook para obtener el gantt anual de gastos en Cuotas.
+ *
+ * GET /movements/reports/annual-cuotas?year=YYYY[&categories=...][&currency=XXX]
+ *
+ * @param year        El año a consultar.
+ * @param categoryIds null=todas; []=ninguna; lista=subconjunto.
+ * @param currency    undefined=default del usuario; presente=override de moneda.
+ */
+export function useCuotasGantt(
+  year: number,
+  categoryIds: string[] | null = null,
+  currency?: CurrencyCode,
+) {
+  const { api, isAuthenticated } = useApi();
+
+  const { categoriesKey, urlParam } = serializeCategoryFilter(categoryIds);
+  const currencyParam = currency ? `&currency=${currency}` : "";
+
+  const query = useQuery<CuotasGanttResponse>({
+    queryKey: CUOTAS_GANTT_QUERY_KEY(year, categoriesKey, currency),
+    queryFn: () => {
+      const url = `/movements/reports/annual-cuotas?year=${year}${urlParam}${currencyParam}`;
+      logger.debug("Cargando gantt de Cuotas", { year, categoriesKey, currency });
+      return api.get<CuotasGanttResponse>(url);
     },
     enabled: Boolean(year) && isAuthenticated,
     placeholderData: keepPreviousData,
