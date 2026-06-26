@@ -17,6 +17,7 @@ import { ReactQueryProvider } from "@/lib/react-query";
 import { ToastProvider } from "@/components/ui/toast";
 import { AuthSessionProvider } from "@/lib/session-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { auth } from "@/auth";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -54,11 +55,13 @@ export const metadata: Metadata = {
  */
 const themeScript = `(function(){try{var t=localStorage.getItem('control:theme');var resolved=(t==='dark'||(!t||t==='system')&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';document.documentElement.dataset.theme=resolved;}catch(e){}})();`;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await auth();
+
   return (
     <html lang="es" suppressHydrationWarning>
       {/* Script inline síncrono — resuelve el tema ANTES del primer paint (anti-FOUC) */}
@@ -66,7 +69,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} antialiased`}>
-        <AuthSessionProvider>
+        <AuthSessionProvider session={session}>
           <ReactQueryProvider>
             <ThemeProvider>
               <ToastProvider>{children}</ToastProvider>

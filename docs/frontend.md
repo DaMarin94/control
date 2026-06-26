@@ -90,6 +90,15 @@ Los callbacks `jwt` y `session` persisten el **`accessToken` de NestJS** y el **
 
 > La sesión de Auth.js es un JWE propio (encriptado por NextAuth); el `accessToken` que viaja dentro es el JWT de NestJS, opaco para el front. Son dos tokens distintos (ver `docs/data-model.md`).
 
+### Seeding de la sesión en el root layout
+
+El root layout (`frontend/src/app/layout.tsx`) es un Server Component `async` que ejecuta `auth()` en cada request y **siembra la sesión** pasándola como prop `session` a `SessionProvider` (`frontend/src/lib/session-provider.tsx`).
+
+- **Efecto:** en el primer render del cliente `useSession()` ya está `authenticated` (no pasa por `"loading"`), así que `usePreferences` arranca con el blob real de preferencias del usuario en vez de `{}`. Esto evita el flash de defaults (reportes, secciones colapsadas, etc.) en el boot.
+- **Trade-off estructural:** desencriptar la cookie de Auth.js se paga en cada navegación de página completa; en navegación SPA no.
+- **Gotcha:** `auth()` devuelve `null` en rutas no autenticadas (ej. `/login`) y `SessionProvider` acepta `null`, así que no hay lógica condicional en el layout.
+- **Relación con el tema:** el flash del **modo de color** ya lo cubre el script inline anti-FOUC + mirror en localStorage (ver §Modo de color (theming)); el seeding de sesión resuelve el flash del **resto de las preferencias**.
+
 ### Adjuntar el Bearer al backend (patrón obligatorio)
 
 **No hay interceptor global.** Toda fase que consuma el backend debe usar uno de estos dos caminos:
