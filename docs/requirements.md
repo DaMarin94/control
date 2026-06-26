@@ -1296,7 +1296,7 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 
 El módulo de Reportes visualiza los movimientos del usuario a lo largo de un año, mes a mes. El eje X son los 12 meses del año; el eje Y es el monto. Ofrece **dos tipos de reporte** —ingresos vs. gastos por mes, y gastos por categoría apilados— implementados como un **widget de reporte autónomo, configurable por props**, que lleva embebidos su propia navegación de año y su propio filtro de categorías. La pantalla `/reportes` es **configurable**: el usuario arma su vista agregando y quitando **cards de reporte**; el dashboard monta una sola instancia del widget (ver RF-DASH-001/002).
 
-> **Alcance:** los tipos de reporte descritos en RF-REP-001 (ingresos/gastos y apilado por categoría de gastos), RF-REP-010 (grilla anual de gastos Únicos día × mes), RF-REP-011 (gantt anual de gastos en Cuotas) y RF-REP-012 (líneas de Inflación vs Ingresos). Otros tipos de reporte/gráfico (torta, barras de comparación) quedan fuera de alcance (ver sección 6).
+> **Alcance:** los tipos de reporte descritos en RF-REP-001 (ingresos/gastos y apilado por categoría de gastos), RF-REP-010 (grilla anual de gastos Únicos día × mes), RF-REP-011 (gantt anual de gastos en Cuotas), RF-REP-012 (líneas de Inflación vs Ingresos) y RF-REP-013 (Evolución de gastos fijos). La card de Ingresos vs Gastos admite además filtros por tipo / dirección / categoría (RF-REP-014) y proyección de fijos a futuro (RF-REP-015). Otros tipos de reporte/gráfico (torta, barras de comparación) quedan fuera de alcance (ver sección 6).
 
 ---
 
@@ -1636,6 +1636,104 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 
 ---
 
+#### RF-REP-013 — Reporte de Evolución de gastos fijos (gráfico de líneas)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Tipo de card de reporte (`fixed-evolution`) que grafica la evolución a lo largo de un año (12 meses, ene–dic) de un conjunto de **gastos fijos** elegidos por el usuario, como **una sola línea total**. Su alcance son **únicamente** los movimientos de tipo **Fijo** y dirección **Gasto** (`EXPENSE`): no entran cuotas, ni únicos, ni fijos de ingreso. En lugar del filtro por categoría de las demás cards (RF-REP-002), expone una **selección a nivel de gasto fijo individual**: el usuario elige cuáles fijos entran (1, varios o todos) y la línea total se recalcula con esa selección. Ofrece un selector de **modo de visualización** con tres lecturas del mismo dato: montos simples, variación % nominal y variación % ajustada por inflación. Es un widget de reporte autónomo (RF-REP-002) con su año y su moneda propios, persistidos en la clave `reports` (RF-REP-004). **Solo en `/reportes`; no se monta en el dashboard.** |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Contenido del gráfico:**
+
+- **Eje X:** los 12 meses del año (ene–dic). **Eje Y:** monto en el modo "montos simples"; puntos porcentuales en los dos modos de variación.
+- **Una sola línea total** = la suma, mes a mes, del monto de los gastos fijos seleccionados que están activos en ese mes (criterio de aparición de fijos por mes: RN-016). Cambiar la selección recalcula esa única línea. Geometría: **línea**.
+- **Selección de fijos (reemplaza el filtro por categoría).** El usuario elige a nivel de **gasto fijo individual** cuáles entran en la línea. En esta card **no** hay filtro por categoría: la selección por fijo lo sustituye. El universo ofrecido son **solo los gastos fijos (`EXPENSE`) del año** y es estable (no se achica al destildar). La card nace con **todos** los fijos del universo seleccionados.
+- **Modo de visualización (3 lecturas del mismo dato):**
+  - **Montos simples** — la línea total en moneda, en la moneda de display de la card (RF-REP-007).
+  - **Variación % nominal** — variación del total mensual respecto del mes anterior, en puntos porcentuales. Sin punto si el total del mes anterior es cero o si el mes es futuro.
+  - **Variación % ajustada por inflación** — la misma variación descontando la inflación del mes (IPC nacional, RF-IPC-001); sin punto si falta el IPC, si el total anterior es cero o si el mes es futuro.
+  - El **ajuste por inflación aplica solo a los modos de variación**, nunca al modo de montos.
+
+**Criterios de aceptación:**
+- [ ] La card `fixed-evolution` grafica **una sola línea total** sobre los 12 meses del año, suma mensual de los gastos fijos seleccionados activos en cada mes (RN-016).
+- [ ] El alcance es **exclusivamente** movimientos de tipo **Fijo** y dirección **Gasto** (`EXPENSE`): no entran cuotas, únicos ni fijos de ingreso.
+- [ ] La selección se hace a nivel de **gasto fijo individual** y **reemplaza** al filtro por categoría: esta card **no** ofrece filtro por categoría. El universo son solo los gastos fijos del año, estable; la card nace con todos seleccionados.
+- [ ] Un selector de **modo de visualización** ofrece tres lecturas del mismo dato: montos simples, variación % nominal y variación % ajustada por inflación.
+- [ ] El **ajuste por inflación** (RF-IPC-001) aplica **solo** a los modos de variación; el modo de montos nunca se ajusta.
+- [ ] La card reusa el **stepper de año** y la **moneda de display por card** del widget de reporte (RF-REP-002, RF-REP-007). La moneda solo incide en el modo de montos.
+- [ ] La selección de fijos, el modo de visualización, el año y la moneda se **persisten por card** en la clave `reports` (RF-REP-004); el shape concreto se fija en implementación (`docs/data-model.md`).
+- [ ] La card **solo existe en `/reportes`**; no se ofrece como widget del dashboard.
+
+**Notas:**
+- La forma concreta del **control de modo** (tres opciones planas, o "Montos / Variación" con un sub-toggle de ajuste por inflación) y la del **selector de fijos** las define `control-design` (`docs/design.md`), no este RF.
+- La card necesita el **monto mensual de cada fijo a lo largo del año** (reconstruible de la cadena de splits `Recurring`, RN-005). El contrato del endpoint se fija en implementación (`docs/data-model.md`); este RF no lo prescribe.
+- **Relación con la proyección de fijos de income-expense (RF-REP-015):** ambas son miradas sobre los fijos. Esta card es la mirada de **variación / inflación con selección por fijo**; Ingresos vs Gastos (RF-REP-014/RF-REP-015) es la mirada de **montos con filtros por tipo / dirección / categoría** y su proyección a futuro.
+
+---
+
+#### RF-REP-014 — Filtros por tipo de movimiento y dirección en Ingresos vs Gastos
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | La card de tipo `income-expense` (Ingresos vs Gastos, RF-REP-001) admite acotar qué movimientos entran en sus series mediante tres dimensiones de filtro **combinables**: **tipo de movimiento** (fijo / cuota / único, multi-selección), **dirección** (solo gastos / solo ingresos / ambos) y **categoría** (ya soportado vía RF-REP-002). El default reproduce el comportamiento histórico de la card —todos los tipos, ambas direcciones, todas las categorías—, por lo que una card sin filtros configurados muestra exactamente lo de siempre (back-compat). |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | Existe una card de tipo `income-expense` (en `/reportes`). |
+
+**Dimensiones de filtro (combinables):**
+
+- **Tipo de movimiento** — `fijo` / `cuota` / `único`, **multi-selección**; default **los tres**. Acota qué tipos de movimiento aportan a los totales mensuales de ingresos y de gastos.
+- **Dirección** — `solo gastos` / `solo ingresos` / `ambos`; default **ambos**. Acota qué dirección se computa en la serie.
+- **Categoría** — el filtro de categorías ya existente del widget (RF-REP-002), con su lógica de tres estados (todas / subconjunto / ninguna).
+
+Las tres dimensiones se combinan libremente (ej. "solo gastos fijos de la categoría X"; "todas las categorías pero solo gastos fijos"; "solo ingresos únicos").
+
+**Criterios de aceptación:**
+- [ ] La card `income-expense` admite filtrar por **tipo de movimiento** (fijo / cuota / único, multi-selección), **dirección** (solo gastos / solo ingresos / ambos) y **categoría** (RF-REP-002), de forma **combinable**.
+- [ ] El **default** es **todos los tipos**, **ambas direcciones** y **todas las categorías**; ese default = el comportamiento actual de la card.
+- [ ] **Back-compat obligatoria:** una card `income-expense` ya existente, sin estos filtros configurados, sigue mostrando **todo** (todos los tipos, ambas direcciones) sin cambio de comportamiento.
+- [ ] El filtro acota **qué movimientos se computan** en los totales mensuales de ingresos y de gastos (mismo criterio de imputación mensual de RN-015).
+- [ ] La configuración de filtros se **persiste por card** en la clave `reports` (RF-REP-004); el shape concreto se fija en implementación (`docs/data-model.md`).
+
+**Notas:**
+- La **forma de los controles** (cómo se exponen tipo y dirección, y cómo conviven con la leyenda interactiva que togglea las series Ingresos/Gastos, RF-REP-002) la define `control-design` (`docs/design.md`).
+
+---
+
+#### RF-REP-015 — Proyección de gastos fijos a futuro en Ingresos vs Gastos
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | La card de tipo `income-expense` (RF-REP-001) ofrece un **toggle on/off** que **extiende sus líneas hacia los meses futuros** proyectando **solo los fijos**: las cuotas y los movimientos únicos **no** entran en el tramo proyectado. La proyección de cada fijo se calcula a partir de la tasa de crecimiento de su propio historial de montos y se compone hacia adelante. El **horizonte es ilimitado**: la proyección se sigue mostrando por más que el usuario navegue años hacia adelante. El tramo proyectado se **diferencia visualmente** del tramo real. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | Existe una card de tipo `income-expense` (en `/reportes`). |
+
+**Regla de cálculo de la proyección:**
+
+- **Método.** Para cada fijo se toma la **ventana de los últimos 3 meses** de su historial de montos, se calcula su **crecimiento porcentual promedio** y se aplica de forma **compuesta** hacia los meses futuros.
+- **Fijo sin historial de cambios** (nunca varió de monto) → se proyecta **plano** al monto actual.
+- **Solo fijos.** En el tramo proyectado solo entran los fijos (los de gasto extienden la serie de gastos; los de ingreso, la de ingresos). Cuotas y únicos no se proyectan.
+- **Horizonte ilimitado.** El tramo proyectado no se corta a fin de año: se recalcula y se sigue mostrando para cualquier año futuro que el usuario navegue.
+
+**Criterios de aceptación:**
+- [ ] La card `income-expense` expone un **toggle on/off** de proyección de fijos; **default off** (con el toggle off, la card no agrega tramo proyectado).
+- [ ] Con el toggle on, las líneas se **extienden a los meses futuros** proyectando **solo los fijos**; cuotas y únicos **no** entran en el tramo proyectado.
+- [ ] Cada fijo se proyecta por el **crecimiento porcentual promedio de los últimos 3 meses** de su historial de montos, **compuesto** hacia adelante.
+- [ ] Un fijo **sin historial de cambios** se proyecta **plano** a su monto actual.
+- [ ] El **horizonte es ilimitado**: la proyección se sigue mostrando al navegar años hacia adelante; no se corta a fin de año.
+- [ ] El **tramo proyectado se diferencia visualmente** del tramo real (forma exacta a definir por diseño).
+- [ ] El estado del toggle se **persiste por card** en la clave `reports` (RF-REP-004); el shape concreto se fija en implementación (`docs/data-model.md`).
+
+**Notas:**
+- El cálculo se apoya en que el **historial de montos de cada fijo es reconstruible**: cada edición de monto de un fijo crea un **split en la cadena `Recurring`** (RN-005), de modo que la sucesión de montos por mes está disponible para derivar la ventana de 3 meses y la tasa de crecimiento. Las fórmulas exactas y el contrato del endpoint se fijan en implementación (`docs/backend.md`, `docs/data-model.md`).
+- La **diferenciación visual** del tramo proyectado (trazo, color, marca de "proyección") la define `control-design` (`docs/design.md`).
+- **Relación con RF-REP-013:** la proyección de fijos de esta card y el reporte de Evolución de gastos fijos (RF-REP-013) son ambas miradas sobre los fijos; aquí es la mirada de **montos** (con filtros por tipo / dirección / categoría, RF-REP-014) extendida a futuro, mientras que RF-REP-013 es la mirada de **variación / inflación con selección por fijo**.
+
+---
+
 ### 3.10 Módulo: Multi-moneda
 
 > La moneda es **explícita**: cada movimiento lleva su **moneda + cotización**; los totales se expresan en una **única moneda default** del usuario, convertida en vivo. La cotización del movimiento se **pre-carga desde una tabla de cotizaciones de referencia** (interna, no editable por UI). Modelo de datos en `data-model.md`, §Moneda explícita, set curado, §Contrato de configuración del usuario (settings) y §Tabla de cotizaciones de referencia.
@@ -1901,7 +1999,7 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 
 | Feature | Motivo de exclusión |
 |---|---|
-| Reportes: otros tipos (torta, barras de comparación, etc.) | Los tipos de reporte que **sí** entran son ingresos/gastos y apilado por categoría de gastos (RF-REP-001), la grilla anual de gastos Únicos día × mes (RF-REP-010), el gantt anual de gastos en Cuotas (RF-REP-011) y las líneas de Inflación vs Ingresos (RF-REP-012). Sumar nuevos tipos de reporte queda fuera de alcance: es una mini-fase futura que requiere definición de UX y no es bloqueante |
+| Reportes: otros tipos (torta, barras de comparación, etc.) | Los tipos de reporte que **sí** entran son ingresos/gastos y apilado por categoría de gastos (RF-REP-001), la grilla anual de gastos Únicos día × mes (RF-REP-010), el gantt anual de gastos en Cuotas (RF-REP-011), las líneas de Inflación vs Ingresos (RF-REP-012) y la Evolución de gastos fijos (RF-REP-013). Sumar nuevos tipos de reporte queda fuera de alcance: es una mini-fase futura que requiere definición de UX y no es bloqueante |
 | Tarjetas con fecha de corte | Requiere flujo propio; demasiado complejo para v1 |
 | Edición retroactiva de mes pasado de un fijo | Complejidad en el modelo de datos |
 | Cancelación parcial de cuotas restantes | Pendiente de definición |
