@@ -1646,6 +1646,65 @@ export class MovementsRepository {
   }
 
   /**
+   * Devuelve la agregación mensual de movimientos únicos INCOME para un mes dado.
+   * Usada para obtener el ingreso de diciembre del año previo (para el %dif de enero
+   * del reporte anual de inflación vs ingresos).
+   *
+   * Agrupa por (categoryId, currency, exchangeRate, anchorCurrency) — sin agrupación
+   * por día porque el reporte de inflación-ingresos trabaja con totales mensuales,
+   * no con promedios diarios.
+   *
+   * Devuelve TODAS las categorías sin filtrar; el filtro lo aplica el service.
+   */
+  async getUnicosIncomeForMonth(
+    userId: string,
+    yearMonth: string, // YYYY-MM
+  ): Promise<Array<{
+    categoryId: string;
+    categoryName: string;
+    categoryColor: string;
+    currency: string;
+    exchangeRate: string;
+    anchorCurrency: string;
+    totalCents: bigint;
+  }>> {
+    const monthStart = `${yearMonth}-01`;
+    const rows = await this.prisma.$queryRaw<Array<{
+      categoryId: string;
+      categoryName: string;
+      categoryColor: string;
+      currency: string;
+      exchangeRate: string;
+      anchorCurrency: string;
+      totalCents: bigint;
+    }>>`
+      SELECT
+        t."categoryId"                       AS "categoryId",
+        c.name                               AS "categoryName",
+        c.color                              AS "categoryColor",
+        t.currency::text                     AS "currency",
+        t."exchangeRate"::text               AS "exchangeRate",
+        t."anchorCurrency"::text             AS "anchorCurrency",
+        SUM(t."amountCents")                 AS "totalCents"
+      FROM "Transaction" t
+      JOIN "Category" c ON c.id = t."categoryId"
+      WHERE
+        t."userId" = ${userId}
+        AND t.type = 'INCOME'
+        AND date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
+            = date_trunc('month', ${monthStart}::timestamp)
+      GROUP BY
+        t."categoryId",
+        c.name,
+        c.color,
+        t.currency,
+        t."exchangeRate",
+        t."anchorCurrency"
+    `;
+    return rows;
+  }
+
+  /**
    * Devuelve la metadata de las categorías con los ids dados.
    * Incluye categorías soft-deleted (RF-CAT-004).
    * Usado por getAnnualUnicosReport para enriquecer catMetaAll con nombre/color.

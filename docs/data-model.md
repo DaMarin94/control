@@ -19,7 +19,7 @@
 | **Preferencias de usuario** | Conjunto de preferencias del usuario (estado de UI que sobrevive a la navegación y al cierre de sesión). Una fila por usuario (1:1 con Usuario), con el contenido guardado como **blob JSON** en lugar de una columna por preferencia. La consumen las secciones colapsadas / orden de `/mes`, la config de reportes y el filtro por categoría. |
 | **Cotización de referencia (`ReferenceRate`)** | Tabla **global** (sin `userId`), **interna y no editable por UI**, de cotizaciones de referencia por `(moneda, mes)`. Sirve de **default por copia (no FK)** para pre-cargar la cotización de un movimiento según su mes; el movimiento conserva su propia cotización editable. Sembrada por seed idempotente y alimentada por el sync externo con la variante oficial. Ver §Tabla de cotizaciones de referencia. |
 | **Cotización externa por variante (`CurrencyQuote`)** | Tabla **global**, interna, no editable por UI. Histórico crudo de **variantes** de cotización FX capturadas de fuentes externas (oficial, blue, …) por `(moneda, variante, mes)`. `variant` es **string libre** (no enum), por mente abierta a variantes futuras. La conversión interna no la consume todavía. Ver §Cotizaciones externas y sincronización. |
-| **Inflación (`InflationRate`)** | Tabla **global**, interna, no editable por UI. IPC nacional (INDEC) por mes (variación mensual + nivel del índice). La consume el **reporte anual de gastos Únicos** (RF-REP-010), para las métricas de inflación y % ajustado del footer. Ver §Cotizaciones externas y sincronización. |
+| **Inflación (`InflationRate`)** | Tabla **global**, interna, no editable por UI. IPC nacional (INDEC) por mes (variación mensual + nivel del índice). La consumen el **reporte anual de gastos Únicos** (RF-REP-010, métricas de inflación y % ajustado del footer) y el **reporte anual de Inflación vs Ingresos** (RF-REP-012, serie de inflación y ajuste del ingreso). Ver §Cotizaciones externas y sincronización. |
 | **Log de sincronización (`RateSyncLog`)** | Tabla **global** de auditoría: una fila por intento de ingesta externa (aceptado/rechazado + motivo + payload crudo). El secret nunca se loguea. Ver §Cotizaciones externas y sincronización. |
 
 ---
@@ -134,13 +134,14 @@ ReportCardConfig = {
   currency?: "ARS" | "USD" | "EUR" | "BRL"       // moneda de display de la card (RF-REP-007); ausente = default global vigente
 }
 
-ReportCardType = "income-expense" | "by-category" | "unique-grid" | "installment-gantt"
+ReportCardType = "income-expense" | "by-category" | "unique-grid" | "installment-gantt" | "inflation-income"
 ```
 
-Nombres de display de cada tipo (menú "[+]" y mini de reorden): `income-expense` = **"Ingresos vs Gastos"**, `by-category` = **"Gastos por categoría"**, `unique-grid` = **"Gastos Únicos"**, `installment-gantt` = **"Gastos en Cuotas"**.
+Nombres de display de cada tipo (menú "[+]" y mini de reorden): `income-expense` = **"Ingresos vs Gastos"**, `by-category` = **"Gastos por categoría"**, `unique-grid` = **"Gastos Únicos"**, `installment-gantt` = **"Gastos en Cuotas"**, `inflation-income` = **"Inflación vs Ingresos"**.
 
 - **`title`** (RF-REP-008) — título de la card, máx. 60 caracteres, trimmeado al confirmar. Aplica a ambos `type`. **Ausente o vacío** → la card muestra el placeholder **"Reporte N"** (N = posición 1-based de la card en la columna, contando todas las cards; **display puro, no se persiste** y se recalcula en vivo al quitar/reordenar). Si el usuario confirma un título vacío, el campo se **omite** del objeto (back-compat: cards sin `title` muestran el placeholder).
-- **`type`** (`ReportCardType`) — `"income-expense"` (Ingresos vs Gastos, RF-REP-001), `"by-category"` (Gastos por categoría, RF-REP-001), `"unique-grid"` (grilla anual de gastos Únicos día × mes, RF-REP-010) o `"installment-gantt"` (gantt anual de gastos en Cuotas, RF-REP-011). La card `income-expense` es **Total-only**: muestra únicamente las dos series agregadas (ingresos vs gastos), sin sub-vista por categoría ni tabs. Las cards `unique-grid` y `installment-gantt` persisten **los mismos** campos que las otras (`year`, `categoryIds`, `currency`, `title`); **no** agregan campos propios (no usan `categoryChartMode` ni `hiddenSeries`). Su fuente de datos es un endpoint propio (`GET /movements/reports/annual-unicos` y `GET /movements/reports/annual-cuotas` respectivamente; ver §Contrato de reporte anual de Únicos y §Contrato de reporte anual de Cuotas), distinto de `GET /movements/reports`.
+- **`type`** (`ReportCardType`) — `"income-expense"` (Ingresos vs Gastos, RF-REP-001), `"by-category"` (Gastos por categoría, RF-REP-001), `"unique-grid"` (grilla anual de gastos Únicos día × mes, RF-REP-010), `"installment-gantt"` (gantt anual de gastos en Cuotas, RF-REP-011) o `"inflation-income"` (líneas de Inflación vs Ingresos del año, RF-REP-012). La card `income-expense` es **Total-only**: muestra únicamente las dos series agregadas (ingresos vs gastos), sin sub-vista por categoría ni tabs. Las cards `unique-grid`, `installment-gantt` e `inflation-income` persisten **los mismos** campos que las otras (`year`, `categoryIds`, `currency`, `title`); **no** agregan campos propios (no usan `categoryChartMode` ni `hiddenSeries`). Su fuente de datos es un endpoint propio (`GET /movements/reports/annual-unicos`, `GET /movements/reports/annual-cuotas` y `GET /movements/reports/annual-inflation-income` respectivamente; ver §Contrato de reporte anual de Únicos, §Contrato de reporte anual de Cuotas y §Contrato de reporte anual de Inflación vs Ingresos), distinto de `GET /movements/reports`.
+  - **`inflation-income` — toggle de series efímero.** La card grafica tres series (inflación, variación % de ingreso, ingreso ajustado) cuya **visibilidad se togglea por la leyenda**, pero ese toggle es **estado local efímero de la card**: **no** se persiste en el blob (default = las tres visibles; al recargar vuelven todas). Lo que sí se persiste (como en las demás cards anuales) es el filtro de categorías (`categoryIds`) y la moneda (`currency`).
 - **`year`** — el año que la card grafica; lo cambia la navegación de año embebida del widget.
 - **`categoryIds`** — filtro de categorías de la card. **`null` = todas** (default al crear); una **lista** = subconjunto explícito de `categoryId`s seleccionados. Aplica a ambos tipos (en `income-expense` restringe qué categorías cuentan en los totales; en `by-category`, qué bandas se apilan). Lo que el front manda al endpoint como `categories` deriva de este campo (ver contrato `GET /movements/reports`).
 - **`categoryChartMode`** (RF-REP-006) — representación **solo de las cards `by-category`**: `"bar"` = barras apiladas por categoría (default); `"line"` = áreas apiladas por categoría (mismo dato, geometría continua, con línea de contorno = total de gasto). **Ausente = `"bar"`** (back-compat: cards existentes mantienen barras). Irrelevante para los demás tipos. En el dashboard solo se monta `income-expense`, que no usa este campo.
@@ -272,7 +273,7 @@ Tabla **global**, **interna y no editable por UI**, que guarda el IPC nacional (
 | `fetchedAt` | `DateTime` | instante de captura (UTC) |
 
 - **Clave única `yearMonth`.** El IPC nacional es un único valor por mes (sin moneda ni variante). Upsert idempotente por esta clave.
-- **Consumo.** No alimenta la conversión de monedas ni los totales del mes. Lo consume el reporte anual de gastos Únicos (RF-REP-010, footer de inflación y % ajustado); ver §Contrato de reporte anual de Únicos.
+- **Consumo.** No alimenta la conversión de monedas ni los totales del mes. La consumen el reporte anual de gastos Únicos (RF-REP-010, footer de inflación y % ajustado; ver §Contrato de reporte anual de Únicos) y el reporte anual de Inflación vs Ingresos (RF-REP-012, serie de inflación y ajuste del ingreso; ver §Contrato de reporte anual de Inflación vs Ingresos).
 - **Histórico sembrado por data migration (`20260623000000_seed_historical_ipc`).** El histórico de IPC viene horneado por esta migración de Prisma: **113 meses (2017-01 … 2026-05)** de la serie completa de INDEC (`apis.datos.gob.ar`, variación e índice) insertados con `ON CONFLICT ("yearMonth") DO NOTHING`. Idempotente y convive con el sync diario sin pisarse: el sync solo cubre el **mes corriente**, la migración cubre el pasado.
 
 ### `RateSyncLog` — auditoría de la sincronización
@@ -665,9 +666,57 @@ donde `AvailableCategory = { categoryId, name, color }` (mismo shape que en §Co
 
 ---
 
+## Contrato de reporte anual de Inflación vs Ingresos (respuesta de `GET /movements/reports/annual-inflation-income`)
+
+`GET /movements/reports/annual-inflation-income?year=YYYY&categories=<...>&currency=XXX&today=YYYY-MM-DD` devuelve, dentro del sobre `{ success, statusCode, data }`, las **series anuales de Inflación vs Ingresos** (12 meses) que alimentan la card `inflation-income` (RF-REP-012): la inflación IPC del mes, la variación mensual del total de **ingreso** (`INCOME`) y esa misma variación **ajustada por inflación**, más las **dos rectas de tendencia** (OLS) de las series de ingreso. Solo agrega movimientos de tipo **ingreso (`INCOME`)**. Es un endpoint **distinto** de `GET /movements/reports` y de los otros dos reportes anuales (no comparte shape). Reglas de cálculo (fórmulas de variación, ajuste por inflación, enero vs diciembre previo, tendencia OLS) en `docs/backend.md`, §Serie de reportes → Reporte anual de Inflación vs Ingresos.
+
+**Query params:**
+
+- **`year`** (`YYYY`, requerido) — el año a graficar.
+- **`categories`** (opcional) — filtro por categoría, **tres estados** (§Filtro de categorías — query param `categories`): **ausente = todas**, **`categories=` = ninguna**, **lista `id1,id2` = subconjunto**. Comas **sin URL-encode**. El front lo deriva del `categoryIds` de la card. Restringe **qué ingresos cuentan** en las series; **`earliestYear` y `availableCategories` lo ignoran** (superconjunto estable).
+- **`currency`** (opcional) — override de la moneda de display (RF-REP-007), una de las 4 monedas, **case-sensitive**. **Ausente → la default global del usuario**; **presente y válido → esa moneda**; **vacío o fuera del set → `400`**. La moneda solo define en qué moneda se computa el **total de ingreso** del mes (insumo de la variación %); las series resultantes están en **puntos porcentuales**, no en moneda.
+- **`today`** (opcional, `YYYY-MM-DD`) — la **fecha local del usuario**: define el **mes en curso** (su total de ingreso se computa a la fecha) y a partir de qué mes los meses son **futuros** (series en `null`). Si falta, el backend cae a `new Date()` (UTC).
+
+```
+AnnualInflationIncomeResponse = {
+  year: number,
+  currency: "ARS" | "USD" | "EUR" | "BRL",   // moneda de display usada para el total de ingreso
+  months: InflationIncomeMonth[],            // SIEMPRE 12 entradas; índice = mes-1
+  incomeTrend: TrendLine,                     // recta OLS sobre la serie de ingreso nominal (incomePct)
+  incomeAdjTrend: TrendLine,                  // recta OLS sobre la serie de ingreso ajustada (incomePctAdj)
+  earliestYear: number | null,               // año más antiguo con algún movimiento del usuario; NO afectado por el filtro
+  availableCategories: AvailableCategory[]    // universo de categorías con INGRESO del año, SIN el filtro
+}
+
+InflationIncomeMonth = {
+  inflationPct: number | null,   // variación IPC (puntos %) del mes; null si no hay dato de IPC
+  incomePct: number | null,      // variación % MoM del total de ingreso (puntos %); null si previo 0 o mes futuro
+  incomePctAdj: number | null    // incomePct con el ingreso previo inflado por el IPC del mes; null si falta IPC / previo 0 / mes futuro
+}
+
+TrendLine = {
+  slope: number,                 // pendiente de la recta y = slope·x + intercept (x = índice de mes 0–11)
+  intercept: number,
+  points: number[] | null        // 12 valores de la recta evaluada en cada mes; null si la serie madre tiene < 2 puntos no nulos
+}
+```
+
+donde `AvailableCategory = { categoryId, name, color }` (mismo shape que en §Contrato de serie de reportes).
+
+- **`months` — siempre 12, índice = mes-1.** Las tres series están en **puntos porcentuales** (ej. `3.5` = 3,5 %), no en moneda. Cada métrica es `null` cuando no se puede computar (ver más abajo); el front corta la línea en los meses `null` (no las conecta).
+  - **`inflationPct`** — `InflationRate.monthlyVariation` (puntos %) del mes; **`null`** si no hay fila de IPC para ese mes.
+  - **`incomePct`** — variación mensual del total de ingreso: `ROUNDDOWN((ingresoActual × 100 / ingresoPrevio) − 100, 2)`, **truncado hacia cero**. El mes previo de **enero es diciembre del año anterior** (requiere consultar ingresos **fuera del año pedido**). **`null`** si `ingresoPrevio == 0` o si el mes es **futuro**.
+  - **`incomePctAdj`** — igual que `incomePct`, pero el ingreso del mes previo se **infla por la variación IPC del mes en curso** antes de comparar (misma semántica que `pctVsPrevAdj` del reporte de Únicos). **`null`** si falta el IPC del mes, si `ingresoPrevio == 0` o si el mes es futuro.
+- **Total de ingreso del mes — insumo de la variación.** Suma de movimientos **`INCOME`** imputados al mes (únicos por su mes local + fijos/cuotas aplicables, con el mismo bucketeo RN-015 que el resto), en centavos de `currency` (capa de display, re-ruteo por pivote USD). El mes en curso usa el total **a la fecha** (`today`); los meses **futuros** no tienen total → `incomePct`/`incomePctAdj` en `null`.
+- **`incomeTrend` / `incomeAdjTrend` — tendencias OLS.** Rectas de mínimos cuadrados ajustadas sobre los **puntos no nulos** de su serie madre (`incomePct` e `incomePctAdj` respectivamente). `points` es la recta evaluada en los 12 meses; **`null` si la serie madre tiene menos de 2 puntos no nulos** (no hay recta posible). No son ítems de la leyenda: en el front cada tendencia sigue la visibilidad de su serie de ingreso madre.
+- **`earliestYear`** — año más antiguo con **cualquier** movimiento del usuario, **ignorando el filtro `categories`** (mismo criterio que en §Contrato de serie de reportes); `null` si el usuario no tiene movimientos. **A diferencia de `annual-unicos`/`annual-cuotas`, este contrato SÍ lo expone:** la card `inflation-income` topea la navegación de año hacia atrás en el primer año con datos (RF-REP-012).
+- **`availableCategories`** — universo de categorías con **ingreso (`INCOME`)** del año, computado **sin** aplicar el filtro `categories` (superconjunto estable). Es el universo **de ingreso** (no de gasto, a diferencia de los otros reportes); alimenta la leyenda-filtro de categorías de la card.
+
+---
+
 ## Filtro de categorías — query param `categories`
 
-> Destino canónico del contrato del param `categories`. Lo consumen **`GET /movements/reports?year=YYYY`** (filtro de reportes, RF-REP-002), **`GET /movements/reports/annual-unicos?year=YYYY`** (filtro de la grilla anual de Únicos, RF-REP-010) y **`GET /movements/reports/annual-cuotas?year=YYYY`** (filtro del gantt anual de Cuotas, RF-REP-011), con la misma semántica de tres estados. `GET /movements?month=YYYY-MM` lo **acepta** también, pero **`/mes` no lo envía**: el filtro de la Vista del mes vive en el frontend (filtros por listado, RF-VM-006; ver §Preferencia `monthListFilters`).
+> Destino canónico del contrato del param `categories`. Lo consumen **`GET /movements/reports?year=YYYY`** (filtro de reportes, RF-REP-002), **`GET /movements/reports/annual-unicos?year=YYYY`** (filtro de la grilla anual de Únicos, RF-REP-010), **`GET /movements/reports/annual-cuotas?year=YYYY`** (filtro del gantt anual de Cuotas, RF-REP-011) y **`GET /movements/reports/annual-inflation-income?year=YYYY`** (filtro del reporte de Inflación vs Ingresos, RF-REP-012), con la misma semántica de tres estados. `GET /movements?month=YYYY-MM` lo **acepta** también, pero **`/mes` no lo envía**: el filtro de la Vista del mes vive en el frontend (filtros por listado, RF-VM-006; ver §Preferencia `monthListFilters`).
 
 El param distingue **tres estados** —y, en particular, distingue **"ausente" de "presente y vacío"**:
 

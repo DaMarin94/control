@@ -232,6 +232,53 @@ export interface AnnualCuotasResponse {
   availableCategories: AvailableCategory[];
 }
 
+// ---------------------------------------------------------------------------
+// Shapes para el reporte anual de inflación vs ingresos — P5
+// ---------------------------------------------------------------------------
+
+/**
+ * Punto del mes en el reporte anual de inflación vs ingresos.
+ *
+ * inflationPct  — variación IPC del mes en puntos %; null si no hay dato.
+ * incomePct     — variación MoM del ingreso total del mes (truncada 2 dec).
+ *                 null si el mes es futuro (del año en curso) o si ingreso anterior es 0.
+ * incomePctAdj  — igual que incomePct pero el ingreso anterior se infla por IPC del mes.
+ *                 null si falta IPC, si el mes es futuro, o si el ingreso anterior es 0.
+ */
+export interface AnnualInflationIncomeMonth {
+  inflationPct: number | null;
+  incomePct: number | null;
+  incomePctAdj: number | null;
+}
+
+/**
+ * Línea de tendencia lineal por mínimos cuadrados.
+ * Se exponen los 12 puntos de la recta (índice = mes-1), uno por mes,
+ * calculados como y = slope * x + intercept donde x = índice de mes (0..11).
+ * Los meses sin punto de datos contribuyen al cálculo con la recta; los que
+ * caen fuera del rango de puntos disponibles también llevan el valor de la recta.
+ * null si hay menos de 2 puntos no nulos (recta no computable).
+ */
+export interface AnnualInflationIncomeTrend {
+  slope: number;
+  intercept: number;
+  /** 12 valores de la recta en los índices de mes 0..11. null si no computable. */
+  points: number[] | null;
+}
+
+/**
+ * Shape completo de la respuesta de GET /movements/reports/annual-inflation-income.
+ */
+export interface AnnualInflationIncomeResponse {
+  year: number;
+  currency: Currency;
+  months: AnnualInflationIncomeMonth[]; // siempre 12, índice = mes-1
+  incomeTrend: AnnualInflationIncomeTrend;
+  incomeAdjTrend: AnnualInflationIncomeTrend;
+  earliestYear: number | null;
+  availableCategories: AvailableCategory[];
+}
+
 @Injectable()
 export class MovementsService {
   constructor(
@@ -1549,6 +1596,577 @@ export class MovementsService {
   }
 
   // ---------------------------------------------------------------------------
+  // Reporte anual de inflación vs ingresos — P5
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Devuelve el reporte anual de inflación vs ingresos del usuario para el año dado.
+   *
+   * Por cada mes calcula:
+   *   inflationPct  — InflationRate.monthlyVariation (puntos %) del mes.
+   *   incomePct     — ROUNDDOWN((ingresoCurrent×100/ingresoPrev)−100, 2), truncado.
+   *                   El mes anterior de enero = diciembre del año previo.
+   *                   null si el mes es futuro del año en curso, o si ingresoPrev==0.
+   *   incomePctAdj  — igual pero ingresoPrev *= (1 + inflationPct/100) antes de comparar.
+   *                   null si falta IPC, si el mes es futuro, o si ingresoPrev==0.
+   *
+   * "Ingreso del mes" = suma de INCOME de todos los orígenes (únicos + fijos + cuotas),
+   * con el mismo criterio de imputación por mes que la serie de reportes.
+   *
+   * El filtro de categorías restringe qué ingresos cuentan; earliestYear y
+   * availableCategories (universo de categorías con INCOME en el año) ignoran el filtro.
+   *
+   * El "mes en curso" usa el total a la fecha (no nulo) pero la variación es nula para
+   * meses futuros del año en curso (igual criterio que dailyAvg en annual-unicos).
+   */
+  async getAnnualInflationIncomeReport(
+    userId: string,
+    year: number,
+    categoryIds?: string[] | null,
+    currencyOverride?: Currency | null,
+    today?: string,
+  ): Promise<AnnualInflationIncomeResponse> {
+    // Normalizar filtro de categorías
+    const filterSet: Set<string> | null =
+      categoryIds === null || categoryIds === undefined
+        ? null
+        : categoryIds.length === 0
+          ? new Set<string>()
+          : new Set(categoryIds);
+
+    // Determinar fecha "hoy" para determinar meses futuros
+    const todayDate = today ? new Date(today + 'T00:00:00Z') : new Date();
+    const todayYear = todayDate.getUTCFullYear();
+    const todayMonth = todayDate.getUTCMonth() + 1; // 1-based
+
+    const yearStr = String(year).padStart(4, '0');
+    const prevYearStr = String(year - 1).padStart(4, '0');
+    const prevDecKey = `${prevYearStr}-12`;
+    const months12: string[] = Array.from({ length: 12 }, (_, i) => {
+      const m = String(i + 1).padStart(2, '0');
+      return `${yearStr}-${m}`;
+    });
+
+    // Cargar en paralelo: settings, pivot rates, inflation rates, únicos del año,
+    // únicos del mes anterior al año (dic previo), fijos y cuotas
+    const [
+      userSettings,
+      pivotRatesForYear,
+      inflationRates,
+      unicosYear,
+      unicosPrevDec,
+      allFijos,
+      allCuotas,
+      earliestYear,
+    ] = await Promise.all([
+      this.settingsService.getSettings(userId),
+      this.repo.loadPivotRatesForYear(year),
+      this.repo.loadInflationRatesForYear(year),
+      this.repo.getAnnualUnicosAggregated(userId, year),
+      this.repo.getUnicosIncomeForMonth(userId, prevDecKey),
+      this.repo.getAllFijosForAnnual(userId),
+      this.repo.getAllCuotasForAnnual(userId),
+      this.repo.getEarliestYear(userId),
+    ]);
+
+    const displayCurrency: Currency =
+      currencyOverride != null ? currencyOverride : userSettings.defaultCurrency;
+
+    // ---------------------------------------------------------------------------
+    // Separar fijos en normales y calculados
+    // ---------------------------------------------------------------------------
+    const normalesForAnnual = allFijos.filter(
+      (f) => f.sourceChainId === null && f.sourceMovementId === null && f.sourceInstallmentGroupId === null,
+    );
+    const calculadosDeFijoAnual = allFijos.filter((f) => f.sourceChainId !== null);
+    const calculadosDeUnicoAnual = allFijos.filter((f) => f.sourceMovementId !== null);
+    const calculadosDeCuotaAnual = allFijos.filter((f) => f.sourceInstallmentGroupId !== null);
+
+    // Cargar Transactions y Groups de origen para calculados (una sola query cada uno)
+    const txIdsAnual = [...new Set(calculadosDeUnicoAnual.map((f) => f.sourceMovementId!).filter(Boolean))];
+    const txAnualMap = new Map<string, { amountCents: number; currency: Currency; exchangeRate: number; anchorCurrency: Currency }>();
+    if (txIdsAnual.length > 0) {
+      const txRows = await this.repo.findTransactionsByIds(txIdsAnual);
+      for (const tx of txRows) txAnualMap.set(tx.id, {
+        amountCents: tx.amountCents,
+        currency: tx.currency,
+        exchangeRate: tx.exchangeRate,
+        anchorCurrency: tx.anchorCurrency,
+      });
+    }
+
+    const groupIdsAnual = [...new Set(calculadosDeCuotaAnual.map((f) => f.sourceInstallmentGroupId!).filter(Boolean))];
+    const groupAnualMap = new Map<string, {
+      amountCents: number;
+      totalInstallments: number;
+      startMonth: string;
+      currency: Currency;
+      exchangeRate: number;
+      anchorCurrency: Currency;
+    }>();
+    if (groupIdsAnual.length > 0) {
+      const groupRows = await this.repo.findInstallmentGroupsByIds(groupIdsAnual);
+      for (const g of groupRows) groupAnualMap.set(g.id, {
+        amountCents: g.amountCents,
+        totalInstallments: g.totalInstallments,
+        startMonth: g.startMonth,
+        currency: g.currency,
+        exchangeRate: g.exchangeRate,
+        anchorCurrency: g.anchorCurrency,
+      });
+    }
+
+    // ---------------------------------------------------------------------------
+    // Universo estable de categorías con INCOME en el año (sin filtro)
+    // ---------------------------------------------------------------------------
+    const catMetaAll = new Map<string, AnnualCategoryMeta>();
+    const annualIncomeAll = new Map<string, number>();
+
+    // Función de acumulación al universo (solo para INCOME, sin filtro)
+    const accumulateUniverse = (categoryId: string, name: string, color: string, cents: number) => {
+      if (!catMetaAll.has(categoryId)) {
+        catMetaAll.set(categoryId, { categoryId, name, color });
+      }
+      annualIncomeAll.set(categoryId, (annualIncomeAll.get(categoryId) ?? 0) + cents);
+    };
+
+    // ---------------------------------------------------------------------------
+    // Acumular ingresos por mes: [0..11] = enero..diciembre
+    // monthIncome[i] = total de INCOME del mes i+1
+    // ---------------------------------------------------------------------------
+    const monthIncome: number[] = new Array(12).fill(0);
+
+    // 1. Únicos INCOME del año
+    for (const row of unicosYear) {
+      if (row.type !== 'INCOME') continue;
+      const idx = parseInt(row.monthKey.split('-')[1], 10) - 1;
+      if (idx < 0 || idx > 11) continue;
+
+      const pivotRates = pivotRatesForYear.get(row.monthKey) ?? null;
+      const cents = convertToDisplayCurrency(
+        Number(row.totalCents),
+        row.currency as Currency,
+        Number(row.exchangeRate),
+        row.anchorCurrency as Currency,
+        displayCurrency,
+        pivotRates,
+      );
+
+      accumulateUniverse(row.categoryId, row.categoryName, row.categoryColor, cents);
+
+      if (filterSet === null || filterSet.has(row.categoryId)) {
+        monthIncome[idx] += cents;
+      }
+    }
+
+    // 2. Fijos e ingresos derivados, mes por mes
+    for (let i = 0; i < 12; i++) {
+      const mes = months12[i];
+      const pivotRates = pivotRatesForYear.get(mes) ?? null;
+
+      // Mapa chainId → datos del normal activo en este mes (para calculados de fijo)
+      const normalesActivosMes = new Map<string, {
+        amountCents: number;
+        skipped: boolean;
+        startMonth: string;
+        currency: Currency;
+        exchangeRate: number;
+        anchorCurrency: Currency;
+      }>();
+      for (const fijo of normalesForAnnual) {
+        const inRange =
+          fijo.startMonth <= mes &&
+          (fijo.deletedFrom === null || fijo.deletedFrom > mes);
+        if (!inRange) continue;
+        if (!isOnFrequency(fijo.startMonth, fijo.frequency, mes)) continue;
+        const existing = normalesActivosMes.get(fijo.chainId);
+        if (!existing || fijo.startMonth > existing.startMonth) {
+          normalesActivosMes.set(fijo.chainId, {
+            amountCents: fijo.amountCents,
+            skipped: fijo.skippedMonths.has(mes),
+            startMonth: fijo.startMonth,
+            currency: fijo.currency,
+            exchangeRate: fijo.exchangeRate,
+            anchorCurrency: fijo.anchorCurrency,
+          });
+        }
+      }
+
+      // Fijos normales INCOME
+      for (const fijo of normalesForAnnual) {
+        if (fijo.type !== 'INCOME') continue;
+        const inRange =
+          fijo.startMonth <= mes &&
+          (fijo.deletedFrom === null || fijo.deletedFrom > mes);
+        if (!inRange) continue;
+        if (!isOnFrequency(fijo.startMonth, fijo.frequency, mes)) continue;
+        if (fijo.skippedMonths.has(mes)) continue;
+
+        const convertedAmount = convertToDisplayCurrencyByMonth(
+          fijo.amountCents,
+          fijo.currency,
+          displayCurrency,
+          pivotRates,
+          fijo.exchangeRate,
+          fijo.anchorCurrency,
+        );
+
+        accumulateUniverse(fijo.categoryId, fijo.categoryName, fijo.categoryColor, convertedAmount);
+        if (filterSet === null || filterSet.has(fijo.categoryId)) {
+          monthIncome[i] += convertedAmount;
+        }
+      }
+
+      // Calculados de fijo
+      for (const calc of calculadosDeFijoAnual) {
+        const inRange =
+          calc.startMonth <= mes &&
+          (calc.deletedFrom === null || calc.deletedFrom > mes);
+        if (!inRange) continue;
+
+        const originData = calc.sourceChainId
+          ? normalesActivosMes.get(calc.sourceChainId)
+          : undefined;
+        if (!originData) continue;
+        if (originData.skipped || calc.skippedMonths.has(mes)) continue;
+
+        const derivedAmount = applyFormula(
+          originData.amountCents,
+          calc.formulaOperator as FormulaOperator,
+          calc.formulaOperand!,
+          calc.formulaSign!,
+        );
+        const derivedType =
+          derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
+        if (derivedType !== MovementType.INCOME) continue;
+
+        const magnitude = convertToDisplayCurrencyByMonth(
+          Math.abs(derivedAmount),
+          originData.currency,
+          displayCurrency,
+          pivotRates,
+          originData.exchangeRate,
+          originData.anchorCurrency,
+        );
+
+        accumulateUniverse(calc.categoryId, calc.categoryName, calc.categoryColor, magnitude);
+        if (filterSet === null || filterSet.has(calc.categoryId)) {
+          monthIncome[i] += magnitude;
+        }
+      }
+
+      // Calculados de único
+      for (const calc of calculadosDeUnicoAnual) {
+        const inRange =
+          calc.startMonth <= mes &&
+          (calc.deletedFrom === null || calc.deletedFrom > mes);
+        if (!inRange) continue;
+
+        const txData = calc.sourceMovementId ? txAnualMap.get(calc.sourceMovementId) : undefined;
+        if (!txData) continue;
+
+        const derivedAmount = applyFormula(
+          txData.amountCents,
+          calc.formulaOperator as FormulaOperator,
+          calc.formulaOperand!,
+          calc.formulaSign!,
+        );
+        const derivedType =
+          derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
+        if (derivedType !== MovementType.INCOME) continue;
+
+        const magnitude = convertToDisplayCurrency(
+          Math.abs(derivedAmount),
+          txData.currency,
+          txData.exchangeRate,
+          txData.anchorCurrency,
+          displayCurrency,
+          pivotRates,
+        );
+
+        accumulateUniverse(calc.categoryId, calc.categoryName, calc.categoryColor, magnitude);
+        if (filterSet === null || filterSet.has(calc.categoryId)) {
+          monthIncome[i] += magnitude;
+        }
+      }
+
+      // Calculados de cuota
+      for (const calc of calculadosDeCuotaAnual) {
+        const inRange =
+          calc.startMonth <= mes &&
+          (calc.deletedFrom === null || calc.deletedFrom > mes);
+        if (!inRange) continue;
+
+        const groupData = calc.sourceInstallmentGroupId
+          ? groupAnualMap.get(calc.sourceInstallmentGroupId)
+          : undefined;
+        if (!groupData) continue;
+
+        const endMonth = addMonths(groupData.startMonth, groupData.totalInstallments);
+        if (mes >= endMonth) continue;
+
+        const derivedAmount = applyFormula(
+          groupData.amountCents,
+          calc.formulaOperator as FormulaOperator,
+          calc.formulaOperand!,
+          calc.formulaSign!,
+        );
+        const derivedType =
+          derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
+        if (derivedType !== MovementType.INCOME) continue;
+
+        const magnitude = convertToDisplayCurrencyByMonth(
+          Math.abs(derivedAmount),
+          groupData.currency,
+          displayCurrency,
+          pivotRates,
+          groupData.exchangeRate,
+          groupData.anchorCurrency,
+        );
+
+        accumulateUniverse(calc.categoryId, calc.categoryName, calc.categoryColor, magnitude);
+        if (filterSet === null || filterSet.has(calc.categoryId)) {
+          monthIncome[i] += magnitude;
+        }
+      }
+
+      // Cuotas INCOME
+      for (const grupo of allCuotas) {
+        if (grupo.type !== 'INCOME') continue;
+        const endMonth = addMonths(grupo.startMonth, grupo.totalInstallments);
+        if (grupo.startMonth > mes || mes >= endMonth) continue;
+
+        const convertedAmount = convertToDisplayCurrencyByMonth(
+          grupo.amountCents,
+          grupo.currency,
+          displayCurrency,
+          pivotRates,
+          grupo.exchangeRate,
+          grupo.anchorCurrency,
+        );
+
+        accumulateUniverse(grupo.categoryId, grupo.categoryName, grupo.categoryColor, convertedAmount);
+        if (filterSet === null || filterSet.has(grupo.categoryId)) {
+          monthIncome[i] += convertedAmount;
+        }
+      }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Calcular ingreso de diciembre del año previo (para la variación de enero)
+    // Incluye únicos, fijos y cuotas de ese mes.
+    // ---------------------------------------------------------------------------
+
+    // Pivot rates para diciembre del año previo: usamos el rate más cercano disponible.
+    // loadPivotRatesForYear solo carga los 12 meses del año pedido; para el mes previo
+    // usamos la clave de enero como proxy al más antiguo disponible, igual que anual-unicos.
+    // Como clamping: si no hay pivotRate para prevDec, usamos el de enero del año (fallback).
+    const januaryKey = `${yearStr}-01`;
+    const pivotRatesPrevDec = pivotRatesForYear.get(januaryKey) ?? null;
+
+    let prevDecIncome = 0;
+
+    // Únicos INCOME de diciembre del año previo
+    for (const row of unicosPrevDec) {
+      const cents = convertToDisplayCurrency(
+        Number(row.totalCents),
+        row.currency as Currency,
+        Number(row.exchangeRate),
+        row.anchorCurrency as Currency,
+        displayCurrency,
+        pivotRatesPrevDec,
+      );
+      if (filterSet === null || filterSet.has(row.categoryId)) {
+        prevDecIncome += cents;
+      }
+    }
+
+    // Fijos INCOME activos en diciembre del año previo
+    for (const fijo of normalesForAnnual) {
+      if (fijo.type !== 'INCOME') continue;
+      const inRange =
+        fijo.startMonth <= prevDecKey &&
+        (fijo.deletedFrom === null || fijo.deletedFrom > prevDecKey);
+      if (!inRange) continue;
+      if (!isOnFrequency(fijo.startMonth, fijo.frequency, prevDecKey)) continue;
+      if (fijo.skippedMonths.has(prevDecKey)) continue;
+
+      const convertedAmount = convertToDisplayCurrencyByMonth(
+        fijo.amountCents,
+        fijo.currency,
+        displayCurrency,
+        pivotRatesPrevDec,
+        fijo.exchangeRate,
+        fijo.anchorCurrency,
+      );
+      if (filterSet === null || filterSet.has(fijo.categoryId)) {
+        prevDecIncome += convertedAmount;
+      }
+    }
+
+    // Calculados de fijo INCOME activos en diciembre del año previo
+    {
+      const normalesMes = new Map<string, { amountCents: number; skipped: boolean; startMonth: string; currency: Currency; exchangeRate: number; anchorCurrency: Currency }>();
+      for (const fijo of normalesForAnnual) {
+        const inRange = fijo.startMonth <= prevDecKey && (fijo.deletedFrom === null || fijo.deletedFrom > prevDecKey);
+        if (!inRange) continue;
+        if (!isOnFrequency(fijo.startMonth, fijo.frequency, prevDecKey)) continue;
+        const existing = normalesMes.get(fijo.chainId);
+        if (!existing || fijo.startMonth > existing.startMonth) {
+          normalesMes.set(fijo.chainId, { amountCents: fijo.amountCents, skipped: fijo.skippedMonths.has(prevDecKey), startMonth: fijo.startMonth, currency: fijo.currency, exchangeRate: fijo.exchangeRate, anchorCurrency: fijo.anchorCurrency });
+        }
+      }
+      for (const calc of calculadosDeFijoAnual) {
+        const inRange = calc.startMonth <= prevDecKey && (calc.deletedFrom === null || calc.deletedFrom > prevDecKey);
+        if (!inRange) continue;
+        const originData = calc.sourceChainId ? normalesMes.get(calc.sourceChainId) : undefined;
+        if (!originData) continue;
+        if (originData.skipped || calc.skippedMonths.has(prevDecKey)) continue;
+        const derivedAmount = applyFormula(originData.amountCents, calc.formulaOperator as FormulaOperator, calc.formulaOperand!, calc.formulaSign!);
+        if (derivedAmount <= 0) continue;
+        const magnitude = convertToDisplayCurrencyByMonth(Math.abs(derivedAmount), originData.currency, displayCurrency, pivotRatesPrevDec, originData.exchangeRate, originData.anchorCurrency);
+        if (filterSet === null || filterSet.has(calc.categoryId)) {
+          prevDecIncome += magnitude;
+        }
+      }
+    }
+
+    // Calculados de único INCOME activos en diciembre del año previo
+    for (const calc of calculadosDeUnicoAnual) {
+      const inRange = calc.startMonth <= prevDecKey && (calc.deletedFrom === null || calc.deletedFrom > prevDecKey);
+      if (!inRange) continue;
+      const txData = calc.sourceMovementId ? txAnualMap.get(calc.sourceMovementId) : undefined;
+      if (!txData) continue;
+      const derivedAmount = applyFormula(txData.amountCents, calc.formulaOperator as FormulaOperator, calc.formulaOperand!, calc.formulaSign!);
+      if (derivedAmount <= 0) continue;
+      const magnitude = convertToDisplayCurrency(Math.abs(derivedAmount), txData.currency, txData.exchangeRate, txData.anchorCurrency, displayCurrency, pivotRatesPrevDec);
+      if (filterSet === null || filterSet.has(calc.categoryId)) {
+        prevDecIncome += magnitude;
+      }
+    }
+
+    // Calculados de cuota INCOME activos en diciembre del año previo
+    for (const calc of calculadosDeCuotaAnual) {
+      const inRange = calc.startMonth <= prevDecKey && (calc.deletedFrom === null || calc.deletedFrom > prevDecKey);
+      if (!inRange) continue;
+      const groupData = calc.sourceInstallmentGroupId ? groupAnualMap.get(calc.sourceInstallmentGroupId) : undefined;
+      if (!groupData) continue;
+      const endMonth = addMonths(groupData.startMonth, groupData.totalInstallments);
+      if (prevDecKey >= endMonth) continue;
+      const derivedAmount = applyFormula(groupData.amountCents, calc.formulaOperator as FormulaOperator, calc.formulaOperand!, calc.formulaSign!);
+      if (derivedAmount <= 0) continue;
+      const magnitude = convertToDisplayCurrencyByMonth(Math.abs(derivedAmount), groupData.currency, displayCurrency, pivotRatesPrevDec, groupData.exchangeRate, groupData.anchorCurrency);
+      if (filterSet === null || filterSet.has(calc.categoryId)) {
+        prevDecIncome += magnitude;
+      }
+    }
+
+    // Cuotas INCOME activas en diciembre del año previo
+    for (const grupo of allCuotas) {
+      if (grupo.type !== 'INCOME') continue;
+      const endMonth = addMonths(grupo.startMonth, grupo.totalInstallments);
+      if (grupo.startMonth > prevDecKey || prevDecKey >= endMonth) continue;
+      const convertedAmount = convertToDisplayCurrencyByMonth(
+        grupo.amountCents,
+        grupo.currency,
+        displayCurrency,
+        pivotRatesPrevDec,
+        grupo.exchangeRate,
+        grupo.anchorCurrency,
+      );
+      if (filterSet === null || filterSet.has(grupo.categoryId)) {
+        prevDecIncome += convertedAmount;
+      }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Construir los 12 meses del reporte
+    // ---------------------------------------------------------------------------
+    const months: AnnualInflationIncomeMonth[] = [];
+    // incomePct values para la regresión (incluyendo nulls — OLS solo usa no-nulos)
+    const incomePctValues: (number | null)[] = [];
+    const incomePctAdjValues: (number | null)[] = [];
+
+    let prevMonthIncome: number = prevDecIncome;
+
+    for (let i = 0; i < 12; i++) {
+      const monthNum = i + 1;
+      const monthKey = months12[i];
+      const inflationPct: number | null = inflationRates.get(monthKey) ?? null;
+
+      // Determinar si el mes es futuro (sin dato de variación)
+      const isFuture =
+        year > todayYear ||
+        (year === todayYear && monthNum > todayMonth);
+
+      const currentIncome = monthIncome[i];
+
+      // incomePct: variación MoM del ingreso total
+      let incomePct: number | null = null;
+      if (!isFuture && prevMonthIncome > 0) {
+        incomePct = roundDown((currentIncome * 100) / prevMonthIncome - 100, 2);
+      }
+
+      // incomePctAdj: variación MoM ajustada por IPC
+      let incomePctAdj: number | null = null;
+      if (!isFuture && prevMonthIncome > 0 && inflationPct !== null) {
+        const prevInflated = prevMonthIncome * (1 + inflationPct / 100);
+        if (prevInflated > 0) {
+          incomePctAdj = roundDown((currentIncome * 100) / prevInflated - 100, 2);
+        }
+      }
+
+      months.push({ inflationPct, incomePct, incomePctAdj });
+      incomePctValues.push(incomePct);
+      incomePctAdjValues.push(incomePctAdj);
+
+      // El ingreso de este mes es el "previo" del siguiente
+      // Para meses futuros también actualizamos el previo para que las variaciones
+      // futuras sean correctas (cuando llegue el tiempo, etc.)
+      prevMonthIncome = currentIncome;
+    }
+
+    // ---------------------------------------------------------------------------
+    // Calcular regresiones lineales por mínimos cuadrados
+    // ---------------------------------------------------------------------------
+    const incomeTrend = computeLinearTrend(incomePctValues);
+    const incomeAdjTrend = computeLinearTrend(incomePctAdjValues);
+
+    // ---------------------------------------------------------------------------
+    // availableCategories: universo de categorías con INCOME del año, sin filtro,
+    // ordenado por ingreso anual DESC, desempate categoryId ASC
+    // ---------------------------------------------------------------------------
+    const availableCategories: AvailableCategory[] = Array.from(catMetaAll.values()).sort((a, b) => {
+      const totalA = annualIncomeAll.get(a.categoryId) ?? 0;
+      const totalB = annualIncomeAll.get(b.categoryId) ?? 0;
+      if (totalB !== totalA) return totalB - totalA;
+      return a.categoryId.localeCompare(b.categoryId);
+    });
+
+    this.logger.debug(
+      {
+        userId,
+        year,
+        displayCurrency,
+        filterCount: filterSet?.size ?? null,
+        availableCategoriesCount: availableCategories.length,
+        earliestYear,
+      },
+      'Reporte anual de inflación vs ingresos calculado',
+    );
+
+    return {
+      year,
+      currency: displayCurrency,
+      months,
+      incomeTrend,
+      incomeAdjTrend,
+      earliestYear,
+      availableCategories,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // Helpers privados
   // ---------------------------------------------------------------------------
 
@@ -1591,4 +2209,47 @@ export function getDaysInMonth(year: number, month: number): number {
 export function roundDown(value: number, decimals: number): number {
   const factor = Math.pow(10, decimals);
   return Math.trunc(value * factor) / factor;
+}
+
+/**
+ * Calcula la regresión lineal por mínimos cuadrados sobre los valores no nulos.
+ *
+ * El índice de mes (0..11) es la variable independiente (x).
+ * Requiere al menos 2 puntos para que la recta sea computable.
+ *
+ * Devuelve { slope, intercept, points } donde:
+ *   slope     — pendiente de la recta
+ *   intercept — ordenada en el origen
+ *   points    — array de 12 valores y = slope*x + intercept para x = 0..11
+ *               null si hay menos de 2 puntos no nulos
+ */
+export function computeLinearTrend(values: (number | null)[]): AnnualInflationIncomeTrend {
+  const points: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] !== null) {
+      points.push({ x: i, y: values[i] as number });
+    }
+  }
+
+  if (points.length < 2) {
+    return { slope: 0, intercept: 0, points: null };
+  }
+
+  const n = points.length;
+  const sumX = points.reduce((s, p) => s + p.x, 0);
+  const sumY = points.reduce((s, p) => s + p.y, 0);
+  const sumXX = points.reduce((s, p) => s + p.x * p.x, 0);
+  const sumXY = points.reduce((s, p) => s + p.x * p.y, 0);
+
+  const denom = n * sumXX - sumX * sumX;
+  // Si todas las x son iguales (caso degenerado), la recta no está determinada
+  if (denom === 0) {
+    return { slope: 0, intercept: sumY / n, points: null };
+  }
+
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+
+  const trendPoints = Array.from({ length: 12 }, (_, i) => slope * i + intercept);
+  return { slope, intercept, points: trendPoints };
 }

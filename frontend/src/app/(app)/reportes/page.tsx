@@ -23,7 +23,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Plus, AreaChart, BarChart3, CalendarDays, CalendarRange, ArrowUpDown, Check } from "lucide-react";
+import { Plus, AreaChart, BarChart3, CalendarDays, CalendarRange, TrendingUp, ArrowUpDown, Check } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -82,8 +82,8 @@ const POPOVER_WIDTH = 240;
 const VIEWPORT_MARGIN = 12;
 /** Gap entre anchor y popover (ambas direcciones). */
 const POPOVER_GAP = 6;
-/** Alto estimado para el primer frame antes de medir el DOM real (4 opciones). */
-const POPOVER_HEIGHT_ESTIMATE = 270;
+/** Alto estimado para el primer frame antes de medir el DOM real (5 opciones). */
+const POPOVER_HEIGHT_ESTIMATE = 330;
 
 function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -233,6 +233,20 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
         <div>
           <p className="text-[13px] font-semibold text-ink">Gastos en Cuotas</p>
           <p className="text-[11.5px] text-muted mt-[1px]">Gantt anual de gastos en cuotas</p>
+        </div>
+      </button>
+
+      {/* Opción 5: Inflación vs Ingresos (gráfico de líneas) */}
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => onSelect("inflation-income")}
+        className="flex w-full items-center gap-[10px] rounded-ctl px-3 py-[10px] text-left transition-colors duration-[140ms] hover:bg-panel-2 focus-visible:outline-none focus-visible:bg-panel-2"
+      >
+        <TrendingUp size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
+        <div>
+          <p className="text-[13px] font-semibold text-ink">Inflación vs Ingresos</p>
+          <p className="text-[11.5px] text-muted mt-[1px]">Variación de tus ingresos frente a la inflación, mes a mes.</p>
         </div>
       </button>
     </div>

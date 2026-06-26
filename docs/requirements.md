@@ -1296,7 +1296,7 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 
 El módulo de Reportes visualiza los movimientos del usuario a lo largo de un año, mes a mes. El eje X son los 12 meses del año; el eje Y es el monto. Ofrece **dos tipos de reporte** —ingresos vs. gastos por mes, y gastos por categoría apilados— implementados como un **widget de reporte autónomo, configurable por props**, que lleva embebidos su propia navegación de año y su propio filtro de categorías. La pantalla `/reportes` es **configurable**: el usuario arma su vista agregando y quitando **cards de reporte**; el dashboard monta una sola instancia del widget (ver RF-DASH-001/002).
 
-> **Alcance:** los tipos de reporte descritos en RF-REP-001 (ingresos/gastos y apilado por categoría de gastos), RF-REP-010 (grilla anual de gastos Únicos día × mes) y RF-REP-011 (gantt anual de gastos en Cuotas). Otros tipos de reporte/gráfico (torta, barras, línea) quedan fuera de alcance (ver sección 6).
+> **Alcance:** los tipos de reporte descritos en RF-REP-001 (ingresos/gastos y apilado por categoría de gastos), RF-REP-010 (grilla anual de gastos Únicos día × mes), RF-REP-011 (gantt anual de gastos en Cuotas) y RF-REP-012 (líneas de Inflación vs Ingresos). Otros tipos de reporte/gráfico (torta, barras de comparación) quedan fuera de alcance (ver sección 6).
 
 ---
 
@@ -1598,6 +1598,44 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 
 ---
 
+#### RF-REP-012 — Reporte anual de Inflación vs Ingresos (gráfico de líneas)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Quinto tipo de card de reporte (`inflation-income`): un **gráfico de líneas anual** (12 meses, ene–dic) que compara, en **puntos porcentuales**, la **inflación** del mes con la evolución de los **ingresos** del usuario. Muestra tres series: (1) la inflación mensual del IPC nacional (RF-IPC-001), (2) la variación mensual del total de **ingresos** respecto del mes anterior, y (3) esa misma variación **ajustada por inflación**. Sobre las dos series de ingreso traza además sus **rectas de tendencia**. Solo considera movimientos de tipo **ingreso (`INCOME`)**. Es un widget de reporte autónomo (RF-REP-002) con su año, su filtro de categorías y su moneda propios, persistidos en la clave `reports` (RF-REP-004). **Solo en `/reportes`; no se monta en el dashboard.** |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Contenido del gráfico:**
+
+- **Eje X:** los 12 meses del año (ene–dic). **Eje Y:** puntos porcentuales (no moneda).
+- **Tres series**, todas en puntos %:
+  - **Inflación del mes** — variación mensual del IPC nacional (RF-IPC-001) de ese mes; sin punto si no hay dato de IPC.
+  - **Variación de ingresos** — variación del total de ingresos del mes respecto del mes anterior. El mes anterior de **enero es diciembre del año previo** (continuidad temporal). Sin punto si el ingreso del mes anterior es cero o si el mes es **futuro**.
+  - **Variación de ingresos ajustada por inflación** — la misma variación, descontando la inflación del mes en curso del ingreso del mes anterior antes de comparar; sin punto si falta el IPC, si el ingreso anterior es cero o si el mes es futuro.
+- **Dos rectas de tendencia** — una sobre la serie de ingresos nominal y otra sobre la ajustada (ajuste lineal sobre los meses con dato). Cada tendencia **acompaña la visibilidad de su serie de ingreso madre**: no es un ítem propio de la leyenda.
+- **Total de ingreso del mes** — suma de los ingresos del mes (únicos + fijos + cuotas aplicables) en la moneda de display de la card; es el insumo de la variación %, no se grafica como moneda. El mes en curso se computa **a la fecha**; los meses futuros no tienen dato.
+- **Línea cortada en meses futuros** — la serie no conecta a través de meses sin dato.
+- El **filtro de categorías** (RF-REP-002) restringe qué ingresos cuentan en las variaciones; el universo ofrecido es **solo las categorías con ingreso del año** (estable, no se achica al destildar).
+
+**Criterios de aceptación:**
+- [ ] La card `inflation-income` muestra un **gráfico de líneas de 12 meses (ene–dic)** con tres series en **puntos porcentuales**: inflación del mes, variación de ingresos y variación de ingresos ajustada por inflación.
+- [ ] **Solo** movimientos de tipo `INCOME` alimentan las series de ingreso; gastos no entran.
+- [ ] Cada serie queda **sin punto** cuando no se puede computar (sin IPC, ingreso previo cero, mes futuro), y la línea **no conecta** a través de esos meses.
+- [ ] El mes anterior de **enero** es **diciembre del año previo** para la variación de ingresos.
+- [ ] Se trazan **dos rectas de tendencia** (ingreso nominal y ajustado), cada una **siguiendo la visibilidad de su serie de ingreso madre**; no aparecen como ítems propios de la leyenda.
+- [ ] La **leyenda togglea la visibilidad de las tres series** de forma **efímera** (no se persiste; al recargar vuelven las tres visibles).
+- [ ] La card es un widget autónomo (RF-REP-002): año, filtro de categorías y moneda propios, persistidos en la clave `reports` (RF-REP-004). El universo del filtro son **solo las categorías con ingreso del año**.
+- [ ] La card **solo existe en `/reportes`**; no se ofrece como widget del dashboard.
+- [ ] La navegación de año respeta los límites de RF-REP-002 (hacia atrás topa en el primer año con datos; hacia adelante bloquea años futuros).
+
+**Notas:**
+- Las decisiones de presentación visual (color de cada serie y de las tendencias, grosor, leyenda) son responsabilidad de `control-design` (`docs/design.md`), no de este RF.
+- Las fórmulas exactas (truncado de la variación, ajuste por inflación, ajuste lineal de la tendencia) y el contrato del endpoint viven en `docs/backend.md` §Serie de reportes y `docs/data-model.md` §Contrato de reporte anual de Inflación vs Ingresos.
+
+---
+
 ### 3.10 Módulo: Multi-moneda
 
 > La moneda es **explícita**: cada movimiento lleva su **moneda + cotización**; los totales se expresan en una **única moneda default** del usuario, convertida en vivo. La cotización del movimiento se **pre-carga desde una tabla de cotizaciones de referencia** (interna, no editable por UI). Modelo de datos en `data-model.md`, §Moneda explícita, set curado, §Contrato de configuración del usuario (settings) y §Tabla de cotizaciones de referencia.
@@ -1863,7 +1901,7 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 
 | Feature | Motivo de exclusión |
 |---|---|
-| Reportes: otros tipos (torta, barras de comparación, etc.) | Los tipos de reporte que **sí** entran son ingresos/gastos y apilado por categoría de gastos (RF-REP-001), la grilla anual de gastos Únicos día × mes (RF-REP-010) y el gantt anual de gastos en Cuotas (RF-REP-011). Sumar nuevos tipos de reporte queda fuera de alcance: es una mini-fase futura que requiere definición de UX y no es bloqueante |
+| Reportes: otros tipos (torta, barras de comparación, etc.) | Los tipos de reporte que **sí** entran son ingresos/gastos y apilado por categoría de gastos (RF-REP-001), la grilla anual de gastos Únicos día × mes (RF-REP-010), el gantt anual de gastos en Cuotas (RF-REP-011) y las líneas de Inflación vs Ingresos (RF-REP-012). Sumar nuevos tipos de reporte queda fuera de alcance: es una mini-fase futura que requiere definición de UX y no es bloqueante |
 | Tarjetas con fecha de corte | Requiere flujo propio; demasiado complejo para v1 |
 | Edición retroactiva de mes pasado de un fijo | Complejidad en el modelo de datos |
 | Cancelación parcial de cuotas restantes | Pendiente de definición |

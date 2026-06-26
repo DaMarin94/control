@@ -40,7 +40,7 @@
 
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useApi } from "@/hooks/use-api";
-import type { ReportsMovementsResponse, UnicoGridResponse, CuotasGanttResponse } from "@/types/reports";
+import type { ReportsMovementsResponse, UnicoGridResponse, CuotasGanttResponse, AnnualInflationIncomeResponse } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
 import { createLogger } from "@/lib/logger";
 
@@ -226,6 +226,56 @@ export function useCuotasGantt(
       const url = `/movements/reports/annual-cuotas?year=${year}${urlParam}${currencyParam}`;
       logger.debug("Cargando gantt de Cuotas", { year, categoriesKey, currency });
       return api.get<CuotasGanttResponse>(url);
+    },
+    enabled: Boolean(year) && isAuthenticated,
+    placeholderData: keepPreviousData,
+  });
+
+  return query;
+}
+
+// ─── Hook para el reporte Inflación vs Ingresos (Ola 4, P5) ──────────────────
+
+/**
+ * Query key para el reporte anual de Inflación vs Ingresos.
+ * Varía por año, filtro de categorías, moneda y fecha de hoy.
+ */
+export const INFLATION_INCOME_QUERY_KEY = (
+  year: number,
+  categoriesKey: string | null,
+  currency?: CurrencyCode,
+  today?: string,
+) => ["reports-inflation-income", year, categoriesKey, currency ?? null, today ?? null] as const;
+
+/**
+ * Hook para obtener el reporte anual de Inflación vs Ingresos.
+ *
+ * GET /movements/reports/annual-inflation-income?year=YYYY[&categories=...][&currency=XXX][&today=YYYY-MM-DD]
+ *
+ * @param year        El año a consultar.
+ * @param categoryIds null=todas; []=ninguna; lista=subconjunto.
+ * @param currency    undefined=default del usuario; presente=override de moneda.
+ * @param today       Fecha local del usuario (YYYY-MM-DD). Se manda para que el
+ *                    backend determine qué meses son futuros en la zona del usuario.
+ */
+export function useInflationIncome(
+  year: number,
+  categoryIds: string[] | null = null,
+  currency?: CurrencyCode,
+  today?: string,
+) {
+  const { api, isAuthenticated } = useApi();
+
+  const { categoriesKey, urlParam } = serializeCategoryFilter(categoryIds);
+  const currencyParam = currency ? `&currency=${currency}` : "";
+  const todayParam = today ? `&today=${today}` : "";
+
+  const query = useQuery<AnnualInflationIncomeResponse>({
+    queryKey: INFLATION_INCOME_QUERY_KEY(year, categoriesKey, currency, today),
+    queryFn: () => {
+      const url = `/movements/reports/annual-inflation-income?year=${year}${urlParam}${currencyParam}${todayParam}`;
+      logger.debug("Cargando reporte Inflación vs Ingresos", { year, categoriesKey, currency, today });
+      return api.get<AnnualInflationIncomeResponse>(url);
     },
     enabled: Boolean(year) && isAuthenticated,
     placeholderData: keepPreviousData,

@@ -90,6 +90,20 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  // referenceRate.findMany se usa en loadAllPivotRates → loadPivotRatesForYear
+  referenceRate: {
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    upsert: jest.fn(),
+    findUnique: jest.fn(),
+  },
+  // inflationRate.findMany se usa en loadInflationRatesForYear (reporte anual de únicos / inflación-ingresos)
+  inflationRate: {
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    upsert: jest.fn(),
+    findUnique: jest.fn(),
+  },
   // $queryRaw se mockea para que MovementsRepository pueda funcionar
   $queryRaw: jest.fn(),
   $connect: jest.fn(),
@@ -1164,6 +1178,274 @@ describe('Movements (e2e)', () => {
 
       expect(res.body.success).toBe(false);
       expect(res.body.statusCode).toBe(400);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /movements/reports/annual-inflation-income (P5)
+  //
+  // Estrategia de mock:
+  //   - $queryRaw se llama en orden:
+  //       1. getAnnualUnicosAggregated (únicos INCOME+EXPENSE del año)
+  //       2. getUnicosIncomeForMonth (únicos INCOME de dic del año previo)
+  //       3. getEarliestYear
+  //       4. (loadPivotRatesForYear usa loadAllPivotRates → referenceRate.findMany)
+  //   - inflationRate.findMany → loadInflationRatesForYear
+  //   - recurring.findMany → getAllFijosForAnnual (incluye allSkips via recurringSkip.findMany)
+  //   - installmentGroup.findMany → getAllCuotasForAnnual
+  // -------------------------------------------------------------------------
+
+  describe('GET /movements/reports/annual-inflation-income (P5)', () => {
+    /** Helper: fila de único para getAnnualUnicosAggregated */
+    function makeInflIncomUnicoRow(overrides: Record<string, unknown> = {}) {
+      return {
+        monthKey: '2025-01',
+        categoryId: CAT_ID,
+        categoryName: 'Sueldo',
+        categoryColor: '#4F86C6',
+        categoryScope: 'INCOME',
+        type: 'INCOME',
+        totalCents: BigInt(50000),
+        currency: 'ARS',
+        exchangeRate: '1',
+        anchorCurrency: 'ARS',
+        ...overrides,
+      };
+    }
+
+    /** Helper: fila de único para getUnicosIncomeForMonth (dic previo) */
+    function makePrevDecRow(overrides: Record<string, unknown> = {}) {
+      return {
+        categoryId: CAT_ID,
+        categoryName: 'Sueldo',
+        categoryColor: '#4F86C6',
+        totalCents: BigInt(40000),
+        currency: 'ARS',
+        exchangeRate: '1',
+        anchorCurrency: 'ARS',
+        ...overrides,
+      };
+    }
+
+    /** Configura los mocks para una corrida básica del endpoint */
+    function setupInflationIncomeMocks({
+      unicosYear = [] as unknown[],
+      unicosPrevDec = [] as unknown[],
+      earliestYear = null as bigint | null,
+      inflationRates = [] as Array<{ yearMonth: string; monthlyVariation: number }>,
+    } = {}) {
+      // $queryRaw se llama en este orden:
+      //   1. getAnnualUnicosAggregated (únicos del año)
+      //   2. getUnicosIncomeForMonth (únicos INCOME de dic del año previo)
+      //   3. getEarliestYear
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce(unicosYear)
+        .mockResolvedValueOnce(unicosPrevDec)
+        .mockResolvedValueOnce(
+          earliestYear !== null ? [{ earliestYear }] : [{ earliestYear: null }],
+        );
+      // loadPivotRatesForYear → referenceRate.findMany (sin datos = Map vacío para tests básicos)
+      mockPrisma.referenceRate.findMany.mockResolvedValue([]);
+      // fijos y cuotas vacíos por defecto
+      mockPrisma.recurring.findMany.mockResolvedValue([]);
+      mockPrisma.installmentGroup.findMany.mockResolvedValue([]);
+      // IPC
+      mockPrisma.inflationRate.findMany.mockResolvedValue(
+        inflationRates.map((r) => ({ yearMonth: r.yearMonth, monthlyVariation: r.monthlyVariation })),
+      );
+    }
+
+    beforeEach(() => {
+      // Defaults mínimos para que el endpoint no falle en las tablas requeridas
+      mockPrisma.recurring.findMany.mockResolvedValue([]);
+      mockPrisma.installmentGroup.findMany.mockResolvedValue([]);
+      mockPrisma.inflationRate.findMany.mockResolvedValue([]);
+      mockPrisma.referenceRate.findMany.mockResolvedValue([]);
+    });
+
+    it('200 + shape completo de AnnualInflationIncomeResponse', async () => {
+      setupInflationIncomeMocks({
+        unicosYear: [makeInflIncomUnicoRow({ monthKey: '2025-03', totalCents: BigInt(50000) })],
+        unicosPrevDec: [makePrevDecRow({ totalCents: BigInt(40000) })],
+        earliestYear: BigInt(2025),
+        inflationRates: [{ yearMonth: '2025-01', monthlyVariation: 3.5 }],
+      });
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-inflation-income?year=2025&today=2025-12-31')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.statusCode).toBe(200);
+
+      const data = res.body.data;
+      expect(data).toHaveProperty('year', 2025);
+      expect(data).toHaveProperty('currency', 'ARS');
+      expect(data).toHaveProperty('months');
+      expect(data).toHaveProperty('incomeTrend');
+      expect(data).toHaveProperty('incomeAdjTrend');
+      expect(data).toHaveProperty('earliestYear', 2025);
+      expect(data).toHaveProperty('availableCategories');
+
+      // months: siempre 12 entradas
+      expect(Array.isArray(data.months)).toBe(true);
+      expect(data.months).toHaveLength(12);
+
+      // Cada mes tiene los campos correctos
+      data.months.forEach((m: Record<string, unknown>) => {
+        expect(m).toHaveProperty('inflationPct');
+        expect(m).toHaveProperty('incomePct');
+        expect(m).toHaveProperty('incomePctAdj');
+      });
+
+      // Enero tiene IPC = 3.5
+      expect(data.months[0].inflationPct).toBe(3.5);
+
+      // incomeTrend tiene shape correcto
+      expect(data.incomeTrend).toHaveProperty('slope');
+      expect(data.incomeTrend).toHaveProperty('intercept');
+      expect(data.incomeTrend).toHaveProperty('points');
+    });
+
+    it('enero usa diciembre del año previo → incomePct calculado vs dic-2024', async () => {
+      // Dic 2024: 40000; Enero 2025: 50000 → incomePct = ROUNDDOWN((50000*100/40000)-100, 2) = 25.00
+      setupInflationIncomeMocks({
+        unicosYear: [makeInflIncomUnicoRow({ monthKey: '2025-01', totalCents: BigInt(50000) })],
+        unicosPrevDec: [makePrevDecRow({ totalCents: BigInt(40000) })],
+        earliestYear: BigInt(2025),
+      });
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-inflation-income?year=2025&today=2025-12-31')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.months[0].incomePct).toBe(25.00);
+    });
+
+    it('meses futuros del año en curso → incomePct null', async () => {
+      // Today = 2025-06-25, año 2025 → meses 7..12 son futuros
+      setupInflationIncomeMocks({
+        // Inyectamos ingreso en todos los meses para que solo los futuros sean null
+        unicosYear: Array.from({ length: 12 }, (_, i) =>
+          makeInflIncomUnicoRow({
+            monthKey: `2025-${String(i + 1).padStart(2, '0')}`,
+            totalCents: BigInt(50000),
+          }),
+        ),
+        unicosPrevDec: [makePrevDecRow({ totalCents: BigInt(40000) })],
+        earliestYear: BigInt(2025),
+      });
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-inflation-income?year=2025&today=2025-06-25')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      // Enero..junio → no null (pasados o en curso)
+      expect(res.body.data.months[0].incomePct).not.toBeNull();
+      expect(res.body.data.months[5].incomePct).not.toBeNull();
+      // Julio..diciembre → null (futuros)
+      expect(res.body.data.months[6].incomePct).toBeNull();
+      expect(res.body.data.months[11].incomePct).toBeNull();
+    });
+
+    it('previo en 0 → incomePct null', async () => {
+      // Dic previo sin datos → prevDecIncome = 0 → enero incomePct null
+      setupInflationIncomeMocks({
+        unicosYear: [makeInflIncomUnicoRow({ monthKey: '2025-01', totalCents: BigInt(50000) })],
+        unicosPrevDec: [], // sin datos de dic previo
+        earliestYear: BigInt(2025),
+      });
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-inflation-income?year=2025&today=2025-12-31')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.months[0].incomePct).toBeNull();
+    });
+
+    it('filtro de categorías: categories= (vacío) → incomePct null (previo=0 por filtro)', async () => {
+      // Con filtro vacío, ningún ingreso pasa → previo=0 → incomePct null
+      setupInflationIncomeMocks({
+        unicosYear: [makeInflIncomUnicoRow({ monthKey: '2025-01', totalCents: BigInt(50000) })],
+        unicosPrevDec: [makePrevDecRow({ totalCents: BigInt(40000) })],
+        earliestYear: BigInt(2025),
+      });
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-inflation-income?year=2025&today=2025-12-31&categories=')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.months[0].incomePct).toBeNull();
+      // availableCategories sigue teniendo las categorías (no afectada por el filtro)
+      expect(res.body.data.availableCategories).toHaveLength(1);
+    });
+
+    it('400 si falta year', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-inflation-income')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(400);
+    });
+
+    it('400 si currency es inválido (GBP)', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-inflation-income?year=2025&currency=GBP')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(400);
+    });
+
+    it('400 si currency está vacío', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-inflation-income?year=2025&currency=')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(400);
+    });
+
+    it('401 sin JWT', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-inflation-income?year=2025')
+        .expect(401);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(401);
+    });
+
+    it('200 con año vacío → 12 meses todos null, earliestYear null, availableCategories []', async () => {
+      setupInflationIncomeMocks({
+        unicosYear: [],
+        unicosPrevDec: [],
+        earliestYear: null,
+      });
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-inflation-income?year=2025&today=2025-12-31')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const data = res.body.data;
+      expect(data.year).toBe(2025);
+      expect(data.months).toHaveLength(12);
+      data.months.forEach((m: Record<string, unknown>) => {
+        expect(m.inflationPct).toBeNull();
+        expect(m.incomePct).toBeNull();
+        expect(m.incomePctAdj).toBeNull();
+      });
+      expect(data.earliestYear).toBeNull();
+      expect(data.availableCategories).toEqual([]);
     });
   });
 });

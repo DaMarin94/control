@@ -320,7 +320,7 @@ Pantalla dedicada para administrar las categorías del usuario: listar, crear, e
 
 ## 7. Reportes (pantalla configurable)
 
-**RF relacionados:** RF-REP-001, RF-REP-002, RF-REP-003, RF-REP-004, RF-NAV-001
+**RF relacionados:** RF-REP-001, RF-REP-002, RF-REP-003, RF-REP-004, RF-REP-010, RF-REP-011, RF-REP-012, RF-NAV-001
 
 > **Ruta:** `/reportes`. **Link en el sidebar:** rótulo **"Reportes"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Reportes → Categorías).
 
@@ -333,7 +333,7 @@ Pantalla **configurable** donde el usuario arma su propia vista de reportes a lo
 - **Sidebar** con el link **"Reportes"** marcado como activo.
 - **Header** con el **chip de moneda default** en la fila del eyebrow (ver Convenciones).
 - **Recuadro "[+]"** — siempre presente; agrega una card de reporte nueva.
-- **Cards de reporte** — una por cada entrada de la clave `reports`, en el orden del array. Cada card monta un **widget de reporte autónomo** (pantalla 8) en **modo persistido**, con sus flechas de año y su filtro de categorías embebidos. El tipo de card se elige al agregarla; los rótulos del menú "[+]" (y del mini de reorden) son: **"Ingresos vs Gastos"** (`income-expense`), **"Gastos por categoría"** (`by-category`), **"Gastos Únicos"** (`unique-grid`) y **"Gastos en Cuotas"** (`installment-gantt`), según RF-REP-001/010/011.
+- **Cards de reporte** — una por cada entrada de la clave `reports`, en el orden del array. Cada card monta un **widget de reporte autónomo** (pantalla 8) en **modo persistido**, con sus flechas de año y su filtro de categorías embebidos. El tipo de card se elige al agregarla; los rótulos del menú "[+]" (y del mini de reorden) son: **"Ingresos vs Gastos"** (`income-expense`), **"Gastos por categoría"** (`by-category`), **"Gastos Únicos"** (`unique-grid`), **"Gastos en Cuotas"** (`installment-gantt`) y **"Inflación vs Ingresos"** (`inflation-income`, ícono `TrendingUp`), según RF-REP-001/010/011/012.
 - **Título de la card** (RF-REP-008) — en la cabecera de cada card, un **título editable**. Si la card no tiene título, muestra el placeholder **"Reporte N"** (N = posición 1-based de la card en la columna, recalculado en vivo).
 - El layout, tamaños y disposición de las cards y del "[+]" los define `control-design`.
 

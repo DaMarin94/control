@@ -440,9 +440,9 @@ Logo/nombre "Control" → `/`; links **Dashboard** (`/`), **Vista del mes** (`/m
 - **Sección activa — match EXACTO para `/`:** el link Dashboard compara `pathname === "/"`. Con `startsWith("/")` quedaría activo en **todas** las rutas. Los links `/mes` y `/categorias` usan `startsWith` (no hay subrutas que colisionen).
 - **`<Suspense>` en `(app)/mes/page.tsx`:** se mantiene envolviendo `MonthViewWrapper` (que usa `useSearchParams()`); sin él el build de Next 15 falla. El cambio de carpeta al route group no lo altera (ver gotcha de `<Suspense>` en la sección Vista del mes).
 
-## Reportes (RF-REP-001..011)
+## Reportes (RF-REP-001..012)
 
-Visualización de reportes en `/reportes` (ingresos/gastos, apilado por categoría, grilla anual de gastos Únicos y gantt anual de gastos en Cuotas). El spec visual (color, alturas, jerarquía, transición) vive en `docs/design.md` — acá solo arquitectura y gotchas técnicos.
+Visualización de reportes en `/reportes` (ingresos/gastos, apilado por categoría, grilla anual de gastos Únicos, gantt anual de gastos en Cuotas y líneas de Inflación vs Ingresos). El spec visual (color, alturas, jerarquía, transición) vive en `docs/design.md` — acá solo arquitectura y gotchas técnicos.
 
 ### Arquitectura en dos capas (enfoque shadcn charts)
 
@@ -508,6 +508,18 @@ Cuarto tipo de card (`ReportCardType = "installment-gantt"`). Renderiza el gantt
 - **Tooltip con rango real.** El rango del tooltip usa `realStartMonth`/`realEndMonth` (período completo del plan, sin recortar al año; ver `docs/data-model.md`), **no** los `startMonthIndex`/`endMonthIndex` clampeados que rigen el layout de la barra.
 - **Navegación de año libre hacia atrás.** El control ‹ está **siempre habilitado** (sin tope) porque el contrato **no expone `earliestYear`**, igual que la card de Únicos. El tope hacia adelante (año en curso) sí aplica. **No** manda `today` (el endpoint no lo usa).
 
+### Card `inflation-income` — líneas de Inflación vs Ingresos (RF-REP-012)
+
+Quinto tipo de card (`ReportCardType = "inflation-income"`). Componente **`components/charts/inflation-income-card.tsx`**; datos vía el hook **`useInflationIncome`** (`hooks/use-reports.ts`) sobre `GET /movements/reports/annual-inflation-income` (contrato en `docs/data-model.md`, §Contrato de reporte anual de Inflación vs Ingresos). Tipos en `types/reports.ts`. Spec visual en `docs/design.md`. Lo no obvio:
+
+- **Recharts (gráfico de líneas), a diferencia de Únicos/Cuotas.** Esta card **sí** usa el motor de charting (líneas de 12 meses), no tabla ni CSS absoluto. Convive con las otras formas de render de `/reportes`.
+- **Solo en `/reportes`, no en el dashboard** (el dashboard monta solo `IncomeExpenseCard`).
+- **Tres series + dos tendencias.** Las series (`inflationPct`, `incomePct`, `incomePctAdj`) están en **puntos %**. Las dos rectas de tendencia se dibujan desde `incomeTrend.points` / `incomeAdjTrend.points` del response (el front **no** ajusta la recta; si `points` es `null`, no hay tendencia). Cada tendencia **sigue la visibilidad de su serie de ingreso madre** y **no** es un ítem de la leyenda.
+- **Toggle de series efímero.** La leyenda togglea la visibilidad de las tres series como **estado local de la card** (no se persiste; default = las tres visibles). Contrasta con el filtro de categorías (`categoryIds`) y la moneda (`currency`), que **sí** se persisten en la clave `reports` (ver `docs/data-model.md` §`reports`).
+- **Cabecera estándar de card anual.** Título editable + stepper de año + filtro de categorías (mismo control que `unique-grid`/`installment-gantt`) + selector de moneda. El universo del filtro es de **ingreso** (`availableCategories` del response, no de gasto).
+- **Línea cortada en meses futuros.** Las series usan `connectNulls={false}`: la línea no conecta a través de meses `null`.
+- **Color de la línea de inflación = token `--rate`** (ver §Design system → token `--rate`).
+
 ## Design system "Precise Ledger" — tokens
 
 Detalle operativo para no romper tokens en `.claude/agents/control-frontend.md`. Lo esencial:
@@ -519,6 +531,7 @@ Detalle operativo para no romper tokens en `.claude/agents/control-frontend.md`.
 - **Densidad fija** (`--row-pad`/`--card-pad`/`--gap`); sin toggles.
 - **Cifras de dinero:** helper `.mono` (IBM Plex Mono + `tnum`).
 - **Token semántico `warning`** (ámbar, hue 75) con la misma dualidad `@theme`/`:root` que income/expense, con su variante oscura. Detalle de valores y del re-estilado de primitivas en `.claude/agents/control-frontend.md`.
+- **Token semántico `--rate`** (grafito, hue 270) — color de la **línea de inflación** del reporte Inflación vs Ingresos (RF-REP-012). Misma dualidad claro/oscuro que el resto: claro `oklch(0.45 0.03 270)`, oscuro `oklch(0.72 0.025 270)`; utilidades `bg-rate` / `text-rate` vía `--color-rate`. Definido en `globals.css`.
 - **Todas las pantallas y modales usan el DS y `lucide-react`**: login, registro, sidebar, dashboard, vista del mes, categorías y los modales de movimiento/borrado. No queda SVG inline ni estilos fuera del DS. Componentes/utilidades compartidos: **`components/ui/auth-brand-side.tsx`** (panel de marca de login y registro) y la animación de modal **`animate-modal-pop`** (utility en `globals.css`). Detalle operativo (grilla/glow con `<div>` absolutos, gradiente hardcodeado, botón Google placeholder, scrim del modal) en `.claude/agents/control-frontend.md`.
 
 ## Modo de color (theming)

@@ -68,8 +68,9 @@ export interface ReportsMovementsResponse {
  * - "by-category": Forma 2, Gastos por categoría apilado (BarChart)
  * - "unique-grid": Ola 3 P2, grilla día×mes de Únicos (heatmap calendario nativo)
  * - "installment-gantt": Ola 3 P2, gantt anual de barras horizontales de Cuotas
+ * - "inflation-income": Ola 4 P5, gráfico de líneas Inflación vs Ingresos
  */
-export type ReportCardType = "income-expense" | "by-category" | "unique-grid" | "installment-gantt";
+export type ReportCardType = "income-expense" | "by-category" | "unique-grid" | "installment-gantt" | "inflation-income";
 
 // ─── Tipos del endpoint de reporte anual de Únicos (Ola 3, P2) ───────────────
 
@@ -275,6 +276,83 @@ export interface CuotasGanttResponse {
   /**
    * Universo de categorías con cuotas EXPENSE en el año (sin aplicar filtro).
    * El front resuelve color/nombre de cada barra desde aquí por categoryId.
+   */
+  availableCategories: Array<{ categoryId: string; name: string; color: string }>;
+}
+
+// ─── Tipos del endpoint de reporte anual de Inflación vs Ingresos (Ola 4, P5) ──
+
+/**
+ * Datos de un mes en el reporte de inflación vs ingresos.
+ * Índice mes-1 (ene=0, dic=11). 12 entradas fijas.
+ */
+export interface InflationIncomeMonth {
+  /**
+   * Puntos porcentuales de inflación del mes (IPC).
+   * null = sin dato de inflación para ese mes.
+   */
+  inflationPct: number | null;
+  /**
+   * Variación % de ingresos nominales respecto al mes anterior.
+   * null = sin dato (meses futuros / previo en 0 → sin punto).
+   */
+  incomePct: number | null;
+  /**
+   * Variación % de ingresos ajustada por inflación.
+   * null = sin dato.
+   */
+  incomePctAdj: number | null;
+}
+
+/**
+ * Recta de tendencia (mínimos cuadrados) sobre una serie.
+ * El backend calcula los puntos; el front solo los traza.
+ */
+export interface InflationIncomeTrend {
+  slope: number;
+  intercept: number;
+  /**
+   * 12 valores (uno por mes, ordenados ene→dic) de la recta y=slope*x+intercept.
+   * null si hay menos de 2 puntos con dato → no se traza la tendencia.
+   */
+  points: number[] | null;
+}
+
+/**
+ * Respuesta de GET /movements/reports/annual-inflation-income?year=YYYY[&categories=...][&currency=XXX][&today=YYYY-MM-DD]
+ * (dentro del sobre { success, statusCode, data }).
+ *
+ * Fuente de verdad: contrato del backend (Ola 4, P5).
+ */
+export interface AnnualInflationIncomeResponse {
+  /** El año pedido. */
+  year: number;
+  /** Moneda de display usada (la pedida por ?currency= o la default del usuario). */
+  currency: "ARS" | "USD" | "EUR" | "BRL";
+  /**
+   * 12 entradas fijas (ene→dic), índice = mes-1.
+   * inflationPct/incomePct/incomePctAdj en puntos porcentuales (no centavos).
+   * null = sin punto (meses futuros / previo en 0) → la línea se corta.
+   */
+  months: InflationIncomeMonth[];
+  /**
+   * Recta de tendencia (mínimos cuadrados) sobre la serie de ingresos nominal.
+   * points=null → no se dibuja la tendencia (menos de 2 puntos).
+   */
+  incomeTrend: InflationIncomeTrend;
+  /**
+   * Recta de tendencia (mínimos cuadrados) sobre la serie de ingresos ajustada.
+   * points=null → no se dibuja la tendencia (menos de 2 puntos).
+   */
+  incomeAdjTrend: InflationIncomeTrend;
+  /**
+   * Año más antiguo con ingresos del usuario (sin aplicar filtro).
+   * null si no hay datos. Usado para el tope ‹ del stepper.
+   */
+  earliestYear: number | null;
+  /**
+   * Universo de categorías de INGRESO en el año (sin aplicar filtro).
+   * El front lo usa como universo del filtro de chips de categoría.
    */
   availableCategories: Array<{ categoryId: string; name: string; color: string }>;
 }

@@ -29,6 +29,89 @@ export class MovementsController {
   constructor(private readonly movementsService: MovementsService) {}
 
   /**
+   * GET /movements/reports/annual-inflation-income?year=YYYY[&categories=<id1,id2,...>][&currency=<ARS|USD|EUR|BRL>][&today=YYYY-MM-DD]
+   *
+   * Devuelve el reporte anual de inflación vs ingresos del usuario para el año dado.
+   * Por cada mes emite:
+   *   inflationPct  — variación IPC mensual (puntos %); null si sin dato.
+   *   incomePct     — variación MoM del ingreso total del mes (truncada 2 dec);
+   *                   null si mes futuro del año en curso o si ingreso anterior == 0.
+   *   incomePctAdj  — igual pero ajustado por IPC; null si falta IPC, mes futuro o anterior == 0.
+   * Además: tendencias lineales (slope, intercept, points) para incomePct e incomePctAdj,
+   * earliestYear y availableCategories (universo de categorías con INCOME en el año).
+   *
+   * Parámetros:
+   * - year (obligatorio): año en formato YYYY.
+   * - categories (opcional): filtro de categorías, 3 estados (misma semántica que /reports).
+   * - currency (opcional): override de moneda de display (ARS|USD|EUR|BRL).
+   * - today (opcional): fecha local del usuario YYYY-MM-DD para determinar meses futuros.
+   *
+   * Respuesta: AnnualInflationIncomeResponse dentro del sobre { success, statusCode, data }.
+   * 400 si year falta, formato inválido, fuera de rango, o currency inválido.
+   */
+  @Get('reports/annual-inflation-income')
+  getAnnualInflationIncomeReport(
+    @Request() req: AuthRequest,
+    @Query('year') yearParam: string | undefined,
+    @Query('categories') categoriesParam: string | undefined,
+    @Query('currency') currencyParam: string | undefined,
+    @Query('today') todayParam: string | undefined,
+  ) {
+    if (!yearParam || !/^\d{4}$/.test(yearParam)) {
+      throw new BadRequestException(
+        'El parámetro "year" es obligatorio y debe tener exactamente 4 dígitos (ej: 2026)',
+      );
+    }
+
+    const year = parseInt(yearParam, 10);
+
+    if (year < YEAR_MIN || year > YEAR_MAX) {
+      throw new BadRequestException(
+        `El año debe estar entre ${YEAR_MIN} y ${YEAR_MAX}`,
+      );
+    }
+
+    let currencyOverride: Currency | undefined;
+    if (currencyParam !== undefined) {
+      const validCurrencies: string[] = Object.values(Currency);
+      if (!validCurrencies.includes(currencyParam)) {
+        throw new BadRequestException(
+          `El parámetro "currency" debe ser uno de: ${validCurrencies.join(', ')}`,
+        );
+      }
+      currencyOverride = currencyParam as Currency;
+    }
+
+    let todayStr: string | undefined;
+    if (todayParam !== undefined) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(todayParam)) {
+        throw new BadRequestException(
+          'El parámetro "today" debe tener formato YYYY-MM-DD (ej: 2026-06-25)',
+        );
+      }
+      todayStr = todayParam;
+    }
+
+    const categoryIds: string[] | null =
+      categoriesParam === undefined
+        ? null
+        : categoriesParam.trim().length === 0
+          ? []
+          : categoriesParam
+              .split(',')
+              .map((id) => id.trim())
+              .filter((id) => id.length > 0);
+
+    return this.movementsService.getAnnualInflationIncomeReport(
+      req.user.userId,
+      year,
+      categoryIds,
+      currencyOverride,
+      todayStr,
+    );
+  }
+
+  /**
    * GET /movements/reports/annual-cuotas?year=YYYY[&categories=<id1,id2,...>][&currency=<ARS|USD|EUR|BRL>]
    *
    * Devuelve el gantt anual de cuotas EXPENSE del usuario para el año dado.

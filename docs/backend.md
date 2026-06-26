@@ -86,7 +86,7 @@ La fuente de verdad de tipos, campos y constraints es `backend/prisma/schema.pri
 
 | Módulo | Ruta base | Descripción |
 |--------|-----------|-------------|
-| `movements` | `GET /movements`, `GET /movements/reports`, `GET /movements/reports/annual-unicos`, `GET /movements/reports/annual-cuotas` | Lista unificada del mes + serie de reportes agregada + grilla anual de Únicos + gantt anual de Cuotas (transacciones + recurrentes + cuotas) |
+| `movements` | `GET /movements`, `GET /movements/reports`, `GET /movements/reports/annual-unicos`, `GET /movements/reports/annual-cuotas`, `GET /movements/reports/annual-inflation-income` | Lista unificada del mes + serie de reportes agregada + grilla anual de Únicos + gantt anual de Cuotas + series anuales de Inflación vs Ingresos (transacciones + recurrentes + cuotas) |
 | `transactions` | `/transactions` | Movimientos únicos (CRUD) |
 | `recurring` | `/recurring` | Movimientos fijos (crear, editar, eliminar) |
 | `installments` | `/installments` | Grupos de cuotas (crear, editar, eliminar) |
@@ -118,6 +118,9 @@ Devuelve la **grilla anual día × mes de gastos Únicos** y el footer de métri
 
 ### `GET /movements/reports/annual-cuotas?year=YYYY&categories=&currency=`
 Devuelve el **gantt anual de gastos en Cuotas** (una barra por compra en cuotas que intersecta el año, empaquetadas en renglones) para la card `installment-gantt` (RF-REP-011). Solo agrega **cuotas de tipo gasto (`EXPENSE`)**. **No usa `today`.** Contrato (params y shape) en `docs/data-model.md`, §Contrato de reporte anual de Cuotas; reglas de cálculo en la sección **Movimientos del mes (MovementsModule)** → Reporte anual de Cuotas.
+
+### `GET /movements/reports/annual-inflation-income?year=YYYY&categories=&currency=&today=`
+Devuelve las **series anuales de Inflación vs Ingresos** (12 meses: inflación IPC, variación % del ingreso y variación ajustada por inflación) más las **dos rectas de tendencia OLS** para la card `inflation-income` (RF-REP-012). Solo agrega movimientos de tipo **ingreso (`INCOME`)**. Contrato (params y shape) en `docs/data-model.md`, §Contrato de reporte anual de Inflación vs Ingresos; reglas de cálculo en la sección **Movimientos del mes (MovementsModule)** → Reporte anual de Inflación vs Ingresos.
 
 ### `POST /transactions` · `PATCH /transactions/:id` · `DELETE /transactions/:id`
 CRUD de movimientos únicos. El monto siempre en centavos (entero > 0). El instante se guarda en UTC más la zona original del registro (ver fechas/timezone en `docs/technical.md`).
@@ -262,6 +265,17 @@ Gantt anual de barras horizontales para la card `installment-gantt` (RF-REP-011)
 - **Packing (asignación de renglones).** Las barras se ordenan por **origen de la cuota** (`startMonth` ASC, mes de la primera cuota; desempate `createdAt` ASC) y se ubican en renglones; `rowIndex` arranca en `0` (renglón pegado al eje). Una barra **reusa** un renglón si **no entra en conflicto con ninguno** de los intervalos ya asignados a ese renglón —conflicto = menos de 1 mes de descanso a cualquiera de los dos lados—, **aprovechando huecos intermedios** (una barra puede ubicarse entre dos ya colocadas si hay ≥1 mes de descanso a cada lado). Se elige el renglón **más bajo** que la admita; si ninguno sirve, se abre uno nuevo por encima. Por el orden por `startMonth` ASC, la de origen más temprano queda en el renglón más cercano al eje. Calculado en el backend sobre el subconjunto ya filtrado. El front invierte el eje al renderizar (ver `docs/frontend.md`).
 - **Rango real de la barra.** Cada barra emite `realStartMonth`/`realEndMonth` (`YYYY-MM`) con el período **completo** del plan (primera y última cuota), **sin recortar al año** —distinto de `startMonthIndex`/`endMonthIndex`, que se clampean a 0–11—; el front los usa para el rango del tooltip. Ver `docs/data-model.md`, §Contrato de reporte anual de Cuotas.
 - **Conversión del monto por cuota — TC del primer mes visible de la barra.** Si `startMonth` del plan cae **dentro** del año, se usa el TC de **ese mes**; si es **anterior** al año, se usa el TC de **enero del año** (`YYYY-01`). Vía `pivotRatesForYear` con clamp al mes disponible. Coherente con la regla de que las cuotas usan el TC oficial del mes de la instancia.
+
+### Reporte anual de Inflación vs Ingresos (`GET /movements/reports/annual-inflation-income`)
+
+Series anuales en **puntos porcentuales** para la card `inflation-income` (RF-REP-012), scopeado por `userId` del JWT. Contrato (params, shape `AnnualInflationIncomeResponse` / `InflationIncomeMonth` / `TrendLine`) en `docs/data-model.md`, §Contrato de reporte anual de Inflación vs Ingresos. Reglas de negocio:
+
+- **Total de ingreso del mes (insumo).** Suma de movimientos **`INCOME`** imputados al mes —únicos por su mes local (`AT TIME ZONE`, RN-015) + fijos/cuotas aplicables a nivel mes—, convertida a la moneda de display (`currency` del param o la default) con el mismo re-ruteo por pivote USD que el resto. El **mes en curso** usa el total **a la fecha** (`today`); los **meses futuros** no se computan (`incomePct`/`incomePctAdj` → `null`). El repo expone **`getUnicosIncomeForMonth`** para la parte de únicos; fijos y cuotas se suman vía sus services (propiedad de dominio).
+- **`incomePct` — variación % MoM del ingreso.** `ROUNDDOWN((ingresoActual × 100 / ingresoPrevio) − 100, 2)`, **trunca hacia cero** (no redondea). El mes previo de **enero es diciembre del año anterior** (continuidad temporal; **requiere consultar el ingreso fuera del año pedido**, igual que `pctVsPrev` de Únicos). `null` si `ingresoPrevio == 0` o el mes es futuro.
+- **`incomePctAdj` — variación ajustada por inflación.** Igual que `incomePct`, pero el ingreso del mes previo se **infla por la variación IPC del mes en curso** (`incomePctAdj` usa `inflationPct/100`) antes de comparar — misma semántica que `pctVsPrevAdj` del reporte de Únicos. `null` si falta el IPC del mes, si `ingresoPrevio == 0` o si el mes es futuro.
+- **`inflationPct`.** `InflationRate.monthlyVariation` (puntos %, unidad canónica del sistema; ver Reporte anual de Únicos para la conversión ×100 en la ingesta) del mes; `null` si no hay fila de IPC.
+- **Tendencias OLS (`incomeTrend` / `incomeAdjTrend`).** Recta de mínimos cuadrados ajustada sobre los **puntos no nulos** de `incomePct` e `incomePctAdj` respectivamente (x = índice de mes 0–11). Emite `{ slope, intercept, points }`; `points` = la recta evaluada en los 12 meses, **`null` si la serie madre tiene < 2 puntos no nulos**. El helper **`computeLinearTrend`** (exportado) encapsula el ajuste; reusarlo, no reimplementar.
+- **`earliestYear` y `availableCategories` ignoran el filtro `categories`** (superconjunto estable, mismo criterio que la serie de reportes). `availableCategories` es el universo de categorías con **ingreso (`INCOME`)** del año (no de gasto, a diferencia de los otros reportes). El filtro `categories` sí restringe qué ingresos cuentan en las series.
 
 ## Movimientos fijos (RecurringModule)
 

@@ -19,10 +19,11 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, AreaChart, BarChart3, CalendarDays, CalendarRange } from "lucide-react";
+import { GripVertical, AreaChart, BarChart3, CalendarDays, CalendarRange, TrendingUp } from "lucide-react";
 import { ReportCard } from "@/components/charts/report-card";
 import { UniqueGridCard } from "@/components/charts/unique-grid-card";
 import { CuotasGanttCard } from "@/components/charts/cuotas-gantt-card";
+import { InflationIncomeCard } from "@/components/charts/inflation-income-card";
 import type { ReportCardConfig, ReportCardType } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
 
@@ -47,12 +48,14 @@ function ReportCardMini({
     type === "income-expense" ? AreaChart
     : type === "by-category" ? BarChart3
     : type === "unique-grid" ? CalendarDays
-    : CalendarRange;
+    : type === "installment-gantt" ? CalendarRange
+    : TrendingUp;
   const typeLabel =
     type === "income-expense" ? "Ingresos vs Gastos"
     : type === "by-category" ? "Gastos por categoría"
     : type === "unique-grid" ? "Gastos Únicos"
-    : "Gastos en Cuotas";
+    : type === "installment-gantt" ? "Gastos en Cuotas"
+    : "Inflación vs Ingresos";
 
   const hasTitle = Boolean(title);
 
@@ -187,6 +190,20 @@ export function SortableReportCard({
         />
       ) : config.type === "installment-gantt" ? (
         <CuotasGanttCard
+          year={config.year}
+          categoryIds={config.categoryIds}
+          currency={config.currency}
+          title={config.title}
+          titlePlaceholder={titlePlaceholder}
+          removable={true}
+          onYearChange={onYearChange}
+          onCategoryIdsChange={onCategoryIdsChange}
+          onCurrencyChange={onCurrencyChange}
+          onRemove={onRemove}
+          onTitleChange={onTitleChange}
+        />
+      ) : config.type === "inflation-income" ? (
+        <InflationIncomeCard
           year={config.year}
           categoryIds={config.categoryIds}
           currency={config.currency}

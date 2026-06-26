@@ -75,9 +75,21 @@ vi.mock("@/hooks/use-reports", () => ({
     fetchStatus: "fetching",
     refetch: vi.fn(),
   })),
+  useInflationIncome: vi.fn(() => ({
+    data: undefined,
+    isLoading: true,
+    isError: false,
+    isPending: true,
+    isSuccess: false,
+    error: null,
+    status: "loading",
+    fetchStatus: "fetching",
+    refetch: vi.fn(),
+  })),
   REPORTS_QUERY_KEY: (year: number, key: string | null) => ["reports", year, key],
   UNICO_GRID_QUERY_KEY: (year: number, key: string | null) => ["reports-unico-grid", year, key],
   CUOTAS_GANTT_QUERY_KEY: (year: number, key: string | null) => ["reports-cuotas-gantt", year, key],
+  INFLATION_INCOME_QUERY_KEY: (year: number, key: string | null) => ["reports-inflation-income", year, key],
 }));
 
 vi.mock("@/hooks/use-categories", () => ({
@@ -106,8 +118,11 @@ vi.mock("recharts", () => {
   return {
     AreaChart: MockChart,
     BarChart: MockChart,
+    LineChart: MockChart,
     Area: () => null,
     Bar: () => null,
+    Line: () => null,
+    ReferenceLine: () => null,
     XAxis: () => null,
     YAxis: () => null,
     CartesianGrid: () => null,
@@ -688,5 +703,98 @@ describe("ReportesPage — chip de moneda default (Fase 1.2.3-ext)", () => {
     renderPage();
     const chip = screen.getByRole("link", { name: /moneda por defecto: ARS/i });
     expect(chip).toHaveTextContent("ARS");
+  });
+});
+
+// ─── Tests: menú "[+]" — 5ª entrada Inflación vs Ingresos (Ola 4, P5) ─────────
+
+describe("ReportesPage — menú AddCard, 5ª entrada 'Inflación vs Ingresos'", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    uuidCounter = 0;
+    makePreferencesHook([]);
+  });
+
+  it("el menú de tipo incluye 'Inflación vs Ingresos' cuando se abre", () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /agregar primer reporte/i }));
+    expect(screen.getByText("Inflación vs Ingresos")).toBeInTheDocument();
+  });
+
+  it("el menú muestra la sub-descripción de Inflación vs Ingresos", () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /agregar primer reporte/i }));
+    expect(
+      screen.getByText(/variación de tus ingresos frente a la inflación/i),
+    ).toBeInTheDocument();
+  });
+
+  it("al elegir 'Inflación vs Ingresos' llama a setPreferences con una card inflation-income", async () => {
+    const setPreferences = vi.fn().mockResolvedValue({ success: true });
+    makePreferencesHook([], setPreferences);
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /agregar primer reporte/i }));
+    fireEvent.click(screen.getByText("Inflación vs Ingresos"));
+
+    await waitFor(() => {
+      expect(setPreferences).toHaveBeenCalledTimes(1);
+    });
+
+    const callArg = setPreferences.mock.calls[0]?.[0] as UserPreferences;
+    expect(Array.isArray(callArg.reports)).toBe(true);
+    expect(callArg.reports).toHaveLength(1);
+    expect(callArg.reports?.[0]?.type).toBe("inflation-income");
+    expect(callArg.reports?.[0]?.year).toBe(2026);
+    expect(callArg.reports?.[0]?.categoryIds).toBeNull();
+  });
+});
+
+// ─── Tests: normalización del blob con tipo inflation-income ──────────────────
+
+describe("ReportesPage — normalización del blob con 'inflation-income'", () => {
+  const inflationIncomeCard: ReportCardConfig = {
+    id: "card-inf-1",
+    type: "inflation-income",
+    year: 2026,
+    categoryIds: null,
+    currency: "ARS",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    uuidCounter = 0;
+  });
+
+  it("acepta y renderiza cards de tipo inflation-income sin normalization error", () => {
+    makePreferencesHook([inflationIncomeCard]);
+    renderPage();
+    // La card de inflation-income se monta (skeleton de carga visible)
+    expect(screen.getByRole("status", { name: /cargando/i })).toBeInTheDocument();
+  });
+
+  it("el mini de reorden muestra 'Inflación vs Ingresos' para tipo inflation-income", () => {
+    makePreferencesHook([
+      inflationIncomeCard,
+      { id: "card-2", type: "income-expense", year: 2025, categoryIds: null },
+    ]);
+    renderPage();
+
+    // Entrar en modo orden
+    fireEvent.click(screen.getByRole("button", { name: /ordenar reportes/i }));
+
+    // La etiqueta de tipo del mini para inflation-income debe ser "Inflación vs Ingresos"
+    expect(screen.getByText("Inflación vs Ingresos")).toBeInTheDocument();
+  });
+
+  it("cards inflation-income con campos opcionales (title, currency) se normalizan sin error", () => {
+    const cardWithExtras: ReportCardConfig = {
+      ...inflationIncomeCard,
+      title: "Mi inflación 2026",
+      currency: "USD",
+    };
+    makePreferencesHook([cardWithExtras]);
+    renderPage();
+    expect(screen.getByText("Mi inflación 2026")).toBeInTheDocument();
   });
 });

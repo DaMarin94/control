@@ -36,6 +36,9 @@
   --color-warning-soft: oklch(0.95 0.05 75);
   --color-warning-ink: oklch(0.52 0.12 75);
 
+  /* Tasa (rate) — graphite neutro hue 270 para benchmark de inflación/tasas */
+  --color-rate: oklch(0.45 0.03 270);
+
   /* Neutros */
   --color-paper:      oklch(0.965 0.004 270);
   --color-panel:      #ffffff;
@@ -84,6 +87,9 @@
   --warning:     oklch(0.72 0.15 75);
   --warning-soft: oklch(0.95 0.05 75);
   --warning-ink: oklch(0.52 0.12 75);
+
+  /* Tasa (rate) — graphite neutro hue 270 para benchmark de inflación */
+  --rate: oklch(0.45 0.03 270);
 
   --paper:       oklch(0.965 0.004 270);
   --panel:       #ffffff;
@@ -178,6 +184,9 @@
   --warning-soft: oklch(0.34 0.06 75);
   --warning-ink:  oklch(0.84 0.13 75);
 
+  /* Tasa (rate) — oscuro más luminoso para separarse del panel oscuro */
+  --rate: oklch(0.72 0.025 270);
+
   /* ---- Semánticos — tokens @theme (bg-income-soft, text-expense-ink, etc.) ---- */
   --color-income:       oklch(0.70 0.13 158);
   --color-income-soft:  oklch(0.32 0.05 158);
@@ -188,6 +197,9 @@
   --color-warning:      oklch(0.78 0.15 75);
   --color-warning-soft: oklch(0.34 0.06 75);
   --color-warning-ink:  oklch(0.84 0.13 75);
+
+  /* Tasa (rate) — token @theme para oscuro */
+  --color-rate: oklch(0.72 0.025 270);
 
   /* ---- Acento índigo — alias :root (solo marca; nunca tiñe montos) ---- */
   --accent:       oklch(0.66 0.17 264);
