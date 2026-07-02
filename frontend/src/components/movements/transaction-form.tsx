@@ -308,7 +308,7 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
         categoryId: data.categoryId,
         occurredAt,
         timezone,
-        description: data.description || undefined,
+        description: data.description || null,
         currency: data.currency,
         exchangeRate: parsedExchangeRate,
       });

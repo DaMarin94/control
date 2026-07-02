@@ -2,23 +2,9 @@
 
 > **Working doc descartable.** Es un documento de trabajo: refleja el estado actual de lo pendiente y se **borra al cerrar la versión**. No es registro histórico ni fuente de verdad permanente. Los RF/RN definitivos de cada item se escriben en `requirements.md` (y las pantallas en `screens.md`, el modelo en `data-model.md`) **cuando el item se implementa**, no antes.
 
-Orden de ejecución: **B1 → P5 → P1 → P3 → P4 → P2**.
+Orden de ejecución: **P5 → P1 → P3 → P4 → P2**.
 
 P2 (Límites y Alertas) es el item más grande y transversal, está en fase de descubrimiento y vive en documento aparte: `docs/roadmap-limites-alertas.md`. Va **último**.
-
----
-
-## B1 — La descripción no se borra al editar
-
-**Bug, fix front-only.**
-
-**Causa.** En modo edición, `frontend/.../transaction-form.tsx` (~L311/L330) y `calculated-form.tsx` arman el payload con `description: data.description || undefined`. Al vaciar el campo, se envía `undefined`: la clave desaparece del body y el backend preserva el valor viejo (evalúa `dto.description !== undefined`).
-
-**Fix (solo frontend).** En **edición**, enviar la descripción vacía explícita como `null` en vez de omitirla. En **creación** se puede seguir omitiendo. El backend ya soporta `null` sin cambios.
-
-**Alcance.** Los cuatro casos de carga: único / fijo / cuota (`transaction-form`) + calculado (`calculated-form`). Resultado esperado: descripción vacía → sin descripción (`null`).
-
-**Agente.** control-frontend.
 
 ---
 
