@@ -596,6 +596,65 @@ La card del Dashboard usa el **mismo `ReportCard`** pero **NO** renderiza el `Ca
 
 > **Reglas duras reafirmadas:** el código de moneda va en **mono tabular** (regla dura 3); ningún elemento del disparador, popover o ítems se tiñe de income/expense (regla dura 1) ni de índigo de marca (regla dura 2); el índigo aparece **solo** como focus ring (cromo de interacción). El selector de moneda **no** cambia qué es ingreso/gasto ni recolorea cifras: solo cambia el **símbolo** con el que se presentan (vía el mapa `código → símbolo` de *Símbolos de moneda por código*).
 
+### Botón de refrescar por reporte — utilidad per-card (P5)
+
+Cada card de reporte lleva **su propio botón de refrescar**, en la barra de controles de la cabecera. Refetchea **solo esa card** (reusa el `refetch` del hook de la card). Aplica a los **5 tipos de card** (`income-expense`, `by-category`, únicos, cuotas-gantt, inflación-vs-ingresos) **+ el widget `income-expense` del Dashboard**. En **modo orden** la card colapsa a mini y no se renderiza → el botón tampoco existe ahí (no aplica).
+
+**No inventa cromo nuevo:** es un icon-button ghost del mismo lenguaje que el botón `X` (quitar) — mismo hit-area, mismos colores de estado, mismo focus ring. La única pieza nueva es el ícono y su estado de carga.
+
+#### 1. Ícono
+
+- **`RefreshCw`** (lucide) — dos flechas en círculo, la lectura universal de "refrescar/recargar". **16px**, `aria-hidden="true"`. Se elige `RefreshCw` (no `RotateCw`) porque el doble-arco lee inequívocamente como "actualizar datos" y no como "deshacer/rotar".
+- Tamaño 16px para **igualar al `X`** de la cabecera (ambos viven en el mismo clúster de utilidad; los chevrones del `YearStepper` son 18px porque pertenecen a la pill de navegación, otro grupo).
+
+#### 2. Ubicación y orden — regla única para los 4 layouts de cabecera
+
+El botón vive en el **clúster de utilidad**, junto al `X`, al final de la barra de controles derecha. Orden completo (izq → der):
+
+```
+[ YearStepper ] |hair| [ CardCurrencySelect? ] |hair| [ refrescar ] [ X? ]
+```
+
+- **`refrescar` va inmediatamente a la izquierda del `X`**, dentro del mismo bloque, **sin divisor entre ambos** (separados solo por el `gap-2` del contenedor). Refrescar (no destructivo) primero; `X` (quitar, destructivo) **queda terminal/rightmost**, preservando la muscle-memory de "quitar es la esquina" y la jerarquía año > moneda > utilidades.
+- **El divisor `--hair` que hoy precede al `X` pasa a preceder al clúster `[ refrescar ][ X? ]`.** Como `refrescar` está **siempre presente**, ese divisor **siempre se renderiza** (a diferencia de hoy, donde el divisor del `X` era condicional a `removable`). Es decir: el clúster de utilidad ahora es incondicional y arrastra su propio divisor de entrada.
+- **No se agrega un segundo divisor** entre `refrescar` y `X`: un solo hair de entrada al clúster. Así una card completa de `/reportes` tiene **dos** hairlines (stepper|moneda y moneda|utilidad), no tres — se evita ruido de hairlines.
+- **Regla mecánica para las 4 cabeceras** (el `CardControls` compartido de `report-card.tsx` y las 3 cabeceras inline de `unique-grid-card`, `cuotas-gantt-card`, `inflation-income-card`): renderizar **incondicionalmente** `|hair| [ refrescar ]` después del bloque de moneda, y **dentro del mismo bloque** agregar `[ X ]` solo si `removable`. La condición de `removable` deja de gobernar el divisor (que ahora es del clúster, no del `X`).
+
+Resultado por caso:
+
+- **Dashboard** (`income-expense`, sin moneda ni `X`): `[ YearStepper ] |hair| [ refrescar ]`. La cabecera del Dashboard **deja de ser "stepper solo"**: gana el divisor + refrescar. (Es el único cambio visible del Dashboard por P5.)
+- **`/reportes`, card normal**: `[ YearStepper ] |hair| [ CardCurrencySelect ] |hair| [ refrescar ] [ X ]`.
+
+#### 3. Botón icónico — anatomía y estados (reposo/hover/focus)
+
+Idéntico al botón `X` de la cabecera, para que el clúster de utilidad lea uniforme:
+
+- **Hit-area:** `h-8 w-8` (32×32px), `rounded-ctl` (`--r-ctl` 10px), ícono centrado (`flex items-center justify-center`).
+- **Reposo:** `text-muted`, sin caja (fondo transparente).
+- **Hover:** `hover:bg-panel-2 hover:text-ink`, transición `140ms` (`transition-colors duration-[140ms]`).
+- **Focus (teclado):** `focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]` — mismo ring `--accent-soft` que todos los icon-buttons de la cabecera. Acento = cromo de foco, no dato (no viola reglas duras).
+- **Sin color semántico ni índigo** en el ícono en ningún estado (regla dura 1 y 2): el ícono es neutro (`--muted` → `--ink`). El índigo aparece **solo** como focus ring.
+
+El botón **no** depende de los límites de año (a diferencia de los chevrones del stepper): está siempre habilitado, salvo mientras su propio refetch está en vuelo (§4).
+
+#### 4. Estado de carga — spinner, sin toast
+
+Feedback **exclusivamente visual y local: solo spinner, sin toast** (la card ya maneja su propio estado de error en el área de contenido; el botón no anuncia nada).
+
+- **Mientras refetchea:** el **mismo ícono `RefreshCw` rota** (`animate-spin`, giro horario). No se cambia por un spinner distinto — se reusa el ícono, que es exactamente la metáfora "refrescando".
+- **Botón inerte durante el fetch:** `disabled` + cursor default + **atenuado a `opacity-60`** para señalar que está trabajando y no vuelve a accionarse; hover suprimido mientras carga.
+- **A qué estado se ata:** al **fetch en segundo plano** de la card (dato ya presente + refetch en vuelo) — que es justamente el caso del refrescar manual. La **carga inicial** la sigue cubriendo el skeleton de la card (regla de *Skeletons*), así que el botón **no** necesita spinnear en el arranque; su spinner es el del refetch de fondo.
+- **`prefers-reduced-motion`:** `motion-reduce:animate-none` — bajo reduced-motion el ícono **no gira**; el estado de "trabajando" queda señalado por la **atenuación `opacity-60` + `disabled`** (que se aplican en ambos casos, con o sin movimiento). Así el feedback de carga **nunca depende solo de la animación**: el dim es el cue accesible cuando no hay giro.
+
+#### 5. Accesibilidad
+
+- **`aria-label="Actualizar reporte"`** (estático; no cambia mientras carga).
+- **`aria-busy`** refleja el estado de carga: `aria-busy="true"` mientras refetchea, `false` en reposo. Es el anuncio de "trabajando" para lectores de pantalla, coherente con que no hay toast.
+- **`aria-disabled` / `disabled`** durante el fetch (el mismo estado que atenúa y suprime el hover).
+- `type="button"`, ícono `aria-hidden="true"` (el nombre accesible lo da el `aria-label`).
+
+> **Reglas duras reafirmadas:** el botón de refrescar es **cromo estrictamente neutro** — ícono `--muted`/`--ink`, sin income/expense (regla dura 1), sin índigo salvo focus ring (regla dura 2). No toca ninguna cifra de dinero, así que la regla dura 3 (mono tabular) no lo alcanza.
+
 ### Gráficos — Forma 1 y Forma 2
 
 Las dos visualizaciones que montan las *cards de reporte*. Librería: Tremor Raw (Recharts por debajo). El **encuadre** (cabecera, controles, estados de carga/vacío/error de la card) vive en *Card de reporte*; acá viven las **gráficas**: tipo, mapeo de color, curva, ejes, gridlines, leyenda y tooltip. Altos de canvas: 300px (`/reportes`) / 280px (Dashboard) / 220px en ≤940px; ancho 100% del contenedor (responsive container de Recharts).

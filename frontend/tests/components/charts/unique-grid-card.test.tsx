@@ -390,6 +390,37 @@ describe("UniqueGridCard — hook y parámetros", () => {
   });
 });
 
+describe("UniqueGridCard — botón de refrescar per-card (P5)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("está presente sin depender de removable", () => {
+    mockUseUnicoGrid.mockReturnValue(makeSuccessReturn());
+    renderCard({ removable: false });
+    expect(screen.getByRole("button", { name: /actualizar reporte/i })).toBeInTheDocument();
+  });
+
+  it("al hacer clic, llama a refetch", () => {
+    const refetch = vi.fn();
+    mockUseUnicoGrid.mockReturnValue({ ...makeSuccessReturn(), refetch });
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: /actualizar reporte/i }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("se deshabilita y marca aria-busy mientras isFetching=true", () => {
+    mockUseUnicoGrid.mockReturnValue({
+      ...makeSuccessReturn(),
+      isFetching: true,
+    } as unknown as HookReturn);
+    renderCard();
+    const btn = screen.getByRole("button", { name: /actualizar reporte/i });
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute("aria-busy", "true");
+  });
+});
+
 describe("UniqueGridCard — stepper de año", () => {
   beforeEach(() => {
     vi.clearAllMocks();

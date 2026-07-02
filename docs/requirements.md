@@ -1516,7 +1516,7 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 **Criterios de aceptación:**
 - [ ] El usuario puede reordenar **las cards entre sí** mediante drag, dentro de un **modo orden** explícito que se activa/desactiva con un botón del header ("Ordenar reportes" / "Listo").
 - [ ] El botón "Ordenar reportes" se muestra **solo cuando hay 2 o más cards** (con 0 o 1 no hay nada que reordenar).
-- [ ] En modo orden, cada card colapsa a su representación **mini** y se arrastra como una unidad; los controles internos de cada card (navegación de año, moneda, quitar, título editable) y el recuadro **"[+]"** quedan **deshabilitados**.
+- [ ] En modo orden, cada card colapsa a su representación **mini** y se arrastra como una unidad; los controles internos de cada card (navegación de año, moneda, refrescar, quitar, título editable) y el recuadro **"[+]"** quedan **deshabilitados**.
 - [ ] El **orden de las cards** es el orden del array `reports`; se **persiste por usuario** (clave `reports`, RF-REP-004; shape en `docs/data-model.md`) y se **aplica en vivo**. No hay acción de "cancelar" (espejo de RF-VM-005).
 - [ ] Al reordenar, el placeholder **"Reporte N"** de las cards sin título se recalcula en vivo según la nueva posición (RF-REP-008).
 
@@ -1749,6 +1749,24 @@ Las tres dimensiones se combinan libremente (ej. "solo gastos fijos de la catego
 - **Límite asumido — salto único vs. periódico.** Un aumento único e irrepetible es indistinguible de uno periódico en el dato disponible: la tasa lo trata igual que a un aumento repetible, por lo que puede **sobreestimar** tras un salto único.
 - **Capacidad retenida, no consumida.** El backend conserva el soporte para responder la proyección (params `projectFixed` / `today` → `projected`; contrato en `docs/data-model.md`, cálculo en `docs/backend.md`), pero hoy ningún consumidor la pide.
 - **Relación con RF-REP-013:** la proyección de fijos y el reporte de Evolución de gastos fijos (RF-REP-013) son ambas miradas sobre los fijos; aquí es la mirada de **montos** proyectada a futuro, mientras que RF-REP-013 es la mirada de **variación / inflación con selección por fijo**.
+
+---
+
+#### RF-REP-016 — Refrescar una card individualmente
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Cada card de `/reportes` —los cinco tipos: income-expense (RF-REP-005), by-category (RF-REP-006), unique-grid (RF-REP-010), installment-gantt (RF-REP-011), inflation-income (RF-REP-012)— **y** el widget income-expense del Dashboard exponen en su cabecera un botón de **refrescar** que vuelve a pedir al backend **solo los datos de esa card**. El refetch es **independiente por card**: refrescar una no afecta a las demás. **Backend sin cambios**: reusa el mismo endpoint de datos de la card. El detalle visual (forma, ubicación, ícono, estado de carga) está en `docs/design.md`. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Baja |
+| **Precondiciones** | El usuario está en `/reportes` (o en el Dashboard, para su widget income-expense). |
+
+**Criterios de aceptación:**
+- [ ] Cada uno de los cinco tipos de card de `/reportes` y el widget income-expense del Dashboard exponen un botón de **refrescar** en su cabecera.
+- [ ] Al accionarlo, la card **vuelve a pedir sus datos al backend** y **solo esa card** se recarga; las demás no se ven afectadas.
+- [ ] El **feedback es solo un spinner** mientras recarga; **no hay toast** (ni de éxito ni de error).
+- [ ] Si la recarga **falla**, la card muestra su propio **estado de error** ya existente.
+- [ ] En **modo orden** (RF-REP-009) el botón de refrescar, como el resto de los controles internos de la card, **no está disponible**.
 
 ---
 

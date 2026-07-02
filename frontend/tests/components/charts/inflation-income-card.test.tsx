@@ -243,6 +243,55 @@ describe("InflationIncomeCard — estado de error", () => {
   });
 });
 
+describe("InflationIncomeCard — botón de refrescar per-card (P5)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("está presente sin depender de removable", () => {
+    mockHookWithData(mockData);
+    renderCard({ removable: false });
+    expect(screen.getByRole("button", { name: /actualizar reporte/i })).toBeInTheDocument();
+  });
+
+  it("al hacer clic, llama a refetch", () => {
+    const refetch = vi.fn();
+    mockUseInflationIncome.mockReturnValue({
+      data: mockData,
+      isLoading: false,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      error: null,
+      status: "success",
+      fetchStatus: "idle",
+      refetch,
+    } as ReturnType<typeof useInflationIncome>);
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: /actualizar reporte/i }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("se deshabilita y marca aria-busy mientras isFetching=true", () => {
+    mockUseInflationIncome.mockReturnValue({
+      data: mockData,
+      isLoading: false,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      error: null,
+      status: "success",
+      fetchStatus: "fetching",
+      isFetching: true,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useInflationIncome>);
+    renderCard();
+    const btn = screen.getByRole("button", { name: /actualizar reporte/i });
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute("aria-busy", "true");
+  });
+});
+
 // ─── Tests: estado vacío ───────────────────────────────────────────────────────
 
 describe("InflationIncomeCard — estado vacío (sin datos)", () => {

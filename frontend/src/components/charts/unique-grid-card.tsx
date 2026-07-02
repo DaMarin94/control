@@ -33,6 +33,7 @@ import {
   AlertTriangle,
   ArrowUp,
   ArrowDown,
+  RefreshCw,
 } from "lucide-react";
 import { useUnicoGrid } from "@/hooks/use-reports";
 import { useSettings } from "@/hooks/use-settings";
@@ -1066,7 +1067,7 @@ export function UniqueGridCard({
     return `${y}-${m}-${d}`;
   }, []);
 
-  const { data, isLoading, isError, refetch } = useUnicoGrid(year, categoryIds, currency, today);
+  const { data, isLoading, isError, isFetching, refetch } = useUnicoGrid(year, categoryIds, currency, today);
 
   const [removeOpen, setRemoveOpen] = useState(false);
   const removeButtonRef = useRef<HTMLButtonElement>(null);
@@ -1200,19 +1201,31 @@ export function UniqueGridCard({
             </>
           )}
 
+          <span className="block h-[16px] w-px bg-hair shrink-0" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            aria-label="Actualizar reporte"
+            aria-busy={isFetching}
+            className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted"
+          >
+            <RefreshCw
+              size={16}
+              aria-hidden="true"
+              className={cn(isFetching && "animate-spin motion-reduce:animate-none")}
+            />
+          </button>
           {removable && (
-            <>
-              <span className="block h-[16px] w-px bg-hair shrink-0" aria-hidden="true" />
-              <button
-                ref={removeButtonRef}
-                type="button"
-                onClick={() => setRemoveOpen((o) => !o)}
-                aria-label="Quitar reporte"
-                className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
-              >
-                <X size={16} aria-hidden="true" />
-              </button>
-            </>
+            <button
+              ref={removeButtonRef}
+              type="button"
+              onClick={() => setRemoveOpen((o) => !o)}
+              aria-label="Quitar reporte"
+              className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
           )}
         </div>
       </div>

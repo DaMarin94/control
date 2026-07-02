@@ -48,6 +48,7 @@ import {
   Eye,
   EyeOff,
   Pencil,
+  RefreshCw,
 } from "lucide-react";
 import { useReports } from "@/hooks/use-reports";
 import { useSettings } from "@/hooks/use-settings";
@@ -1192,6 +1193,8 @@ interface CardControlsProps {
   removable: boolean;
   removeButtonRef: React.RefObject<HTMLButtonElement | null>;
   onRemoveOpen: () => void;
+  onRefresh: () => void;
+  isFetching: boolean;
 }
 
 /**
@@ -1211,6 +1214,8 @@ function CardControls({
   removable,
   removeButtonRef,
   onRemoveOpen,
+  onRefresh,
+  isFetching,
 }: CardControlsProps) {
   return (
     <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -1238,24 +1243,35 @@ function CardControls({
         </>
       )}
 
-      {/* Divisor y botón quitar (solo en /reportes) */}
+      {/* Divisor de entrada al clúster de utilidad (refrescar + X?) — incondicional (P5) */}
+      <span
+        className="block h-[16px] w-px bg-hair shrink-0"
+        aria-hidden="true"
+      />
+      <button
+        type="button"
+        onClick={onRefresh}
+        disabled={isFetching}
+        aria-label="Actualizar reporte"
+        aria-busy={isFetching}
+        className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted"
+      >
+        <RefreshCw
+          size={16}
+          aria-hidden="true"
+          className={cn(isFetching && "animate-spin motion-reduce:animate-none")}
+        />
+      </button>
       {removable && (
-        <>
-          {/* Mini-divisor --hair entre moneda/stepper y X */}
-          <span
-            className="block h-[16px] w-px bg-hair shrink-0"
-            aria-hidden="true"
-          />
-          <button
-            ref={removeButtonRef}
-            type="button"
-            onClick={onRemoveOpen}
-            aria-label="Quitar reporte"
-            className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
-          >
-            <X size={16} aria-hidden="true" />
-          </button>
-        </>
+        <button
+          ref={removeButtonRef}
+          type="button"
+          onClick={onRemoveOpen}
+          aria-label="Quitar reporte"
+          className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+        >
+          <X size={16} aria-hidden="true" />
+        </button>
       )}
     </div>
   );
@@ -1313,7 +1329,7 @@ export function ReportCard({
   const reportsMovementTypes = type === "income-expense" ? movementTypes : undefined;
   const reportsDirection = type === "income-expense" ? direction : undefined;
 
-  const { data, isLoading, isError, refetch } = useReports(
+  const { data, isLoading, isError, isFetching, refetch } = useReports(
     year,
     categoryIds,
     currency,
@@ -1572,6 +1588,8 @@ export function ReportCard({
                 removable={removable}
                 removeButtonRef={removeButtonRef}
                 onRemoveOpen={() => setRemoveOpen((o) => !o)}
+                onRefresh={() => refetch()}
+                isFetching={isFetching}
               />
             </div>
           </>
@@ -1606,6 +1624,8 @@ export function ReportCard({
               removable={removable}
               removeButtonRef={removeButtonRef}
               onRemoveOpen={() => setRemoveOpen((o) => !o)}
+              onRefresh={() => refetch()}
+              isFetching={isFetching}
             />
           </div>
         )
@@ -1650,6 +1670,8 @@ export function ReportCard({
               removable={removable}
               removeButtonRef={removeButtonRef}
               onRemoveOpen={() => setRemoveOpen((o) => !o)}
+              onRefresh={() => refetch()}
+              isFetching={isFetching}
             />
           </div>
         </>

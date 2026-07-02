@@ -343,6 +343,7 @@ Pantalla **configurable** donde el usuario arma su propia vista de reportes a lo
 - **Quitar card** — elimina la card de la vista y de la persistencia.
 - **Navegar el año de una card** y **filtrar sus categorías** — embebidos en cada card (widget autónomo, pantalla 8); cada cambio se persiste. Son **independientes por card**: no hay control de año ni filtro compartidos.
 - **Editar el título de una card** (RF-REP-008) — desde la cabecera; máx. 60 caracteres, **Enter o blur** confirman, **Esc** cancela. Confirmar un título vacío vuelve a mostrar el placeholder "Reporte N".
+- **Refrescar una card** (RF-REP-016) — desde la cabecera; vuelve a pedir al backend **solo los datos de esa card**, con feedback solo-spinner. Es **independiente por card**.
 - **Ordenar reportes** (RF-REP-009) — un botón del header ("Ordenar reportes" / "Listo") activa/desactiva el **modo orden**, con el mismo mecanismo que "Ordenar secciones" de `/mes`. Se muestra **solo con 2 o más cards**. En modo orden cada card colapsa a su representación **mini** y el usuario la **arrastra para reordenarla** entre las demás; los controles internos de cada card y el "[+]" quedan deshabilitados. El orden se **aplica en vivo** y se **persiste por usuario** (clave `reports`, RF-REP-004); no hay acción de cancelar.
 - Acciones globales del sidebar.
 

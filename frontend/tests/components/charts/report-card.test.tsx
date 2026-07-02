@@ -656,6 +656,55 @@ describe("ReportCard — quitar card", () => {
   });
 });
 
+describe("ReportCard — botón de refrescar per-card (P5)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("está presente en el Dashboard (removable=false, sin onCurrencyChange)", () => {
+    mockUseReports.mockReturnValue(makeSuccessReturn());
+    renderCard({ type: "income-expense", removable: false });
+    expect(screen.getByRole("button", { name: /actualizar reporte/i })).toBeInTheDocument();
+  });
+
+  it("está presente en /reportes (removable=true, con onCurrencyChange) junto al X", () => {
+    mockUseReports.mockReturnValue(makeSuccessReturn());
+    renderCard({ type: "income-expense", removable: true, onCurrencyChange: vi.fn() });
+    expect(screen.getByRole("button", { name: /actualizar reporte/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /quitar reporte/i })).toBeInTheDocument();
+  });
+
+  it("al hacer clic, llama a refetch", () => {
+    const refetch = vi.fn();
+    mockUseReports.mockReturnValue({ ...makeSuccessReturn(), refetch });
+    renderCard({ type: "income-expense" });
+    fireEvent.click(screen.getByRole("button", { name: /actualizar reporte/i }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("se deshabilita y marca aria-busy mientras isFetching=true", () => {
+    mockUseReports.mockReturnValue({
+      ...makeSuccessReturn(),
+      isFetching: true,
+    } as unknown as ReturnType<typeof useReports>);
+    renderCard({ type: "income-expense" });
+    const btn = screen.getByRole("button", { name: /actualizar reporte/i });
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute("aria-busy", "true");
+  });
+
+  it("está habilitado y aria-busy=false en reposo (isFetching=false)", () => {
+    mockUseReports.mockReturnValue({
+      ...makeSuccessReturn(),
+      isFetching: false,
+    } as unknown as ReturnType<typeof useReports>);
+    renderCard({ type: "income-expense" });
+    const btn = screen.getByRole("button", { name: /actualizar reporte/i });
+    expect(btn).not.toBeDisabled();
+    expect(btn).toHaveAttribute("aria-busy", "false");
+  });
+});
+
 // ─── Tests: Toggle Barra/Línea en by-category ────────────────────────────────
 
 describe("ReportCard — toggle Barra/Línea en by-category (categoryChartMode)", () => {
