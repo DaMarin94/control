@@ -3,5 +3,5 @@
   "compilerOptions": {
     "incremental": false
   },
-  "exclude": ["node_modules", "tests", "dist", "**/*spec.ts", "prisma", "prisma.config.ts"]
+  "exclude": ["node_modules", "tests", "dist", "**/*spec.ts", "prisma", "prisma.config.ts", "scripts"]
 }

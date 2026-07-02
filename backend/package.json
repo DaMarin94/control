@@ -20,7 +20,8 @@
     "db:seed": "node node_modules/tsx/dist/cli.mjs prisma/seed.ts",
     "seed:rates": "node node_modules/tsx/dist/cli.mjs prisma/seed-reference-rates.ts",
     "db:migrate": "node node_modules/prisma/build/index.js migrate dev",
-    "db:generate": "node node_modules/prisma/build/index.js generate"
+    "db:generate": "node node_modules/prisma/build/index.js generate",
+    "restitch:recurring-chains": "node node_modules/tsx/dist/cli.mjs scripts/restitch-recurring-chains.ts"
   },
   "prisma": {
     "seed": "node node_modules/tsx/dist/cli.mjs prisma/seed.ts"

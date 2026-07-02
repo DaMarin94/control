@@ -18,6 +18,9 @@ pnpm-debug.log*
 # Coverage
 coverage/
 
+# Backups generados por scripts de migración de datos (restitch-recurring-chains --execute)
+scripts/restitch-backups/
+
 # Editor
 .vscode/
 .idea/
