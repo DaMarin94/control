@@ -82,7 +82,7 @@ function makeDbCategory(overrides: Record<string, unknown> = {}) {
     userId: USER_A_ID,
     name: 'Consumibles',
     scope: CategoryScope.BOTH,
-    color: '#4F86C6',
+    color: '#E23B3B',
     deletedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -290,7 +290,7 @@ describe('Categories (e2e)', () => {
       mockPrisma.category.findMany
         .mockResolvedValueOnce([]) // findByNormalizedName
         .mockResolvedValueOnce([]); // countActiveByColor (no debería llamarse, pero por si acaso)
-      const colorElegido = '#84A9D6'; // T3, válido
+      const colorElegido = '#8DB4ED'; // L2, válido
       const created = makeDbCategory({ name: 'Viajes', color: colorElegido });
       mockPrisma.category.create.mockResolvedValue(created);
 
@@ -308,13 +308,13 @@ describe('Categories (e2e)', () => {
       mockPrisma.category.findMany
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
-      const created = makeDbCategory({ name: 'Test', color: '#84A9D6' });
+      const created = makeDbCategory({ name: 'Test', color: '#8DB4ED' });
       mockPrisma.category.create.mockResolvedValue(created);
 
       const res = await request(app.getHttpServer())
         .post('/categories')
         .set('Authorization', `Bearer ${tokenA}`)
-        .send({ name: 'Test', color: '#84a9d6' })
+        .send({ name: 'Test', color: '#8db4ed' })
         .expect(201);
 
       expect(res.body.success).toBe(true);
@@ -372,7 +372,7 @@ describe('Categories (e2e)', () => {
         id: 'cat-deleted-id',
         name: 'Viajes',
         scope: CategoryScope.EXPENSE,
-        color: '#E07B54',
+        color: '#E8863A',
         deletedAt: new Date('2024-01-01'),
       });
       mockPrisma.category.findMany.mockResolvedValue([deletedCat]);
@@ -390,7 +390,7 @@ describe('Categories (e2e)', () => {
       expect(res.body.error.data.category.id).toBe('cat-deleted-id');
       expect(res.body.error.data.category.name).toBe('Viajes');
       expect(res.body.error.data.category.scope).toBe('EXPENSE');
-      expect(res.body.error.data.category.color).toBe('#E07B54');
+      expect(res.body.error.data.category.color).toBe('#E8863A');
     });
 
     it('colisión por acentos con eliminada → 409 reactivable (RN-014)', async () => {
@@ -431,7 +431,7 @@ describe('Categories (e2e)', () => {
         id: 'cat-del',
         deletedAt: new Date('2024-01-01'),
         scope: CategoryScope.EXPENSE,
-        color: '#E07B54',
+        color: '#E8863A',
       });
       mockPrisma.category.findUnique.mockResolvedValue(deletedCat);
       const reactivated = { ...deletedCat, deletedAt: null };
@@ -447,7 +447,7 @@ describe('Categories (e2e)', () => {
       expect(res.body.data.deletedAt).toBeNull();
       expect(res.body.data.id).toBe('cat-del');
       expect(res.body.data.scope).toBe('EXPENSE');
-      expect(res.body.data.color).toBe('#E07B54');
+      expect(res.body.data.color).toBe('#E8863A');
     });
 
     it('404 si la categoría no existe', async () => {
@@ -521,9 +521,9 @@ describe('Categories (e2e)', () => {
     // --- Color en PATCH (Fase 1.1.2) ---
 
     it('200 editando color a un valor válido de la matriz', async () => {
-      const existing = makeDbCategory({ id: 'cat-001', color: '#4F86C6' });
+      const existing = makeDbCategory({ id: 'cat-001', color: '#E23B3B' });
       mockPrisma.category.findUnique.mockResolvedValue(existing);
-      const newColor = '#1F3551'; // T7, válido
+      const newColor = '#0C4F54'; // L5, válido
       const updated = { ...existing, color: newColor };
       mockPrisma.category.update.mockResolvedValue(updated);
 
@@ -538,15 +538,15 @@ describe('Categories (e2e)', () => {
     });
 
     it('200 editando color en minúsculas → aceptado (normalizado a mayúsculas)', async () => {
-      const existing = makeDbCategory({ id: 'cat-001', color: '#4F86C6' });
+      const existing = makeDbCategory({ id: 'cat-001', color: '#E23B3B' });
       mockPrisma.category.findUnique.mockResolvedValue(existing);
-      const updated = { ...existing, color: '#1F3551' };
+      const updated = { ...existing, color: '#0C4F54' };
       mockPrisma.category.update.mockResolvedValue(updated);
 
       const res = await request(app.getHttpServer())
         .patch('/categories/cat-001')
         .set('Authorization', `Bearer ${tokenA}`)
-        .send({ color: '#1f3551' })
+        .send({ color: '#0c4f54' })
         .expect(200);
 
       expect(res.body.success).toBe(true);

@@ -269,64 +269,84 @@ El control del modo de color vive en el **chrome global** (el sidebar / `AppSide
 
 ## Paleta de colores para categorías
 
-El usuario **elige y edita** el color de una categoría —tanto al crear como al editar— desde una **matriz de colores tipo Office** (sin entrada de hex libre). El pool de 10 de `backend/src/categories/color-pool.ts` es **una fila identificable de la matriz** (la fila base T4), para back-compat de las categorías ya pintadas.
+El usuario **elige y edita** el color de una categoría —tanto al crear como al editar— desde una **matriz de colores tipo Office** (sin entrada de hex libre). El pool de asignación automática de `backend/src/categories/color-pool.ts` es **el subset base identificable de la matriz** (la fila media L3).
 
 ### Regla dura
 
-El color de categoría es **solo un identificador de categoría** (swatch en la lista, bandas del apilado de la Forma 2 del gráfico, swatch en leyendas). **Nunca** tiñe un monto ni comunica ingreso/gasto — eso lo hacen income/expense (regla dura 1). La matriz está construida para **no chocar** con los semánticos ni con la marca: ningún hex de la matriz es el verde income (`#1f8a5b`), el rojo expense (`#c64637`) ni el índigo de acento.
+El color de categoría es **solo un identificador de categoría** (swatch en la lista, bandas del apilado de la Forma 2 del gráfico, swatch en leyendas). **Nunca** tiñe un monto ni comunica ingreso/gasto — eso lo hacen income/expense (regla dura 1). La matriz está construida para **no chocar** con los semánticos ni con la marca: ningún hex de la matriz es el verde income (`#1F8A5B`), el rojo expense (`#C64637`) ni el índigo de acento (`~#5B57C2`).
 
-### La matriz — fuente de verdad compartida (10 base × 7 tonalidades)
+### Regla de diseño rectora — máxima separación perceptual
+
+La única regla dura de esta paleta: **dos categorías nunca deben confundirse de un vistazo.** Se prioriza **distinguibilidad sobre cantidad**. De ahí las tres decisiones estructurales:
+
+1. **8 hues categóricamente distintos.** Cada columna es un color con **nombre propio inequívoco**: rojo, naranja, oro, verde, teal, azul, violeta, magenta — repartidos alrededor de la rueda sin dos adyacentes parecidos, sin hues "barrosos" que colapsen con un vecino.
+2. **Chroma alto y parejo en la fila base.** Ningún color base es la "versión desaturada" de otro; todos son vívidos, así la distinción es por **hue**, no por sutilezas de saturación.
+3. **5 tonalidades con saltos grandes.** Los pasos de claridad son amplios (~0.13–0.15 L de OKLCH entre filas) para que aun dentro de una misma columna dos tonos se lean claramente distintos.
+
+### La matriz — fuente de verdad compartida (8 hues × 5 tonalidades)
 
 La matriz es la **única fuente de verdad** del set de colores elegibles: el backend la usa para **validar** que el color recibido pertenezca a la matriz, y el frontend para **renderizar** el picker. Cualquier hex fuera de esta lista es inválido.
 
-- **Estructura:** 7 **filas** (T1 = más clara, arriba → T7 = más oscura, abajo) × 10 **columnas** (un hue por columna, en el **orden del pool**: azul, naranja, verde, violeta, amarillo, turquesa, rosa, azul grisáceo, marrón, verde menta).
-- **Fila base = pool:** la fila **T4** es **exactamente** el pool de 10 colores de `color-pool.ts`, en su orden original. Es la fila "media" de cada columna y la que hace back-compat: una categoría ya pintada con un color del pool cae sobre un swatch de T4, que el picker resalta como seleccionado.
-- **Total:** 70 swatches. Todos los hex son explícitos abajo (no se derivan en runtime: esta tabla **es** la fuente).
-- **Cálculo del "menos usado" (default al crear):** se mantiene tal cual hoy — sobre los **10 colores base de la fila T4** (no sobre los 70). El sistema preselecciona el color base menos usado entre las categorías activas; el usuario puede cambiarlo a cualquiera de los 70.
+- **Estructura:** 5 **filas** (L1 = más clara, arriba → L5 = más oscura, abajo) × 8 **columnas** (un hue por columna). **Total: 40 swatches.**
+- **Orden de columnas (espectral, izq→der):** C1 rojo, C2 naranja, C3 oro, C4 verde, C5 teal, C6 azul, C7 violeta, C8 magenta.
+- **Fila base = subset de asignación:** la fila **L3** (fila media, la vívida) es el **subset base** que usa el backend para el "menos usado". Es la fila dominante del picker. Todos los hex son explícitos abajo (no se derivan en runtime: esta tabla **es** la fuente).
+- **Cálculo del "menos usado" (default al crear):** se mantiene la mecánica de hoy — sobre los **8 colores base de la fila L3** (no sobre los 40). El sistema preselecciona el color base menos usado entre las categorías activas; en empate, el primero del **orden de asignación** (ver abajo); el usuario puede cambiarlo a cualquiera de los 40.
 
-**Orden de columnas (índice → hue, igual a `color-pool.ts`):**
+**Matriz de hex (filas L1→L5 de claro a oscuro; L3 es el subset base, resaltada):**
 
-| Col | Hue |
-|---|---|
-| C1 | azul |
-| C2 | naranja |
-| C3 | verde |
-| C4 | violeta |
-| C5 | amarillo |
-| C6 | turquesa |
-| C7 | rosa |
-| C8 | azul grisáceo |
-| C9 | marrón |
-| C10 | verde menta |
+| Fila | C1 rojo | C2 naranja | C3 oro | C4 verde | C5 teal | C6 azul | C7 violeta | C8 magenta |
+|---|---|---|---|---|---|---|---|---|
+| **L1** | `#F7C8C8` | `#F9DDC8` | `#F7EBC5` | `#C6E6D1` | `#BFE6E9` | `#C8DBF6` | `#DFCEF3` | `#F4CCE4` |
+| **L2** | `#EE8D8D` | `#F2B98D` | `#EFD686` | `#8ACB9F` | `#7ACBD1` | `#8DB4ED` | `#BC99E6` | `#E996C7` |
+| **L3** | `#E23B3B` | `#E8863A` | `#E3B92E` | `#35A65A` | `#1AA5B0` | `#3B7DE0` | `#8B4FD4` | `#D94A9E` |
+| **L4** | `#9E2929` | `#A25E29` | `#9F8220` | `#25743F` | `#12747B` | `#29589D` | `#613794` | `#98346F` |
+| **L5** | `#6C1C1C` | `#6F401C` | `#6D5916` | `#19502B` | `#0C4F54` | `#1C3C6C` | `#432666` | `#68244C` |
 
-**Matriz de hex (filas T1→T7 de claro a oscuro; T4 es el pool, resaltada):**
-
-| Fila | C1 azul | C2 naranja | C3 verde | C4 violeta | C5 amarillo | C6 turquesa | C7 rosa | C8 azul gris | C9 marrón | C10 v. menta |
-|---|---|---|---|---|---|---|---|---|---|---|
-| **T1** | `#DCE7F4` | `#F8E2D7` | `#E0F1DE` | `#ECE4F6` | `#FBF3D1` | `#D8F0ED` | `#F8DEE7` | `#E3E8F0` | `#F0E0CD` | `#DDF1E8` |
-| **T2** | `#B6CDE9` | `#F1C4AE` | `#C2E4BF` | `#D6C6ED` | `#F6E6A6` | `#B2E2DB` | `#F1BDCC` | `#C8D1E1` | `#E2C19C` | `#BCE4D2` |
-| **T3** | `#84A9D6` | `#E89E78` | `#97D08F` | `#BFA4E1` | `#EFD56F` | `#83D2C7` | `#E893AB` | `#A9B6CD` | `#D29F66` | `#9BD5B8` |
-| **T4** | `#4F86C6` | `#E07B54` | `#6DBF67` | `#A98BD6` | `#E8C84A` | `#5BC4B8` | `#E06B8B` | `#8B9DBF` | `#C47D3E` | `#7DBF9E` |
-| **T5** | `#3E6BA3` | `#BC6241` | `#54A04E` | `#8A6BB8` | `#C2A52E` | `#46A096` | `#BD5572` | `#71819F` | `#A2632C` | `#629E81` |
-| **T6** | `#2E5079` | `#8E4A30` | `#3E7739` | `#674F89` | `#917B1F` | `#33766F` | `#8C3F55` | `#546077` | `#794927` | `#497660` |
-| **T7** | `#1F3551` | `#5F311F` | `#284E25` | `#443458` | `#5F5113` | `#214E49` | `#5D2A39` | `#383F4F` | `#502F19` | `#304E40` |
-
-**Lista canónica ordenada (para backend/frontend) — recorrido por filas, de T1 a T7, cada fila C1→C10:**
+**Lista canónica ordenada (orden flat para el picker) — recorrido por filas, de L1 a L5, cada fila C1→C8:**
 
 ```
-T1: #DCE7F4 #F8E2D7 #E0F1DE #ECE4F6 #FBF3D1 #D8F0ED #F8DEE7 #E3E8F0 #F0E0CD #DDF1E8
-T2: #B6CDE9 #F1C4AE #C2E4BF #D6C6ED #F6E6A6 #B2E2DB #F1BDCC #C8D1E1 #E2C19C #BCE4D2
-T3: #84A9D6 #E89E78 #97D08F #BFA4E1 #EFD56F #83D2C7 #E893AB #A9B6CD #D29F66 #9BD5B8
-T4: #4F86C6 #E07B54 #6DBF67 #A98BD6 #E8C84A #5BC4B8 #E06B8B #8B9DBF #C47D3E #7DBF9E   ← pool (back-compat)
-T5: #3E6BA3 #BC6241 #54A04E #8A6BB8 #C2A52E #46A096 #BD5572 #71819F #A2632C #629E81
-T6: #2E5079 #8E4A30 #3E7739 #674F89 #917B1F #33766F #8C3F55 #546077 #794927 #497660
-T7: #1F3551 #5F311F #284E25 #443458 #5F5113 #214E49 #5D2A39 #383F4F #502F19 #304E40
+L1: #F7C8C8 #F9DDC8 #F7EBC5 #C6E6D1 #BFE6E9 #C8DBF6 #DFCEF3 #F4CCE4
+L2: #EE8D8D #F2B98D #EFD686 #8ACB9F #7ACBD1 #8DB4ED #BC99E6 #E996C7
+L3: #E23B3B #E8863A #E3B92E #35A65A #1AA5B0 #3B7DE0 #8B4FD4 #D94A9E   ← subset base
+L4: #9E2929 #A25E29 #9F8220 #25743F #12747B #29589D #613794 #98346F
+L5: #6C1C1C #6F401C #6D5916 #19502B #0C4F54 #1C3C6C #432666 #68244C
 ```
 
-Notas de construcción (para entender la matriz, no son reglas que el código deba recalcular):
-- Cada columna conserva el **hue del color base de T4**; lo que varía por fila es la claridad (y un leve ajuste de saturación: las T1–T2 son pasteles desaturados; las T6–T7, profundas). Esto da el patrón de "una familia por columna" típico de un picker tipo Office.
-- Las filas claras (T1–T3) son aptas como fondo de chip; las oscuras (T6–T7) garantizan contraste para swatches sobre panel blanco. Todas se usan **igual** como color de categoría (identificador), sin que la fila implique semántica.
-- Verde income y rojo expense quedan fuera de la matriz por construcción; los verdes (C3, C10) y el rojo/rosa (C7) de la matriz son hues claramente distintos de los semánticos.
+### Subset base (pool de asignación automática) — orden explícito
+
+El subset base son los **8 hex de la fila L3**. Su **orden de asignación** (el que rompe empates: "en empate, el primero") **no** es el orden espectral de la columna, sino un **orden que salta por la rueda** para que las **primeras** categorías creadas queden lo más separadas posible entre sí (la 1ª y la 2ª casi opuestas, la 3ª/4ª formando triada, etc.). Este orden es `[0,4,2,6,1,5,3,7]` sobre las columnas espectrales:
+
+| # | Hue | Hex |
+|---|---|---|
+| 1 | rojo | `#E23B3B` |
+| 2 | teal | `#1AA5B0` |
+| 3 | oro | `#E3B92E` |
+| 4 | violeta | `#8B4FD4` |
+| 5 | naranja | `#E8863A` |
+| 6 | azul | `#3B7DE0` |
+| 7 | verde | `#35A65A` |
+| 8 | magenta | `#D94A9E` |
+
+**Pool en orden de asignación (lista canónica para `color-pool.ts` / `CATEGORY_BASE_COLORS`):**
+
+```
+#E23B3B #1AA5B0 #E3B92E #8B4FD4 #E8863A #3B7DE0 #35A65A #D94A9E
+```
+
+> Nota de estructura para implementación: como el orden de asignación **difiere** del orden flat de la fila L3 en la matriz, el subset base se define como un **array explícito** (no como un `slice` posicional de la lista flat). El orden flat de la matriz (espectral) es para **pintar el grid**; el orden del pool (salteado) es para **asignar**.
+
+### Picker — geometría del grid
+
+- **Columnas del grid del picker: 8.** El picker (`category-form-modal.tsx`) renderiza la lista flat en `grid-template-columns: repeat(8, 1fr)`.
+- **Orden de render:** la lista flat canónica de arriba (L1→L5, cada fila C1→C8). Con 8 columnas, cada fila del CSS grid coincide exactamente con una tonalidad (L1 arriba … L5 abajo), reproduciendo el patrón "una familia por columna, un tono por fila".
+- El resto del picker (ring de selección neutro `--ink`, hover scale, botón Aleatorio, hairline de contorno en oscuro) **no cambia**.
+
+### Notas de construcción y comportamiento
+
+- **Familia por columna:** cada columna mantiene el **hue** de su color base L3; lo que varía por fila es la claridad (L1–L2 son tintes claros/pastel, aptos como fondo de chip; L4–L5 son sombras profundas, con buen contraste sobre panel blanco). Ninguna fila implica semántica: todas se usan **igual** como identificador de categoría.
+- **Separación garantizada en el subset base:** los 8 hues de L3 están repartidos alrededor de la rueda sin dos adyacentes confundibles; combinados con el orden de asignación salteado, las categorías auto-pinteadas nacen ya bien separadas.
+- **Ambos modos (regla dura 4):** los hex no cambian entre claro y oscuro. Sobre panel oscuro, las filas oscuras (L4–L5) se apoyan en el **hairline de contorno obligatorio** del swatch (ya definido en *Categorías y gráficos en oscuro*). Los tintes L1–L2 contrastan bien sobre panel oscuro; el texto sobre un chip pintado se calcula por contraste contra el hex, independiente del modo.
+- **Fuera de semánticos y marca por construcción:** ningún hex es el verde income, el rojo expense ni el índigo de acento. El rojo de categoría (`#E23B3B`) es un rojo vívido y saturado, distinto del brick apagado del expense (`#C64637`); el verde (`#35A65A`) es un verde grama, distinto del verde teal del income (`#1F8A5B`); el azul (`#3B7DE0`) y el violeta (`#8B4FD4`) son distintos del índigo azul-violeta de marca.
 
 ---
 
@@ -1473,11 +1493,11 @@ Control **ligero/disimulado** que vive **solo en la cabecera de la sección Úni
 
 ### Picker de color de categoría (matriz de swatches)
 
-Selector del color de categoría en el modal de categoría (crear y editar), que consume la **matriz de 70 colores** (ver *Paleta de colores para categorías*). Grid 10 columnas × 7 filas, swatch cuadrado `aspect-ratio: 1` radio `--r-chip` 7px, gap 6px.
+Selector del color de categoría en el modal de categoría (crear y editar), que consume la **matriz de 40 colores** (ver *Paleta de colores para categorías*). Grid 8 columnas × 5 filas, swatch cuadrado `aspect-ratio: 1` radio `--r-chip` 7px, gap 6px.
 
 - **Estados del swatch:** *reposo* = su hex con borde `--line` 1px. *Hover* = `scale(1.12)` + `--shadow-sm`, borde `--line-strong`, transición 0.14s. *Seleccionado* = anillo `box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--ink)` (ring **neutro `--ink`**, no acento — regla dura 2). *Focus* = ring `--accent-soft` 3px.
 - **Botón "Aleatorio":** ghost chico (`Shuffle` 15px) que mueve la selección a un swatch al azar **de la matriz** (nunca un hex fuera de ella).
-- **Crear:** arranca en el color menos usado (fila T4). **Editar:** arranca en el color actual de la categoría.
+- **Crear:** arranca en el color menos usado (subset base, fila L3). **Editar:** arranca en el color actual de la categoría.
 
 ### Metadatos de relación en la sublínea del ítem de `/mes` (calculados)
 

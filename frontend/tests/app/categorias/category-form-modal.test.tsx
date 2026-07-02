@@ -23,15 +23,15 @@ import { useCategories } from "@/hooks/use-categories";
 
 const mockUseCategories = vi.mocked(useCategories);
 
-// Color en T4 (índice 30 de la paleta = fila T4, columna C1)
-const T4_FIRST = CATEGORY_BASE_COLORS[0]; // "#4F86C6"
+// Primer color del subset base (L3, orden de asignación)
+const L3_FIRST = CATEGORY_BASE_COLORS[0]; // "#E23B3B"
 
 const mockCategory: Category = {
   id: "cat-1",
   userId: "user-1",
   name: "Alimentación",
   scope: "BOTH",
-  color: T4_FIRST,
+  color: L3_FIRST,
   deletedAt: null,
   createdAt: "2024-01-01T00:00:00Z",
   updatedAt: "2024-01-01T00:00:00Z",
@@ -202,7 +202,7 @@ describe("CategoryFormModal", () => {
         id: "cat-deleted-1",
         name: "Alimentación",
         scope: "BOTH",
-        color: T4_FIRST,
+        color: L3_FIRST,
       },
     });
 
@@ -230,7 +230,7 @@ describe("CategoryFormModal", () => {
         id: "cat-deleted-1",
         name: "Alimentación",
         scope: "BOTH",
-        color: T4_FIRST,
+        color: L3_FIRST,
       },
     });
 
@@ -263,7 +263,7 @@ describe("CategoryFormModal", () => {
         id: "cat-deleted-1",
         name: "Alimentación",
         scope: "BOTH",
-        color: T4_FIRST,
+        color: L3_FIRST,
       },
     });
     mockReactivateCategory.mockResolvedValue({ success: true, category: mockCategory });
@@ -303,7 +303,7 @@ describe("CategoryFormModal", () => {
     await waitFor(() => {
       expect(mockUpdateCategory).toHaveBeenCalledWith(
         "cat-1",
-        expect.objectContaining({ name: "Comida", color: T4_FIRST }),
+        expect.objectContaining({ name: "Comida", color: L3_FIRST }),
       );
       expect(onClose).toHaveBeenCalled();
     });
@@ -384,7 +384,7 @@ describe("CategoryFormModal", () => {
         id: "cat-deleted-1",
         name: "Alimentación",
         scope: "BOTH",
-        color: T4_FIRST,
+        color: L3_FIRST,
       },
     });
     mockReactivateCategory.mockResolvedValue({ success: true, category: reactivated });
@@ -418,29 +418,29 @@ describe("CategoryFormModal", () => {
     expect(screen.getByRole("button", { name: /aleatorio/i })).toBeInTheDocument();
     // Debe haber el radiogroup de swatches
     expect(screen.getByRole("radiogroup", { name: /seleccionar color/i })).toBeInTheDocument();
-    // 70 swatches
+    // 40 swatches
     const swatches = screen.getAllByRole("radio");
-    expect(swatches).toHaveLength(70);
+    expect(swatches).toHaveLength(40);
   });
 
   it("pre-selecciona el color actual de la categoría en modo editar", () => {
     renderModal({ category: mockCategory });
 
     // El swatch con aria-label = color de la categoría debe estar seleccionado
-    const selectedSwatch = screen.getByRole("radio", { name: T4_FIRST });
+    const selectedSwatch = screen.getByRole("radio", { name: L3_FIRST });
     expect(selectedSwatch).toHaveAttribute("aria-checked", "true");
   });
 
-  it("pre-selecciona el primer color de T4 en crear cuando no hay categorías activas (todas en cero → primero de T4)", () => {
-    // Con categories: [] → todos los colores de T4 tienen conteo 0 → el primero gana
+  it("pre-selecciona el primer color del subset base en crear cuando no hay categorías activas (todas en cero → primero del subset base)", () => {
+    // Con categories: [] → todos los colores del subset base tienen conteo 0 → el primero gana
     renderModal({ category: null });
 
-    const firstT4Swatch = screen.getByRole("radio", { name: T4_FIRST });
-    expect(firstT4Swatch).toHaveAttribute("aria-checked", "true");
+    const firstL3Swatch = screen.getByRole("radio", { name: L3_FIRST });
+    expect(firstL3Swatch).toHaveAttribute("aria-checked", "true");
   });
 
-  it("pre-selecciona el segundo color de T4 en crear cuando el primero ya está en uso", () => {
-    // Inyectar una categoría activa con el primer color de T4
+  it("pre-selecciona el segundo color del subset base en crear cuando el primero ya está en uso", () => {
+    // Inyectar una categoría activa con el primer color del subset base
     const catUsingFirst: Category = {
       ...mockCategory,
       id: "cat-existing",
@@ -450,7 +450,7 @@ describe("CategoryFormModal", () => {
 
     renderModal({ category: null });
 
-    // El segundo color de T4 debe quedar seleccionado
+    // El segundo color del subset base debe quedar seleccionado
     const secondColor = CATEGORY_BASE_COLORS[1];
     const secondSwatch = screen.getByRole("radio", { name: secondColor });
     expect(secondSwatch).toHaveAttribute("aria-checked", "true");
@@ -460,7 +460,7 @@ describe("CategoryFormModal", () => {
     const user = userEvent.setup();
     renderModal({ category: null });
 
-    // El tercer color de T4 (índice 2)
+    // El tercer color del subset base (índice 2)
     const targetColor = CATEGORY_BASE_COLORS[2];
     const targetSwatch = screen.getByRole("radio", { name: targetColor });
 
@@ -469,7 +469,7 @@ describe("CategoryFormModal", () => {
     expect(targetSwatch).toHaveAttribute("aria-checked", "true");
 
     // El primero (que estaba seleccionado antes) ya no debe estar seleccionado
-    const firstSwatch = screen.getByRole("radio", { name: T4_FIRST });
+    const firstSwatch = screen.getByRole("radio", { name: L3_FIRST });
     expect(firstSwatch).toHaveAttribute("aria-checked", "false");
   });
 
@@ -499,8 +499,8 @@ describe("CategoryFormModal", () => {
 
     renderModal({ category: null, onClose });
 
-    // Elegir el cuarto color de T4
-    const targetColor = CATEGORY_BASE_COLORS[3]; // "#A98BD6"
+    // Elegir el cuarto color del subset base
+    const targetColor = CATEGORY_BASE_COLORS[3]; // "#8B4FD4"
     await user.click(screen.getByRole("radio", { name: targetColor }));
 
     await user.type(screen.getByLabelText(/nombre/i), "Transporte");
@@ -520,8 +520,8 @@ describe("CategoryFormModal", () => {
 
     renderModal({ category: mockCategory, onClose });
 
-    // El color actual es T4_FIRST; cambiar al quinto de T4
-    const newColor = CATEGORY_BASE_COLORS[4]; // "#E8C84A"
+    // El color actual es L3_FIRST; cambiar al quinto del subset base
+    const newColor = CATEGORY_BASE_COLORS[4]; // "#E8863A"
     await user.click(screen.getByRole("radio", { name: newColor }));
 
     await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
@@ -540,11 +540,11 @@ describe("CategoryFormModal", () => {
 import { getLeastUsedBaseColor } from "@/types/category";
 
 describe("getLeastUsedBaseColor", () => {
-  it("devuelve el primer color de T4 cuando no hay categorías activas", () => {
+  it("devuelve el primer color del subset base cuando no hay categorías activas", () => {
     expect(getLeastUsedBaseColor([])).toBe(CATEGORY_BASE_COLORS[0]);
   });
 
-  it("devuelve el primer color de T4 cuando todos tienen el mismo conteo", () => {
+  it("devuelve el primer color del subset base cuando todos tienen el mismo conteo", () => {
     const cats = CATEGORY_BASE_COLORS.map((color, i) => ({
       ...mockCategory,
       id: `cat-${i}`,
@@ -564,10 +564,10 @@ describe("getLeastUsedBaseColor", () => {
     expect(getLeastUsedBaseColor(cats)).toBe(CATEGORY_BASE_COLORS[2]);
   });
 
-  it("en empate entre múltiples colores de cero usos, devuelve el primero de T4 en orden", () => {
+  it("en empate entre múltiples colores de cero usos, devuelve el primero del subset base en orden", () => {
     // Solo el primer color está usado; los demás tienen 0
     const cats = [{ ...mockCategory, id: "a", color: CATEGORY_BASE_COLORS[0] }];
-    // El segundo tiene 0 → gana (es el primero en T4 con 0 usos)
+    // El segundo tiene 0 → gana (es el primero en el subset base con 0 usos)
     expect(getLeastUsedBaseColor(cats)).toBe(CATEGORY_BASE_COLORS[1]);
   });
 
@@ -580,13 +580,13 @@ describe("getLeastUsedBaseColor", () => {
     expect(getLeastUsedBaseColor(cats)).toBe(CATEGORY_BASE_COLORS[2]);
   });
 
-  it("ignora colores que no están en T4", () => {
-    // Un color fuera de T4 no debería afectar el conteo
+  it("ignora colores que no están en el subset base", () => {
+    // Un color fuera del subset base no debería afectar el conteo
     const cats = [
-      { color: "#FFFFFF" }, // no está en T4
+      { color: "#FFFFFF" }, // no está en el subset base
       { color: CATEGORY_BASE_COLORS[0] },
     ];
-    // Solo el primero de T4 tiene 1 uso; el segundo tiene 0 → gana el segundo
+    // Solo el primero del subset base tiene 1 uso; el segundo tiene 0 → gana el segundo
     expect(getLeastUsedBaseColor(cats)).toBe(CATEGORY_BASE_COLORS[1]);
   });
 });

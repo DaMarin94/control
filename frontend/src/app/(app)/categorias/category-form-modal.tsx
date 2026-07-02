@@ -7,7 +7,7 @@
  * - Scrim: fijo, ink/0.46 + blur(3px)
  * - Diálogo: max-width 380px, radio 18px, shadow-lg, animación modal-pop
  * - Scope picker: .scopepick (tres botones Ambos/Gasto/Ingreso, activo en accent)
- * - Color picker: grid 10×7, ring de selección neutro (--ink), botón "Aleatorio" (Fase 1.1.2)
+ * - Color picker: grid 8×5, ring de selección neutro (--ink), botón "Aleatorio" (Fase 1.1.2)
  *
  * Lógica preservada intacta.
  */
@@ -349,7 +349,7 @@ function ColorPicker({ value, onChange }: ColorPickerProps) {
         aria-label="Seleccionar color"
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(10, 1fr)",
+          gridTemplateColumns: "repeat(8, 1fr)",
           gap: "6px",
         }}
       >

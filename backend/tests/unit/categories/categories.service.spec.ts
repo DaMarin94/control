@@ -58,7 +58,7 @@ function makeCategory(overrides: Partial<CategoryWithCount> = {}): CategoryWithC
     userId: USER_A,
     name: 'Consumibles',
     scope: CategoryScope.BOTH,
-    color: '#4F86C6',
+    color: '#E23B3B',
     deletedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -127,22 +127,22 @@ describe('CategoriesService', () => {
   // -------------------------------------------------------------------------
 
   describe('isValidCategoryColor (COLOR_MATRIX)', () => {
-    it('acepta colores de la fila T4 (COLOR_POOL) en mayúsculas', () => {
-      expect(isValidCategoryColor('#4F86C6')).toBe(true);
-      expect(isValidCategoryColor('#E07B54')).toBe(true);
-      expect(isValidCategoryColor('#7DBF9E')).toBe(true);
+    it('acepta colores de la fila L3 (subset base de COLOR_POOL) en mayúsculas', () => {
+      expect(isValidCategoryColor('#E23B3B')).toBe(true);
+      expect(isValidCategoryColor('#E8863A')).toBe(true);
+      expect(isValidCategoryColor('#D94A9E')).toBe(true);
     });
 
-    it('acepta colores de otras filas de la matriz (T1, T7)', () => {
-      // T1 primer color
-      expect(isValidCategoryColor('#DCE7F4')).toBe(true);
-      // T7 último color
-      expect(isValidCategoryColor('#304E40')).toBe(true);
+    it('acepta colores de otras filas de la matriz (L1, L5)', () => {
+      // L1 primer color
+      expect(isValidCategoryColor('#F7C8C8')).toBe(true);
+      // L5 último color
+      expect(isValidCategoryColor('#68244C')).toBe(true);
     });
 
     it('es case-insensitive: acepta minúsculas', () => {
-      expect(isValidCategoryColor('#4f86c6')).toBe(true);
-      expect(isValidCategoryColor('#dce7f4')).toBe(true);
+      expect(isValidCategoryColor('#e23b3b')).toBe(true);
+      expect(isValidCategoryColor('#f7c8c8')).toBe(true);
     });
 
     it('rechaza un hex arbitrario no en la matriz', () => {
@@ -154,15 +154,15 @@ describe('CategoriesService', () => {
       expect(isValidCategoryColor('')).toBe(false);
     });
 
-    it('la matriz contiene exactamente 70 colores', () => {
+    it('la matriz contiene exactamente 40 colores', () => {
       const total = COLOR_MATRIX.flat().length;
-      expect(total).toBe(70);
+      expect(total).toBe(40);
     });
 
-    it('la matriz tiene 7 filas de 10 columnas cada una', () => {
-      expect(COLOR_MATRIX.length).toBe(7);
+    it('la matriz tiene 5 filas de 8 columnas cada una', () => {
+      expect(COLOR_MATRIX.length).toBe(5);
       for (const row of COLOR_MATRIX) {
-        expect(row.length).toBe(10);
+        expect(row.length).toBe(8);
       }
     });
   });
@@ -291,7 +291,7 @@ describe('CategoriesService', () => {
         id: 'deleted-cat-id',
         name: 'Viajes',
         scope: CategoryScope.EXPENSE,
-        color: '#E07B54',
+        color: '#E8863A',
         deletedAt: new Date('2024-01-01'),
       });
       mockRepo.findByNormalizedName.mockResolvedValue({ active: null, deleted: deletedCategory });
@@ -309,7 +309,7 @@ describe('CategoriesService', () => {
       expect(err.reactivablePayload.category.id).toBe('deleted-cat-id');
       expect(err.reactivablePayload.category.name).toBe('Viajes');
       expect(err.reactivablePayload.category.scope).toBe(CategoryScope.EXPENSE);
-      expect(err.reactivablePayload.category.color).toBe('#E07B54');
+      expect(err.reactivablePayload.category.color).toBe('#E8863A');
 
       expect(mockRepo.create).not.toHaveBeenCalled();
     });
@@ -335,22 +335,22 @@ describe('CategoriesService', () => {
 
       const result = await service.create(USER_A, { name: 'Nueva' });
 
-      // Con todos los colores en 0, elige el primero del pool: #4F86C6
-      expect(result.color).toBe('#4F86C6');
+      // Con todos los colores en 0, elige el primero del pool: #E23B3B
+      expect(result.color).toBe('#E23B3B');
       // No llama a assignColor con color del DTO, usa el de pool
       expect(mockRepo.countActiveByColor).toHaveBeenCalledWith(USER_A);
     });
 
     it('con color válido en DTO → usa ese color (no llama a assignColor)', async () => {
       mockRepo.findByNormalizedName.mockResolvedValue({ active: null, deleted: null });
-      const chosenColor = '#84A9D6'; // T3, válido en la matriz
+      const chosenColor = '#8DB4ED'; // L2, válido en la matriz pero fuera del pool
       mockRepo.create.mockImplementation((data: Record<string, unknown>) =>
         Promise.resolve(makeCategory({ color: data['color'] as string })),
       );
 
       const result = await service.create(USER_A, { name: 'Nueva', color: chosenColor });
 
-      expect(result.color).toBe('#84A9D6');
+      expect(result.color).toBe('#8DB4ED');
       // No debe consultar el pool si viene color
       expect(mockRepo.countActiveByColor).not.toHaveBeenCalled();
     });
@@ -361,9 +361,9 @@ describe('CategoriesService', () => {
         Promise.resolve(makeCategory({ color: data['color'] as string })),
       );
 
-      const result = await service.create(USER_A, { name: 'Nueva', color: '#84a9d6' });
+      const result = await service.create(USER_A, { name: 'Nueva', color: '#8db4ed' });
 
-      expect(result.color).toBe('#84A9D6');
+      expect(result.color).toBe('#8DB4ED');
     });
 
     it('aislamiento: llama a findByNormalizedName con el userId correcto', async () => {
@@ -395,24 +395,22 @@ describe('CategoriesService', () => {
 
       const result = await service.create(USER_A, { name: 'Cat' });
 
-      // Con todos los colores en 0, elige el primero del pool: #4F86C6
-      expect(result.color).toBe('#4F86C6');
+      // Con todos los colores en 0, elige el primero del pool: #E23B3B
+      expect(result.color).toBe('#E23B3B');
     });
 
     it('elige el color menos usado entre los existentes (todos los colores del pool cubiertos)', async () => {
       setupNoCollision();
-      // Todos los colores del pool cubiertos, #6DBF67 tiene el conteo más bajo
+      // Todos los colores del pool cubiertos, #E3B92E tiene el conteo más bajo
       const colorCount = new Map([
-        ['#4F86C6', 3],
-        ['#E07B54', 3],
-        ['#6DBF67', 1], // este es el menos usado
-        ['#A98BD6', 2],
-        ['#E8C84A', 5],
-        ['#5BC4B8', 5],
-        ['#E06B8B', 5],
-        ['#8B9DBF', 5],
-        ['#C47D3E', 5],
-        ['#7DBF9E', 5],
+        ['#E23B3B', 3],
+        ['#1AA5B0', 3],
+        ['#E3B92E', 1], // este es el menos usado
+        ['#8B4FD4', 2],
+        ['#E8863A', 5],
+        ['#3B7DE0', 5],
+        ['#35A65A', 5],
+        ['#D94A9E', 5],
       ]);
       mockRepo.countActiveByColor.mockResolvedValue(colorCount);
       mockRepo.create.mockImplementation((data: Record<string, unknown>) =>
@@ -421,22 +419,20 @@ describe('CategoriesService', () => {
 
       const result = await service.create(USER_A, { name: 'Cat' });
 
-      expect(result.color).toBe('#6DBF67');
+      expect(result.color).toBe('#E3B92E');
     });
 
     it('en empate elige el primero en orden del pool', async () => {
       setupNoCollision();
       const colorCount = new Map([
-        ['#4F86C6', 2],
-        ['#E07B54', 2],
-        ['#6DBF67', 5],
-        ['#A98BD6', 5],
-        ['#E8C84A', 5],
-        ['#5BC4B8', 5],
-        ['#E06B8B', 5],
-        ['#8B9DBF', 5],
-        ['#C47D3E', 5],
-        ['#7DBF9E', 5],
+        ['#E23B3B', 2],
+        ['#1AA5B0', 2],
+        ['#E3B92E', 5],
+        ['#8B4FD4', 5],
+        ['#E8863A', 5],
+        ['#3B7DE0', 5],
+        ['#35A65A', 5],
+        ['#D94A9E', 5],
       ]);
       mockRepo.countActiveByColor.mockResolvedValue(colorCount);
       mockRepo.create.mockImplementation((data: Record<string, unknown>) =>
@@ -445,8 +441,8 @@ describe('CategoriesService', () => {
 
       const result = await service.create(USER_A, { name: 'Cat' });
 
-      // #4F86C6 va primero en el pool y está empatado en mínimo (2) con #E07B54
-      expect(result.color).toBe('#4F86C6');
+      // #E23B3B va primero en el pool y está empatado en mínimo (2) con #1AA5B0
+      expect(result.color).toBe('#E23B3B');
     });
 
     it('cuando llega color en DTO, no consulta el pool (no asigna automáticamente)', async () => {
@@ -455,7 +451,7 @@ describe('CategoriesService', () => {
         Promise.resolve(makeCategory({ color: data['color'] as string })),
       );
 
-      await service.create(USER_A, { name: 'Cat', color: '#B6CDE9' }); // T2
+      await service.create(USER_A, { name: 'Cat', color: '#7ACBD1' }); // L2
 
       expect(mockRepo.countActiveByColor).not.toHaveBeenCalled();
     });
@@ -471,7 +467,7 @@ describe('CategoriesService', () => {
         id: 'cat-del',
         deletedAt: new Date('2024-01-01'),
         scope: CategoryScope.EXPENSE,
-        color: '#E07B54',
+        color: '#E8863A',
       });
       mockRepo.findById.mockResolvedValue(deletedCat);
       const reactivated = { ...deletedCat, deletedAt: null };
@@ -501,14 +497,14 @@ describe('CategoriesService', () => {
       const deletedCat = makeCategory({
         id: 'cat-del',
         deletedAt: new Date(),
-        color: '#A98BD6',
+        color: '#8B4FD4',
       });
       mockRepo.findById.mockResolvedValue(deletedCat);
       mockRepo.update.mockResolvedValue({ ...deletedCat, deletedAt: null });
 
       const result = await service.reactivate(USER_A, 'cat-del');
 
-      expect(result.color).toBe('#A98BD6');
+      expect(result.color).toBe('#8B4FD4');
     });
 
     it('vuelve con el mismo id', async () => {
@@ -574,27 +570,27 @@ describe('CategoriesService', () => {
     });
 
     it('actualiza color válido exitosamente', async () => {
-      const existing = makeCategory({ id: 'cat-001', color: '#4F86C6' });
+      const existing = makeCategory({ id: 'cat-001', color: '#E23B3B' });
       mockRepo.findById.mockResolvedValue(existing);
-      const newColor = '#84A9D6'; // T3, válido
+      const newColor = '#8DB4ED'; // L2, válido
       const updated = { ...existing, color: newColor };
       mockRepo.update.mockResolvedValue(updated);
 
       const result = await service.update(USER_A, 'cat-001', { color: newColor });
 
-      expect(result.color).toBe('#84A9D6');
-      expect(mockRepo.update).toHaveBeenCalledWith('cat-001', { color: '#84A9D6' });
+      expect(result.color).toBe('#8DB4ED');
+      expect(mockRepo.update).toHaveBeenCalledWith('cat-001', { color: '#8DB4ED' });
     });
 
     it('actualiza color en minúsculas → se normaliza a mayúsculas en el update', async () => {
-      const existing = makeCategory({ id: 'cat-001', color: '#4F86C6' });
+      const existing = makeCategory({ id: 'cat-001', color: '#E23B3B' });
       mockRepo.findById.mockResolvedValue(existing);
-      const updated = { ...existing, color: '#84A9D6' };
+      const updated = { ...existing, color: '#8DB4ED' };
       mockRepo.update.mockResolvedValue(updated);
 
-      await service.update(USER_A, 'cat-001', { color: '#84a9d6' });
+      await service.update(USER_A, 'cat-001', { color: '#8db4ed' });
 
-      expect(mockRepo.update).toHaveBeenCalledWith('cat-001', { color: '#84A9D6' });
+      expect(mockRepo.update).toHaveBeenCalledWith('cat-001', { color: '#8DB4ED' });
     });
 
     it('colisión de nombre con otra activa → ConflictException (RN-014)', async () => {

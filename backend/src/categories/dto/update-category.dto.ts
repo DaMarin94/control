@@ -11,8 +11,8 @@ import { CategoryScope } from '@prisma/client';
 import { isValidCategoryColor, normalizeColorHex } from '../color-pool';
 
 /**
- * Decorador de validación que verifica si un hex pertenece a la COLOR_MATRIX (70 colores).
- * Case-insensitive: "#4f86c6" y "#4F86C6" son equivalentes.
+ * Decorador de validación que verifica si un hex pertenece a la COLOR_MATRIX (40 colores).
+ * Case-insensitive: "#e23b3b" y "#E23B3B" son equivalentes.
  */
 function IsColorInMatrix(validationOptions?: ValidationOptions) {
   return function (object: object, propertyName: string) {

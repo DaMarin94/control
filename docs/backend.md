@@ -447,7 +447,7 @@ CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca ca
 | `DELETE /categories/:id` | — | `204 No Content` | `404` |
 
 - **`GET /categories`** — solo activas (`deletedAt` null), ordenadas por **nombre ascendente**, cada una con su `movementCount`.
-- **`POST /categories`** — `name` obligatorio y no vacío; `scope` opcional (default `BOTH`); **`color` opcional**: debe pertenecer a la matriz de 70 (case-insensitive, se normaliza a mayúsculas). Si **no** llega `color`, el backend asigna el "menos usado" como red de seguridad (el front igualmente siempre lo envía). Dos casos de `409`:
+- **`POST /categories`** — `name` obligatorio y no vacío; `scope` opcional (default `BOTH`); **`color` opcional**: debe pertenecer a la matriz de 40 (case-insensitive, se normaliza a mayúsculas). Si **no** llega `color`, el backend asigna el "menos usado" como red de seguridad (el front igualmente siempre lo envía). Dos casos de `409`:
   - **Colisión con una categoría activa** (RN-008): `error.message` = `"Ya existe una categoría activa..."`, **sin** `error.data`. Es un bloqueo duro de duplicado.
   - **Colisión con una categoría eliminada / reactivable** (RF-CAT-002, A3): `error.data = { reactivable: true, category: { id, name, scope, color } }`. El front usa ese `id` para ofrecer reactivar. Ver `ReactivableConflictException` abajo.
   - `400`: nombre vacío o faltante, `scope` inválido, o `color` fuera de la matriz.
@@ -458,12 +458,13 @@ CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca ca
 ### Pool de colores (RF-CAT-005)
 
 - **Única fuente:** `backend/src/categories/color-pool.ts`.
-- **`COLOR_MATRIX` — set elegible (70 colores).** Matriz de 7 tonalidades × 10 hues (estilo Office). Es el conjunto de colores que el usuario puede elegir al crear/editar una categoría. La **fila T4** de la matriz es el pool de 10 base (ver `COLOR_POOL`).
-- **`COLOR_POOL` — pool de 10 (fila base T4), sin cambios.** Los 10 colores base:
-  `#4F86C6`, `#E07B54`, `#6DBF67`, `#A98BD6`, `#E8C84A`, `#5BC4B8`, `#E06B8B`, `#8B9DBF`, `#C47D3E`, `#7DBF9E`.
+- **`COLOR_MATRIX` — set elegible (40 colores).** Matriz de 8 hues × 5 tonalidades (hues rojo, naranja, oro, verde, teal, azul, violeta, magenta; filas L1 clara → L5 oscura). Es el conjunto de colores que el usuario puede elegir al crear/editar una categoría.
+- **`COLOR_POOL` — pool base de 8.** Es un **subconjunto explícito** de la matriz (uno por hue, fila vívida) en un **orden propio salteado por la rueda cromática** —**no** una fila posicional de `COLOR_MATRIX`—, por eso es un **array explícito** y no derivado por posición. Los 8 colores base:
+  `#E23B3B`, `#1AA5B0`, `#E3B92E`, `#8B4FD4`, `#E8863A`, `#3B7DE0`, `#35A65A`, `#D94A9E`.
   Los primeros 4 son los de las categorías por defecto. `AuthService` y `CategoriesService` importan del mismo módulo; no hay colores hardcodeados sueltos.
 - **Validación: `isValidCategoryColor()` / `normalizeColorHex()`.** El `color` recibido en `POST`/`PATCH` se **normaliza a mayúsculas** (`normalizeColorHex()`) y se **valida contra la matriz** (`isValidCategoryColor()`) en los DTOs vía el validador **`@IsColorInMatrix`**; un color fuera de la matriz es `400`. Solo colores de la matriz, sin hex libre.
-- **`assignColor()` — default "menos usado", sobre la fila base T4 (`COLOR_POOL`), sin cambios.** Cuando el `POST` no trae `color` (red de seguridad — el front siempre lo envía), se asigna el color de `COLOR_POOL` **menos usado** entre las categorías **activas** del usuario; en empate gana el **primero en orden de definición**. Las 4 categorías por defecto del alta toman los primeros 4 colores en orden. El cálculo del menos-usado se hace **sobre los 10 base**, no sobre los 70. El color no se reasigna al editar; el usuario lo cambia explícitamente.
+- **`assignColor()` — default "menos usado", sobre el pool base (`COLOR_POOL`).** Cuando el `POST` no trae `color` (red de seguridad — el front siempre lo envía), se asigna el color de `COLOR_POOL` **menos usado** entre las categorías **activas** del usuario; en empate gana el **primero en orden de definición**. Las 4 categorías por defecto del alta toman los primeros 4 colores en orden. El cálculo del menos-usado se hace **sobre los 8 base**, no sobre los 40. El color no se reasigna al editar; el usuario lo cambia explícitamente.
+- **Reasignación masiva de colores.** El script de mantenimiento `backend/scripts/reassign-category-colors.ts` (`pnpm reassign:category-colors`) reasigna el color de **cada** categoría (activas + soft-deleted) por usuario, recorriéndolas en orden estable (`createdAt`, `id`) y aplicando la misma lógica "menos usado" sobre `COLOR_POOL`. **Dry-run por defecto**; `--execute` aplica los cambios, previo **backup JSON** del estado anterior. Es limpieza de una sola vez.
 
 ### Normalización y unicidad (RN-014)
 

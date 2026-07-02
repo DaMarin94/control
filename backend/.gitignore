@@ -21,6 +21,9 @@ coverage/
 # Backups generados por scripts de migración de datos (restitch-recurring-chains --execute)
 scripts/restitch-backups/
 
+# Backups generados por scripts de migración de datos (reassign-category-colors --execute)
+scripts/color-reassign-backups/
+
 # Editor
 .vscode/
 .idea/

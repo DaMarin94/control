@@ -66,7 +66,7 @@ export class CategoriesController {
   /**
    * PATCH /categories/:id
    * Edita nombre, scope y/o color de una categoría activa del usuario (RF-CAT-003).
-   * El color debe pertenecer a la paleta de 70 colores (COLOR_MATRIX); hex libre → 400.
+   * El color debe pertenecer a la paleta de 40 colores (COLOR_MATRIX); hex libre → 400.
    */
   @Patch(':id')
   update(
