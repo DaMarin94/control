@@ -12,6 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { useState } from "react";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RecurringForm } from "@/components/movements/recurring-form";
@@ -431,6 +432,65 @@ describe("RecurringForm — flujo editar", () => {
           currentMonth: "2026-06",
           amountCents: 200000,
         }),
+      );
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
+});
+
+// ─── Tests: reset espurio por cambio de referencia del prop `recurring` ──────
+// Bug real: el llamador (month-view-client) arma `recurring` inline en cada
+// render (`movementItemToRecurring(editingFijo)`), por lo que la referencia
+// cambia en cada re-render del padre (ej. refetch de movements por window
+// focus) aunque sea el mismo movimiento. Si el form resetea el monto tipeado
+// cada vez que cambia la referencia (no el id), el valor nuevo se pierde antes
+// del submit y se envía el monto viejo al backend.
+
+describe("RecurringForm — no resetea el monto tipeado ante re-render del padre con misma id", () => {
+  it("mantiene el monto editado por el usuario y lo envía en el PATCH aunque el prop `recurring` cambie de referencia (mismo id)", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    mockUpdateRecurring.mockResolvedValue({
+      success: true,
+      recurring: { ...mockRecurring, amountCents: 200000 },
+    });
+
+    function Wrapper() {
+      const [, forceRerender] = useState(0);
+      // Nueva referencia de objeto en cada render, mismo contenido/id —
+      // simula `movementItemToRecurring(editingFijo)` construido inline en JSX.
+      const recurringProp: Recurring = { ...mockRecurring };
+      return (
+        <ToastProvider>
+          <RecurringForm recurring={recurringProp} onClose={onClose} />
+          <button type="button" onClick={() => forceRerender((n) => n + 1)}>
+            simular re-render del padre
+          </button>
+        </ToastProvider>
+      );
+    }
+
+    render(<Wrapper />);
+
+    // Usuario edita el monto
+    const amountInput = screen.getByLabelText(/monto/i) as HTMLInputElement;
+    await user.clear(amountInput);
+    await user.type(amountInput, "2000");
+    expect(amountInput.value).toBe("2000");
+
+    // El padre se re-renderiza (ej. refetch de movements por window focus),
+    // pasando un `recurring` con nueva referencia pero mismo id.
+    await user.click(screen.getByRole("button", { name: /simular re-render del padre/i }));
+
+    // El monto tipeado por el usuario debe seguir intacto (no se resetea).
+    expect(amountInput.value).toBe("2000");
+
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(mockUpdateRecurring).toHaveBeenCalledWith(
+        "rec-1",
+        expect.objectContaining({ amountCents: 200000 }),
       );
       expect(onClose).toHaveBeenCalled();
     });

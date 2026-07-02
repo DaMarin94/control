@@ -205,6 +205,13 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
     defaultCurrency,
   });
 
+  // Depende de `recurring?.id` (no del objeto `recurring` completo): el llamador
+  // (month-view-client) construye el objeto `recurring` inline en cada render
+  // (`movementItemToRecurring(editingFijo)`), por lo que su referencia cambia en
+  // cualquier re-render del padre (ej. refetch de movements por window focus)
+  // aunque sea el mismo movimiento. Si este effect dependiera de la referencia,
+  // se dispararía `reset()` en cada uno de esos re-renders y pisaría silenciosamente
+  // el monto (u otro campo) que el usuario ya tipeó en el form con el valor original.
   useEffect(() => {
     if (isEditing) {
       const newCurrency = recurring.currency ?? defaultCurrency;
@@ -223,7 +230,8 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
       initialCurrencyRef.current = newCurrency;
       setIsExchangeRateModified(false);
     }
-  }, [recurring, isEditing, reset, defaultCurrency]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recurring?.id, isEditing, reset, defaultCurrency]);
 
   // Pre-cargar defaultCurrency al crear cuando cambia
   useEffect(() => {
