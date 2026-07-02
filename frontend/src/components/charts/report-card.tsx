@@ -38,7 +38,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ReferenceLine,
   Cell,
 } from "recharts";
 import {
@@ -49,7 +48,6 @@ import {
   Eye,
   EyeOff,
   Pencil,
-  TrendingUp,
 } from "lucide-react";
 import { useReports } from "@/hooks/use-reports";
 import { useSettings } from "@/hooks/use-settings";
@@ -122,75 +120,17 @@ interface ChartDataPoint {
   fullLabel: string;
   incomeCents: number;
   expenseCents: number;
-  /** true si este mes es proyectado (RF-REP-015: projected=true del backend). */
-  projected: boolean;
-  /**
-   * Segmento real de ingresos (RF-REP-015): valor si !projected, undefined si projected.
-   * También incluye el valor en lastRealIdx para dar continuidad visual al empalme.
-   * undefined cuando projectFixed=false (se usa incomeCents como dataKey).
-   */
-  incomeCentsReal?: number;
-  /** Segmento proyectado de ingresos: valor si projected o en lastRealIdx, undefined si real. */
-  incomeCentsProj?: number;
-  /** Segmento real de gastos (ídem incomeCentsReal). */
-  expenseCentsReal?: number;
-  /** Segmento proyectado de gastos (ídem incomeCentsProj). */
-  expenseCentsProj?: number;
-  [key: string]: number | string | boolean | undefined;
+  [key: string]: number | string | undefined;
 }
 
-function buildChartData(data: ReportsMovementsResponse, projectFixed?: boolean): ChartDataPoint[] {
-  // Encontrar el índice del último mes real para el empalme de continuidad.
-  // Solo relevante cuando hay tramo proyectado (projectFixed=true y hay meses con projected=true).
-  let lastRealIdx = -1;
-  if (projectFixed) {
-    for (let i = 0; i < data.months.length; i++) {
-      if (!(data.months[i]?.projected ?? false)) {
-        lastRealIdx = i;
-      }
-    }
-  }
-
+function buildChartData(data: ReportsMovementsResponse): ChartDataPoint[] {
   return data.months.map((m, i) => {
-    const isProjected = projectFixed === true ? (m.projected ?? false) : false;
-
-    // Segmentos para el render proyectado (solo cuando projectFixed=true).
-    // El lastRealIdx se incluye en AMBOS segmentos para dar continuidad visual
-    // (sin quiebre de suavizado en el empalme — spec RF-REP-015 §1).
-    let incomeCentsReal: number | undefined;
-    let incomeCentsProj: number | undefined;
-    let expenseCentsReal: number | undefined;
-    let expenseCentsProj: number | undefined;
-
-    if (projectFixed) {
-      if (!isProjected) {
-        // Mes real: va en el segmento real.
-        incomeCentsReal = m.incomeCents;
-        expenseCentsReal = m.expenseCents;
-        // El último mes real también aparece en el segmento proyectado
-        // como punto de arranque, para que la curva monotone sea continua.
-        if (i === lastRealIdx) {
-          incomeCentsProj = m.incomeCents;
-          expenseCentsProj = m.expenseCents;
-        }
-      } else {
-        // Mes proyectado: va en el segmento proyectado.
-        incomeCentsProj = m.incomeCents;
-        expenseCentsProj = m.expenseCents;
-      }
-    }
-
     const point: ChartDataPoint = {
       monthIndex: i,
       shortLabel: MONTH_LABELS_SHORT[i] ?? String(i + 1),
       fullLabel: MONTH_LABELS_FULL[i] ?? String(i + 1),
       incomeCents: m.incomeCents,
       expenseCents: m.expenseCents,
-      projected: isProjected,
-      incomeCentsReal,
-      incomeCentsProj,
-      expenseCentsReal,
-      expenseCentsProj,
     };
     // Gastos por categoría (Forma 2 + Vista B)
     data.categories.forEach((cat) => {
@@ -210,41 +150,20 @@ interface Form1TooltipProps {
   currency: string;
   /** Dirección de cómputo — determina qué series aparecen en el tooltip. */
   direction?: "expense" | "income" | "both";
-  /**
-   * RF-REP-015: cuando true, el tooltip usa las keys de segmentos (incomeCentsReal/Proj)
-   * y consulta chartData para saber si el mes es proyectado.
-   */
-  projectFixed?: boolean;
-  /** Datos del chart para derivar si el mes bajo cursor es proyectado. */
-  chartData?: ChartDataPoint[];
 }
 
-function Form1Tooltip({ active, payload, label, year, currency, direction, projectFixed, chartData }: Form1TooltipProps) {
+function Form1Tooltip({ active, payload, label, year, currency, direction }: Form1TooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
   const labelStr = String(label ?? "");
   const monthIndex = MONTH_LABELS_SHORT.indexOf(labelStr);
   if (monthIndex === -1) return null;
 
-  // Determinar si el mes bajo cursor es proyectado (RF-REP-015)
-  const isProjected = projectFixed === true && (chartData?.[monthIndex]?.projected ?? false);
-
   const fullLabel = `${MONTH_LABELS_FULL[monthIndex] ?? label} ${year}`;
 
-  // Obtener valor de una serie, usando las keys correctas según el estado de proyección.
-  // Cuando projectFixed=true se usan incomeCentsReal/Proj; cuando false, incomeCents/expenseCents.
   function getSeriesValue(series: "income" | "expense"): number {
-    if (projectFixed) {
-      const projKey = series === "income" ? "incomeCentsProj" : "expenseCentsProj";
-      const realKey = series === "income" ? "incomeCentsReal" : "expenseCentsReal";
-      const key = isProjected ? projKey : realKey;
-      return payload!.find((p) => p.dataKey === key)?.value ?? 0;
-    }
     const key = series === "income" ? "incomeCents" : "expenseCents";
     return payload!.find((p) => p.dataKey === key)?.value ?? 0;
   }
-
-  // Prefijo "≈" (U+2248) para montos estimados (spec RF-REP-015 §5)
-  const prefix = isProjected ? "≈ " : "";
 
   const showIncome = direction !== "expense";
   const showExpense = direction !== "income";
@@ -254,7 +173,7 @@ function Form1Tooltip({ active, payload, label, year, currency, direction, proje
       ? [{
           color: "var(--income)",
           label: "Ingresos",
-          formattedValue: `${prefix}${formatCurrency(getSeriesValue("income"), currency)}`,
+          formattedValue: formatCurrency(getSeriesValue("income"), currency),
           valueColor: "var(--income-ink)",
         }]
       : []),
@@ -262,13 +181,13 @@ function Form1Tooltip({ active, payload, label, year, currency, direction, proje
       ? [{
           color: "var(--expense)",
           label: "Gastos",
-          formattedValue: `${prefix}${formatCurrency(getSeriesValue("expense"), currency)}`,
+          formattedValue: formatCurrency(getSeriesValue("expense"), currency),
           valueColor: "var(--expense-ink)",
         }]
       : []),
   ];
   if (rows.length === 0) return null;
-  return <ChartTooltipContent monthLabel={fullLabel} rows={rows} isProjected={isProjected} />;
+  return <ChartTooltipContent monthLabel={fullLabel} rows={rows} />;
 }
 
 // ─── Tooltip — Forma 2 ────────────────────────────────────────────────────────
@@ -612,7 +531,7 @@ function ChartResponsiveArea({ desktopHeight, children }: ChartResponsiveAreaPro
   );
 }
 
-// ─── Forma 1 — AreaChart interno ──────────────────────────────────────────────
+// ─── Forma 1 — AreaChart interno ─────────────────────────────────────────────────
 
 interface Form1ChartInnerProps {
   chartData: ChartDataPoint[];
@@ -622,204 +541,52 @@ interface Form1ChartInnerProps {
   currency: string;
   /** Dirección de cómputo — determina qué series se renderizan en el chart. */
   direction?: "expense" | "income" | "both";
-  /**
-   * RF-REP-015: cuando true, renderiza el tramo proyectado dasheado
-   * y el marcador de empalme. Los datos de proyección vienen en chartData
-   * como incomeCentsReal/Proj y expenseCentsReal/Proj.
-   */
-  projectFixed?: boolean;
 }
 
-function Form1ChartInner({ chartData, year, height, reducedMotion, currency, direction, projectFixed }: Form1ChartInnerProps) {
+function Form1ChartInner({ chartData, year, height, reducedMotion, currency, direction }: Form1ChartInnerProps) {
   const formatYAxisTick = makeYAxisTickFormatter(currency);
   const showIncome = direction !== "expense";
   const showExpense = direction !== "income";
 
-  // ── Derivar info de proyección desde chartData (RF-REP-015) ──────────────
-  const hasProjected = projectFixed === true && chartData.some((d) => d.projected);
-  const allProjected = hasProjected && chartData.every((d) => d.projected);
-  const firstProjectedIdx = hasProjected ? chartData.findIndex((d) => d.projected) : -1;
-  const lastRealIdx = hasProjected && !allProjected ? (firstProjectedIdx - 1) : -1;
-  const projectionRefX = firstProjectedIdx >= 0 ? (chartData[firstProjectedIdx]?.shortLabel ?? undefined) : undefined;
-
-  // Función para generar el dot persistente en el punto de empalme (spec §2)
-  function makeJunctionDot(seriesColor: string, refIdx: number) {
-    return function JunctionDot(props: Record<string, unknown>) {
-      const { cx, cy, index } = props as { cx?: number; cy?: number; index?: number };
-      if (index !== refIdx || cx === undefined || cy === undefined) {
-        // Dot invisible para los demás puntos
-        return <circle key={`noop-${String(index)}`} cx={0} cy={0} r={0} fill="none" />;
-      }
-      return (
-        <circle
-          key={`junction-${String(index)}`}
-          cx={cx}
-          cy={cy}
-          r={3.5}
-          fill={seriesColor}
-          stroke="var(--panel)"
-          strokeWidth={2}
-        />
-      );
-    };
-  }
-
   return (
-    <div className="relative">
-      {/* Caption de esquina "Proyección" para años completamente futuros (spec §2 variante) */}
-      {allProjected && (
-        <div className="absolute top-[8px] z-10 pointer-events-none" style={{ left: 68 }}>
-          <span
-            className="inline-flex items-center px-[7px] py-[3px] text-[10.5px] font-semibold text-muted"
-            style={{ backgroundColor: "var(--panel-2)", borderRadius: "var(--r-chip, 7px)" }}
-          >
-            Proyección
-          </span>
-        </div>
-      )}
-
-      <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={chartData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
-          <defs>
-            {/* Gradientes del tramo real */}
-            <linearGradient id="areaIncomeRep" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--income)" stopOpacity={0.18} />
-              <stop offset="100%" stopColor="var(--income)" stopOpacity={0.02} />
-            </linearGradient>
-            <linearGradient id="areaExpenseRep" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--expense)" stopOpacity={0.18} />
-              <stop offset="100%" stopColor="var(--expense)" stopOpacity={0.02} />
-            </linearGradient>
-            {/* Gradientes del tramo proyectado (fill muy tenue ~0.05) (spec §1) */}
-            <linearGradient id="areaIncomeRepProj" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--income)" stopOpacity={0.07} />
-              <stop offset="100%" stopColor="var(--income)" stopOpacity={0.01} />
-            </linearGradient>
-            <linearGradient id="areaExpenseRepProj" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--expense)" stopOpacity={0.07} />
-              <stop offset="100%" stopColor="var(--expense)" stopOpacity={0.01} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid horizontal vertical={false} stroke="var(--hair)" strokeWidth={1} />
-          <XAxis dataKey="shortLabel" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 500, fill: "var(--muted)", fontFamily: "var(--ui)" }} interval={0} />
-          <YAxis axisLine={false} tickLine={false} tickCount={5} tickFormatter={formatYAxisTick} tick={{ fontSize: 11.5, fill: "var(--muted)", fontFamily: "var(--mono)" }} width={64} />
-          <Tooltip
-            cursor={{ stroke: "var(--hair)", strokeWidth: 1 }}
-            content={({ active, payload, label }) => (
-              <Form1Tooltip
-                active={active}
-                payload={payload as unknown as Array<{ dataKey: string; value: number }>}
-                label={label}
-                year={year}
-                currency={currency}
-                direction={direction}
-                projectFixed={projectFixed}
-                chartData={chartData}
-              />
-            )}
-          />
-
-          {/* Línea divisoria vertical en el empalme (spec §2) — solo en año en curso con split */}
-          {hasProjected && !allProjected && projectionRefX !== undefined && (
-            <ReferenceLine
-              x={projectionRefX}
-              stroke="var(--line)"
-              strokeDasharray="4 4"
-              strokeWidth={1}
-              label={{
-                value: "Proyección",
-                position: "insideTopRight",
-                fontSize: 10.5,
-                fontWeight: 600,
-                fill: "var(--faint)",
-              }}
+    <ResponsiveContainer width="100%" height={height}>
+      <AreaChart data={chartData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id="areaIncomeRep" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--income)" stopOpacity={0.18} />
+            <stop offset="100%" stopColor="var(--income)" stopOpacity={0.02} />
+          </linearGradient>
+          <linearGradient id="areaExpenseRep" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--expense)" stopOpacity={0.18} />
+            <stop offset="100%" stopColor="var(--expense)" stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid horizontal vertical={false} stroke="var(--hair)" strokeWidth={1} />
+        <XAxis dataKey="shortLabel" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 500, fill: "var(--muted)", fontFamily: "var(--ui)" }} interval={0} />
+        <YAxis axisLine={false} tickLine={false} tickCount={5} tickFormatter={formatYAxisTick} tick={{ fontSize: 11.5, fill: "var(--muted)", fontFamily: "var(--mono)" }} width={64} />
+        <Tooltip
+          cursor={{ stroke: "var(--hair)", strokeWidth: 1 }}
+          content={({ active, payload, label }) => (
+            <Form1Tooltip
+              active={active}
+              payload={payload as unknown as Array<{ dataKey: string; value: number }>}
+              label={label}
+              year={year}
+              currency={currency}
+              direction={direction}
             />
           )}
+        />
 
-          {/* Gastos primero (debajo), ingresos encima — spec design.md */}
-
-          {/* ── Modo sin proyección (projectFixed=false): render normal ── */}
-          {!projectFixed && showExpense && (
-            <Area type="monotone" dataKey="expenseCents" stroke="var(--expense)" strokeWidth={2} fill="url(#areaExpenseRep)" dot={false} activeDot={{ r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 }} isAnimationActive={!reducedMotion} animationDuration={400} animationEasing="ease-out" />
-          )}
-          {!projectFixed && showIncome && (
-            <Area type="monotone" dataKey="incomeCents" stroke="var(--income)" strokeWidth={2} fill="url(#areaIncomeRep)" dot={false} activeDot={{ r: 4, fill: "var(--income)", stroke: "var(--panel)", strokeWidth: 2 }} isAnimationActive={!reducedMotion} animationDuration={400} animationEasing="ease-out" />
-          )}
-
-          {/* ── Modo con proyección (projectFixed=true): tramos real + proyectado ── */}
-
-          {/* Tramo real de gastos (con dot de empalme en lastRealIdx) */}
-          {projectFixed && showExpense && (
-            <Area
-              type="monotone"
-              dataKey="expenseCentsReal"
-              stroke="var(--expense)"
-              strokeWidth={2}
-              fill="url(#areaExpenseRep)"
-              dot={hasProjected && lastRealIdx >= 0 ? (makeJunctionDot("var(--expense)", lastRealIdx) as unknown as boolean) : false}
-              activeDot={{ r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 }}
-              isAnimationActive={!reducedMotion}
-              animationDuration={400}
-              animationEasing="ease-out"
-              connectNulls={false}
-            />
-          )}
-          {/* Tramo proyectado de gastos (dasheado, opacidad 0.7, fill tenue) */}
-          {projectFixed && showExpense && hasProjected && (
-            <Area
-              type="monotone"
-              dataKey="expenseCentsProj"
-              stroke="var(--expense)"
-              strokeWidth={2}
-              strokeDasharray="6 4"
-              strokeOpacity={0.7}
-              fill="url(#areaExpenseRepProj)"
-              dot={false}
-              activeDot={{ r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 }}
-              isAnimationActive={!reducedMotion}
-              animationDuration={400}
-              animationEasing="ease-out"
-              connectNulls={false}
-            />
-          )}
-
-          {/* Tramo real de ingresos (con dot de empalme en lastRealIdx) */}
-          {projectFixed && showIncome && (
-            <Area
-              type="monotone"
-              dataKey="incomeCentsReal"
-              stroke="var(--income)"
-              strokeWidth={2}
-              fill="url(#areaIncomeRep)"
-              dot={hasProjected && lastRealIdx >= 0 ? (makeJunctionDot("var(--income)", lastRealIdx) as unknown as boolean) : false}
-              activeDot={{ r: 4, fill: "var(--income)", stroke: "var(--panel)", strokeWidth: 2 }}
-              isAnimationActive={!reducedMotion}
-              animationDuration={400}
-              animationEasing="ease-out"
-              connectNulls={false}
-            />
-          )}
-          {/* Tramo proyectado de ingresos (dasheado, opacidad 0.7, fill tenue) */}
-          {projectFixed && showIncome && hasProjected && (
-            <Area
-              type="monotone"
-              dataKey="incomeCentsProj"
-              stroke="var(--income)"
-              strokeWidth={2}
-              strokeDasharray="6 4"
-              strokeOpacity={0.7}
-              fill="url(#areaIncomeRepProj)"
-              dot={false}
-              activeDot={{ r: 4, fill: "var(--income)", stroke: "var(--panel)", strokeWidth: 2 }}
-              isAnimationActive={!reducedMotion}
-              animationDuration={400}
-              animationEasing="ease-out"
-              connectNulls={false}
-            />
-          )}
-        </AreaChart>
-      </ResponsiveContainer>
-    </div>
+        {/* Gastos primero (debajo), ingresos encima — spec design.md */}
+        {showExpense && (
+          <Area type="monotone" dataKey="expenseCents" stroke="var(--expense)" strokeWidth={2} fill="url(#areaExpenseRep)" dot={false} activeDot={{ r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 }} isAnimationActive={!reducedMotion} animationDuration={400} animationEasing="ease-out" />
+        )}
+        {showIncome && (
+          <Area type="monotone" dataKey="incomeCents" stroke="var(--income)" strokeWidth={2} fill="url(#areaIncomeRep)" dot={false} activeDot={{ r: 4, fill: "var(--income)", stroke: "var(--panel)", strokeWidth: 2 }} isAnimationActive={!reducedMotion} animationDuration={400} animationEasing="ease-out" />
+        )}
+      </AreaChart>
+    </ResponsiveContainer>
   );
 }
 
@@ -1279,21 +1046,6 @@ export interface ReportCardProps {
    * de 2 series Ingresos/Gastos (modo Dashboard).
    */
   onDirectionChange?: (dir: "expense" | "income" | "both") => void;
-  /**
-   * Estado del toggle de proyección de fijos a futuro (RF-REP-015).
-   * false / undefined = off (default, back-compat: card sin campo = sin proyección).
-   * true = on: se solicita proyección al backend y se renderiza el tramo proyectado.
-   * Solo aplica a type === "income-expense". Ignorado en otros tipos.
-   * Dashboard NO recibe este prop (igual que onCurrencyChange y los filtros RF-REP-014).
-   */
-  projectFixed?: boolean;
-  /**
-   * Callback al cambiar el toggle de proyección (RF-REP-015).
-   * Cuando está presente → se monta el chip "Proyección" en CardControls.
-   * Cuando está ausente → no se monta (gate, igual que onCurrencyChange / RF-REP-014).
-   * Solo relevante en /reportes; Dashboard lo omite por diseño.
-   */
-  onProjectFixedChange?: (v: boolean) => void;
 }
 
 // ─── EditableTitle — título editable in-situ de la card (Ola 2, P4) ───────────
@@ -1427,46 +1179,6 @@ function EditableTitle({
   );
 }
 
-// ─── ProjectionToggleChip — toggle de proyección de fijos (RF-REP-015) ─────────
-
-/**
- * Chip-toggle binario "Proyección" (RF-REP-015).
- * Reusa la caja de chip-toggle de Tipo (RF-REP-014 §3): aria-pressed, on=elevada/off=plana.
- * Ubicación: primer ítem del cluster derecho CardControls, antes del YearStepper.
- * Solo se monta en /reportes (cuando hay callback — igual que currency/direction).
- * Dashboard NO monta este toggle.
- * Spec: docs/design.md §"Proyección de fijos a futuro" → §4 "Toggle de proyección".
- */
-interface ProjectionToggleChipProps {
-  isOn: boolean;
-  onChange: (v: boolean) => void;
-}
-
-function ProjectionToggleChip({ isOn, onChange }: ProjectionToggleChipProps) {
-  return (
-    <button
-      type="button"
-      aria-pressed={isOn}
-      aria-label="Proyección de fijos a futuro"
-      onClick={() => onChange(!isOn)}
-      className={cn(
-        "inline-flex items-center gap-[6px] px-[10px] py-[5px]",
-        "text-[12.5px] font-semibold select-none",
-        "rounded-[7px] transition-colors duration-[140ms]",
-        "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
-        isOn
-          // On: pieza elevada — fondo panel, borde line-strong, sombra
-          ? "bg-panel border border-line-strong shadow-[var(--shadow-sm)] text-ink"
-          // Off: plano/hundido — fondo panel-2, borde line, sin sombra
-          : "bg-panel-2 border border-line text-muted hover:text-ink-2 hover:border-line-strong active:bg-panel-3",
-      )}
-    >
-      <TrendingUp size={15} aria-hidden="true" />
-      Proyección
-    </button>
-  );
-}
-
 // ─── CardControls — barra de controles derecha de la cabecera ─────────────────
 
 interface CardControlsProps {
@@ -1480,18 +1192,13 @@ interface CardControlsProps {
   removable: boolean;
   removeButtonRef: React.RefObject<HTMLButtonElement | null>;
   onRemoveOpen: () => void;
-  /** RF-REP-015: estado del toggle de proyección. Solo presente en /reportes. */
-  projectFixed?: boolean;
-  /** RF-REP-015: callback al cambiar el toggle. Su presencia monta el chip (gate, igual que currency). */
-  onProjectFixedChange?: (v: boolean) => void;
 }
 
 /**
  * Barra de controles derecha de la cabecera de la card:
- * [Proyección?] [divisor] [YearStepper] [divisor] [CardCurrencySelect?] [divisor] [X?].
+ * [YearStepper] [divisor] [CardCurrencySelect?] [divisor] [X?].
  * Extraído para reutilizar en los dos bloques de cabecera (by-category e income-expense).
- * Spec: docs/design.md §"Moneda por reporte — selector embebido en la cabecera de la card (Ola 3, P3)"
- *       y §"Proyección de fijos a futuro" → §4 (toggle como primer ítem del cluster derecho).
+ * Spec: docs/design.md §"Moneda por reporte — selector embebido en la cabecera de la card (Ola 3, P3)".
  */
 function CardControls({
   year,
@@ -1504,26 +1211,9 @@ function CardControls({
   removable,
   removeButtonRef,
   onRemoveOpen,
-  projectFixed,
-  onProjectFixedChange,
 }: CardControlsProps) {
   return (
     <div className="flex items-center gap-2 flex-wrap justify-end">
-      {/* Toggle de proyección de fijos (solo en /reportes — gate por callback) */}
-      {onProjectFixedChange && (
-        <>
-          <ProjectionToggleChip
-            isOn={projectFixed === true}
-            onChange={onProjectFixedChange}
-          />
-          {/* Mini-divisor --hair entre chip Proyección y stepper */}
-          <span
-            className="block h-[16px] w-px bg-hair shrink-0"
-            aria-hidden="true"
-          />
-        </>
-      )}
-
       {/* Control de año embebido (stepper pill) */}
       <YearStepper
         year={year}
@@ -1607,8 +1297,6 @@ export function ReportCard({
   onMovementTypesChange,
   direction,
   onDirectionChange,
-  projectFixed,
-  onProjectFixedChange,
 }: ReportCardProps) {
   const reducedMotion = useReducedMotion();
   const { defaultCurrency } = useSettings();
@@ -1620,21 +1308,10 @@ export function ReportCard({
   // así el backend aplica la default del usuario sin param explícito (back-compat).
   const effectiveCurrency = currency ?? defaultCurrency;
 
-  // Para la card income-expense, pasamos movementTypes, direction y projectFixed al hook.
+  // Para la card income-expense, pasamos movementTypes y direction al hook.
   // Para otros tipos, son undefined.
   const reportsMovementTypes = type === "income-expense" ? movementTypes : undefined;
   const reportsDirection = type === "income-expense" ? direction : undefined;
-  const reportsProjectFixed = type === "income-expense" && projectFixed === true ? true : undefined;
-
-  // Fecha local para el param ?today= cuando projectFixed=true (convención de annual-unicos).
-  // Se computa siempre (hook rules) pero solo se pasa al hook cuando projectFixed=true.
-  const today = useMemo(() => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-    const d = String(now.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }, []);
 
   const { data, isLoading, isError, refetch } = useReports(
     year,
@@ -1642,8 +1319,6 @@ export function ReportCard({
     currency,
     reportsMovementTypes,
     reportsDirection,
-    reportsProjectFixed,
-    reportsProjectFixed ? today : undefined,
   );
 
   const [removeOpen, setRemoveOpen] = useState(false);
@@ -1694,8 +1369,7 @@ export function ReportCard({
   }, []);
 
   const earliestYear = data?.earliestYear ?? null;
-  // Pasar reportsProjectFixed para que buildChartData populate los segmentos de proyección
-  const chartData = data ? buildChartData(data, reportsProjectFixed) : [];
+  const chartData = data ? buildChartData(data) : [];
 
   // Universo estable de categorías para la leyenda-filtro (P2_b).
   // Viene de availableCategories (sin aplicar filtro), no de useCategories.
@@ -1886,7 +1560,7 @@ export function ReportCard({
                 />
                 {/* Categoría ya NO tiene control en la cabecera — está en el footer como leyenda-filtro */}
               </div>
-              {/* Cluster derecho — CardControls con chip Proyección antes del stepper */}
+              {/* Cluster derecho — CardControls */}
               <CardControls
                 year={year}
                 currentYear={currentYear}
@@ -1898,13 +1572,11 @@ export function ReportCard({
                 removable={removable}
                 removeButtonRef={removeButtonRef}
                 onRemoveOpen={() => setRemoveOpen((o) => !o)}
-                projectFixed={projectFixed}
-                onProjectFixedChange={onProjectFixedChange}
               />
             </div>
           </>
         ) : (
-          /* ── Sin filtros (dashboard): fila única igual que antes (sin toggle proyección) ── */
+          /* ── Sin filtros (dashboard): fila única igual que antes ── */
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-[18px]">
             {/* Identidad: solo el título editable (izquierda) */}
             <div className="min-w-0 flex-1">
@@ -1922,7 +1594,7 @@ export function ReportCard({
                 canEdit={!!onTitleChange}
               />
             </div>
-            {/* Controles: stepper + moneda + X (derecha) — chip Proyección si hay callback */}
+            {/* Controles: stepper + moneda + X (derecha) */}
             <CardControls
               year={year}
               currentYear={currentYear}
@@ -1934,8 +1606,6 @@ export function ReportCard({
               removable={removable}
               removeButtonRef={removeButtonRef}
               onRemoveOpen={() => setRemoveOpen((o) => !o)}
-              projectFixed={projectFixed}
-              onProjectFixedChange={onProjectFixedChange}
             />
           </div>
         )
@@ -2022,7 +1692,6 @@ export function ReportCard({
                     reducedMotion={reducedMotion}
                     currency={effectiveCurrency}
                     direction={direction}
-                    projectFixed={reportsProjectFixed === true}
                   />
                 );
               }

@@ -1,14 +1,12 @@
 /**
- * Tests del hook useReports (Fase 1.1.5 / Fase 1.1.6 / Ola 3 P3 / RF-REP-014 / RF-REP-015).
+ * Tests del hook useReports (Fase 1.1.5 / Fase 1.1.6 / Ola 3 P3 / RF-REP-014).
  *
  * Verifica:
- * - REPORTS_QUERY_KEY genera la query key correcta (varía por año, categoriesKey, currency, typesKey, directionKey, projectFixed, today)
+ * - REPORTS_QUERY_KEY genera la query key correcta (varía por año, categoriesKey, currency, typesKey, directionKey)
  * - Fase 1.1.6: distingue null (todas), "" (ninguna), string (subconjunto) en la key de categorías
  * - Ola 3 P3: currency en la key y en la URL
  * - RF-REP-014: movementTypes en la key y en la URL (tipos de movimiento)
  * - RF-REP-014: direction en la key y en la URL (dirección de cómputo)
- * - RF-REP-015: projectFixed en la key y en la URL (proyección de fijos a futuro)
- * - RF-REP-015: today en la key y en la URL solo cuando projectFixed=true
  * - useReports llama a GET /movements/reports?year=YYYY (sin filtro ni moneda)
  * - useReports incluye categories= en la URL cuando hay filtro
  * - Fase 1.1.6: categoryIds=[] manda &categories= vacío (= ninguna)
@@ -18,8 +16,6 @@
  * - RF-REP-014: movementTypes subconjunto → agrega &types= con CSV
  * - RF-REP-014: direction ausente/"both" → NO agrega &direction= (back-compat)
  * - RF-REP-014: direction "expense"/"income" → agrega &direction=
- * - RF-REP-015: projectFixed ausente/false → OMITE params (back-compat)
- * - RF-REP-015: projectFixed=true → agrega &projectFixed=true&today=YYYY-MM-DD
  * - Estados isLoading/data/isError
  * - enabled: isAuthenticated (no dispara sin autenticación)
  * - El contrato de la respuesta (months × 12, categories con monthlyExpenseCents × 12)
@@ -102,13 +98,13 @@ function createWrapper() {
 // ─── Tests REPORTS_QUERY_KEY ─────────────────────────────────────────────────
 
 describe("REPORTS_QUERY_KEY", () => {
-  it("genera la query key correcta para año sin filtros (8 elementos — RF-REP-015)", () => {
-    // 8 elementos: ["reports", year, categoriesKey, currency??null, typesKey??null, directionKey??null, projectFixed??null, today??null]
-    expect(REPORTS_QUERY_KEY(2026, null)).toEqual(["reports", 2026, null, null, null, null, null, null]);
+  it("genera la query key correcta para año sin filtros (6 elementos)", () => {
+    // 6 elementos: ["reports", year, categoriesKey, currency??null, typesKey??null, directionKey??null]
+    expect(REPORTS_QUERY_KEY(2026, null)).toEqual(["reports", 2026, null, null, null, null]);
   });
 
   it("genera la query key correcta para año con filtro de categorías (sin moneda)", () => {
-    expect(REPORTS_QUERY_KEY(2026, "cat-1,cat-2")).toEqual(["reports", 2026, "cat-1,cat-2", null, null, null, null, null]);
+    expect(REPORTS_QUERY_KEY(2026, "cat-1,cat-2")).toEqual(["reports", 2026, "cat-1,cat-2", null, null, null]);
   });
 
   it("query keys de años distintos son distintas", () => {
@@ -215,40 +211,6 @@ describe("REPORTS_QUERY_KEY", () => {
     );
   });
 
-  // ── RF-REP-015: projectFixed en la query key ─────────────────────────────
-
-  it("el séptimo elemento es null cuando projectFixed no se pasa (= off, back-compat)", () => {
-    expect(REPORTS_QUERY_KEY(2026, null)[6]).toBeNull();
-    expect(REPORTS_QUERY_KEY(2026, null, undefined, null, null, undefined)[6]).toBeNull();
-  });
-
-  it("el séptimo elemento es null cuando projectFixed=false (= omitido, back-compat)", () => {
-    expect(REPORTS_QUERY_KEY(2026, null, undefined, null, null, false)[6]).toBeNull();
-  });
-
-  it("el séptimo elemento es true cuando projectFixed=true", () => {
-    expect(REPORTS_QUERY_KEY(2026, null, undefined, null, null, true)[6]).toBe(true);
-  });
-
-  it("el octavo elemento es null cuando projectFixed=false (today no se incluye)", () => {
-    expect(REPORTS_QUERY_KEY(2026, null, undefined, null, null, false, "2026-06-26")[7]).toBeNull();
-  });
-
-  it("el octavo elemento es la fecha cuando projectFixed=true", () => {
-    expect(REPORTS_QUERY_KEY(2026, null, undefined, null, null, true, "2026-06-26")[7]).toBe("2026-06-26");
-  });
-
-  it("query key con projectFixed=true es distinta de sin projectFixed", () => {
-    expect(REPORTS_QUERY_KEY(2026, null)).not.toEqual(
-      REPORTS_QUERY_KEY(2026, null, undefined, null, null, true, "2026-06-26"),
-    );
-  });
-
-  it("query key sin projectFixed (back-compat) = projectFixed=false (mismo resultado)", () => {
-    expect(REPORTS_QUERY_KEY(2026, null)).toEqual(
-      REPORTS_QUERY_KEY(2026, null, undefined, null, null, false),
-    );
-  });
 });
 
 // ─── Tests useReports ─────────────────────────────────────────────────────────
@@ -773,95 +735,6 @@ describe("useReports", () => {
     await waitFor(() => expect(mockApiGet).toHaveBeenCalledTimes(2));
     const secondUrl = mockApiGet.mock.calls[1]?.[0] as string;
     expect(secondUrl).toContain("&direction=expense");
-  });
-
-  // ── RF-REP-015: projectFixed en la URL ─────────────────────────────────────
-
-  it("back-compat: card sin projectFixed → URL sin &projectFixed= ni &today= (RF-REP-015)", async () => {
-    mockApiGet.mockResolvedValue(mockReportsResponse);
-
-    const { result } = renderHook(
-      () => useReports(2026, null),
-      { wrapper: createWrapper() }
-    );
-
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-
-    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
-    expect(callUrl).toBe("/movements/reports?year=2026");
-    expect(callUrl).not.toContain("projectFixed=");
-    expect(callUrl).not.toContain("today=");
-  });
-
-  it("projectFixed=false → OMITE &projectFixed= y &today= (back-compat)", async () => {
-    mockApiGet.mockResolvedValue(mockReportsResponse);
-
-    const { result } = renderHook(
-      () => useReports(2026, null, undefined, undefined, undefined, false, "2026-06-26"),
-      { wrapper: createWrapper() }
-    );
-
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-
-    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
-    expect(callUrl).not.toContain("projectFixed=");
-    expect(callUrl).not.toContain("today=");
-  });
-
-  it("projectFixed=true → agrega &projectFixed=true&today=YYYY-MM-DD", async () => {
-    mockApiGet.mockResolvedValue(mockReportsResponse);
-
-    const { result } = renderHook(
-      () => useReports(2026, null, undefined, undefined, undefined, true, "2026-06-26"),
-      { wrapper: createWrapper() }
-    );
-
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-
-    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
-    expect(callUrl).toContain("&projectFixed=true");
-    expect(callUrl).toContain("&today=2026-06-26");
-  });
-
-  it("projectFixed=true → refetcha al cambiar today (año en curso con fecha distinta)", async () => {
-    mockApiGet.mockResolvedValue(mockReportsResponse);
-
-    const { result, rerender } = renderHook(
-      ({ today }: { today: string }) =>
-        useReports(2026, null, undefined, undefined, undefined, true, today),
-      { wrapper: createWrapper(), initialProps: { today: "2026-06-26" } }
-    );
-
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(mockApiGet).toHaveBeenCalledTimes(1);
-
-    // Cambiar la fecha → nueva query key → nuevo fetch
-    mockApiGet.mockResolvedValue(mockReportsResponse);
-    rerender({ today: "2026-07-01" });
-
-    await waitFor(() => expect(mockApiGet).toHaveBeenCalledTimes(2));
-    const secondUrl = mockApiGet.mock.calls[1]?.[0] as string;
-    expect(secondUrl).toContain("&today=2026-07-01");
-  });
-
-  it("combina todos los params en la URL correctamente (RF-REP-015 full)", async () => {
-    mockApiGet.mockResolvedValue(mockReportsResponse);
-
-    const { result } = renderHook(
-      () => useReports(2026, ["cat-1"], "USD", ["fijo"], "expense", true, "2026-06-26"),
-      { wrapper: createWrapper() }
-    );
-
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-
-    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
-    expect(callUrl).toContain("year=2026");
-    expect(callUrl).toContain("categories=cat-1");
-    expect(callUrl).toContain("&currency=USD");
-    expect(callUrl).toContain("&types=fijo");
-    expect(callUrl).toContain("&direction=expense");
-    expect(callUrl).toContain("&projectFixed=true");
-    expect(callUrl).toContain("&today=2026-06-26");
   });
 
   it("invariante: suma de monthlyExpenseCents[i] == months[i].expenseCents", async () => {

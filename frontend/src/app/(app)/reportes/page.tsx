@@ -525,22 +525,6 @@ function ReportesPageContent() {
     });
   }
 
-  function handleProjectFixedChange(id: string, v: boolean) {
-    const newCards = cards.map((c) => {
-      if (c.id !== id) return c;
-      // Ausente / false = off (back-compat: omitir el campo cuando está apagado).
-      if (!v) {
-        const updated = { ...c };
-        delete updated.projectFixed;
-        return updated;
-      }
-      return { ...c, projectFixed: true };
-    });
-    void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
-      logger.error("Error al persistir proyección de card", { error: err, cardId: id });
-    });
-  }
-
   const hasCards = cards.length > 0;
 
   return (
@@ -645,7 +629,6 @@ function ReportesPageContent() {
                   onTitleChange={(t) => handleTitleChange(card.id, t)}
                   onMovementTypesChange={(types) => handleMovementTypesChange(card.id, types)}
                   onDirectionChange={(dir) => handleDirectionChange(card.id, dir)}
-                  onProjectFixedChange={(v) => handleProjectFixedChange(card.id, v)}
                 />
               ))}
 

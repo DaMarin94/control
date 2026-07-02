@@ -24,7 +24,6 @@
  * - Región scrolleable con max-h-[84px] en leyenda de by-category
  * - data-overflow: lógica de medición de scrollHeight > clientHeight
  * - Toggle Barra/Línea en by-category (categoryChartMode + onCategoryChartModeChange)
- * - Toggle Proyección RF-REP-015 (gate por onProjectFixedChange)
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -70,8 +69,6 @@ vi.mock("recharts", () => {
   const MockCartesianGrid = () => null;
   const MockTooltip = () => null;
   const MockCell = () => null;
-  // RF-REP-015: ReferenceLine necesita estar en el mock (la card lo importa)
-  const MockReferenceLine = () => null;
   const MockResponsiveContainer = ({ children }: { children: ReactNode }) =>
     React.createElement("div", { "data-testid": "responsive-container" }, children);
 
@@ -86,7 +83,6 @@ vi.mock("recharts", () => {
     Tooltip: MockTooltip,
     ResponsiveContainer: MockResponsiveContainer,
     Cell: MockCell,
-    ReferenceLine: MockReferenceLine,
   };
 });
 
@@ -750,105 +746,5 @@ describe("ReportCard — toggle Barra/Línea en by-category (categoryChartMode)"
     } as unknown as ReturnType<typeof useReports>);
     renderCard({ type: "by-category" });
     expect(screen.getByRole("tablist", { name: /representación del reporte/i })).toBeInTheDocument();
-  });
-});
-
-// ─── Tests: RF-REP-015 — Toggle de proyección de fijos ───────────────────────
-
-describe("ReportCard — toggle Proyección (RF-REP-015)", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockUseReports.mockReturnValue(makeSuccessReturn());
-  });
-
-  // ── Gate: el toggle solo se monta si hay callback ─────────────────────────
-
-  it("NO muestra el chip 'Proyección' cuando no hay onProjectFixedChange (Dashboard, back-compat)", () => {
-    renderCard({ type: "income-expense" });
-    // Sin callback → el toggle no se monta
-    expect(screen.queryByRole("button", { name: /proyección de fijos a futuro/i })).not.toBeInTheDocument();
-  });
-
-  it("NO muestra el chip 'Proyección' en by-category (solo income-expense)", () => {
-    const onChange = vi.fn();
-    renderCard({ type: "by-category", onProjectFixedChange: onChange });
-    // by-category no monta el toggle (el componente lo ignora para tipos que no son income-expense)
-    expect(screen.queryByRole("button", { name: /proyección de fijos a futuro/i })).not.toBeInTheDocument();
-  });
-
-  it("muestra el chip 'Proyección' cuando hay onProjectFixedChange en income-expense", () => {
-    const onChange = vi.fn();
-    renderCard({ type: "income-expense", onProjectFixedChange: onChange });
-    expect(screen.getByRole("button", { name: /proyección de fijos a futuro/i })).toBeInTheDocument();
-  });
-
-  // ── Estado inicial / aria-pressed ────────────────────────────────────────
-
-  it("el chip tiene aria-pressed='false' cuando projectFixed=false (off por defecto)", () => {
-    const onChange = vi.fn();
-    renderCard({ type: "income-expense", onProjectFixedChange: onChange, projectFixed: false });
-    const btn = screen.getByRole("button", { name: /proyección de fijos a futuro/i });
-    expect(btn).toHaveAttribute("aria-pressed", "false");
-  });
-
-  it("el chip tiene aria-pressed='true' cuando projectFixed=true (on)", () => {
-    const onChange = vi.fn();
-    renderCard({ type: "income-expense", onProjectFixedChange: onChange, projectFixed: true });
-    const btn = screen.getByRole("button", { name: /proyección de fijos a futuro/i });
-    expect(btn).toHaveAttribute("aria-pressed", "true");
-  });
-
-  // ── Interacción: callback al hacer clic ───────────────────────────────────
-
-  it("al hacer clic en el chip (off→on), llama onProjectFixedChange(true)", () => {
-    const onChange = vi.fn();
-    renderCard({ type: "income-expense", onProjectFixedChange: onChange, projectFixed: false });
-    fireEvent.click(screen.getByRole("button", { name: /proyección de fijos a futuro/i }));
-    expect(onChange).toHaveBeenCalledWith(true);
-  });
-
-  it("al hacer clic en el chip (on→off), llama onProjectFixedChange(false)", () => {
-    const onChange = vi.fn();
-    renderCard({ type: "income-expense", onProjectFixedChange: onChange, projectFixed: true });
-    fireEvent.click(screen.getByRole("button", { name: /proyección de fijos a futuro/i }));
-    expect(onChange).toHaveBeenCalledWith(false);
-  });
-
-  // ── Back-compat: card sin projectFixed ni callback = sin proyección ────────
-
-  it("back-compat: card sin projectFixed → NO pasa projectFixed al hook (sin params de proyección)", () => {
-    // Sin projectFixed ni onProjectFixedChange → el hook debe llamarse sin los params de RF-REP-015.
-    // El mock de useReports captura los argumentos de la llamada.
-    renderCard({ type: "income-expense" });
-    // El hook se llama, verificamos que projectFixed (6º param) no es true
-    const callArgs = mockUseReports.mock.calls[0];
-    // callArgs: [year, categoryIds, currency, movementTypes, direction, projectFixed, today]
-    // Cuando no se pasa, el componente pasa undefined (reportsProjectFixed=undefined)
-    expect(callArgs?.[5]).toBeFalsy(); // projectFixed ausente o false
-  });
-
-  it("toggle on: hook se llama con projectFixed=true y today=string", () => {
-    const onChange = vi.fn();
-    renderCard({ type: "income-expense", onProjectFixedChange: onChange, projectFixed: true });
-    const callArgs = mockUseReports.mock.calls[0];
-    // Cuando projectFixed=true, el hook recibe true y una fecha YYYY-MM-DD
-    expect(callArgs?.[5]).toBe(true); // projectFixed
-    expect(callArgs?.[6]).toMatch(/^\d{4}-\d{2}-\d{2}$/); // today formato ISO
-  });
-
-  // ── El chip aparece antes del YearStepper en el DOM ──────────────────────
-
-  it("el chip 'Proyección' aparece ANTES del stepper de año en el DOM (spec: primer ítem del cluster)", () => {
-    const onChange = vi.fn();
-    const { container } = renderCard({ type: "income-expense", year: 2026, onProjectFixedChange: onChange, projectFixed: false });
-    const chip = screen.getByRole("button", { name: /proyección de fijos a futuro/i });
-    // El stepper se identifica por el botón "año siguiente"
-    const stepperNext = screen.getAllByRole("button", { name: /año siguiente/i })[0];
-    expect(stepperNext).toBeDefined();
-    if (stepperNext && chip && container) {
-      // compareDocumentPosition: 4 = Node.DOCUMENT_POSITION_FOLLOWING (stepperNext viene DESPUÉS de chip)
-      const position = chip.compareDocumentPosition(stepperNext);
-      expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    }
   });
 });

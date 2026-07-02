@@ -30,8 +30,8 @@
  *   (el backend lo interpretaba como "todas"). Ahora `[]` manda `&categories=`
  *   vacío explícito → el backend devuelve resultado vacío / totales en cero.
  *
- * Query key: REPORTS_QUERY_KEY(year, categoriesKey, currency, typesKey, directionKey, projectFixed, today)
- *   - varía por año, categorías, moneda, tipos, dirección y proyección.
+ * Query key: REPORTS_QUERY_KEY(year, categoriesKey, currency, typesKey, directionKey)
+ *   - varía por año, categorías, moneda, tipos y dirección.
  *   - categoriesKey null  → omite el param (= todas).
  *   - categoriesKey ""    → `&categories=` vacío (= ninguna). Distinto de null en la key.
  *   - categoriesKey string no vacío → subconjunto serializado "id1,id2,...".
@@ -42,8 +42,10 @@
  *   - typesKey string no vacío → `&types=fijo,cuota`; CSV en la key.
  *   - directionKey null → param `direction` ausente (= "both"); null en la key.
  *   - directionKey "expense" | "income" → param presente; string en la key.
- *   - projectFixed true → param `&projectFixed=true&today=YYYY-MM-DD`; true en la key.
- *   - projectFixed false/absent → params omitidos; null en la key (back-compat).
+ *
+ * Nota: el backend soporta además `projectFixed`/`today` (RF-REP-015, proyección de
+ * fijos a futuro), pero ninguna pantalla los consume hoy — quedan reservados para un
+ * futuro módulo de simulación que los consumirá fresco (fuera de este hook).
  *
  * Patrón de autenticación: enabled: isAuthenticated (obligatorio para queries
  * de lectura al montar una pantalla autenticada, igual que useMovements).
@@ -62,7 +64,7 @@ const logger = createLogger("useReports");
 // ─── Query key ─────────────────────────────────────────────────────────────────
 
 /**
- * Query key para la serie de reportes de un año, filtro de categorías, moneda, tipos, dirección y proyección.
+ * Query key para la serie de reportes de un año, filtro de categorías, moneda, tipos y dirección.
  * Es una FUNCIÓN porque varía por todos esos parámetros.
  *
  * @param year          El año a consultar (ej. 2026).
@@ -78,9 +80,6 @@ const logger = createLogger("useReports");
  *                      string no vacío = subconjunto CSV "cuota,fijo".
  * @param directionKey  null = "both" (param ausente, back-compat);
  *                      "expense" | "income" = param presente.
- * @param projectFixed  true = proyección on (incluye params en URL); false/absent = off (back-compat).
- *                      Solo relevante cuando projectFixed=true; de lo contrario null en la key.
- * @param today         Fecha local YYYY-MM-DD. Solo incluida en la key cuando projectFixed=true.
  */
 export const REPORTS_QUERY_KEY = (
   year: number,
@@ -88,8 +87,6 @@ export const REPORTS_QUERY_KEY = (
   currency?: CurrencyCode,
   typesKey?: string | null,
   directionKey?: string | null,
-  projectFixed?: boolean,
-  today?: string,
 ) => [
   "reports",
   year,
@@ -97,8 +94,6 @@ export const REPORTS_QUERY_KEY = (
   currency ?? null,
   typesKey ?? null,
   directionKey ?? null,
-  projectFixed === true ? true : null,
-  projectFixed === true ? (today ?? null) : null,
 ] as const;
 
 // ─── Serialización del filtro ──────────────────────────────────────────────────
@@ -181,10 +176,6 @@ function serializeDirectionFilter(direction?: "expense" | "income" | "both"): {
  * @param currency      undefined = default del usuario (sin param); presente = override de moneda por card.
  * @param movementTypes undefined = todos los tipos (back-compat); [] = ninguno; lista = subconjunto.
  * @param direction     undefined / "both" = ambas direcciones (back-compat); "expense" | "income" = filtrar.
- * @param projectFixed  true = proyección on → agrega &projectFixed=true&today=YYYY-MM-DD.
- *                      false / absent → omite ambos params (back-compat, respuesta idéntica a hoy).
- * @param today         Fecha local YYYY-MM-DD. Solo usada cuando projectFixed=true. Determina qué
- *                      meses son futuros en la zona del usuario. Seguir la convención de annual-unicos.
  */
 export function useReports(
   year: number,
@@ -192,8 +183,6 @@ export function useReports(
   currency?: CurrencyCode,
   movementTypes?: Array<"fijo" | "cuota" | "unico">,
   direction?: "expense" | "income" | "both",
-  projectFixed?: boolean,
-  today?: string,
 ) {
   const { api, isAuthenticated } = useApi();
 
@@ -204,23 +193,16 @@ export function useReports(
   // Serializar el param de moneda (solo si está presente)
   const currencyParam = currency ? `&currency=${currency}` : "";
 
-  // RF-REP-015: proyección de fijos.
-  // Ausente / false → omitir ambos params (back-compat).
-  // true → &projectFixed=true&today=YYYY-MM-DD
-  const projectFixedParam = projectFixed === true
-    ? `&projectFixed=true${today ? `&today=${today}` : ""}`
-    : "";
-
   const query = useQuery<ReportsMovementsResponse>({
-    queryKey: REPORTS_QUERY_KEY(year, categoriesKey, currency, typesKey, directionKey, projectFixed, today),
+    queryKey: REPORTS_QUERY_KEY(year, categoriesKey, currency, typesKey, directionKey),
     queryFn: () => {
       // Construir URL manualmente para evitar que URLSearchParams
       // encodee las comas de la lista de categoryIds (RFC 3986: coma es reservada).
       // El backend espera "categories=id1,id2,..." sin encoding.
       // Con [] (ninguna), urlParam = "&categories=" → se manda param vacío explícito.
       // El código de moneda es plano (ARS/USD/EUR/BRL), no necesita encoding.
-      const url = `/movements/reports?year=${year}${urlParam}${currencyParam}${typesParam}${directionParam}${projectFixedParam}`;
-      logger.debug("Cargando serie de reportes", { year, categoriesKey, currency, typesKey, directionKey, projectFixed });
+      const url = `/movements/reports?year=${year}${urlParam}${currencyParam}${typesParam}${directionParam}`;
+      logger.debug("Cargando serie de reportes", { year, categoriesKey, currency, typesKey, directionKey });
       return api.get<ReportsMovementsResponse>(url);
     },
     // No disparar hasta que la sesión resolvió y el token está presente.

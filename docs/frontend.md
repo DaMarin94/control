@@ -472,8 +472,8 @@ El gráfico se separa en una **primitiva reutilizable** (motor de charting, agn�
 
 ### Datos (`use-reports`)
 
-- Hook **`useReports(year, categoryIds)`** sobre `GET /movements/reports?year=&categories=`. Sin mutaciones (solo lectura). Aplica el patrón obligatorio **`enabled: isAuthenticated`** (ver Queries de lectura gate-adas en Autenticación).
-- **Query key varía por año Y por filtro de categorías:** `["reports", year, categoriesKey]`, donde `categoriesKey` es la serialización del filtro (`null` → todas; lista ordenada → subconjunto). Sin incluir el filtro en la key, React Query no refetchearía al cambiar el checklist.
+- Hook **`useReports(year, categoryIds, currency, movementTypes, direction)`** sobre `GET /movements/reports`. Sin mutaciones (solo lectura). Aplica el patrón obligatorio **`enabled: isAuthenticated`** (ver Queries de lectura gate-adas en Autenticación). **No recibe `projectFixed`/`today`**: ninguna pantalla consume la proyección de fijos (RF-REP-015).
+- **`REPORTS_QUERY_KEY` tiene 6 elementos:** `["reports", year, categoriesKey, currency, movementTypesKey, direction]`, donde `categoriesKey` y `movementTypesKey` son la serialización de cada filtro. Cada dimensión que altera la respuesta va en la key para que React Query refetchee al cambiarla; sin ella no refetchearía.
 - **`placeholderData: keepPreviousData`.** Al cambiar el filtro de categorías o el año, el gráfico mantiene visibles los datos previos durante el refetch; el skeleton de carga aparece solo en la primera carga (sin caché), no en cada cambio de filtro. Es deliberado para evitar el parpadeo del gráfico.
 - **GOTCHA — el query param `categories` se construye por concatenación de string, NO con `URLSearchParams`.** El backend espera la coma **literal** (`categories=id1,id2,id3`); `URLSearchParams` encodea la coma a `%2C` y el filtro deja de matchear. Patrón reusable para **cualquier endpoint que acepte listas separadas por coma**: armar el query string a mano, no con `URLSearchParams`.
 - Tipos del contrato en **`types/reports.ts`**: `ReportMovementsResponse` / `ReportMonth` / `ReportCategory`.
@@ -489,13 +489,6 @@ Solo en `/reportes` (la income-expense del dashboard **no** los monta; ver gate 
 - **Gate `/reportes` vs. dashboard por `onDirectionChange`.** La presencia del callback `onDirectionChange` distingue la card configurable de `/reportes` (monta los filtros y la leyenda-filtro de categorías) de la card del dashboard (sin filtros; conserva solo la leyenda **decorativa** de 2 series, que no filtra).
 - **Sin `hiddenSeries`.** No existe el acoplamiento `hiddenSeries` ↔ `direction`: la dirección sola gobierna qué líneas se ven. El campo `hiddenSeries` está deprecado y la normalización del blob lo strip en runtime para `income-expense` (ver `docs/data-model.md`).
 
-### Proyección de fijos de la card income-expense (RF-REP-015)
-
-Toggle **"Proyección"** (chip) en la card income-expense, **solo en `/reportes`** (el dashboard **no** lo monta). Default off; persistido en `projectFixed` del blob `reports`. Con on, el front manda `projectFixed=true` + `today` al endpoint (mapeo en `docs/data-model.md`).
-
-- **Separación tramo real vs. proyectado por `months[i].projected`.** El front parte la serie en el corte que marca el flag y renderiza el tramo futuro diferenciado; la regla de qué se proyecta (solo fijos, con tasa compuesta) es del backend.
-- **Sigue a la Dirección.** Una serie fuera de alcance por la dirección (RF-REP-014) no dibuja su tramo proyectado: con `expense` solo proyecta gastos, con `income` solo ingresos, con `both` ambas. La proyección no agrega un ítem propio a ninguna leyenda.
-
 ### Puntos de uso
 
 - **Pantalla `/reportes` configurable por cards — `app/(app)/reportes/page.tsx`** (bajo el route group `(app)`, hereda el sidebar). Arranca **vacía** (solo el recuadro "[+]"); el usuario agrega cards eligiendo el tipo (popover-menú con los 2 tipos) y las quita. Cada card monta una tarjeta de reporte cuyo año y filtro de categorías son **estado persistido** en preferencias (ver abajo). El orden de las cards es el orden del array. **El año NO va en la URL** → la pantalla **no usa `useSearchParams()` ni `<Suspense>`** (a diferencia de `/mes`).
@@ -510,10 +503,10 @@ Para que un agente futuro que toque gráficos no los re-tropiece:
 - **CSS vars `oklch` directas en el SVG de Recharts:** se pueden pasar `var(--token)` directo en props de color (`stroke`, `fill`, y `stopColor` de `<stop>` dentro de `<defs>`). **No** hace falta `getComputedStyle` en runtime para resolver el token.
 - **Cifras tabulares (`tnum`):** la propiedad `fontFeatureSettings` **no existe** en el tipo de tick SVG de Recharts; el `tnum` se delega a la CSS var **`--mono`** (IBM Plex Mono ya trae `tnum`). No intentar setear `fontFeatureSettings` en el tick.
 - **Recharts 3.x + TypeScript strict:** `TooltipPayload` es **`readonly`** → el componente custom de tooltip requiere un **doble cast** (`as unknown as Array<...>`). El prop `label` del tooltip es `string | number | undefined` (no solo `string`).
-- **`dot` de `<Area>` con render custom — cast obligatorio:** el prop `dot` acepta una **función de render** en runtime, pero su tipo TS la declara como `boolean`. Pasar un dot renderer custom (p. ej. para marcar el tramo proyectado de RF-REP-015) exige castear **`as unknown as boolean`**. Trampa reusable para cualquier `<Area>`/`<Line>` con dots condicionales.
+- **`dot` de `<Area>` con render custom — cast obligatorio:** el prop `dot` acepta una **función de render** en runtime, pero su tipo TS la declara como `boolean`. Pasar un dot renderer custom exige castear **`as unknown as boolean`**. Trampa reusable para cualquier `<Area>`/`<Line>` con dots condicionales.
 - **Alto responsive — por prop `height`, no CSS var:** Recharts necesita el alto como **valor numérico en el prop `height`** (no acepta una CSS var de altura). Se resuelve con **dos `<div>` + media queries de Tailwind v4** (`[@media(max-width:940px)]:hidden` / `[@media(min-width:941px)]:hidden`).
 - **`prefers-reduced-motion`:** las tarjetas usan un detector interno de reduced-motion. **jsdom no implementa `window.matchMedia`**, así que se agregó un **mock global de `matchMedia` en `tests/setup.ts`** — necesario para cualquier componente futuro que detecte reduced-motion.
-- **Dedupe de `useReports` por query key — no es doble fetch:** cuando `useReports(year, categoryIds)` se invoca **varias veces a la vez** con los mismos argumentos, React Query lo resuelve como **una sola request** por compartir la misma key (dedupe por key). No es N peticiones simultáneas.
+- **Dedupe de `useReports` por query key — no es doble fetch:** cuando `useReports` se invoca **varias veces a la vez** con los mismos argumentos, React Query lo resuelve como **una sola request** por compartir la misma key (dedupe por key). No es N peticiones simultáneas.
 
 ### Card `unique-grid` — grilla anual de gastos Únicos (RF-REP-010)
 

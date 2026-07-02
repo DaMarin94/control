@@ -21,8 +21,10 @@ export interface ReportMonth {
   /** Suma de gastos del mes en centavos (únicos + fijos + cuotas), filtrada al set pedido. */
   expenseCents: number;
   /**
-   * true solo en meses futuros cuando projectFixed=true (RF-REP-015).
-   * Ausente / false = mes real (back-compat: con toggle off todos los meses son reales).
+   * true solo en meses futuros cuando se pide `projectFixed=true` (RF-REP-015).
+   * Sigue existiendo en el contrato del backend, pero ninguna pantalla lo consume hoy:
+   * el render de proyección se retiró del frontend (revert RF-REP-015). Reservado para
+   * un futuro módulo de simulación que consultará el endpoint fresco con este param.
    */
   projected?: boolean;
 }
@@ -230,11 +232,12 @@ export interface ReportCardConfig {
   direction?: "expense" | "income" | "both";
   /**
    * Toggle de proyección de fijos a futuro (RF-REP-015).
-   * Ausente / false = off (default, back-compat: card sin este campo = sin proyección).
-   * true = on: el backend recibe &projectFixed=true&today=YYYY-MM-DD y devuelve
-   * meses futuros con projected:true en ReportMonth.
-   * Solo aplica a type === "income-expense". Ignorado en otros tipos.
-   * El Dashboard NO monta este toggle (igual que currency y los filtros de RF-REP-014).
+   * Sigue existiendo en el contrato del backend (`&projectFixed=true&today=YYYY-MM-DD`,
+   * `ReportMonth.projected`), pero ninguna pantalla lo consume hoy: el frontend retiró
+   * el render de proyección de la card income-expense (revert RF-REP-015). Cards ya
+   * persistidas con `projectFixed: true` simplemente dejan de proyectar (no se migra /
+   * borra el campo del blob). Reservado para un futuro módulo de simulación que
+   * consumirá el endpoint fresco con este param.
    */
   projectFixed?: boolean;
 }
