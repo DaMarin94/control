@@ -1841,12 +1841,11 @@ export function addMonths(yyyyMM: string, n: number): string {
 
   month += n;
 
+  // Math.floor handles negative n correctly for year rollover.
+  // Use true modulo ((x%12)+12)%12 to avoid the double-year-subtraction
+  // bug that occurs when month%12 is negative and we subsequently do year-=1.
   year += Math.floor(month / 12);
-  month = month % 12;
-  if (month < 0) {
-    month += 12;
-    year -= 1;
-  }
+  month = ((month % 12) + 12) % 12;
 
   return `${year}-${String(month + 1).padStart(2, '0')}`;
 }

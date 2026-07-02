@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Hook de datos para el endpoint GET /movements/reports?year=YYYY[&categories=...][&currency=XXX].
+ * Hook de datos para el endpoint GET /movements/reports?year=YYYY[&categories=...][&currency=XXX][&types=...][&direction=...].
  *
  * Fase 1.1.5: renombre de use-annual. El endpoint pasó de /movements/annual a
  * /movements/reports y se le agregó el param `categories` para filtrar.
@@ -13,6 +13,13 @@
  *   - Presente y válido   → la serie viene convertida a esa moneda.
  *   Se suma a la query key para que React Query refetche al cambiar la moneda.
  *
+ * RF-REP-014: se agregan los params `types` y `direction` para la card income-expense.
+ *   - `types` ausente / todos → omite el param (= todos los tipos, back-compat).
+ *   - `types` subconjunto   → `&types=fijo,cuota` (CSV ordenado, sin URL-encode de comas).
+ *   - `types` [] → `&types=` vacío → backend devuelve totales en cero.
+ *   - `direction` ausente / "both" → omite el param (back-compat).
+ *   - `direction` "expense" | "income" → `&direction=expense` / `&direction=income`.
+ *
  * Semántica de `categoryIds` (3 estados):
  *   - null   → param `categories` AUSENTE (= todas).
  *   - []     → param `categories` PRESENTE Y VACÍO (`&categories=`) (= ninguna).
@@ -23,14 +30,20 @@
  *   (el backend lo interpretaba como "todas"). Ahora `[]` manda `&categories=`
  *   vacío explícito → el backend devuelve resultado vacío / totales en cero.
  *
- * Query key: REPORTS_QUERY_KEY(year, categoriesKey, currency)
- *   - varía por año, por el string de categorías y por la moneda para que React Query
- *     refetche cuando cambia cualquiera de esos tres valores.
+ * Query key: REPORTS_QUERY_KEY(year, categoriesKey, currency, typesKey, directionKey, projectFixed, today)
+ *   - varía por año, categorías, moneda, tipos, dirección y proyección.
  *   - categoriesKey null  → omite el param (= todas).
  *   - categoriesKey ""    → `&categories=` vacío (= ninguna). Distinto de null en la key.
  *   - categoriesKey string no vacío → subconjunto serializado "id1,id2,...".
- *   - currency undefined → param `currency` ausente; undefined en la key.
+ *   - currency undefined → param `currency` ausente; null en la key.
  *   - currency "ARS"|"USD"|"EUR"|"BRL" → param `&currency=XXX`; string en la key.
+ *   - typesKey null → param `types` ausente (= todos los tipos); null en la key.
+ *   - typesKey "" → `&types=` vacío (= ninguno); "" en la key.
+ *   - typesKey string no vacío → `&types=fijo,cuota`; CSV en la key.
+ *   - directionKey null → param `direction` ausente (= "both"); null en la key.
+ *   - directionKey "expense" | "income" → param presente; string en la key.
+ *   - projectFixed true → param `&projectFixed=true&today=YYYY-MM-DD`; true en la key.
+ *   - projectFixed false/absent → params omitidos; null en la key (back-compat).
  *
  * Patrón de autenticación: enabled: isAuthenticated (obligatorio para queries
  * de lectura al montar una pantalla autenticada, igual que useMovements).
@@ -49,8 +62,8 @@ const logger = createLogger("useReports");
 // ─── Query key ─────────────────────────────────────────────────────────────────
 
 /**
- * Query key para la serie de reportes de un año, filtro de categorías y moneda.
- * Es una FUNCIÓN porque varía por año, por el filtro de categorías y por la moneda.
+ * Query key para la serie de reportes de un año, filtro de categorías, moneda, tipos, dirección y proyección.
+ * Es una FUNCIÓN porque varía por todos esos parámetros.
  *
  * @param year          El año a consultar (ej. 2026).
  * @param categoriesKey null = todas (param ausente); "" = ninguna (param vacío);
@@ -60,12 +73,33 @@ const logger = createLogger("useReports");
  * @param currency      undefined = default del usuario (param ausente);
  *                      string = código de moneda (param presente). Incluido en la
  *                      key para que React Query refetche al cambiar la moneda.
+ * @param typesKey      null = todos los tipos (param ausente, back-compat);
+ *                      "" = ningún tipo (param vacío = totales en cero);
+ *                      string no vacío = subconjunto CSV "cuota,fijo".
+ * @param directionKey  null = "both" (param ausente, back-compat);
+ *                      "expense" | "income" = param presente.
+ * @param projectFixed  true = proyección on (incluye params en URL); false/absent = off (back-compat).
+ *                      Solo relevante cuando projectFixed=true; de lo contrario null en la key.
+ * @param today         Fecha local YYYY-MM-DD. Solo incluida en la key cuando projectFixed=true.
  */
 export const REPORTS_QUERY_KEY = (
   year: number,
   categoriesKey: string | null,
   currency?: CurrencyCode,
-) => ["reports", year, categoriesKey, currency ?? null] as const;
+  typesKey?: string | null,
+  directionKey?: string | null,
+  projectFixed?: boolean,
+  today?: string,
+) => [
+  "reports",
+  year,
+  categoriesKey,
+  currency ?? null,
+  typesKey ?? null,
+  directionKey ?? null,
+  projectFixed === true ? true : null,
+  projectFixed === true ? (today ?? null) : null,
+] as const;
 
 // ─── Serialización del filtro ──────────────────────────────────────────────────
 
@@ -92,44 +126,108 @@ function serializeCategoryFilter(categoryIds: string[] | null): {
   return { categoriesKey: sorted, urlParam: `&categories=${sorted}` };
 }
 
+// ─── Serialización de tipos de movimiento ─────────────────────────────────────
+
+/**
+ * Convierte el estado de movementTypes a la query key y al fragmento de URL.
+ * Semántica:
+ *   undefined o los 3 tipos → omite el param (back-compat: todos los tipos).
+ *   []                      → `&types=` vacío (ninguno; backend devuelve ceros).
+ *   subconjunto             → `&types=cuota,fijo` (CSV ordenado).
+ */
+function serializeMovementTypesFilter(movementTypes?: Array<"fijo" | "cuota" | "unico">): {
+  typesKey: string | null;
+  typesParam: string;
+} {
+  if (!movementTypes) {
+    return { typesKey: null, typesParam: "" };
+  }
+  if (movementTypes.length === 0) {
+    return { typesKey: "", typesParam: "&types=" };
+  }
+  // Si están los 3 tipos → equivale a "todos" → omitir param (back-compat)
+  if (movementTypes.length === 3) {
+    return { typesKey: null, typesParam: "" };
+  }
+  const sorted = [...movementTypes].sort().join(",");
+  return { typesKey: sorted, typesParam: `&types=${sorted}` };
+}
+
+// ─── Serialización de dirección ────────────────────────────────────────────────
+
+/**
+ * Convierte el estado de direction a la query key y al fragmento de URL.
+ * Semántica:
+ *   undefined o "both" → omite el param (back-compat: ambas direcciones).
+ *   "expense" | "income" → `&direction=expense` / `&direction=income`.
+ */
+function serializeDirectionFilter(direction?: "expense" | "income" | "both"): {
+  directionKey: string | null;
+  directionParam: string;
+} {
+  if (!direction || direction === "both") {
+    return { directionKey: null, directionParam: "" };
+  }
+  return { directionKey: direction, directionParam: `&direction=${direction}` };
+}
+
 // ─── Hook principal ────────────────────────────────────────────────────────────
 
 /**
  * Hook para obtener la serie de reportes agregada (totales + desglose por categoría).
  *
- * @param year        El año a consultar (ej. 2026).
- * @param categoryIds null = todas; [] = ninguna; lista = subconjunto explícito.
- * @param currency    undefined = default del usuario (sin param); presente = override de moneda por card.
+ * @param year          El año a consultar (ej. 2026).
+ * @param categoryIds   null = todas; [] = ninguna; lista = subconjunto explícito.
+ * @param currency      undefined = default del usuario (sin param); presente = override de moneda por card.
+ * @param movementTypes undefined = todos los tipos (back-compat); [] = ninguno; lista = subconjunto.
+ * @param direction     undefined / "both" = ambas direcciones (back-compat); "expense" | "income" = filtrar.
+ * @param projectFixed  true = proyección on → agrega &projectFixed=true&today=YYYY-MM-DD.
+ *                      false / absent → omite ambos params (back-compat, respuesta idéntica a hoy).
+ * @param today         Fecha local YYYY-MM-DD. Solo usada cuando projectFixed=true. Determina qué
+ *                      meses son futuros en la zona del usuario. Seguir la convención de annual-unicos.
  */
 export function useReports(
   year: number,
   categoryIds: string[] | null = null,
   currency?: CurrencyCode,
+  movementTypes?: Array<"fijo" | "cuota" | "unico">,
+  direction?: "expense" | "income" | "both",
+  projectFixed?: boolean,
+  today?: string,
 ) {
   const { api, isAuthenticated } = useApi();
 
   const { categoriesKey, urlParam } = serializeCategoryFilter(categoryIds);
+  const { typesKey, typesParam } = serializeMovementTypesFilter(movementTypes);
+  const { directionKey, directionParam } = serializeDirectionFilter(direction);
 
   // Serializar el param de moneda (solo si está presente)
   const currencyParam = currency ? `&currency=${currency}` : "";
 
+  // RF-REP-015: proyección de fijos.
+  // Ausente / false → omitir ambos params (back-compat).
+  // true → &projectFixed=true&today=YYYY-MM-DD
+  const projectFixedParam = projectFixed === true
+    ? `&projectFixed=true${today ? `&today=${today}` : ""}`
+    : "";
+
   const query = useQuery<ReportsMovementsResponse>({
-    queryKey: REPORTS_QUERY_KEY(year, categoriesKey, currency),
+    queryKey: REPORTS_QUERY_KEY(year, categoriesKey, currency, typesKey, directionKey, projectFixed, today),
     queryFn: () => {
       // Construir URL manualmente para evitar que URLSearchParams
       // encodee las comas de la lista de categoryIds (RFC 3986: coma es reservada).
       // El backend espera "categories=id1,id2,..." sin encoding.
       // Con [] (ninguna), urlParam = "&categories=" → se manda param vacío explícito.
       // El código de moneda es plano (ARS/USD/EUR/BRL), no necesita encoding.
-      const url = `/movements/reports?year=${year}${urlParam}${currencyParam}`;
-      logger.debug("Cargando serie de reportes", { year, categoriesKey, currency });
+      const url = `/movements/reports?year=${year}${urlParam}${currencyParam}${typesParam}${directionParam}${projectFixedParam}`;
+      logger.debug("Cargando serie de reportes", { year, categoriesKey, currency, typesKey, directionKey, projectFixed });
       return api.get<ReportsMovementsResponse>(url);
     },
     // No disparar hasta que la sesión resolvió y el token está presente.
     // Evita 401 espurios durante el loading inicial de Auth.js.
     enabled: Boolean(year) && isAuthenticated,
-    // Al cambiar el filtro (año, categorías o moneda), mantiene los datos previos visibles
-    // mientras refetcha: isLoading queda false → el skeleton no parpadea en cada toggle.
+    // Al cambiar cualquier filtro, mantiene los datos previos visibles mientras refetcha:
+    // isLoading queda false → el skeleton no parpadea en cada toggle.
     // El skeleton solo aparece en la primera carga (sin datos cacheados para esa key).
     placeholderData: keepPreviousData,
   });

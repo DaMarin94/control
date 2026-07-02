@@ -45,6 +45,12 @@ export interface ReportMonth {
   month: string; // YYYY-MM
   incomeCents: number;
   expenseCents: number;
+  /**
+   * RF-REP-015: true si este mes es proyectado (futuro respecto de "hoy") y el flag
+   * projectFixed está activo. false en todos los demás casos (tramo real o flag off).
+   * Siempre presente en la respuesta para que el frontend pueda distinguir el tramo.
+   */
+  projected: boolean;
 }
 
 /**
@@ -431,6 +437,10 @@ export class MovementsService {
     year: number,
     categoryIds?: string[] | null,
     currencyOverride?: Currency | null,
+    typesFilter?: string[] | null,
+    direction?: 'both' | 'expense' | 'income',
+    projectFixed?: boolean,
+    today?: string,
   ): Promise<ReportsMovementsResponse> {
     // Normalizar el filtro de categorías
     const EMPTY_SET = new Set<string>();
@@ -440,6 +450,21 @@ export class MovementsService {
         : categoryIds.length === 0
           ? EMPTY_SET
           : new Set(categoryIds);
+
+    // RF-REP-014: filtro por tipo de movimiento (3-state semántica, igual que categorías)
+    // null = todos los tipos; Set vacío = ninguno; Set con valores = subconjunto.
+    const typeSet: Set<string> | null =
+      typesFilter === null || typesFilter === undefined
+        ? null
+        : new Set(typesFilter);
+
+    const includeMovType = (movType: 'fijo' | 'cuota' | 'unico'): boolean => {
+      if (typeSet === null) return true;
+      return typeSet.has(movType);
+    };
+
+    // RF-REP-014: filtro de dirección. 'both' = sin filtro (default).
+    const dir: 'both' | 'expense' | 'income' = direction ?? 'both';
 
     // Cargar la moneda default del usuario y las pivot rates del año en paralelo (Fase 1.2.4)
     const [userSettings, pivotRatesForYear] = await Promise.all([
@@ -479,6 +504,28 @@ export class MovementsService {
     // Gasto anual por categoría SIN filtro (para ordenar availableCategories).
     const annualExpenseAll = new Map<string, number>();
 
+    // ---------------------------------------------------------------------------
+    // RF-REP-015: Proyección de fijos a futuro
+    // ---------------------------------------------------------------------------
+
+    // Fecha "hoy" para distinguir meses pasados/presentes de futuros.
+    // Misma convención que getAnnualUnicosReport y getAnnualInflationIncomeReport:
+    // el param today viene como YYYY-MM-DD; ausente → fecha UTC del sistema.
+    const todayDate = today ? new Date(today + 'T00:00:00Z') : new Date();
+    const todayMonthKey = `${String(todayDate.getUTCFullYear()).padStart(4, '0')}-${String(todayDate.getUTCMonth() + 1).padStart(2, '0')}`;
+
+    // lineRate: tasa de precio same-basket (mensual) de la canasta comparable de
+    // cada línea (gasto/ingreso). Solo se computa cuando projectFixed=true.
+    const lineRate: { expense: number; income: number } = { expense: 0, income: 0 };
+
+    // Referencia a computeFixedLineTotal (canasta_conocida), expuesta fuera del
+    // bloque `if (projectFixed === true)` para que el loop principal la use al
+    // aplicar la proyección en cada mes futuro. Solo se asigna cuando
+    // projectFixed=true (mismas condiciones bajo las que isFutureMonth puede ser true).
+    let computeFixedLineTotalForProjection:
+      | ((mes: string, lineType: 'EXPENSE' | 'INCOME') => number)
+      | null = null;
+
     // 1. Únicos
     const unicosRows = await this.repo.getAnnualUnicosAggregated(userId, year);
 
@@ -514,13 +561,16 @@ export class MovementsService {
       }
 
       if (filterSet !== null && !filterSet.has(row.categoryId)) continue;
+      if (!includeMovType('unico')) continue;
 
       if (row.type === 'INCOME') {
-        agg[idx].incomeCents += cents;
+        if (dir !== 'expense') agg[idx].incomeCents += cents;
       } else {
-        agg[idx].expenseCents += cents;
-        const prev = agg[idx].categoryExpense.get(row.categoryId) ?? 0;
-        agg[idx].categoryExpense.set(row.categoryId, prev + cents);
+        if (dir !== 'income') {
+          agg[idx].expenseCents += cents;
+          const prev = agg[idx].categoryExpense.get(row.categoryId) ?? 0;
+          agg[idx].categoryExpense.set(row.categoryId, prev + cents);
+        }
       }
 
       if (!catMeta.has(row.categoryId)) {
@@ -579,10 +629,276 @@ export class MovementsService {
       });
     }
 
+    // ---------------------------------------------------------------------------
+    // RF-REP-015: Proyección de fijos a futuro — esqueleto determinista × tasa de
+    // precio de canasta comparable (same-basket), POR LÍNEA (gasto/ingreso).
+    // Solo se ejecuta cuando projectFixed=true — costeo mínimo cuando está off.
+    //
+    //   valor_línea(m) = canasta_conocida(m) × (1 + tasa_precio)^m
+    //
+    // canasta_conocida(m): total de fijos (normales + calculados-de-fijo) EN
+    //   ALCANCE (RF-REP-014: dirección, tipos, categorías) activos en el mes
+    //   futuro `m`, cada uno a su último monto conocido — mismo criterio de
+    //   actividad que un mes real (startMonth/deletedFrom/frecuencia/skip).
+    //   Reusa computeFixedLineTotal(mes, lineType), la misma función que ya
+    //   calcula el total de un mes arbitrario. Las altas/bajas futuras ya
+    //   cargadas (startMonth futuro, deletedFrom futuro) y los fijos anuales se
+    //   resuelven acá, NO en la tasa: por eso un fijo nuevo no "explota" la
+    //   proyección y la composición futura es determinista.
+    //
+    // tasa_precio: UNA por línea, crecimiento real ponderado por tamaño,
+    //   por cadena (chainId de fijos normales) activa HOY, sobre SU PROPIA
+    //   historia disponible en la ventana [hoy-12 .. hoy-1]:
+    //     - Para cada cadena activa hoy, se busca su monto más viejo dentro
+    //       de la ventana (el mes más antiguo, hasta 12, donde esa MISMA
+    //       cadena estaba activa): old_i, a distancia n_i meses de hoy.
+    //     - Sin historia previa en la ventana (alta reciente) u old_i = 0 →
+    //       la cadena se EXCLUYE del cálculo de la tasa (no infla; su
+    //       composición ya la maneja canasta_conocida).
+    //     - growth_i = (today_i / old_i)^(1/n_i) − 1 (CAGR mensual propio).
+    //     - tasa_precio = promedio ponderado por tamaño (peso = today_i):
+    //         Σ(today_i · growth_i) / Σ(today_i), sobre cadenas con historia.
+    //   Esto evita que una única cadena "ancla" (la única con 12 meses de
+    //   historia) opaque el resto de las cadenas que solo tienen historia
+    //   parcial pero varían fuerte.
+    //   Piso en 0 (nunca proyecta bajas): Math.max(0, tasa). Sin ninguna
+    //   cadena con historia → tasa = 0. NO usa IPC en ningún caso.
+    //
+    // Los montos se calculan en displayCurrency (mismo criterio que
+    // incomeCents/expenseCents), convirtiendo cada mes con SU PROPIO TC oficial;
+    // la proyección hacia adelante ya no vuelve a convertir (no hay TC futuro real).
+    //
+    // Skips: no cuentan para la tasa (se usa el monto conocido del segmento
+    // activo, sea o no skippeado ese mes puntual) — sí afectan canasta_conocida
+    // (mes skippeado → ese fijo aporta 0 ese mes, vía computeFixedLineTotal).
+    // ---------------------------------------------------------------------------
+    if (projectFixed === true) {
+      // Pivot rates extendidas: cubren el año pedido MÁS los años reales que toca
+      // la ventana backward + hoy (pueden caer fuera de `year`, ej. reporte de un
+      // año viejo con `today` en el año en curso).
+      const todayYearNum = parseInt(todayMonthKey.slice(0, 4), 10);
+      const extraYears = [...new Set([todayYearNum, todayYearNum - 1])].filter(
+        (y) => y !== year,
+      );
+      const extraPivotMaps = await Promise.all(
+        extraYears.map((y) => this.repo.loadPivotRatesForYear(y)),
+      );
+      const extendedPivotRates = new Map<string, Partial<PivotRates>>(
+        pivotRatesForYear,
+      );
+      for (const m of extraPivotMaps) {
+        for (const [k, v] of m) extendedPivotRates.set(k, v);
+      }
+
+      type ChainSegment = {
+        amountCents: number;
+        skipped: boolean;
+        startMonth: string;
+        currency: Currency;
+        exchangeRate: number;
+        anchorCurrency: Currency;
+        categoryId: string;
+        type: MovementType;
+      };
+
+      // Segmento activo por cadena en `mes` (mayor startMonth ≤ mes, cumple
+      // frecuencia y sigue vigente). Compartido por canasta_conocida y por la
+      // selección de cadenas comunes de la tasa.
+      const activeByChainAt = (
+        mes: string,
+      ): { activeByChain: Map<string, ChainSegment>; pivotRates: Partial<PivotRates> | null } => {
+        const pivotRates = extendedPivotRates.get(mes) ?? null;
+        const activeByChain = new Map<string, ChainSegment>();
+        for (const fijo of normalesForAnnual) {
+          const inRange =
+            fijo.startMonth <= mes &&
+            (fijo.deletedFrom === null || fijo.deletedFrom > mes);
+          if (!inRange) continue;
+          if (!isOnFrequency(fijo.startMonth, fijo.frequency, mes)) continue;
+          const existing = activeByChain.get(fijo.chainId);
+          if (!existing || fijo.startMonth > existing.startMonth) {
+            activeByChain.set(fijo.chainId, {
+              amountCents: fijo.amountCents,
+              skipped: fijo.skippedMonths.has(mes),
+              startMonth: fijo.startMonth,
+              currency: fijo.currency,
+              exchangeRate: fijo.exchangeRate,
+              anchorCurrency: fijo.anchorCurrency,
+              categoryId: fijo.categoryId,
+              type: fijo.type as MovementType,
+            });
+          }
+        }
+        return { activeByChain, pivotRates };
+      };
+
+      // canasta_conocida: total agregado (displayCurrency, cents) de fijos EN
+      // ALCANCE de una línea, en un mes arbitrario `mes` (puede caer fuera del
+      // año `year`) — cada cadena a su último monto conocido. Es la función que
+      // compone el futuro determinísticamente (altas/bajas/fijo anual incluidos).
+      const computeFixedLineTotal = (
+        mes: string,
+        lineType: 'EXPENSE' | 'INCOME',
+      ): number => {
+        if (!includeMovType('fijo')) return 0;
+        if (lineType === 'EXPENSE' && dir === 'income') return 0;
+        if (lineType === 'INCOME' && dir === 'expense') return 0;
+
+        const { activeByChain, pivotRates } = activeByChainAt(mes);
+
+        let total = 0;
+
+        // Fijos normales
+        for (const data of activeByChain.values()) {
+          if (data.skipped) continue;
+          if (data.type !== lineType) continue;
+          if (filterSet !== null && !filterSet.has(data.categoryId)) continue;
+          total += convertToDisplayCurrencyByMonth(
+            data.amountCents,
+            data.currency,
+            displayCurrency,
+            pivotRates,
+            data.exchangeRate,
+            data.anchorCurrency,
+          );
+        }
+
+        // Calculados de fijo (heredan moneda/cotización del origen)
+        for (const calc of calculadosDeFijoAnual) {
+          const inRange =
+            calc.startMonth <= mes &&
+            (calc.deletedFrom === null || calc.deletedFrom > mes);
+          if (!inRange) continue;
+
+          const originData = calc.sourceChainId
+            ? activeByChain.get(calc.sourceChainId)
+            : undefined;
+          if (!originData) continue;
+          if (originData.skipped || calc.skippedMonths.has(mes)) continue;
+
+          const derivedAmount = applyFormula(
+            originData.amountCents,
+            calc.formulaOperator as FormulaOperator,
+            calc.formulaOperand!,
+            calc.formulaSign!,
+          );
+          const derivedType =
+            derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
+          if (derivedType !== lineType) continue;
+          if (filterSet !== null && !filterSet.has(calc.categoryId)) continue;
+
+          total += convertToDisplayCurrencyByMonth(
+            Math.abs(derivedAmount),
+            originData.currency,
+            displayCurrency,
+            pivotRates,
+            originData.exchangeRate,
+            originData.anchorCurrency,
+          );
+        }
+
+        return total;
+      };
+
+      // Montos activos por cadena (solo fijos normales) EN ALCANCE de una línea,
+      // en `mes`, para la comparación same-basket de la tasa. A diferencia de la
+      // canasta, IGNORA el skip del mes puntual: el monto conocido de la cadena
+      // sigue siendo una señal de precio válida aunque ese mes puntual no se
+      // haya cobrado (el skip no cuenta para la tasa).
+      const activeChainAmountsForLine = (
+        mes: string,
+        lineType: 'EXPENSE' | 'INCOME',
+      ): Map<string, number> => {
+        const result = new Map<string, number>();
+        if (!includeMovType('fijo')) return result;
+        if (lineType === 'EXPENSE' && dir === 'income') return result;
+        if (lineType === 'INCOME' && dir === 'expense') return result;
+
+        const { activeByChain, pivotRates } = activeByChainAt(mes);
+        for (const [chainId, data] of activeByChain) {
+          if (data.type !== lineType) continue;
+          if (filterSet !== null && !filterSet.has(data.categoryId)) continue;
+          result.set(
+            chainId,
+            convertToDisplayCurrencyByMonth(
+              data.amountCents,
+              data.currency,
+              displayCurrency,
+              pivotRates,
+              data.exchangeRate,
+              data.anchorCurrency,
+            ),
+          );
+        }
+        return result;
+      };
+
+      // 12 meses backward (hoy excluido), en orden cronológico ascendente
+      // (i=-12 → today-12, i=-1 → today-1). El más antiguo es el primero.
+      const windowMonths: string[] = [];
+      for (let i = -12; i <= -1; i++) {
+        windowMonths.push(addMonths(todayMonthKey, i));
+      }
+
+      for (const [lineKey, lineType] of [
+        ['expense', 'EXPENSE'],
+        ['income', 'INCOME'],
+      ] as const) {
+        const todayChains = activeChainAmountsForLine(todayMonthKey, lineType);
+
+        // Montos por cadena en cada mes de la ventana, precomputados una vez
+        // (orden ascendente = más antiguo primero) para la búsqueda por cadena.
+        const windowChainAmounts = windowMonths.map((wm) =>
+          activeChainAmountsForLine(wm, lineType),
+        );
+
+        let rate = 0;
+        if (todayChains.size > 0) {
+          let weightedSum = 0;
+          let weightTotal = 0;
+
+          for (const [chainId, todayAmount] of todayChains) {
+            // Monto más viejo de ESTA cadena dentro de la ventana (primer
+            // match en orden ascendente = mes más antiguo disponible).
+            let oldAmount: number | null = null;
+            let oldMonth: string | null = null;
+            for (let idx = 0; idx < windowMonths.length; idx++) {
+              const amt = windowChainAmounts[idx].get(chainId);
+              if (amt !== undefined) {
+                oldAmount = amt;
+                oldMonth = windowMonths[idx];
+                break;
+              }
+            }
+            if (oldAmount === null || oldMonth === null) continue; // alta reciente, sin historia
+            if (oldAmount <= 0) continue; // evitar div/0
+
+            const n = monthDiff(oldMonth, todayMonthKey);
+            if (n < 1) continue;
+
+            const growth = Math.pow(todayAmount / oldAmount, 1 / n) - 1;
+            weightedSum += todayAmount * growth;
+            weightTotal += todayAmount;
+          }
+
+          if (weightTotal > 0) {
+            rate = Math.max(0, weightedSum / weightTotal);
+          }
+        }
+
+        lineRate[lineKey] = rate;
+      }
+
+      computeFixedLineTotalForProjection = computeFixedLineTotal;
+    }
+
     for (let i = 0; i < 12; i++) {
       const mes = months12[i];
       // Pivot rates del mes (para re-rutear la conversión si anchorCurrency ≠ displayCurrency)
       const pivotRates = pivotRatesForYear.get(mes) ?? null;
+
+      // RF-REP-015: true cuando estamos en modo proyección Y el mes es futuro.
+      const isFutureMonth = projectFixed === true && mes > todayMonthKey;
 
       // Construir mapa chainId → datos del normal activo en este mes.
       const normalesActivosMes = new Map<string, {
@@ -613,8 +929,13 @@ export class MovementsService {
         }
       }
 
-      // Procesar fijos normales
+      // Procesar fijos normales.
+      // RF-REP-015: el tramo futuro NO suma fijos individuales — se resuelve más
+      // abajo con el agregado proyectado de la línea (lineBase/lineRate). Cada fijo
+      // solo aporta a agg[i] en su tramo real.
       for (const fijo of normalesForAnnual) {
+        if (isFutureMonth) break;
+
         const inRange =
           fijo.startMonth <= mes &&
           (fijo.deletedFrom === null || fijo.deletedFrom > mes);
@@ -622,9 +943,11 @@ export class MovementsService {
         if (!isOnFrequency(fijo.startMonth, fijo.frequency, mes)) continue;
         if (fijo.skippedMonths.has(mes)) continue;
 
+        const effectiveAmountCents = fijo.amountCents;
+
         // P3: fijos usan TC oficial del mes (pivotRates), no el exchangeRate guardado.
         const convertedAmount = convertToDisplayCurrencyByMonth(
-          fijo.amountCents,
+          effectiveAmountCents,
           fijo.currency,
           displayCurrency,
           pivotRates,
@@ -648,13 +971,16 @@ export class MovementsService {
         }
 
         if (filterSet !== null && !filterSet.has(fijo.categoryId)) continue;
+        if (!includeMovType('fijo')) continue;
 
         if (fijo.type === 'INCOME') {
-          agg[i].incomeCents += convertedAmount;
+          if (dir !== 'expense') agg[i].incomeCents += convertedAmount;
         } else {
-          agg[i].expenseCents += convertedAmount;
-          const prev = agg[i].categoryExpense.get(fijo.categoryId) ?? 0;
-          agg[i].categoryExpense.set(fijo.categoryId, prev + convertedAmount);
+          if (dir !== 'income') {
+            agg[i].expenseCents += convertedAmount;
+            const prev = agg[i].categoryExpense.get(fijo.categoryId) ?? 0;
+            agg[i].categoryExpense.set(fijo.categoryId, prev + convertedAmount);
+          }
         }
 
         if (!catMeta.has(fijo.categoryId) && fijo.type === 'EXPENSE') {
@@ -666,8 +992,34 @@ export class MovementsService {
         }
       }
 
+      // RF-REP-015: en meses futuros, la línea vale SOLO el esqueleto determinista
+      // (canasta_conocida(m) — computeFixedLineTotalForProjection, fijos en alcance
+      // activos ese mes a su último monto conocido) multiplicado por la tasa de
+      // precio same-basket de la línea (lineRate, calculada más arriba). Compuesto:
+      // canasta*(1+rate)^n, sin truncar intermedios, redondeo solo al final. La
+      // contribución de cuotas/únicos/calculados-de-único/calculados-de-cuota al
+      // futuro es 0 (se excluyen explícitamente en sus propios loops).
+      if (isFutureMonth && computeFixedLineTotalForProjection) {
+        const n = monthDiff(todayMonthKey, mes);
+        const canastaExpense = computeFixedLineTotalForProjection(mes, 'EXPENSE');
+        if (canastaExpense > 0) {
+          agg[i].expenseCents += Math.round(
+            canastaExpense * Math.pow(1 + lineRate.expense, n),
+          );
+        }
+        const canastaIncome = computeFixedLineTotalForProjection(mes, 'INCOME');
+        if (canastaIncome > 0) {
+          agg[i].incomeCents += Math.round(
+            canastaIncome * Math.pow(1 + lineRate.income, n),
+          );
+        }
+      }
+
       // Procesar calculados de fijo (Fase 1.1.7)
       for (const calc of calculadosDeFijoAnual) {
+        // RF-REP-015: calculados no entran en el tramo proyectado
+        if (isFutureMonth) continue;
+
         const inRange =
           calc.startMonth <= mes &&
           (calc.deletedFrom === null || calc.deletedFrom > mes);
@@ -715,13 +1067,16 @@ export class MovementsService {
         }
 
         if (filterSet !== null && !filterSet.has(calc.categoryId)) continue;
+        if (!includeMovType('fijo')) continue;
 
         if (derivedType === MovementType.INCOME) {
-          agg[i].incomeCents += magnitude;
+          if (dir !== 'expense') agg[i].incomeCents += magnitude;
         } else {
-          agg[i].expenseCents += magnitude;
-          const prev = agg[i].categoryExpense.get(calc.categoryId) ?? 0;
-          agg[i].categoryExpense.set(calc.categoryId, prev + magnitude);
+          if (dir !== 'income') {
+            agg[i].expenseCents += magnitude;
+            const prev = agg[i].categoryExpense.get(calc.categoryId) ?? 0;
+            agg[i].categoryExpense.set(calc.categoryId, prev + magnitude);
+          }
         }
 
         if (!catMeta.has(calc.categoryId) && derivedType === MovementType.EXPENSE) {
@@ -737,6 +1092,9 @@ export class MovementsService {
       // El rango ya está autolimitado (1 mes), así que el inRange garantiza que solo aparece
       // en el mes del único. No hay skip (los únicos no tienen skip).
       for (const calc of calculadosDeUnicoAnual) {
+        // RF-REP-015: calculados de único no entran en el tramo proyectado
+        if (isFutureMonth) continue;
+
         const inRange =
           calc.startMonth <= mes &&
           (calc.deletedFrom === null || calc.deletedFrom > mes);
@@ -780,13 +1138,16 @@ export class MovementsService {
         }
 
         if (filterSet !== null && !filterSet.has(calc.categoryId)) continue;
+        if (!includeMovType('unico')) continue;
 
         if (derivedType === MovementType.INCOME) {
-          agg[i].incomeCents += magnitude;
+          if (dir !== 'expense') agg[i].incomeCents += magnitude;
         } else {
-          agg[i].expenseCents += magnitude;
-          const prev = agg[i].categoryExpense.get(calc.categoryId) ?? 0;
-          agg[i].categoryExpense.set(calc.categoryId, prev + magnitude);
+          if (dir !== 'income') {
+            agg[i].expenseCents += magnitude;
+            const prev = agg[i].categoryExpense.get(calc.categoryId) ?? 0;
+            agg[i].categoryExpense.set(calc.categoryId, prev + magnitude);
+          }
         }
 
         if (!catMeta.has(calc.categoryId) && derivedType === MovementType.EXPENSE) {
@@ -801,6 +1162,9 @@ export class MovementsService {
       // Procesar calculados de cuota (Fase 1.1.7.ext)
       // El rango on-the-fly del grupo limita los meses de aparición.
       for (const calc of calculadosDeCuotaAnual) {
+        // RF-REP-015: calculados de cuota no entran en el tramo proyectado
+        if (isFutureMonth) continue;
+
         const inRange =
           calc.startMonth <= mes &&
           (calc.deletedFrom === null || calc.deletedFrom > mes);
@@ -850,13 +1214,16 @@ export class MovementsService {
         }
 
         if (filterSet !== null && !filterSet.has(calc.categoryId)) continue;
+        if (!includeMovType('cuota')) continue;
 
         if (derivedType === MovementType.INCOME) {
-          agg[i].incomeCents += magnitude;
+          if (dir !== 'expense') agg[i].incomeCents += magnitude;
         } else {
-          agg[i].expenseCents += magnitude;
-          const prev = agg[i].categoryExpense.get(calc.categoryId) ?? 0;
-          agg[i].categoryExpense.set(calc.categoryId, prev + magnitude);
+          if (dir !== 'income') {
+            agg[i].expenseCents += magnitude;
+            const prev = agg[i].categoryExpense.get(calc.categoryId) ?? 0;
+            agg[i].categoryExpense.set(calc.categoryId, prev + magnitude);
+          }
         }
 
         if (!catMeta.has(calc.categoryId) && derivedType === MovementType.EXPENSE) {
@@ -878,6 +1245,9 @@ export class MovementsService {
       for (let i = 0; i < 12; i++) {
         const mes = months12[i];
         if (grupo.startMonth > mes || mes >= endMonth) continue;
+
+        // RF-REP-015: cuotas no entran en el tramo proyectado
+        if (projectFixed === true && mes > todayMonthKey) continue;
 
         // P3: cuotas usan TC oficial del mes de la instancia (pivotRates), no el exchangeRate guardado.
         const pivotRates = pivotRatesForYear.get(mes) ?? null;
@@ -906,16 +1276,19 @@ export class MovementsService {
         }
 
         if (filterSet !== null && !filterSet.has(grupo.categoryId)) continue;
+        if (!includeMovType('cuota')) continue;
 
         if (grupo.type === 'INCOME') {
-          agg[i].incomeCents += convertedAmount;
+          if (dir !== 'expense') agg[i].incomeCents += convertedAmount;
         } else {
-          agg[i].expenseCents += convertedAmount;
-          const prev = agg[i].categoryExpense.get(grupo.categoryId) ?? 0;
-          agg[i].categoryExpense.set(
-            grupo.categoryId,
-            prev + convertedAmount,
-          );
+          if (dir !== 'income') {
+            agg[i].expenseCents += convertedAmount;
+            const prev = agg[i].categoryExpense.get(grupo.categoryId) ?? 0;
+            agg[i].categoryExpense.set(
+              grupo.categoryId,
+              prev + convertedAmount,
+            );
+          }
         }
 
         if (!catMeta.has(grupo.categoryId) && grupo.type === 'EXPENSE') {
@@ -933,6 +1306,9 @@ export class MovementsService {
       month,
       incomeCents: agg[i].incomeCents,
       expenseCents: agg[i].expenseCents,
+      // RF-REP-015: projected=true solo cuando el flag está activo y el mes es futuro.
+      // false cuando el flag está off (back-compat dura: comportamiento actual sin cambio).
+      projected: projectFixed === true && month > todayMonthKey,
     }));
 
     // 5. Armar el array categories
@@ -978,6 +1354,8 @@ export class MovementsService {
         userId,
         year,
         filterCount: filterSet?.size ?? null,
+        typeSet: typeSet !== null ? [...typeSet] : null,
+        direction: dir,
         monthsWithData: monthsResult.filter(
           (m) => m.incomeCents > 0 || m.expenseCents > 0,
         ).length,

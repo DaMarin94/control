@@ -328,9 +328,9 @@ export class MovementsController {
   }
 
   /**
-   * GET /movements/reports?year=YYYY[&categories=<id1,id2,...>][&currency=<ARS|USD|EUR|BRL>]
+   * GET /movements/reports?year=YYYY[&categories=<id1,id2,...>][&currency=<ARS|USD|EUR|BRL>][&types=<fijo,cuota,unico>][&direction=<both|expense|income>][&projectFixed=true][&today=YYYY-MM-DD]
    *
-   * Devuelve la serie anual de reportes de movimientos del usuario (RF-REP-001/002/005).
+   * Devuelve la serie anual de reportes de movimientos del usuario (RF-REP-001/002/005/015).
    * Responde con los 12 meses del año (siempre presentes, en cero si no hay datos),
    * el desglose de gastos por categoría y el año más antiguo con datos.
    *
@@ -344,6 +344,15 @@ export class MovementsController {
    *   Ausente (omitido) → usa la moneda default vigente del usuario.
    *   Presente → usa esa moneda como displayCurrency para todas las conversiones del reporte.
    *   Inválido (valor fuera del enum) → 400.
+   * - types (opcional): filtro de tipos. Semántica de 3 estados (RF-REP-014).
+   * - direction (opcional): filtro de dirección: both | expense | income. Default: both.
+   * - projectFixed (opcional, RF-REP-015): "true" activa la proyección de fijos a futuro.
+   *   Default: false. Con projectFixed=true los meses futuros proyectan solo fijos normales
+   *   (con tasa de crecimiento compuesta); cuotas, únicos y calculados se excluyen.
+   *   Cada mes incluye "projected: boolean" en la respuesta para distinguir el tramo proyectado.
+   *   Back-compat dura: ausente o false → comportamiento idéntico al actual.
+   * - today (opcional): fecha actual del usuario YYYY-MM-DD para determinar meses futuros.
+   *   Ausente → fecha UTC del sistema. Solo relevante con projectFixed=true.
    *
    * Criterio de imputación por mes (RN-015):
    * - Únicos: mes local (AT TIME ZONE propia del registro)
@@ -352,6 +361,7 @@ export class MovementsController {
    * 200 + sobre con ReportsMovementsResponse.
    * 400 si "year" falta, no es exactamente 4 dígitos, o no es un año razonable.
    * 400 si "currency" está presente pero no es un valor válido del enum.
+   * 400 si "today" está presente pero no tiene formato YYYY-MM-DD.
    */
   @Get('reports')
   getReports(
@@ -359,6 +369,10 @@ export class MovementsController {
     @Query('year') yearParam: string | undefined,
     @Query('categories') categoriesParam: string | undefined,
     @Query('currency') currencyParam: string | undefined,
+    @Query('types') typesParam: string | undefined,
+    @Query('direction') directionParam: string | undefined,
+    @Query('projectFixed') projectFixedParam: string | undefined,
+    @Query('today') todayParam: string | undefined,
   ) {
     // Validar presencia y formato exacto YYYY
     if (!yearParam || !/^\d{4}$/.test(yearParam)) {
@@ -402,11 +416,73 @@ export class MovementsController {
               .map((id) => id.trim())
               .filter((id) => id.length > 0);
 
+    // RF-REP-014 — Parseo de types con semántica de 3 estados (análoga a categories):
+    // - undefined (ausente) → null = todos los tipos (fijo, cuota, unico)
+    // - "" (presente y vacío) → [] = ningún tipo → resultado en cero
+    // - "fijo,cuota" → ["fijo","cuota"] = subconjunto
+    const VALID_MOVEMENT_TYPES = new Set(['fijo', 'cuota', 'unico']);
+
+    let typesFilter: string[] | null;
+    if (typesParam === undefined) {
+      typesFilter = null;
+    } else if (typesParam.trim().length === 0) {
+      typesFilter = [];
+    } else {
+      typesFilter = typesParam
+        .split(',')
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
+      for (const t of typesFilter) {
+        if (!VALID_MOVEMENT_TYPES.has(t)) {
+          throw new BadRequestException(
+            `El parámetro "types" acepta solo los valores: fijo, cuota, unico`,
+          );
+        }
+      }
+    }
+
+    // RF-REP-014 — Parseo de direction:
+    // - undefined / ausente → 'both' (default; comportamiento histórico sin cambio)
+    // - 'expense' / 'income' / 'both' → válido
+    // - cualquier otro valor → 400
+    const VALID_DIRECTIONS = ['expense', 'income', 'both'];
+    let direction: 'both' | 'expense' | 'income' = 'both';
+    if (directionParam !== undefined) {
+      if (!VALID_DIRECTIONS.includes(directionParam)) {
+        throw new BadRequestException(
+          `El parámetro "direction" debe ser uno de: expense, income, both`,
+        );
+      }
+      direction = directionParam as 'both' | 'expense' | 'income';
+    }
+
+    // RF-REP-015 — Parseo de projectFixed:
+    // - ausente o cualquier valor distinto de "true" → false (back-compat dura)
+    // - "true" → true (activa la proyección de fijos a futuro)
+    const projectFixed: boolean = projectFixedParam === 'true';
+
+    // RF-REP-015 — Parseo de today (fecha local del usuario YYYY-MM-DD):
+    // - ausente → undefined → el service usa la fecha UTC del sistema
+    // - presente con formato inválido → 400
+    let todayStr: string | undefined;
+    if (todayParam !== undefined) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(todayParam)) {
+        throw new BadRequestException(
+          'El parámetro "today" debe tener formato YYYY-MM-DD (ej: 2026-06-25)',
+        );
+      }
+      todayStr = todayParam;
+    }
+
     return this.movementsService.getReportsMovements(
       req.user.userId,
       year,
       categoryIds,
       currencyOverride,
+      typesFilter,
+      direction,
+      projectFixed,
+      todayStr,
     );
   }
 }

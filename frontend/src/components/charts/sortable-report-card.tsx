@@ -115,10 +115,15 @@ interface SortableReportCardProps {
   onYearChange: (year: number) => void;
   onCategoryIdsChange: (ids: string[] | null) => void;
   onCategoryChartModeChange: (mode: "bar" | "line") => void;
-  onHiddenSeriesChange: (hidden: Array<"income" | "expense">) => void;
   onRemove: () => void;
   onCurrencyChange: (c: CurrencyCode) => void;
   onTitleChange: (t: string) => void;
+  /** RF-REP-014: filtro de tipo de movimiento para income-expense (solo en /reportes). */
+  onMovementTypesChange: (types: Array<"fijo" | "cuota" | "unico">) => void;
+  /** RF-REP-014: filtro de dirección para income-expense (solo en /reportes). */
+  onDirectionChange: (dir: "expense" | "income" | "both") => void;
+  /** RF-REP-015: toggle de proyección de fijos a futuro (solo en /reportes). */
+  onProjectFixedChange: (v: boolean) => void;
 }
 
 export function SortableReportCard({
@@ -129,10 +134,12 @@ export function SortableReportCard({
   onYearChange,
   onCategoryIdsChange,
   onCategoryChartModeChange,
-  onHiddenSeriesChange,
   onRemove,
   onCurrencyChange,
   onTitleChange,
+  onMovementTypesChange,
+  onDirectionChange,
+  onProjectFixedChange,
 }: SortableReportCardProps) {
   const {
     attributes,
@@ -222,12 +229,10 @@ export function SortableReportCard({
           year={config.year}
           categoryIds={config.categoryIds}
           categoryChartMode={config.type === "by-category" ? (config.categoryChartMode ?? "bar") : undefined}
-          hiddenSeries={config.type === "income-expense" ? (config.hiddenSeries ?? []) : undefined}
           chartHeight={300}
           onYearChange={onYearChange}
           onCategoryIdsChange={onCategoryIdsChange}
           onCategoryChartModeChange={config.type === "by-category" ? onCategoryChartModeChange : undefined}
-          onHiddenSeriesChange={config.type === "income-expense" ? onHiddenSeriesChange : undefined}
           removable={true}
           onRemove={onRemove}
           currency={config.currency}
@@ -235,6 +240,12 @@ export function SortableReportCard({
           title={config.title}
           titlePlaceholder={titlePlaceholder}
           onTitleChange={onTitleChange}
+          movementTypes={config.type === "income-expense" ? (config.movementTypes ?? ["fijo", "cuota", "unico"]) : undefined}
+          onMovementTypesChange={config.type === "income-expense" ? onMovementTypesChange : undefined}
+          direction={config.type === "income-expense" ? (config.direction ?? "both") : undefined}
+          onDirectionChange={config.type === "income-expense" ? onDirectionChange : undefined}
+          projectFixed={config.type === "income-expense" ? (config.projectFixed ?? false) : undefined}
+          onProjectFixedChange={config.type === "income-expense" ? onProjectFixedChange : undefined}
         />
       )}
     </div>

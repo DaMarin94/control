@@ -43,8 +43,6 @@ export function DashboardClient() {
   // Estado efímero del widget de reporte (no se persiste — RF-DASH-001)
   const [reportYear, setReportYear] = useState(currentYear);
   const [reportCategoryIds, setReportCategoryIds] = useState<string[] | null>(null);
-  // Series ocultas en vista "Total" — efímero (al recargar vuelven ambas visibles)
-  const [reportHiddenSeries, setReportHiddenSeries] = useState<Array<"income" | "expense">>([]);
 
   const totals = data?.totals;
   const unicos = data?.movements.unicos ?? [];
@@ -255,15 +253,14 @@ export function DashboardClient() {
               pero el estado NO se persiste — al recargar vuelve a año en curso + todas.
               Ubicación: después del balance hero y ANTES del footer "Ver todos". */}
           <div className="mt-[var(--gap)]">
+            {/* Dashboard: sin onDirectionChange → modo decorativo (leyenda Ingresos/Gastos no interactiva). */}
             <ReportCard
               type="income-expense"
               year={reportYear}
               categoryIds={reportCategoryIds}
-              hiddenSeries={reportHiddenSeries}
               chartHeight={280}
               onYearChange={setReportYear}
               onCategoryIdsChange={setReportCategoryIds}
-              onHiddenSeriesChange={setReportHiddenSeries}
               removable={false}
             />
           </div>

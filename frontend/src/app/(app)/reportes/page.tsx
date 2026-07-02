@@ -384,8 +384,9 @@ function ReportesPageContent() {
   //   - income-expense con categoryBreakdown=true → type "by-category" + categoryChartMode "line"
   //     (conserva id, title, year, categoryIds, currency; quita categoryBreakdown y hiddenSeries).
   //   - income-expense con categoryBreakdown=false/ausente → queda income-expense sin ese campo.
+  //   - income-expense con hiddenSeries → se limpia (campo deprecated; la leyenda-filtro de
+  //     categorías reemplazó la leyenda de series; RF-REP-014 rework).
   //   - by-category sin categoryChartMode → queda by-category, se lee como "bar" en runtime.
-  //   - hiddenSeries solo aplica a income-expense; ignorado en otros tipos.
   const rawReports = preferences?.reports;
   const cards: ReportCardConfig[] = Array.isArray(rawReports)
     ? rawReports.map((raw): ReportCardConfig => {
@@ -398,13 +399,20 @@ function ReportesPageContent() {
           void _cb; void _hs; // suprimir unused
           return { ...rest, type: "by-category", categoryChartMode: "line" };
         }
-        // income-expense con categoryBreakdown=false/ausente: limpiar campo si existe
+        // income-expense con categoryBreakdown=false/ausente: limpiar campo si existe.
+        // Si además tiene hiddenSeries (deprecated), también se limpia en esta pasada.
         if (
           raw.type === "income-expense" &&
           "categoryBreakdown" in raw
         ) {
-          const { categoryBreakdown: _cb, ...rest } = raw as ReportCardConfig;
-          void _cb;
+          const { categoryBreakdown: _cb, hiddenSeries: _hs, ...rest } = raw as ReportCardConfig;
+          void _cb; void _hs;
+          return rest as ReportCardConfig;
+        }
+        // income-expense con hiddenSeries (deprecated, sin categoryBreakdown): limpiar.
+        if (raw.type === "income-expense" && "hiddenSeries" in raw) {
+          const { hiddenSeries: _hs, ...rest } = raw as ReportCardConfig;
+          void _hs;
           return rest as ReportCardConfig;
         }
         // by-category sin categoryChartMode: queda tal cual (runtime lo trata como "bar")
@@ -462,15 +470,6 @@ function ReportesPageContent() {
     });
   }
 
-  function handleHiddenSeriesChange(id: string, hidden: Array<"income" | "expense">) {
-    const newCards = cards.map((c) =>
-      c.id === id ? { ...c, hiddenSeries: hidden } : c
-    );
-    void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
-      logger.error("Error al persistir series ocultas de card", { error: err, cardId: id });
-    });
-  }
-
   function handleCurrencyChange(id: string, newCurrency: CurrencyCode) {
     const newCards = cards.map((c) =>
       c.id === id ? { ...c, currency: newCurrency } : c
@@ -491,6 +490,54 @@ function ReportesPageContent() {
     });
     void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
       logger.error("Error al persistir título de card", { error: err, cardId: id });
+    });
+  }
+
+  function handleMovementTypesChange(id: string, types: Array<"fijo" | "cuota" | "unico">) {
+    const newCards = cards.map((c) => {
+      if (c.id !== id) return c;
+      // Si están los tres tipos (= default), omitir el campo para back-compat.
+      if (types.length === 3) {
+        const updated = { ...c };
+        delete updated.movementTypes;
+        return updated;
+      }
+      return { ...c, movementTypes: types };
+    });
+    void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
+      logger.error("Error al persistir tipos de movimiento de card", { error: err, cardId: id });
+    });
+  }
+
+  function handleDirectionChange(id: string, dir: "expense" | "income" | "both") {
+    const newCards = cards.map((c) => {
+      if (c.id !== id) return c;
+      // Si es "both" (= default), omitir el campo para back-compat (campo ausente = ambos).
+      if (dir === "both") {
+        const updated = { ...c };
+        delete updated.direction;
+        return updated;
+      }
+      return { ...c, direction: dir };
+    });
+    void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
+      logger.error("Error al persistir dirección de card", { error: err, cardId: id });
+    });
+  }
+
+  function handleProjectFixedChange(id: string, v: boolean) {
+    const newCards = cards.map((c) => {
+      if (c.id !== id) return c;
+      // Ausente / false = off (back-compat: omitir el campo cuando está apagado).
+      if (!v) {
+        const updated = { ...c };
+        delete updated.projectFixed;
+        return updated;
+      }
+      return { ...c, projectFixed: true };
+    });
+    void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
+      logger.error("Error al persistir proyección de card", { error: err, cardId: id });
     });
   }
 
@@ -593,10 +640,12 @@ function ReportesPageContent() {
                   onYearChange={(year) => handleYearChange(card.id, year)}
                   onCategoryIdsChange={(ids) => handleCategoryIdsChange(card.id, ids)}
                   onCategoryChartModeChange={(mode) => handleCategoryChartModeChange(card.id, mode)}
-                  onHiddenSeriesChange={(hidden) => handleHiddenSeriesChange(card.id, hidden)}
                   onRemove={() => handleRemoveCard(card.id)}
                   onCurrencyChange={(c) => handleCurrencyChange(card.id, c)}
                   onTitleChange={(t) => handleTitleChange(card.id, t)}
+                  onMovementTypesChange={(types) => handleMovementTypesChange(card.id, types)}
+                  onDirectionChange={(dir) => handleDirectionChange(card.id, dir)}
+                  onProjectFixedChange={(v) => handleProjectFixedChange(card.id, v)}
                 />
               ))}
 

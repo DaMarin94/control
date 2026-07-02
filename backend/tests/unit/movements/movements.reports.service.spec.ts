@@ -1229,4 +1229,1719 @@ describe('MovementsService — getReportsMovements', () => {
       expect(mockSettingsService.updateLastExchangeRate).not.toHaveBeenCalled();
     });
   });
+
+  // -------------------------------------------------------------------------
+  // RF-REP-014 — Filtro por tipo de movimiento (typesFilter)
+  // -------------------------------------------------------------------------
+
+  describe('filtro por tipo de movimiento (RF-REP-014 — typesFilter)', () => {
+    // -----------------------------------------------------------------------
+    // Back-compat: sin typesFilter = comportamiento actual idéntico
+    // -----------------------------------------------------------------------
+
+    it('back-compat: sin typesFilter (undefined) → misma respuesta que antes (todos los tipos)', async () => {
+      // Único EXPENSE 1000 en enero
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', type: 'EXPENSE', totalCents: BigInt(1000) }),
+      ]);
+      // Fijo EXPENSE 2000 activo en enero
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 2000, startMonth: '2026-01', deletedFrom: '2026-02', type: 'EXPENSE' as any }),
+      ]);
+      // Cuota EXPENSE 500 en enero
+      mockRepo.getAllCuotasForAnnual.mockResolvedValue([
+        makeCuota({ amountCents: 500, totalInstallments: 1, startMonth: '2026-01', type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      // Sin typesFilter → todos los tipos suman
+      const result = await service.getReportsMovements(USER_A, 2026);
+
+      expect(result.months[0].expenseCents).toBe(3500); // 1000 + 2000 + 500
+    });
+
+    it('back-compat: typesFilter=null → mismo que ausente (todos los tipos)', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', type: 'EXPENSE', totalCents: BigInt(1000) }),
+      ]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 2000, startMonth: '2026-01', deletedFrom: '2026-02', type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getAllCuotasForAnnual.mockResolvedValue([
+        makeCuota({ amountCents: 500, totalInstallments: 1, startMonth: '2026-01', type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, null);
+
+      expect(result.months[0].expenseCents).toBe(3500);
+    });
+
+    // -----------------------------------------------------------------------
+    // Tipos vacíos → resultado en cero
+    // -----------------------------------------------------------------------
+
+    it('typesFilter=[] → NINGÚN tipo: todos los totales en cero', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', type: 'EXPENSE', totalCents: BigInt(5000) }),
+      ]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 3000, startMonth: '2026-01', deletedFrom: null, type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getAllCuotasForAnnual.mockResolvedValue([
+        makeCuota({ amountCents: 2000, totalInstallments: 6, startMonth: '2026-01', type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, []);
+
+      result.months.forEach((m) => {
+        expect(m.expenseCents).toBe(0);
+        expect(m.incomeCents).toBe(0);
+      });
+      expect(result.categories).toHaveLength(0);
+    });
+
+    it('typesFilter=[] → availableCategories NO se achica (universo estable)', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_A, type: 'EXPENSE', totalCents: BigInt(1000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, []);
+
+      expect(result.categories).toHaveLength(0);
+      expect(result.availableCategories).toHaveLength(1);
+    });
+
+    // -----------------------------------------------------------------------
+    // Solo únicos
+    // -----------------------------------------------------------------------
+
+    it('typesFilter=["unico"] → solo únicos suman; fijos y cuotas excluidos', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', type: 'EXPENSE', totalCents: BigInt(1000) }),
+      ]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 9000, startMonth: '2026-01', deletedFrom: null, type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getAllCuotasForAnnual.mockResolvedValue([
+        makeCuota({ amountCents: 5000, totalInstallments: 12, startMonth: '2026-01', type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, ['unico']);
+
+      expect(result.months[0].expenseCents).toBe(1000); // solo el único
+    });
+
+    it('typesFilter=["unico"] → fijos INCOME excluidos de incomeCents', async () => {
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 80000, startMonth: '2026-01', deletedFrom: null, type: 'INCOME' as any }),
+      ]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, ['unico']);
+
+      result.months.forEach((m) => {
+        expect(m.incomeCents).toBe(0);
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // Solo fijos
+    // -----------------------------------------------------------------------
+
+    it('typesFilter=["fijo"] → solo fijos suman; únicos y cuotas excluidos', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', type: 'EXPENSE', totalCents: BigInt(999) }),
+      ]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 3000, startMonth: '2026-01', deletedFrom: '2026-02', type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getAllCuotasForAnnual.mockResolvedValue([
+        makeCuota({ amountCents: 888, totalInstallments: 1, startMonth: '2026-01', type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, ['fijo']);
+
+      expect(result.months[0].expenseCents).toBe(3000); // solo el fijo
+    });
+
+    // -----------------------------------------------------------------------
+    // Solo cuotas
+    // -----------------------------------------------------------------------
+
+    it('typesFilter=["cuota"] → solo cuotas suman; únicos y fijos excluidos', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', type: 'EXPENSE', totalCents: BigInt(999) }),
+      ]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 3000, startMonth: '2026-01', deletedFrom: null, type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getAllCuotasForAnnual.mockResolvedValue([
+        makeCuota({ amountCents: 2500, totalInstallments: 12, startMonth: '2026-01', type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, ['cuota']);
+
+      result.months.forEach((m) => {
+        expect(m.expenseCents).toBe(2500);
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // Multi-selección (ej: fijo + cuota, excluyendo único)
+    // -----------------------------------------------------------------------
+
+    it('typesFilter=["fijo","cuota"] → fijos y cuotas suman; únicos excluidos', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', type: 'EXPENSE', totalCents: BigInt(999) }),
+      ]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 1000, startMonth: '2026-01', deletedFrom: '2026-02', type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getAllCuotasForAnnual.mockResolvedValue([
+        makeCuota({ amountCents: 2000, totalInstallments: 1, startMonth: '2026-01', type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, ['fijo', 'cuota']);
+
+      expect(result.months[0].expenseCents).toBe(3000); // fijo 1000 + cuota 2000
+    });
+
+    // -----------------------------------------------------------------------
+    // earliestYear y availableCategories no se ven afectados por typesFilter
+    // -----------------------------------------------------------------------
+
+    it('typesFilter: earliestYear NO se ve afectado (se calcula sin filtro)', async () => {
+      setupEmptyMocks();
+      mockRepo.getEarliestYear.mockResolvedValue(2022);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, ['unico']);
+
+      expect(result.earliestYear).toBe(2022);
+      expect(mockRepo.getEarliestYear).toHaveBeenCalledWith(USER_A);
+    });
+
+    it('typesFilter: availableCategories refleja el universo sin filtro de tipo', async () => {
+      // Único (unico) de CAT_A, fijo (fijo) de CAT_B
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', categoryId: CAT_A, type: 'EXPENSE', totalCents: BigInt(1000) }),
+      ]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 5000, startMonth: '2026-01', deletedFrom: null, type: 'EXPENSE' as any, categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6' }),
+      ]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      // typesFilter solo unico → solo CAT_A suma en agg
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, ['unico']);
+
+      // categories solo tiene CAT_A (el filtrado por tipo)
+      expect(result.categories).toHaveLength(1);
+      expect(result.categories[0].categoryId).toBe(CAT_A);
+
+      // availableCategories tiene ambas (universo sin filtro de tipo)
+      expect(result.availableCategories).toHaveLength(2);
+      const ids = result.availableCategories.map((c) => c.categoryId);
+      expect(ids).toContain(CAT_A);
+      expect(ids).toContain(CAT_B);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // RF-REP-014 — Filtro por dirección (direction)
+  // -------------------------------------------------------------------------
+
+  describe('filtro por dirección (RF-REP-014 — direction)', () => {
+    // -----------------------------------------------------------------------
+    // Back-compat: sin direction = comportamiento histórico (ambos)
+    // -----------------------------------------------------------------------
+
+    it('back-compat: sin direction (undefined) → both (ingresos y gastos)', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', type: 'EXPENSE', totalCents: BigInt(1000) }),
+        makeUnicoRow({ monthKey: '2026-01', type: 'INCOME', totalCents: BigInt(2000), categoryId: CAT_B }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026);
+
+      expect(result.months[0].expenseCents).toBe(1000);
+      expect(result.months[0].incomeCents).toBe(2000);
+    });
+
+    it('back-compat: direction="both" → comportamiento idéntico al actual', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', type: 'EXPENSE', totalCents: BigInt(500) }),
+      ]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 300, startMonth: '2026-01', deletedFrom: '2026-02', type: 'INCOME' as any }),
+      ]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, null, 'both');
+
+      expect(result.months[0].expenseCents).toBe(500);
+      expect(result.months[0].incomeCents).toBe(300);
+    });
+
+    // -----------------------------------------------------------------------
+    // Solo gastos (expense)
+    // -----------------------------------------------------------------------
+
+    it('direction="expense" → solo movimientos EXPENSE suman; INCOME ignorado', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', type: 'EXPENSE', totalCents: BigInt(1000), categoryId: CAT_A }),
+        makeUnicoRow({ monthKey: '2026-01', type: 'INCOME', totalCents: BigInt(5000), categoryId: CAT_B }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, null, 'expense');
+
+      expect(result.months[0].expenseCents).toBe(1000);
+      expect(result.months[0].incomeCents).toBe(0);
+    });
+
+    it('direction="expense" con fijo INCOME → incomeCents=0', async () => {
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 80000, startMonth: '2026-01', deletedFrom: null, type: 'INCOME' as any }),
+      ]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, null, 'expense');
+
+      result.months.forEach((m) => {
+        expect(m.incomeCents).toBe(0);
+        expect(m.expenseCents).toBe(0);
+      });
+    });
+
+    it('direction="expense" con cuota EXPENSE → expenseCents correcto', async () => {
+      setupEmptyUnicosMock();
+      setupEmptyFijosMock();
+      mockRepo.getAllCuotasForAnnual.mockResolvedValue([
+        makeCuota({ amountCents: 700, totalInstallments: 3, startMonth: '2026-01', type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, null, 'expense');
+
+      [0, 1, 2].forEach((i) => expect(result.months[i].expenseCents).toBe(700));
+      result.months.slice(3).forEach((m) => expect(m.expenseCents).toBe(0));
+    });
+
+    // -----------------------------------------------------------------------
+    // Solo ingresos (income)
+    // -----------------------------------------------------------------------
+
+    it('direction="income" → solo movimientos INCOME suman; EXPENSE ignorado', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', type: 'EXPENSE', totalCents: BigInt(3000), categoryId: CAT_A }),
+        makeUnicoRow({ monthKey: '2026-06', type: 'INCOME', totalCents: BigInt(8000), categoryId: CAT_B }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, null, 'income');
+
+      expect(result.months[5].expenseCents).toBe(0);
+      expect(result.months[5].incomeCents).toBe(8000);
+    });
+
+    it('direction="income" → categories (EXPENSE breakdown) vacío aunque haya gastos', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', type: 'EXPENSE', totalCents: BigInt(9000), categoryId: CAT_A }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, null, 'income');
+
+      // No hay EXPENSE que sume → categories vacío
+      expect(result.categories).toHaveLength(0);
+      // Pero availableCategories sí tiene la categoría (universo sin filtro de dirección)
+      expect(result.availableCategories).toHaveLength(1);
+    });
+
+    it('direction="income" con fijo INCOME → incomeCents correcto', async () => {
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 50000, startMonth: '2026-01', deletedFrom: null, type: 'INCOME' as any }),
+      ]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, null, 'income');
+
+      result.months.forEach((m) => {
+        expect(m.incomeCents).toBe(50000);
+        expect(m.expenseCents).toBe(0);
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // Combinación: types + direction
+    // -----------------------------------------------------------------------
+
+    it('types=["fijo"] + direction="expense" → solo gastos fijos', async () => {
+      // Único EXPENSE 999 + Fijo EXPENSE 3000 + Fijo INCOME 8000 + Cuota EXPENSE 500
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', type: 'EXPENSE', totalCents: BigInt(999) }),
+      ]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ id: 'fijo-exp', amountCents: 3000, startMonth: '2026-01', deletedFrom: '2026-02', type: 'EXPENSE' as any, chainId: 'chain-exp' }),
+        makeFijo({ id: 'fijo-inc', amountCents: 8000, startMonth: '2026-01', deletedFrom: null, type: 'INCOME' as any, chainId: 'chain-inc' }),
+      ]);
+      mockRepo.getAllCuotasForAnnual.mockResolvedValue([
+        makeCuota({ amountCents: 500, totalInstallments: 1, startMonth: '2026-01', type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, ['fijo'], 'expense');
+
+      // Solo el fijo EXPENSE 3000 en enero
+      expect(result.months[0].expenseCents).toBe(3000);
+      expect(result.months[0].incomeCents).toBe(0);
+    });
+
+    it('types=["unico"] + direction="income" → solo ingresos únicos', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-03', type: 'EXPENSE', totalCents: BigInt(9000), categoryId: CAT_A }),
+        makeUnicoRow({ monthKey: '2026-03', type: 'INCOME', totalCents: BigInt(4000), categoryId: CAT_B }),
+      ]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 100, startMonth: '2026-01', deletedFrom: null, type: 'INCOME' as any }),
+      ]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, ['unico'], 'income');
+
+      // Solo el único INCOME de 4000 en marzo
+      expect(result.months[2].incomeCents).toBe(4000);
+      expect(result.months[2].expenseCents).toBe(0);
+      // Fijo INCOME excluido (types=unico excluye fijos)
+      result.months.forEach((m, i) => {
+        if (i !== 2) {
+          expect(m.incomeCents).toBe(0);
+          expect(m.expenseCents).toBe(0);
+        }
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // Combinación: types + direction + categories
+    // -----------------------------------------------------------------------
+
+    it('types + direction + categories se combinan (AND): solo gastos únicos de CAT_A', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', categoryId: CAT_A, type: 'EXPENSE', totalCents: BigInt(1000) }),
+        makeUnicoRow({ monthKey: '2026-01', categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6', type: 'EXPENSE', totalCents: BigInt(2000) }),
+        makeUnicoRow({ monthKey: '2026-01', categoryId: CAT_A, type: 'INCOME', totalCents: BigInt(5000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(
+        USER_A,
+        2026,
+        [CAT_A],          // categories: solo CAT_A
+        undefined,
+        ['unico'],        // types: solo únicos
+        'expense',        // direction: solo gastos
+      );
+
+      // Solo único EXPENSE de CAT_A = 1000
+      expect(result.months[0].expenseCents).toBe(1000);
+      expect(result.months[0].incomeCents).toBe(0);
+      expect(result.categories).toHaveLength(1);
+      expect(result.categories[0].categoryId).toBe(CAT_A);
+    });
+
+    // -----------------------------------------------------------------------
+    // direction no afecta earliestYear
+    // -----------------------------------------------------------------------
+
+    it('direction: earliestYear NO se ve afectado', async () => {
+      setupEmptyMocks();
+      mockRepo.getEarliestYear.mockResolvedValue(2020);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, null, 'expense');
+
+      expect(result.earliestYear).toBe(2020);
+      expect(mockRepo.getEarliestYear).toHaveBeenCalledWith(USER_A);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // RF-REP-015 — Proyección de fijos a futuro (projectFixed / today)
+  // -------------------------------------------------------------------------
+
+  describe('RF-REP-015 — proyección de fijos (projectFixed)', () => {
+    // -----------------------------------------------------------------------
+    // Back-compat: sin projectFixed (o ≠ true) → projected:false en todos
+    // -----------------------------------------------------------------------
+
+    it('back-compat: sin projectFixed → todos los meses projected:false, comportamiento idéntico', async () => {
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 1000, startMonth: '2026-01', deletedFrom: null, type: 'EXPENSE' as any }),
+      ]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      // Sin pasar projectFixed → undefined → false por defecto
+      const result = await service.getReportsMovements(USER_A, 2026);
+
+      // Todos los meses projected:false (back-compat dura)
+      result.months.forEach((m) => {
+        expect(m.projected).toBe(false);
+      });
+      // Comportamiento normal: fijo en todos los meses
+      result.months.forEach((m) => {
+        expect(m.expenseCents).toBe(1000);
+      });
+    });
+
+    it('back-compat: projectFixed=false → todos los meses projected:false', async () => {
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 2000, startMonth: '2026-01', deletedFrom: null, type: 'EXPENSE' as any }),
+      ]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, false, '2026-03-15',
+      );
+
+      result.months.forEach((m) => {
+        expect(m.projected).toBe(false);
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // Placement de projected: true solo en meses futuros respecto de today
+    // -----------------------------------------------------------------------
+
+    it('projected:true solo en meses futuros respecto de today; pasados/presente projected:false', async () => {
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ amountCents: 500, startMonth: '2026-01', deletedFrom: null, type: 'EXPENSE' as any }),
+      ]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      // today = '2026-03-15' → todayMonthKey = '2026-03'
+      // Meses pasados/presente: ene(01), feb(02), mar(03) → projected:false
+      // Meses futuros: abr(04)..dic(12) → projected:true
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, true, '2026-03-15',
+      );
+
+      // Índices 0..2 (ene-mar): projected:false
+      result.months.slice(0, 3).forEach((m) => {
+        expect(m.projected).toBe(false);
+      });
+      // Índices 3..11 (abr-dic): projected:true
+      result.months.slice(3).forEach((m) => {
+        expect(m.projected).toBe(true);
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // Método: valor_línea(m) = canasta_conocida(m) × (1+tasa_precio)^m.
+    // Con UNA sola cadena de fijo en alcance, canasta_conocida(m) es constante
+    // (el último monto conocido de esa cadena) y la tasa same-basket coincide
+    // con la fórmula clásica (dos puntas, compuesto). Estos tests fijan ese
+    // caso degenerado con valores verificados a mano / con node.
+    // -----------------------------------------------------------------------
+
+    it('cadena común que subió de precio (edición real): tasa>0 y la canasta constante crece compuesta — 2 meses futuros, distintos entre sí', async () => {
+      // today='2026-03-15' → todayMonthKey='2026-03'
+      // Ventana backward [today-12..today-1] = ['2025-03'..'2026-02']:
+      //   '2025-03'..'2026-01': seg0 activo (1000) — deletedFrom='2026-02' > todos
+      //   '2026-02':            seg1 activo (1200)
+      //   (today '2026-03' NO está en la ventana; monto_hoy=1440 por seg2.)
+      //
+      // Punta vieja = '2025-03' (primer mes de la ventana, ya con la cadena
+      // presente), N = monthDiff('2025-03','2026-03') = 12
+      // monto_viejo = 1000, monto_hoy = 1440
+      // tasa = (1440/1000)^(1/12) − 1 ≈ 0.030853
+      //
+      // canasta_conocida(m futuro) = 1440 (única cadena, sin más segmentos)
+      // Abr (n=1): round(1440 * 1.030853^1) = round(1484.43) = 1484
+      // May (n=2): round(1440 * 1.030853^2) = round(1530.23) = 1530
+      const seg0 = makeFijo({
+        id: 'seg-old', chainId: 'chain-proj',
+        startMonth: '2025-01', amountCents: 1000,
+        deletedFrom: '2026-02', type: 'EXPENSE' as any,
+      });
+      const seg1 = makeFijo({
+        id: 'seg-mid', chainId: 'chain-proj',
+        startMonth: '2026-02', amountCents: 1200,
+        deletedFrom: '2026-03', type: 'EXPENSE' as any,
+      });
+      const seg2 = makeFijo({
+        id: 'seg-new', chainId: 'chain-proj',
+        startMonth: '2026-03', amountCents: 1440,
+        deletedFrom: null, type: 'EXPENSE' as any,
+      });
+
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([seg0, seg1, seg2]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2025);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, true, '2026-03-15',
+      );
+
+      // Meses pasados/presente: importe real del segmento activo en cada mes
+      expect(result.months[0].expenseCents).toBe(1000); // ene: seg0 activo, projected:false
+      expect(result.months[0].projected).toBe(false);
+      expect(result.months[1].expenseCents).toBe(1200); // feb: seg1 activo, projected:false
+      expect(result.months[1].projected).toBe(false);
+      expect(result.months[2].expenseCents).toBe(1440); // mar: seg2 activo (presente), projected:false
+      expect(result.months[2].projected).toBe(false);
+
+      // Meses futuros: canasta constante (1440) × tasa same-basket
+      expect(result.months[3].expenseCents).toBe(1484);
+      expect(result.months[3].projected).toBe(true);
+      expect(result.months[4].expenseCents).toBe(1530);
+      expect(result.months[4].projected).toBe(true);
+    });
+
+    it('robustez de fase: el mismo salto neto de precio, gradual o de una vez, da la misma tasa (la tasa solo mira las dos puntas)', async () => {
+      // Mismo escenario que el anterior pero el salto ocurre hoy de golpe (no
+      // escalonado). La tasa solo compara monto_hoy vs. monto en la punta
+      // vieja → misma tasa, mismos futuros, sin importar la fase intermedia.
+      const oldSeg = makeFijo({
+        id: 'seg-old-2w', chainId: 'chain-2w',
+        startMonth: '2025-01', amountCents: 1000,
+        deletedFrom: '2026-03', type: 'EXPENSE' as any,
+      });
+      const newSeg = makeFijo({
+        id: 'seg-new-2w', chainId: 'chain-2w',
+        startMonth: '2026-03', amountCents: 1440,
+        deletedFrom: null, type: 'EXPENSE' as any,
+      });
+
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([oldSeg, newSeg]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2025);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, true, '2026-03-15',
+      );
+
+      expect(result.months[0].expenseCents).toBe(1000); // ene: old_seg
+      expect(result.months[1].expenseCents).toBe(1000); // feb: old_seg
+      expect(result.months[2].expenseCents).toBe(1440); // mar: new_seg (presente)
+
+      // Misma tasa que el escenario escalonado → mismos futuros
+      expect(result.months[3].expenseCents).toBe(1484);
+      expect(result.months[4].expenseCents).toBe(1530);
+    });
+
+    it('la tasa usa el monto activo HOY, no el de un segmento futuro pre-planificado (canasta_conocida tampoco lo usa hasta su mes)', async () => {
+      // Segmentos: old_seg (2025-01..2026-03, 1000) — punta vieja
+      //            cur_seg (2026-03..2026-07, 1440) — activo hoy, base de la tasa
+      //            fut_seg (2026-07..null, 9999) — pre-planificado, muy distinto
+      // Punta vieja='2025-03'(1000), N=12, monto_hoy=1440 → tasa≈0.030853
+      // Jun (n=3, canasta=1440 aún, fut_seg no empezó): round(1440*1.030853^3)=1577
+      // Jul (n=4, canasta_conocida('2026-07')=9999 porque fut_seg YA está activo
+      //      ese mes futuro): round(9999*1.030853320886...^4) = 11291
+      const oldSeg = makeFijo({
+        id: 'base-old', chainId: 'chain-base',
+        startMonth: '2025-01', amountCents: 1000,
+        deletedFrom: '2026-03', type: 'EXPENSE' as any,
+      });
+      const curSeg = makeFijo({
+        id: 'base-cur', chainId: 'chain-base',
+        startMonth: '2026-03', amountCents: 1440,
+        deletedFrom: '2026-07', type: 'EXPENSE' as any,
+      });
+      const futSeg = makeFijo({
+        id: 'base-fut', chainId: 'chain-base',
+        startMonth: '2026-07', amountCents: 9999,
+        deletedFrom: null, type: 'EXPENSE' as any,
+      });
+
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([oldSeg, curSeg, futSeg]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2025);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, true, '2026-03-15',
+      );
+
+      expect(result.months[0].expenseCents).toBe(1000); // ene: old_seg
+      expect(result.months[2].expenseCents).toBe(1440); // mar: cur_seg (presente)
+      // Jun (n=3): la canasta sigue en 1440 (fut_seg todavía no arrancó)
+      expect(result.months[5].expenseCents).toBe(1577);
+      expect(result.months[5].projected).toBe(true);
+      // Jul (n=4): la canasta pasa a 9999 (fut_seg activo ese mes) — la tasa
+      // sigue siendo la misma (≈0.030853, calculada sobre chain-base hoy/vieja),
+      // pero ahora se aplica sobre el monto conocido correcto del mes futuro.
+      expect(result.months[6].expenseCents).toBe(11291);
+      expect(result.months[6].projected).toBe(true);
+    });
+
+    it('proyección compuesta correcta en 9 meses futuros (n=1..9, fórmula directa sobre canasta constante)', async () => {
+      // Verifica que la fórmula canasta*(1+rate)^n se aplica correctamente para n=1..9.
+      // Mismo setup que el primer test: tasa≈0.030853, canasta_conocida constante=1440.
+      const seg0 = makeFijo({ id:'sc-old', chainId:'chain-sc', startMonth:'2025-01', amountCents:1000, deletedFrom:'2026-02', type:'EXPENSE' as any });
+      const seg1 = makeFijo({ id:'sc-mid', chainId:'chain-sc', startMonth:'2026-02', amountCents:1200, deletedFrom:'2026-03', type:'EXPENSE' as any });
+      const seg2 = makeFijo({ id:'sc-new', chainId:'chain-sc', startMonth:'2026-03', amountCents:1440, deletedFrom:null, type:'EXPENSE' as any });
+
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([seg0, seg1, seg2]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2025);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, true, '2026-03-15',
+      );
+
+      // Verifica los 9 meses futuros (abr=idx3 … dic=idx11)
+      const expectedFuture = [1484, 1530, 1577, 1626, 1676, 1728, 1781, 1836, 1893];
+      for (let i = 0; i < expectedFuture.length; i++) {
+        expect(result.months[3 + i].expenseCents).toBe(expectedFuture[i]);
+        expect(result.months[3 + i].projected).toBe(true);
+      }
+    });
+
+    it('2 meses de vida (N=1): tasa = variación directa entre las dos puntas, futuros compuestos y distintos entre sí', async () => {
+      // today='2026-03-15' → todayMonthKey='2026-03'
+      // Ventana backward ['2025-03'..'2026-02']: solo '2026-02' tiene presencia
+      // de la cadena (seg0, startMonth='2026-02') → punta vieja='2026-02'
+      // N = monthDiff('2026-02','2026-03') = 1
+      // monto_viejo=1000, monto_hoy=1200 (seg1) → tasa = (1200/1000)^(1/1)−1 = 0.2
+      // canasta_conocida(m futuro) = 1200 constante
+      // Abr (n=1): round(1200 * 1.2^1) = 1440
+      // May (n=2): round(1200 * 1.2^2) = 1728
+      const seg0 = makeFijo({
+        id: 'seg-2m-a', chainId: 'chain-2m',
+        startMonth: '2026-02', amountCents: 1000,
+        deletedFrom: '2026-03', type: 'EXPENSE' as any,
+      });
+      const seg1 = makeFijo({
+        id: 'seg-2m-b', chainId: 'chain-2m',
+        startMonth: '2026-03', amountCents: 1200,
+        deletedFrom: null, type: 'EXPENSE' as any,
+      });
+
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([seg0, seg1]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, true, '2026-03-15',
+      );
+
+      expect(result.months[1].expenseCents).toBe(1000); // feb
+      expect(result.months[1].projected).toBe(false);
+      expect(result.months[2].expenseCents).toBe(1200); // mar (presente)
+      expect(result.months[2].projected).toBe(false);
+      expect(result.months[0].expenseCents).toBe(0); // ene: sin segmento activo
+
+      expect(result.months[3].expenseCents).toBe(1440); // abr (n=1)
+      expect(result.months[3].projected).toBe(true);
+      expect(result.months[4].expenseCents).toBe(1728); // may (n=2) — distinto de abr
+      expect(result.months[4].projected).toBe(true);
+    });
+
+    // -----------------------------------------------------------------------
+    // Sin canasta comparable / fijos nunca editados → tasa 0, plano
+    // -----------------------------------------------------------------------
+
+    it('fijo sin historial de cambios (1 segmento constante) → sin variación en la canasta comparable → proyección plana al monto conocido', async () => {
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({
+          id: 'fijo-flat', chainId: 'chain-flat',
+          startMonth: '2026-01', amountCents: 3000, deletedFrom: null,
+          type: 'EXPENSE' as any,
+        }),
+      ]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, true, '2026-03-15',
+      );
+
+      result.months.forEach((m) => {
+        expect(m.expenseCents).toBe(3000);
+      });
+      result.months.slice(3).forEach((m) => {
+        expect(m.projected).toBe(true);
+        expect(m.expenseCents).toBe(3000);
+      });
+    });
+
+    it('1 mes de vida (startMonth=todayMonth) → sin presencia en la ventana backward → sin punta vieja → tasa=0, plano', async () => {
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({
+          id: 'new-this-month', chainId: 'chain-new-month',
+          startMonth: '2026-03', amountCents: 5000,
+          deletedFrom: null, type: 'EXPENSE' as any,
+        }),
+      ]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, true, '2026-03-15',
+      );
+
+      expect(result.months[0].expenseCents).toBe(0);
+      expect(result.months[1].expenseCents).toBe(0);
+      expect(result.months[2].expenseCents).toBe(5000);
+      expect(result.months[2].projected).toBe(false);
+      result.months.slice(3).forEach((m) => {
+        expect(m.expenseCents).toBe(5000);
+        expect(m.projected).toBe(true);
+      });
+    });
+
+    it('cambio ANTERIOR a la ventana de 12 meses no afecta la tasa (la punta vieja ya cae con el monto actualizado)', async () => {
+      // old_seg: 500, deletedFrom='2025-02' → termina antes del inicio de la
+      // ventana ('2025-03') → no entra en la ventana.
+      // new_seg: 1000 desde '2025-02' → activo en TODA la ventana → punta
+      // vieja='2025-03'(1000), monto_hoy=1000 → tasa=0. El salto histórico
+      // 500→1000 no afecta la tasa.
+      const oldSeg = makeFijo({
+        id: 'hist-old', chainId: 'chain-hist',
+        startMonth: '2020-01', amountCents: 500,
+        deletedFrom: '2025-02', type: 'EXPENSE' as any,
+      });
+      const newSeg = makeFijo({
+        id: 'hist-new', chainId: 'chain-hist',
+        startMonth: '2025-02', amountCents: 1000,
+        deletedFrom: null, type: 'EXPENSE' as any,
+      });
+
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([oldSeg, newSeg]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2020);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, true, '2026-03-15',
+      );
+
+      result.months.forEach((m) => {
+        expect(m.expenseCents).toBe(1000);
+      });
+      result.months.slice(3).forEach((m) => {
+        expect(m.projected).toBe(true);
+        expect(m.expenseCents).toBe(1000);
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // Piso en 0: canasta comparable que bajó → tasa 0 (nunca negativa) → plano
+    // -----------------------------------------------------------------------
+
+    it('piso en 0: cadena común que BAJÓ de precio → tasa=0 (no negativa) → línea plana al monto conocido, no decreciente', async () => {
+      // today='2026-03-15' → todayMonthKey='2026-03'
+      // seg0: 2020-01..2026-03 (2000) — punta vieja
+      // seg1: 2026-03..null (1000) — activo hoy
+      // Punta vieja='2025-03'(2000), N=12, monto_hoy=1000
+      // ratio=1000/2000=0.5 → (0.5)^(1/12)-1 ≈ −0.056 → PISO EN 0 → tasa=0
+      // canasta_conocida(m futuro) = 1000 constante → futuros PLANOS en 1000,
+      // no decrecientes (a diferencia del método CAGR anterior, sin piso).
+      const seg0 = makeFijo({
+        id: 'neg-seg0', chainId: 'chain-neg',
+        startMonth: '2020-01', amountCents: 2000,
+        deletedFrom: '2026-03', type: 'EXPENSE' as any,
+      });
+      const seg1 = makeFijo({
+        id: 'neg-seg1', chainId: 'chain-neg',
+        startMonth: '2026-03', amountCents: 1000,
+        deletedFrom: null, type: 'EXPENSE' as any,
+      });
+
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([seg0, seg1]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2020);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, true, '2026-03-15',
+      );
+
+      expect(result.months[2].expenseCents).toBe(1000); // presente (mar)
+      expect(result.months[2].projected).toBe(false);
+
+      // Futuros: planos en 1000 (piso en 0, sin decrecer)
+      expect(result.months[3].expenseCents).toBe(1000);
+      expect(result.months[3].projected).toBe(true);
+      expect(result.months[4].expenseCents).toBe(1000);
+      expect(result.months[4].projected).toBe(true);
+      expect(result.months[11].expenseCents).toBe(1000);
+    });
+
+    // -----------------------------------------------------------------------
+    // Composición determinista de la canasta (altas/bajas/fijo anual) vs.
+    // tasa same-basket: las altas/bajas NO entran en la tasa, se resuelven
+    // directamente en canasta_conocida(m). Esto es lo que reemplaza al método
+    // CAGR anterior (que contaba las altas como "aumento" y explotaba).
+    // -----------------------------------------------------------------------
+
+    describe('composición determinista vs. tasa same-basket (no explota con altas)', () => {
+      it('se agrega un fijo nuevo (alta) a mitad de ventana: la cadena nueva NO entra en la tasa → futuro plano al total compuesto, sin explotar', async () => {
+        // today='2026-06-15' → todayMonthKey='2026-06'.
+        // Fijo A (CAT_A): activo desde '2025-01', SIEMPRE 100000 (flat, nunca editado).
+        // Fijo B (CAT_B): arranca '2026-03' (mitad de la ventana backward),
+        //   SIEMPRE 50000 (flat, nunca editado).
+        //
+        // Cadenas comunes hoy vs. punta vieja ('2025-06', primer mes de la
+        // ventana): solo chain-a (chain-b no existía en '2025-06'). chain-a
+        // nunca varió → tasa=0. La alta de B NO contamina la tasa.
+        //
+        // canasta_conocida(mes futuro) = A(100000) + B(50000) = 150000
+        // constante (ninguna de las dos cadenas vuelve a cambiar) → los
+        // futuros son PLANOS en 150000 (con el método CAGR anterior, que
+        // contaba la alta como "crecimiento", este mismo escenario daba una
+        // curva creciente artificial — el bug que motiva este método).
+        const fijoA = makeFijo({
+          id: 'agg-a', chainId: 'chain-agg-a',
+          startMonth: '2025-01', amountCents: 100000, deletedFrom: null,
+          categoryId: CAT_A, type: 'EXPENSE' as any,
+        });
+        const fijoB = makeFijo({
+          id: 'agg-b', chainId: 'chain-agg-b',
+          startMonth: '2026-03', amountCents: 50000, deletedFrom: null,
+          categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6',
+          type: 'EXPENSE' as any,
+        });
+
+        setupEmptyUnicosMock();
+        mockRepo.getAllFijosForAnnual.mockResolvedValue([fijoA, fijoB]);
+        setupEmptyCuotasMock();
+        mockRepo.getEarliestYear.mockResolvedValue(2025);
+
+        const result = await service.getReportsMovements(
+          USER_A, 2026, null, undefined, null, undefined, true, '2026-06-15',
+        );
+
+        // Presente (jun, idx5): 100000 + 50000 = 150000
+        expect(result.months[5].expenseCents).toBe(150000);
+        expect(result.months[5].projected).toBe(false);
+
+        // Futuros (jul, ago, sep = idx 6,7,8): PLANOS en 150000, sin explotar
+        expect(result.months[6].expenseCents).toBe(150000);
+        expect(result.months[6].projected).toBe(true);
+        expect(result.months[7].expenseCents).toBe(150000);
+        expect(result.months[8].expenseCents).toBe(150000);
+      });
+
+      it('la misma alta, ocurra a mitad de ventana o exactamente hoy, da la misma tasa (0) y el mismo futuro plano', async () => {
+        // Escenario B: mismo Fijo A (flat, chain-agg-a2), pero el fijo nuevo
+        // arranca EXACTAMENTE hoy ('2026-06', sin presencia en la ventana) en
+        // vez de a mitad de camino. La tasa depende solo de la cadena común
+        // (chain-a), nunca de cuándo se sumó la cadena nueva.
+        const fijoA = makeFijo({
+          id: 'agg-a2', chainId: 'chain-agg-a2',
+          startMonth: '2025-01', amountCents: 100000, deletedFrom: null,
+          categoryId: CAT_A, type: 'EXPENSE' as any,
+        });
+        const fijoC = makeFijo({
+          id: 'agg-c2', chainId: 'chain-agg-c2',
+          startMonth: '2026-06', amountCents: 50000, deletedFrom: null,
+          categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6',
+          type: 'EXPENSE' as any,
+        });
+
+        setupEmptyUnicosMock();
+        mockRepo.getAllFijosForAnnual.mockResolvedValue([fijoA, fijoC]);
+        setupEmptyCuotasMock();
+        mockRepo.getEarliestYear.mockResolvedValue(2025);
+
+        const result = await service.getReportsMovements(
+          USER_A, 2026, null, undefined, null, undefined, true, '2026-06-15',
+        );
+
+        expect(result.months[5].expenseCents).toBe(150000); // presente
+
+        // Mismo resultado plano que el escenario gradual
+        expect(result.months[6].expenseCents).toBe(150000);
+        expect(result.months[7].expenseCents).toBe(150000);
+        expect(result.months[8].expenseCents).toBe(150000);
+      });
+
+      it('altas + una cadena común que SÍ subió de precio: la tasa refleja SOLO el encarecimiento del subconjunto estable, moderada, no el salto por la alta (valor verificado a mano)', async () => {
+        // today='2026-06-15' → todayMonthKey='2026-06'.
+        // chain-a: 100000 (desde antes de la ventana) → 105000 desde hoy
+        //   (+5% neto en 12 meses, N=12 → tasa=(105000/100000)^(1/12)-1≈0.4074%/mes)
+        // chain-b: fijo NUEVO de 900000 que arranca exactamente hoy (una alta
+        //   enorme, 9x el resto). NO tiene presencia en la ventana → excluida
+        //   de la tasa por completo.
+        //
+        // Bajo el método CAGR total anterior, base=1005000/oldest=100000 daría
+        // una tasa disparatada (~22%/mes). Bajo este método, la tasa solo
+        // refleja el 5% real de chain-a → moderada (~0.41%/mes).
+        //
+        // canasta_conocida(mes futuro) = 105000 + 900000 = 1005000 constante.
+        // Jul (n=1): round(1005000 * 1.05^(1/12))       = 1009094
+        // Ago (n=2): round(1005000 * 1.05^(2/12))       = 1013206
+        // Sep (n=3): round(1005000 * 1.05^(3/12))       = 1017334
+        const chainAOld = makeFijo({
+          id: 'mod-a-old', chainId: 'chain-mod-a',
+          startMonth: '2020-01', amountCents: 100000,
+          deletedFrom: '2026-06', categoryId: CAT_A, type: 'EXPENSE' as any,
+        });
+        const chainANew = makeFijo({
+          id: 'mod-a-new', chainId: 'chain-mod-a',
+          startMonth: '2026-06', amountCents: 105000,
+          deletedFrom: null, categoryId: CAT_A, type: 'EXPENSE' as any,
+        });
+        const chainB = makeFijo({
+          id: 'mod-b', chainId: 'chain-mod-b',
+          startMonth: '2026-06', amountCents: 900000,
+          deletedFrom: null, categoryId: CAT_B,
+          categoryName: 'Tecnología', categoryColor: '#A98BD6',
+          type: 'EXPENSE' as any,
+        });
+
+        setupEmptyUnicosMock();
+        mockRepo.getAllFijosForAnnual.mockResolvedValue([chainAOld, chainANew, chainB]);
+        setupEmptyCuotasMock();
+        mockRepo.getEarliestYear.mockResolvedValue(2020);
+
+        const result = await service.getReportsMovements(
+          USER_A, 2026, null, undefined, null, undefined, true, '2026-06-15',
+        );
+
+        // Presente (jun): 105000 + 900000 = 1005000
+        expect(result.months[5].expenseCents).toBe(1005000);
+        expect(result.months[5].projected).toBe(false);
+
+        // Futuros: moderados y compuestos, NO una explosión por la alta de 900000
+        expect(result.months[6].expenseCents).toBe(1009094);
+        expect(result.months[6].projected).toBe(true);
+        expect(result.months[7].expenseCents).toBe(1013206);
+        expect(result.months[8].expenseCents).toBe(1017334);
+
+        // Sanity: el crecimiento es moderado (~0.4%/mes), muy lejos de una
+        // tasa del ~22%/mes que hubiese dado el método CAGR total anterior.
+        const growthRatio = result.months[6].expenseCents / result.months[5].expenseCents;
+        expect(growthRatio).toBeLessThan(1.01); // <1%/mes, no ~22%/mes
+        expect(growthRatio).toBeGreaterThan(1);
+      });
+
+      it('baja de un fijo (deletedFrom) se refleja directamente en la canasta futura, no como tasa negativa: cadena restante flat → futuro plano al remanente', async () => {
+        // Fijo A (CAT_A): 50000, flat, siempre activo.
+        // Fijo B (CAT_B): 150000, activo desde antes de la ventana, eliminado
+        //   ANTES de hoy ('2026-03', hoy es '2026-06').
+        //
+        // Hoy, B ya no está activo → no entra en todayChains → nunca es
+        // "cadena común" → la tasa se calcula solo con A (flat) → tasa=0.
+        // canasta_conocida(futuro) = solo A = 50000 → plano (la baja de B ya
+        // quedó reflejada por la composición, no hace falta una tasa negativa).
+        const fijoA = makeFijo({
+          id: 'baja-a', chainId: 'chain-baja-a',
+          startMonth: '2025-01', amountCents: 50000, deletedFrom: null,
+          categoryId: CAT_A, type: 'EXPENSE' as any,
+        });
+        const fijoB = makeFijo({
+          id: 'baja-b', chainId: 'chain-baja-b',
+          startMonth: '2025-01', amountCents: 150000, deletedFrom: '2026-03',
+          categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6',
+          type: 'EXPENSE' as any,
+        });
+
+        setupEmptyUnicosMock();
+        mockRepo.getAllFijosForAnnual.mockResolvedValue([fijoA, fijoB]);
+        setupEmptyCuotasMock();
+        mockRepo.getEarliestYear.mockResolvedValue(2025);
+
+        const result = await service.getReportsMovements(
+          USER_A, 2026, null, undefined, null, undefined, true, '2026-06-15',
+        );
+
+        // Presente (jun): solo Fijo A (B fue eliminado en marzo)
+        expect(result.months[5].expenseCents).toBe(50000);
+        expect(result.months[5].projected).toBe(false);
+
+        // Futuros: planos en 50000 (la baja ya está reflejada en la canasta,
+        // no se proyecta una caída adicional)
+        expect(result.months[6].expenseCents).toBe(50000);
+        expect(result.months[6].projected).toBe(true);
+        expect(result.months[7].expenseCents).toBe(50000);
+      });
+
+      it('varios fijos que arrancan exactamente hoy (altas simultáneas) → ninguno tiene presencia en la ventana → sin punta vieja → plano al total de hoy', async () => {
+        const fijoA = makeFijo({
+          id: 'new-a', chainId: 'chain-new-a',
+          startMonth: '2026-06', amountCents: 60000, deletedFrom: null,
+          categoryId: CAT_A, type: 'EXPENSE' as any,
+        });
+        const fijoB = makeFijo({
+          id: 'new-b', chainId: 'chain-new-b',
+          startMonth: '2026-06', amountCents: 30000, deletedFrom: null,
+          categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6',
+          type: 'EXPENSE' as any,
+        });
+
+        setupEmptyUnicosMock();
+        mockRepo.getAllFijosForAnnual.mockResolvedValue([fijoA, fijoB]);
+        setupEmptyCuotasMock();
+        mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+        const result = await service.getReportsMovements(
+          USER_A, 2026, null, undefined, null, undefined, true, '2026-06-15',
+        );
+
+        expect(result.months[5].expenseCents).toBe(90000); // presente
+        expect(result.months[5].projected).toBe(false);
+
+        // Futuros: plano en 90000 (tasa=0, sin punta anterior en la ventana)
+        result.months.slice(6).forEach((m) => {
+          expect(m.projected).toBe(true);
+          expect(m.expenseCents).toBe(90000);
+        });
+      });
+
+      it('alta con startMonth futuro ya cargada: aparece en la canasta recién desde su mes de inicio, sin afectar la tasa (trivialmente 0, sin cadenas activas hoy)', async () => {
+        // today='2026-01-15' → todayMonthKey='2026-01'. Fijo cargado con
+        // startMonth='2026-07' (alta pre-planificada, todavía no arrancó).
+        // Hoy no hay ninguna cadena activa en la línea → tasa=0 (trivial).
+        // canasta_conocida(mes) = 0 hasta jun-2026 inclusive; 3000 desde jul.
+        setupEmptyUnicosMock();
+        mockRepo.getAllFijosForAnnual.mockResolvedValue([
+          makeFijo({
+            id: 'future-alta', chainId: 'chain-future-alta',
+            startMonth: '2026-07', amountCents: 3000, deletedFrom: null,
+            type: 'EXPENSE' as any,
+          }),
+        ]);
+        setupEmptyCuotasMock();
+        mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+        const result = await service.getReportsMovements(
+          USER_A, 2026, null, undefined, null, undefined, true, '2026-01-15',
+        );
+
+        // Ene (presente, idx0): sin actividad
+        expect(result.months[0].expenseCents).toBe(0);
+        expect(result.months[0].projected).toBe(false);
+
+        // Feb-jun (futuros, antes del alta): en cero, la cadena todavía no arrancó
+        for (let i = 1; i <= 5; i++) {
+          expect(result.months[i].projected).toBe(true);
+          expect(result.months[i].expenseCents).toBe(0);
+        }
+
+        // Jul en adelante (futuros, desde el alta): 3000, plano (tasa=0)
+        for (let i = 6; i <= 11; i++) {
+          expect(result.months[i].projected).toBe(true);
+          expect(result.months[i].expenseCents).toBe(3000);
+        }
+      });
+
+      it('baja con deletedFrom futuro: desaparece de la canasta desde ese mes en adelante', async () => {
+        // today='2026-01-15' → todayMonthKey='2026-01'. Fijo activo desde
+        // antes, con baja programada en '2026-07' (deletedFrom futuro).
+        setupEmptyUnicosMock();
+        mockRepo.getAllFijosForAnnual.mockResolvedValue([
+          makeFijo({
+            id: 'future-baja', chainId: 'chain-future-baja',
+            startMonth: '2025-01', amountCents: 4000, deletedFrom: '2026-07',
+            type: 'EXPENSE' as any,
+          }),
+        ]);
+        setupEmptyCuotasMock();
+        mockRepo.getEarliestYear.mockResolvedValue(2025);
+
+        const result = await service.getReportsMovements(
+          USER_A, 2026, null, undefined, null, undefined, true, '2026-01-15',
+        );
+
+        // Ene (presente): activo, 4000
+        expect(result.months[0].expenseCents).toBe(4000);
+        expect(result.months[0].projected).toBe(false);
+
+        // Feb-jun (futuros, antes de la baja): sigue activo, 4000 (tasa=0, flat)
+        for (let i = 1; i <= 5; i++) {
+          expect(result.months[i].projected).toBe(true);
+          expect(result.months[i].expenseCents).toBe(4000);
+        }
+
+        // Jul en adelante (futuros, desde la baja): desaparece de la canasta
+        for (let i = 6; i <= 11; i++) {
+          expect(result.months[i].projected).toBe(true);
+          expect(result.months[i].expenseCents).toBe(0);
+        }
+      });
+
+      it('fijo ANNUAL: solo aparece en la canasta el mes en que le toca según su frecuencia', async () => {
+        // today='2026-01-15' → todayMonthKey='2026-01'. Fijo ANNUAL con
+        // startMonth='2025-06' → ocurre en jun-2025, jun-2026, jun-2027, ...
+        setupEmptyUnicosMock();
+        mockRepo.getAllFijosForAnnual.mockResolvedValue([
+          makeFijo({
+            id: 'annual-fijo', chainId: 'chain-annual',
+            startMonth: '2025-06', amountCents: 12000, deletedFrom: null,
+            frequency: RecurringFrequency.ANNUAL, type: 'EXPENSE' as any,
+          }),
+        ]);
+        setupEmptyCuotasMock();
+        mockRepo.getEarliestYear.mockResolvedValue(2025);
+
+        const result = await service.getReportsMovements(
+          USER_A, 2026, null, undefined, null, undefined, true, '2026-01-15',
+        );
+
+        // Ene (presente): no le toca este mes
+        expect(result.months[0].expenseCents).toBe(0);
+
+        // Feb-may (futuros): no le toca
+        for (let i = 1; i <= 4; i++) {
+          expect(result.months[i].projected).toBe(true);
+          expect(result.months[i].expenseCents).toBe(0);
+        }
+        // Jun (futuro, idx5): le toca → 12000
+        expect(result.months[5].projected).toBe(true);
+        expect(result.months[5].expenseCents).toBe(12000);
+        // Jul-dic (futuros): no le toca de nuevo
+        for (let i = 6; i <= 11; i++) {
+          expect(result.months[i].expenseCents).toBe(0);
+        }
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // Fix: tasa_precio = crecimiento ponderado por tamaño, por cadena, sobre
+    // SU PROPIA historia disponible en la ventana — reemplaza al método de
+    // "ancla en la punta vieja común" (que, con datos reales, anclaba en la
+    // única cadena con 12 meses de historia —flat— y dejaba la tasa en 0,
+    // ignorando cadenas con historia parcial que sí variaban fuerte).
+    // -----------------------------------------------------------------------
+
+    describe('tasa ponderada por tamaño, por cadena (fix: el ancla plana con historia completa ya no opaca a las cadenas con historia parcial)', () => {
+      it('cadena ancla flat con 12 meses de historia + cadena con historia parcial (6 meses) que subió: la tasa refleja el crecimiento ponderado, no queda en 0 (bug real reproducido)', async () => {
+        // today='2026-07-15' → todayMonthKey='2026-07'. Ventana=[2025-07..2026-06].
+        // "Tidal": chain-tidal, activa desde 2020, SIEMPRE 50000 (flat) → tiene
+        //   presencia en TODA la ventana (sería la "punta vieja" bajo el
+        //   método viejo) pero su propio growth es 0.
+        // "Telecentro": chain-tele, solo tiene historia desde '2026-01' (6
+        //   meses dentro de la ventana): 8000 → 12000 (+50% en 6 meses).
+        //   Bajo el método viejo, al no estar presente en la punta vieja
+        //   ('2025-07'), quedaba excluida de la tasa por completo, y la tasa
+        //   quedaba en 0 (arrastrada por Tidal). Bajo el nuevo método, cada
+        //   cadena usa SU propia ventana disponible → Telecentro sí aporta.
+        //
+        // growthTele = (12000/8000)^(1/6) − 1 ≈ 0.06991319 (CAGR mensual propio)
+        // rate = (50000·0 + 12000·growthTele) / (50000+12000) ≈ 0.01353159
+        // canasta_conocida(futuro) = 50000 + 12000 = 62000 constante
+        // Ago (n=1): round(62000 * 1.01353159^1) = 62839
+        // Sep (n=2): round(62000 * 1.01353159^2) = 63689
+        // Oct (n=3): round(62000 * 1.01353159^3) = 64551
+        const tidal = makeFijo({
+          id: 'tidal', chainId: 'chain-tidal',
+          startMonth: '2020-01', amountCents: 50000, deletedFrom: null,
+          type: 'EXPENSE' as any,
+        });
+        const teleOld = makeFijo({
+          id: 'tele-old', chainId: 'chain-tele',
+          startMonth: '2026-01', amountCents: 8000, deletedFrom: '2026-07',
+          categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6',
+          type: 'EXPENSE' as any,
+        });
+        const teleNew = makeFijo({
+          id: 'tele-new', chainId: 'chain-tele',
+          startMonth: '2026-07', amountCents: 12000, deletedFrom: null,
+          categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6',
+          type: 'EXPENSE' as any,
+        });
+
+        setupEmptyUnicosMock();
+        mockRepo.getAllFijosForAnnual.mockResolvedValue([tidal, teleOld, teleNew]);
+        setupEmptyCuotasMock();
+        mockRepo.getEarliestYear.mockResolvedValue(2020);
+
+        const result = await service.getReportsMovements(
+          USER_A, 2026, null, undefined, null, undefined, true, '2026-07-15',
+        );
+
+        // Presente (jul, idx6): 50000 + 12000 = 62000
+        expect(result.months[6].expenseCents).toBe(62000);
+        expect(result.months[6].projected).toBe(false);
+
+        // Futuros: crece (ya NO queda plano en 62000 como con el método viejo)
+        expect(result.months[7].expenseCents).toBe(62839); // ago (n=1)
+        expect(result.months[7].projected).toBe(true);
+        expect(result.months[8].expenseCents).toBe(63689); // sep (n=2)
+        expect(result.months[9].expenseCents).toBe(64551); // oct (n=3)
+        // sep ≠ oct ≠ nov (creciente, con pendiente, no plano)
+        expect(result.months[8].expenseCents).not.toBe(result.months[9].expenseCents);
+        expect(result.months[9].expenseCents).not.toBe(result.months[10].expenseCents);
+      });
+
+      it('piso en 0 sobre el promedio ponderado FINAL (no por cadena): una cadena que bajó fuerte y pesa más que arrastra el promedio a negativo → tasa=0, no un promedio "pre-flooreado" por cadena', async () => {
+        // today='2026-07-15' → todayMonthKey='2026-07'. Ventana=[2025-07..2026-06].
+        // "Down" (peso grande, bajó fuerte): 20000 (desde '2026-01') → 10000 hoy.
+        //   growthDown = (10000/20000)^(1/6) − 1 ≈ −0.10910128
+        // "Up" (peso chico, subió poco): 1000 (desde '2026-01') → 1100 hoy.
+        //   growthUp = (1100/1000)^(1/6) − 1 ≈ 0.01601187
+        //
+        // Promedio ponderado CRUDO (sin flooreo por cadena):
+        //   (10000·growthDown + 1100·growthUp) / 11100 ≈ −0.0967 (negativo)
+        //   → piso en 0 SOLO al final → tasa=0 → futuros PLANOS en 11100.
+        //
+        // Si el piso se aplicara por cadena ANTES de ponderar (growthDown
+        // flooreado a 0 antes de la suma), el resultado sería ≈+0.1587%
+        // mensual (positivo) — un futuro CRECIENTE, distinto del esperado
+        // (plano). Este test distingue ambas implementaciones.
+        const down1 = makeFijo({
+          id: 'down-old', chainId: 'chain-down',
+          startMonth: '2026-01', amountCents: 20000, deletedFrom: '2026-07',
+          type: 'EXPENSE' as any,
+        });
+        const down2 = makeFijo({
+          id: 'down-new', chainId: 'chain-down',
+          startMonth: '2026-07', amountCents: 10000, deletedFrom: null,
+          type: 'EXPENSE' as any,
+        });
+        const up1 = makeFijo({
+          id: 'up-old', chainId: 'chain-up',
+          startMonth: '2026-01', amountCents: 1000, deletedFrom: '2026-07',
+          categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6',
+          type: 'EXPENSE' as any,
+        });
+        const up2 = makeFijo({
+          id: 'up-new', chainId: 'chain-up',
+          startMonth: '2026-07', amountCents: 1100, deletedFrom: null,
+          categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6',
+          type: 'EXPENSE' as any,
+        });
+
+        setupEmptyUnicosMock();
+        mockRepo.getAllFijosForAnnual.mockResolvedValue([down1, down2, up1, up2]);
+        setupEmptyCuotasMock();
+        mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+        const result = await service.getReportsMovements(
+          USER_A, 2026, null, undefined, null, undefined, true, '2026-07-15',
+        );
+
+        // Presente (jul, idx6): 10000 + 1100 = 11100
+        expect(result.months[6].expenseCents).toBe(11100);
+        expect(result.months[6].projected).toBe(false);
+
+        // Futuros: planos en 11100 (piso en 0 sobre el agregado, NO creciente)
+        expect(result.months[7].expenseCents).toBe(11100);
+        expect(result.months[7].projected).toBe(true);
+        expect(result.months[8].expenseCents).toBe(11100);
+        expect(result.months[11].expenseCents).toBe(11100);
+      });
+
+      it('fijo sin ningún monto previo en la ventana (alta reciente) se excluye del cálculo de la tasa pero SÍ participa en canasta_conocida', async () => {
+        // today='2026-07-15' → todayMonthKey='2026-07'.
+        // "Base" (con historia, sube +50000 total plano — sin variación): flat
+        //   desde antes de la ventana → growth=0.
+        // "Alta" (chain-alta): arranca EXACTAMENTE hoy, monto GRANDE (500000,
+        //   10x Base) → sin ningún monto previo en la ventana → EXCLUIDA del
+        //   cálculo de la tasa (no la infla ni la diluye), pero SÍ suma en
+        //   canasta_conocida desde hoy en adelante.
+        const base = makeFijo({
+          id: 'base-flat', chainId: 'chain-base-flat',
+          startMonth: '2020-01', amountCents: 50000, deletedFrom: null,
+          type: 'EXPENSE' as any,
+        });
+        const alta = makeFijo({
+          id: 'alta-grande', chainId: 'chain-alta-grande',
+          startMonth: '2026-07', amountCents: 500000, deletedFrom: null,
+          categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6',
+          type: 'EXPENSE' as any,
+        });
+
+        setupEmptyUnicosMock();
+        mockRepo.getAllFijosForAnnual.mockResolvedValue([base, alta]);
+        setupEmptyCuotasMock();
+        mockRepo.getEarliestYear.mockResolvedValue(2020);
+
+        const result = await service.getReportsMovements(
+          USER_A, 2026, null, undefined, null, undefined, true, '2026-07-15',
+        );
+
+        // Presente (jul, idx6): 50000 + 500000 = 550000
+        expect(result.months[6].expenseCents).toBe(550000);
+        expect(result.months[6].projected).toBe(false);
+
+        // Futuros: la tasa es 0 (única cadena con historia, "base", es flat;
+        // "alta" quedó excluida por no tener monto previo) → canasta
+        // constante en 550000 (alta SÍ está en la canasta, plana)
+        expect(result.months[7].expenseCents).toBe(550000);
+        expect(result.months[7].projected).toBe(true);
+        expect(result.months[11].expenseCents).toBe(550000);
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // Skips no cuentan para la tasa (sí para la canasta_conocida del mes real)
+    // -----------------------------------------------------------------------
+
+    it('skip del mes de hoy no corrompe la tasa (usa el monto conocido de la cadena), aunque sí deje en 0 el total real de ese mes', async () => {
+      // today='2026-03-15' → todayMonthKey='2026-03'.
+      // seg_old: 1000, activo en toda la ventana (deletedFrom='2026-03').
+      // seg_new: 1200, activo desde hoy, pero SKIPPEADO en '2026-03' (no se
+      // cobra este mes puntual, pero el precio conocido sigue siendo 1200).
+      //
+      // Real (mar, presente): el loop normal respeta el skip → 0.
+      // Tasa: punta vieja='2025-03'(1000), N=12, monto_hoy=1200 (NO
+      //   zero-eado por el skip) → tasa=(1200/1000)^(1/12)-1≈0.015309
+      // canasta_conocida(abr) = 1200 (abril no está skippeado) →
+      //   Abr (n=1): round(1200*1.015309^1) = 1218
+      //   May (n=2): round(1200*1.015309^2) = 1237
+      const segOld = makeFijo({
+        id: 'skip-old', chainId: 'chain-skip',
+        startMonth: '2025-01', amountCents: 1000,
+        deletedFrom: '2026-03', type: 'EXPENSE' as any,
+      });
+      const segNew = makeFijo({
+        id: 'skip-new', chainId: 'chain-skip',
+        startMonth: '2026-03', amountCents: 1200,
+        deletedFrom: null, type: 'EXPENSE' as any,
+        skippedMonths: new Set(['2026-03']),
+      });
+
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([segOld, segNew]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2025);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, true, '2026-03-15',
+      );
+
+      // Presente (mar): skippeado → 0 en el total real
+      expect(result.months[2].expenseCents).toBe(0);
+      expect(result.months[2].projected).toBe(false);
+
+      // Futuros: la tasa usó 1200 (no 0) como monto_hoy → futuros crecientes,
+      // no un salto artificial de "0 a 1200"
+      expect(result.months[3].expenseCents).toBe(1218);
+      expect(result.months[3].projected).toBe(true);
+      expect(result.months[4].expenseCents).toBe(1237);
+      expect(result.months[4].projected).toBe(true);
+    });
+
+    // -----------------------------------------------------------------------
+    // Cuotas NO se proyectan: excluidas de meses futuros cuando projectFixed=true
+    // -----------------------------------------------------------------------
+
+    it('cuotas NO se proyectan: sus aportes son 0 en meses futuros cuando projectFixed=true', async () => {
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({
+          chainId: 'chain-fijo-cuota-test',
+          amountCents: 1000,
+          startMonth: '2026-01',
+          deletedFrom: null,
+          type: 'EXPENSE' as any,
+        }),
+      ]);
+      mockRepo.getAllCuotasForAnnual.mockResolvedValue([
+        makeCuota({ amountCents: 5000, totalInstallments: 12, startMonth: '2026-01', type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, true, '2026-03-15',
+      );
+
+      result.months.slice(0, 3).forEach((m) => {
+        expect(m.expenseCents).toBe(6000);
+        expect(m.projected).toBe(false);
+      });
+
+      result.months.slice(3).forEach((m) => {
+        expect(m.expenseCents).toBe(1000);
+        expect(m.projected).toBe(true);
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // Únicos NO se proyectan: sin extrapolación a meses donde no tienen datos
+    // -----------------------------------------------------------------------
+
+    it('únicos NO se proyectan: un único en enero no aparece en meses futuros', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', type: 'EXPENSE', totalCents: BigInt(7000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, true, '2026-03-15',
+      );
+
+      expect(result.months[0].expenseCents).toBe(7000);
+      expect(result.months[0].projected).toBe(false);
+
+      result.months.slice(3).forEach((m) => {
+        expect(m.expenseCents).toBe(0);
+        expect(m.projected).toBe(true);
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // Dirección: EXPENSE extiende expenseCents, INCOME extiende incomeCents
+    // -----------------------------------------------------------------------
+
+    it('fijo EXPENSE proyectado extiende expenseCents; fijo INCOME proyectado extiende incomeCents', async () => {
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({
+          id: 'fijo-exp', chainId: 'chain-exp',
+          amountCents: 5000, startMonth: '2026-01', deletedFrom: null,
+          type: 'EXPENSE' as any,
+        }),
+        makeFijo({
+          id: 'fijo-inc', chainId: 'chain-inc',
+          amountCents: 8000, startMonth: '2026-01', deletedFrom: null,
+          type: 'INCOME' as any,
+        }),
+      ]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, true, '2026-03-15',
+      );
+
+      result.months.slice(3).forEach((m) => {
+        expect(m.projected).toBe(true);
+        expect(m.expenseCents).toBe(5000); // fijo EXPENSE
+        expect(m.incomeCents).toBe(8000);  // fijo INCOME
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // Horizonte ilimitado: año completamente futuro
+    // -----------------------------------------------------------------------
+
+    it('horizonte ilimitado: fijo ya activo hoy → año completamente futuro sigue mostrando la canasta conocida (plana)', async () => {
+      // today='2025-12-15' → todayMonthKey='2025-12'. Todo 2026 es futuro.
+      // El fijo arranca en 2025-01 (ya activo hoy y en toda la ventana
+      // backward, mismo monto siempre) → tasa=0 (plano) → el horizonte
+      // ilimitado se sigue mostrando aunque el usuario navegue a un año
+      // completamente futuro (2026).
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({
+          chainId: 'chain-future-active',
+          amountCents: 2000,
+          startMonth: '2025-01',
+          deletedFrom: null,
+          type: 'EXPENSE' as any,
+        }),
+      ]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2025);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, true, '2025-12-15',
+      );
+
+      result.months.forEach((m) => {
+        expect(m.projected).toBe(true);
+      });
+      result.months.forEach((m) => {
+        expect(m.expenseCents).toBe(2000);
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // Combinación con filtros de RF-REP-014
+    // -----------------------------------------------------------------------
+
+    it('combinación con direction=expense: fijo INCOME no se proyecta en incomeCents de meses futuros', async () => {
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({
+          id: 'fijo-e', chainId: 'chain-e',
+          amountCents: 4000, startMonth: '2026-01', deletedFrom: null,
+          type: 'EXPENSE' as any,
+        }),
+        makeFijo({
+          id: 'fijo-i', chainId: 'chain-i',
+          amountCents: 9000, startMonth: '2026-01', deletedFrom: null,
+          type: 'INCOME' as any,
+        }),
+      ]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, 'expense', true, '2026-03-15',
+      );
+
+      result.months.slice(3).forEach((m) => {
+        expect(m.projected).toBe(true);
+        expect(m.expenseCents).toBe(4000); // EXPENSE fijo
+        expect(m.incomeCents).toBe(0);     // INCOME fijo excluido por direction=expense
+      });
+    });
+
+    it('combinación con filtro de categorías: solo fijos de la categoría filtrada entran en la canasta y en la tasa', async () => {
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({
+          id: 'fijo-cat-a', chainId: 'chain-cat-a',
+          amountCents: 1500, startMonth: '2026-01', deletedFrom: null,
+          categoryId: CAT_A, type: 'EXPENSE' as any,
+        }),
+        makeFijo({
+          id: 'fijo-cat-b', chainId: 'chain-cat-b',
+          amountCents: 6000, startMonth: '2026-01', deletedFrom: null,
+          categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6',
+          type: 'EXPENSE' as any,
+        }),
+      ]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      // Filtro: solo CAT_A
+      const result = await service.getReportsMovements(
+        USER_A, 2026, [CAT_A], undefined, null, undefined, true, '2026-03-15',
+      );
+
+      // Meses futuros: solo fijo de CAT_A (1500), plano; CAT_B excluida por filtro
+      result.months.slice(3).forEach((m) => {
+        expect(m.projected).toBe(true);
+        expect(m.expenseCents).toBe(1500);
+      });
+    });
+
+    it('combinación con typesFilter=["cuota"]: fijos excluidos, meses futuros en cero', async () => {
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({
+          chainId: 'chain-no-proj',
+          amountCents: 9999, startMonth: '2026-01', deletedFrom: null,
+          type: 'EXPENSE' as any,
+        }),
+      ]);
+      mockRepo.getAllCuotasForAnnual.mockResolvedValue([
+        makeCuota({ amountCents: 3000, totalInstallments: 12, startMonth: '2026-01', type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, ['cuota'], undefined, true, '2026-03-15',
+      );
+
+      result.months.slice(3).forEach((m) => {
+        expect(m.projected).toBe(true);
+        expect(m.expenseCents).toBe(0);
+      });
+
+      result.months.slice(0, 3).forEach((m) => {
+        expect(m.projected).toBe(false);
+        expect(m.expenseCents).toBe(3000);
+      });
+    });
+
+    it('filtro de categorías (RF-REP-014) que reduce el alcance a una sola cadena flat: filtro deja fuera la cadena que aportaba composición, plano al remanente', async () => {
+      // Mismo setup que "no explota con altas" (A: 100000 flat desde siempre,
+      // B: 50000 desde '2026-03'), pero filtrado a [CAT_A] → CAT_B queda
+      // fuera del alcance por completo: canasta_conocida=100000 constante,
+      // única cadena en alcance (A) nunca varió → tasa=0 → plano en 100000.
+      const fijoA = makeFijo({
+        id: 'filt-a', chainId: 'chain-filt-a',
+        startMonth: '2025-01', amountCents: 100000, deletedFrom: null,
+        categoryId: CAT_A, type: 'EXPENSE' as any,
+      });
+      const fijoB = makeFijo({
+        id: 'filt-b', chainId: 'chain-filt-b',
+        startMonth: '2026-03', amountCents: 50000, deletedFrom: null,
+        categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6',
+        type: 'EXPENSE' as any,
+      });
+
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([fijoA, fijoB]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2025);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, [CAT_A], undefined, null, undefined, true, '2026-06-15',
+      );
+
+      expect(result.months[5].expenseCents).toBe(100000);
+
+      result.months.slice(6).forEach((m) => {
+        expect(m.projected).toBe(true);
+        expect(m.expenseCents).toBe(100000);
+      });
+    });
+
+    it('direction=expense proyecta SOLO la línea de gasto: incomeCents queda en 0 aunque su propia canasta también existiera', async () => {
+      // Fijo EXPENSE (dos cadenas, una flat desde antes + una alta mid-window,
+      // mismo patrón que "no explota con altas" → plano en 150000).
+      // Fijo INCOME: direction=expense excluye la línea de ingreso por completo.
+      const fijoExpA = makeFijo({
+        id: 'dir-exp-a', chainId: 'chain-dir-exp-a',
+        startMonth: '2025-01', amountCents: 100000, deletedFrom: null,
+        categoryId: CAT_A, type: 'EXPENSE' as any,
+      });
+      const fijoExpB = makeFijo({
+        id: 'dir-exp-b', chainId: 'chain-dir-exp-b',
+        startMonth: '2026-03', amountCents: 50000, deletedFrom: null,
+        categoryId: CAT_A, type: 'EXPENSE' as any,
+      });
+      const fijoInc = makeFijo({
+        id: 'dir-inc-a', chainId: 'chain-dir-inc-a',
+        startMonth: '2026-03', amountCents: 80000, deletedFrom: null,
+        categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6',
+        type: 'INCOME' as any,
+      });
+
+      setupEmptyUnicosMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([fijoExpA, fijoExpB, fijoInc]);
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2025);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, 'expense', true, '2026-06-15',
+      );
+
+      // Futuros: expenseCents plano en 150000 (composición, sin explotar);
+      // incomeCents en 0 pese a que la línea de ingreso también tenía canasta.
+      expect(result.months[6].expenseCents).toBe(150000);
+      expect(result.months[6].incomeCents).toBe(0);
+      expect(result.months[7].expenseCents).toBe(150000);
+      expect(result.months[7].incomeCents).toBe(0);
+    });
+  });
 });

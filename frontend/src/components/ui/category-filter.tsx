@@ -43,6 +43,14 @@ export interface CategoryFilterPopoverProps {
   onSelectionChange: (ids: string[] | null) => void;
   onClose: () => void;
   anchorRef: React.RefObject<HTMLButtonElement | null>;
+  /**
+   * Opcional: universo de categorías a mostrar en el popover.
+   * Cuando se provee (ej. income-expense usa availableCategories de la API),
+   * se usa en lugar de useCategories(). Útil cuando el universo de categorías
+   * es el subconjunto con actividad en el año/filtros, no todas las categorías del usuario.
+   * Cuando se omite, el popover usa useCategories() igual que antes (back-compat).
+   */
+  availableCategories?: Array<{ id: string; name: string; color: string }>;
 }
 
 export function CategoryFilterPopover({
@@ -50,7 +58,10 @@ export function CategoryFilterPopover({
   onSelectionChange,
   onClose,
   anchorRef,
+  availableCategories: availableCategoriesProp,
 }: CategoryFilterPopoverProps) {
+  // Siempre llamamos useCategories (Rules of Hooks).
+  // Su resultado solo se usa cuando availableCategoriesProp no está provisto.
   const { categories } = useCategories();
   const popoverRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
@@ -94,11 +105,14 @@ export function CategoryFilterPopover({
     };
   }, [onClose, anchorRef]);
 
-  const allCategories: PopoverCategoryItem[] = (categories ?? []).map((c) => ({
-    id: c.id,
-    name: c.name,
-    color: c.color,
-  }));
+  // Universo de categorías: usa el prop si se provee; si no, useCategories().
+  const allCategories: PopoverCategoryItem[] = availableCategoriesProp
+    ? availableCategoriesProp
+    : (categories ?? []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        color: c.color,
+      }));
 
   // Calcular selección actual normalizada.
   // null = todas; [] = ninguna; lista = subconjunto.
@@ -260,15 +274,19 @@ export function FilterButton({
       onClick={onClick}
       aria-label="Filtrar categorías"
       aria-expanded={isOpen}
+      aria-haspopup="dialog"
       className={cn(
-        "flex items-center gap-[6px] rounded-ctl px-[9px] py-[5px]",
+        "inline-flex items-center gap-[6px] rounded-ctl px-[10px] py-[5px]",
         "text-[12.5px] font-semibold transition-colors duration-[140ms]",
-        "border border-transparent focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+        "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+        // Abierto: fondo panel-2 + texto ink (indica contexto activo)
         isOpen
           ? "bg-panel-2 text-ink"
+          // Filtro activo: texto ink (resalta que hay filtro)
           : isFiltered
             ? "text-ink hover:bg-panel-2"
-            : "text-ink-2 hover:bg-panel-2 hover:text-ink",
+            // Reposo (todas = sin filtro): texto muted (indistinguible de "sin filtrar")
+            : "text-muted hover:bg-panel-2 hover:text-ink",
       )}
     >
       <SlidersHorizontal size={15} aria-hidden="true" />
@@ -282,7 +300,7 @@ export function FilterButton({
           "Categorías"
         )}
       </span>
-      {/* Punto indicador de filtro activo */}
+      {/* Punto indicador de filtro activo — acento (cromo de UI, no monto) */}
       {isFiltered && (
         <span
           className="h-[6px] w-[6px] rounded-full bg-accent"

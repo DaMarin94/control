@@ -71,6 +71,12 @@ interface ChartTooltipContentProps {
   rows: TooltipRow[];
   /** Fila de total (Forma 2) — se muestra al final separada por un divisor. */
   totalRow?: TooltipRow;
+  /**
+   * Cuando true, agrega sufijo "· Proyección" al encabezado (RF-REP-015).
+   * UI 10.5px/600 --muted, mismo registro que el rótulo de la línea divisoria.
+   * Comunica que todos los valores del tooltip son estimados.
+   */
+  isProjected?: boolean;
 }
 
 /**
@@ -83,14 +89,22 @@ export function ChartTooltipContent({
   monthLabel,
   rows,
   totalRow,
+  isProjected,
 }: ChartTooltipContentProps) {
   return (
     <div
       className="rounded-ctl border border-line bg-panel px-3 py-[10px] text-[12.5px] font-medium"
       style={{ boxShadow: "var(--shadow-lg)", minWidth: "180px" }}
     >
-      {/* Encabezado: mes y año */}
-      <p className="mb-[8px] font-semibold text-ink">{monthLabel}</p>
+      {/* Encabezado: mes y año (+ sufijo "· Proyección" cuando es mes proyectado) */}
+      <p className="mb-[8px] font-semibold text-ink">
+        {monthLabel}
+        {isProjected && (
+          <span className="ml-[5px] text-[10.5px] font-semibold text-muted">
+            · Proyección
+          </span>
+        )}
+      </p>
 
       {/* Filas de series/categorías */}
       <div className="flex flex-col gap-[5px]">

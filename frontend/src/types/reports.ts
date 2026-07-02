@@ -20,6 +20,11 @@ export interface ReportMonth {
   incomeCents: number;
   /** Suma de gastos del mes en centavos (únicos + fijos + cuotas), filtrada al set pedido. */
   expenseCents: number;
+  /**
+   * true solo en meses futuros cuando projectFixed=true (RF-REP-015).
+   * Ausente / false = mes real (back-compat: con toggle off todos los meses son reales).
+   */
+  projected?: boolean;
 }
 
 /** Categoría con su gasto mensual desagregado. Solo categorías con gasto EXPENSE. */
@@ -207,6 +212,31 @@ export interface ReportCardConfig {
    * Presente = título propio del usuario (máx. 60 caracteres, trimmeado al persistir).
    */
   title?: string;
+  /**
+   * Filtro de tipo de movimiento para la card `income-expense` (RF-REP-014).
+   * Ausente / undefined = todos los tipos (back-compat: cards viejas sin este campo).
+   * Lista con todos los tres tipos explícitos → equivalente a ausente (omit param).
+   * [] → `&types=` vacío → backend retorna totales en cero.
+   * Solo aplica a type === "income-expense". Ignorado en otros tipos.
+   */
+  movementTypes?: Array<"fijo" | "cuota" | "unico">;
+  /**
+   * Filtro de dirección para la card `income-expense` (RF-REP-014).
+   * Ausente / undefined = "both" (back-compat: cards viejas sin este campo).
+   * "expense" = solo gastos; "income" = solo ingresos; "both" = ambos.
+   * Ausente y "both" producen el mismo param (omitido), misma query key (null).
+   * Solo aplica a type === "income-expense". Ignorado en otros tipos.
+   */
+  direction?: "expense" | "income" | "both";
+  /**
+   * Toggle de proyección de fijos a futuro (RF-REP-015).
+   * Ausente / false = off (default, back-compat: card sin este campo = sin proyección).
+   * true = on: el backend recibe &projectFixed=true&today=YYYY-MM-DD y devuelve
+   * meses futuros con projected:true en ReportMonth.
+   * Solo aplica a type === "income-expense". Ignorado en otros tipos.
+   * El Dashboard NO monta este toggle (igual que currency y los filtros de RF-REP-014).
+   */
+  projectFixed?: boolean;
 }
 
 // ─── Tipos del endpoint de reporte anual de Cuotas (Ola 3, P2) ───────────────

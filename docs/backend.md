@@ -210,6 +210,7 @@ El join de movimientos y el cálculo de totales **no filtran por `Category.delet
 - **Cálculo on-the-fly (RN-006):** no hay filas por instancia mensual. Se consultan los grupos con `startMonth <= month` (comparación léxica de strings `YYYY-MM`, como los fijos) y se filtra en JS por `month < addMonths(startMonth, totalInstallments)`. Una cuota cae en el mes si `startMonth <= month < addMonths(startMonth, totalInstallments)`.
 - **Número de cuota del mes (1-based):** `monthDiff(startMonth, month) + 1`. Va al campo `installment.number`; `installment.total = totalInstallments`. El `MovementItem` de una cuota trae `occurredAt`/`timezone` en `null` (sin día/hora) y `installment` poblado (en únicos/fijos `installment` es `null`).
 - **Helpers `addMonths` / `monthDiff`** exportados desde `movements.repository.ts` — reusarlos, no reimplementar aritmética de meses.
+- **Gotcha — `addMonths` soporta offsets negativos que cruzan el límite de año vía módulo verdadero.** El cálculo del mes destino usa `((month % 12) + 12) % 12` (módulo verdadero, no `%` de JS, que devuelve negativos): con eso `addMonths('2026-03', -3) = '2025-12'`. Imprescindible porque la **proyección de fijos (RF-REP-015)** arma su ventana con offsets negativos `[hoy-12 .. hoy]`; un módulo ingenuo desfasaría el año al retroceder más allá de enero.
 - **Los totales del mes suman únicos + fijos + cuotas.**
 
 ### Serie de reportes (`GET /movements/reports?year=YYYY&categories=`)
@@ -219,6 +220,8 @@ Endpoint **agregado** para los reportes (RF-REP-001/002/005), scopeado por `user
 - **`year` (`YYYY`) obligatorio:** exactamente **4 dígitos**, rango **1900–2200**. Si falta, no tiene 4 dígitos o cae fuera de rango → `400`. `401` global por JWT inválido/ausente.
 - **`categories` (lista de `categoryId`s separados por comas) opcional:** **omitido = todas las categorías** (sin filtro). El front lo manda con la **coma literal** (`categories=id1,id2`).
 - **`currency` opcional (override de display, RF-REP-007):** una de las 4 monedas, **case-sensitive**. En `getReportsMovements`, el `displayCurrency` que alimenta todas las conversiones es `currencyOverride ?? userSettings.defaultCurrency`: omitido convierte a la default del usuario; presente y válido convierte a esa moneda. **Presente vacío o fuera del set → `400`.** El resto de la conversión (re-ruteo por pivote USD con la tabla de referencia del mes) es idéntico al de la default. Contrato del param en `docs/data-model.md`, §Contrato de serie de reportes.
+- **`types` y `direction` opcionales (RF-REP-014):** `types` (CSV de `fijo`/`cuota`/`unico`, semántica de 3 estados igual que `categories`; valor fuera del set → `400`) y `direction` (`expense`/`income`/`both`, default `both`; fuera del set → `400`). El controller parsea ambos y los pasa a `getReportsMovements`; contrato y mapeo persistencia→query en `docs/data-model.md`, §Contrato de serie de reportes. Comportamiento abajo.
+- **`projectFixed` y `today` opcionales (RF-REP-015):** `projectFixed=true` activa la proyección de fijos a futuro; ausente o cualquier otro valor = off (respuesta idéntica a hoy). `today` (`YYYY-MM-DD`) fija el corte real/proyectado; ausente = ahora UTC; solo relevante con `projectFixed=true`. Contrato en `docs/data-model.md`, §Contrato de serie de reportes; regla de cálculo abajo.
 
 > Shape de la respuesta (`ReportMovementsResponse` / `ReportMonth` / `ReportCategory`), invariante de consistencia y reglas de `months` / `categories` / `earliestYear` en `docs/data-model.md`, §Contrato de serie de reportes. Abajo solo cómo se calcula cada parte en el backend.
 
@@ -237,6 +240,34 @@ Endpoint **agregado** para los reportes (RF-REP-001/002/005), scopeado por `user
 - **Afecta Forma 1 y Forma 2.** El filtro restringe qué movimientos cuentan: en `months[*]` (Forma 1: `incomeCents`/`expenseCents`) **y** en `categories[*]` (Forma 2: las bandas apiladas). Una categoría omitida no aparece en ninguna de las dos.
 - **`earliestYear` y `availableCategories` IGNORAN el filtro** — se calculan sobre **todos** los movimientos del usuario (del año, en el caso de `availableCategories`), para que ni los límites de navegación de año (RF-REP-002) ni la leyenda-filtro salten al cambiar el filtro.
 - **Filtrado in-memory, NO en SQL/ORM:** se trae el universo de movimientos del año y se filtra en JS con un **`Set` de `categoryId`s** pedidos (omitido = sin filtrar). El invariante `SUM(bandas por categoría) == expenseCents del mes` **se mantiene con el filtro activo** (ambos lados se computan sobre el mismo conjunto filtrado).
+
+#### Filtros de tipo y dirección (RF-REP-014)
+
+Sobre los **totales mensuales** (`incomeCents`/`expenseCents`), `getReportsMovements` aplica además, con el **mismo criterio de imputación que RN-015**, dos filtros combinables (AND) con el de categorías:
+
+- **Tipo de movimiento** — `Set` de `["fijo","cuota","unico"]` (3 estados igual que categorías: `null` = todos, `Set` vacío = ninguno → totales en cero, subconjunto = los pedidos). Acota qué orígenes aportan a las series.
+- **Dirección** — `both` (default, sin filtro) / `expense` (suma solo gastos) / `income` (suma solo ingresos).
+- **Solo totales.** Los filtros de tipo/dirección afectan `months[*]`; `categories[*]`, `availableCategories` y `earliestYear` se calculan **ignorándolos** (superconjunto estable, igual que ante el filtro de categorías).
+- **Gotcha — dirección y tipo de un calculado se resuelven al vuelo, no por la fila origen:**
+  - La **dirección** (income/expense) de un movimiento **calculado** la fija su `derivedType` —el signo del monto tras aplicar `formulaSign`—, no el `type` de la fila origen: un calculado puede **invertir** el signo del origen (un calculado-de-fijo de gasto puede resultar `INCOME`, y viceversa). El filtro `direction` se aplica sobre ese `derivedType`.
+  - El **tipo de movimiento** de un calculado se **hereda de su fuente**: un calculado-de-fijo cuenta como `fijo`, un calculado-de-cuota como `cuota`, un calculado-de-único como `unico`. El filtro `types` matchea por ese tipo heredado, no por una categoría propia del calculado.
+
+#### Proyección de fijos a futuro (RF-REP-015)
+
+Con `projectFixed=true`, los meses **posteriores a `today`** del año pedido se marcan `projected: true` (ver `docs/data-model.md`, §Contrato de serie de reportes) y suman, sobre el dato real, la proyección de los fijos. Con la proyección off (o sin el param) todos los meses vienen `projected: false` y los totales son los de siempre.
+
+- **Solo fijos.** En el tramo futuro solo se proyectan los **fijos** (cuotas y únicos **no** se extienden a futuro). Los fijos de gasto extienden `expenseCents`; los de ingreso, `incomeCents`. El mes futuro de cada línea vale **solo** el valor proyectado de fijos.
+- **Método — esqueleto determinista × tasa de crecimiento de fijos, por línea.** La proyección se calcula **por línea** (gasto e ingreso por separado). Para cada mes futuro `m` (meses hacia adelante desde hoy): `valor_línea(m) = canasta_conocida(m) × (1 + tasa_precio)^m`, compuesto, sin truncar decimales intermedios; el redondeo va solo al valor final.
+- **`canasta_conocida(m)` — esqueleto determinista por mes.** Suma del monto de los fijos en alcance **activos en el mes futuro `m`** según el criterio de actividad de la serie real (RN-016: `startMonth ≤ mes`, no eliminado en el mes, `isOnFrequency`), cada uno a su **último monto conocido** (segmento vigente de su cadena de splits `Recurring`, RN-005). Solo fijos —normales y calculados-de-fijo—; cuotas y únicos no. Reusa la misma imputación mensual del tramo real, extendida a meses futuros: las altas con `startMonth` futuro, las bajas (`deletedFrom`) y la cadencia (anual/bimestral) entran acá de forma determinista, **no** vía la tasa.
+- **`tasa_precio` — crecimiento propio de cada fijo, ponderado por tamaño, 12 meses.** Tasa mensual medida **por línea** sobre las cadenas de fijo **activas hoy** en alcance (solo fijos). Por cada cadena `i`: se toma su **monto más viejo dentro de `[hoy-12 .. hoy-1]`** (el mes más antiguo, hasta 12 atrás, en que esa cadena estaba activa) como `old_i` a `n_i` meses, y su monto de hoy `today_i`; `growth_i = (today_i / old_i)^(1/n_i) − 1`. `tasa_precio = Σ(today_i · growth_i) / Σ(today_i)` sobre las cadenas con historia previa. Una cadena **sin monto previo en la ventana** (alta reciente) o con `old_i <= 0` se **excluye de la tasa** (pero sigue en `canasta_conocida`, así un alta no infla la tasa).
+- **Piso en 0 — sin bajas.** `max(0, tasa_precio)` sobre el agregado final (nunca proyecta bajas). Si ninguna cadena tiene historia previa en la ventana, `tasa_precio = 0` (proyección plana al esqueleto).
+- **Racional (estructural).** Se mide el crecimiento real de cada fijo sobre su propia historia, ponderado por tamaño, en vez de anclar en un único mes común de la ventana: los fijos que varían cuentan aunque tengan pocos meses de historia, los planos aportan ~0, y las altas no inflan la tasa (las absorbe la canasta determinista).
+- **Sin IPC.** El pronóstico **no** usa `InflationRate` en ningún caso (ni motor, ni mezcla, ni fallback). Un fijo nunca editado no aporta señal a la tasa (su crecimiento propio es 0) y contribuye plano a su monto real.
+- **Skips.** No cuentan para la tasa (ausencia puntual, no cambio de precio); sí afectan `canasta_conocida(m)` (un mes skippeado aporta 0 de ese fijo ese mes).
+- **Limitación de moneda.** La proyección se calcula enteramente sobre la serie en **moneda de display**: los montos de las puntas y del esqueleto se toman ya convertidos con el TC de sus propios meses, y el crecimiento hacia adelante no vuelve a convertir. Proyectar en moneda propia exigiría tipos de cambio futuros que el sistema no tiene.
+- **Horizonte ilimitado.** La proyección no se corta a fin de año: un año **completamente futuro** ⇒ los 12 meses vienen proyectados.
+- **Respeta los filtros de RF-REP-014.** `direction` / `types` / `categories` acotan qué fijos entran tanto en el esqueleto como en el cómputo de la tasa, con el mismo criterio que aplican al tramo real (un `types` sin `fijo` deja el tramo futuro sin proyección de fijos; `direction=income` proyecta solo los fijos de ingreso, etc.).
+- **Gotcha — el desglose por categoría no incluye fijos futuros.** Con `projectFixed=true`, `categories[*]` **no** recibe contribución de fijos en los meses proyectados (la proyección solo alimenta los totales de línea `incomeCents`/`expenseCents`). No es visible en producto porque el reporte `by-category` no expone el toggle de proyección; queda como nota técnica.
 
 ### Reporte anual de Únicos (`GET /movements/reports/annual-unicos`)
 
@@ -342,7 +373,7 @@ Un **calculado es un fijo** cuyo `amountCents` y `type` **no se ingresan ni se p
 
 - Todo `Recurring` tiene un **`chainId`** (`@default(cuid())`). Un "fijo lógico" es una **cadena de filas** con el mismo `chainId`; en el **split** de edición (cierra R1, abre R2), **R2 hereda el `chainId` de R1** — el `id` de fila cambia, el `chainId` no.
 - El calculado **vincula al origen por `sourceChainId` = `chainId` del origen** (NO un `Recurring.id` de fila). Así el vínculo **sobrevive a los splits** del origen (RF-MCALC-004). El calculado tiene además su **propia** `chainId` nueva (es su propia cadena, independiente).
-- **Limitación conocida/aceptada:** las cadenas partidas por splits **anteriores** a la migración de `chainId` quedaron con `chainId`s separados (no se reagruparon retroactivamente).
+- **Cadenas legacy fragmentadas.** Las cadenas partidas por splits **anteriores** a la migración de `chainId` quedaron con `chainId`s separados. Se **re-unen** con el script de mantenimiento `backend/scripts/restitch-recurring-chains.ts` (`pnpm restitch:recurring-chains`), que agrupa por **identidad = descripción del fijo** (única por fijo) y fusiona en una sola cadena los grupos con múltiples `chainId` cuyos tramos no se solapan; solo re-apunta `chainId` / `sourceChainId`, sin tocar montos ni fechas. Es limpieza de una sola vez: el split de edición en curso ya hereda el `chainId` y no fragmenta.
 
 ### Derivación on-the-fly (Forma 2, no persistida)
 

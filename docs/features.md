@@ -37,7 +37,8 @@
 | Reportes — card "Reporte anual de gastos en Cuotas" (gantt de barras horizontales por mes) | RF-REP-011 | Implementado |
 | Reportes — card "Inflación vs Ingresos" (líneas anuales: inflación, variación de ingresos y ajustada + tendencias OLS) | RF-REP-012 | Implementado |
 | Reportes — card "Evolución de gastos fijos" (línea total, selección por fijo, modos montos/variación/ajustada) | RF-REP-013 | Definido (no implementado) |
-| Reportes — Ingresos vs Gastos: filtros tipo/dirección/categoría + proyección de fijos a futuro | RF-REP-014..015 | Definido (no implementado) |
+| Reportes — Ingresos vs Gastos: filtros de tipo de movimiento, dirección y categoría (acotan las 2 series, no es desglose) | RF-REP-014 | Implementado |
+| Reportes — Ingresos vs Gastos: proyección de fijos a futuro | RF-REP-015 | Implementado |
 | Multi-moneda — set curado 4 (ARS/USD/EUR/BRL) + tabla de cotizaciones de referencia + pantalla `/configuracion` | RF-CUR-001..006, RN-009 | Implementado |
 | Modo de color — toggle Sistema/Claro/Oscuro en el chrome global (sidebar), persistido (blob `theme`) | RF-APP-001 | Implementado |
 | Sincronización de cotizaciones externas — FX (dolarapi/Frankfurter) + IPC (datos.gob.ar) vía trigger sin datos | RF-FX-001, RF-IPC-001, RF-SYNC-001 | Definido (no implementado) |

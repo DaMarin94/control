@@ -1345,9 +1345,10 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 - **Tipo de reporte.** `income-expense` (Ingresos vs Gastos) o `by-category` (Gastos por categoría). Define qué visualización monta la instancia.
 - **Año a mostrar.** Define el año cuyos 12 meses se grafican. La navegación de año (flechas embebidas en el widget) está **siempre activa** e **independiente por instancia**: cambiar el año de un widget no afecta a ningún otro. Límites de navegación: hacia atrás el control ‹ se deshabilita antes del **primer año con CUALQUIER movimiento del usuario** (`earliestYear`, no afectado por el filtro de categorías — ver RF-REP-005); hacia adelante se **bloquean los años futuros** (máximo navegable: el año en curso).
 - **Categorías seleccionadas (filtro).** Subconjunto de categorías que el reporte considera; default **todas**. El filtro tiene **tres estados**: **todas** (default, sin filtro), **subconjunto** (solo las tildadas) y **ninguna** (todas destildadas) → la serie/bandas se grafican en **cero** (igual que el filtro de `/mes`, RF-VM-006). El universo de categorías ofrecido es **solo las categorías con gasto del año** (no el catálogo completo del usuario): cualquier filtro de categorías de un reporte lista únicamente las categorías que aportan a lo que se muestra ahí. Ese universo es **estable**: no se achica al destildar categorías (igual criterio que `earliestYear`).
-- **La leyenda del gráfico ES el filtro.** El widget **no** tiene un control de filtro separado: la **leyenda interactiva** es el único disparador. Clic en un ítem de la leyenda lo activa/desactiva. Qué togglea depende del tipo:
+- **La leyenda del gráfico ES el filtro.** Para `by-category` (y para la card `income-expense` del dashboard) el widget **no** tiene un control de filtro separado: la **leyenda interactiva** es el único disparador. Clic en un ítem de la leyenda lo activa/desactiva. Qué togglea depende del tipo:
   - **Ingresos vs Gastos** (`income-expense`): la leyenda togglea las **series Ingresos / Gastos** (estado `hiddenSeries`, persistido por card).
   - **Gastos por categoría** (`by-category`): la leyenda togglea **categorías** (usa el filtro de categorías persistido de la card, con su lógica de tres estados — todas / subconjunto / ninguna).
+  - **Excepción — card `income-expense` de `/reportes`:** suma controles de filtro **dedicados** de tipo de movimiento, dirección y categoría (RF-REP-014), separados de la leyenda (que ahí togglea solo las series).
 - **Persistencia (modo).** Define qué hace la instancia con sus cambios de año y de filtro:
   - **Persistida** — en `/reportes`: cada cambio de año y de filtro de la card se persiste en la clave `reports` de preferencias (RF-REP-004).
   - **Efímera** — en el dashboard: el año y el filtro son de sesión; **no** se persisten (al recargar, el widget vuelve a su estado inicial — año en curso, todas las categorías). Ver RF-DASH-001/002.
@@ -1356,7 +1357,7 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 - [ ] El widget es un componente reutilizable; tipo, año, categorías seleccionadas y modo de persistencia se controlan por props, no por lógica interna distinta en cada pantalla.
 - [ ] La navegación de año está **embebida en el widget** y es **independiente por instancia**: mover el año de una instancia no mueve el de ninguna otra (no hay control de año compartido).
 - [ ] El filtro de categorías está **embebido en el widget** y ofrece **solo las categorías con gasto del año** (las que aportan a lo que se muestra), con default **todas seleccionadas**; el universo es estable (no se achica al destildar).
-- [ ] La **leyenda del gráfico es el filtro**: no hay un control de filtro separado. Clic en un ítem de la leyenda lo activa/desactiva. En `income-expense` togglea las series Ingresos/Gastos; en `by-category` togglea categorías. La lógica de tres estados del filtro de categorías (todas / subconjunto / ninguna) se mantiene.
+- [ ] La **leyenda del gráfico es el filtro**: no hay un control de filtro separado (excepto en la card `income-expense` de `/reportes`, que suma controles dedicados de tipo / dirección / categoría — RF-REP-014). Clic en un ítem de la leyenda lo activa/desactiva. En `income-expense` togglea las series Ingresos/Gastos; en `by-category` togglea categorías. La lógica de tres estados del filtro de categorías (todas / subconjunto / ninguna) se mantiene.
 - [ ] El filtro aplica a ambos tipos: en `income-expense` restringe qué categorías cuentan en los totales de ingresos y de gastos; en `by-category` restringe qué bandas se apilan (ver contrato del endpoint en data-model.md).
 - [ ] Los límites de navegación de año respetan `earliestYear` (primer año con cualquier movimiento del usuario, **independiente del filtro**) hacia atrás y el año en curso hacia adelante.
 - [ ] En modo **persistido** (cards de `/reportes`), los cambios de año y de filtro de la instancia se persisten vía clave `reports` (RF-REP-004).
@@ -1686,7 +1687,7 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 
 - **Tipo de movimiento** — `fijo` / `cuota` / `único`, **multi-selección**; default **los tres**. Acota qué tipos de movimiento aportan a los totales mensuales de ingresos y de gastos.
 - **Dirección** — `solo gastos` / `solo ingresos` / `ambos`; default **ambos**. Acota qué dirección se computa en la serie.
-- **Categoría** — el filtro de categorías ya existente del widget (RF-REP-002), con su lógica de tres estados (todas / subconjunto / ninguna).
+- **Categoría** — el filtro de categorías ya existente del widget (RF-REP-002), con su lógica de tres estados (todas / subconjunto / ninguna), expuesto como la **leyenda-filtro de categorías tildables del footer** (igual que `by-category`).
 
 Las tres dimensiones se combinan libremente (ej. "solo gastos fijos de la categoría X"; "todas las categorías pero solo gastos fijos"; "solo ingresos únicos").
 
@@ -1698,7 +1699,7 @@ Las tres dimensiones se combinan libremente (ej. "solo gastos fijos de la catego
 - [ ] La configuración de filtros se **persiste por card** en la clave `reports` (RF-REP-004); el shape concreto se fija en implementación (`docs/data-model.md`).
 
 **Notas:**
-- La **forma de los controles** (cómo se exponen tipo y dirección, y cómo conviven con la leyenda interactiva que togglea las series Ingresos/Gastos, RF-REP-002) la define `control-design` (`docs/design.md`).
+- La **forma de los controles** (cómo se exponen tipo y dirección, y la leyenda-filtro de categorías del footer) la define `control-design` (`docs/design.md`). La card **no** tiene leyenda interactiva de las series Ingresos/Gastos: la **dirección** es el único control de cuántas líneas dibuja el canvas (ambos = 2 líneas; solo gastos / solo ingresos = 1).
 
 ---
 
@@ -1706,29 +1707,47 @@ Las tres dimensiones se combinan libremente (ej. "solo gastos fijos de la catego
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | La card de tipo `income-expense` (RF-REP-001) ofrece un **toggle on/off** que **extiende sus líneas hacia los meses futuros** proyectando **solo los fijos**: las cuotas y los movimientos únicos **no** entran en el tramo proyectado. La proyección de cada fijo se calcula a partir de la tasa de crecimiento de su propio historial de montos y se compone hacia adelante. El **horizonte es ilimitado**: la proyección se sigue mostrando por más que el usuario navegue años hacia adelante. El tramo proyectado se **diferencia visualmente** del tramo real. |
+| **Descripción** | La card de tipo `income-expense` (RF-REP-001) ofrece un **toggle on/off** que **extiende sus líneas hacia los meses futuros** proyectando **solo los fijos**: las cuotas y los movimientos únicos **no** entran en el tramo proyectado. La proyección se calcula por **línea** (gasto e ingreso por separado) combinando dos partes: (1) un **esqueleto determinista** que reconstruye, mes a mes, la canasta de fijos conocida que estará activa en el futuro, y (2) una **tasa de encarecimiento** medida sobre el crecimiento de precio propio de cada fijo activo. El **horizonte es ilimitado**: la proyección se sigue mostrando por más que el usuario navegue años hacia adelante. El tramo proyectado se **diferencia visualmente** del tramo real. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | Existe una card de tipo `income-expense` (en `/reportes`). |
 
 **Regla de cálculo de la proyección:**
 
-- **Método.** Para cada fijo se toma la **ventana de los últimos 3 meses** de su historial de montos, se calcula su **crecimiento porcentual promedio** y se aplica de forma **compuesta** hacia los meses futuros.
-- **Fijo sin historial de cambios** (nunca varió de monto) → se proyecta **plano** al monto actual.
-- **Solo fijos.** En el tramo proyectado solo entran los fijos (los de gasto extienden la serie de gastos; los de ingreso, la de ingresos). Cuotas y únicos no se proyectan.
-- **Horizonte ilimitado.** El tramo proyectado no se corta a fin de año: se recalcula y se sigue mostrando para cualquier año futuro que el usuario navegue.
+- **Método — esqueleto determinista × tasa de crecimiento de fijos, por línea.** La proyección se calcula por **línea** (gasto e ingreso por separado). Para cada mes futuro `m` (meses hacia adelante desde hoy):
+
+  `valor_línea(m) = canasta_conocida(m) × (1 + tasa_precio)^m`
+
+  compuesto, sin truncar decimales intermedios; el redondeo se aplica solo al valor final. El mes futuro de la línea vale **solo** este valor proyectado de fijos (cuotas y únicos no aportan al futuro).
+- **`canasta_conocida(m)` — esqueleto determinista.** Suma, para el mes futuro `m`, del monto de los movimientos **fijos** en alcance que estarán **activos ese mes** según RN-016 (frecuencia, altas con `startMonth` futuro ya cargadas, `deletedFrom`, skips), cada uno a su **último monto conocido**, respetando los filtros de RF-REP-014 (dirección, tipos con `fijo` incluido, categorías tildadas). Solo entran fijos —normales y calculados-de-fijo—; cuotas y únicos no. Es **determinista**: la composición futura conocida (altas programadas, bajas, cadencia de un fijo anual/bimestral) se reconstruye acá, **no** se estima con la tasa. Un fijo con alta futura aparece en su mes; uno dado de baja deja de sumar; un anual reaparece solo en el mes que le toca.
+- **`tasa_precio` — crecimiento propio de cada fijo, ponderado por tamaño.** Tasa mensual medida **por línea**, sobre las **cadenas de fijo activas hoy** en alcance (filtros de RF-REP-014, solo fijos). Para cada cadena `i`:
+  - Se busca su **monto más viejo dentro de la ventana `[hoy-12 .. hoy-1]`**: el mes más antiguo —hasta 12 atrás— en que esa misma cadena estaba activa (`old_i`, a `n_i` meses de hoy); `today_i` es su monto hoy.
+  - Una cadena **sin monto previo en la ventana** (alta reciente) o con `old_i <= 0` queda **excluida de la tasa** —pero sigue en `canasta_conocida`, para que un alta no infle la tasa.
+  - `growth_i = (today_i / old_i)^(1/n_i) − 1` (CAGR mensual propio de esa cadena sobre su ventana disponible).
+  - `tasa_precio` = promedio de los `growth_i` **ponderado por tamaño** (peso = `today_i`): `Σ(today_i · growth_i) / Σ(today_i)`, sobre las cadenas con historia previa.
+- **Piso en 0 — nunca se proyectan bajas.** Se aplica `max(0, tasa_precio)` sobre el **agregado final** (nunca proyecta bajas). Si ninguna cadena tiene historia previa en la ventana, `tasa_precio = 0` (proyección plana al esqueleto).
+- **Racional.** Se mide el crecimiento **real de cada fijo sobre su propia historia**, ponderado por tamaño, en vez de anclar en un único mes común de la ventana: así los fijos que varían cuentan aunque tengan pocos meses de historia, los planos aportan ~0, y las altas no inflan la tasa (las absorbe la canasta determinista).
+- **Sin IPC.** El pronóstico **no** usa la inflación nacional (IPC) en ningún caso: ni como motor, ni como mezcla, ni como fallback. Un fijo nunca editado (monto constante, sin historial de precio) no aporta señal y contribuye plano a su monto real.
+- **Skips.** Un skip es ausencia puntual, no cambio de precio: **no** cuenta para la tasa; sí afecta `canasta_conocida(m)` (un mes skippeado aporta 0 de ese fijo ese mes).
+- **Moneda — serie de display.** La proyección se calcula sobre la serie en la **moneda de display** (montos ya convertidos con el TC de sus propios meses). Es una limitación conocida: mezcla parte de la variación de tipo de cambio en la tasa. Proyectar en moneda propia sería inviable sin tipos de cambio futuros.
+- **Ventana 12 meses; horizonte ilimitado; solo fijos.** La ventana de la tasa es de 12 meses; el tramo proyectado no se corta a fin de año (se recalcula para cualquier año futuro que se navegue) y solo extiende fijos.
 
 **Criterios de aceptación:**
 - [ ] La card `income-expense` expone un **toggle on/off** de proyección de fijos; **default off** (con el toggle off, la card no agrega tramo proyectado).
 - [ ] Con el toggle on, las líneas se **extienden a los meses futuros** proyectando **solo los fijos**; cuotas y únicos **no** entran en el tramo proyectado.
-- [ ] Cada fijo se proyecta por el **crecimiento porcentual promedio de los últimos 3 meses** de su historial de montos, **compuesto** hacia adelante.
-- [ ] Un fijo **sin historial de cambios** se proyecta **plano** a su monto actual.
+- [ ] Cada mes futuro de cada línea vale `canasta_conocida(m) × (1 + tasa_precio)^m`, aplicado **compuesto** hacia adelante; el redondeo va solo al valor final.
+- [ ] `canasta_conocida(m)` reconstruye de forma **determinista** los fijos activos ese mes según RN-016 (frecuencia, altas futuras, bajas, skips) a su último monto conocido, respetando los filtros de RF-REP-014: un fijo con alta futura aparece en su mes, un fijo dado de baja deja de sumar, un anual reaparece solo cuando le toca.
+- [ ] `tasa_precio` es el **promedio ponderado por tamaño** (peso = monto hoy) del **CAGR mensual propio** de cada cadena de fijo activa hoy, medido contra su monto más viejo dentro de la ventana `[hoy-12 .. hoy-1]`; las cadenas sin historia previa en la ventana se **excluyen de la tasa** (pero siguen en la canasta).
+- [ ] La tasa tiene **piso en 0** sobre el agregado final: nunca se proyectan bajas. Sin ninguna cadena con historia previa ⇒ proyección plana al esqueleto.
+- [ ] La proyección **no usa IPC** en ningún caso (ni motor, ni mezcla, ni fallback).
 - [ ] El **horizonte es ilimitado**: la proyección se sigue mostrando al navegar años hacia adelante; no se corta a fin de año.
 - [ ] El **tramo proyectado se diferencia visualmente** del tramo real (forma exacta a definir por diseño).
 - [ ] El estado del toggle se **persiste por card** en la clave `reports` (RF-REP-004); el shape concreto se fija en implementación (`docs/data-model.md`).
 
 **Notas:**
-- El cálculo se apoya en que el **historial de montos de cada fijo es reconstruible**: cada edición de monto de un fijo crea un **split en la cadena `Recurring`** (RN-005), de modo que la sucesión de montos por mes está disponible para derivar la ventana de 3 meses y la tasa de crecimiento. Las fórmulas exactas y el contrato del endpoint se fijan en implementación (`docs/backend.md`, `docs/data-model.md`).
+- La tasa se apoya en que el **historial de montos de cada fijo es reconstruible**: cada edición de monto de un fijo crea un **split en la cadena `Recurring`** (RN-005), de modo que el monto de cada cadena en su punta vieja de la ventana está disponible para medir su crecimiento propio. Las fórmulas exactas y el contrato del endpoint se fijan en implementación (`docs/backend.md`, `docs/data-model.md`).
+- **Limitación de moneda.** La proyección se calcula sobre la serie en la **moneda de display**, no sobre la moneda propia del fijo; proyectar en moneda propia exigiría tipos de cambio futuros que el sistema no tiene.
+- **Límite asumido — salto único vs. periódico.** Un aumento único e irrepetible es indistinguible de uno periódico en el dato disponible: la tasa lo trata igual que a un aumento repetible, por lo que puede **sobreestimar** tras un salto único.
 - La **diferenciación visual** del tramo proyectado (trazo, color, marca de "proyección") la define `control-design` (`docs/design.md`).
 - **Relación con RF-REP-013:** la proyección de fijos de esta card y el reporte de Evolución de gastos fijos (RF-REP-013) son ambas miradas sobre los fijos; aquí es la mirada de **montos** (con filtros por tipo / dirección / categoría, RF-REP-014) extendida a futuro, mientras que RF-REP-013 es la mirada de **variación / inflación con selección por fijo**.
 
