@@ -180,9 +180,11 @@ beforeEach(() => {
     createTransaction: mockCreateTransaction,
     updateTransaction: mockUpdateTransaction,
     deleteTransaction: mockDeleteTransaction,
+    skipTransaction: vi.fn(),
     isCreating: false,
     isUpdating: false,
     isDeleting: false,
+    isSkipping: false,
   });
 
   mockUseRouter.mockReturnValue({ push: mockPush } as unknown as ReturnType<typeof useRouter>);

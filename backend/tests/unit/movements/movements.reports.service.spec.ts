@@ -163,6 +163,7 @@ function makeCuota(overrides: Partial<InstallmentGroupForAnnual> = {}): Installm
     anchorCurrency: Currency.ARS,
     totalInstallments: 12,
     startMonth: '2026-01',
+    skippedMonths: new Set<string>(),
     categoryId: CAT_B,
     categoryName: 'Tecnología',
     categoryColor: '#A98BD6',

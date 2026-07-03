@@ -110,6 +110,8 @@ export interface InstallmentGroupForAnnual {
   anchorCurrency: Currency;
   totalInstallments: number;
   startMonth: string;
+  /** Set de meses salteados (YYYY-MM) — vacío si no tiene skips (P3 — Fase 1.1.1.ext). */
+  skippedMonths: Set<string>;
   categoryId: string;
   categoryName: string;
   categoryColor: string;
@@ -265,9 +267,12 @@ export interface CalculatedInfo {
  * - Fijos: la frecuencia del fijo (RecurringFrequency)
  * - Únicos y cuotas: null (no aplica)
  *
- * P1 (Fase 1.1.1) — campo skipped:
+ * P1 (Fase 1.1.1) / P3 (Fase 1.1.1.ext) — campo skipped:
  * - Fijos: true si el fijo está anulado para este mes puntual (no suma a totales)
- * - Únicos y cuotas: false siempre (no tienen skip)
+ * - Únicos: true si el único está anulado (flag en la fila, sin noción de mes)
+ * - Cuotas: true si esa instancia (mes) puntual de la cuota está anulada
+ * En los tres casos, un calculado hereda el skip de su origen (para ese mes)
+ * OR su propio skip (si el calculado en sí fue anulado).
  *
  * Fase 1.1.7 — campo calculated:
  * - Presente si el ítem ES un calculado (hijo): contiene info del origen y la fórmula.
@@ -338,6 +343,8 @@ interface RawTransactionRow {
   exchangeRate: string;
   /** Moneda de referencia del exchangeRate guardado (Fase 1.2.4) */
   anchorCurrency: string;
+  /** true si el único está anulado (P3 — Fase 1.1.1.ext) */
+  skipped: boolean;
   categoryId: string;
   categoryName: string;
   categoryColor: string;
@@ -482,6 +489,7 @@ export class MovementsRepository {
           t.currency::text                AS "currency",
           t."exchangeRate"::text          AS "exchangeRate",
           t."anchorCurrency"::text        AS "anchorCurrency",
+          t.skipped                       AS "skipped",
           t."categoryId"                  AS "categoryId",
           c.name                          AS "categoryName",
           c.color                         AS "categoryColor",
@@ -516,6 +524,11 @@ export class MovementsRepository {
         category: {
           select: { id: true, name: true, color: true, scope: true },
         },
+        // Skip propio del calculado (P3 — Fase 1.1.1.ext): mismo patrón que calculado-de-fijo.
+        skips: {
+          where: { month },
+          select: { month: true },
+        },
       },
     });
 
@@ -523,11 +536,11 @@ export class MovementsRepository {
       return unicosItems;
     }
 
-    // Cargar Transactions de origen (con anchorCurrency)
+    // Cargar Transactions de origen (con anchorCurrency + skipped)
     const txIds = calculadosDeUnico.map((r) => r.sourceMovementId!);
     const txRows = await this.prisma.transaction.findMany({
       where: { id: { in: txIds } },
-      select: { id: true, amountCents: true, description: true, occurredAt: true, timezone: true, currency: true, exchangeRate: true, anchorCurrency: true },
+      select: { id: true, amountCents: true, description: true, occurredAt: true, timezone: true, currency: true, exchangeRate: true, anchorCurrency: true, skipped: true },
     });
     const txOriginMap = new Map<string, {
       amountCents: number;
@@ -537,6 +550,7 @@ export class MovementsRepository {
       currency: Currency;
       exchangeRate: number;
       anchorCurrency: Currency;
+      skipped: boolean;
     }>();
     for (const tx of txRows) {
       txOriginMap.set(tx.id, {
@@ -547,12 +561,16 @@ export class MovementsRepository {
         currency: tx.currency,
         exchangeRate: Number(tx.exchangeRate),
         anchorCurrency: tx.anchorCurrency,
+        skipped: tx.skipped,
       });
     }
 
     for (const calc of calculadosDeUnico) {
       const txData = calc.sourceMovementId ? txOriginMap.get(calc.sourceMovementId) : undefined;
       if (!txData) continue;
+
+      // Skip heredado del origen OR skip propio del calculado (mismo criterio que calculado-de-fijo)
+      const skipped = txData.skipped || calc.skips.length > 0;
 
       const derivedAmount = applyFormula(
         txData.amountCents,
@@ -592,7 +610,7 @@ export class MovementsRepository {
         },
         installment: null,
         frequency: null,
-        skipped: false,
+        skipped,
         calculated: {
           sourceType: 'unico',
           sourceId: calc.sourceMovementId!,
@@ -851,6 +869,11 @@ export class MovementsRepository {
               scope: true,
             },
           },
+          // Skip de la instancia (mes) puntual de este grupo (P3 — Fase 1.1.1.ext)
+          skips: {
+            where: { month },
+            select: { month: true },
+          },
         },
       }),
       this.loadPivotRates(month),
@@ -864,6 +887,7 @@ export class MovementsRepository {
         continue;
       }
 
+      const skipped = g.skips.length > 0;
       const number = monthDiff(g.startMonth, month) + 1;
       const exchangeRate = Number(g.exchangeRate);
       // P3: cuotas usan TC oficial del mes de la instancia (pivotRates), no el exchangeRate guardado.
@@ -899,7 +923,7 @@ export class MovementsRepository {
           startMonth: g.startMonth,
         },
         frequency: null,
-        skipped: false,
+        skipped,
         calculated: null,
         hasCalculated: false,
       });
@@ -922,11 +946,16 @@ export class MovementsRepository {
         category: {
           select: { id: true, name: true, color: true, scope: true },
         },
+        // Skip propio del calculado (P3 — Fase 1.1.1.ext): mismo patrón que calculado-de-fijo.
+        skips: {
+          where: { month },
+          select: { month: true },
+        },
       },
     });
 
     if (calculadosDeCuota.length > 0) {
-      // Cargar InstallmentGroups de origen (con anchorCurrency)
+      // Cargar InstallmentGroups de origen (con anchorCurrency + skip de la instancia del mes)
       const groupIds = calculadosDeCuota.map((r) => r.sourceInstallmentGroupId!);
       const groupRows = await this.prisma.installmentGroup.findMany({
         where: { id: { in: groupIds } },
@@ -939,6 +968,10 @@ export class MovementsRepository {
           currency: true,
           exchangeRate: true,
           anchorCurrency: true,
+          skips: {
+            where: { month },
+            select: { month: true },
+          },
         },
       });
       const groupOriginMap = new Map<string, {
@@ -949,6 +982,7 @@ export class MovementsRepository {
         currency: Currency;
         exchangeRate: number;
         anchorCurrency: Currency;
+        skipped: boolean;
       }>();
       for (const g of groupRows) {
         groupOriginMap.set(g.id, {
@@ -959,6 +993,7 @@ export class MovementsRepository {
           currency: g.currency,
           exchangeRate: Number(g.exchangeRate),
           anchorCurrency: g.anchorCurrency,
+          skipped: g.skips.length > 0,
         });
       }
 
@@ -971,6 +1006,10 @@ export class MovementsRepository {
         // Verificar que el mes está dentro del rango del grupo on-the-fly
         const endMonth = addMonths(groupData.startMonth, groupData.totalInstallments);
         if (month >= endMonth) continue;
+
+        // Skip heredado del origen (para este mes) OR skip propio del calculado
+        // (mismo criterio que calculado-de-fijo)
+        const skipped = groupData.skipped || calc.skips.length > 0;
 
         const derivedAmount = applyFormula(
           groupData.amountCents,
@@ -1011,7 +1050,7 @@ export class MovementsRepository {
           },
           installment: null,
           frequency: null,
-          skipped: false,
+          skipped,
           calculated: {
             sourceType: 'cuota',
             sourceId: calc.sourceInstallmentGroupId!,
@@ -1052,6 +1091,7 @@ export class MovementsRepository {
       FROM "Transaction" t
       WHERE
         t."userId" = ${userId}
+        AND NOT t.skipped
         AND date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
             = date_trunc('month', ${monthStart}::timestamp)
     `;
@@ -1223,6 +1263,10 @@ export class MovementsRepository {
         amountCents: true,
         totalInstallments: true,
         startMonth: true,
+        skips: {
+          where: { month },
+          select: { month: true },
+        },
       },
     });
 
@@ -1232,6 +1276,9 @@ export class MovementsRepository {
     for (const g of groups) {
       const endMonth = addMonths(g.startMonth, g.totalInstallments);
       if (month >= endMonth) {
+        continue;
+      }
+      if (g.skips.length > 0) {
         continue;
       }
 
@@ -1280,6 +1327,7 @@ export class MovementsRepository {
       WHERE
         t."userId" = ${userId}
         AND t.type = 'EXPENSE'
+        AND NOT t.skipped
         AND EXTRACT(year FROM
               date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
             ) = ${year}
@@ -1330,6 +1378,7 @@ export class MovementsRepository {
       WHERE
         t."userId" = ${userId}
         AND t.type = 'EXPENSE'
+        AND NOT t.skipped
         AND date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
             = date_trunc('month', ${monthStart}::timestamp)
       GROUP BY
@@ -1402,6 +1451,7 @@ export class MovementsRepository {
       JOIN "Category" c ON c.id = t."categoryId"
       WHERE
         t."userId" = ${userId}
+        AND NOT t.skipped
         AND EXTRACT(year FROM
               date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
             ) = ${year}
@@ -1498,31 +1548,46 @@ export class MovementsRepository {
 
   /**
    * Devuelve todos los grupos de cuotas del usuario para la proyección anual.
+   * Incluye skippedMonths (P3 — Fase 1.1.1.ext), espejo de skippedMonths en RecurringForAnnual.
    */
   async getAllCuotasForAnnual(
     userId: string,
   ): Promise<InstallmentGroupForAnnual[]> {
-    const rows = await this.prisma.installmentGroup.findMany({
-      where: { userId },
-      select: {
-        id: true,
-        type: true,
-        amountCents: true,
-        currency: true,
-        exchangeRate: true,
-        anchorCurrency: true,
-        totalInstallments: true,
-        startMonth: true,
-        categoryId: true,
-        category: {
-          select: {
-            name: true,
-            color: true,
-            scope: true,
+    const [rows, allSkips] = await Promise.all([
+      this.prisma.installmentGroup.findMany({
+        where: { userId },
+        select: {
+          id: true,
+          type: true,
+          amountCents: true,
+          currency: true,
+          exchangeRate: true,
+          anchorCurrency: true,
+          totalInstallments: true,
+          startMonth: true,
+          categoryId: true,
+          category: {
+            select: {
+              name: true,
+              color: true,
+              scope: true,
+            },
           },
         },
-      },
-    });
+      }),
+      this.prisma.installmentSkip.findMany({
+        where: { installmentGroup: { userId } },
+        select: { installmentGroupId: true, month: true },
+      }),
+    ]);
+
+    const skipMap = new Map<string, Set<string>>();
+    for (const s of allSkips) {
+      if (!skipMap.has(s.installmentGroupId)) {
+        skipMap.set(s.installmentGroupId, new Set<string>());
+      }
+      skipMap.get(s.installmentGroupId)!.add(s.month);
+    }
 
     return rows.map((g) => ({
       id: g.id,
@@ -1533,6 +1598,7 @@ export class MovementsRepository {
       anchorCurrency: g.anchorCurrency,
       totalInstallments: g.totalInstallments,
       startMonth: g.startMonth,
+      skippedMonths: skipMap.get(g.id) ?? new Set<string>(),
       categoryId: g.categoryId,
       categoryName: g.category.name,
       categoryColor: g.category.color,
@@ -1602,10 +1668,12 @@ export class MovementsRepository {
     currency: Currency;
     exchangeRate: number;
     anchorCurrency: Currency;
+    /** true si el único está anulado (P3 — Fase 1.1.1.ext). */
+    skipped: boolean;
   }>> {
     const rows = await this.prisma.transaction.findMany({
       where: { id: { in: ids } },
-      select: { id: true, amountCents: true, description: true, currency: true, exchangeRate: true, anchorCurrency: true },
+      select: { id: true, amountCents: true, description: true, currency: true, exchangeRate: true, anchorCurrency: true, skipped: true },
     });
     return rows.map((r) => ({
       id: r.id,
@@ -1614,6 +1682,7 @@ export class MovementsRepository {
       currency: r.currency,
       exchangeRate: Number(r.exchangeRate),
       anchorCurrency: r.anchorCurrency,
+      skipped: r.skipped,
     }));
   }
 
@@ -1629,10 +1698,21 @@ export class MovementsRepository {
     currency: Currency;
     exchangeRate: number;
     anchorCurrency: Currency;
+    /** Set de meses salteados (YYYY-MM) — vacío si no tiene skips (P3 — Fase 1.1.1.ext). */
+    skippedMonths: Set<string>;
   }>> {
     const rows = await this.prisma.installmentGroup.findMany({
       where: { id: { in: ids } },
-      select: { id: true, amountCents: true, totalInstallments: true, startMonth: true, currency: true, exchangeRate: true, anchorCurrency: true },
+      select: {
+        id: true,
+        amountCents: true,
+        totalInstallments: true,
+        startMonth: true,
+        currency: true,
+        exchangeRate: true,
+        anchorCurrency: true,
+        skips: { select: { month: true } },
+      },
     });
     return rows.map((r) => ({
       id: r.id,
@@ -1642,6 +1722,7 @@ export class MovementsRepository {
       currency: r.currency,
       exchangeRate: Number(r.exchangeRate),
       anchorCurrency: r.anchorCurrency,
+      skippedMonths: new Set(r.skips.map((s) => s.month)),
     }));
   }
 
@@ -1691,6 +1772,7 @@ export class MovementsRepository {
       WHERE
         t."userId" = ${userId}
         AND t.type = 'INCOME'
+        AND NOT t.skipped
         AND date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
             = date_trunc('month', ${monthStart}::timestamp)
       GROUP BY
@@ -1790,7 +1872,7 @@ export class MovementsRepository {
       },
       installment: null,
       frequency: null,
-      skipped: false,
+      skipped: row.skipped,
       calculated: null,
       hasCalculated: false,
     };

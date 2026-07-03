@@ -31,6 +31,8 @@ export interface TransactionWithCategory {
   exchangeRate: number;
   /** Moneda default del usuario al momento de guardar el movimiento (Fase 1.2.4) */
   anchorCurrency: Currency;
+  /** true si el único está anulado (P3 — Fase 1.1.1.ext). No suma a totales ni reportes. */
+  skipped: boolean;
   createdAt: Date;
   updatedAt: Date;
   category: EmbeddedCategory;
@@ -67,6 +69,7 @@ function mapToTransactionWithCategory(
     // Prisma 7 devuelve Decimal para campos @db.Decimal; convertir a number para serializar
     exchangeRate: Number(tx.exchangeRate),
     anchorCurrency: tx.anchorCurrency,
+    skipped: tx.skipped,
     createdAt: tx.createdAt,
     updatedAt: tx.updatedAt,
     category: {

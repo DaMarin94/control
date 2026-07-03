@@ -130,9 +130,11 @@ vi.mock("@/hooks/use-installments", () => ({
     createInstallment: vi.fn(),
     updateInstallment: vi.fn(),
     deleteInstallment: vi.fn(),
+    skipInstallment: vi.fn(),
     isCreating: false,
     isUpdating: false,
     isDeleting: false,
+    isSkipping: false,
   })),
 }));
 

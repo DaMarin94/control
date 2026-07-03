@@ -9,6 +9,7 @@ import { CategoryValidatorService } from '../categories/category-validator.servi
 import {
   InstallmentsRepository,
   InstallmentGroupWithCategory,
+  SkipToggleResult,
 } from './installments.repository';
 import { CreateInstallmentDto } from './dto/create-installment.dto';
 import { UpdateInstallmentDto } from './dto/update-installment.dto';
@@ -193,8 +194,77 @@ export class InstallmentsService {
   }
 
   // ---------------------------------------------------------------------------
+  // POST /installments/:id/skip — toggle anular/des-anular (P3 — Fase 1.1.1.ext)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Toglea el skip de una cuota puntual de un grupo, para un mes puntual.
+   * Espejo exacto de RecurringService.toggleSkip (P1).
+   *
+   * - Si (grupo, mes) ya está skippeado → lo des-anula (borra el skip).
+   * - Si no → lo anula (crea el skip).
+   * Anula SOLO la instancia de ese mes, no el grupo entero.
+   * Devuelve { skipped, month } con el estado resultante.
+   *
+   * 404 si el grupo no existe o no pertenece al usuario (RN-003).
+   * 400 si el formato del mes es inválido.
+   *
+   * NOTA: no se valida que el mes caiga dentro del rango del grupo (startMonth..
+   * startMonth+totalInstallments). Esa validación semántica es responsabilidad
+   * del frontend (que ya tiene el ítem del mes desde GET /movements). El backend
+   * solo valida formato y ownership.
+   */
+  async toggleSkip(
+    userId: string,
+    id: string,
+    month: string,
+  ): Promise<SkipToggleResult> {
+    this.validateMonthFormat(month);
+    this.validateMonthValue(month);
+
+    const existing = await this.repo.findById(id);
+
+    if (!existing || existing.userId !== userId) {
+      throw new NotFoundException('Grupo de cuotas no encontrado');
+    }
+
+    const alreadySkipped = await this.repo.findSkip(id, month);
+
+    if (alreadySkipped) {
+      await this.repo.deleteSkip(id, month);
+
+      this.logger.log(
+        { userId, installmentGroupId: id, month, action: 'unskip' },
+        'Cuota des-anulada para el mes',
+      );
+
+      return { skipped: false, month };
+    } else {
+      await this.repo.createSkip(id, month);
+
+      this.logger.log(
+        { userId, installmentGroupId: id, month, action: 'skip' },
+        'Cuota anulada para el mes',
+      );
+
+      return { skipped: true, month };
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Helper: validación de semántica del mes
   // ---------------------------------------------------------------------------
+
+  /**
+   * Valida que el string tenga formato YYYY-MM.
+   */
+  private validateMonthFormat(month: string): void {
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      throw new BadRequestException(
+        'El mes debe tener formato YYYY-MM (ej: 2026-06)',
+      );
+    }
+  }
 
   /**
    * Valida que el número de mes esté entre 01 y 12.

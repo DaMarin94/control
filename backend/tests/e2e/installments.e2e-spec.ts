@@ -69,6 +69,13 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  // installmentSkip — necesario para el toggle de skip (P3 — Fase 1.1.1.ext)
+  installmentSkip: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    delete: jest.fn(),
+  },
   $connect: jest.fn(),
   $disconnect: jest.fn(),
 };
@@ -565,6 +572,93 @@ describe('Installments (e2e)', () => {
     it('401 sin JWT', async () => {
       const res = await request(app.getHttpServer())
         .delete(`/installments/${GROUP_ID}`)
+        .expect(401);
+
+      expect(res.body.success).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /installments/:id/skip (P3 — Fase 1.1.1.ext)
+  // -------------------------------------------------------------------------
+
+  describe('POST /installments/:id/skip', () => {
+    it('anula la cuota de ese mes: crea el skip y devuelve { skipped: true, month }', async () => {
+      const group = makeDbInstallmentGroup();
+      mockPrisma.installmentGroup.findUnique.mockResolvedValue(group);
+      mockPrisma.installmentSkip.findUnique.mockResolvedValue(null);
+      mockPrisma.installmentSkip.create.mockResolvedValue({ id: 'skip-1', installmentGroupId: GROUP_ID, month: '2026-06' });
+
+      const res = await request(app.getHttpServer())
+        .post(`/installments/${GROUP_ID}/skip`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ month: '2026-06' });
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toEqual({ skipped: true, month: '2026-06' });
+      expect(mockPrisma.installmentSkip.create).toHaveBeenCalledWith({
+        data: { installmentGroupId: GROUP_ID, month: '2026-06' },
+      });
+    });
+
+    it('des-anula la cuota de ese mes: borra el skip y devuelve { skipped: false, month }', async () => {
+      const group = makeDbInstallmentGroup();
+      mockPrisma.installmentGroup.findUnique.mockResolvedValue(group);
+      mockPrisma.installmentSkip.findUnique.mockResolvedValue({ id: 'skip-1', installmentGroupId: GROUP_ID, month: '2026-06' });
+      mockPrisma.installmentSkip.delete.mockResolvedValue({ id: 'skip-1' });
+
+      const res = await request(app.getHttpServer())
+        .post(`/installments/${GROUP_ID}/skip`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ month: '2026-06' });
+
+      expect(res.body.data).toEqual({ skipped: false, month: '2026-06' });
+      expect(mockPrisma.installmentSkip.delete).toHaveBeenCalledWith({
+        where: { installmentGroupId_month: { installmentGroupId: GROUP_ID, month: '2026-06' } },
+      });
+    });
+
+    it('404 si el grupo no existe', async () => {
+      mockPrisma.installmentGroup.findUnique.mockResolvedValue(null);
+
+      const res = await request(app.getHttpServer())
+        .post('/installments/no-existe/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ month: '2026-06' })
+        .expect(404);
+
+      expect(res.body.success).toBe(false);
+      expect(mockPrisma.installmentSkip.create).not.toHaveBeenCalled();
+    });
+
+    it('aislamiento: 404 si el grupo pertenece a otro usuario (RN-003)', async () => {
+      const group = makeDbInstallmentGroup({ userId: USER_B_ID });
+      mockPrisma.installmentGroup.findUnique.mockResolvedValue(group);
+
+      const res = await request(app.getHttpServer())
+        .post(`/installments/${GROUP_ID}/skip`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ month: '2026-06' })
+        .expect(404);
+
+      expect(res.body.success).toBe(false);
+      expect(mockPrisma.installmentSkip.create).not.toHaveBeenCalled();
+    });
+
+    it('400 si month tiene formato inválido', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/installments/${GROUP_ID}/skip`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ month: '202606' })
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+    });
+
+    it('401 sin JWT', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/installments/${GROUP_ID}/skip`)
+        .send({ month: '2026-06' })
         .expect(401);
 
       expect(res.body.success).toBe(false);

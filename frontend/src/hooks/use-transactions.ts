@@ -8,8 +8,9 @@
  * - createTransaction(data): crea un movimiento único
  * - updateTransaction(id, data): edita un movimiento existente
  * - deleteTransaction(id, month): elimina un movimiento (hard delete, permanente)
+ * - skipTransaction(id, month): POST /transactions/:id/skip — toggle anular/des-anular (P3)
  *
- * Invalidación: tras crear/editar/eliminar se invalida MOVEMENTS_QUERY_KEY(month)
+ * Invalidación: tras crear/editar/eliminar/skip se invalida MOVEMENTS_QUERY_KEY(month)
  * (endpoint vigente desde Fase 5: GET /movements?month=YYYY-MM).
  */
 
@@ -20,6 +21,7 @@ import {
   type Transaction,
   type CreateTransactionRequest,
   type UpdateTransactionRequest,
+  type SkipTransactionResponse,
 } from "@/types/transaction";
 import { MOVEMENTS_QUERY_KEY } from "@/hooks/use-movements";
 import { createLogger } from "@/lib/logger";
@@ -42,6 +44,12 @@ export interface UpdateTransactionResult {
 
 export interface DeleteTransactionResult {
   success: boolean;
+  error?: string;
+}
+
+export interface SkipTransactionResult {
+  success: boolean;
+  skipped?: boolean;
   error?: string;
 }
 
@@ -188,13 +196,61 @@ export function useTransactions() {
     }
   }
 
+  // ─── Mutation: toggle anular/des-anular único (P3) ────────────────────────
+
+  const skipMutation = useMutation<SkipTransactionResponse, ApiError, { id: string }>({
+    mutationFn: ({ id }) =>
+      api.post<SkipTransactionResponse>(`/transactions/${id}/skip`, undefined),
+    onSuccess: (_res, { id }) => {
+      logger.info("Toggle skip de único", { id });
+    },
+    onError: (err) => {
+      if (err.isServerError()) {
+        logger.error("Error de servidor al toggle skip de único", { statusCode: err.statusCode });
+      }
+    },
+  });
+
+  /**
+   * Anula/des-anula un movimiento único. Sin alcance temporal (a diferencia de
+   * fijos/cuotas) — el endpoint no recibe body. `month` solo se usa para invalidar
+   * la query del mes que se está visualizando.
+   */
+  async function skipTransaction(id: string, month: string): Promise<SkipTransactionResult> {
+    try {
+      const res = await skipMutation.mutateAsync({ id });
+      void queryClient.invalidateQueries({ queryKey: MOVEMENTS_QUERY_KEY(month) });
+      return { success: true, skipped: res.skipped };
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.statusCode === 404) {
+          return { success: false, error: "El movimiento no existe o ya fue eliminado." };
+        }
+        if (err.statusCode === 400) {
+          return { success: false, error: err.message };
+        }
+        logger.error("Error al toggle skip de único", { statusCode: err.statusCode });
+        return {
+          success: false,
+          error: "Ocurrió un error al anular el movimiento. Intentalo de nuevo.",
+        };
+      }
+      logger.error("Error inesperado al toggle skip de único", {
+        error: err instanceof Error ? err.message : "desconocido",
+      });
+      return { success: false, error: "Ocurrió un error inesperado. Intentalo de nuevo." };
+    }
+  }
+
   return {
     createTransaction,
     updateTransaction,
     deleteTransaction,
+    skipTransaction,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
+    isSkipping: skipMutation.isPending,
   };
 }
 

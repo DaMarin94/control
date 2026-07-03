@@ -310,6 +310,72 @@ describe("useInstallments", () => {
     });
   });
 
+  // ─── skipInstallment (P3) ────────────────────────────────────────────────────
+
+  describe("skipInstallment", () => {
+    it("éxito: llama POST /installments/:id/skip con { month } y devuelve skipped", async () => {
+      mockApiPost.mockResolvedValue({ skipped: true, month: "2026-06" });
+
+      const { result } = renderHook(() => useInstallments(), { wrapper: createWrapper() });
+
+      let skipResult: Awaited<ReturnType<typeof result.current.skipInstallment>>;
+
+      await act(async () => {
+        skipResult = await result.current.skipInstallment("inst-1", "2026-06");
+      });
+
+      expect(skipResult!.success).toBe(true);
+      expect(skipResult!.skipped).toBe(true);
+      expect(mockApiPost).toHaveBeenCalledWith("/installments/inst-1/skip", {
+        month: "2026-06",
+      });
+    });
+
+    it("toggle: la segunda llamada devuelve skipped=false (des-anular)", async () => {
+      mockApiPost.mockResolvedValue({ skipped: false, month: "2026-06" });
+
+      const { result } = renderHook(() => useInstallments(), { wrapper: createWrapper() });
+
+      let skipResult: Awaited<ReturnType<typeof result.current.skipInstallment>>;
+
+      await act(async () => {
+        skipResult = await result.current.skipInstallment("inst-1", "2026-06");
+      });
+
+      expect(skipResult!.skipped).toBe(false);
+    });
+
+    it("404: devuelve error descriptivo", async () => {
+      mockApiPost.mockRejectedValue(new ApiError("Not found", 404));
+
+      const { result } = renderHook(() => useInstallments(), { wrapper: createWrapper() });
+
+      let skipResult: Awaited<ReturnType<typeof result.current.skipInstallment>>;
+
+      await act(async () => {
+        skipResult = await result.current.skipInstallment("inst-inexistente", "2026-06");
+      });
+
+      expect(skipResult!.success).toBe(false);
+      expect(skipResult!.error).toMatch(/no existe|eliminado/i);
+    });
+
+    it("error de servidor (500): devuelve mensaje genérico", async () => {
+      mockApiPost.mockRejectedValue(new ApiError("Internal Server Error", 500));
+
+      const { result } = renderHook(() => useInstallments(), { wrapper: createWrapper() });
+
+      let skipResult: Awaited<ReturnType<typeof result.current.skipInstallment>>;
+
+      await act(async () => {
+        skipResult = await result.current.skipInstallment("inst-1", "2026-06");
+      });
+
+      expect(skipResult!.success).toBe(false);
+      expect(skipResult!.error).toMatch(/error/i);
+    });
+  });
+
   // ─── Estado de carga ─────────────────────────────────────────────────────────
 
   describe("Estado de carga", () => {

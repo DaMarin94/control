@@ -104,9 +104,9 @@ export interface InstallmentInfo {
 
 /**
  * Ítem individual de movimiento tal como lo devuelve GET /movements.
- * Para "unico": todos los campos están presentes; installment=null; frequency=null; skipped=false.
+ * Para "unico": todos los campos están presentes; installment=null; frequency=null; skipped real (P3).
  * Para "fijo": occurredAt y timezone son null; installment=null; frequency=su frecuencia; skipped según el mes.
- * Para "cuota": occurredAt y timezone son null; installment tiene number/total/startMonth; frequency=null; skipped=false.
+ * Para "cuota": occurredAt y timezone son null; installment tiene number/total/startMonth; frequency=null; skipped real (P3).
  */
 export interface MovementItem {
   id: string;
@@ -136,9 +136,9 @@ export interface MovementItem {
    */
   frequency: RecurringFrequency | null;
   /**
-   * Indica si el fijo está anulado para el mes consultado (P1 — Fase 1.1.1).
-   * Solo puede ser true para origin==="fijo".
-   * Siempre false para "unico" y "cuota".
+   * Indica si el ítem está anulado para el mes consultado.
+   * "fijo": P1 — Fase 1.1.1. "unico"/"cuota": P3 (extiende el toggle de skip).
+   * Los calculados heredan el skip de su origen (el frontend no maneja skip de calculados).
    * Los ítems anulados se siguen mostrando en la lista pero NO suman a los totales.
    */
   skipped: boolean;

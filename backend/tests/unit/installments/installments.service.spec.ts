@@ -35,6 +35,9 @@ const mockRepo = {
   findById: jest.fn(),
   update: jest.fn(),
   delete: jest.fn(),
+  findSkip: jest.fn(),
+  createSkip: jest.fn(),
+  deleteSkip: jest.fn(),
 };
 
 const mockCategoryValidator = {
@@ -478,6 +481,98 @@ describe('InstallmentsService', () => {
       await expect(service.remove(USER_A, GROUP_ID)).rejects.toThrow(NotFoundException);
 
       expect(mockRepo.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // toggleSkip (P3 — Fase 1.1.1.ext) — espejo de RecurringService.toggleSkip
+  // -------------------------------------------------------------------------
+
+  describe('toggleSkip', () => {
+    it('anula un mes puntual de la cuota: crea el skip y devuelve { skipped: true, month }', async () => {
+      const group = makeGroup();
+      mockRepo.findById.mockResolvedValue(group);
+      mockRepo.findSkip.mockResolvedValue(false);
+      mockRepo.createSkip.mockResolvedValue(undefined);
+
+      const result = await service.toggleSkip(USER_A, GROUP_ID, '2026-06');
+
+      expect(mockRepo.createSkip).toHaveBeenCalledWith(GROUP_ID, '2026-06');
+      expect(mockRepo.deleteSkip).not.toHaveBeenCalled();
+      expect(result).toEqual({ skipped: true, month: '2026-06' });
+    });
+
+    it('des-anula un mes puntual: borra el skip y devuelve { skipped: false, month }', async () => {
+      const group = makeGroup();
+      mockRepo.findById.mockResolvedValue(group);
+      mockRepo.findSkip.mockResolvedValue(true);
+      mockRepo.deleteSkip.mockResolvedValue(undefined);
+
+      const result = await service.toggleSkip(USER_A, GROUP_ID, '2026-06');
+
+      expect(mockRepo.deleteSkip).toHaveBeenCalledWith(GROUP_ID, '2026-06');
+      expect(mockRepo.createSkip).not.toHaveBeenCalled();
+      expect(result).toEqual({ skipped: false, month: '2026-06' });
+    });
+
+    it('idempotencia del toggle: anular dos veces des-anula', async () => {
+      const group = makeGroup();
+      mockRepo.findById.mockResolvedValue(group);
+
+      mockRepo.findSkip.mockResolvedValueOnce(false);
+      mockRepo.createSkip.mockResolvedValue(undefined);
+      const r1 = await service.toggleSkip(USER_A, GROUP_ID, '2026-06');
+      expect(r1.skipped).toBe(true);
+
+      mockRepo.findSkip.mockResolvedValueOnce(true);
+      mockRepo.deleteSkip.mockResolvedValue(undefined);
+      const r2 = await service.toggleSkip(USER_A, GROUP_ID, '2026-06');
+      expect(r2.skipped).toBe(false);
+    });
+
+    it('404 si el grupo no existe', async () => {
+      mockRepo.findById.mockResolvedValue(null);
+
+      await expect(
+        service.toggleSkip(USER_A, 'no-existe', '2026-06'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockRepo.findSkip).not.toHaveBeenCalled();
+    });
+
+    it('aislamiento: 404 si el grupo pertenece a otro usuario (RN-003)', async () => {
+      const group = makeGroup({ userId: USER_B });
+      mockRepo.findById.mockResolvedValue(group);
+
+      await expect(
+        service.toggleSkip(USER_A, GROUP_ID, '2026-06'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockRepo.findSkip).not.toHaveBeenCalled();
+    });
+
+    it('400 si el mes tiene formato inválido', async () => {
+      await expect(
+        service.toggleSkip(USER_A, GROUP_ID, '202606'),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockRepo.findById).not.toHaveBeenCalled();
+    });
+
+    it('400 si el mes tiene valor inválido (13)', async () => {
+      await expect(
+        service.toggleSkip(USER_A, GROUP_ID, '2026-13'),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockRepo.findById).not.toHaveBeenCalled();
+    });
+
+    it('400 si el mes tiene valor inválido (00)', async () => {
+      await expect(
+        service.toggleSkip(USER_A, GROUP_ID, '2026-00'),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockRepo.findById).not.toHaveBeenCalled();
     });
   });
 });

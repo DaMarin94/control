@@ -16,6 +16,7 @@
 | Movimiento único — crear, editar, eliminar | RF-MU-001..003 | Implementado |
 | Movimiento fijo — crear, visualizar, editar, eliminar | RF-MF-001..004 | Implementado |
 | Fijos extendidos — anular por mes (P1) + periodicidad (P2) | RF-MF-005..006, RN-016 | Implementado |
+| Anulación de movimientos — extendida a únicos y cuotas (P3) | RF-MU-005, RF-MC-004, RN-020 | Implementado |
 | Movimiento en cuotas — crear, visualizar, editar, eliminar | RF-MC-001..003 | Implementado (solo Gasto en v1) |
 | Movimientos calculados — fijo/único/cuota de origen | RF-MCALC-001..010, RN-017..019 | Implementado |
 | Categorías — defaults + CRUD + soft delete | RF-CAT-001..006 | Implementado |

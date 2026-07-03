@@ -157,4 +157,35 @@ export class TransactionsService {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // POST /transactions/:id/skip — toggle anular/des-anular (P3 — Fase 1.1.1.ext)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Toglea la anulación (skip) de un único.
+   *
+   * A diferencia de fijos y cuotas, el único es UNA sola fila (sin noción de mes):
+   * el skip es directamente el flag booleano `skipped` en la fila. Toggle simple:
+   * invierte el valor actual.
+   *
+   * 404 si la transacción no existe o no pertenece al usuario (RN-003).
+   */
+  async toggleSkip(userId: string, id: string): Promise<{ skipped: boolean }> {
+    const existing = await this.repo.findById(id);
+
+    if (!existing || existing.userId !== userId) {
+      throw new NotFoundException('Transacción no encontrada');
+    }
+
+    const newSkipped = !existing.skipped;
+
+    await this.repo.update(id, { skipped: newSkipped });
+
+    this.logger.log(
+      { userId, transactionId: id, skipped: newSkipped },
+      newSkipped ? 'Único anulado' : 'Único des-anulado',
+    );
+
+    return { skipped: newSkipped };
+  }
 }

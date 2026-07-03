@@ -6,11 +6,13 @@
  * - Render del ítem fijo anulado (skipped=true): badge, tachado, opacity (P1 — Fase 1.1.1).
  * - Acción "Anular este mes" en el KebabMenu de fijos activos (P1 — Fase 1.1.1).
  * - Acción "Des-anular este mes" en el KebabMenu de fijos anulados (P1 — Fase 1.1.1).
- * - Únicos y cuotas (y sus calculados) NO tienen la acción de anular en su KebabMenu.
+ * - Calculados de único/cuota NO tienen la acción de anular en su KebabMenu (heredan skip del origen).
  * - Calculados de fijo SÍ tienen la acción de anular (RF-MF-005: skip propio del calculado).
  * - Fase 1.1.7: chip "Calculado" para hijos, indicador GitBranch para padres,
  *   monto negativo/cero, acción "Crear movimiento desde este".
  * - Fase 1.1.8: chip/marca padre en único y cuota; acción kebab en único/cuota no calculados.
+ * - P3: el toggle de skip se extiende a únicos NO calculados ("Anular"/"Des-anular", sin
+ *   alcance temporal) y a cuotas NO calculadas ("Anular este mes"/"Des-anular este mes").
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -25,6 +27,14 @@ import type { ReactNode } from "react";
 
 vi.mock("@/hooks/use-recurring", () => ({
   useRecurring: vi.fn(),
+}));
+
+vi.mock("@/hooks/use-transactions", () => ({
+  useTransactions: vi.fn(),
+}));
+
+vi.mock("@/hooks/use-installments", () => ({
+  useInstallments: vi.fn(),
 }));
 
 vi.mock("@/hooks/use-toast", () => ({
@@ -52,12 +62,18 @@ vi.mock("@/hooks/use-settings", () => ({
 }));
 
 import { useRecurring } from "@/hooks/use-recurring";
+import { useTransactions } from "@/hooks/use-transactions";
+import { useInstallments } from "@/hooks/use-installments";
 import { useSettings } from "@/hooks/use-settings";
 
 const mockUseRecurring = vi.mocked(useRecurring);
+const mockUseTransactions = vi.mocked(useTransactions);
+const mockUseInstallments = vi.mocked(useInstallments);
 const mockUseSettings = vi.mocked(useSettings);
 
 const mockSkipRecurring = vi.fn();
+const mockSkipTransaction = vi.fn();
+const mockSkipInstallment = vi.fn();
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -318,6 +334,26 @@ beforeEach(() => {
     isDeleting: false,
     isSkipping: false,
   });
+  mockUseTransactions.mockReturnValue({
+    createTransaction: vi.fn(),
+    updateTransaction: vi.fn(),
+    deleteTransaction: vi.fn(),
+    skipTransaction: mockSkipTransaction,
+    isCreating: false,
+    isUpdating: false,
+    isDeleting: false,
+    isSkipping: false,
+  });
+  mockUseInstallments.mockReturnValue({
+    createInstallment: vi.fn(),
+    updateInstallment: vi.fn(),
+    deleteInstallment: vi.fn(),
+    skipInstallment: mockSkipInstallment,
+    isCreating: false,
+    isUpdating: false,
+    isDeleting: false,
+    isSkipping: false,
+  });
 });
 
 // ─── Tests: render básico ─────────────────────────────────────────────────────
@@ -399,6 +435,34 @@ describe("MovementItemRow — ítem fijo anulado (P1)", () => {
   });
 });
 
+// ─── Tests: señalética "Anulado" idéntica en los tres orígenes (P3) ──────────
+
+describe("MovementItemRow — señalética de anulado en único y cuota (P3)", () => {
+  it("único anulado muestra el badge 'Anulado' y el monto tachado", () => {
+    const unicoAnulado: MovementItem = { ...unico, skipped: true };
+    renderRow(unicoAnulado);
+    expect(screen.getByText("Anulado")).toBeInTheDocument();
+    expect(screen.getByText("−$100,00")).toHaveClass("line-through");
+  });
+
+  it("cuota anulada muestra el badge 'Anulado' y el monto tachado", () => {
+    const cuotaAnulada: MovementItem = { ...cuota, skipped: true };
+    renderRow(cuotaAnulada);
+    expect(screen.getByText("Anulado")).toBeInTheDocument();
+    expect(screen.getByText("−$500,00")).toHaveClass("line-through");
+  });
+
+  it("único activo NO muestra el badge 'Anulado'", () => {
+    renderRow(unico);
+    expect(screen.queryByText("Anulado")).not.toBeInTheDocument();
+  });
+
+  it("cuota activa NO muestra el badge 'Anulado'", () => {
+    renderRow(cuota);
+    expect(screen.queryByText("Anulado")).not.toBeInTheDocument();
+  });
+});
+
 // ─── Tests: acción Anular / Des-anular en KebabMenu (P1 — Fase 1.1.1) ────────
 
 describe("MovementItemRow — acción Anular/Des-anular en KebabMenu (P1)", () => {
@@ -461,24 +525,23 @@ describe("MovementItemRow — acción Anular/Des-anular en KebabMenu (P1)", () =
     });
   });
 
-  it("único NO tiene la acción 'Anular este mes'", () => {
+  it("único NO calculado tiene la acción 'Anular' (sin 'este mes')", () => {
     renderRow(unico);
 
     const trigger = screen.getByRole("button", { name: /acciones de almuerzo/i });
     fireEvent.click(trigger);
 
+    expect(screen.getByRole("menuitem", { name: /^anular$/i })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /anular este mes/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /des-anular este mes/i })).not.toBeInTheDocument();
   });
 
-  it("cuota NO tiene la acción 'Anular este mes'", () => {
+  it("cuota NO calculada tiene la acción 'Anular este mes'", () => {
     renderRow(cuota);
 
     const trigger = screen.getByRole("button", { name: /acciones de notebook/i });
     fireEvent.click(trigger);
 
-    expect(screen.queryByRole("menuitem", { name: /anular este mes/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /des-anular este mes/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /anular este mes/i })).toBeInTheDocument();
   });
 
   it("el KebabMenu del fijo tiene: Editar, Anular este mes, Eliminar (en ese orden)", () => {
@@ -492,6 +555,107 @@ describe("MovementItemRow — acción Anular/Des-anular en KebabMenu (P1)", () =
     expect(items[0]).toHaveTextContent(/editar/i);
     expect(items[1]).toHaveTextContent(/anular este mes/i);
     expect(items[2]).toHaveTextContent(/eliminar/i);
+  });
+});
+
+// ─── Tests: toggle Anular/Des-anular en únicos y cuotas (P3) ─────────────────
+
+describe("MovementItemRow — toggle Anular/Des-anular en único (P3)", () => {
+  it("único activo: muestra 'Anular' (sin 'este mes') en el KebabMenu", () => {
+    renderRow(unico);
+
+    const trigger = screen.getByRole("button", { name: /acciones de almuerzo/i });
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole("menuitem", { name: /^anular$/i })).toBeInTheDocument();
+  });
+
+  it("único anulado: muestra 'Des-anular' (sin 'este mes') en el KebabMenu", () => {
+    const unicoAnulado: MovementItem = { ...unico, skipped: true };
+    renderRow(unicoAnulado);
+
+    const trigger = screen.getByRole("button", { name: /acciones de almuerzo/i });
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole("menuitem", { name: /^des-anular$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /^anular$/i })).not.toBeInTheDocument();
+  });
+
+  it("click en 'Anular' llama a skipTransaction con el id y viewMonth (sin scope temporal)", async () => {
+    mockSkipTransaction.mockResolvedValue({ success: true, skipped: true });
+
+    renderRow(unico, "2026-06");
+
+    const trigger = screen.getByRole("button", { name: /acciones de almuerzo/i });
+    fireEvent.click(trigger);
+
+    const anularItem = screen.getByRole("menuitem", { name: /^anular$/i });
+    fireEvent.click(anularItem);
+
+    await waitFor(() => {
+      expect(mockSkipTransaction).toHaveBeenCalledWith("mov-1", "2026-06");
+    });
+    // No debe tocar los otros dos hooks de skip
+    expect(mockSkipRecurring).not.toHaveBeenCalled();
+    expect(mockSkipInstallment).not.toHaveBeenCalled();
+  });
+
+  it("muestra toast de error si skipTransaction falla", async () => {
+    mockSkipTransaction.mockResolvedValue({ success: false, error: "No se pudo anular." });
+
+    renderRow(unico);
+
+    const trigger = screen.getByRole("button", { name: /acciones de almuerzo/i });
+    fireEvent.click(trigger);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /^anular$/i }));
+
+    await waitFor(() => {
+      expect(mockSkipTransaction).toHaveBeenCalled();
+    });
+  });
+});
+
+describe("MovementItemRow — toggle Anular/Des-anular en cuota (P3)", () => {
+  it("cuota activa: muestra 'Anular este mes' en el KebabMenu", () => {
+    renderRow(cuota);
+
+    const trigger = screen.getByRole("button", { name: /acciones de notebook/i });
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole("menuitem", { name: /anular este mes/i })).toBeInTheDocument();
+  });
+
+  it("cuota anulada: muestra 'Des-anular este mes' en el KebabMenu", () => {
+    const cuotaAnulada: MovementItem = { ...cuota, skipped: true };
+    renderRow(cuotaAnulada);
+
+    const trigger = screen.getByRole("button", { name: /acciones de notebook/i });
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole("menuitem", { name: /des-anular este mes/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: /^anular este mes$/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("click en 'Anular este mes' llama a skipInstallment con el id y viewMonth", async () => {
+    mockSkipInstallment.mockResolvedValue({ success: true, skipped: true });
+
+    renderRow(cuota, "2026-06");
+
+    const trigger = screen.getByRole("button", { name: /acciones de notebook/i });
+    fireEvent.click(trigger);
+
+    const anularItem = screen.getByRole("menuitem", { name: /anular este mes/i });
+    fireEvent.click(anularItem);
+
+    await waitFor(() => {
+      expect(mockSkipInstallment).toHaveBeenCalledWith("inst-1", "2026-06");
+    });
+    // No debe tocar los otros dos hooks de skip
+    expect(mockSkipRecurring).not.toHaveBeenCalled();
+    expect(mockSkipTransaction).not.toHaveBeenCalled();
   });
 });
 
@@ -775,6 +939,26 @@ describe("MovementItemRow — Fase 1.2.3: display cross-rate", () => {
       updateRecurring: vi.fn(),
       deleteRecurring: vi.fn(),
       skipRecurring: mockSkipRecurring,
+      isCreating: false,
+      isUpdating: false,
+      isDeleting: false,
+      isSkipping: false,
+    });
+    mockUseTransactions.mockReturnValue({
+      createTransaction: vi.fn(),
+      updateTransaction: vi.fn(),
+      deleteTransaction: vi.fn(),
+      skipTransaction: mockSkipTransaction,
+      isCreating: false,
+      isUpdating: false,
+      isDeleting: false,
+      isSkipping: false,
+    });
+    mockUseInstallments.mockReturnValue({
+      createInstallment: vi.fn(),
+      updateInstallment: vi.fn(),
+      deleteInstallment: vi.fn(),
+      skipInstallment: mockSkipInstallment,
       isCreating: false,
       isUpdating: false,
       isDeleting: false,

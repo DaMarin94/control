@@ -80,9 +80,11 @@ beforeEach(() => {
     createInstallment: vi.fn(),
     updateInstallment: vi.fn(),
     deleteInstallment: mockDeleteInstallment,
+    skipInstallment: vi.fn(),
     isCreating: false,
     isUpdating: false,
     isDeleting: false,
+    isSkipping: false,
   });
 });
 

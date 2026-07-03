@@ -71,6 +71,7 @@ function makeTransaction(overrides: Partial<TransactionWithCategory> = {}): Tran
     description: null,
     occurredAt: new Date('2026-06-08T14:30:00Z'),
     timezone: 'America/Argentina/Buenos_Aires',
+    skipped: false,
     createdAt: new Date(),
     updatedAt: new Date(),
     category: {
@@ -457,6 +458,63 @@ describe('TransactionsService', () => {
       await expect(service.remove(USER_A, 'tx-001')).rejects.toThrow(NotFoundException);
 
       expect(mockRepo.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // toggleSkip (P3 — Fase 1.1.1.ext)
+  // -------------------------------------------------------------------------
+
+  describe('toggleSkip', () => {
+    it('anula un único: flag skipped=false → true', async () => {
+      const tx = makeTransaction({ skipped: false });
+      mockRepo.findById.mockResolvedValue(tx);
+      mockRepo.update.mockResolvedValue(makeTransaction({ skipped: true }));
+
+      const result = await service.toggleSkip(USER_A, 'tx-001');
+
+      expect(mockRepo.update).toHaveBeenCalledWith('tx-001', { skipped: true });
+      expect(result).toEqual({ skipped: true });
+    });
+
+    it('des-anula un único: flag skipped=true → false (toggle)', async () => {
+      const tx = makeTransaction({ skipped: true });
+      mockRepo.findById.mockResolvedValue(tx);
+      mockRepo.update.mockResolvedValue(makeTransaction({ skipped: false }));
+
+      const result = await service.toggleSkip(USER_A, 'tx-001');
+
+      expect(mockRepo.update).toHaveBeenCalledWith('tx-001', { skipped: false });
+      expect(result).toEqual({ skipped: false });
+    });
+
+    it('idempotencia del toggle: anular dos veces des-anula', async () => {
+      mockRepo.findById.mockResolvedValueOnce(makeTransaction({ skipped: false }));
+      mockRepo.update.mockResolvedValueOnce(makeTransaction({ skipped: true }));
+      const r1 = await service.toggleSkip(USER_A, 'tx-001');
+      expect(r1.skipped).toBe(true);
+
+      mockRepo.findById.mockResolvedValueOnce(makeTransaction({ skipped: true }));
+      mockRepo.update.mockResolvedValueOnce(makeTransaction({ skipped: false }));
+      const r2 = await service.toggleSkip(USER_A, 'tx-001');
+      expect(r2.skipped).toBe(false);
+    });
+
+    it('404 si la transacción no existe', async () => {
+      mockRepo.findById.mockResolvedValue(null);
+
+      await expect(service.toggleSkip(USER_A, 'no-existe')).rejects.toThrow(NotFoundException);
+
+      expect(mockRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('aislamiento: 404 si pertenece a otro usuario (RN-003)', async () => {
+      const tx = makeTransaction({ userId: USER_B });
+      mockRepo.findById.mockResolvedValue(tx);
+
+      await expect(service.toggleSkip(USER_A, 'tx-001')).rejects.toThrow(NotFoundException);
+
+      expect(mockRepo.update).not.toHaveBeenCalled();
     });
   });
 

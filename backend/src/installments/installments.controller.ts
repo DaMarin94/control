@@ -12,6 +12,7 @@ import {
 import { InstallmentsService } from './installments.service';
 import { CreateInstallmentDto } from './dto/create-installment.dto';
 import { UpdateInstallmentDto } from './dto/update-installment.dto';
+import { ToggleSkipInstallmentDto } from './dto/toggle-skip-installment.dto';
 import { RecurringService } from '../recurring/recurring.service';
 import { CreateCalculatedFromInstallmentDto } from '../recurring/dto/create-calculated-from-installment.dto';
 import { UpdateCalculatedFromInstallmentDto } from '../recurring/dto/update-calculated-from-installment.dto';
@@ -120,5 +121,32 @@ export class InstallmentsController {
     @Body() dto: UpdateCalculatedFromInstallmentDto,
   ) {
     return this.recurringService.updateCalculatedFromInstallment(req.user.userId, id, dto);
+  }
+
+  /**
+   * POST /installments/:id/skip
+   * Toglea el skip de una cuota puntual del grupo con id = :id, para un mes puntual
+   * (P3 — Fase 1.1.1.ext). Espejo exacto de POST /recurring/:id/skip.
+   *
+   * Body: { month: "YYYY-MM" }
+   *
+   * Respuesta + sobre:
+   * { skipped: boolean, month: string }
+   * - skipped=true: la cuota de ese mes quedó anulada (no suma a totales, aparece
+   *   con skipped=true en /movements)
+   * - skipped=false: la cuota de ese mes fue des-anulada (vuelve a contar)
+   *
+   * Anula SOLO la instancia de ese mes, no el grupo entero.
+   *
+   * 404 si el grupo no existe o no pertenece al usuario.
+   * 400 si month tiene formato inválido.
+   */
+  @Post(':id/skip')
+  toggleSkip(
+    @Request() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() dto: ToggleSkipInstallmentDto,
+  ) {
+    return this.installmentsService.toggleSkip(req.user.userId, id, dto.month);
   }
 }

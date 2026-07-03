@@ -360,10 +360,10 @@ export class MovementsService {
     // el type ya viene derivado del signo en el MovementItem.
     // Fijos skippeados (y calculados cuyo origen está skippeado) no suman.
     const unicosExpense = unicosFiltrados
-      .filter((u) => u.type === 'EXPENSE')
+      .filter((u) => !u.skipped && u.type === 'EXPENSE')
       .reduce((sum, u) => sum + u.convertedAmountCents, 0);
     const unicosIncome = unicosFiltrados
-      .filter((u) => u.type === 'INCOME')
+      .filter((u) => !u.skipped && u.type === 'INCOME')
       .reduce((sum, u) => sum + u.convertedAmountCents, 0);
 
     const fijosExpense = fijosFiltrados
@@ -374,10 +374,10 @@ export class MovementsService {
       .reduce((sum, f) => sum + f.convertedAmountCents, 0);
 
     const cuotasExpense = cuotasFiltradas
-      .filter((c) => c.type === 'EXPENSE')
+      .filter((c) => !c.skipped && c.type === 'EXPENSE')
       .reduce((sum, c) => sum + c.convertedAmountCents, 0);
     const cuotasIncome = cuotasFiltradas
-      .filter((c) => c.type === 'INCOME')
+      .filter((c) => !c.skipped && c.type === 'INCOME')
       .reduce((sum, c) => sum + c.convertedAmountCents, 0);
 
     const expenseCents = unicosExpense + fijosExpense + cuotasExpense;
@@ -595,7 +595,7 @@ export class MovementsService {
 
     // Cargar todos los Transactions de origen para calculados de único (una sola query)
     const txIdsAnual = [...new Set(calculadosDeUnicoAnual.map((f) => f.sourceMovementId!).filter(Boolean))];
-    const txAnualMap = new Map<string, { amountCents: number; description: string | null; currency: Currency; exchangeRate: number; anchorCurrency: Currency }>();
+    const txAnualMap = new Map<string, { amountCents: number; description: string | null; currency: Currency; exchangeRate: number; anchorCurrency: Currency; skipped: boolean }>();
     if (txIdsAnual.length > 0) {
       const txRows = await this.repo.findTransactionsByIds(txIdsAnual);
       for (const tx of txRows) txAnualMap.set(tx.id, {
@@ -604,6 +604,7 @@ export class MovementsService {
         currency: tx.currency,
         exchangeRate: tx.exchangeRate,
         anchorCurrency: tx.anchorCurrency,
+        skipped: tx.skipped,
       });
     }
 
@@ -616,6 +617,7 @@ export class MovementsService {
       currency: Currency;
       exchangeRate: number;
       anchorCurrency: Currency;
+      skippedMonths: Set<string>;
     }>();
     if (groupIdsAnual.length > 0) {
       const groupRows = await this.repo.findInstallmentGroupsByIds(groupIdsAnual);
@@ -626,6 +628,7 @@ export class MovementsService {
         currency: g.currency,
         exchangeRate: g.exchangeRate,
         anchorCurrency: g.anchorCurrency,
+        skippedMonths: g.skippedMonths,
       });
     }
 
@@ -1090,7 +1093,8 @@ export class MovementsService {
 
       // Procesar calculados de único (Fase 1.1.7.ext)
       // El rango ya está autolimitado (1 mes), así que el inRange garantiza que solo aparece
-      // en el mes del único. No hay skip (los únicos no tienen skip).
+      // en el mes del único.
+      // P3 (Fase 1.1.1.ext): skip heredado del único de origen OR skip propio del calculado.
       for (const calc of calculadosDeUnicoAnual) {
         // RF-REP-015: calculados de único no entran en el tramo proyectado
         if (isFutureMonth) continue;
@@ -1102,6 +1106,7 @@ export class MovementsService {
 
         const txData = calc.sourceMovementId ? txAnualMap.get(calc.sourceMovementId) : undefined;
         if (!txData) continue;
+        if (txData.skipped || calc.skippedMonths.has(mes)) continue;
 
         const derivedAmount = applyFormula(
           txData.amountCents,
@@ -1161,6 +1166,8 @@ export class MovementsService {
 
       // Procesar calculados de cuota (Fase 1.1.7.ext)
       // El rango on-the-fly del grupo limita los meses de aparición.
+      // P3 (Fase 1.1.1.ext): skip heredado de la cuota de origen (para este mes)
+      // OR skip propio del calculado.
       for (const calc of calculadosDeCuotaAnual) {
         // RF-REP-015: calculados de cuota no entran en el tramo proyectado
         if (isFutureMonth) continue;
@@ -1178,6 +1185,7 @@ export class MovementsService {
         // Verificar límite on-the-fly del grupo
         const endMonth = addMonths(groupData.startMonth, groupData.totalInstallments);
         if (mes >= endMonth) continue;
+        if (groupData.skippedMonths.has(mes) || calc.skippedMonths.has(mes)) continue;
 
         const derivedAmount = applyFormula(
           groupData.amountCents,
@@ -1248,6 +1256,9 @@ export class MovementsService {
 
         // RF-REP-015: cuotas no entran en el tramo proyectado
         if (projectFixed === true && mes > todayMonthKey) continue;
+
+        // P3 (Fase 1.1.1.ext): la instancia (mes) de la cuota está anulada
+        if (grupo.skippedMonths.has(mes)) continue;
 
         // P3: cuotas usan TC oficial del mes de la instancia (pivotRates), no el exchangeRate guardado.
         const pivotRates = pivotRatesForYear.get(mes) ?? null;
@@ -2062,7 +2073,7 @@ export class MovementsService {
 
     // Cargar Transactions y Groups de origen para calculados (una sola query cada uno)
     const txIdsAnual = [...new Set(calculadosDeUnicoAnual.map((f) => f.sourceMovementId!).filter(Boolean))];
-    const txAnualMap = new Map<string, { amountCents: number; currency: Currency; exchangeRate: number; anchorCurrency: Currency }>();
+    const txAnualMap = new Map<string, { amountCents: number; currency: Currency; exchangeRate: number; anchorCurrency: Currency; skipped: boolean }>();
     if (txIdsAnual.length > 0) {
       const txRows = await this.repo.findTransactionsByIds(txIdsAnual);
       for (const tx of txRows) txAnualMap.set(tx.id, {
@@ -2070,6 +2081,7 @@ export class MovementsService {
         currency: tx.currency,
         exchangeRate: tx.exchangeRate,
         anchorCurrency: tx.anchorCurrency,
+        skipped: tx.skipped,
       });
     }
 
@@ -2081,6 +2093,7 @@ export class MovementsService {
       currency: Currency;
       exchangeRate: number;
       anchorCurrency: Currency;
+      skippedMonths: Set<string>;
     }>();
     if (groupIdsAnual.length > 0) {
       const groupRows = await this.repo.findInstallmentGroupsByIds(groupIdsAnual);
@@ -2091,6 +2104,7 @@ export class MovementsService {
         currency: g.currency,
         exchangeRate: g.exchangeRate,
         anchorCurrency: g.anchorCurrency,
+        skippedMonths: g.skippedMonths,
       });
     }
 
@@ -2242,6 +2256,7 @@ export class MovementsService {
 
         const txData = calc.sourceMovementId ? txAnualMap.get(calc.sourceMovementId) : undefined;
         if (!txData) continue;
+        if (txData.skipped || calc.skippedMonths.has(mes)) continue;
 
         const derivedAmount = applyFormula(
           txData.amountCents,
@@ -2282,6 +2297,7 @@ export class MovementsService {
 
         const endMonth = addMonths(groupData.startMonth, groupData.totalInstallments);
         if (mes >= endMonth) continue;
+        if (groupData.skippedMonths.has(mes) || calc.skippedMonths.has(mes)) continue;
 
         const derivedAmount = applyFormula(
           groupData.amountCents,
@@ -2313,6 +2329,7 @@ export class MovementsService {
         if (grupo.type !== 'INCOME') continue;
         const endMonth = addMonths(grupo.startMonth, grupo.totalInstallments);
         if (grupo.startMonth > mes || mes >= endMonth) continue;
+        if (grupo.skippedMonths.has(mes)) continue;
 
         const convertedAmount = convertToDisplayCurrencyByMonth(
           grupo.amountCents,
@@ -2415,6 +2432,7 @@ export class MovementsService {
       if (!inRange) continue;
       const txData = calc.sourceMovementId ? txAnualMap.get(calc.sourceMovementId) : undefined;
       if (!txData) continue;
+      if (txData.skipped || calc.skippedMonths.has(prevDecKey)) continue;
       const derivedAmount = applyFormula(txData.amountCents, calc.formulaOperator as FormulaOperator, calc.formulaOperand!, calc.formulaSign!);
       if (derivedAmount <= 0) continue;
       const magnitude = convertToDisplayCurrency(Math.abs(derivedAmount), txData.currency, txData.exchangeRate, txData.anchorCurrency, displayCurrency, pivotRatesPrevDec);
@@ -2431,6 +2449,7 @@ export class MovementsService {
       if (!groupData) continue;
       const endMonth = addMonths(groupData.startMonth, groupData.totalInstallments);
       if (prevDecKey >= endMonth) continue;
+      if (groupData.skippedMonths.has(prevDecKey) || calc.skippedMonths.has(prevDecKey)) continue;
       const derivedAmount = applyFormula(groupData.amountCents, calc.formulaOperator as FormulaOperator, calc.formulaOperand!, calc.formulaSign!);
       if (derivedAmount <= 0) continue;
       const magnitude = convertToDisplayCurrencyByMonth(Math.abs(derivedAmount), groupData.currency, displayCurrency, pivotRatesPrevDec, groupData.exchangeRate, groupData.anchorCurrency);
@@ -2444,6 +2463,7 @@ export class MovementsService {
       if (grupo.type !== 'INCOME') continue;
       const endMonth = addMonths(grupo.startMonth, grupo.totalInstallments);
       if (grupo.startMonth > prevDecKey || prevDecKey >= endMonth) continue;
+      if (grupo.skippedMonths.has(prevDecKey)) continue;
       const convertedAmount = convertToDisplayCurrencyByMonth(
         grupo.amountCents,
         grupo.currency,

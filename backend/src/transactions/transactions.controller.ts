@@ -126,4 +126,22 @@ export class TransactionsController {
   ) {
     return this.recurringService.updateCalculatedFromTransaction(req.user.userId, id, dto);
   }
+
+  /**
+   * POST /transactions/:id/skip
+   * Toglea la anulación de un movimiento único (P3 — Fase 1.1.1.ext).
+   *
+   * Sin body: el único es una sola fila, el skip es un flag booleano (sin noción de mes).
+   *
+   * Respuesta + sobre:
+   * { skipped: boolean }
+   * - skipped=true: el único quedó anulado (no suma a totales, aparece con skipped=true en /movements)
+   * - skipped=false: el único fue des-anulado (vuelve a contar)
+   *
+   * 404 si la transacción no existe o no pertenece al usuario.
+   */
+  @Post(':id/skip')
+  toggleSkip(@Request() req: AuthRequest, @Param('id') id: string) {
+    return this.transactionsService.toggleSkip(req.user.userId, id);
+  }
 }

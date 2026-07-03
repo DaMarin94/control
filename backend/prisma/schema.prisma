@@ -238,6 +238,13 @@ model Transaction {
   exchangeRate    Decimal  @default(1) @db.Decimal(18, 6)
   anchorCurrency  Currency @default(ARS)
 
+  // Anulación (skip) de un único (P3 — Fase 1.1.1.ext).
+  // El único es una sola fila: no hay tabla de meses (a diferencia de fijos/cuotas),
+  // el skip es directamente un flag booleano en la fila. Reversible (toggle).
+  // Anulado: se SIGUE MOSTRANDO en /movements marcado con skipped=true, pero no suma
+  // a totales del mes ni a ningún reporte.
+  skipped Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -483,5 +490,34 @@ model InstallmentGroup {
   // onDelete: Cascade en la FK del lado Recurring garantiza borrado automático.
   calculados Recurring[]
 
+  // Meses salteados (P3 — Fase 1.1.1.ext): cada fila anula UNA instancia (mes) del grupo,
+  // no el grupo entero. Espejo exacto de RecurringSkip.
+  // onDelete: Cascade: si se borra el grupo, sus skips desaparecen.
+  skips InstallmentSkip[]
+
   @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// InstallmentSkip (meses salteados por grupo de cuotas — P3, Fase 1.1.1.ext)
+// ---------------------------------------------------------------------------
+
+// Modela "una cuota puntual de un grupo está anulada para ese mes puntual".
+// Es reversible: la acción es un toggle (anular / des-anular).
+// El mes anulado SE SIGUE MOSTRANDO en /movements marcado con skipped=true.
+// No suma a los totales del mes ni a ningún reporte (se excluye del cálculo).
+// Espejo exacto de RecurringSkip (ver arriba).
+model InstallmentSkip {
+  id                  String @id @default(cuid())
+  installmentGroupId  String
+  // month: mes anulado en formato "YYYY-MM"
+  month               String
+
+  createdAt DateTime @default(now())
+
+  installmentGroup InstallmentGroup @relation(fields: [installmentGroupId], references: [id], onDelete: Cascade)
+
+  // Restricción: solo puede haber un skip por (grupo, mes)
+  @@unique([installmentGroupId, month])
+  @@index([installmentGroupId])
 }

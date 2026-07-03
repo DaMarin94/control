@@ -84,3 +84,20 @@ export interface UpdateInstallmentRequest {
   /** Cotización ARS por 1 USD (Fase 1.2.3). */
   exchangeRate?: number;
 }
+
+/**
+ * Body de POST /installments/:id/skip (toggle anular/des-anular una cuota para un mes puntual — P3).
+ */
+export interface SkipInstallmentRequest {
+  /** Mes a anular/des-anular en formato YYYY-MM */
+  month: string;
+}
+
+/**
+ * Respuesta de POST /installments/:id/skip.
+ * data del sobre estándar { success, statusCode, data }.
+ */
+export interface SkipInstallmentResponse {
+  skipped: boolean;
+  month: string;
+}

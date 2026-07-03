@@ -629,6 +629,84 @@ describe('Transactions (e2e)', () => {
   });
 
   // -------------------------------------------------------------------------
+  // POST /transactions/:id/skip (P3 — Fase 1.1.1.ext)
+  // -------------------------------------------------------------------------
+
+  describe('POST /transactions/:id/skip', () => {
+    it('anula el único: skipped=false → true, sin body', async () => {
+      const existing = makeDbTransaction({ skipped: false });
+      mockPrisma.transaction.findUnique.mockResolvedValue(existing);
+      mockPrisma.transaction.update.mockResolvedValue(makeDbTransaction({ skipped: true }));
+
+      const res = await request(app.getHttpServer())
+        .post('/transactions/tx-e2e-001/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({});
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toEqual({ skipped: true });
+      expect(mockPrisma.transaction.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'tx-e2e-001' },
+          data: { skipped: true },
+        }),
+      );
+    });
+
+    it('des-anula el único: skipped=true → false (toggle)', async () => {
+      const existing = makeDbTransaction({ skipped: true });
+      mockPrisma.transaction.findUnique.mockResolvedValue(existing);
+      mockPrisma.transaction.update.mockResolvedValue(makeDbTransaction({ skipped: false }));
+
+      const res = await request(app.getHttpServer())
+        .post('/transactions/tx-e2e-001/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({});
+
+      expect(res.body.data).toEqual({ skipped: false });
+      expect(mockPrisma.transaction.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { skipped: false } }),
+      );
+    });
+
+    it('404 si el único no existe', async () => {
+      mockPrisma.transaction.findUnique.mockResolvedValue(null);
+
+      const res = await request(app.getHttpServer())
+        .post('/transactions/no-existe/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({})
+        .expect(404);
+
+      expect(res.body.success).toBe(false);
+      expect(mockPrisma.transaction.update).not.toHaveBeenCalled();
+    });
+
+    it('aislamiento: 404 si el único pertenece a otro usuario (RN-003)', async () => {
+      const existing = makeDbTransaction({ userId: USER_B_ID, skipped: false });
+      mockPrisma.transaction.findUnique.mockResolvedValue(existing);
+
+      const res = await request(app.getHttpServer())
+        .post('/transactions/tx-e2e-001/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({})
+        .expect(404);
+
+      expect(res.body.success).toBe(false);
+      expect(mockPrisma.transaction.update).not.toHaveBeenCalled();
+    });
+
+    it('401 sin JWT', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/transactions/tx-e2e-001/skip')
+        .send({})
+        .expect(401);
+
+      expect(res.body.success).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Multi-moneda: currency y exchangeRate sobreviven al ValidationPipe
   // (Fase 1.2.3 — experimento decisivo para el bug de enum descartado)
   // -------------------------------------------------------------------------

@@ -213,6 +213,7 @@ const TX_DATA = {
   currency: 'ARS',
   exchangeRate: '1',
   anchorCurrency: 'ARS',
+  skipped: false,
 };
 const GROUP_DATA = {
   id: GROUP_ID,
@@ -223,6 +224,7 @@ const GROUP_DATA = {
   currency: 'ARS',
   exchangeRate: '1',
   anchorCurrency: 'ARS',
+  skips: [],
 };
 
 // ---------------------------------------------------------------------------
@@ -629,7 +631,7 @@ describe('MovementsService.getReportsMovements — calculados de único y cuota 
   it('calculado de único aparece solo en el mes del Transaction (junio 2026)', async () => {
     const calc = makeCalcDeUnicoAnual({ startMonth: '2026-06', deletedFrom: '2026-07' });
     mockRepo.getAllFijosForAnnual.mockResolvedValue([calc]);
-    mockRepo.findTransactionsByIds.mockResolvedValue([{ id: TX_ID, amountCents: 10000, description: 'Viaje', currency: Currency.ARS, exchangeRate: 1, anchorCurrency: Currency.ARS }]);
+    mockRepo.findTransactionsByIds.mockResolvedValue([{ id: TX_ID, amountCents: 10000, description: 'Viaje', currency: Currency.ARS, exchangeRate: 1, anchorCurrency: Currency.ARS, skipped: false }]);
 
     const result = await service.getReportsMovements(USER_A, 2026);
 
@@ -656,6 +658,7 @@ describe('MovementsService.getReportsMovements — calculados de único y cuota 
       currency: Currency.ARS,
       exchangeRate: 1,
       anchorCurrency: Currency.ARS,
+      skippedMonths: new Set<string>(),
     }]);
 
     const result = await service.getReportsMovements(USER_A, 2026);
@@ -683,6 +686,7 @@ describe('MovementsService.getReportsMovements — calculados de único y cuota 
       currency: Currency.ARS,
       exchangeRate: 1,
       anchorCurrency: Currency.ARS,
+      skippedMonths: new Set<string>(),
     }]);
 
     const result = await service.getReportsMovements(USER_A, 2026);

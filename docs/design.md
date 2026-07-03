@@ -1513,20 +1513,23 @@ La **sublínea** del ítem de `/mes` es el lugar canónico de los metadatos del 
   - **Ícono de la caja de origen (form de calculado).** La caja de origen *read-only* del form lleva un glifo lucide que identifica el **tipo del movimiento de origen**, en `--accent-ink` (cromo de UI, no monto): **fijo → `Repeat`** (recurrencia), **único → `Receipt`** (gasto puntual / ticket), **cuota → `CreditCard`** (compra financiada en N pagos). 15px, `shrink-0`, `aria-hidden`. Son afordancias neutras: no tiñen cifras ni colisionan con la regla verde/rojo. No hay convención previa de ícono para único/cuota en listas (Únicos se distingue por la columna fecha; Cuotas por "X/N"), así que estos tres glifos viven por ahora solo en esta caja.
 - **Aviso de borrado en cascada (modal de eliminar):** cuando el movimiento a eliminar es **padre** (`hasCalculated === true`), el modal de confirmación suma un **callout de advertencia** como **último bloque del cuerpo, antes del footer**, avisando que al borrarlo también se borran sus calculados. Es **advertencia (ámbar `--warning`), no error**: el borrado es lo pedido, el callout informa el efecto colateral. Banda `--r-ctl`, fondo `--warning-soft`, borde `--warning`, `AlertTriangle` (lucide, 16px, `--warning-ink`) + texto 13px/500 `--warning-ink`. El botón "Eliminar" del footer **es `danger`** (rojo): advertencia ámbar y acción destructiva roja conviven. Solo aparece si `hasCalculated`; si es `false`, el modal queda igual.
 
-### Ítem fijo anulado (`skipped`) y acciones del KebabMenu
+### Ítem anulado (`skipped`) y acciones del KebabMenu
 
-**Fijo anulado para el mes** (`origin: 'fijo'`, `skipped: true`): el ítem **se sigue mostrando** en su sección y posición (no desaparece), pero no suma a los totales. Tres señales juntas, ninguna sola alcanza:
+**Ítem anulado** (`skipped: true`): el ítem **se sigue mostrando** en su sección y posición (no desaparece), pero no suma a los totales. La anulación aplica a los **tres orígenes** — fijo, único y cuota — con la **misma señalética visual**; lo único que cambia es el **rótulo** de la acción (ver más abajo). Tres señales juntas, ninguna sola alcanza:
 
 - **Atenuación de la fila:** todo el contenido de la fila (ícono, nombre, sublínea, monto, columna fecha) a **`opacity: 0.55`**. **No** se atenúa el fondo/hover ni el KebabMenu (que queda a opacidad plena para accionar "Des-anular").
 - **Monto tachado:** `line-through` sobre el monto, además de la atenuación. **Conserva su color por tipo y su signo** — no se recolorea a neutro.
-- **Badge "Anulado":** chip neutro como **primer** segmento de la sublínea (antes de Categoría; si además es calculado: `[Anulado] [Calculado] …`). Mismo molde de chip neutro del DS: `--panel-3` / `--muted` / `--r-chip` 7px / 11px·600·`.04em`. Neutro a propósito (no `--warning` ni semántico): "anulado" es un estado de cómputo, no error.
+- **Badge "Anulado":** chip neutro como **primer** segmento de la sublínea (antes de Categoría; si además es calculado: `[Anulado] [Calculado] …`). Mismo molde de chip neutro del DS: `--panel-3` / `--muted` / `--r-chip` 7px / 11px·600·`.04em`. **Mismo texto "Anulado" para los tres orígenes** (no se cambia por "este mes"): el badge señala el estado de cómputo del ítem, no el alcance temporal — ese matiz vive en el rótulo del kebab. Neutro a propósito (no `--warning` ni semántico): "anulado" es un estado de cómputo, no error.
 
 **Hover del anulado:** la fila sigue interactiva (`hover:bg-panel-2` + KebabMenu visible); el contenido atenuado **no** vuelve a opacidad plena en hover.
 
-**Acciones del KebabMenu del ítem (orden):** Editar → Anular/Des-anular este mes → Crear movimiento desde este → Eliminar (única `danger`/roja). Las dos intermedias son **neutras** (`text-ink hover:bg-panel-2`, ícono 15px), **solo en `origin: 'fijo'`** para "Anular" y **solo en orígenes no-calculados** para "Crear desde este":
+**Acciones del KebabMenu del ítem (orden):** Editar → Anular/Des-anular → Crear movimiento desde este → Eliminar (única `danger`/roja). Las dos intermedias son **neutras** (`text-ink hover:bg-panel-2`, ícono 15px); la anulación aparece en **fijo, único y cuota** (siempre en el mismo slot, justo después de Editar), y "Crear desde este" **solo en orígenes no-calculados**:
 
-- **Anular / Des-anular este mes** — toggle según `skipped`: activo → **"Anular este mes"** (`CalendarOff`); anulado → **"Des-anular este mes"** (`CalendarPlus`). Reversible, nunca `danger`.
-- **Crear movimiento desde este** — abre el form de calculado (abajo) con el origen fijado. Ícono `Calculator`. **No** aparece sobre un ítem que ya es calculado (sin encadenamiento). Únicos/cuotas pueden ser origen (su KebabMenu **no** lleva "Anular").
+- **Anular / Des-anular** — toggle según `skipped`, siempre en el slot posterior a Editar. Íconos reusados para los tres orígenes: activo → `CalendarOff`; anulado → `CalendarPlus`. Reversible, nunca `danger`. El **rótulo** distingue el alcance:
+  - **Fijo** y **cuota** (anulación de la instancia de **ese mes**): **"Anular este mes"** / **"Des-anular este mes"**.
+  - **Único** (la anulación es un **flag de la fila**, no un mes puntual): **"Anular"** / **"Des-anular"**, sin "este mes".
+  - Los íconos `CalendarOff`/`CalendarPlus` se **reusan tal cual** también en el único: no se introduce ícono nuevo (sin "ojito" ni glifo alternativo). Aunque el calendario alude a "mes", se prioriza mantener el toggle **reconocible e idéntico** entre los tres orígenes; el matiz de alcance lo carga el rótulo.
+- **Crear movimiento desde este** — abre el form de calculado (abajo) con el origen fijado. Ícono `Calculator`. **No** aparece sobre un ítem que ya es calculado (sin encadenamiento). Todos los orígenes no-calculados pueden ser origen.
 
 ### Selector de frecuencia del form de fijo
 

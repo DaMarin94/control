@@ -77,3 +77,12 @@ export interface UpdateTransactionRequest {
   exchangeRate?: number;
 }
 
+/**
+ * Respuesta de POST /transactions/:id/skip (toggle anular/des-anular un único — P3).
+ * Sin body en el request; sin alcance temporal (a diferencia de fijos/cuotas).
+ * data del sobre estándar { success, statusCode, data }.
+ */
+export interface SkipTransactionResponse {
+  skipped: boolean;
+}
+

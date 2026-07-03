@@ -234,6 +234,70 @@ describe("useTransactions", () => {
     });
   });
 
+  // ─── skipTransaction (P3) ────────────────────────────────────────────────────
+
+  describe("skipTransaction", () => {
+    it("éxito: llama POST /transactions/:id/skip SIN body y devuelve skipped", async () => {
+      mockApiPost.mockResolvedValue({ skipped: true });
+
+      const { result } = renderHook(() => useTransactions(), { wrapper: createWrapper() });
+
+      let skipResult: Awaited<ReturnType<typeof result.current.skipTransaction>>;
+
+      await act(async () => {
+        skipResult = await result.current.skipTransaction("tx-1", "2026-06");
+      });
+
+      expect(skipResult!.success).toBe(true);
+      expect(skipResult!.skipped).toBe(true);
+      expect(mockApiPost).toHaveBeenCalledWith("/transactions/tx-1/skip", undefined);
+    });
+
+    it("toggle: la segunda llamada devuelve skipped=false (des-anular)", async () => {
+      mockApiPost.mockResolvedValue({ skipped: false });
+
+      const { result } = renderHook(() => useTransactions(), { wrapper: createWrapper() });
+
+      let skipResult: Awaited<ReturnType<typeof result.current.skipTransaction>>;
+
+      await act(async () => {
+        skipResult = await result.current.skipTransaction("tx-1", "2026-06");
+      });
+
+      expect(skipResult!.skipped).toBe(false);
+    });
+
+    it("404: devuelve error descriptivo", async () => {
+      mockApiPost.mockRejectedValue(new ApiError("Not found", 404));
+
+      const { result } = renderHook(() => useTransactions(), { wrapper: createWrapper() });
+
+      let skipResult: Awaited<ReturnType<typeof result.current.skipTransaction>>;
+
+      await act(async () => {
+        skipResult = await result.current.skipTransaction("tx-inexistente", "2026-06");
+      });
+
+      expect(skipResult!.success).toBe(false);
+      expect(skipResult!.error).toMatch(/no existe|eliminado/i);
+    });
+
+    it("error de servidor (500): devuelve mensaje genérico", async () => {
+      mockApiPost.mockRejectedValue(new ApiError("Internal Server Error", 500));
+
+      const { result } = renderHook(() => useTransactions(), { wrapper: createWrapper() });
+
+      let skipResult: Awaited<ReturnType<typeof result.current.skipTransaction>>;
+
+      await act(async () => {
+        skipResult = await result.current.skipTransaction("tx-1", "2026-06");
+      });
+
+      expect(skipResult!.success).toBe(false);
+      expect(skipResult!.error).toMatch(/error/i);
+    });
+  });
+
   // ─── Estados de carga ────────────────────────────────────────────────────────
 
   describe("estados de carga", () => {

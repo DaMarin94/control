@@ -113,6 +113,7 @@ function makeInstallmentGroup(overrides: Record<string, unknown> = {}) {
     startMonth: '2026-01',
     description: 'Test cuota',
     category: CAT_EMBEDDED,
+    skips: [],
     ...overrides,
   };
 }

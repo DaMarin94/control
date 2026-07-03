@@ -456,6 +456,38 @@ Un movimiento único es un gasto o ingreso que ocurrió una sola vez en una fech
 
 ---
 
+#### RF-MU-005 — Anular un movimiento único (skip)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El usuario puede **anular** un movimiento único sin eliminarlo. Es una acción **reversible** (toggle anular / des-anular) modelada como un **flag booleano de la fila** (sin alcance temporal: anula el movimiento entero, no un mes puntual). El único anulado se sigue mostrando en la lista, pero **no suma** a los totales del mes ni a los reportes. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El movimiento único existe y pertenece al usuario autenticado. |
+
+**Flujo principal:**
+1. El usuario abre el menú de acciones (kebab) del ítem de un movimiento único en la Vista del mes (`/mes`).
+2. El usuario selecciona la acción **"Anular"**.
+3. El sistema marca el único como anulado (flag de la fila).
+4. El ítem **se sigue mostrando** en la lista con su diferenciación visual de anulado, **deja de sumar** a los totales del mes y a los reportes.
+
+**Flujos alternativos:**
+- *A1 — Des-anular (toggle):* sobre un único ya anulado, la acción se rotula **"Des-anular"**; al activarla, el movimiento vuelve a contar y el ítem pierde la diferenciación visual de anulado.
+
+**Criterios de aceptación:**
+- [ ] La acción de anular / des-anular vive en el **menú de acciones (kebab)** del ítem del único, con rótulo **"Anular"** / **"Des-anular"** (sin "este mes": la anulación no tiene alcance temporal, es de la fila entera).
+- [ ] La acción es un **toggle reversible**: anular activa el flag, des-anular lo quita. Se puede ir y volver indefinidamente.
+- [ ] Aplica a cualquier dirección del único (gasto o ingreso).
+- [ ] Un único anulado **se sigue mostrando** en la lista con diferenciación visual, y su monto **no suma** a los totales del mes (RF-VM-002, RF-DASH-002) **ni** a los reportes (RF-REP-001) — mismo efecto que la anulación de un fijo (RN-016), formalizado en RN-020.
+- [ ] Los **calculados** derivados de un único anulado **heredan** su estado de anulación para el mes: no tienen skip propio (RF-MCALC-005).
+- [ ] Solo se pueden anular movimientos únicos propios.
+
+**Notas:**
+- El detalle visual del ítem anulado y del control de la acción lo define `control-design` (`docs/design.md`).
+- El flag de anulación del único vive en la propia fila (`Transaction.skipped`), a diferencia del fijo y de la cuota, que anulan **una** aparición mensual con un registro aparte. Ver `docs/data-model.md`, entidad Movimiento único, y RN-020.
+
+---
+
 ### 3.4 Módulo: Movimientos fijos
 
 Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netflix. Aparece automáticamente en cada mes desde su inicio hasta que el usuario lo elimina. No tiene día específico dentro del mes.
@@ -591,7 +623,7 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 - *A1 — Des-anular (toggle):* sobre un fijo ya anulado en ese mes, la acción se rotula **"Des-anular este mes"**; al activarla, la aparición vuelve a contar y el ítem pierde la diferenciación visual de anulado.
 
 **Criterios de aceptación:**
-- [ ] La acción de anular / des-anular está disponible en los ítems de la sección **Fijos**: tanto en los **fijos** como en los **calculados de fijo** (los que tienen `origin: "fijo"`). Un **calculado de fijo se puede anular por su cuenta** y **además** queda anulado si su fijo de origen está anulado ese mes: su estado resultante es `skip propio del calculado **OR** skip del fijo de origen` (RF-MCALC-005: la herencia del estado del origen se mantiene; sobre ella se suma el skip propio). Los movimientos **únicos**, las **cuotas** y los **calculados de único o de cuota** **no** se anulan: su `skipped` es siempre `false` y no ofrecen la acción.
+- [ ] La acción de anular / des-anular vive en el **menú de acciones (kebab)** del ítem del **fijo**, sin ícono ni control adicional. Los **calculados** (de fijo, único o cuota) **no ofrecen la acción**: no tienen skip propio, **heredan** el estado de anulación de su origen para el mes (RF-MCALC-005). Los movimientos **únicos** (RF-MU-005) y las **cuotas** (RF-MC-004) tienen su propia acción de anulación, con la misma mecánica de exclusión de totales y reportes (RN-016, RN-020).
 - [ ] La acción es un **toggle reversible**: anular crea la anulación del mes; des-anular la quita. Sobre el mismo fijo y mes se puede ir y volver indefinidamente.
 - [ ] El mes anulado se distingue de los demás (`deletedFrom`, RF-MF-004): anular **no** elimina el fijo ni afecta otros meses — solo esa única aparición. El fijo sigue vivo y aparece en las demás apariciones que dicta su frecuencia.
 - [ ] Un fijo anulado para un mes **se sigue mostrando** en la lista de ese mes, con diferenciación visual.
@@ -744,7 +776,7 @@ Un **movimiento calculado** es un movimiento **fijo** cuyo monto **no se ingresa
 **Criterios de aceptación:**
 - [ ] Si el origen **fijo** se **elimina** (RF-MF-004), el calculado **se elimina** (con la misma semántica de pivote/split del fijo: desaparece desde el mes en que desaparece el origen, preservando el pasado).
 - [ ] Si el origen **único** o de **cuota** se **elimina**, su(s) calculado(s) se **eliminan por completo** (cascada total, RF-MCALC-008): un único/cuota no tiene split, así que al borrarlo desaparece toda su derivación.
-- [ ] Si el origen **fijo** se **anula en un mes puntual** (skip, RF-MF-005), el calculado **se anula ese mes**: se sigue listando pero no suma a los totales ni a la serie anual, igual que el origen.
+- [ ] Si el origen (**fijo**, **único** o **cuota**) está **anulado** en un mes (skip — RF-MF-005 / RF-MU-005 / RF-MC-004), el calculado **se anula ese mes**: se sigue listando pero no suma a los totales ni a la serie anual, igual que el origen. El calculado **no tiene skip propio** (el toggle no aparece en su kebab): su estado de anulación es siempre el del origen para ese mes.
 - [ ] Si el origen **fijo** cambia de **frecuencia** —que en el modelo equivale a recrearlo (RF-MF-006)— el calculado **matchea la presencia** del origen vigente.
 - [ ] El calculado nunca aparece en un mes donde el origen no aparece.
 
@@ -944,6 +976,39 @@ Una compra o cobro dividido en N pagos mensuales iguales. El usuario ingresa el 
 - [ ] Solo se pueden editar grupos propios.
 
 > **Nota:** El tipo (Gasto/Ingreso) no es editable: en v1 las cuotas son **solo Gasto** (ver nota en RF-MC-001).
+
+---
+
+#### RF-MC-004 — Anular una cuota en un mes puntual (skip)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El usuario puede **anular** la instancia de una cuota en un **mes puntual**, sin eliminar el grupo. Es una acción **reversible** (toggle anular / des-anular) que anula **solo la cuota de ese mes**; las demás cuotas del grupo no se tocan. La cuota anulada se sigue mostrando, pero **no suma** a los totales del mes ni a los reportes. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El grupo de cuotas existe, la cuota aparece en el mes visualizado y pertenece al usuario autenticado. |
+
+**Flujo principal:**
+1. El usuario, parado en un mes en la Vista del mes (`/mes`), abre el menú de acciones (kebab) del ítem de una cuota.
+2. El usuario selecciona la acción **"Anular este mes"**.
+3. El sistema marca esa instancia mensual de la cuota como anulada, sin afectar el resto del grupo.
+4. El ítem **se sigue mostrando** en la lista con su diferenciación visual de anulado, **deja de sumar** a los totales del mes y a los reportes.
+
+**Flujos alternativos:**
+- *A1 — Des-anular (toggle):* sobre una cuota ya anulada en ese mes, la acción se rotula **"Des-anular este mes"**; al activarla, la instancia vuelve a contar y el ítem pierde la diferenciación visual de anulado.
+
+**Criterios de aceptación:**
+- [ ] La acción de anular / des-anular vive en el **menú de acciones (kebab)** del ítem de la cuota, con rótulo **"Anular este mes"** / **"Des-anular este mes"** (igual que el fijo: anula **una** instancia mensual, no el grupo entero).
+- [ ] La acción es un **toggle reversible**: anular crea la anulación de ese mes; des-anular la quita. Se puede ir y volver indefinidamente.
+- [ ] Anular una cuota en un mes **no** afecta las demás cuotas del grupo ni las anula: solo esa instancia mensual.
+- [ ] Aplica a cualquier dirección de la cuota (gasto o ingreso; en v1 las cuotas son solo Gasto, ver RF-MC-001).
+- [ ] Una cuota anulada **se sigue mostrando** en la lista con diferenciación visual, y su monto **no suma** a los totales del mes (RF-VM-002, RF-DASH-002) **ni** a los reportes (RF-REP-001) — mismo efecto que la anulación de un fijo (RN-016), formalizado en RN-020.
+- [ ] Los **calculados** derivados de una cuota anulada **heredan** su estado de anulación para ese mes: no tienen skip propio (RF-MCALC-005).
+- [ ] Solo se pueden anular cuotas de grupos propios.
+
+**Notas:**
+- El detalle visual del ítem anulado y del control de la acción lo define `control-design` (`docs/design.md`).
+- La anulación de una cuota se modela como un registro aparte `(grupo, mes)` —espejo de la anulación de un fijo—, distinto de eliminar el grupo (RF-MC-002). Ver `docs/data-model.md`, entidad Anulación de cuota (InstallmentSkip), y RN-020.
 
 ---
 
@@ -2011,6 +2076,7 @@ P7 se parte en dos requerimientos independientes (fuentes distintas): **P7a = FX
 | RN-017 | **Fórmula y redondeo del movimiento calculado (RF-MCALC-002).** El monto de un movimiento calculado se deriva del monto del fijo de origen **del mes en cuestión** aplicando **una** operación: un operador de `{ +, −, ×, ÷, % }` y un **operando** numérico común. El cálculo por operador es: `+` → `origen + operando`; `−` → `origen − operando`; `×` → `origen × operando`; `÷` → `origen ÷ operando`; `%` → `origen × operando ÷ 100`. El **operando 0 no se acepta** en `÷` ni en `%` (división por cero); el resto acepta cualquier operando numérico. El resultado se **redondea a centavos enteros** (`round`, mantiene RN-002): **no** se persiste ni propaga precisión sub-centavo. La presentación siempre muestra 2 decimales. El signo final lo aplica RN-018, no la fórmula. El cálculo es **on-the-fly por mes** (RN-006): el monto **no se persiste**, se deriva al vuelo del origen en cada lectura, así que sigue automáticamente cualquier cambio del origen (RF-MCALC-004). |
 | RN-018 | **Signo, monto y tipo derivado del movimiento calculado — excepción a RN-001 (RF-MCALC-003).** El movimiento calculado tiene un **switch de signo** que multiplica el resultado de la fórmula por `+1` o `−1`. Por eso su `amountCents` **puede ser negativo o cero**, a diferencia de todo otro movimiento (RN-001, monto > 0). Esta excepción aplica **únicamente** a movimientos calculados; únicos, fijos "normales" y cuotas siguen exigiendo monto > 0. El `type` (`EXPENSE`/`INCOME`) **no se elige**: se **deriva del signo del monto final** —`final < 0` → `EXPENSE`; `final > 0` → `INCOME`; `final == 0` → `EXPENSE` por convención de borde (no afecta totales, RN-019)—. Así signo y tipo son siempre consistentes (positivo = ingreso, negativo = gasto). |
 | RN-019 | **Imputación a totales y reportes por el tipo derivado (RF-MCALC-003).** Cada movimiento suma su **magnitud** (`\|amountCents\|`) al bucket que le corresponde **según su `type`**: un `INCOME` suma a `incomeCents`; un `EXPENSE`, a `expenseCents`. Para movimientos normales el `type` es fijo y `amountCents > 0`. Para un **calculado**, como el `type` se deriva del signo del monto (RN-018), la imputación queda siempre consistente: un calculado de monto `−2000` es `EXPENSE` (tipo derivado) y suma **2000** a `expenseCents`; uno de `+2000` es `INCOME` y suma **2000** a `incomeCents`; un monto 0 no aporta a ningún bucket. No hay restas a un bucket ni reasignación: signo y tipo nunca se contradicen. El balance del mes (`incomeCents − expenseCents`, RF-VM-002 / RF-DASH-002) y la serie anual de reportes (RF-REP-001, ambos tipos) se calculan con esta suma de magnitudes, sin lógica especial. En `by-category` (gastos apilados por categoría) la porción de la categoría de un calculado `EXPENSE` suma su magnitud, preservando la invariante "suma de porciones del mes = `expenseCents` del mes" (`docs/data-model.md`, §Contrato de serie de reportes). |
+| RN-020 | **Anulación (skip) de movimientos únicos y cuotas (RF-MU-005, RF-MC-004).** Un movimiento **único** se anula con un **flag booleano de la propia fila** (`Transaction.skipped`, sin alcance temporal: anula el movimiento entero). Una **cuota** se anula por **mes puntual** con un registro aparte `(grupo, mes)` que cancela **solo** esa instancia mensual, dejando vivo el resto del grupo. En ambos casos la acción es un **toggle reversible** y aplica a cualquier dirección (gasto/ingreso). A efectos de totales y reportes se comportan igual que la anulación de un fijo (RN-016): el ítem anulado **se sigue listando** con marca de anulado pero su monto **no suma** a los totales del mes ni a la serie anual de los reportes. Los **calculados** derivados de un único o cuota anulado **heredan** ese estado (no tienen skip propio; RF-MCALC-005). El cálculo sigue siendo on-the-fly (RN-006). |
 
 ---
 

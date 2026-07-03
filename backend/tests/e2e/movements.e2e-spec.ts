@@ -90,6 +90,13 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  // installmentSkip.findMany se usa en getAllCuotasForAnnual (P3 — Fase 1.1.1.ext)
+  installmentSkip: {
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    delete: jest.fn(),
+    findUnique: jest.fn(),
+  },
   // referenceRate.findMany se usa en loadAllPivotRates → loadPivotRatesForYear
   referenceRate: {
     findMany: jest.fn().mockResolvedValue([]),
@@ -539,6 +546,7 @@ describe('Movements (e2e)', () => {
           color: '#4F86C6',
           scope: 'EXPENSE',
         },
+        skips: [],
         ...overrides,
       };
     }

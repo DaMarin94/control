@@ -37,6 +37,16 @@ export interface InstallmentGroupWithCategory {
   category: EmbeddedCategory;
 }
 
+/**
+ * Resultado del toggle de skip (P3 — Fase 1.1.1.ext). Espejo de SkipToggleResult (recurring).
+ * - skipped: true si el mes quedó anulado (se creó el skip); false si fue des-anulado (se borró).
+ * - month: mes que fue toggleado.
+ */
+export interface SkipToggleResult {
+  skipped: boolean;
+  month: string;
+}
+
 // Include para todas las queries de InstallmentGroup
 const INSTALLMENT_INCLUDE = {
   category: {
@@ -128,5 +138,37 @@ export class InstallmentsRepository {
    */
   async delete(id: string): Promise<void> {
     await this.prisma.installmentGroup.delete({ where: { id } });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Skips (P3 — Fase 1.1.1.ext). Espejo exacto de RecurringRepository — skips.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Verifica si existe un skip para (installmentGroupId, month).
+   */
+  async findSkip(installmentGroupId: string, month: string): Promise<boolean> {
+    const skip = await this.prisma.installmentSkip.findUnique({
+      where: { installmentGroupId_month: { installmentGroupId, month } },
+    });
+    return skip !== null;
+  }
+
+  /**
+   * Crea un skip para (installmentGroupId, month).
+   */
+  async createSkip(installmentGroupId: string, month: string): Promise<void> {
+    await this.prisma.installmentSkip.create({
+      data: { installmentGroupId, month },
+    });
+  }
+
+  /**
+   * Elimina un skip para (installmentGroupId, month).
+   */
+  async deleteSkip(installmentGroupId: string, month: string): Promise<void> {
+    await this.prisma.installmentSkip.delete({
+      where: { installmentGroupId_month: { installmentGroupId, month } },
+    });
   }
 }

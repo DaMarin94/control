@@ -15,6 +15,10 @@
  *
  * Acciones editar/borrar: via KebabMenu (portal+fixed por overflow-hidden de la tarjeta).
  * Fijos añaden "Anular este mes" / "Des-anular este mes" (toggle skip — P1, Fase 1.1.1).
+ * P3: el toggle de skip se extiende a únicos ("Anular"/"Des-anular", sin alcance temporal)
+ *   y a cuotas ("Anular este mes"/"Des-anular este mes"). Calculados de único/cuota NO
+ *   ofrecen el toggle (heredan el skip del origen desde el backend); calculados de fijo sí
+ *   (comportamiento previo, sin cambios).
  * Fase 1.1.8: "Crear movimiento desde este" habilitado también en únicos y cuotas.
  *   Marca padre (GitBranch) ya no restringida a fijos — aplica a cualquier origen con hasCalculated.
  *
@@ -30,6 +34,8 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { ArrowDown, ArrowUp, Repeat, Pencil, Trash2, CalendarOff, CalendarPlus, Link2, GitBranch, Calculator } from "lucide-react";
 import { KebabMenu } from "@/components/ui/kebab-menu";
 import { useRecurring } from "@/hooks/use-recurring";
+import { useTransactions } from "@/hooks/use-transactions";
+import { useInstallments } from "@/hooks/use-installments";
 import { useSettings } from "@/hooks/use-settings";
 import { useToast } from "@/hooks/use-toast";
 
@@ -54,6 +60,8 @@ interface MovementItemRowProps {
 
 export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreateCalculated }: MovementItemRowProps) {
   const { skipRecurring } = useRecurring();
+  const { skipTransaction } = useTransactions();
+  const { skipInstallment } = useInstallments();
   const { toast } = useToast();
   const { defaultCurrency } = useSettings();
 
@@ -62,6 +70,7 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
 
   const isExpense = movement.type === "EXPENSE";
   const isFijo = movement.origin === "fijo";
+  const isUnico = movement.origin === "unico";
   const isCuota = movement.origin === "cuota";
   const isSkipped = movement.skipped;
 
@@ -133,18 +142,34 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
       ? (FREQUENCY_LABEL[movement.frequency] ?? "mensual")
       : "mensual";
 
-  // Handler para el toggle de anular/des-anular
+  // Handler para el toggle de anular/des-anular — enruta por origen (P3)
   async function handleSkipToggle() {
-    const result = await skipRecurring(movement.id, viewMonth);
+    const result = isFijo
+      ? await skipRecurring(movement.id, viewMonth)
+      : isCuota
+        ? await skipInstallment(movement.id, viewMonth)
+        : await skipTransaction(movement.id, viewMonth);
     if (!result.success) {
       toast.error(result.error ?? "No se pudo cambiar el estado del movimiento.");
     }
     // Si tiene éxito, React Query invalida la query del mes y la lista se refresca sola
   }
 
-  // Ítems del KebabMenu — para fijos (incluidos calculados de fijo) se añade el toggle skip
-  // entre Editar y Eliminar (RF-MF-005). Un calculado de fijo puede anularse por su cuenta
-  // (su skipped = skip propio OR skip del padre); los calculados de único/cuota no tienen skip.
+  // Toggle skip visible en: fijos (incluidos calculados de fijo — RF-MF-005; un calculado
+  // de fijo puede anularse por su cuenta, su skipped = skip propio OR skip del padre) y en
+  // únicos/cuotas NO calculados (P3). Los calculados de único/cuota no ofrecen el toggle
+  // porque heredan el skip del origen desde el backend.
+  const showSkipToggle = isFijo || ((isUnico || isCuota) && !isCalculated);
+  // Rótulo: fijo y cuota llevan "este mes" (alcance temporal); único no (P3 spec).
+  const skipLabel = isUnico
+    ? isSkipped
+      ? "Des-anular"
+      : "Anular"
+    : isSkipped
+      ? "Des-anular este mes"
+      : "Anular este mes";
+
+  // Ítems del KebabMenu — el toggle skip va entre Editar y Eliminar (spec de posición).
   // "Crear movimiento desde este" solo en ítems NO calculados (spec sección 2).
   const menuItems = [
     {
@@ -152,10 +177,10 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
       icon: Pencil,
       onSelect: () => onEdit(movement),
     },
-    ...(isFijo
+    ...(showSkipToggle
       ? [
           {
-            label: isSkipped ? "Des-anular este mes" : "Anular este mes",
+            label: skipLabel,
             icon: isSkipped ? CalendarPlus : CalendarOff,
             onSelect: handleSkipToggle,
           },

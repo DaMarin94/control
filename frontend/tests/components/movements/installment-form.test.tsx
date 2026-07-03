@@ -183,9 +183,11 @@ beforeEach(() => {
     createInstallment: mockCreateInstallment,
     updateInstallment: mockUpdateInstallment,
     deleteInstallment: mockDeleteInstallment,
+    skipInstallment: vi.fn(),
     isCreating: false,
     isUpdating: false,
     isDeleting: false,
+    isSkipping: false,
   });
 
   mockUseRouter.mockReturnValue({ push: mockPush } as unknown as ReturnType<typeof useRouter>);

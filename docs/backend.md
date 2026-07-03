@@ -149,6 +149,7 @@ CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca mo
 | `GET /transactions/:id` | — | `200` · `data: Transaction` | `404` |
 | `PATCH /transactions/:id` | parcial (cualquier campo de POST) | `200` · `data: Transaction` | `400` · `404` |
 | `DELETE /transactions/:id` | — | `204 No Content` | `404` |
+| `POST /transactions/:id/skip` | — (sin body) | `200` · `data: { skipped }` | `404` |
 | `POST /transactions/:id/calculated` | calculado desde el único `:id` | `201` · `data: Recurring` | `400` · `404` |
 | `PATCH /transactions/:id/calculated` | edita el calculado de único `:id` | `200` · `data: Recurring` | `400` · `404` |
 
@@ -156,6 +157,7 @@ CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca mo
 - **`GET /transactions/:id`** — `404` si no existe o no es del usuario.
 - **`PATCH /transactions/:id`** — body parcial (cualquier campo del POST). **Reaplica todas las validaciones** (RN-002 monto, RN-010 scope). `404` si no existe o no es del usuario.
 - **`DELETE /transactions/:id`** — **hard delete** (permanente, RF-MU-003; la entidad no tiene `deletedAt`). **`204` sin cuerpo.** `404` si no existe o no es del usuario. Si el único tiene calculados derivados (`sourceMovementId`), la FK `onDelete: Cascade` los borra enteros (ver §Movimientos calculados, Eliminación).
+- **`POST /transactions/:id/skip` — toggle de anulación (RF-MU-005):** anula / des-anula el único, **sin body**. Es un **toggle** del flag `Transaction.skipped`: si estaba en `false` lo pone en `true` (`data: { skipped: true }`) y viceversa. Sin alcance temporal (anula la fila entera). `404` si el único no existe o no es del usuario. Un único anulado **se sigue listando** en `GET /movements` con `skipped: true` pero **no suma** a totales ni reportes.
 - **`POST|PATCH /transactions/:id/calculated`** — calculado de origen único; contrato en `docs/data-model.md`, §Contrato de movimientos calculados; mecánica en §Movimientos calculados (abajo).
 
 > **El listado del mes no vive en `transactions`:** es `GET /movements?month=YYYY-MM` (ver **Movimientos del mes (MovementsModule)**), que unifica únicos + fijos + cuotas y agrega los totales. De `transactions` solo quedan los cuatro endpoints de la tabla de arriba (`POST`, `GET /:id`, `PATCH`, `DELETE`).
@@ -212,6 +214,7 @@ El join de movimientos y el cálculo de totales **no filtran por `Category.delet
 - **Helpers `addMonths` / `monthDiff`** exportados desde `movements.repository.ts` — reusarlos, no reimplementar aritmética de meses.
 - **Gotcha — `addMonths` soporta offsets negativos que cruzan el límite de año vía módulo verdadero.** El cálculo del mes destino usa `((month % 12) + 12) % 12` (módulo verdadero, no `%` de JS, que devuelve negativos): con eso `addMonths('2026-03', -3) = '2025-12'`. Imprescindible porque la **proyección de fijos (RF-REP-015)** arma su ventana con offsets negativos `[hoy-12 .. hoy]`; un módulo ingenuo desfasaría el año al retroceder más allá de enero.
 - **Los totales del mes suman únicos + fijos + cuotas.**
+- **Anulados excluidos de los totales del mes.** Igual que un fijo anulado, un **único anulado** (flag `Transaction.skipped`, RF-MU-005) y una **cuota anulada** (`InstallmentSkip` del mes, RF-MC-004) **se incluyen en la lista** con `skipped: true` pero **no suman** a `totals`; sus **calculados** heredan el estado del origen (RN-020).
 
 ### Serie de reportes (`GET /movements/reports?year=YYYY&categories=`)
 
@@ -228,9 +231,10 @@ Endpoint **agregado** para los reportes (RF-REP-001/002/005), scopeado por `user
 #### Cómo se computa cada parte (bucketeo, mismo criterio que el mensual — RN-015)
 
 - **`months[*]` (12 meses).** Cada `incomeCents` / `expenseCents` suma **únicos + fijos activos + cuotas activas** con el mismo bucketeo que `GET /movements` mensual, sin regla de zona nueva:
-  - **únicos** por `date_trunc('month', "occurredAt" AT TIME ZONE timezone)` (la zona propia del registro);
+  - **únicos** por `date_trunc('month', "occurredAt" AT TIME ZONE timezone)` (la zona propia del registro), **excluyendo los anulados** (flag `Transaction.skipped` → no suma; RF-MU-005);
   - **fijos** por `startMonth <= mes AND (deletedFrom IS NULL OR deletedFrom > mes)` **más** `isOnFrequency(startMonth, frequency, mes)`, **excluyendo los meses anulados** (`skippedMonths.has(mes)` → no suma; RF-MF-005);
-  - **cuotas** por `startMonth <= mes < addMonths(startMonth, totalInstallments)`.
+  - **cuotas** por `startMonth <= mes < addMonths(startMonth, totalInstallments)`, **excluyendo las instancias anuladas** (`InstallmentSkip` del mes → no suma; RF-MC-004).
+- **Exclusión de anulados — transversal.** Un movimiento anulado (`skipped: true`) queda fuera de **todas** las agregaciones: totales de `GET /movements`, series `income-expense` y desglose `by-category` de `GET /movements/reports`, y los reportes anuales (Únicos, Cuotas —con el matiz del gantt, ver §Reporte anual de Cuotas—, Inflación vs Ingresos). Aplica por igual a únicos, cuotas, fijos y sus calculados (el calculado hereda el skip del origen; RN-020).
 - **`categories[*]`.** El desglose por categoría **no filtra por `Category.deletedAt`** (incluye soft-deleted con gasto histórico, igual que el mensual). Orden por gasto anual total DESC, desempate por `categoryId` ASC.
 - **`earliestYear`.** Mínimo entre el año del mes local de cualquier único (`AT TIME ZONE`) y el año del `startMonth` de cualquier fijo o cuota; `null` si el usuario no tiene movimientos.
 - **`availableCategories`.** Universo de categorías con gasto `EXPENSE` del año, computado **independiente del filtro `categories`** (igual que `earliestYear`): es el superconjunto estable que alimenta la leyenda-filtro del front. Incluye soft-deleted con gasto histórico; orden por gasto anual DESC, desempate `categoryId` ASC. Shape en `docs/data-model.md`, §Contrato de serie de reportes.
@@ -296,6 +300,7 @@ Gantt anual de barras horizontales para la card `installment-gantt` (RF-REP-011)
 - **Packing (asignación de renglones).** Las barras se ordenan por **origen de la cuota** (`startMonth` ASC, mes de la primera cuota; desempate `createdAt` ASC) y se ubican en renglones; `rowIndex` arranca en `0` (renglón pegado al eje). Una barra **reusa** un renglón si **no entra en conflicto con ninguno** de los intervalos ya asignados a ese renglón —conflicto = menos de 1 mes de descanso a cualquiera de los dos lados—, **aprovechando huecos intermedios** (una barra puede ubicarse entre dos ya colocadas si hay ≥1 mes de descanso a cada lado). Se elige el renglón **más bajo** que la admita; si ninguno sirve, se abre uno nuevo por encima. Por el orden por `startMonth` ASC, la de origen más temprano queda en el renglón más cercano al eje. Calculado en el backend sobre el subconjunto ya filtrado. El front invierte el eje al renderizar (ver `docs/frontend.md`).
 - **Rango real de la barra.** Cada barra emite `realStartMonth`/`realEndMonth` (`YYYY-MM`) con el período **completo** del plan (primera y última cuota), **sin recortar al año** —distinto de `startMonthIndex`/`endMonthIndex`, que se clampean a 0–11—; el front los usa para el rango del tooltip. Ver `docs/data-model.md`, §Contrato de reporte anual de Cuotas.
 - **Conversión del monto por cuota — TC del primer mes visible de la barra.** Si `startMonth` del plan cae **dentro** del año, se usa el TC de **ese mes**; si es **anterior** al año, se usa el TC de **enero del año** (`YYYY-01`). Vía `pivotRatesForYear` con clamp al mes disponible. Coherente con la regla de que las cuotas usan el TC oficial del mes de la instancia.
+- **Gotcha estructural — el gantt NO considera la anulación (skip) de cuotas.** `getAnnualCuotasReport` renderiza **una barra por plan de cuotas con un monto estático por cuota** (no una suma mensual agregada), así que la anulación de una instancia mensual (`InstallmentSkip`, RF-MC-004) **no mapea** sobre esta vista: la barra representa el plan completo, no el gasto real mes a mes. Es deliberado —no es un bug a "corregir"—: a diferencia de los totales del mes y de la serie `income-expense` (que sí excluyen los meses anulados), el gantt muestra la estructura del plan, no la imputación mensual.
 
 ### Reporte anual de Inflación vs Ingresos (`GET /movements/reports/annual-inflation-income`)
 
@@ -417,12 +422,14 @@ Gestión de grupos de cuotas, **scopeada por `userId` del JWT**. El módulo expo
 | `POST /installments` | `{ type, amountCents, totalInstallments, startMonth, categoryId, description? }` | `201` · `data: InstallmentGroup` | `400` |
 | `PATCH /installments/:id` | `{ type?, amountCents?, totalInstallments?, startMonth?, categoryId?, description? }` | `200` · `data: InstallmentGroup` | `400` · `404` |
 | `DELETE /installments/:id` | — | `204 No Content` | `404` |
+| `POST /installments/:id/skip` | `{ month }` (`YYYY-MM`) | `200` · `data: { skipped, month }` | `400` · `404` |
 | `POST /installments/:id/calculated` | calculado desde el grupo `:id` | `201` · `data: Recurring` | `400` · `404` |
 | `PATCH /installments/:id/calculated` | edita el calculado de cuota `:id` | `200` · `data: Recurring` | `400` · `404` |
 
 - **Solo `EXPENSE` en v1:** el endpoint **rechaza `INCOME` con `400`** (resuelve la contradicción RF-MC-001 vs "Fuera de alcance: Ingreso en cuotas"). `amountCents` es el monto **por cuota** (entero `> 0`, RN-002), no el total. `totalInstallments` es la cantidad (entero `> 0`). `startMonth` es `YYYY-MM`.
 - **`PATCH /installments/:id` — edita el grupo completo in-place (RF-MC-003).** Campos editables: monto por cuota, cantidad, mes de inicio, categoría, descripción. **El `type` no se edita.** **No hay split ni inmutabilidad del pasado** (a diferencia de los fijos): la edición aplica a todas las instancias del grupo. `404` si no existe o no es del usuario.
 - **`DELETE /installments/:id` — hard delete del grupo entero.** Borra **físicamente** todas las cuotas (pasadas y futuras): `InstallmentGroup` no tiene `deletedFrom` ni soft delete. **`204` sin cuerpo.** `404` si no existe o no es del usuario. Si el grupo tiene calculados derivados (`sourceInstallmentGroupId`), la FK `onDelete: Cascade` los borra enteros (ver §Movimientos calculados, Eliminación).
+- **`POST /installments/:id/skip` — toggle de anulación de una instancia mensual (RF-MC-004):** anula / des-anula la cuota de un mes puntual, body `{ month: "YYYY-MM" }`. Es un **toggle** sobre `InstallmentSkip(installmentGroupId, month)`: si ya existe lo borra (`data: { skipped: false, month }`); si no, lo crea (`data: { skipped: true, month }`). Anula **solo** esa instancia mensual, sin tocar el resto del grupo. `404` si el grupo no existe o no es del usuario; `400` si el `month` no cumple `YYYY-MM`. Una cuota anulada **se sigue listando** en `GET /movements` con `skipped: true` pero **no suma** a totales ni reportes.
 - **`POST|PATCH /installments/:id/calculated`** — calculado de origen cuota (deriva del **monto por cuota**); contrato en `docs/data-model.md`, §Contrato de movimientos calculados; mecánica en §Movimientos calculados (abajo).
 - **Validación de categoría:** idéntica a únicos y fijos (propia, activa, scope compatible RN-010); inexistente / ajena / eliminada / scope incompatible son todas `400`, nunca `409`; categoría ajena no se distingue de inexistente. Se delega en `CategoryValidatorService` (ver abajo).
 
