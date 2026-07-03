@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -60,4 +61,22 @@ export class UpdateRecurringDto {
   @IsOptional()
   @IsEnum(Currency, { message: 'currency debe ser ARS, USD, EUR o BRL' })
   currency?: Currency;
+
+  /**
+   * Método de pago asociado, opcional (RF-PM-006). `null` explícito lo desasocia
+   * ("(ninguno)" en el selector); ausente = no se toca. Aplica desde el mes editado
+   * en adelante (sigue el mismo pivote de split que el resto de los campos editables).
+   */
+  @IsOptional()
+  @IsString()
+  paymentMethodId?: string | null;
+
+  /**
+   * Débito automático, opcional (P4 — corrección de alcance). Atributo del MOVIMIENTO,
+   * no del método de pago. Solo se persiste si el paymentMethodId efectivo apunta a un
+   * método de tipo DEBIT; en cualquier otro caso el backend lo ignora (queda null).
+   */
+  @IsOptional()
+  @IsBoolean({ message: 'autoDebit debe ser booleano' })
+  autoDebit?: boolean;
 }

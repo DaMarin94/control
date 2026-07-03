@@ -91,6 +91,7 @@ La fuente de verdad de tipos, campos y constraints es `backend/prisma/schema.pri
 | `recurring` | `/recurring` | Movimientos fijos (crear, editar, eliminar) |
 | `installments` | `/installments` | Grupos de cuotas (crear, editar, eliminar) |
 | `categories` | `/categories` | Categorías (CRUD + soft delete) |
+| `payment-methods` | `/payment-methods` | Métodos de pago (CRUD + soft delete) |
 | `preferences` | `/preferences` | Preferencias de usuario (blob JSON, lectura/escritura) |
 | `users` | — | Creación de cuenta + categorías por defecto |
 | `auth` | `/auth` | Registro, login y Google; emisión y validación del JWT (guard global) |
@@ -133,6 +134,9 @@ Gestión de grupos de cuotas. **Solo `EXPENSE` en v1** (rechaza `INCOME` con `40
 
 ### `GET /categories` · `POST /categories` · `PATCH /categories/:id` · `DELETE /categories/:id`
 CRUD de categorías. El DELETE es soft delete (`deletedAt`). Ver el contrato completo en la sección **Categorías (CategoriesModule)**.
+
+### `GET /payment-methods` · `POST /payment-methods` · `POST /payment-methods/:id/reactivate` · `PATCH /payment-methods/:id` · `DELETE /payment-methods/:id`
+CRUD de métodos de pago. El DELETE es soft delete (`deletedAt`). Ver el contrato completo en la sección **Métodos de pago (PaymentMethodsModule)**.
 
 ### `GET /preferences` · `PUT /preferences`
 Lectura y escritura del blob JSON de preferencias del usuario autenticado. El `PUT` **reemplaza el blob entero** (no mergea) y hace upsert. Ver el contrato completo en la sección **Preferencias de usuario (PreferencesModule)**.
@@ -480,6 +484,46 @@ CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca ca
 ### Manejo de errores — extensión del filter
 
 - **`ReactivableConflictException`** (409): el único error que adjunta `error.data` estructurado. Para soportarlo, el Global Exception Filter se extendió de forma **mínima** con un campo `data` **opcional** en el sobre de error: solo lo lleva este caso; el resto de los errores no incluyen `data`. Shape de `error.data` en `docs/data-model.md`, §Payload reactivable en errores (409).
+
+## Métodos de pago (PaymentMethodsModule)
+
+CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca métodos de otro). Todas las respuestas exitosas devuelven el shape de método de pago. Shape, campos condicionales y `movementCount` en `docs/data-model.md`, §Métodos de pago.
+
+### Endpoints
+
+| Endpoint | Body | Éxito | Errores |
+|----------|------|-------|---------|
+| `GET /payment-methods` | — | `200` · `data: PaymentMethod[]` | — |
+| `POST /payment-methods` | `{ name, type, icon?, closingDay?, paymentDay? }` | `201` · `data: PaymentMethod` | `400` · `409` (dos casos, ver abajo) |
+| `POST /payment-methods/:id/reactivate` | — (ignora el body) | `200` · `data: PaymentMethod` | `404` · `409` |
+| `PATCH /payment-methods/:id` | `{ name?, type?, icon?, closingDay?, paymentDay? }` | `200` · `data: PaymentMethod` | `400` · `404` · `409` |
+| `DELETE /payment-methods/:id` | — | `204 No Content` | `404` |
+
+- **`GET /payment-methods`** — solo activos (`deletedAt` null), ordenados por **nombre ascendente**, cada uno con su `movementCount`.
+- **`POST /payment-methods`** — `name` obligatorio y no vacío; `type` obligatorio (allowlist, sin default); `icon` opcional (fallback silencioso a `card`). Dos casos de `409`, análogos a categorías:
+  - **Colisión con un método activo** (RN-021): `error.message`, **sin** `error.data`. Bloqueo duro de duplicado.
+  - **Colisión con un método eliminado / reactivable** (RF-PM-001 A4): `error.data = { reactivable: true, paymentMethod: { id, name, type, icon } }`. Ver `ReactivableConflictException` en la sección Categorías.
+  - `400`: nombre vacío o faltante, `type` fuera de la allowlist, o `closingDay`/`paymentDay` fuera de 1-31.
+- **`POST /payment-methods/:id/reactivate`** — reactiva uno soft-deleted; vuelve **exactamente como estaba** (lo tipeado en el form se ignora). `404` si no existe o no es del usuario; `409` si ya está activo.
+- **`PATCH /payment-methods/:id`** — todos los campos opcionales. **Al cambiar `type` se descartan los campos condicionales que no aplican** al nuevo tipo (p. ej. pasar a `DEBIT` o `CASH` limpia `closingDay`/`paymentDay`). `409` si el nuevo nombre colisiona con otro activo. `404` si no existe, no es del usuario, o está eliminado.
+- **`DELETE /payment-methods/:id`** — soft delete (`deletedAt`). **`204` sin cuerpo. No es idempotente**: borrar uno **ya eliminado** devuelve `404`.
+
+### Campos condicionales por tipo
+
+`closingDay`/`paymentDay` solo aplican a `CREDIT`; `DEBIT` y `CASH` no tienen campos condicionales. Los que no corresponden al `type` se descartan al crear/editar y se persisten `null`. Los días son **1-31 e informativos**: el clamp al último día del mes es responsabilidad del **consumo/display**, no mueve imputación (RN-021). El **débito automático** no es campo del método: es un flag **del movimiento** (ver §Método y débito automático en movimientos).
+
+### Allowlists en código (`payment-method-constants.ts`)
+
+`type` (`CREDIT`/`DEBIT`/`CASH`) e `icon` (set curado de **12 claves**, default/fallback **`card`**) **no son enums de Prisma**: son strings validados contra una allowlist en `backend/src/payment-methods/payment-method-constants.ts` (mismo criterio que `CurrencyQuote.variant`, extensible sin migración).
+
+- **Diferencia con el color de categorías:** un `icon` fuera del set **no rechaza con `400`** — cae **silenciosamente a `card`** (`normalizePaymentMethodIcon`). Un `type` fuera de la allowlist **sí** es `400`.
+- La allowlist de íconos se **duplica back/front** y debe mantenerse en sync — mismo patrón que el pool de colores; ver `docs/frontend.md`, §Métodos de pago (íconos).
+
+### Método y débito automático en movimientos + herencia del calculado
+
+`GET /movements` embebe `paymentMethod: { id, name, icon, type } | null` en cada ítem (`null` si no tiene) y expone `autoDebit: boolean | null` **a nivel del ítem** (fuera del objeto `paymentMethod`). El **calculado hereda método y `autoDebit` de su origen**: se **derivan al vuelo, nunca persiste unos propios** (mismo tratamiento que `currency`/`exchangeRate`). Contrato del ítem en `docs/data-model.md`, §Contrato de movimientos del mes.
+
+**`autoDebit` es campo del movimiento, no del método** (RN-021). Es columna `autoDebit Boolean?` en `Transaction`, `Recurring` e `InstallmentGroup`. Los bodies `POST`/`PATCH` de transactions / recurring / installments aceptan `autoDebit?: boolean` (el **calculado no**, lo hereda). **Regla de persistencia** — validador `resolveAutoDebit`: solo se guarda `true`/`false` si el **método efectivo del movimiento es de tipo `DEBIT`**; sin método o con método `CREDIT`/`CASH` se fuerza a `null` aunque el body pida `true`.
 
 ## Preferencias de usuario (PreferencesModule)
 

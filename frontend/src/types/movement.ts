@@ -16,6 +16,7 @@
 import type { CategoryScope } from "@/types/category";
 import type { RecurringFrequency } from "@/types/recurring";
 import type { CurrencyCode } from "@/types/settings";
+import type { EmbeddedPaymentMethod } from "@/types/payment-method";
 
 /** Discriminador de origen del movimiento */
 export type MovementOrigin = "unico" | "fijo" | "cuota";
@@ -144,6 +145,11 @@ export interface MovementItem {
   skipped: boolean;
   category: MovementCategory;
   /**
+   * Método de pago asociado al movimiento (RF-PM-006, P4). null si el movimiento
+   * no tiene método asociado. Un calculado hereda el método de su origen.
+   */
+  paymentMethod: EmbeddedPaymentMethod | null;
+  /**
    * Datos del calculado — Fase 1.1.7/1.1.8 (RF-MCALC-001..007).
    * Presente si este ítem es un movimiento calculado (de origen fijo, único o cuota).
    * null si no es calculado.
@@ -171,6 +177,13 @@ export interface MovementItem {
    * El front muestra este valor como monto principal (el que entra al total).
    */
   convertedAmountCents: number;
+  /**
+   * Débito automático (P4 — corrección de alcance). Atributo del MOVIMIENTO,
+   * no del método de pago. Solo puede ser true/false si el método asociado es
+   * de tipo DEBIT; en cualquier otro caso (sin método, CREDIT o CASH) es null.
+   * Un calculado hereda el autoDebit de su origen — no persiste uno propio.
+   */
+  autoDebit: boolean | null;
 }
 
 /** Totales del mes */

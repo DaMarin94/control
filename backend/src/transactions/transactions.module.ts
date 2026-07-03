@@ -3,6 +3,7 @@ import { TransactionsController } from './transactions.controller';
 import { TransactionsService } from './transactions.service';
 import { TransactionsRepository } from './transactions.repository';
 import { CategoriesModule } from '../categories/categories.module';
+import { PaymentMethodsModule } from '../payment-methods/payment-methods.module';
 import { RecurringModule } from '../recurring/recurring.module';
 import { SettingsModule } from '../settings/settings.module';
 
@@ -22,7 +23,7 @@ import { SettingsModule } from '../settings/settings.module';
  * con cotización (Fase 1.2.3).
  */
 @Module({
-  imports: [CategoriesModule, RecurringModule, SettingsModule],
+  imports: [CategoriesModule, PaymentMethodsModule, RecurringModule, SettingsModule],
   controllers: [TransactionsController],
   providers: [TransactionsService, TransactionsRepository],
   exports: [TransactionsService],

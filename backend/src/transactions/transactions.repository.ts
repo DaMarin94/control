@@ -14,7 +14,17 @@ export interface EmbeddedCategory {
 }
 
 /**
- * Shape completo de una transacción con categoría embebida.
+ * Shape de método de pago embebido (RF-PM-006). `null` si el movimiento no tiene método.
+ */
+export interface EmbeddedPaymentMethod {
+  id: string;
+  name: string;
+  icon: string;
+  type: string;
+}
+
+/**
+ * Shape completo de una transacción con categoría (y método de pago) embebidos.
  */
 export interface TransactionWithCategory {
   id: string;
@@ -33,9 +43,18 @@ export interface TransactionWithCategory {
   anchorCurrency: Currency;
   /** true si el único está anulado (P3 — Fase 1.1.1.ext). No suma a totales ni reportes. */
   skipped: boolean;
+  /** Método de pago asociado; null = sin método (RF-PM-006) */
+  paymentMethodId: string | null;
+  /**
+   * Débito automático (P4 — corrección de alcance). Atributo del MOVIMIENTO.
+   * Solo puede ser true/false si paymentMethod es de tipo DEBIT; en cualquier
+   * otro caso queda null (coherencia impuesta por PaymentMethodValidatorService).
+   */
+  autoDebit: boolean | null;
   createdAt: Date;
   updatedAt: Date;
   category: EmbeddedCategory;
+  paymentMethod: EmbeddedPaymentMethod | null;
 }
 
 // Include para todas las queries de Transaction
@@ -46,6 +65,14 @@ const TRANSACTION_INCLUDE = {
       name: true,
       color: true,
       scope: true,
+    },
+  },
+  paymentMethod: {
+    select: {
+      id: true,
+      name: true,
+      icon: true,
+      type: true,
     },
   },
 } satisfies Prisma.TransactionInclude;
@@ -70,6 +97,8 @@ function mapToTransactionWithCategory(
     exchangeRate: Number(tx.exchangeRate),
     anchorCurrency: tx.anchorCurrency,
     skipped: tx.skipped,
+    paymentMethodId: tx.paymentMethodId,
+    autoDebit: tx.autoDebit,
     createdAt: tx.createdAt,
     updatedAt: tx.updatedAt,
     category: {
@@ -78,6 +107,14 @@ function mapToTransactionWithCategory(
       color: tx.category.color,
       scope: tx.category.scope,
     },
+    paymentMethod: tx.paymentMethod
+      ? {
+          id: tx.paymentMethod.id,
+          name: tx.paymentMethod.name,
+          icon: tx.paymentMethod.icon,
+          type: tx.paymentMethod.type,
+        }
+      : null,
   };
 }
 

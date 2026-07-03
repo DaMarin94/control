@@ -60,6 +60,8 @@ const mockFijoMovement: MovementItem = {
     color: "#FF5733",
     scope: "EXPENSE",
   },
+  paymentMethod: null,
+  autoDebit: null,
   calculated: null,
   hasCalculated: false,
   currency: "ARS",
@@ -85,6 +87,8 @@ const mockCalculatedUnicoMovement: MovementItem = {
     color: "#33FF57",
     scope: "EXPENSE",
   },
+  paymentMethod: null,
+  autoDebit: null,
   calculated: {
     sourceType: "unico",
     sourceId: "mov-1",

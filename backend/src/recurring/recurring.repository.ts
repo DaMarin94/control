@@ -14,6 +14,18 @@ export interface EmbeddedCategory {
 }
 
 /**
+ * Shape de método de pago embebido (RF-PM-006). `null` si el fijo no tiene método.
+ * Los calculados NUNCA persisten uno propio (siempre null en su fila; el método
+ * mostrado se deriva al vuelo del origen en MovementsRepository).
+ */
+export interface EmbeddedPaymentMethod {
+  id: string;
+  name: string;
+  icon: string;
+  type: string;
+}
+
+/**
  * Shape completo de un fijo con categoría embebida.
  * Incluye frequency (P2 — Fase 1.1.1), campos de calculado (Fase 1.1.7 + 1.1.7.ext) y chainId.
  */
@@ -50,9 +62,18 @@ export interface RecurringWithCategory {
   exchangeRate: number;
   /** Moneda default del usuario al momento de guardar el movimiento (Fase 1.2.4). */
   anchorCurrency: Currency;
+  /** Método de pago asociado; null = sin método o es un calculado (RF-PM-006) */
+  paymentMethodId: string | null;
+  /**
+   * Débito automático (P4 — corrección de alcance). Atributo del MOVIMIENTO. Solo
+   * aplica a fijos NORMALES con paymentMethod de tipo DEBIT; un calculado NUNCA
+   * persiste uno propio (siempre null en su fila — se deriva del origen al vuelo).
+   */
+  autoDebit: boolean | null;
   createdAt: Date;
   updatedAt: Date;
   category: EmbeddedCategory;
+  paymentMethod: EmbeddedPaymentMethod | null;
 }
 
 /**
@@ -87,6 +108,14 @@ const RECURRING_INCLUDE = {
       scope: true,
     },
   },
+  paymentMethod: {
+    select: {
+      id: true,
+      name: true,
+      icon: true,
+      type: true,
+    },
+  },
 } satisfies Prisma.RecurringInclude;
 
 /**
@@ -115,6 +144,8 @@ function mapToRecurringWithCategory(
     currency: r.currency,
     exchangeRate: Number(r.exchangeRate),
     anchorCurrency: r.anchorCurrency,
+    paymentMethodId: r.paymentMethodId,
+    autoDebit: r.autoDebit,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     category: {
@@ -123,6 +154,14 @@ function mapToRecurringWithCategory(
       color: r.category.color,
       scope: r.category.scope,
     },
+    paymentMethod: r.paymentMethod
+      ? {
+          id: r.paymentMethod.id,
+          name: r.paymentMethod.name,
+          icon: r.paymentMethod.icon,
+          type: r.paymentMethod.type,
+        }
+      : null,
   };
 }
 

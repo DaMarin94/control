@@ -176,6 +176,18 @@ export interface MovementEmbeddedCategory {
 }
 
 /**
+ * Shape de método de pago embebido en un MovementItem (RF-PM-006).
+ * `null` si el movimiento no tiene método asociado. Puede estar soft-deleted
+ * y aun así mostrarse (espejo de la categoría — se muestra igual en el ítem histórico).
+ */
+export interface MovementEmbeddedPaymentMethod {
+  id: string;
+  name: string;
+  icon: string;
+  type: string;
+}
+
+/**
  * Shape del campo installment para ítems de cuotas (D1 — Fase 7).
  * - number: número de cuota en el mes consultado (1-based)
  * - total: total de cuotas del grupo (totalInstallments)
@@ -315,6 +327,19 @@ export interface MovementItem {
   occurredAt: Date | null;
   timezone: string | null;
   category: MovementEmbeddedCategory;
+  /**
+   * Método de pago embebido (RF-PM-006). `null` si no tiene.
+   * Un calculado hereda el método del ORIGEN — nunca persiste uno propio; se deriva
+   * al vuelo, igual que currency/exchangeRate.
+   */
+  paymentMethod: MovementEmbeddedPaymentMethod | null;
+  /**
+   * Débito automático (P4 — corrección de alcance). Atributo del MOVIMIENTO, NO del
+   * método embebido. `null` si no aplica (sin método, o método no-DEBIT). Un calculado
+   * hereda el autoDebit del ORIGEN — nunca persiste uno propio; se deriva al vuelo,
+   * igual que el método de pago y currency/exchangeRate.
+   */
+  autoDebit: boolean | null;
   installment: InstallmentInfo | null;
   /** Frecuencia del fijo. null para únicos y cuotas. */
   frequency: RecurringFrequency | null;
@@ -349,6 +374,13 @@ interface RawTransactionRow {
   categoryName: string;
   categoryColor: string;
   categoryScope: string;
+  /** Método de pago asociado; null = sin método (RF-PM-006) */
+  paymentMethodId: string | null;
+  paymentMethodName: string | null;
+  paymentMethodIcon: string | null;
+  paymentMethodType: string | null;
+  /** Débito automático (P4 — corrección de alcance). Atributo del movimiento. */
+  autoDebit: boolean | null;
 }
 
 /**
@@ -493,9 +525,15 @@ export class MovementsRepository {
           t."categoryId"                  AS "categoryId",
           c.name                          AS "categoryName",
           c.color                         AS "categoryColor",
-          c.scope::text                   AS "categoryScope"
+          c.scope::text                   AS "categoryScope",
+          t."paymentMethodId"             AS "paymentMethodId",
+          pm.name                         AS "paymentMethodName",
+          pm.icon                         AS "paymentMethodIcon",
+          pm.type                         AS "paymentMethodType",
+          t."autoDebit"                   AS "autoDebit"
         FROM "Transaction" t
         JOIN "Category" c ON c.id = t."categoryId"
+        LEFT JOIN "PaymentMethod" pm ON pm.id = t."paymentMethodId"
         WHERE
           t."userId" = ${userId}
           AND date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
@@ -536,11 +574,16 @@ export class MovementsRepository {
       return unicosItems;
     }
 
-    // Cargar Transactions de origen (con anchorCurrency + skipped)
+    // Cargar Transactions de origen (con anchorCurrency + skipped + método de pago)
     const txIds = calculadosDeUnico.map((r) => r.sourceMovementId!);
     const txRows = await this.prisma.transaction.findMany({
       where: { id: { in: txIds } },
-      select: { id: true, amountCents: true, description: true, occurredAt: true, timezone: true, currency: true, exchangeRate: true, anchorCurrency: true, skipped: true },
+      select: {
+        id: true, amountCents: true, description: true, occurredAt: true, timezone: true,
+        currency: true, exchangeRate: true, anchorCurrency: true, skipped: true,
+        paymentMethod: { select: { id: true, name: true, icon: true, type: true } },
+        autoDebit: true,
+      },
     });
     const txOriginMap = new Map<string, {
       amountCents: number;
@@ -551,6 +594,8 @@ export class MovementsRepository {
       exchangeRate: number;
       anchorCurrency: Currency;
       skipped: boolean;
+      paymentMethod: MovementEmbeddedPaymentMethod | null;
+      autoDebit: boolean | null;
     }>();
     for (const tx of txRows) {
       txOriginMap.set(tx.id, {
@@ -562,6 +607,8 @@ export class MovementsRepository {
         exchangeRate: Number(tx.exchangeRate),
         anchorCurrency: tx.anchorCurrency,
         skipped: tx.skipped,
+        paymentMethod: tx.paymentMethod,
+        autoDebit: tx.autoDebit,
       });
     }
 
@@ -608,6 +655,10 @@ export class MovementsRepository {
           color: calc.category.color,
           scope: calc.category.scope as CategoryScope,
         },
+        // Calculado hereda el método de pago del origen — no persiste uno propio (RF-PM-006)
+        paymentMethod: txData.paymentMethod,
+        // Calculado hereda autoDebit del origen — no persiste uno propio (P4)
+        autoDebit: txData.autoDebit,
         installment: null,
         frequency: null,
         skipped,
@@ -682,6 +733,9 @@ export class MovementsRepository {
               scope: true,
             },
           },
+          paymentMethod: {
+            select: { id: true, name: true, icon: true, type: true },
+          },
           skips: {
             where: { month },
             select: { month: true },
@@ -708,6 +762,8 @@ export class MovementsRepository {
       currency: Currency;
       exchangeRate: number;
       anchorCurrency: Currency;
+      paymentMethod: MovementEmbeddedPaymentMethod | null;
+      autoDebit: boolean | null;
     }>();
 
     for (const r of normales) {
@@ -719,6 +775,8 @@ export class MovementsRepository {
         currency: r.currency,
         exchangeRate: Number(r.exchangeRate),
         anchorCurrency: r.anchorCurrency,
+        paymentMethod: r.paymentMethod,
+        autoDebit: r.autoDebit,
       });
     }
 
@@ -762,6 +820,8 @@ export class MovementsRepository {
           color: r.category.color,
           scope: r.category.scope as CategoryScope,
         },
+        paymentMethod: r.paymentMethod,
+        autoDebit: r.autoDebit,
         installment: null,
         frequency: r.frequency,
         skipped,
@@ -813,6 +873,10 @@ export class MovementsRepository {
           color: calc.category.color,
           scope: calc.category.scope as CategoryScope,
         },
+        // Calculado hereda el método de pago del origen — no persiste uno propio (RF-PM-006)
+        paymentMethod: originData.paymentMethod,
+        // Calculado hereda autoDebit del origen — no persiste uno propio (P4)
+        autoDebit: originData.autoDebit,
         installment: null,
         frequency: calc.frequency,
         skipped,
@@ -869,6 +933,9 @@ export class MovementsRepository {
               scope: true,
             },
           },
+          paymentMethod: {
+            select: { id: true, name: true, icon: true, type: true },
+          },
           // Skip de la instancia (mes) puntual de este grupo (P3 — Fase 1.1.1.ext)
           skips: {
             where: { month },
@@ -917,6 +984,8 @@ export class MovementsRepository {
           color: g.category.color,
           scope: g.category.scope as CategoryScope,
         },
+        paymentMethod: g.paymentMethod,
+        autoDebit: g.autoDebit,
         installment: {
           number,
           total: g.totalInstallments,
@@ -968,6 +1037,10 @@ export class MovementsRepository {
           currency: true,
           exchangeRate: true,
           anchorCurrency: true,
+          paymentMethod: {
+            select: { id: true, name: true, icon: true, type: true },
+          },
+          autoDebit: true,
           skips: {
             where: { month },
             select: { month: true },
@@ -983,6 +1056,8 @@ export class MovementsRepository {
         exchangeRate: number;
         anchorCurrency: Currency;
         skipped: boolean;
+        paymentMethod: MovementEmbeddedPaymentMethod | null;
+        autoDebit: boolean | null;
       }>();
       for (const g of groupRows) {
         groupOriginMap.set(g.id, {
@@ -994,6 +1069,8 @@ export class MovementsRepository {
           exchangeRate: Number(g.exchangeRate),
           anchorCurrency: g.anchorCurrency,
           skipped: g.skips.length > 0,
+          paymentMethod: g.paymentMethod,
+          autoDebit: g.autoDebit,
         });
       }
 
@@ -1048,6 +1125,10 @@ export class MovementsRepository {
             color: calc.category.color,
             scope: calc.category.scope as CategoryScope,
           },
+          // Calculado hereda el método de pago del origen — no persiste uno propio (RF-PM-006)
+          paymentMethod: groupData.paymentMethod,
+          // Calculado hereda autoDebit del origen — no persiste uno propio (P4)
+          autoDebit: groupData.autoDebit,
           installment: null,
           frequency: null,
           skipped,
@@ -1870,6 +1951,15 @@ export class MovementsRepository {
         color: row.categoryColor,
         scope: row.categoryScope as CategoryScope,
       },
+      paymentMethod: row.paymentMethodId
+        ? {
+            id: row.paymentMethodId,
+            name: row.paymentMethodName!,
+            icon: row.paymentMethodIcon!,
+            type: row.paymentMethodType!,
+          }
+        : null,
+      autoDebit: row.autoDebit,
       installment: null,
       frequency: null,
       skipped: row.skipped,

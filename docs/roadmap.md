@@ -71,8 +71,9 @@ Nueva característica de todos los movimientos: asociar cada gasto/ingreso a un 
 - **Tipos extensibles:** hoy crédito / débito / efectivo, pero el modelo **NO debe requerir migración para sumar tipos futuros** (patrón string + allowlist en código, estilo `CurrencyQuote.variant`; la forma exacta la confirma backend/analyst al implementar).
 - **Campos por tipo:**
   - crédito → fecha de cierre + fecha de cobro
-  - débito → marca de "débito automático"
+  - débito → sin campos extra
   - efectivo → sin campos extra
+- **"Débito automático" es flag del MOVIMIENTO, no del método:** aparece en el form de carga cuando el método elegido es de tipo débito, no como atributo de `PaymentMethod`.
 
 **Formulario de carga.** Selector de método de pago **opcional** en los tres tabs, análogo a categoría. **Sin "+ Nuevo" inline.**
 

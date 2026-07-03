@@ -6,6 +6,7 @@ import {
 import { Currency, FormulaOperator, MovementType, RecurringFrequency } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { CategoryValidatorService } from '../categories/category-validator.service';
+import { PaymentMethodValidatorService } from '../payment-methods/payment-method-validator.service';
 import {
   RecurringRepository,
   RecurringWithCategory,
@@ -27,6 +28,7 @@ export class RecurringService {
   constructor(
     private readonly repo: RecurringRepository,
     private readonly categoryValidator: CategoryValidatorService,
+    private readonly paymentMethodValidator: PaymentMethodValidatorService,
     private readonly logger: Logger,
     private readonly settingsService: SettingsService,
   ) {}
@@ -45,11 +47,21 @@ export class RecurringService {
     // Validar categoría: propia + activa + scope compatible (RN-010)
     await this.categoryValidator.validateCategory(userId, dto.categoryId, dto.type);
 
+    // Validar método de pago (opcional): propio + activo (RF-PM-006)
+    await this.paymentMethodValidator.validatePaymentMethod(userId, dto.paymentMethodId);
+
     const effectiveExchangeRate = dto.exchangeRate ?? 1;
 
     // Cargar la defaultCurrency del usuario para anclarla como anchor (Fase 1.2.4)
     const userSettings = await this.settingsService.getSettings(userId);
     const anchorCurrency = userSettings.defaultCurrency;
+
+    // autoDebit (P4 — corrección de alcance): solo se persiste si el método asociado
+    // es de tipo DEBIT; en cualquier otro caso queda null.
+    const autoDebit = await this.paymentMethodValidator.resolveAutoDebit(
+      dto.paymentMethodId ?? null,
+      dto.autoDebit ?? null,
+    );
 
     const r = await this.repo.create({
       user: { connect: { id: userId } },
@@ -62,6 +74,10 @@ export class RecurringService {
       ...(dto.currency !== undefined && { currency: dto.currency }),
       exchangeRate: effectiveExchangeRate,
       anchorCurrency,
+      ...(dto.paymentMethodId !== undefined && {
+        paymentMethod: { connect: { id: dto.paymentMethodId } },
+      }),
+      autoDebit,
       // chainId se genera por el @default(cuid()) del schema;
       // sourceChainId/formulaOperator/formulaOperand/formulaSign son null (fijo normal)
     });
@@ -209,6 +225,11 @@ export class RecurringService {
       await this.categoryValidator.validateCategory(userId, dto.categoryId, existing.type);
     }
 
+    // Validar método de pago si se está actualizando (null = desasociar, no valida)
+    if (dto.paymentMethodId !== undefined) {
+      await this.paymentMethodValidator.validatePaymentMethod(userId, dto.paymentMethodId);
+    }
+
     // Lógica de split (D1):
     // Si currentMonth > R.startMonth → hay pasado: split
     // Si currentMonth <= R.startMonth → sin pasado: update in-place
@@ -228,6 +249,21 @@ export class RecurringService {
       const effectiveAnchorCurrency = (dto.exchangeRate !== undefined || dto.currency !== undefined)
         ? (await this.settingsService.getSettings(userId)).defaultCurrency
         : existing.anchorCurrency;
+      // paymentMethodId: hereda del original salvo que el DTO lo sobreescriba
+      // (incluyendo null explícito para desasociar — RF-PM-006).
+      const effectivePaymentMethodId = dto.paymentMethodId !== undefined
+        ? dto.paymentMethodId
+        : existing.paymentMethodId;
+      // autoDebit (P4 — corrección de alcance): hereda del original salvo que el DTO
+      // lo sobreescriba; se recalcula contra el paymentMethodId efectivo de R2.
+      const effectiveRequestedAutoDebit = dto.autoDebit !== undefined
+        ? dto.autoDebit
+        : existing.autoDebit;
+      const effectiveAutoDebit = await this.paymentMethodValidator.resolveAutoDebit(
+        effectivePaymentMethodId,
+        effectiveRequestedAutoDebit,
+      );
+
       result = await this.repo.create({
         user: { connect: { id: userId } },
         category: { connect: { id: dto.categoryId ?? existing.categoryId } },
@@ -243,6 +279,10 @@ export class RecurringService {
         description: dto.description !== undefined
           ? dto.description
           : existing.description,
+        ...(effectivePaymentMethodId !== null && {
+          paymentMethod: { connect: { id: effectivePaymentMethodId } },
+        }),
+        autoDebit: effectiveAutoDebit,
         // fijo normal: sourceChainId/formulaOperator/formulaOperand/formulaSign son null
       });
 
@@ -267,6 +307,20 @@ export class RecurringService {
         inPlaceAnchor = s.defaultCurrency;
       }
 
+      // autoDebit (P4 — corrección de alcance): recalcular solo si paymentMethodId o
+      // autoDebit vienen en el body; en cualquier otro PATCH se deja intacto.
+      let inPlaceAutoDebit: boolean | null | undefined = undefined;
+      if (dto.paymentMethodId !== undefined || dto.autoDebit !== undefined) {
+        const effectivePaymentMethodId =
+          dto.paymentMethodId !== undefined ? dto.paymentMethodId : existing.paymentMethodId;
+        const effectiveRequestedAutoDebit =
+          dto.autoDebit !== undefined ? dto.autoDebit : existing.autoDebit;
+        inPlaceAutoDebit = await this.paymentMethodValidator.resolveAutoDebit(
+          effectivePaymentMethodId,
+          effectiveRequestedAutoDebit,
+        );
+      }
+
       result = await this.repo.update(id, {
         ...(dto.amountCents !== undefined && { amountCents: dto.amountCents }),
         ...(dto.categoryId !== undefined && {
@@ -277,6 +331,13 @@ export class RecurringService {
         ...(dto.currency !== undefined && { currency: dto.currency }),
         ...(dto.exchangeRate !== undefined && { exchangeRate: dto.exchangeRate }),
         ...(inPlaceAnchor !== undefined && { anchorCurrency: inPlaceAnchor }),
+        ...(dto.paymentMethodId !== undefined && {
+          paymentMethod:
+            dto.paymentMethodId === null
+              ? { disconnect: true }
+              : { connect: { id: dto.paymentMethodId } },
+        }),
+        ...(inPlaceAutoDebit !== undefined && { autoDebit: inPlaceAutoDebit }),
       });
 
       if (dto.exchangeRate !== undefined) {

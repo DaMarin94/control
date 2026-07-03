@@ -14,6 +14,16 @@ export interface EmbeddedCategory {
 }
 
 /**
+ * Shape de método de pago embebido (RF-PM-006). `null` si el grupo no tiene método.
+ */
+export interface EmbeddedPaymentMethod {
+  id: string;
+  name: string;
+  icon: string;
+  type: string;
+}
+
+/**
  * Shape completo de un grupo de cuotas con categoría embebida.
  */
 export interface InstallmentGroupWithCategory {
@@ -32,9 +42,18 @@ export interface InstallmentGroupWithCategory {
   exchangeRate: number;
   /** Moneda default del usuario al momento de guardar el grupo (Fase 1.2.4). */
   anchorCurrency: Currency;
+  /** Método de pago asociado; null = sin método (RF-PM-006) */
+  paymentMethodId: string | null;
+  /**
+   * Débito automático (P4 — corrección de alcance). Atributo del MOVIMIENTO.
+   * Único para todo el grupo. Solo puede ser true/false si paymentMethod es de
+   * tipo DEBIT; en cualquier otro caso queda null.
+   */
+  autoDebit: boolean | null;
   createdAt: Date;
   updatedAt: Date;
   category: EmbeddedCategory;
+  paymentMethod: EmbeddedPaymentMethod | null;
 }
 
 /**
@@ -57,6 +76,14 @@ const INSTALLMENT_INCLUDE = {
       scope: true,
     },
   },
+  paymentMethod: {
+    select: {
+      id: true,
+      name: true,
+      icon: true,
+      type: true,
+    },
+  },
 } satisfies Prisma.InstallmentGroupInclude;
 
 /**
@@ -77,6 +104,8 @@ function mapToInstallmentGroupWithCategory(
     currency: g.currency,
     exchangeRate: Number(g.exchangeRate),
     anchorCurrency: g.anchorCurrency,
+    paymentMethodId: g.paymentMethodId,
+    autoDebit: g.autoDebit,
     createdAt: g.createdAt,
     updatedAt: g.updatedAt,
     category: {
@@ -85,6 +114,14 @@ function mapToInstallmentGroupWithCategory(
       color: g.category.color,
       scope: g.category.scope,
     },
+    paymentMethod: g.paymentMethod
+      ? {
+          id: g.paymentMethod.id,
+          name: g.paymentMethod.name,
+          icon: g.paymentMethod.icon,
+          type: g.paymentMethod.type,
+        }
+      : null,
   };
 }
 

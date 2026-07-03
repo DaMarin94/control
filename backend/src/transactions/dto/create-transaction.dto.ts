@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsISO8601,
@@ -71,4 +72,21 @@ export class CreateTransactionDto {
   @IsNumber({}, { message: 'exchangeRate debe ser un número' })
   @IsPositive({ message: 'exchangeRate debe ser un número positivo' })
   exchangeRate?: number;
+
+  /**
+   * Método de pago asociado, opcional (RF-PM-006). Debe ser propio del usuario y activo.
+   */
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty({ message: 'El paymentMethodId no puede estar vacío' })
+  paymentMethodId?: string;
+
+  /**
+   * Débito automático, opcional (P4 — corrección de alcance). Atributo del MOVIMIENTO,
+   * no del método de pago. Solo se persiste si paymentMethodId apunta a un método de
+   * tipo DEBIT; en cualquier otro caso el backend lo ignora (queda null).
+   */
+  @IsOptional()
+  @IsBoolean({ message: 'autoDebit debe ser booleano' })
+  autoDebit?: boolean;
 }

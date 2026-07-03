@@ -32,6 +32,7 @@
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.77.0",
     "recharts": "^3.8.1",
+    "simple-icons": "^16.24.1",
     "tailwind-merge": "^2.6.0",
     "zod": "^3.24.2"
   },

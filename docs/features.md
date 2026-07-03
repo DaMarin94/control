@@ -20,6 +20,7 @@
 | Movimiento en cuotas — crear, visualizar, editar, eliminar | RF-MC-001..003 | Implementado (solo Gasto en v1) |
 | Movimientos calculados — fijo/único/cuota de origen | RF-MCALC-001..010, RN-017..019 | Implementado |
 | Categorías — defaults + CRUD + soft delete | RF-CAT-001..006 | Implementado |
+| Métodos de pago — entidad + CRUD (`/metodos-pago`) + selector opcional en el form + asociación por movimiento | RF-PM-001..006, RN-021 | Implementado |
 | Color de categoría editable — matriz de 70 colores | RF-CAT-005, RN-013 | Implementado |
 | Vista del mes — lista + totales + navegación | RF-VM-001..004 | Implementado |
 | Vista del mes — salto rápido mes/año (popover de dos ruedas) + navegación ilimitada | RF-VM-004 | Implementado |

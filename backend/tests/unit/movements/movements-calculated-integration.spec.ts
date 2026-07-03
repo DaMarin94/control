@@ -27,6 +27,7 @@ import { RecurringService } from '../../../src/recurring/recurring.service';
 import { RecurringRepository } from '../../../src/recurring/recurring.repository';
 import { MovementsRepository } from '../../../src/movements/movements.repository';
 import { CategoryValidatorService } from '../../../src/categories/category-validator.service';
+import { PaymentMethodValidatorService } from '../../../src/payment-methods/payment-method-validator.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { SettingsService } from '../../../src/settings/settings.service';
 
@@ -332,6 +333,13 @@ describe('Bug B — flujo real: crear fijo → split → crear calculado', () =>
         {
           provide: CategoryValidatorService,
           useValue: { validateCategory: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: PaymentMethodValidatorService,
+          useValue: {
+            validatePaymentMethod: jest.fn().mockResolvedValue(undefined),
+            resolveAutoDebit: jest.fn().mockResolvedValue(null),
+          },
         },
         {
           provide: Logger,
@@ -818,6 +826,13 @@ describe('BUG borrado de cadena — flujo real: crear fijo → split → crear c
         {
           provide: CategoryValidatorService,
           useValue: { validateCategory: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: PaymentMethodValidatorService,
+          useValue: {
+            validatePaymentMethod: jest.fn().mockResolvedValue(undefined),
+            resolveAutoDebit: jest.fn().mockResolvedValue(null),
+          },
         },
         {
           provide: Logger,

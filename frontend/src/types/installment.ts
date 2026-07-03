@@ -8,6 +8,7 @@
 
 import type { CategoryScope } from "@/types/category";
 import type { CurrencyCode } from "@/types/settings";
+import type { EmbeddedPaymentMethod } from "@/types/payment-method";
 
 /** Categoría embebida en la respuesta de un grupo de cuotas */
 export interface InstallmentCategory {
@@ -45,6 +46,16 @@ export interface InstallmentGroup {
   updatedAt: string;
   /** Categoría embebida en la respuesta */
   category: InstallmentCategory;
+  /** Método de pago asociado (P4, RF-PM-006); null = sin método */
+  paymentMethodId: string | null;
+  /** Método de pago embebido en la respuesta; null si no tiene */
+  paymentMethod: EmbeddedPaymentMethod | null;
+  /**
+   * Débito automático (P4 — corrección de alcance). Atributo del MOVIMIENTO,
+   * no del método de pago. Solo true/false si paymentMethod es de tipo DEBIT;
+   * null en cualquier otro caso.
+   */
+  autoDebit: boolean | null;
 }
 
 /**
@@ -66,6 +77,13 @@ export interface CreateInstallmentRequest {
   currency?: CurrencyCode;
   /** Cotización ARS por 1 USD (Fase 1.2.3). Requerido si currency !== defaultCurrency. */
   exchangeRate?: number;
+  /** Método de pago asociado (P4, RF-PM-006). Opcional; se omite si no hay método. */
+  paymentMethodId?: string;
+  /**
+   * Débito automático (P4 — corrección de alcance). Atributo del MOVIMIENTO.
+   * El backend lo ignora (queda null) si el método efectivo no es DEBIT.
+   */
+  autoDebit?: boolean;
 }
 
 /**
@@ -83,6 +101,13 @@ export interface UpdateInstallmentRequest {
   currency?: CurrencyCode;
   /** Cotización ARS por 1 USD (Fase 1.2.3). */
   exchangeRate?: number;
+  /** Método de pago asociado (P4, RF-PM-006). null limpia la asociación. */
+  paymentMethodId?: string | null;
+  /**
+   * Débito automático (P4 — corrección de alcance). Atributo del MOVIMIENTO.
+   * El backend lo ignora (queda null) si el método efectivo no es DEBIT.
+   */
+  autoDebit?: boolean;
 }
 
 /**

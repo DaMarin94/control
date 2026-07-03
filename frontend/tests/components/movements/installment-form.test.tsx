@@ -19,6 +19,7 @@ import { InstallmentForm } from "@/components/movements/installment-form";
 import { ToastProvider } from "@/components/ui/toast";
 import type { Category } from "@/types/category";
 import type { InstallmentGroup } from "@/types/installment";
+import type { PaymentMethod } from "@/types/payment-method";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,25 @@ vi.mock("@/hooks/use-categories", () => ({
 
 vi.mock("@/hooks/use-installments", () => ({
   useInstallments: vi.fn(),
+}));
+
+// PaymentMethodSelect (RF-PM-006) usa usePaymentMethods internamente — mockeado
+// para no depender de useApi/useSession real en este test de formulario.
+vi.mock("@/hooks/use-payment-methods", () => ({
+  usePaymentMethods: vi.fn(() => ({
+    paymentMethods: [],
+    isLoading: false,
+    isError: false,
+    error: null,
+    createPaymentMethod: vi.fn(),
+    updatePaymentMethod: vi.fn(),
+    deletePaymentMethod: vi.fn(),
+    reactivatePaymentMethod: vi.fn(),
+    isCreating: false,
+    isUpdating: false,
+    isDeleting: false,
+    isReactivating: false,
+  })),
 }));
 
 vi.mock("@/hooks/use-settings", () => ({
@@ -64,12 +84,14 @@ vi.mock("@/lib/format", async (importOriginal) => {
 
 import { useCategories } from "@/hooks/use-categories";
 import { useInstallments } from "@/hooks/use-installments";
+import { usePaymentMethods } from "@/hooks/use-payment-methods";
 import { useSettings } from "@/hooks/use-settings";
 import { useReferenceRate } from "@/hooks/use-reference-rate";
 import { useRouter } from "next/navigation";
 
 const mockUseCategories = vi.mocked(useCategories);
 const mockUseInstallments = vi.mocked(useInstallments);
+const mockUsePaymentMethods = vi.mocked(usePaymentMethods);
 const mockUseSettings = vi.mocked(useSettings);
 const mockUseReferenceRate = vi.mocked(useReferenceRate);
 const mockUseRouter = vi.mocked(useRouter);
@@ -131,6 +153,23 @@ const mockInstallmentGroup: InstallmentGroup = {
     color: "#FF5733",
     scope: "EXPENSE",
   },
+  paymentMethodId: null,
+  paymentMethod: null,
+  autoDebit: null,
+};
+
+const mockDebitMethod: PaymentMethod = {
+  id: "pm-debit-1",
+  userId: "user-1",
+  name: "Débito Banco Nación",
+  type: "DEBIT",
+  icon: "card",
+  closingDay: null,
+  paymentDay: null,
+  deletedAt: null,
+  createdAt: "2024-01-01T00:00:00Z",
+  updatedAt: "2024-01-01T00:00:00Z",
+  movementCount: 0,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -747,6 +786,56 @@ describe("InstallmentForm — currency en edición (Fase 1.2.4)", () => {
     await waitFor(() => {
       const updatedRateInput = screen.getByLabelText(/cotización/i) as HTMLInputElement;
       expect(updatedRateInput.value).toBe("1.200,00");
+    });
+  });
+});
+
+// ─── Tests: "Débito automático" — atributo del movimiento (P4) ───────────────
+
+describe("InstallmentForm — Débito automático (P4, corrección de alcance)", () => {
+  beforeEach(() => {
+    mockUsePaymentMethods.mockReturnValue({
+      paymentMethods: [mockDebitMethod],
+      isLoading: false,
+      isError: false,
+      error: null,
+      createPaymentMethod: vi.fn(),
+      updatePaymentMethod: vi.fn(),
+      deletePaymentMethod: vi.fn(),
+      reactivatePaymentMethod: vi.fn(),
+      isCreating: false,
+      isUpdating: false,
+      isDeleting: false,
+      isReactivating: false,
+    });
+  });
+
+  it("no muestra el checkbox cuando no hay método de pago elegido", () => {
+    renderForm({});
+    expect(screen.queryByText(/débito automático/i)).not.toBeInTheDocument();
+  });
+
+  it("muestra el checkbox y lo envía en autoDebit=true al elegir un método Débito", async () => {
+    const user = userEvent.setup();
+    mockCreateInstallment.mockResolvedValue({ success: true, installment: mockInstallmentGroup });
+
+    renderForm({});
+
+    await user.type(screen.getByLabelText(/monto por cuota/i), "500");
+    await user.type(screen.getByLabelText(/cant\. de cuotas/i), "12");
+    await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
+    await user.click(screen.getByLabelText(/método de pago/i));
+    await user.click(screen.getByRole("option", { name: /débito banco nación/i }));
+
+    const checkbox = screen.getByRole("checkbox", { name: /débito automático/i });
+    await user.click(checkbox);
+
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(mockCreateInstallment).toHaveBeenCalledWith(
+        expect.objectContaining({ autoDebit: true, paymentMethodId: "pm-debit-1" }),
+      );
     });
   });
 });

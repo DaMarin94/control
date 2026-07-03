@@ -8,6 +8,7 @@
 
 import type { Category } from "@/types/category";
 import type { CurrencyCode } from "@/types/settings";
+import type { EmbeddedPaymentMethod } from "@/types/payment-method";
 
 /** Tipo de movimiento */
 export type TransactionType = "EXPENSE" | "INCOME";
@@ -44,6 +45,16 @@ export interface Transaction {
   updatedAt: string;
   /** Categoría embebida en la respuesta */
   category: Pick<Category, "id" | "name" | "color" | "scope">;
+  /** Método de pago asociado (P4, RF-PM-006); null = sin método */
+  paymentMethodId: string | null;
+  /** Método de pago embebido en la respuesta; null si no tiene */
+  paymentMethod: EmbeddedPaymentMethod | null;
+  /**
+   * Débito automático (P4 — corrección de alcance). Atributo del MOVIMIENTO,
+   * no del método de pago. Solo true/false si paymentMethod es de tipo DEBIT;
+   * null en cualquier otro caso.
+   */
+  autoDebit: boolean | null;
 }
 
 /** Body de POST /transactions */
@@ -61,6 +72,13 @@ export interface CreateTransactionRequest {
   currency?: CurrencyCode;
   /** Cotización ARS por 1 USD (Fase 1.2.3). Requerido si currency !== defaultCurrency. */
   exchangeRate?: number;
+  /** Método de pago asociado (P4, RF-PM-006). Opcional; se omite si no hay método. */
+  paymentMethodId?: string;
+  /**
+   * Débito automático (P4 — corrección de alcance). Atributo del MOVIMIENTO.
+   * El backend lo ignora (queda null) si el método efectivo no es DEBIT.
+   */
+  autoDebit?: boolean;
 }
 
 /** Body de PATCH /transactions/:id — todos los campos opcionales */
@@ -75,6 +93,13 @@ export interface UpdateTransactionRequest {
   currency?: CurrencyCode;
   /** Cotización ARS por 1 USD (Fase 1.2.3). */
   exchangeRate?: number;
+  /** Método de pago asociado (P4, RF-PM-006). null limpia la asociación. */
+  paymentMethodId?: string | null;
+  /**
+   * Débito automático (P4 — corrección de alcance). Atributo del MOVIMIENTO.
+   * El backend lo ignora (queda null) si el método efectivo no es DEBIT.
+   */
+  autoDebit?: boolean;
 }
 
 /**

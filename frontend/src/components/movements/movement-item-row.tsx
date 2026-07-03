@@ -31,8 +31,9 @@
 import { type MovementItem } from "@/types/movement";
 import { type RecurringFrequency } from "@/types/recurring";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { ArrowDown, ArrowUp, Repeat, Pencil, Trash2, CalendarOff, CalendarPlus, Link2, GitBranch, Calculator } from "lucide-react";
+import { ArrowDown, ArrowUp, Repeat, Pencil, Trash2, CalendarOff, CalendarPlus, Link2, GitBranch, Calculator, Zap } from "lucide-react";
 import { KebabMenu } from "@/components/ui/kebab-menu";
+import { PaymentMethodIcon } from "@/components/ui/payment-method-icon";
 import { useRecurring } from "@/hooks/use-recurring";
 import { useTransactions } from "@/hooks/use-transactions";
 import { useInstallments } from "@/hooks/use-installments";
@@ -260,6 +261,19 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
             aria-hidden="true"
           />
           <span>{typeLabel}</span>
+          {/* Método de pago — solo si el movimiento lo tiene asociado (RF-PM-006) */}
+          {movement.paymentMethod && (
+            <>
+              <span
+                className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
+                aria-hidden="true"
+              />
+              <span className="inline-flex items-center gap-[4px]">
+                <PaymentMethodIcon icon={movement.paymentMethod.icon} size={12} className="opacity-60" />
+                {movement.paymentMethod.name}
+              </span>
+            </>
+          )}
           {isFijo && (
             <>
               <span
@@ -300,6 +314,22 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
                 title="Tiene movimiento(s) calculado(s)"
               >
                 <GitBranch size={13} aria-hidden="true" />
+              </span>
+            </>
+          )}
+          {/* Débito automático — segmento final, atributo del movimiento (P4) */}
+          {movement.autoDebit === true && (
+            <>
+              <span
+                className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
+                aria-hidden="true"
+              />
+              <span
+                className="inline-flex items-center gap-[4px] text-muted text-[12px]"
+                title="Débito automático"
+              >
+                <Zap size={11} aria-hidden="true" />
+                Débito automático
               </span>
             </>
           )}

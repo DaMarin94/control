@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -76,4 +77,21 @@ export class CreateRecurringDto {
   @IsNumber({}, { message: 'exchangeRate debe ser un número' })
   @IsPositive({ message: 'exchangeRate debe ser un número positivo' })
   exchangeRate?: number;
+
+  /**
+   * Método de pago asociado, opcional (RF-PM-006). Debe ser propio del usuario y activo.
+   */
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty({ message: 'El paymentMethodId no puede estar vacío' })
+  paymentMethodId?: string;
+
+  /**
+   * Débito automático, opcional (P4 — corrección de alcance). Atributo del MOVIMIENTO,
+   * no del método de pago. Solo relevante para fijos NORMALES; solo se persiste si
+   * paymentMethodId apunta a un método de tipo DEBIT (queda null en cualquier otro caso).
+   */
+  @IsOptional()
+  @IsBoolean({ message: 'autoDebit debe ser booleano' })
+  autoDebit?: boolean;
 }

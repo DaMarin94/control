@@ -225,6 +225,9 @@ function movementItemToTransaction(item: MovementItem): Transaction {
     createdAt: occurredAt,
     updatedAt: occurredAt,
     category: item.category,
+    paymentMethodId: item.paymentMethod?.id ?? null,
+    paymentMethod: item.paymentMethod,
+    autoDebit: item.autoDebit,
   };
 }
 
@@ -246,6 +249,9 @@ function movementItemToRecurring(item: MovementItem): Recurring {
     createdAt: "",
     updatedAt: "",
     category: item.category,
+    paymentMethodId: item.paymentMethod?.id ?? null,
+    paymentMethod: item.paymentMethod,
+    autoDebit: item.autoDebit,
   };
 }
 
@@ -266,6 +272,9 @@ function movementItemToInstallment(item: MovementItem): InstallmentGroup {
     createdAt: "",
     updatedAt: "",
     category: item.category,
+    paymentMethodId: item.paymentMethod?.id ?? null,
+    paymentMethod: item.paymentMethod,
+    autoDebit: item.autoDebit,
   };
 }
 

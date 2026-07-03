@@ -20,6 +20,7 @@ import { Logger } from 'nestjs-pino';
 import { TransactionsService } from '../../../src/transactions/transactions.service';
 import { TransactionsRepository, TransactionWithCategory } from '../../../src/transactions/transactions.repository';
 import { CategoryValidatorService } from '../../../src/categories/category-validator.service';
+import { PaymentMethodValidatorService } from '../../../src/payment-methods/payment-method-validator.service';
 import { SettingsService } from '../../../src/settings/settings.service';
 
 // ---------------------------------------------------------------------------
@@ -35,6 +36,11 @@ const mockRepo = {
 
 const mockCategoryValidator = {
   validateCategory: jest.fn().mockResolvedValue(undefined),
+};
+
+const mockPaymentMethodValidator = {
+  validatePaymentMethod: jest.fn().mockResolvedValue(undefined),
+  resolveAutoDebit: jest.fn().mockResolvedValue(null),
 };
 
 const mockLogger = {
@@ -80,6 +86,9 @@ function makeTransaction(overrides: Partial<TransactionWithCategory> = {}): Tran
       color: '#4F86C6',
       scope: CategoryScope.EXPENSE,
     },
+    paymentMethodId: null,
+    paymentMethod: null,
+    autoDebit: null,
     ...overrides,
   };
 }
@@ -94,12 +103,15 @@ describe('TransactionsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     mockCategoryValidator.validateCategory.mockResolvedValue(undefined);
+    mockPaymentMethodValidator.validatePaymentMethod.mockResolvedValue(undefined);
+    mockPaymentMethodValidator.resolveAutoDebit.mockResolvedValue(null);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TransactionsService,
         { provide: TransactionsRepository, useValue: mockRepo },
         { provide: CategoryValidatorService, useValue: mockCategoryValidator },
+        { provide: PaymentMethodValidatorService, useValue: mockPaymentMethodValidator },
         { provide: Logger, useValue: mockLogger },
         { provide: SettingsService, useValue: mockSettingsServiceTx },
       ],
@@ -284,6 +296,90 @@ describe('TransactionsService', () => {
           timezone: 'America/Argentina/Buenos_Aires',
         }),
       ).resolves.not.toThrow();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // autoDebit (P4 — corrección de alcance: atributo del movimiento, no del método)
+  // -------------------------------------------------------------------------
+
+  describe('autoDebit', () => {
+    it('create: delega la resolución en PaymentMethodValidatorService.resolveAutoDebit', async () => {
+      mockPaymentMethodValidator.resolveAutoDebit.mockResolvedValue(true);
+      mockRepo.create.mockResolvedValue(makeTransaction({ autoDebit: true }));
+
+      await service.create(USER_A, {
+        type: MovementType.EXPENSE,
+        amountCents: 1000,
+        categoryId: CAT_ID,
+        occurredAt: '2026-06-08T12:00:00Z',
+        timezone: 'America/Argentina/Buenos_Aires',
+        paymentMethodId: 'pm-debit',
+        autoDebit: true,
+      });
+
+      expect(mockPaymentMethodValidator.resolveAutoDebit).toHaveBeenCalledWith('pm-debit', true);
+      expect(mockRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ autoDebit: true }),
+      );
+    });
+
+    it('create: sin paymentMethodId → resolveAutoDebit se llama con null', async () => {
+      mockRepo.create.mockResolvedValue(makeTransaction());
+
+      await service.create(USER_A, {
+        type: MovementType.EXPENSE,
+        amountCents: 1000,
+        categoryId: CAT_ID,
+        occurredAt: '2026-06-08T12:00:00Z',
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+
+      expect(mockPaymentMethodValidator.resolveAutoDebit).toHaveBeenCalledWith(null, null);
+    });
+
+    it('update: no recalcula autoDebit si ni paymentMethodId ni autoDebit vienen en el body', async () => {
+      const existing = makeTransaction({ paymentMethodId: 'pm-debit', autoDebit: true });
+      mockRepo.findById.mockResolvedValue(existing);
+      mockRepo.update.mockResolvedValue(existing);
+
+      await service.update(USER_A, 'tx-001', { amountCents: 2000 });
+
+      expect(mockPaymentMethodValidator.resolveAutoDebit).not.toHaveBeenCalled();
+      expect(mockRepo.update).toHaveBeenCalledWith(
+        'tx-001',
+        expect.not.objectContaining({ autoDebit: expect.anything() }),
+      );
+    });
+
+    it('update: recalcula autoDebit heredando el paymentMethodId existente si solo cambia autoDebit', async () => {
+      const existing = makeTransaction({ paymentMethodId: 'pm-debit', autoDebit: false });
+      mockRepo.findById.mockResolvedValue(existing);
+      mockPaymentMethodValidator.resolveAutoDebit.mockResolvedValue(true);
+      mockRepo.update.mockResolvedValue(makeTransaction({ autoDebit: true }));
+
+      await service.update(USER_A, 'tx-001', { autoDebit: true });
+
+      expect(mockPaymentMethodValidator.resolveAutoDebit).toHaveBeenCalledWith('pm-debit', true);
+      expect(mockRepo.update).toHaveBeenCalledWith(
+        'tx-001',
+        expect.objectContaining({ autoDebit: true }),
+      );
+    });
+
+    it('update: al desasociar el método (paymentMethodId=null) fuerza autoDebit a null', async () => {
+      const existing = makeTransaction({ paymentMethodId: 'pm-debit', autoDebit: true });
+      mockRepo.findById.mockResolvedValue(existing);
+      mockPaymentMethodValidator.resolveAutoDebit.mockResolvedValue(null);
+      mockRepo.update.mockResolvedValue(makeTransaction({ paymentMethodId: null, autoDebit: null }));
+
+      await service.update(USER_A, 'tx-001', { paymentMethodId: null });
+
+      expect(mockPaymentMethodValidator.resolveAutoDebit).toHaveBeenCalledWith(null, true);
+      expect(mockRepo.update).toHaveBeenCalledWith(
+        'tx-001',
+        expect.objectContaining({ autoDebit: null }),
+      );
     });
   });
 

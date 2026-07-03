@@ -5,6 +5,7 @@ import {
 import { Currency, MovementType } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { CategoryValidatorService } from '../categories/category-validator.service';
+import { PaymentMethodValidatorService } from '../payment-methods/payment-method-validator.service';
 import {
   TransactionsRepository,
   TransactionWithCategory,
@@ -18,6 +19,7 @@ export class TransactionsService {
   constructor(
     private readonly repo: TransactionsRepository,
     private readonly categoryValidator: CategoryValidatorService,
+    private readonly paymentMethodValidator: PaymentMethodValidatorService,
     private readonly logger: Logger,
     private readonly settingsService: SettingsService,
   ) {}
@@ -33,11 +35,21 @@ export class TransactionsService {
     // Validar categoría: propia + activa + scope compatible (RN-010)
     await this.categoryValidator.validateCategory(userId, dto.categoryId, dto.type);
 
+    // Validar método de pago (opcional): propio + activo (RF-PM-006)
+    await this.paymentMethodValidator.validatePaymentMethod(userId, dto.paymentMethodId);
+
     const effectiveExchangeRate = dto.exchangeRate ?? 1;
 
     // Cargar la defaultCurrency del usuario para anclarla como anchor (Fase 1.2.4)
     const userSettings = await this.settingsService.getSettings(userId);
     const anchorCurrency = userSettings.defaultCurrency;
+
+    // autoDebit (P4 — corrección de alcance): solo se persiste si el método asociado
+    // es de tipo DEBIT; en cualquier otro caso queda null.
+    const autoDebit = await this.paymentMethodValidator.resolveAutoDebit(
+      dto.paymentMethodId ?? null,
+      dto.autoDebit ?? null,
+    );
 
     const tx = await this.repo.create({
       user: { connect: { id: userId } },
@@ -50,6 +62,10 @@ export class TransactionsService {
       ...(dto.currency !== undefined && { currency: dto.currency }),
       exchangeRate: effectiveExchangeRate,
       anchorCurrency,
+      ...(dto.paymentMethodId !== undefined && {
+        paymentMethod: { connect: { id: dto.paymentMethodId } },
+      }),
+      autoDebit,
     });
 
     // Actualizar lastExchangeRate del usuario (solo si no es el default de back-compat)
@@ -101,11 +117,30 @@ export class TransactionsService {
       await this.categoryValidator.validateCategory(userId, effectiveCategoryId, effectiveType);
     }
 
+    // Validar método de pago si se está actualizando (null = desasociar, no valida)
+    if (dto.paymentMethodId !== undefined) {
+      await this.paymentMethodValidator.validatePaymentMethod(userId, dto.paymentMethodId);
+    }
+
     // Si se está actualizando la cotización, también actualizar el anchor (Fase 1.2.4)
     let anchorCurrency: Currency | undefined = undefined;
     if (dto.exchangeRate !== undefined || dto.currency !== undefined) {
       const userSettings = await this.settingsService.getSettings(userId);
       anchorCurrency = userSettings.defaultCurrency;
+    }
+
+    // autoDebit (P4 — corrección de alcance): recalcular solo si paymentMethodId o
+    // autoDebit vienen en el body; en cualquier otro PATCH se deja intacto.
+    let autoDebit: boolean | null | undefined = undefined;
+    if (dto.paymentMethodId !== undefined || dto.autoDebit !== undefined) {
+      const effectivePaymentMethodId =
+        dto.paymentMethodId !== undefined ? dto.paymentMethodId : existing.paymentMethodId;
+      const effectiveRequestedAutoDebit =
+        dto.autoDebit !== undefined ? dto.autoDebit : existing.autoDebit;
+      autoDebit = await this.paymentMethodValidator.resolveAutoDebit(
+        effectivePaymentMethodId,
+        effectiveRequestedAutoDebit,
+      );
     }
 
     const updated = await this.repo.update(id, {
@@ -123,6 +158,13 @@ export class TransactionsService {
       ...(dto.currency !== undefined && { currency: dto.currency }),
       ...(dto.exchangeRate !== undefined && { exchangeRate: dto.exchangeRate }),
       ...(anchorCurrency !== undefined && { anchorCurrency }),
+      ...(dto.paymentMethodId !== undefined && {
+        paymentMethod:
+          dto.paymentMethodId === null
+            ? { disconnect: true }
+            : { connect: { id: dto.paymentMethodId } },
+      }),
+      ...(autoDebit !== undefined && { autoDebit }),
     });
 
     // Actualizar lastExchangeRate del usuario si se editó la cotización

@@ -24,6 +24,7 @@ import {
   RecurringWithCategory,
 } from '../../../src/recurring/recurring.repository';
 import { CategoryValidatorService } from '../../../src/categories/category-validator.service';
+import { PaymentMethodValidatorService } from '../../../src/payment-methods/payment-method-validator.service';
 import { SettingsService } from '../../../src/settings/settings.service';
 
 // ---------------------------------------------------------------------------
@@ -53,6 +54,11 @@ const mockRepo = {
  */
 const mockCategoryValidator = {
   validateCategory: jest.fn().mockResolvedValue(undefined),
+};
+
+const mockPaymentMethodValidator = {
+  validatePaymentMethod: jest.fn().mockResolvedValue(undefined),
+  resolveAutoDebit: jest.fn().mockResolvedValue(null),
 };
 
 const mockLogger = {
@@ -107,6 +113,9 @@ function makeRecurring(
       color: '#4F86C6',
       scope: CategoryScope.EXPENSE,
     },
+    paymentMethodId: null,
+    paymentMethod: null,
+    autoDebit: null,
     ...overrides,
   };
 }
@@ -122,12 +131,15 @@ describe('RecurringService', () => {
     jest.clearAllMocks();
     // Restablecer el default (categoría válida) antes de cada test
     mockCategoryValidator.validateCategory.mockResolvedValue(undefined);
+    mockPaymentMethodValidator.validatePaymentMethod.mockResolvedValue(undefined);
+    mockPaymentMethodValidator.resolveAutoDebit.mockResolvedValue(null);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RecurringService,
         { provide: RecurringRepository, useValue: mockRepo },
         { provide: CategoryValidatorService, useValue: mockCategoryValidator },
+        { provide: PaymentMethodValidatorService, useValue: mockPaymentMethodValidator },
         { provide: Logger, useValue: mockLogger },
         { provide: SettingsService, useValue: mockSettingsServiceRec },
       ],
@@ -328,6 +340,70 @@ describe('RecurringService', () => {
           startMonth: '2026-06',
         }),
       ).resolves.not.toThrow();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // autoDebit (P4 — corrección de alcance: atributo del movimiento, no del método)
+  // -------------------------------------------------------------------------
+
+  describe('autoDebit', () => {
+    it('create: delega la resolución en PaymentMethodValidatorService.resolveAutoDebit', async () => {
+      mockPaymentMethodValidator.resolveAutoDebit.mockResolvedValue(true);
+      mockRepo.create.mockResolvedValue(makeRecurring({ autoDebit: true }));
+
+      await service.create(USER_A, {
+        type: MovementType.EXPENSE,
+        amountCents: 5000,
+        categoryId: CAT_ID,
+        startMonth: '2026-01',
+        paymentMethodId: 'pm-debit',
+        autoDebit: true,
+      });
+
+      expect(mockPaymentMethodValidator.resolveAutoDebit).toHaveBeenCalledWith('pm-debit', true);
+      expect(mockRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ autoDebit: true }),
+      );
+    });
+
+    it('update in-place: no recalcula autoDebit si ni paymentMethodId ni autoDebit vienen en el body', async () => {
+      const existing = makeRecurring({
+        startMonth: '2026-01',
+        paymentMethodId: 'pm-debit',
+        autoDebit: true,
+      });
+      mockRepo.findById.mockResolvedValue(existing);
+      mockRepo.update.mockResolvedValue(existing);
+
+      // currentMonth <= startMonth → in-place
+      await service.update(USER_A, 'rec-001', { currentMonth: '2026-01', amountCents: 6000 });
+
+      expect(mockPaymentMethodValidator.resolveAutoDebit).not.toHaveBeenCalled();
+      expect(mockRepo.update).toHaveBeenCalledWith(
+        'rec-001',
+        expect.not.objectContaining({ autoDebit: expect.anything() }),
+      );
+    });
+
+    it('update split: R2 hereda autoDebit recalculado contra el paymentMethodId efectivo', async () => {
+      const existing = makeRecurring({
+        startMonth: '2026-01',
+        paymentMethodId: 'pm-debit',
+        autoDebit: true,
+      });
+      mockRepo.findById.mockResolvedValue(existing);
+      mockRepo.update.mockResolvedValue(existing);
+      mockPaymentMethodValidator.resolveAutoDebit.mockResolvedValue(true);
+      mockRepo.create.mockResolvedValue(makeRecurring({ id: 'rec-002', autoDebit: true }));
+
+      // currentMonth > startMonth → split
+      await service.update(USER_A, 'rec-001', { currentMonth: '2026-06' });
+
+      expect(mockPaymentMethodValidator.resolveAutoDebit).toHaveBeenCalledWith('pm-debit', true);
+      expect(mockRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ autoDebit: true }),
+      );
     });
   });
 

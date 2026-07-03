@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -69,4 +70,22 @@ export class CreateInstallmentDto {
   @IsNumber({}, { message: 'exchangeRate debe ser un número' })
   @IsPositive({ message: 'exchangeRate debe ser un número positivo' })
   exchangeRate?: number;
+
+  /**
+   * Método de pago asociado, opcional (RF-PM-006). Único para todo el grupo.
+   * Debe ser propio del usuario y activo.
+   */
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty({ message: 'El paymentMethodId no puede estar vacío' })
+  paymentMethodId?: string;
+
+  /**
+   * Débito automático, opcional (P4 — corrección de alcance). Atributo del MOVIMIENTO,
+   * no del método de pago. Único para todo el grupo. Solo se persiste si paymentMethodId
+   * apunta a un método de tipo DEBIT; en cualquier otro caso queda null.
+   */
+  @IsOptional()
+  @IsBoolean({ message: 'autoDebit debe ser booleano' })
+  autoDebit?: boolean;
 }

@@ -350,6 +350,127 @@ El subset base son los **8 hex de la fila L3**. Su **orden de asignación** (el 
 
 ---
 
+## Métodos de pago — identificador de ícono
+
+Feature P4. Un método de pago tiene **nombre**, **tipo** (Crédito / Débito / Efectivo) e **identificador visual = un ícono** elegido por el usuario. La pantalla `/metodos-pago` y su modal crear/editar son **espejo 1:1 de Categorías** (`/categorias`, pantalla 6) en chrome, layout, estados, validaciones, empty y confirmación de borrado; lo único propio de esta feature es que **la identidad visual es un ÍCONO, no un color**. Todo lo que sigue define ese ícono (el set, cómo se elige, cómo se renderiza); el resto reusa el patrón de Categorías sin cambios.
+
+### Campos del modal según tipo
+
+El modal crear/editar (espejo de Categorías) lleva **siempre**: **Nombre**, **Tipo** (triple switch Crédito / Débito / Efectivo) e **Ícono** (icon-picker de abajo). Los **campos condicionales dependen del tipo** y se muestran/ocultan **en vivo** al cambiar el switch, cada uno como un **bloque del form** (`Label` arriba + control, ritmo `space-y-[14px]`):
+
+- **Crédito:** suma **día de cierre** y **día de cobro** (dos controles del DS para día del mes). Es lo único propio del crédito.
+- **Débito:** **sin campos condicionales** — el modal del método débito es **idéntico en cromo al de efectivo** (solo Nombre + Tipo + Ícono). El atributo "débito automático" **no vive acá**: es un flag del **movimiento**, no del método (ver *Débito automático — control condicional en el form de carga*).
+- **Efectivo:** sin campos condicionales.
+
+(Qué campos exactos y sus validaciones funcionales los define el analista; acá se fija el **cromo y la visibilidad condicional**.)
+
+### Regla dura y decisión de color — SIN campo de color
+
+- **El ícono es la única identidad visual del método. NO existe campo de color.** A diferencia de Categorías (donde el **color** es la identidad), acá el ícono **reemplaza** al color; no se agrega un segundo eje cromático. El modelo lleva solo `icon` (string, allowlist), sin `color`.
+- **Los íconos se renderizan monocromos, en tinta neutra** (`--ink-2` en reposo; `--ink` en selección/hover). **Nunca** en color semántico, **nunca** en índigo de marca (salvo el focus ring del control). Motivos:
+  1. **Regla dura 1** — verde/rojo están reservados estrictamente a ingreso/gasto. Un ícono de método en verde o rojo (Mastercard, Santander, Naranja, muchos bancos) colisionaría con la semántica de montos, sobre todo pegado a un monto en una fila de `/mes`.
+  2. **Regla dura 2** — el índigo es solo marca; no tiñe estos glifos.
+  3. **Regla dura 4** — la tinta neutra se resuelve por token en claro y oscuro sin calibrar un color por cada marca.
+  Las marcas se reconocen por su **silueta / wordmark** (VISA, AMEX, los dos aros de Mastercard, el apretón de Mercado Pago), no por su color corporativo.
+- **Diferenciación entre métodos = ícono + nombre + tipo** (igual que en Categorías la diferenciación es color + nombre). No hace falta color adicional: los genéricos son **glifos distintos entre sí** ($ · tarjeta · billete · monedas · banco · billetera · QR) y las marcas son reconocibles por forma. Dos métodos con el mismo ícono se distinguen por su **nombre**, mismo criterio que dos categorías con el mismo color.
+
+### Set curado de íconos — allowlist v1 (`PAYMENT_METHOD_ICONS`)
+
+Fuente doble:
+
+- **Genéricos → `lucide-react`** (ya instalado en el stack). Glifos outline (stroke).
+- **Marcas → `simple-icons`** (glifos de una sola *path*, `fill: currentColor`, ideales para monocromo). **No está instalado hoy** (el stack solo tiene `lucide-react`): sumarlo es una **dependencia nueva del frontend**, y el catálogo exacto debe **verificarse en la versión que se fije**. Toda marca del set cuyo slug **no exista** en la versión instalada **cae al genérico `card`** (fallback duro).
+
+El backend guarda la **clave** en el campo `icon` (string) con **allowlist en código**, mismo criterio que el pool de colores de categorías (hoy duplicado back/front). Lista canónica v1:
+
+**Genéricos (lucide):**
+
+| Clave | Glifo lucide | Rol |
+|---|---|---|
+| `card` | `CreditCard` | tarjeta genérica — **default al crear** y **fallback** de marca ausente |
+| `cash` | `Banknote` | efectivo / billete |
+| `coins` | `Coins` | efectivo / monedas |
+| `wallet` | `Wallet` | billetera / billetera digital |
+| `bank` | `Landmark` | banco / transferencia bancaria |
+| `dollar` | `CircleDollarSign` | dinero genérico (`$`) |
+| `qr` | `QrCode` | pago con QR / transferencia |
+
+**Marcas (simple-icons; slug entre paréntesis, verificar al instalar):**
+
+| Clave | Slug simple-icons | Marca |
+|---|---|---|
+| `visa` | `visa` | Visa |
+| `mastercard` | `mastercard` | Mastercard |
+| `amex` | `americanexpress` | American Express |
+| `mercadopago` | `mercadopago` | Mercado Pago |
+| `paypal` | `paypal` | PayPal |
+
+Total set v1: **12 claves** (7 genéricas + 5 marcas).
+
+**Marcas comunes en Argentina que NO están disponibles como marca y caen a genérico:** Ualá, Naranja X, Brubank, Personal Pay, MODO, Cuenta DNI, Cabal y los bancos locales (Galicia, Nación, Provincia, etc.) **no están en simple-icons** → el usuario elige un genérico (típicamente `card`, `wallet`, `bank` o `qr`). Santander / BBVA, aun si estuvieran en la versión instalada, **quedan fuera del set v1** para mantenerlo acotado (se los cubre con un genérico). Cualquier ampliación futura del set = **nueva clave en la allowlist back/front**.
+
+### Default y ausencia de "Aleatorio"
+
+- **Default al crear:** `card`. No hay algoritmo de "menos usado" como en el color de categoría: el color se autoasigna para **separar perceptualmente**, pero el ícono debe **describir el método real**, así que un default fijo y neutro (tarjeta) es lo correcto; el usuario lo cambia.
+- **Sin botón "Aleatorio".** Ruptura deliberada del espejo con el color-picker: el color es identidad puramente estética (aleatorizar es válido), pero el ícono **carga significado** (debe coincidir con el método real); un ícono al azar daría una identidad engañosa. El icon-picker **no** incluye el `Shuffle`.
+
+### Icon-picker en el modal de método — espejo del color-picker
+
+Vive en el mismo slot que el picker de color en el modal de categoría. Reusa la geometría y los estados del *Picker de color de categoría (matriz de swatches)*, cambiando el swatch de color por una **celda de ícono**:
+
+- **Grid:** `grid-template-columns: repeat(6, 1fr)`, gap 6px. Orden de render: primero los **genéricos** en el orden de la tabla, luego las **marcas** (12 íconos → 2 filas).
+- **Celda:** cuadrada `aspect-ratio: 1`, radio `--r-ctl` 10px (un paso mayor que el `--r-chip` del swatch de color, porque contiene un glifo y no un fill pleno). Reposo: fondo `--panel-3`, glifo **20px** centrado en `--ink-2`.
+- **Estados** (mismos que el swatch de color): *hover* = `scale(1.12)` + `--shadow-sm`, borde `--line-strong`, glifo → `--ink`, 0.14s. *Seleccionada* = anillo **neutro** `box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--ink)` (ring `--ink`, no acento — regla dura 2) + glifo `--ink`. *Focus* = ring `--accent-soft` 3px.
+- **Fill vs stroke:** las marcas (simple-icons) son glifos rellenos y los genéricos (lucide) son outline; conviven en la misma grilla a **igual caja (20px)** y **misma tinta neutra**. La diferencia de peso relleno/contorno es aceptable y hasta ayuda a leer "marca vs genérico"; no se normaliza.
+- **Oscuro:** la celda `--panel-3` y el glifo (`currentColor`) se resuelven por token; el **hairline de contorno** `--line` en la celda es **obligatorio en oscuro** (mismo recurso que el swatch de color), para que la celda se lea como ficha sobre panel oscuro.
+
+### Render del ícono en la lista de `/metodos-pago`
+
+Espejo del ítem de la lista de categorías (swatch + nombre + scope + "N movimientos"), con el color-swatch reemplazado por una **tile de ícono**:
+
+- **Tile de ícono** (izquierda, en el slot del swatch de color): cuadrada ~**34px**, radio `--r-ctl`, fondo `--panel-3`, borde `--line` (hairline; obligatorio en oscuro), glifo **18px** centrado en `--ink-2`. Es la analogía directa del swatch: en categorías el cuadrado **es** el color; acá el cuadrado neutro **sostiene** el glifo (la identidad).
+- **Nombre:** rol *Nombre de movimiento* (14.5px / 600 `--ink`), igual que el nombre de categoría.
+- **Tipo (Crédito / Débito / Efectivo):** **chip neutro** del DS (`--panel-3` / `--muted` / `--r-chip` 7px / 11px·600·`.04em`), en el slot del badge de scope. **Neutro, no semántico ni índigo** — el tipo de método no comunica ingreso/gasto ni marca; es metadato. (Difiere del badge de scope "Ambos" de categorías, que va en índigo por ser marca: acá no hay caso "marca".)
+- **"N movimientos"** (si la pantalla lo lleva — dato funcional del analista): mismo contador derivado de solo lectura que en categorías (mono tabular, `--muted`), a la derecha de la fila.
+- **Orden de la fila** (espejo de categorías): `[tile ícono] [nombre] [chip tipo] … [N movimientos]`.
+
+### Render del ícono en el selector de método del form de carga
+
+El form de movimiento (tabs Único / Fijo / Cuota) suma un **selector de método de pago opcional**. **Ubicación:** vive **dentro del disclosure "Más opciones"** del form, como **segundo sub-bloque** (tras moneda+cotización) — ver *Disclosure "Más opciones" del form*. Su cromo:
+
+- **Control:** `Select` del DS (mismo molde que el selector de categoría), **opcional**, con opción **"(ninguno)"** y **default = ninguno / vacío**.
+- **Trigger (con método elegido):** glifo del método **16px** `--ink-2` (`shrink-0`) + nombre (`--ink`) + chip de tipo neutro chico (opcional; si el ancho aprieta, el tipo se omite en el trigger y queda solo ícono + nombre).
+- **Trigger (ninguno):** placeholder **"Sin método de pago"** en `--faint`, sin glifo. **No es error**: el campo es opcional.
+- **Opciones del menú:** cada fila = glifo 16px `--ink-2` + nombre `--ink` + chip de tipo neutro a la derecha. La opción **"Sin método de pago"** ("(ninguno)") encabeza la lista, sin glifo.
+- **Sin botón "+ Nueva" análogo al de categoría** salvo que el analista lo defina funcionalmente: categorías lo tiene por RF-MU-004; para método de pago no hay un RF equivalente cerrado, así que **no se asume** acá. Si se define, reusaría el mismo patrón.
+- **Oscuro:** glifos (`currentColor`), chips y `Select` por token; sin tratamiento especial más allá del hairline ya definido.
+
+### Débito automático — control condicional en el form de carga
+
+Cuando el **método de pago seleccionado es de tipo Débito**, el form de movimiento muestra un **checkbox "Débito automático"** para ese movimiento puntual. Es un **atributo del movimiento**, no del método.
+
+- **Visibilidad condicional:** el control se **renderiza solo** si hay un método elegido y su tipo es **Débito**. Si no hay método (`"Sin método de pago"`) o el tipo es **Crédito / Efectivo**, el checkbox **no se muestra** (se desmonta; no queda deshabilitado ni atenuado). Al cambiar el método a uno no-débito el control desaparece. (El manejo del valor al ocultarse es funcional — analista.)
+- **Ubicación:** **inmediatamente debajo** del selector de método de pago, como continuación del mismo sub-bloque —lo **modula**, mismo patrón que la cotización modula a la moneda—, **dentro del disclosure "Más opciones"** del form (el checkbox acompaña al selector ahí; ver *Disclosure "Más opciones" del form*). Sigue el ritmo interno del sub-bloque (`space-y-[14px]`).
+- **Control:** **checkbox del DS** (el mismo del `CategoryFilterPopover`), en fila **`flex items-center gap-[9px]`** con el label a la derecha: casilla + **"Débito automático"** (registro UI 13px/500 `--ink-2`). **No lleva `Label` arriba** (la etiqueta va a la derecha de la casilla, como es propio del checkbox); admite un **field-note** opcional si el analista define copy de ayuda.
+- **Estados:**
+  - **Desmarcado (default):** casilla `--panel` / borde `--line`; al mostrarse arranca **desmarcado**.
+  - **Marcado:** casilla rellena con el **check del DS** (fill de acento como **cromo de interacción** del control — misma licencia que el focus ring y el thumb del segmented; **no** es color de monto ni decoración de marca).
+  - **Hover:** borde `--line-strong`.
+  - **Focus:** ring `--accent-soft` 3px (focus ring del DS).
+- **Neutralidad semántica:** el control **no** usa verde/rojo (no comunica ingreso/gasto) ni tiñe cifras; el único índigo es el del check/focus (interacción). Es el **único** campo condicional por tipo de método en el form; no se agregan otros.
+
+### Débito automático — indicador en el ítem de `/mes`
+
+Un movimiento con **débito automático** lleva una señal **discreta y neutra** en la **sublínea** del ítem de `/mes` (el lugar canónico de metadatos del movimiento — ver *Metadatos de relación en la sublínea del ítem de `/mes`*):
+
+- **Forma:** un **segmento neutro** (no un chip boxeado — peso liviano, como el segmento de frecuencia o "desde {Origen}"): mini-glifo `Zap` (lucide, 11px, `--muted`, `aria-hidden`) + label **"Débito automático"** en el registro de sublínea (`--muted`, 12px, **no** mono). `title` nativo "Débito automático".
+- **Ubicación:** **segmento final** de la sublínea, después de los metadatos existentes (`Categoría · tipo · [frecuencia] · [desde {Origen}]`). Convive con los chips Anulado / Calculado sin recolorearlos.
+- **Neutralidad:** **nunca** semántico (no es ingreso/gasto) ni índigo (no es marca) — es metadato del movimiento, mismo criterio que el chip de moneda y los segmentos de relación.
+- **Condicional:** solo aparece si el flag es `true`; si es `false`, la sublínea queda igual.
+- **Bajo anulado:** hereda la atenuación `opacity: 0.55` de la fila como el resto del contenido.
+
+---
+
 ## Patrones de componentes vigentes
 
 > Patrones de componente **reutilizables y vigentes**, parte del lenguaje visual del producto: el patrón canónico, sus valores clave y sus reglas.
@@ -1557,13 +1678,13 @@ La moneda explícita por movimiento, su cotización y la conversión de display 
 
 - **Badge de código de moneda:** chip neutro con el código (`"USD"`, `"ARS"`), **mismo molde que los chips Anulado/Calculado** (`--panel-3` / `--muted` / `--r-chip` 7px / 11px·600·`.04em` / `mono`). Identifica la moneda de origen; no se tiñe.
 - **Segmented neutro de moneda:** el **segmented del DS sin semánticos** (molde del triple switch de tipo): track `--panel-3`, radio `--r-pill`, padding `2px`; segmentos texto 13px/600 `mono`. Seleccionado = thumb `--panel` + `--shadow-sm`, texto `--ink`, deslizamiento 0.14s; no seleccionado = `--muted` → `--ink-2` en hover. **Sin color semántico ni índigo en los segmentos.** `role="radiogroup"` + `role="radio"`, focus ring `--accent-soft` 3px. Es el selector de moneda en `/configuracion` y en el bloque moneda+cotización de los forms. Tiene **4 segmentos** (ARS/USD/EUR/BRL); su forma completa se detalla en *Monedas configurables — set curado ARS/USD/EUR/BRL*.
-- **Par moneda + cotización (forms de único/fijo/cuotas):** bloque que va **debajo del Monto** (lo modula), dentro de un **disclosure colapsable** (ver *Bloque moneda+cotización del form* abajo). Cuando `moneda ≠ default`: `grid grid-cols-2 gap-[14px]` → Moneda (segmented neutro) + Cotización (input mono con **prefijo de par** de lectura, ej. `"USD→ARS"` / `"ARS→USD"` según la moneda seleccionada, en `mono` 12px `--muted`). Cuando `moneda == default`: el campo Cotización **se oculta** (queda solo el selector). Pre-carga editable: nota *field-note* "Cotización de referencia del mes" (glifo `History` 12px) → "Cotización modificada" al editar. Validación: cotización > 0 (error con borde `--expense` + ring `--expense-soft` + mensaje `--expense-ink`, mismo patrón que el Monto). El **calculado no muestra el bloque** (hereda moneda/cotización del origen, read-only).
+- **Par moneda + cotización (forms de único/fijo/cuotas):** sub-bloque que **modula el Monto** desde dentro del **disclosure colapsable "Más opciones"** —que también contiene el selector de método de pago— ubicado como **último bloque del form, antes de los botones de acción** (ver *#### 4* punto (A) Ubicación). Cuando `moneda ≠ default`: `grid grid-cols-2 gap-[14px]` → Moneda (segmented neutro) + Cotización (input mono con **prefijo de par** de lectura, ej. `"USD→ARS"` / `"ARS→USD"` según la moneda seleccionada, en `mono` 12px `--muted`). Cuando `moneda == default`: el campo Cotización **se oculta** (queda solo el selector). Pre-carga editable: nota *field-note* "Cotización de referencia del mes" (glifo `History` 12px) → "Cotización modificada" al editar. Validación: cotización > 0 (error con borde `--expense` + ring `--expense-soft` + mensaje `--expense-ink`, mismo patrón que el Monto). El **calculado no muestra el bloque** (hereda moneda/cotización del origen, read-only).
 - **Ítem de `/mes` (`MovementItemRow`) — original subordinado al convertido:** **el monto convertido a la default domina** (col 4, 15.5px/600, color por tipo, mono). Cuando `moneda ≠ default` se suman dos elementos **neutros y subordinados**: el **badge de moneda original** a la izquierda del monto (misma celda, `inline-flex items-center gap-[7px] justify-end`) y una **segunda línea** del valor original (*Meta/subtítulos* 12.5px/500 `--muted` `mono`, con el símbolo de su moneda, ej. `US$100,00`, sin signo). **Cuando `moneda = default` el ítem no lleva badge ni línea original.** Bajo anulado, ambos heredan el `opacity-[0.55]`; el convertido conserva su `line-through` + color por tipo.
 - **Tarjeta de ajuste (patrón reutilizable, `/configuracion`):** `.card` del DS con **fila de ajuste** `flex items-center justify-between gap-6` (izquierda: título 14.5px/600 `--ink` + descripción *Meta/subtítulos* `--muted`; derecha: el control). Molde para ajustes (un ajuste = una fila). El único ajuste vigente: "Moneda por defecto" (segmented neutro de moneda), que persiste **en vivo** al seleccionar (sin botón Guardar; toast de confirmación) y **recomputa el display** de `/mes` y reportes sin tocar lo guardado.
 - **Sidebar:** link **"Configuración"** (`Settings` 18px) como **último** ítem de nav, mismo molde/estados que el resto; activo por prefijo `startsWith("/configuracion")`.
 - **Reportes:** **no cambian** — ya operan sobre datos convertidos a la default (la conversión es capa de display aguas arriba del gráfico); no se rotula moneda ni se muestran originales en las cards. El cambio de default recomputa sus valores en vivo.
 
-> El caso **mono-moneda no se ensucia** donde corresponde: el **ítem** de `/mes` (sin badge ni línea original cuando moneda=default) y `/configuracion` (un solo segmented) no muestran complejidad de multi-moneda. En el **form**, el bloque moneda+cotización vive dentro de un disclosure colapsado por default, y cuando moneda=default el campo Cotización se oculta.
+> El caso **mono-moneda no se ensucia** donde corresponde: el **ítem** de `/mes` (sin badge ni línea original cuando moneda=default) y `/configuracion` (un solo segmented) no muestran complejidad de multi-moneda. En el **form**, moneda+cotización (junto con el método de pago) vive dentro del disclosure "Más opciones", colapsado por default, y cuando moneda=default el campo Cotización se oculta.
 
 ### Indicador de moneda default a nivel app
 
@@ -1670,36 +1791,58 @@ El **input de cotización**: caja `rounded-ctl border-[1.5px]`, prefijo de par e
 - **El prefijo de par aguanta las 4 monedas:** `"USD→ARS"`, `"EUR→ARS"`, `"BRL→USD"`, etc. Son códigos de 3 chars `mono`; el prefijo `XXX→YYY` (7 chars) entra en la caja sin recortar (`shrink-0`, `select-none`). Sin tratamiento por moneda en el bloque.
 - **La nota de pre-carga ("Cotización de referencia del mes")** comunica que el valor viene pre-cargado y es editable. Glifo `History` 12px `--muted` + texto `--muted`; al editar pasa a "Cotización modificada" en `--ink-2` (sin glifo).
 
-#### 4. Bloque moneda+cotización del form — disclosure colapsable + caso moneda=default
+#### 4. Disclosure "Más opciones" del form — moneda+cotización + método de pago
 
-El bloque del form (`CurrencyExchangeBlock`, compartido por transaction-form / recurring-form / installment-form):
+El form (tabs Único / Fijo / Cuota) agrupa **dos campos secundarios** —**moneda+cotización** (`CurrencyExchangeBlock`, compartido por transaction-form / recurring-form / installment-form) y **método de pago** (selector opcional + su checkbox condicional de *débito automático*)— dentro de **un único disclosure colapsable**. Reutiliza el **patrón disclosure** del *Acordeón* (cabecera = único `<button>` con `aria-expanded` + `aria-controls`, chevron que rota, animación altura 0↔auto + fade), aplicado a un bloque de form (no a una sección de lista). El cromo interno de cada sub-bloque vive en sus secciones propias (moneda: §1–§3 de esta sección; método: *Render del ícono en el selector de método del form de carga* y *Débito automático — control condicional en el form de carga*); acá se define **el disclosure que los contiene**: rótulo, ubicación, orden interno y resumen colapsado.
 
-**(A) El bloque completo vive dentro de un disclosure colapsable**, **debajo del campo Monto, antes de Categoría**. Reutiliza el **patrón disclosure** del *Acordeón* (cabecera = único `<button>` con `aria-expanded` + `aria-controls`, chevron que rota, animación altura 0↔auto + fade), aplicado a un bloque de form (no a una sección de lista).
+**(A) Rótulo y ubicación.**
 
-- **Trigger (la cabecera del disclosure):** fila `<button>` **al aire** (sin caja de input), `w-full flex items-center gap-[7px]`, padding `py-[7px]` (alto cómodo de click, alineado al ritmo del form). Contenido de izq → der:
-  - **Chevron:** `ChevronRight` (lucide) **16px** `stroke-width 2`, **primer elemento**, `--muted` en reposo. Único glifo que **rota**: colapsado → ▶ (0°); expandido → ▼ (90°). Mismo lenguaje que el chevron del *Acordeón*.
-  - **Label (copy exacto):** **"Moneda y cotización"**. Tipografía: **13px / 600**, `--ink-2` en reposo, `tracking-[0.01em]`, fuente UI (Space Grotesk). Nombra exactamente el contenido del disclosure y es coherente con los labels del form ("Moneda", "Cotización").
-  - **Resumen a la derecha (colapsado):** cuando el disclosure está **colapsado**, mostrar al final de la fila (tras un `flex-1` divisor) un **resumen de un vistazo** de lo que hay configurado: el **código de moneda** seleccionado en **`mono` 12px `--muted`** (ej. `"ARS"`, `"USD"`). Si `moneda ≠ default`, sumar la cotización: `"USD · 1.480,00"` (código + `·` separador `--faint` + valor mono `--ink-2`). Si `moneda == default`, solo el código (`"ARS"`). Es el equivalente al "resumen visible al colapsar" del *Acordeón* (pill+subtotal): comunica el estado sin expandir. Al **expandir**, el resumen se oculta (su info ya está en los controles abiertos).
+- **Rótulo (copy exacto): "Más opciones".** Tipografía del label: **13px / 600**, `--ink-2` en reposo, `tracking-[0.01em]`, fuente UI (Space Grotesk). **Racional:** la sección agrupa dos campos heterogéneos (moneda/cotización + método de pago) que la mayoría de las cargas dejan en su default (moneda = default del usuario, sin método), así que un rótulo enumerativo ("Moneda, cotización y método de pago") sería largo y ruidoso, y el label literal viejo ("Moneda y cotización") ya no cubre el contenido. **"Más opciones"** es el rótulo neutro y honesto para "campos opcionales que abrís solo cuando los necesitás". Se prefiere sobre **"Avanzado"** (connota ajustes técnicos/riesgosos, ajeno a algo tan cotidiano como elegir el método de pago) y sobre **"Extra"** (más informal, menos claro sobre qué contiene). Es la etiqueta más corta que cubre ambos sub-bloques sin enumerarlos, coherente con la voz es-AR del form.
+- **Ubicación: el último bloque del formulario — después de todos los demás campos, justo antes de la fila de botones de acción (Guardar / Cancelar).** El disclosure participa como **un bloque más** del stack del form, con el **gap estándar entre bloques** (`space-y-[14px]`) respecto del campo inmediatamente anterior; no rompe el ritmo de bloques del form. **Colapsado, el disclosure es una sola fila delgada** que no engrosa el pie del form (los campos que la mayoría de las cargas dejan en su default quedan replegados al final, fuera del flujo de los campos primarios). **Separación de la fila de botones:** entre el disclosure y la fila de acciones se conserva la **misma separación que el form ya deja entre su último bloque y sus botones** —no se inventa un valor nuevo—; como el trigger va **al aire** (sin caja de input, ver B), esa separación es la única señal que despega la fila delgada de los botones. **No se agrega divisor ni fondo entre el disclosure y los botones**: sumar un hairline separador acá recargaría el pie y competiría con el propio cromo del disclosure; el gap de bloque alcanza. Con el disclosure **expandido**, su cuerpo termina en el sub-bloque de Método de pago (o su checkbox de *débito automático*, ver D) y la separación al pie aplica desde el borde inferior del cuerpo abierto, con ese mismo gap —el cuerpo abierto no se acerca a los botones más que cualquier otro bloque del form.
+
+**(B) Trigger (la cabecera del disclosure):** fila `<button>` **al aire** (sin caja de input), `w-full flex items-center gap-[7px]`, padding `py-[7px]` (alto cómodo de click, alineado al ritmo del form). Contenido de izq → der:
+
+- **Chevron:** `ChevronRight` (lucide) **16px** `stroke-width 2`, **primer elemento**, `--muted` en reposo. Único glifo que **rota**: colapsado → ▶ (0°); expandido → ▼ (90°). Mismo lenguaje que el chevron del *Acordeón*.
+- **Label:** **"Más opciones"** (tipografía en A).
+- **Resumen a la derecha (colapsado):** ver **(C)**.
 - **Estados del trigger** (mismo set que el disclosure del *Acordeón*):
-  - **Reposo:** chevron `--muted`, label `--ink-2`, resumen `--muted`/`--ink-2`. `cursor: pointer`.
+  - **Reposo:** chevron `--muted`, label `--ink-2`, resumen en sus colores (C). `cursor: pointer`.
   - **Hover** (sobrio, sin fondo en la fila): chevron → `--ink-2`, label → `--ink`, transición 0.14s.
   - **Focus (teclado):** ring `--accent-soft` 3px con radio `--r-chip` 7px (`focus-visible`).
   - **Expandido:** chevron en ▼; sin cambio de color de fondo (la fila sigue al aire).
-- **Arranca SIEMPRE colapsado.** Sin excepciones: también en **modo edición**, aunque el movimiento ya tenga `moneda ≠ default` y una cotización cargada. **Nunca auto-expandido.** El resumen colapsado (que muestra `"USD · 1.480,00"`) es suficiente para que el usuario vea de un vistazo que hay una moneda no-default configurada, sin forzar la apertura.
+- **Arranca SIEMPRE colapsado.** Sin excepciones: también en **modo edición**, aunque el movimiento ya tenga `moneda ≠ default` con cotización cargada y/o un método de pago elegido. **Nunca auto-expandido.** El resumen colapsado (C) es suficiente para ver de un vistazo qué hay configurado sin forzar la apertura.
 - **Animación de apertura:** altura del cuerpo 0↔auto (con `overflow: hidden`) + fade + rotación del chevron, **0.22s ease-out** (idéntico al *Acordeón*). Respeta **`prefers-reduced-motion`**: apertura/cierre **instantáneos** (sin transición de altura ni fade), el chevron cambia de orientación sin animar.
-- **Spacing:** el trigger va separado del campo Monto (arriba) y del campo Categoría (abajo) con el **gap estándar entre campos del form** (no se inventa un valor nuevo; el bloque ocupa el slot entre Monto y Categoría). El **cuerpo expandido** abre con `mt-[7px]` respecto del trigger (separa el chevron/label del contenido), y mantiene su `gap` interno.
 
-**(B) Cuando `moneda == default`, el campo Cotización se OCULTA.** El backend ignora `exchangeRate` cuando `currency === anchorCurrency`, así que el form envía `exchangeRate = 1` sin afectar cálculos; no se muestra cotización en ese caso.
+**(C) Resumen colapsado combinado — dos segmentos de un vistazo.** Cuando el disclosure está **colapsado**, al final de la fila (tras un `flex-1` divisor) se muestra un resumen de lo configurado, armado por **hasta dos segmentos en orden fijo** (moneda primero, método después — mismo orden que el cuerpo expandido y coherente con que la moneda modula el Monto de arriba):
 
-- **Contenido del cuerpo expandido según la moneda seleccionada:**
-  - **`moneda == default`:** el cuerpo muestra **solo el selector de moneda**, a **ancho completo** del form (una sola columna full-width; el `CurrencySegmented` sin `compact`, con `px-[14px]` normal en sus segmentos). **No** se renderiza el label "Cotización", ni la caja del input, ni el prefijo de par, ni la nota *field-note*. Queda: label "Moneda" + segmented a 4.
-  - **`moneda ≠ default`:** el cuerpo muestra el **grid `grid-cols-2 gap-[14px]`** → col izq selector de moneda (`compact=true`, mitad de ancho) + col der el input de cotización completo (prefijo de par real `"USD→ARS"`, nota *field-note*, validación).
+1. **Segmento moneda (siempre presente):** el **código de moneda** en **`mono` 12px `--muted`** (ej. `"ARS"`, `"USD"`). Si `moneda ≠ default`, se suma la cotización: `"USD · 1.480,00"` (código + `·` separador `--faint` + valor mono `--ink-2`). Si `moneda == default`, solo el código. `shrink-0`: este segmento **nunca** se trunca (es la lectura de mayor prioridad —afecta el importe— y es corto).
+2. **Divisor de grupo + segmento método (solo si hay método elegido):** un **hairline vertical** (`--line` 1px, `h-[12px]`, `mx-[8px]`, `self-center`, `shrink-0`, `aria-hidden`) separa el grupo moneda del grupo método —**no** se reusa el `·`, que ya es separador *interno* del grupo moneda, para no ambiguar la agrupación—. Luego: **glifo del método** (16px `--ink-2`, `shrink-0`) + **nombre del método** (UI 12px `--ink-2`, `truncate`). **Sin chip de tipo** en el resumen (se omite para no recargar). Si **no hay método** (`"Sin método de pago"`), este segmento **y su divisor se omiten por completo** — el resumen queda solo con el segmento moneda.
+- **Débito automático NO aparece en el resumen:** es un sub-modificador del método (checkbox dentro del sub-bloque), no un tercer campo; sumarlo recargaría el resumen. El resumen resume **dos** campos: moneda y método.
+- **Truncado / overflow:** el **nombre del método** es el **único elemento flexible** (`truncate`, elipsis) — cede primero cuando la fila se angosta (mobile). El label "Más opciones", el segmento moneda completo y el glifo del método **nunca** se truncan (`shrink-0`); el glifo del método se conserva aun con el nombre truncado (identifica el método visualmente).
+- **Casos combinados (referencia):**
+  - `moneda=default`, sin método → `ARS` (caso más común; limpio).
+  - `moneda=default`, método Visa → `ARS │ [glifo] Visa`.
+  - `moneda≠default`, sin método → `USD · 1.480,00`.
+  - `moneda≠default`, método Visa → `USD · 1.480,00 │ [glifo] Visa`.
+- Al **expandir**, todo el resumen se oculta (su info ya está en los controles abiertos).
+
+**(D) Contenido y orden interno del cuerpo expandido.** El cuerpo abre con `mt-[7px]` respecto del trigger. Contiene **dos sub-bloques en este orden**, separados por un **divisor hairline `--hair` 1px horizontal (`my-[14px]`)** que los marca como dos agrupaciones distintas dentro de la sección:
+
+1. **Sub-bloque Moneda+cotización** (primero — pega con el Monto de arriba). Su contenido depende de la moneda seleccionada — ver **(E)**.
+2. **— divisor `--hair` —**
+3. **Sub-bloque Método de pago** (segundo). Selector de método (opcional; *Render del ícono en el selector de método del form de carga*) y, **inmediatamente debajo**, el **checkbox condicional "Débito automático"** que se renderiza solo cuando el método elegido es de tipo Débito (*Débito automático — control condicional en el form de carga*). Este sub-bloque conserva su propio ritmo interno (`space-y-[14px]` entre selector y checkbox cuando el checkbox está presente).
+
+**(E) Sub-bloque Moneda+cotización — caso `moneda == default` oculta la Cotización.** El backend ignora `exchangeRate` cuando `currency === anchorCurrency`, así que el form envía `exchangeRate = 1` sin afectar cálculos; no se muestra cotización en ese caso.
+
+- **`moneda == default`:** el sub-bloque muestra **solo el selector de moneda**, a **ancho completo** del form (una sola columna full-width; el `CurrencySegmented` sin `compact`, con `px-[14px]` normal en sus segmentos). **No** se renderiza el label "Cotización", ni la caja del input, ni el prefijo de par, ni la nota *field-note*. Queda: label "Moneda" + segmented a 4.
+- **`moneda ≠ default`:** el sub-bloque muestra el **grid `grid-cols-2 gap-[14px]`** → col izq selector de moneda (`compact=true`, mitad de ancho) + col der el input de cotización completo (prefijo de par real `"USD→ARS"`, nota *field-note*, validación).
 - **Transición al cambiar moneda dentro del disclosure abierto:** al pasar de `default` a `≠ default` (o viceversa) con el disclosure **abierto**, la **columna de cotización aparece/desaparece** y el selector pasa de full-width a media-columna (y al revés). El cambio es sobrio: el selector reflowea a su nuevo ancho y la columna de cotización hace **fade + leve expansión de ancho** acompañando el reflow del grid (≈0.14–0.18s). Con **`prefers-reduced-motion`**: instantáneo (aparece/desaparece sin fade ni transición de ancho). No se anima la altura del disclosure (ya está abierto); solo reflowea su contenido.
-- **El resumen colapsado refleja este caso:** si moneda=default, el resumen es solo el código (no hay cotización que mostrar); si moneda≠default, suma `· {cotización}`.
+
+**(F) El form Calculado NO renderiza la sección "Más opciones".** Hereda moneda y cotización de su **origen** (read-only, ver *Form de movimiento calculado*) y no muestra el selector de método: la sección entera queda fuera del calculado. El disclosure es exclusivo de los tabs Único / Fijo / Cuota.
 
 > El requisito de "capturar la cotización" se cumple igual: en moneda=default el backend usa `exchangeRate = 1` (no necesita captura); cuando moneda≠default el campo está presente, editable y validado `> 0`.
 
-> **Lo que este bloque NO toca (por diseño):** no hay UI para la tabla de cotizaciones de referencia (es interna); `/configuracion` tiene una sola tarjeta ("Moneda por defecto", con 4 opciones en el segmented); no hay tokens, colores ni reglas propios. Todo el cromo de las 4 monedas sale del **mapa de símbolos** y el **array de monedas del segmented** — puntos únicos ya centralizados.
+> **Lo que esta sección NO toca (por diseño):** no hay UI para la tabla de cotizaciones de referencia (es interna); `/configuracion` tiene una sola tarjeta ("Moneda por defecto", con 4 opciones en el segmented); no hay tokens, colores ni reglas propios. Todo el cromo de las 4 monedas sale del **mapa de símbolos** y el **array de monedas del segmented**, y el del método del **allowlist de íconos** (`PAYMENT_METHOD_ICONS`) — puntos únicos ya centralizados.
 
 ### Selector de salto de mes/año en `/mes` (popover "rueda")
 

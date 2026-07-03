@@ -112,6 +112,27 @@ vi.mock("@/hooks/use-categories", () => ({
   })),
 }));
 
+// PaymentMethodSelect (RF-PM-006), montado dentro de los forms de edición, usa
+// usePaymentMethods internamente — mockeado para evitar el warning de React Query
+// "Query data cannot be undefined" (el mock de useApi de este archivo no resuelve
+// GET /payment-methods) y no depender de la real.
+vi.mock("@/hooks/use-payment-methods", () => ({
+  usePaymentMethods: vi.fn(() => ({
+    paymentMethods: [],
+    isLoading: false,
+    isError: false,
+    error: null,
+    createPaymentMethod: vi.fn(),
+    updatePaymentMethod: vi.fn(),
+    deletePaymentMethod: vi.fn(),
+    reactivatePaymentMethod: vi.fn(),
+    isCreating: false,
+    isUpdating: false,
+    isDeleting: false,
+    isReactivating: false,
+  })),
+}));
+
 vi.mock("@/hooks/use-recurring", () => ({
   useRecurring: vi.fn(() => ({
     createRecurring: vi.fn(),
@@ -225,6 +246,8 @@ const mockMovementExpense = {
   frequency: null as null,
   skipped: false,
   category: { id: "cat-1", name: "Alimentación", color: "#FF5733", scope: "BOTH" as const },
+  paymentMethod: null,
+  autoDebit: null,
   calculated: null,
   hasCalculated: false,
   currency: "ARS" as const,
@@ -244,6 +267,8 @@ const mockMovementIncome = {
   frequency: null as null,
   skipped: false,
   category: { id: "cat-2", name: "Sueldo", color: "#33FF57", scope: "INCOME" as const },
+  paymentMethod: null,
+  autoDebit: null,
   calculated: null,
   hasCalculated: false,
   currency: "ARS" as const,
@@ -263,6 +288,8 @@ const mockMovementFijo = {
   frequency: "MONTHLY" as const,
   skipped: false,
   category: { id: "cat-3", name: "Servicios", color: "#5733FF", scope: "EXPENSE" as const },
+  paymentMethod: null,
+  autoDebit: null,
   calculated: null,
   hasCalculated: false,
   currency: "ARS" as const,
@@ -286,6 +313,8 @@ const mockMovementCuota = {
   frequency: null as null,
   skipped: false,
   category: { id: "cat-4", name: "Tecnología", color: "#FF33AA", scope: "EXPENSE" as const },
+  paymentMethod: null,
+  autoDebit: null,
   calculated: null,
   hasCalculated: false,
   currency: "ARS" as const,
@@ -344,6 +373,8 @@ const mockMovementCalculadoExpense = {
   frequency: "MONTHLY" as const,
   skipped: false,
   category: { id: "cat-3", name: "Servicios", color: "#5733FF", scope: "EXPENSE" as const },
+  paymentMethod: null,
+  autoDebit: null,
   calculated: {
     sourceType: "fijo" as const,
     sourceId: "rec-1",

@@ -42,6 +42,9 @@ const mockTransaction: Transaction = {
     color: "#FF5733",
     scope: "BOTH",
   },
+  paymentMethodId: null,
+  paymentMethod: null,
+  autoDebit: null,
 };
 
 // ─── Wrapper con QueryClient ──────────────────────────────────────────────────

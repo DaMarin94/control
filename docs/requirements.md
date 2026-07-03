@@ -1167,6 +1167,142 @@ Las categorías clasifican los movimientos. Son personalizables por usuario y ti
 
 ---
 
+### 3.6.b Submódulo: Métodos de pago
+
+Un método de pago clasifica **con qué se pagó o cobró** un movimiento (tarjeta de crédito, débito, efectivo). Es una entidad **espejo de Categoría**: propia del usuario, con soft delete (el histórico conserva la referencia), pantalla de gestión dedicada (`/metodos-pago`) y contador de movimientos. La asociación de un movimiento a un método es **opcional**. La identidad visual del método es un **ícono** (no un color); el set de íconos y su cromo los define `control-design` (ver `docs/design.md`, §Métodos de pago — identificador de ícono). La regla de negocio compacta vive en RN-021; el modelo en `data-model.md`, §Métodos de pago.
+
+> La cuenta nueva **nace sin métodos de pago**: la feature es 100% opcional (a diferencia de las categorías por defecto, RF-CAT-001).
+
+---
+
+#### RF-PM-001 — Crear método de pago
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El usuario crea un método de pago con nombre, tipo (obligatorio, sin preselección), ícono y los campos condicionales que dicta el tipo. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Flujo principal:**
+1. El usuario abre el modal "Nuevo método de pago" desde `/metodos-pago`. El modal abre **sin tipo elegido**.
+2. Ingresa el nombre (obligatorio).
+3. Elige el **tipo**: **Crédito** / **Débito** / **Efectivo** (obligatorio, sin default — hasta elegir uno no se puede guardar).
+4. Según el tipo, el modal muestra los campos condicionales:
+   - **Crédito:** día de cierre y día de cobro (día del mes 1-31, opcionales; informativos).
+   - **Débito:** sin campos extra (idéntico a Efectivo).
+   - **Efectivo:** sin campos extra.
+5. Elige el ícono del set curado (default `card`).
+6. Confirma.
+7. El sistema verifica que el nombre **normalizado** (RN-014) no colisione con otro método del usuario y crea el método.
+
+**Flujos alternativos:**
+- *A1 — Nombre vacío:* error de validación, no crea.
+- *A2 — Sin tipo elegido:* el guardado queda bloqueado (el tipo es obligatorio y no tiene preselección).
+- *A3 — Colisión con un método activo del mismo nombre normalizado:* bloquea la creación como duplicado (espejo RN-008).
+- *A4 — Colisión con un método eliminado (soft delete) del mismo nombre normalizado:* propone **reactivar** el método eliminado mediante un prompt Reactivar / Cancelar (espejo exacto de RF-CAT-002 A3); al reactivar, la fila vuelve con su configuración original (mismo `id`, tipo, ícono y campos), ignorando lo tipeado.
+
+**Criterios de aceptación:**
+- [ ] Nombre y tipo son obligatorios; el modal abre **sin tipo preseleccionado** y no permite guardar hasta elegir Crédito / Débito / Efectivo.
+- [ ] El tipo se persiste como allowlist `CREDIT` / `DEBIT` / `CASH` (rótulos UI en español); ver RN-021.
+- [ ] Los campos condicionales son los del tipo elegido (crédito → días de cierre/cobro; débito y efectivo → ninguno).
+- [ ] Día de cierre y día de cobro son enteros **1-31**; si el valor supera el último día del mes, se aplica al **último día del mes** (clamp). Son **informativos**: no mueven el mes de imputación del gasto en v1 (RN-021).
+- [ ] El ícono sale del set curado (allowlist en código); default `card`. **Sin botón "aleatorio"** (decisión de `control-design`).
+- [ ] La unicidad de nombre es **espejo de categorías**: normalización RN-014 (trim, insensible a mayúsculas y acentos) y flujo crear-o-reactivar sobre un método soft-deleted homónimo (RF-CAT-002 A3).
+- [ ] La cuenta nueva no trae métodos por defecto: la lista arranca vacía.
+
+---
+
+#### RF-PM-002 — Editar método de pago
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El usuario puede modificar nombre, tipo, ícono y los campos condicionales de un método de pago. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El método existe y pertenece al usuario autenticado. |
+
+**Criterios de aceptación:**
+- [ ] Son editables: nombre, tipo, ícono y los campos condicionales del tipo vigente.
+- [ ] El **tipo es editable** tras crear. Al **cambiar de tipo** se **descartan** los campos condicionales que ya no aplican (p. ej. de Crédito a Débito o Efectivo se descartan día de cierre/cobro).
+- [ ] La unicidad de nombre aplica igual que en la creación (RN-014, RN-008).
+- [ ] Los movimientos ya asociados reflejan automáticamente el nuevo nombre, ícono y tipo (referencia por `id`).
+- [ ] Solo se pueden editar métodos propios.
+
+---
+
+#### RF-PM-003 — Eliminar método de pago
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El usuario puede eliminar un método de pago. La eliminación es lógica (soft delete): desaparece de la lista y del selector, pero los movimientos históricos conservan la referencia. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El método existe y pertenece al usuario autenticado. |
+
+**Criterios de aceptación:**
+- [ ] El sistema solicita confirmación antes de eliminar.
+- [ ] El método eliminado no aparece en la lista de `/metodos-pago` ni en el selector de método del formulario de carga.
+- [ ] Los movimientos que tenían ese método conservan la referencia y siguen mostrándolo.
+- [ ] La eliminación es lógica (`deletedAt`); un método eliminado puede **reactivarse** vía crear-o-reactivar (RF-PM-001 A4).
+- [ ] Eliminar un método **no afecta** los totales del mes, el balance ni los reportes: el método es metadato, no entra a ningún cálculo de dinero (el único conteo que cambia es el contador "N movimientos", RF-PM-005).
+- [ ] Solo se pueden eliminar métodos propios.
+
+---
+
+#### RF-PM-004 — Ícono identificador del método
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Cada método de pago tiene un **ícono** de un set curado, elegido por el usuario. El ícono es la **única identidad visual** del método — no hay campo de color. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Baja |
+| **Precondiciones** | Se crea o edita un método de pago. |
+
+**Criterios de aceptación:**
+- [ ] El ícono se elige de un **set curado** (allowlist en código); no hay ingreso libre.
+- [ ] Al **crear**, el default es `card`; al **editar**, el picker abre con el ícono actual del método.
+- [ ] **No hay campo de color**: el ícono reemplaza al color como identidad (a diferencia de las categorías, RF-CAT-005). Decisión de `control-design`.
+- [ ] Una marca no disponible en el set cae al genérico `card` (fallback).
+- [ ] El ícono es solo de presentación: no afecta montos, imputación ni ninguna regla de negocio.
+- [ ] El set concreto de íconos y el cromo del picker los define `control-design` (`docs/design.md`).
+
+---
+
+#### RF-PM-005 — Contador de movimientos por método
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | En la pantalla de gestión de métodos de pago, cada método muestra la cantidad de movimientos asociados. Es un dato derivado de solo lectura. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Baja |
+| **Precondiciones** | El usuario accede a `/metodos-pago`. |
+
+**Criterios de aceptación:**
+- [ ] Cada método de la lista muestra un contador "N movimientos" (espejo de RF-CAT-006), suma de los movimientos únicos, fijos y grupos de cuotas que lo referencian.
+- [ ] El contador es de solo lectura y muestra cero si el método no tiene movimientos asociados.
+
+---
+
+#### RF-PM-006 — Asociar un método de pago a un movimiento
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El formulario de carga permite asociar, **opcionalmente**, un método de pago a cualquier movimiento. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Criterios de aceptación:**
+- [ ] El formulario de carga suma un **selector de método de pago opcional** en los tres tabs (Único / Fijo / Cuotas), análogo al selector de categoría, con opción **"(ninguno)"** / vacío y **default = ninguno**. **Sin botón "+ Nueva" inline** (a diferencia de categorías, RF-MU-004).
+- [ ] El método es **opcional**: un movimiento puede guardarse sin método (no es error).
+- [ ] El selector lista solo métodos **activos** (los soft-deleted no aparecen).
+- [ ] Un movimiento **calculado** **hereda** el método de pago de su origen y **no lo puede editar ni tener uno propio** —no se elige ni se persiste propio; se deriva al vuelo del origen—. Mismo patrón que la moneda/cotización del calculado (RF-CUR-004).
+- [ ] **Débito automático — atributo del movimiento.** El formulario suma un **checkbox "débito automático"** que aparece **solo cuando el método elegido para ese movimiento es de tipo `DEBIT`**. Es un flag **del movimiento**, no del método. Aplica a único / fijo / cuota; el **calculado no lo muestra** (lo hereda del origen, no editable). La regla de persistencia está en RN-021.
+- [ ] El método asociado se expone en `GET /movements` (nombre + ícono + tipo) para que la Vista del mes lo muestre, y cada movimiento expone `autoDebit` (`boolean | null`) **a nivel del ítem** (fuera del objeto `paymentMethod` embebido); contrato en `data-model.md`, §Contrato de movimientos del mes.
+
+---
+
 ### 3.7 Módulo: Vista del mes
 
 La vista del mes muestra todos los movimientos del mes seleccionado (únicos, fijos activos y cuotas) con sus totales.
@@ -1334,7 +1470,8 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
   - **Vista del mes** — lleva a la vista del mes (RF-VM-001), abierta en el mes actual.
   - **Reportes** — lleva a la pantalla de reportes configurable (`/reportes`, RF-REP-003).
   - **Categorías** — lleva a la gestión de categorías (módulo 3.6).
-  - **Configuración** — lleva a la pantalla de configuración (`/configuracion`, RF-CUR-002), debajo de "Categorías".
+  - **Métodos de pago** — lleva a la gestión de métodos de pago (`/metodos-pago`, módulo 3.6.b), debajo de "Categorías".
+  - **Configuración** — lleva a la pantalla de configuración (`/configuracion`, RF-CUR-002), debajo de "Métodos de pago".
 - **Botón "Nuevo movimiento"** (acción primaria): abre el formulario de carga de movimiento (RF-CM-001).
 - **Control de modo de color** (parte inferior, en su propia fila encima del menú de usuario): toggle de iconos Sistema / Claro / Oscuro que aplica y persiste el modo de color de la app (RF-APP-001).
 - **Menú de usuario** (parte inferior): representado por el avatar del usuario. Al activarlo, despliega la opción **"Cerrar sesión"** (RF-AUTH-004).
@@ -1343,9 +1480,10 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 - [ ] El sidebar está presente en todas las pantallas accesibles con sesión activa.
 - [ ] El sidebar no se muestra en la pantalla de login ni en otras pantallas no autenticadas.
 - [ ] El logo/nombre "Control" lleva al dashboard.
-- [ ] Los links Dashboard, Vista del mes, Reportes y Categorías navegan a sus respectivas pantallas, en ese orden.
+- [ ] Los links Dashboard, Vista del mes, Reportes, Categorías, Métodos de pago y Configuración navegan a sus respectivas pantallas, en ese orden.
 - [ ] El link "Vista del mes" abre la vista en el mes actual.
 - [ ] El link "Reportes" lleva a `/reportes` (RF-REP-003) y se ubica entre "Vista del mes" y "Categorías".
+- [ ] El link "Métodos de pago" lleva a `/metodos-pago` (módulo 3.6.b) y se ubica entre "Categorías" y "Configuración".
 - [ ] El botón "Nuevo movimiento" abre el formulario de carga (RF-CM-001) desde cualquier pantalla, cumpliendo el límite de 2 interacciones (RNF-003).
 - [ ] El sidebar indica visualmente cuál es la sección activa.
 - [ ] El control de modo de color (toggle Sistema / Claro / Oscuro) vive en la parte inferior del sidebar, en su propia fila encima del menú de usuario, y dispara RF-APP-001.
@@ -2076,6 +2214,7 @@ P7 se parte en dos requerimientos independientes (fuentes distintas): **P7a = FX
 | RN-017 | **Fórmula y redondeo del movimiento calculado (RF-MCALC-002).** El monto de un movimiento calculado se deriva del monto del fijo de origen **del mes en cuestión** aplicando **una** operación: un operador de `{ +, −, ×, ÷, % }` y un **operando** numérico común. El cálculo por operador es: `+` → `origen + operando`; `−` → `origen − operando`; `×` → `origen × operando`; `÷` → `origen ÷ operando`; `%` → `origen × operando ÷ 100`. El **operando 0 no se acepta** en `÷` ni en `%` (división por cero); el resto acepta cualquier operando numérico. El resultado se **redondea a centavos enteros** (`round`, mantiene RN-002): **no** se persiste ni propaga precisión sub-centavo. La presentación siempre muestra 2 decimales. El signo final lo aplica RN-018, no la fórmula. El cálculo es **on-the-fly por mes** (RN-006): el monto **no se persiste**, se deriva al vuelo del origen en cada lectura, así que sigue automáticamente cualquier cambio del origen (RF-MCALC-004). |
 | RN-018 | **Signo, monto y tipo derivado del movimiento calculado — excepción a RN-001 (RF-MCALC-003).** El movimiento calculado tiene un **switch de signo** que multiplica el resultado de la fórmula por `+1` o `−1`. Por eso su `amountCents` **puede ser negativo o cero**, a diferencia de todo otro movimiento (RN-001, monto > 0). Esta excepción aplica **únicamente** a movimientos calculados; únicos, fijos "normales" y cuotas siguen exigiendo monto > 0. El `type` (`EXPENSE`/`INCOME`) **no se elige**: se **deriva del signo del monto final** —`final < 0` → `EXPENSE`; `final > 0` → `INCOME`; `final == 0` → `EXPENSE` por convención de borde (no afecta totales, RN-019)—. Así signo y tipo son siempre consistentes (positivo = ingreso, negativo = gasto). |
 | RN-019 | **Imputación a totales y reportes por el tipo derivado (RF-MCALC-003).** Cada movimiento suma su **magnitud** (`\|amountCents\|`) al bucket que le corresponde **según su `type`**: un `INCOME` suma a `incomeCents`; un `EXPENSE`, a `expenseCents`. Para movimientos normales el `type` es fijo y `amountCents > 0`. Para un **calculado**, como el `type` se deriva del signo del monto (RN-018), la imputación queda siempre consistente: un calculado de monto `−2000` es `EXPENSE` (tipo derivado) y suma **2000** a `expenseCents`; uno de `+2000` es `INCOME` y suma **2000** a `incomeCents`; un monto 0 no aporta a ningún bucket. No hay restas a un bucket ni reasignación: signo y tipo nunca se contradicen. El balance del mes (`incomeCents − expenseCents`, RF-VM-002 / RF-DASH-002) y la serie anual de reportes (RF-REP-001, ambos tipos) se calculan con esta suma de magnitudes, sin lógica especial. En `by-category` (gastos apilados por categoría) la porción de la categoría de un calculado `EXPENSE` suma su magnitud, preservando la invariante "suma de porciones del mes = `expenseCents` del mes" (`docs/data-model.md`, §Contrato de serie de reportes). |
+| RN-021 | **Métodos de pago (RF-PM-001..006).** Un método de pago es propio del usuario (aislado por `userId`), con **nombre**, **tipo** e **ícono**, y soft delete (el histórico conserva la referencia). El **tipo** es una allowlist en código —`CREDIT` / `DEBIT` / `CASH`— modelada como **string, no enum**, para sumar tipos futuros sin migración (estilo `CurrencyQuote.variant`); rótulos UI Crédito / Débito / Efectivo. Es **obligatorio y sin preselección** al crear. **Campos condicionales por tipo:** `CREDIT` → día de cierre y día de cobro (entero **1-31**; si excede el último día del mes se **clampea** a ese último día; **informativos**: no mueven el mes de imputación del gasto en v1); `DEBIT` y `CASH` → sin campos extra. Al **cambiar de tipo** (editable) se descartan los campos que ya no aplican. El **ícono** sale de un set curado (allowlist en código, default `card`) y es la **única identidad visual** (no hay color); una marca ausente cae a `card`. La **unicidad de nombre** es espejo de categorías (normalización RN-014, crear-o-reactivar sobre soft-deleted). La asociación a un movimiento (único / fijo / cuota) es **opcional**; un **calculado** **hereda** el método del origen y **no lo edita ni tiene uno propio** (mismo patrón que la moneda/cotización del calculado, RF-CUR-004). El método es metadato: **no** afecta totales, balance ni reportes. **Débito automático** es un atributo **del movimiento** (no del método): booleano nullable en `Transaction`, `Recurring` e `InstallmentGroup`, editable en el form solo cuando el método efectivo del movimiento es de tipo `DEBIT`. **Persistencia:** `autoDebit` se guarda como `true`/`false` **solo si** el método efectivo del movimiento es `DEBIT`; sin método o con método `CREDIT`/`CASH` se **fuerza a `null`** aunque el body pida `true`. El **calculado** **no** persiste un `autoDebit` propio: lo **hereda** del origen, derivado al vuelo (mismo tratamiento que el método/currency). Modelo en `data-model.md`, §Métodos de pago. |
 | RN-020 | **Anulación (skip) de movimientos únicos y cuotas (RF-MU-005, RF-MC-004).** Un movimiento **único** se anula con un **flag booleano de la propia fila** (`Transaction.skipped`, sin alcance temporal: anula el movimiento entero). Una **cuota** se anula por **mes puntual** con un registro aparte `(grupo, mes)` que cancela **solo** esa instancia mensual, dejando vivo el resto del grupo. En ambos casos la acción es un **toggle reversible** y aplica a cualquier dirección (gasto/ingreso). A efectos de totales y reportes se comportan igual que la anulación de un fijo (RN-016): el ítem anulado **se sigue listando** con marca de anulado pero su monto **no suma** a los totales del mes ni a la serie anual de los reportes. Los **calculados** derivados de un único o cuota anulado **heredan** ese estado (no tienen skip propio; RF-MCALC-005). El cálculo sigue siendo on-the-fly (RN-006). |
 
 ---
@@ -2102,7 +2241,7 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 | Feature | Motivo de exclusión |
 |---|---|
 | Reportes: otros tipos (torta, barras de comparación, etc.) | Los tipos de reporte que **sí** entran son ingresos/gastos y apilado por categoría de gastos (RF-REP-001), la grilla anual de gastos Únicos día × mes (RF-REP-010), el gantt anual de gastos en Cuotas (RF-REP-011), las líneas de Inflación vs Ingresos (RF-REP-012) y la Evolución de gastos fijos (RF-REP-013). Sumar nuevos tipos de reporte queda fuera de alcance: es una mini-fase futura que requiere definición de UX y no es bloqueante |
-| Tarjetas con fecha de corte | Requiere flujo propio; demasiado complejo para v1 |
+| Métodos de pago v2 — imputación por cierre de tarjeta, proyección de resúmenes, "cuándo cae el cobro" | En v1 el método de pago es metadato y los días de cierre/cobro son **informativos** (RN-021): no mueven el mes de imputación del gasto. Imputar el gasto de crédito al mes del resumen de la tarjeta, proyectar resúmenes y calcular cuándo cae el cobro quedan fuera de v1 (requieren flujo propio) |
 | Edición retroactiva de mes pasado de un fijo | Complejidad en el modelo de datos |
 | Cancelación parcial de cuotas restantes | Pendiente de definición |
 | Ingreso en cuotas | Existe en la realidad; pendiente de definición |
@@ -2131,6 +2270,7 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 | Grupo de cuotas | Registro padre que define monto por cuota, cantidad total de cuotas y mes de inicio. |
 | Ingreso (`INCOME`) | Entrada de dinero. Aumenta el balance del mes. |
 | Mes activo | Mes actualmente visualizado en la vista del mes. Por defecto, el mes corriente. |
+| Método de pago | Metadato opcional de un movimiento: con qué se pagó/cobró (tarjeta de crédito, débito, efectivo). Entidad propia del usuario, espejo de Categoría (soft delete, pantalla propia, contador de movimientos), con identidad visual por **ícono** (no color). Días de cierre/cobro (crédito) son informativos en v1. Ver módulo 3.6.b (RF-PM-001..006) y RN-021. |
 | Movimiento | Registro de una transacción económica. Puede ser único, fijo o una cuota. |
 | Movimiento calculado | Movimiento **fijo** cuyo monto no se ingresa: se deriva al vuelo del monto de un movimiento de origen mediante una fórmula (operador + operando) con signo. El **origen puede ser un fijo, un único o un grupo de cuotas** (RF-MCALC-008); el calculado espeja la cadencia del origen (de cuota deriva del monto por cuota). Tiene categoría y descripción propias; su **tipo (Gasto/Ingreso) se deriva del signo del monto** (negativo → Gasto, positivo → Ingreso). Puede tener monto negativo o cero. Sigue el ciclo de vida del origen; el calculado de único/cuota se borra de forma total (RF-MCALC-009). Ver submódulo 3.4.b (RF-MCALC-001..010), RN-017/018/019. |
 | Identidad de cadena de un fijo | Identificador estable, compartido por todas las filas `Recurring` de un mismo fijo lógico, que sobrevive a los splits del pasado. Es a lo que se vincula un movimiento calculado (no a una fila puntual). Ver `docs/data-model.md`, §Identidad de cadena estable. |

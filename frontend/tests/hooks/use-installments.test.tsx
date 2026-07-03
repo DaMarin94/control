@@ -42,6 +42,9 @@ const mockInstallment: InstallmentGroup = {
     color: "#FF5733",
     scope: "EXPENSE",
   },
+  paymentMethodId: null,
+  paymentMethod: null,
+  autoDebit: null,
 };
 
 // ─── Wrapper con QueryClient ──────────────────────────────────────────────────

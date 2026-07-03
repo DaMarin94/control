@@ -25,6 +25,7 @@ import {
   RecurringWithCategory,
 } from '../../../src/recurring/recurring.repository';
 import { CategoryValidatorService } from '../../../src/categories/category-validator.service';
+import { PaymentMethodValidatorService } from '../../../src/payment-methods/payment-method-validator.service';
 import { SettingsService } from '../../../src/settings/settings.service';
 
 // ---------------------------------------------------------------------------
@@ -53,6 +54,11 @@ const mockRepo = {
 
 const mockCategoryValidator = {
   validateCategory: jest.fn().mockResolvedValue(undefined),
+};
+
+const mockPaymentMethodValidator = {
+  validatePaymentMethod: jest.fn().mockResolvedValue(undefined),
+  resolveAutoDebit: jest.fn().mockResolvedValue(null),
 };
 
 const mockLogger = {
@@ -133,6 +139,9 @@ function makeCalculadoWithCategory(overrides: Partial<RecurringWithCategory> = {
       color: '#4F86C6',
       scope: CategoryScope.EXPENSE,
     },
+    paymentMethodId: null,
+    paymentMethod: null,
+    autoDebit: null,
     ...overrides,
   };
 }
@@ -146,12 +155,14 @@ describe('RecurringService — calculados extendidos (Fase 1.1.7.ext)', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockPaymentMethodValidator.validatePaymentMethod.mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RecurringService,
         { provide: RecurringRepository, useValue: mockRepo },
         { provide: CategoryValidatorService, useValue: mockCategoryValidator },
+        { provide: PaymentMethodValidatorService, useValue: mockPaymentMethodValidator },
         { provide: Logger, useValue: mockLogger },
         { provide: SettingsService, useValue: mockSettingsServiceExt },
       ],

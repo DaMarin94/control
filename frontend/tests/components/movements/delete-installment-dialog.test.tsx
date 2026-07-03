@@ -47,6 +47,8 @@ const mockCuotaMovement: MovementItem = {
     color: "#FF5733",
     scope: "EXPENSE",
   },
+  paymentMethod: null,
+  autoDebit: null,
   calculated: null,
   hasCalculated: false,
   currency: "ARS",

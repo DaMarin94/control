@@ -24,6 +24,7 @@ import {
   InstallmentGroupWithCategory,
 } from '../../../src/installments/installments.repository';
 import { CategoryValidatorService } from '../../../src/categories/category-validator.service';
+import { PaymentMethodValidatorService } from '../../../src/payment-methods/payment-method-validator.service';
 import { SettingsService } from '../../../src/settings/settings.service';
 
 // ---------------------------------------------------------------------------
@@ -42,6 +43,11 @@ const mockRepo = {
 
 const mockCategoryValidator = {
   validateCategory: jest.fn().mockResolvedValue(undefined),
+};
+
+const mockPaymentMethodValidator = {
+  validatePaymentMethod: jest.fn().mockResolvedValue(undefined),
+  resolveAutoDebit: jest.fn().mockResolvedValue(null),
 };
 
 const mockLogger = {
@@ -89,6 +95,9 @@ function makeGroup(
       color: '#4F86C6',
       scope: CategoryScope.EXPENSE,
     },
+    paymentMethodId: null,
+    paymentMethod: null,
+    autoDebit: null,
     ...overrides,
   };
 }
@@ -103,12 +112,15 @@ describe('InstallmentsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     mockCategoryValidator.validateCategory.mockResolvedValue(undefined);
+    mockPaymentMethodValidator.validatePaymentMethod.mockResolvedValue(undefined);
+    mockPaymentMethodValidator.resolveAutoDebit.mockResolvedValue(null);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InstallmentsService,
         { provide: InstallmentsRepository, useValue: mockRepo },
         { provide: CategoryValidatorService, useValue: mockCategoryValidator },
+        { provide: PaymentMethodValidatorService, useValue: mockPaymentMethodValidator },
         { provide: Logger, useValue: mockLogger },
         { provide: SettingsService, useValue: mockSettingsServiceInst },
       ],
@@ -291,6 +303,61 @@ describe('InstallmentsService', () => {
 
       expect(mockRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({ description: null }),
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // autoDebit (P4 — corrección de alcance: atributo del movimiento, no del método)
+  // -------------------------------------------------------------------------
+
+  describe('autoDebit', () => {
+    it('create: delega la resolución en PaymentMethodValidatorService.resolveAutoDebit', async () => {
+      mockPaymentMethodValidator.resolveAutoDebit.mockResolvedValue(true);
+      mockRepo.create.mockResolvedValue(makeGroup({ autoDebit: true }));
+
+      await service.create(USER_A, {
+        type: MovementType.EXPENSE,
+        amountCents: 5000,
+        totalInstallments: 12,
+        categoryId: CAT_ID,
+        startMonth: '2026-01',
+        paymentMethodId: 'pm-debit',
+        autoDebit: true,
+      });
+
+      expect(mockPaymentMethodValidator.resolveAutoDebit).toHaveBeenCalledWith('pm-debit', true);
+      expect(mockRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ autoDebit: true }),
+      );
+    });
+
+    it('update: no recalcula autoDebit si ni paymentMethodId ni autoDebit vienen en el body', async () => {
+      const existing = makeGroup({ paymentMethodId: 'pm-debit', autoDebit: true });
+      mockRepo.findById.mockResolvedValue(existing);
+      mockRepo.update.mockResolvedValue(existing);
+
+      await service.update(USER_A, GROUP_ID, { amountCents: 6000 });
+
+      expect(mockPaymentMethodValidator.resolveAutoDebit).not.toHaveBeenCalled();
+      expect(mockRepo.update).toHaveBeenCalledWith(
+        GROUP_ID,
+        expect.not.objectContaining({ autoDebit: expect.anything() }),
+      );
+    });
+
+    it('update: al desasociar el método (paymentMethodId=null) fuerza autoDebit a null', async () => {
+      const existing = makeGroup({ paymentMethodId: 'pm-debit', autoDebit: true });
+      mockRepo.findById.mockResolvedValue(existing);
+      mockPaymentMethodValidator.resolveAutoDebit.mockResolvedValue(null);
+      mockRepo.update.mockResolvedValue(makeGroup({ paymentMethodId: null, autoDebit: null }));
+
+      await service.update(USER_A, GROUP_ID, { paymentMethodId: null });
+
+      expect(mockPaymentMethodValidator.resolveAutoDebit).toHaveBeenCalledWith(null, true);
+      expect(mockRepo.update).toHaveBeenCalledWith(
+        GROUP_ID,
+        expect.objectContaining({ autoDebit: null }),
       );
     });
   });

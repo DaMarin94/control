@@ -196,6 +196,22 @@ Cuando `CategoryFormModal` se abre **inline** (por encima del modal de movimient
 
 > Si en el futuro se agregan más modales apilados, hay que **respetar/extender esta escala** de z-index (no reusar `z-50` para un nivel que deba quedar por encima del `CategoryFormModal`).
 
+## Métodos de pago (íconos)
+
+Frontend del CRUD `/metodos-pago` y del selector de método en los forms de movimiento. Reglas funcionales en `requirements.md`, §3.6.b; pantalla en `docs/screens.md`, pantalla 10.
+
+### Allowlist de íconos — espejo del backend (gotcha)
+
+La allowlist de claves de ícono vive como constante propia del front en `frontend/src/types/payment-method.ts` (`PAYMENT_METHOD_ICON_KEYS`). Es un **espejo** de `PAYMENT_METHOD_ICONS` en `backend/src/payment-methods/payment-method-constants.ts` — **no hay paquete compartido** (mismo patrón que la paleta de colores de categorías). **Gotcha:** si se cambia el set hay que actualizar **ambos lados**.
+
+### Render del ícono — dos fuentes, un único mapa
+
+El identificador visual del método se renderiza en un **único lugar** (`frontend/src/components/ui/payment-method-icon.tsx`) que mapea cada clave a su fuente: íconos **genéricos vía `lucide-react`**, **marcas vía `simple-icons`**. Marca ausente → fallback a `card`.
+
+### Selector en el form de carga — listbox custom
+
+El selector de método en el form de movimiento es un **listbox custom** (portal + `fixed`, el patrón de popovers del proyecto), **no** un `<select>` nativo, porque cada opción muestra **ícono + nombre**.
+
 ## Movimientos únicos
 
 Carga de movimientos. El modal de carga se invoca desde el dashboard (`/`); **editar y eliminar quedan cableados desde la Vista del mes** (`/mes`) — ver sección Vista del mes y Dashboard.

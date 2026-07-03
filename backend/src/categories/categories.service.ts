@@ -15,7 +15,7 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 import { COLOR_POOL, normalizeColorHex } from './color-pool';
 import {
   ReactivableConflictException,
-  ReactivablePayload,
+  ReactivableCategoryPayload,
 } from '../common/exceptions/reactivable-conflict.exception';
 
 @Injectable()
@@ -78,7 +78,7 @@ export class CategoriesService {
         { userId, name: dto.name, deletedCategoryId: deleted.id },
         'Intento de crear categoría con nombre de una eliminada — reactivable',
       );
-      const payload: ReactivablePayload = {
+      const payload: ReactivableCategoryPayload = {
         reactivable: true,
         category: {
           id: deleted.id,

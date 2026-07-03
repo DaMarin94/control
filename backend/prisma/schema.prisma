@@ -133,6 +133,7 @@ model User {
 
   // Relaciones — onDelete: Cascade: si se borra el usuario, todo lo suyo desaparece
   categories        Category[]
+  paymentMethods    PaymentMethod[]
   transactions      Transaction[]
   recurrings        Recurring[]
   installmentGroups InstallmentGroup[]
@@ -201,6 +202,53 @@ model Category {
 }
 
 // ---------------------------------------------------------------------------
+// PaymentMethod (método de pago — P4)
+// ---------------------------------------------------------------------------
+
+// Espejo de Category: propio del usuario, soft delete, unicidad de nombre
+// app-level (mismo motivo que Category — ver nota arriba de ese modelo).
+// Diferencias de modelado respecto de Category:
+//   - identidad visual: icon (string, allowlist en código), SIN campo color.
+//   - type: string con allowlist en código (CREDIT/DEBIT/CASH), NO enum de Prisma,
+//     para sumar tipos futuros sin migración (mismo criterio que CurrencyQuote.variant).
+//   - campos condicionales por tipo, nullable: closingDay/paymentDay (solo CREDIT).
+//     Al cambiar de tipo el service limpia los que no aplican.
+// NOTA: autoDebit NO vive acá — es un atributo del MOVIMIENTO (Transaction/Recurring/
+// InstallmentGroup), no del método. Ver esos modelos.
+// Metadato: no entra a ningún cálculo de dinero (RN-021).
+model PaymentMethod {
+  id     String @id @default(cuid())
+  userId String
+  name   String
+  // type: allowlist en código (CREDIT | DEBIT | CASH). String, no enum (RN-021).
+  type   String
+
+  // Campos condicionales por tipo (nullable — solo aplican a CREDIT):
+  closingDay Int? // solo CREDIT. Día del mes 1-31, informativo (RN-021)
+  paymentDay Int? // solo CREDIT. Día del mes 1-31, informativo (RN-021)
+
+  // icon: allowlist en código, default/fallback "card". Única identidad visual (sin color).
+  icon String @default("card")
+
+  // Soft delete: deletedAt != null → método eliminado (no aparece en selectores,
+  // pero sus FK en Transaction/Recurring/InstallmentGroup siguen siendo válidas)
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // onDelete: Restrict en todas las FKs de paymentMethodId (espejo de categoryId):
+  // impide borrar físicamente un método mientras existan movimientos que lo referencian.
+  transactions      Transaction[]
+  recurrings        Recurring[]
+  installmentGroups InstallmentGroup[]
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
 // Transaction (movimiento único)
 // ---------------------------------------------------------------------------
 
@@ -209,6 +257,9 @@ model Transaction {
   id          String       @id @default(cuid())
   userId      String
   categoryId  String
+  // paymentMethodId: método de pago asociado, opcional (RF-PM-006). onDelete: Restrict
+  // (espejo de categoryId): un método con movimientos no se hard-deletea (soft delete).
+  paymentMethodId String?
   type        MovementType
   // Monto en centavos para evitar errores de punto flotante (RN-002)
   amountCents Int
@@ -245,11 +296,18 @@ model Transaction {
   // a totales del mes ni a ningún reporte.
   skipped Boolean @default(false)
 
+  // autoDebit: débito automático (P4 — corrección de alcance). Atributo del MOVIMIENTO,
+  // no del método de pago. Solo relevante cuando paymentMethodId apunta a un método de
+  // tipo DEBIT; en cualquier otro caso queda null (el service lo fuerza — ver
+  // PaymentMethodValidatorService.resolveAutoDebit). Nullable, default null.
+  autoDebit Boolean?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category      Category       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
 
   // Calculados derivados de este Transaction (Fase 1.1.7.ext).
   // onDelete: Cascade en la FK del lado Recurring garantiza borrado automático.
@@ -267,6 +325,10 @@ model Recurring {
   id          String       @id @default(cuid())
   userId      String
   categoryId  String
+  // paymentMethodId: método de pago asociado, opcional (RF-PM-006). Solo relevante para
+  // fijos NORMALES: un calculado NUNCA lo persiste (hereda el método del origen al vuelo,
+  // igual que currency/exchangeRate — no se setea en la creación/edición de calculados).
+  paymentMethodId String?
   type        MovementType
   amountCents Int
   description String?
@@ -293,6 +355,12 @@ model Recurring {
   currency        Currency @default(ARS)
   exchangeRate    Decimal  @default(1) @db.Decimal(18, 6)
   anchorCurrency  Currency @default(ARS)
+
+  // autoDebit: débito automático (P4 — corrección de alcance). Atributo del MOVIMIENTO,
+  // no del método de pago. Solo relevante para fijos NORMALES con paymentMethodId de
+  // tipo DEBIT; un calculado NUNCA lo persiste (hereda del origen al vuelo, igual que
+  // el método de pago y currency/exchangeRate). Nullable, default null.
+  autoDebit Boolean?
 
   // ---------------------------------------------------------------------------
   // Identidad de cadena estable (Fase 1.1.7)
@@ -342,8 +410,9 @@ model Recurring {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category      Category       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
 
   // FK a Transaction de origen (calculado de único). onDelete: Cascade.
   sourceMovement    Transaction?      @relation(fields: [sourceMovementId], references: [id], onDelete: Cascade)
@@ -461,6 +530,9 @@ model InstallmentGroup {
   id                String       @id @default(cuid())
   userId            String
   categoryId        String
+  // paymentMethodId: método de pago asociado, opcional (RF-PM-006). Único para todo el
+  // grupo (no hay split en cuotas). onDelete: Restrict, espejo de categoryId.
+  paymentMethodId   String?
   type              MovementType
   // amountCents: monto POR CUOTA (no el total de la compra)
   amountCents       Int
@@ -480,11 +552,17 @@ model InstallmentGroup {
   exchangeRate    Decimal  @default(1) @db.Decimal(18, 6)
   anchorCurrency  Currency @default(ARS)
 
+  // autoDebit: débito automático (P4 — corrección de alcance). Atributo del MOVIMIENTO,
+  // no del método de pago. Único para todo el grupo (no hay split en cuotas). Solo
+  // relevante si paymentMethodId apunta a un método de tipo DEBIT. Nullable, default null.
+  autoDebit Boolean?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category      Category       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
 
   // Calculados derivados de este InstallmentGroup (Fase 1.1.7.ext).
   // onDelete: Cascade en la FK del lado Recurring garantiza borrado automático.

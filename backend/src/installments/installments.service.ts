@@ -6,6 +6,7 @@ import {
 import { Currency, MovementType } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { CategoryValidatorService } from '../categories/category-validator.service';
+import { PaymentMethodValidatorService } from '../payment-methods/payment-method-validator.service';
 import {
   InstallmentsRepository,
   InstallmentGroupWithCategory,
@@ -20,6 +21,7 @@ export class InstallmentsService {
   constructor(
     private readonly repo: InstallmentsRepository,
     private readonly categoryValidator: CategoryValidatorService,
+    private readonly paymentMethodValidator: PaymentMethodValidatorService,
     private readonly logger: Logger,
     private readonly settingsService: SettingsService,
   ) {}
@@ -54,11 +56,21 @@ export class InstallmentsService {
     // Validar categoría: propia + activa + scope compatible (RN-010)
     await this.categoryValidator.validateCategory(userId, dto.categoryId, dto.type);
 
+    // Validar método de pago (opcional): propio + activo (RF-PM-006)
+    await this.paymentMethodValidator.validatePaymentMethod(userId, dto.paymentMethodId);
+
     const effectiveExchangeRate = dto.exchangeRate ?? 1;
 
     // Cargar la defaultCurrency del usuario para anclarla como anchor (Fase 1.2.4)
     const userSettings = await this.settingsService.getSettings(userId);
     const anchorCurrency = userSettings.defaultCurrency;
+
+    // autoDebit (P4 — corrección de alcance): solo se persiste si el método asociado
+    // es de tipo DEBIT; en cualquier otro caso queda null.
+    const autoDebit = await this.paymentMethodValidator.resolveAutoDebit(
+      dto.paymentMethodId ?? null,
+      dto.autoDebit ?? null,
+    );
 
     const group = await this.repo.create({
       user: { connect: { id: userId } },
@@ -71,6 +83,10 @@ export class InstallmentsService {
       ...(dto.currency !== undefined && { currency: dto.currency }),
       exchangeRate: effectiveExchangeRate,
       anchorCurrency,
+      ...(dto.paymentMethodId !== undefined && {
+        paymentMethod: { connect: { id: dto.paymentMethodId } },
+      }),
+      autoDebit,
     });
 
     await this.settingsService.updateLastExchangeRate(userId, effectiveExchangeRate);
@@ -132,11 +148,30 @@ export class InstallmentsService {
       );
     }
 
+    // Validar método de pago si se está actualizando (null = desasociar, no valida)
+    if (dto.paymentMethodId !== undefined) {
+      await this.paymentMethodValidator.validatePaymentMethod(userId, dto.paymentMethodId);
+    }
+
     // Si se actualiza la cotización o moneda, actualizar el anchor (Fase 1.2.4)
     let updateAnchor: Currency | undefined = undefined;
     if (dto.exchangeRate !== undefined || dto.currency !== undefined) {
       const s = await this.settingsService.getSettings(userId);
       updateAnchor = s.defaultCurrency;
+    }
+
+    // autoDebit (P4 — corrección de alcance): recalcular solo si paymentMethodId o
+    // autoDebit vienen en el body; en cualquier otro PATCH se deja intacto.
+    let autoDebit: boolean | null | undefined = undefined;
+    if (dto.paymentMethodId !== undefined || dto.autoDebit !== undefined) {
+      const effectivePaymentMethodId =
+        dto.paymentMethodId !== undefined ? dto.paymentMethodId : existing.paymentMethodId;
+      const effectiveRequestedAutoDebit =
+        dto.autoDebit !== undefined ? dto.autoDebit : existing.autoDebit;
+      autoDebit = await this.paymentMethodValidator.resolveAutoDebit(
+        effectivePaymentMethodId,
+        effectiveRequestedAutoDebit,
+      );
     }
 
     const updated = await this.repo.update(id, {
@@ -152,6 +187,13 @@ export class InstallmentsService {
       ...(dto.currency !== undefined && { currency: dto.currency }),
       ...(dto.exchangeRate !== undefined && { exchangeRate: dto.exchangeRate }),
       ...(updateAnchor !== undefined && { anchorCurrency: updateAnchor }),
+      ...(dto.paymentMethodId !== undefined && {
+        paymentMethod:
+          dto.paymentMethodId === null
+            ? { disconnect: true }
+            : { connect: { id: dto.paymentMethodId } },
+      }),
+      ...(autoDebit !== undefined && { autoDebit }),
     });
 
     if (dto.exchangeRate !== undefined) {

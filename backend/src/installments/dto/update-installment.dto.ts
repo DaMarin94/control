@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -58,4 +59,21 @@ export class UpdateInstallmentDto {
   @IsNumber({}, { message: 'exchangeRate debe ser un número' })
   @IsPositive({ message: 'exchangeRate debe ser un número positivo' })
   exchangeRate?: number;
+
+  /**
+   * Método de pago asociado, opcional (RF-PM-006). `null` explícito lo desasocia
+   * ("(ninguno)" en el selector); ausente = no se toca.
+   */
+  @IsOptional()
+  @IsString()
+  paymentMethodId?: string | null;
+
+  /**
+   * Débito automático, opcional (P4 — corrección de alcance). Atributo del MOVIMIENTO,
+   * no del método de pago. Solo se persiste si el paymentMethodId efectivo apunta a un
+   * método de tipo DEBIT; en cualquier otro caso el backend lo ignora (queda null).
+   */
+  @IsOptional()
+  @IsBoolean({ message: 'autoDebit debe ser booleano' })
+  autoDebit?: boolean;
 }

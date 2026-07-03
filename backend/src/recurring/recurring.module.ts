@@ -3,6 +3,7 @@ import { RecurringController } from './recurring.controller';
 import { RecurringService } from './recurring.service';
 import { RecurringRepository } from './recurring.repository';
 import { CategoriesModule } from '../categories/categories.module';
+import { PaymentMethodsModule } from '../payment-methods/payment-methods.module';
 import { SettingsModule } from '../settings/settings.module';
 
 /**
@@ -21,7 +22,7 @@ import { SettingsModule } from '../settings/settings.module';
  * (el listado unificado GET /movements ya provee el prefill necesario).
  */
 @Module({
-  imports: [CategoriesModule, SettingsModule],
+  imports: [CategoriesModule, PaymentMethodsModule, SettingsModule],
   controllers: [RecurringController],
   providers: [RecurringService, RecurringRepository],
   exports: [RecurringService],

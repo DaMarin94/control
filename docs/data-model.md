@@ -11,6 +11,7 @@
 |---------|-------------|
 | **Usuario** | Puede autenticarse por **Google** o por **email + contraseña** (dos métodos que coexisten en v1). El email identifica al usuario. Las cuentas con email + contraseña almacenan un hash de la contraseña (`passwordHash`); las cuentas creadas solo con Google pueden no tener contraseña. Se crea al hacer login con Google por primera vez o al registrarse con email + contraseña. Todos los demás recursos le pertenecen. Tiene un campo `timezone` (zona horaria default / "de casa"). |
 | **Categoría** | Clasifica los movimientos. Personalizable por usuario. Tiene un color que el usuario **elige y edita** desde una matriz de colores predefinidos. Se elimina con soft delete. |
+| **Método de pago (`PaymentMethod`)** | Metadato **opcional** de un movimiento: con qué se pagó/cobró. Espejo de Categoría (del usuario, soft delete, pantalla propia, contador de movimientos), pero su identidad visual es un **ícono** (`icon`, string con allowlist en código; **no hay color**). Tiene un **tipo** (`type`, string con allowlist `CREDIT`/`DEBIT`/`CASH`, **no enum**) y campos condicionales por tipo: crédito → `closingDay`/`paymentDay` (día del mes 1-31, informativos); débito y efectivo → ninguno. El **débito automático** no vive acá: es un atributo **del movimiento** (ver decisión más abajo). Ver `requirements.md`, submódulo 3.6.b (RF-PM-001..006) y RN-021. |
 | **Movimiento único** | Gasto o ingreso que ocurrió una sola vez en un instante específico (fecha y hora). Se guarda como timestamp UTC (`occurredAt`) más la zona horaria original del registro (`timezone`, nombre IANA). No es solo una fecha de calendario. Tiene un flag `skipped` de **anulación** (RF-MU-005): `true` = anulado; se sigue listando pero no suma a totales ni reportes. Reversible (toggle). |
 | **Movimiento fijo** | Plantilla recurrente activa desde un mes de inicio hasta que el usuario la elimina. Tiene una **frecuencia** (`frequency`) de un set cerrado —mensual (default), bimestral, trimestral, semestral, anual— que define en qué meses aparece, anclada al mes de inicio (RF-MF-006). |
 | **Anulación de fijo (RecurringSkip)** | Marca que **anula una aparición** de un movimiento fijo en un **mes puntual** (`(recurringId, month)`), sin eliminar el fijo. Reversible (toggle). El mes anulado se sigue mostrando pero no suma a los totales ni a la proyección anual (RF-MF-005). Distinta de `deletedFrom`. |
@@ -31,6 +32,9 @@
 - **Soft delete en categorías.** Eliminar una categoría la marca como eliminada (`deletedAt`) pero no borra el registro. Los movimientos históricos conservan la referencia y siguen sumando en los totales del mes (el soft delete no excluye movimientos de los cálculos). Una categoría eliminada puede **reactivarse**: al crear una categoría cuyo nombre normalizado colisiona con una eliminada, el sistema propone reactivar la original en lugar de duplicarla (mismo `id`, scope y color); ver `requirements.md`, RF-CAT-002 / RF-CAT-004.
 - **Unicidad de nombre de categoría: app-level, no DB.** La unicidad de nombre entre categorías **activas** de un mismo usuario se valida en lógica de aplicación, no con un constraint `@@unique` de Prisma/DB. Motivo: la comparación es **normalizada** (trim + insensible a mayúsculas y acentos) y el flujo "crear-o-reactivar" frente a una categoría soft-deleted homónima no caben en un constraint de base de datos.
 - **Color de categoría elegible por el usuario.** Cada categoría tiene un color tomado de una **matriz de colores predefinidos** (40 colores; ver "Matriz de colores" más abajo). El usuario lo elige y edita, con default "menos usado" al crear; la regla funcional completa vive en RN-013 (`requirements.md`). El color es solo presentación y no afecta el cálculo de montos ni el scope.
+- **Métodos de pago — espejo de Categoría, identidad por ícono.** `PaymentMethod` reproduce el patrón de `Category` (del usuario, `deletedAt` soft delete, unicidad de nombre **app-level** con normalización RN-014 y flujo crear-o-reactivar, contador `movementCount` derivado). Diferencias de modelado: (1) la identidad visual es **`icon`** (string, allowlist en código, default `card`), **sin campo `color`**; (2) **`type`** es **string con allowlist en código** (`CREDIT`/`DEBIT`/`CASH`), **no un enum de Prisma**, para sumar tipos futuros sin migración (mismo criterio que `CurrencyQuote.variant`); (3) campos **condicionales por tipo, nullable**: `closingDay Int?` / `paymentDay Int?` (1-31, solo crédito) — al cambiar de tipo, los que no aplican quedan en `null`. `@@index([userId])`. Días de cierre/cobro son **informativos** en v1 (no mueven la imputación; RN-021). Contrato de respuesta en §Métodos de pago.
+- **`paymentMethodId` opcional en las tres tablas de movimiento.** `Transaction`, `Recurring` (incluye calculados) e `InstallmentGroup` llevan `paymentMethodId String?` (nullable = movimiento sin método) con **FK `onDelete: Restrict`** hacia `PaymentMethod` (igual criterio que `categoryId`: un método con movimientos no se hard-deletea; la baja es soft delete). Un **calculado** (fila `Recurring`) **no persiste `paymentMethodId` propio ni editable**: **hereda** el método de pago del origen, derivado al vuelo en lectura (mismo tratamiento que `currency`/`exchangeRate` y `autoDebit`; RF-PM-006, RN-021).
+- **`autoDebit` es atributo del movimiento, no del método.** `Transaction`, `Recurring` e `InstallmentGroup` llevan `autoDebit Boolean?` (nullable). Semántica: `true`/`false` = método efectivo del movimiento de tipo `DEBIT`; `null` = sin método o método `CREDIT`/`CASH`. **Persistencia (RN-021):** se guarda `true`/`false` **solo si** el método efectivo es `DEBIT`; en cualquier otro caso se fuerza a `null` aunque el body pida `true`. El **calculado no persiste `autoDebit` propio**: lo hereda del origen, derivado al vuelo (mismo tratamiento que `currency`/`exchangeRate`). El flag es metadato: no afecta totales, balance ni reportes.
 - **Movimientos fijos: el pasado es inmutable.** Editar o eliminar un fijo no modifica los meses ya pasados. El fijo tiene un mes de inicio (`startMonth`) y opcionalmente un mes desde el cual deja de aparecer (`deletedFrom`, **exclusivo**: "mes desde el cual ya no aparece").
 - **El movimiento fijo se modela como una _cadena_ de filas `Recurring`, no una sola.** Un "fijo lógico" puede estar compuesto por varias filas en el tiempo. Cada edición que afecta meses ya corridos **cierra la fila vigente** (le setea `deletedFrom = mes actual`) y **abre una fila nueva** (`startMonth = mes actual`) con los valores nuevos; así los meses pasados conservan los valores viejos y el actual/futuro toman los nuevos, sin generar filas por instancia mensual. Si el fijo todavía no corrió ningún mes, la edición es en su lugar (no se parte la cadena). Esto materializa "el pasado es inmutable". Detalle de la mecánica (split al editar, boundary de eliminación) en `docs/backend.md`, sección Movimientos fijos.
 - **Identidad de cadena estable del fijo.** Un "fijo lógico" es una **cadena de filas `Recurring`** que comparten un **id de cadena estable** —conceptualmente un `chainId` compartido por **todas** las filas de un mismo fijo lógico— que **sobrevive a los splits**: la fila R2 que abre el split **hereda** el `chainId` de R1. Es independiente del `id` de fila (el `id` de fila cambia en cada split; el `chainId` no). **Por qué:** un movimiento calculado se vincula a **esa identidad de cadena del origen**, no a un `Recurring.id` puntual, para que el vínculo **no se rompa** cuando el origen se edita y se parte (RF-MCALC-004). El nombre y la forma concreta del campo los fija el backend; este documento fija el concepto y la invariante "el split preserva el `chainId`". Las cadenas legacy fragmentadas por splits previos a la migración de `chainId` se re-unen con un script de mantenimiento de una sola vez (ver `docs/backend.md`, §`chainId` — identidad de cadena estable).
@@ -372,6 +376,34 @@ El set **elegible** por el usuario es una **matriz de 40 colores** (`COLOR_MATRI
 
 ---
 
+## Métodos de pago (`PaymentMethod`)
+
+Toda respuesta exitosa de los endpoints de métodos de pago devuelve, dentro del sobre `{ success, statusCode, data }`, este shape (CRUD espejo del de categorías; reglas funcionales en `requirements.md`, §3.6.b y RN-021):
+
+```
+PaymentMethod = {
+  id: string,
+  userId: string,
+  name: string,                          // tal cual lo tipeó el usuario
+  type: "CREDIT" | "DEBIT" | "CASH",     // allowlist en código (string, no enum)
+  icon: string,                          // clave del set curado; "card" default/fallback
+  closingDay: number | null,             // día del mes 1-31; solo CREDIT (null en DEBIT/CASH)
+  paymentDay: number | null,             // día del mes 1-31; solo CREDIT (null en DEBIT/CASH)
+  deletedAt: null,                       // las respuestas solo traen activos
+  createdAt: string,
+  updatedAt: string,
+  movementCount: number
+}
+```
+
+- **`type` — string con allowlist en código**, no enum de Prisma (extensible sin migración; ver decisión de modelado). Rótulos UI: Crédito / Débito / Efectivo.
+- **Campos condicionales nullable.** `closingDay`/`paymentDay` solo tienen valor en `CREDIT`; en `DEBIT`/`CASH` vienen `null` (ningún campo condicional). Días válidos 1-31; si el valor excede el último día del mes se **clampea** a ese último día (informativo, no mueve imputación; RN-021).
+- **`icon` — string con allowlist en código**, default/fallback `card`; una marca ausente del set cae a `card`. Es la única identidad visual (no hay `color`). El set concreto vive en `docs/design.md`.
+- **`movementCount` — derivado de solo lectura**, suma de las tres relaciones de movimiento (únicos + fijos + grupos de cuotas) que referencian el método vía `paymentMethodId`. Cero si no tiene movimientos. Alimenta el contador "N movimientos" (RF-PM-005). No se confunde con los totales de dinero.
+- **Payload reactivable en errores (409).** Igual que categorías, la colisión con un método **eliminado** (RF-PM-001 A4) responde `409` con `error.data = { reactivable: true, paymentMethod: { id, name, type, icon } }`; la colisión con uno **activo** responde `409` sin `data`.
+
+---
+
 ## Contrato de movimiento único (respuesta de la API)
 
 Toda respuesta exitosa de los endpoints de movimientos únicos devuelve, dentro del sobre `{ success, statusCode, data }`, este shape (el modelo Prisma ya está documentado en `docs/backend.md`, sección Capa de datos):
@@ -388,11 +420,15 @@ Transaction = {
   timezone: string,                          // IANA del registro
   createdAt: string,
   updatedAt: string,
-  category: { id, name, color, scope }       // categoría embebida
+  category: { id, name, color, scope },      // categoría embebida
+  paymentMethodId: string | null,            // método de pago asociado; null = sin método
+  paymentMethod: { id, name, icon, type } | null,  // método embebido; null si no tiene
+  autoDebit: boolean | null                  // flag débito automático del movimiento; null salvo método DEBIT (RN-021)
 }
 ```
 
 - **`amountCents` — entero en centavos** (RN-002): el front recibe centavos y formatea a pesos para mostrar.
+- **Método de pago embebido (opcional).** `paymentMethodId` es `null` cuando el movimiento no tiene método; cuando lo tiene, `paymentMethod` trae `{ id, name, icon, type }` (RF-PM-006). Metadato: no entra a ningún total.
 - **`occurredAt` + `timezone` — instante, no fecha de calendario** (RN-004): `occurredAt` es el momento en UTC y `timezone` (IANA) es la zona original del registro, en la que siempre se muestra. El mes al que pertenece se determina en esa zona. Detalle técnico en `docs/technical.md` (Fechas y zonas horarias).
 - **Categoría embebida.** Cada movimiento trae `category: { id, name, color, scope }` — el front no necesita un GET extra de categorías para mostrar nombre y color.
 
@@ -443,6 +479,8 @@ MovementItem = {
   frequency: RecurringFrequency | null,      // fijos: su frecuencia; únicos y cuotas: null
   skipped: boolean,                          // true = anulado (excluido de totales/reportes). fijo: RecurringSkip del mes; único: flag Transaction.skipped; cuota: InstallmentSkip del mes visualizado; calculado: skip propio (solo de fijo) OR skip del origen del mes
   category: { id, name, color, scope },      // embebida
+  paymentMethod: { id, name, icon, type } | null,  // método de pago embebido; null si el movimiento no tiene (RF-PM-006)
+  autoDebit: boolean | null,                 // flag débito automático DEL movimiento (fuera de paymentMethod); null salvo método DEBIT (RN-021)
   calculated: CalculatedInfo | null,         // presente si el ítem ES un calculado (hijo); null si no
   hasCalculated: boolean                     // true si el ítem es un ORIGEN (fijo/único/cuota) con ≥1 calculado en el mes (padre); false en el resto
 }
@@ -471,6 +509,8 @@ donde `RecurringFrequency = "MONTHLY" | "BIMONTHLY" | "QUARTERLY" | "BIANNUAL" |
 - **Los totales suman movimientos, no categorías.** `expenseCents` / `incomeCents` agregan la **magnitud** (`\|convertedAmountCents\|`) de los movimientos del mes **en el bucket de su `type`** (RN-019): un `INCOME` suma a `incomeCents`, un `EXPENSE` a `expenseCents`. Para movimientos normales `amountCents > 0` y el `type` es fijo. Para un **movimiento calculado** el `amountCents` puede ser **negativo o cero** (RN-018) y su `type` se **deriva del signo** (negativo → `EXPENSE`, positivo → `INCOME`); como signo y tipo siempre coinciden, suma su magnitud al bucket correcto —un calculado de `−2000` es `EXPENSE` y suma 2000 a `expenseCents`; uno de `+2000` es `INCOME` y suma 2000 a `incomeCents`; un monto 0 no aporta a ningún bucket—. No hay restas ni reasignación de bucket. `balanceCents = incomeCents - expenseCents`, sin piso (negativo si los gastos superan los ingresos). No se confunden con el contador `movementCount` de la pantalla de categorías (ver más arriba y `requirements.md`, RF-VM-002 / RF-CAT-006). **Un fijo anulado para el mes (`skipped: true`, RF-MF-005) aparece en la lista pero NO suma a los totales.**
 - **Movimientos calculados — `origin` espeja el tipo del origen.** Un movimiento calculado viaja en la lista de **su tipo de origen** (`origin: "fijo" | "unico" | "cuota"` según `calculated.sourceType`): calculado de fijo → lista `fijos`; de único → lista `unicos`; de cuota → lista `cuotas`. Su `amountCents` ya viene **derivado al vuelo y con signo** para el mes (`signo × round(fórmula(montoOrigenEseMes))`, RN-017/018) y puede ser **≤ 0**; su `type` viene **derivado de ese signo** (negativo → `EXPENSE`, positivo → `INCOME`, cero → `EXPENSE`; RN-018), no es un dato elegible. Para un calculado de **cuota**, `calculated.sourceAmountCents` es el **monto por cuota** del grupo, y el ítem **no** trae la etiqueta `installment` "X/N" (RF-MCALC-008). La **relación padre/hijo** (RF-MCALC-007) se expone con dos campos del `MovementItem`: **`calculated`** (objeto `CalculatedInfo` si el ítem **es** un calculado / hijo, `null` si no) y **`hasCalculated`** (`true` si el ítem es un **origen** —fijo, único o cuota— con ≥1 calculado derivado en ese mes / padre). Un calculado nunca es padre (`hasCalculated: false` siempre — sin encadenamiento). El **orden** de cada lista usa la **magnitud** = `\|amountCents\|` DESC (ver "Orden de las listas"): un calculado negativo ordena por su tamaño, no al final.
 - **La categoría embebida puede estar soft-deleted.** Un movimiento histórico muestra su categoría aunque haya sido eliminada (`deletedAt`), y **sigue contando en los totales** (RF-CAT-004 / RF-VM-002; el join de movimientos no filtra por `deletedAt`).
+- **Método de pago embebido (opcional).** Cada `MovementItem` trae `paymentMethod: { id, name, icon, type } | null` — `null` si el movimiento no tiene método (RF-PM-006). Como en la categoría, el método puede estar soft-deleted y aun así se muestra en el ítem histórico. Es **metadato**: no entra a `totals` ni a los reportes. Un **calculado hereda** el método **del origen** (no persiste uno propio; se deriva al vuelo junto con el resto de sus datos derivados, igual que la moneda/cotización — RF-PM-006 / RF-CUR-004). **Los endpoints de reportes (`GET /movements/reports`, anuales) NO exponen el método**: son series agregadas sin dimensión por método de pago en v1.
+- **`autoDebit` — flag del movimiento, fuera del método embebido.** Cada `MovementItem` expone `autoDebit: boolean | null` **a nivel del ítem** (no dentro de `paymentMethod`): `true`/`false` solo cuando el método efectivo es `DEBIT`, `null` en cualquier otro caso (sin método o método `CREDIT`/`CASH`; RN-021). Un **calculado hereda** el `autoDebit` del origen, derivado al vuelo (no persiste uno propio). Metadato: no entra a `totals` ni a los reportes.
 - **Listas de fijos y cuotas pobladas.** Las listas `fijos` y `cuotas` traen datos; los totales del mes suman únicos + fijos + cuotas. El **grupo de cuotas no genera filas por instancia**: se calcula on-the-fly (RN-006) — una cuota cae en `startMonth ≤ mes < startMonth + totalInstallments`. Detalle del cálculo en `docs/backend.md`, sección Movimientos en cuotas.
 
 ---

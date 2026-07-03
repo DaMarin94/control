@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { CurrencyExchangeBlock } from "@/components/ui/currency-exchange-block";
+import { MoreOptionsSection } from "@/components/movements/more-options-section";
 import { useCategories } from "@/hooks/use-categories";
 import { useInstallments } from "@/hooks/use-installments";
 import { useSettings } from "@/hooks/use-settings";
@@ -68,6 +68,13 @@ const installmentSchema = z.object({
     .min(1, "El mes de inicio es requerido")
     .regex(/^\d{4}-\d{2}$/, "El mes debe tener formato YYYY-MM"),
   categoryId: z.string().min(1, "La categoría es requerida"),
+  /** Método de pago opcional (RF-PM-006). "" = ninguno. */
+  paymentMethodId: z.string().optional(),
+  /**
+   * Débito automático (P4 — corrección de alcance). Atributo del movimiento;
+   * el control solo se renderiza cuando el método elegido es de tipo DEBIT.
+   */
+  autoDebit: z.boolean().optional(),
   description: z.string().optional(),
 });
 
@@ -120,6 +127,8 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
         totalInstallments: String(installment.totalInstallments),
         startMonth: installment.startMonth,
         categoryId: installment.categoryId,
+        paymentMethodId: installment.paymentMethodId ?? "",
+        autoDebit: installment.autoDebit ?? false,
         description: installment.description ?? "",
       }
     : {
@@ -129,6 +138,8 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
         totalInstallments: "",
         startMonth: defaultMonth ?? getCurrentMonth(),
         categoryId: "",
+        paymentMethodId: "",
+        autoDebit: false,
         description: "",
       };
 
@@ -158,6 +169,8 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
   const selectedCurrency = watch("currency") as CurrencyCode;
   const selectedStartMonth = watch("startMonth");
   const exchangeRateInput = watch("exchangeRateInput");
+  const selectedPaymentMethodId = watch("paymentMethodId") ?? "";
+  const selectedAutoDebit = watch("autoDebit") ?? false;
 
   // Mes relevante para la cotización de referencia:
   // - Crear: mes de inicio seleccionado (o mes actual como fallback)
@@ -183,6 +196,8 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
         totalInstallments: String(installment.totalInstallments),
         startMonth: installment.startMonth,
         categoryId: installment.categoryId,
+        paymentMethodId: installment.paymentMethodId ?? "",
+        autoDebit: installment.autoDebit ?? false,
         description: installment.description ?? "",
       });
       // Actualizar la referencia de moneda inicial para que el effect de pre-carga
@@ -265,6 +280,8 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
         description: data.description || null,
         currency: data.currency,
         exchangeRate: parsedExchangeRate,
+        paymentMethodId: data.paymentMethodId || null,
+        autoDebit: data.autoDebit ?? false,
       });
 
       if (!result.success) {
@@ -284,6 +301,8 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
         description: data.description || undefined,
         currency: data.currency,
         exchangeRate: parsedExchangeRate,
+        paymentMethodId: data.paymentMethodId || undefined,
+        autoDebit: data.autoDebit ?? false,
       });
 
       if (!result.success) {
@@ -349,26 +368,6 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
               <p className="text-[12px] text-expense-ink">{errors.amountInput.message}</p>
             )}
           </div>
-
-          {/* ── Moneda y cotización ── */}
-          <Controller
-            name="currency"
-            control={control}
-            render={({ field }) => (
-              <CurrencyExchangeBlock
-                currency={field.value as CurrencyCode}
-                exchangeRateInput={exchangeRateInput}
-                defaultCurrency={defaultCurrency}
-                isExchangeRateModified={isExchangeRateModified}
-                exchangeRateError={exchangeRateError}
-                onCurrencyChange={(val) => {
-                  field.onChange(val);
-                }}
-                onExchangeRateChange={(val) => setValue("exchangeRateInput", val)}
-                exchangeRateInputId="inst-exchange-rate"
-              />
-            )}
-          />
 
           {/* ── Cantidad de cuotas + Mes de inicio (grid 2-col) ── */}
           <div className="grid grid-cols-2 gap-[14px]">
@@ -477,6 +476,22 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
               {...register("description")}
             />
           </div>
+
+          {/* ── Más opciones: moneda+cotización + método de pago (P4) ── */}
+          <MoreOptionsSection
+            idPrefix="inst"
+            currency={selectedCurrency}
+            exchangeRateInput={exchangeRateInput}
+            defaultCurrency={defaultCurrency}
+            isExchangeRateModified={isExchangeRateModified}
+            exchangeRateError={exchangeRateError}
+            onCurrencyChange={(val) => setValue("currency", val)}
+            onExchangeRateChange={(val) => setValue("exchangeRateInput", val)}
+            paymentMethodId={selectedPaymentMethodId}
+            onPaymentMethodChange={(val) => setValue("paymentMethodId", val)}
+            autoDebit={selectedAutoDebit}
+            onAutoDebitChange={(checked) => setValue("autoDebit", checked)}
+          />
         </div>
 
         {/* ── Footer ── */}

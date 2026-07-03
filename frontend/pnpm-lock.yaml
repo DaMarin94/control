@@ -59,6 +59,9 @@ importers:
       recharts:
         specifier: ^3.8.1
         version: 3.8.1(@types/react@19.2.16)(react-dom@19.2.7(react@19.2.7))(react-is@17.0.2)(react@19.2.7)(redux@5.0.1)
+      simple-icons:
+        specifier: ^16.24.1
+        version: 16.24.1
       tailwind-merge:
         specifier: ^2.6.0
         version: 2.6.1
@@ -3105,6 +3108,10 @@ packages:
   signal-exit@4.1.0:
     resolution: {integrity: sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==}
     engines: {node: '>=14'}
+
+  simple-icons@16.24.1:
+    resolution: {integrity: sha512-AnDQPrZAVzYSym7cBVIrnbhLk9auWGgkl+9hKvkbTqGEfH6TU7WKgumEXYYaJuM1Ib87+cnzr881UZniCM7t+A==}
+    engines: {node: '>=0.12.18'}
 
   source-map-js@1.2.1:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
@@ -6379,6 +6386,8 @@ snapshots:
   siginfo@2.0.0: {}
 
   signal-exit@4.1.0: {}
+
+  simple-icons@16.24.1: {}
 
   source-map-js@1.2.1: {}
 

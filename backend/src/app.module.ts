@@ -7,6 +7,7 @@ import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { CategoriesModule } from './categories/categories.module';
+import { PaymentMethodsModule } from './payment-methods/payment-methods.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { MovementsModule } from './movements/movements.module';
 import { RecurringModule } from './recurring/recurring.module';
@@ -80,6 +81,7 @@ import { IncomingMessage } from 'http';
     PrismaModule,
     AuthModule,
     CategoriesModule,
+    PaymentMethodsModule,
     TransactionsModule,
     MovementsModule,
     RecurringModule,

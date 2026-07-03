@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { CurrencyExchangeBlock } from "@/components/ui/currency-exchange-block";
+import { MoreOptionsSection } from "@/components/movements/more-options-section";
 import { useCategories } from "@/hooks/use-categories";
 import { useTransactions } from "@/hooks/use-transactions";
 import { useSettings } from "@/hooks/use-settings";
@@ -62,6 +62,13 @@ const transactionSchema = z.object({
    */
   exchangeRateInput: z.string(),
   categoryId: z.string().min(1, "La categoría es requerida"),
+  /** Método de pago opcional (RF-PM-006). "" = ninguno. */
+  paymentMethodId: z.string().optional(),
+  /**
+   * Débito automático (P4 — corrección de alcance). Atributo del movimiento;
+   * el control solo se renderiza cuando el método elegido es de tipo DEBIT.
+   */
+  autoDebit: z.boolean().optional(),
   date: z.string().min(1, "La fecha es requerida"),
   time: z.string().min(1, "La hora es requerida"),
   description: z.string().optional(),
@@ -146,6 +153,8 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
         currency: transaction.currency ?? defaultCurrency,
         exchangeRateInput: initialEditingExchangeRateInput,
         categoryId: transaction.categoryId,
+        paymentMethodId: transaction.paymentMethodId ?? "",
+        autoDebit: transaction.autoDebit ?? false,
         date: utcToLocalDate(transaction.occurredAt, transaction.timezone),
         time: utcToLocalTime(transaction.occurredAt, transaction.timezone),
         description: transaction.description ?? "",
@@ -156,6 +165,8 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
         currency: defaultCurrency,
         exchangeRateInput: "",
         categoryId: "",
+        paymentMethodId: "",
+        autoDebit: false,
         date: nowDate,
         time: nowTime,
         description: "",
@@ -190,6 +201,8 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
   const selectedCurrency = watch("currency") as CurrencyCode;
   const selectedDate = watch("date");
   const exchangeRateInput = watch("exchangeRateInput");
+  const selectedPaymentMethodId = watch("paymentMethodId") ?? "";
+  const selectedAutoDebit = watch("autoDebit") ?? false;
 
   // Mes del movimiento derivado de la fecha seleccionada (para el endpoint de referencia)
   const movementMonth = selectedDate?.length >= 7 ? selectedDate.substring(0, 7) : nowDate.substring(0, 7);
@@ -211,6 +224,8 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
         currency: newCurrency,
         exchangeRateInput: formatExchangeRate(transaction.exchangeRate ?? 1),
         categoryId: transaction.categoryId,
+        paymentMethodId: transaction.paymentMethodId ?? "",
+        autoDebit: transaction.autoDebit ?? false,
         date: utcToLocalDate(transaction.occurredAt, transaction.timezone),
         time: utcToLocalTime(transaction.occurredAt, transaction.timezone),
         description: transaction.description ?? "",
@@ -311,6 +326,8 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
         description: data.description || null,
         currency: data.currency,
         exchangeRate: parsedExchangeRate,
+        paymentMethodId: data.paymentMethodId || null,
+        autoDebit: data.autoDebit ?? false,
       });
 
       if (!result.success) {
@@ -330,6 +347,8 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
         description: data.description || undefined,
         currency: data.currency,
         exchangeRate: parsedExchangeRate,
+        paymentMethodId: data.paymentMethodId || undefined,
+        autoDebit: data.autoDebit ?? false,
       });
 
       if (!result.success) {
@@ -422,26 +441,6 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
               <p className="text-[12px] text-expense-ink">{errors.amountInput.message}</p>
             )}
           </div>
-
-          {/* ── Moneda y cotización ── */}
-          <Controller
-            name="currency"
-            control={control}
-            render={({ field }) => (
-              <CurrencyExchangeBlock
-                currency={field.value as CurrencyCode}
-                exchangeRateInput={exchangeRateInput}
-                defaultCurrency={defaultCurrency}
-                isExchangeRateModified={isExchangeRateModified}
-                exchangeRateError={exchangeRateError}
-                onCurrencyChange={(val) => {
-                  field.onChange(val);
-                }}
-                onExchangeRateChange={(val) => setValue("exchangeRateInput", val)}
-                exchangeRateInputId="tx-exchange-rate"
-              />
-            )}
-          />
 
           {/* ── Categoría ── */}
           <div className="flex flex-col gap-[7px]">
@@ -540,6 +539,22 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
               {...register("description")}
             />
           </div>
+
+          {/* ── Más opciones: moneda+cotización + método de pago (P4) ── */}
+          <MoreOptionsSection
+            idPrefix="tx"
+            currency={selectedCurrency}
+            exchangeRateInput={exchangeRateInput}
+            defaultCurrency={defaultCurrency}
+            isExchangeRateModified={isExchangeRateModified}
+            exchangeRateError={exchangeRateError}
+            onCurrencyChange={(val) => setValue("currency", val)}
+            onExchangeRateChange={(val) => setValue("exchangeRateInput", val)}
+            paymentMethodId={selectedPaymentMethodId}
+            onPaymentMethodChange={(val) => setValue("paymentMethodId", val)}
+            autoDebit={selectedAutoDebit}
+            onAutoDebitChange={(checked) => setValue("autoDebit", checked)}
+          />
         </div>
 
         {/* ── Footer ── */}

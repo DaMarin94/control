@@ -96,6 +96,8 @@ const fijoActivo: MovementItem = {
   frequency: "MONTHLY",
   skipped: false,
   category: baseCategory,
+  paymentMethod: null,
+  autoDebit: null,
   calculated: null,
   hasCalculated: false,
   currency: "ARS",
@@ -144,6 +146,8 @@ const unico: MovementItem = {
   frequency: null,
   skipped: false,
   category: { id: "cat-2", name: "Alimentación", color: "#00FF00", scope: "BOTH" },
+  paymentMethod: null,
+  autoDebit: null,
   calculated: null,
   hasCalculated: false,
   currency: "ARS",
@@ -163,6 +167,8 @@ const cuota: MovementItem = {
   frequency: null,
   skipped: false,
   category: { id: "cat-3", name: "Tecnología", color: "#0000FF", scope: "EXPENSE" },
+  paymentMethod: null,
+  autoDebit: null,
   calculated: null,
   hasCalculated: false,
   currency: "ARS",
@@ -1093,5 +1099,26 @@ describe("MovementItemRow — calculado de fijo: acción 'Anular este mes' dispo
     expect(
       screen.queryByRole("menuitem", { name: /des-anular este mes/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+// ─── Tests: indicador "Débito automático" en la sublínea (P4) ────────────────
+
+describe("MovementItemRow — indicador 'Débito automático' (P4)", () => {
+  it("muestra el segmento 'Débito automático' cuando autoDebit === true", () => {
+    const conDebitoAutomatico: MovementItem = { ...unico, autoDebit: true };
+    renderRow(conDebitoAutomatico);
+    expect(screen.getByText("Débito automático")).toBeInTheDocument();
+  });
+
+  it("NO muestra el segmento cuando autoDebit === false", () => {
+    const sinDebitoAutomatico: MovementItem = { ...unico, autoDebit: false };
+    renderRow(sinDebitoAutomatico);
+    expect(screen.queryByText("Débito automático")).not.toBeInTheDocument();
+  });
+
+  it("NO muestra el segmento cuando autoDebit === null", () => {
+    renderRow(unico); // autoDebit: null en el fixture base
+    expect(screen.queryByText("Débito automático")).not.toBeInTheDocument();
   });
 });

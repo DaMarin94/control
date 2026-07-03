@@ -29,6 +29,7 @@ import {
   CalendarDays,
   BarChart2,
   Tags,
+  CreditCard,
   Settings,
   Menu,
   X,
@@ -43,6 +44,7 @@ const NAV_LINKS = [
   { href: "/mes", label: "Vista del mes", exact: false, Icon: CalendarDays },
   { href: "/reportes", label: "Reportes", exact: false, Icon: BarChart2 },
   { href: "/categorias", label: "Categorías", exact: false, Icon: Tags },
+  { href: "/metodos-pago", label: "Métodos de pago", exact: false, Icon: CreditCard },
   { href: "/configuracion", label: "Configuración", exact: false, Icon: Settings },
 ] as const;
 

@@ -17,12 +17,13 @@
 7. [Reportes (pantalla configurable)](#7-reportes-pantalla-configurable)
 8. [Widget de reporte autónomo (componente reutilizable)](#8-widget-de-reporte-autónomo-componente-reutilizable)
 9. [Configuración (`/configuracion`)](#9-configuración-configuracion)
+10. [Gestión de métodos de pago (`/metodos-pago`)](#10-gestión-de-métodos-de-pago-metodos-pago)
 
 ---
 
 ## Convenciones
 
-- El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Reportes, Categorías, Configuración) y **no** se muestra en las pantallas no autenticadas (Login, Registro). Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo. Orden de los links: Dashboard → Vista del mes → Reportes → Categorías → Configuración. Aloja, en su parte inferior, el **control de modo de color** (toggle Sistema / Claro / Oscuro) sobre el menú de usuario (RF-APP-001).
+- El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Reportes, Categorías, Métodos de pago, Configuración) y **no** se muestra en las pantallas no autenticadas (Login, Registro). Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo. Orden de los links: Dashboard → Vista del mes → Reportes → Categorías → Métodos de pago → Configuración. Aloja, en su parte inferior, el **control de modo de color** (toggle Sistema / Claro / Oscuro) sobre el menú de usuario (RF-APP-001).
   - **Estado de implementación: implementado.** El sidebar (RF-NAV-001) **ya está implementado** (ver `features.md`). Los accesos definidos en cada pantalla (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL directa) se conservan y conviven con el sidebar.
 - El **formulario de carga** (pantalla 5) es un modal sin ruta propia. Se invoca desde el sidebar y desde el dashboard, y se superpone a la pantalla actual.
 - **Chip de moneda default en el header.** Las pantallas con montos/totales —**Dashboard**, **Vista del mes** y **Reportes**— muestran en su header (fila del eyebrow) un **chip indicador de la moneda default vigente** del usuario (código de la moneda del set curado: ARS / USD / EUR / BRL, RF-CUR-002). Es **informativo**: comunica en qué moneda están expresados los montos y totales de la pantalla y **linkea a `/configuracion`** (no cambia la moneda in-situ). Se muestra **siempre**, también en mono-moneda. **`/configuracion` NO lo lleva** (es donde la moneda se edita). El patrón es común a las tres pantallas y no se repite su definición en cada una; el detalle visual lo define `control-design` (ver `docs/design.md`).
@@ -152,7 +153,7 @@ No muestra lista de movimientos (decisión 2026-06-03, ex RF-DASH-004 fuera de a
 
 ## 4. Vista del mes (`/mes`)
 
-**RF relacionados:** RF-VM-001, RF-VM-002, RF-VM-003, RF-VM-004, RF-VM-005, RF-VM-006, RF-MF-005, RF-MF-006, RF-CUR-005
+**RF relacionados:** RF-VM-001, RF-VM-002, RF-VM-003, RF-VM-004, RF-VM-005, RF-VM-006, RF-MF-005, RF-MF-006, RF-CUR-005, RF-PM-006
 
 ### Propósito
 
@@ -168,7 +169,7 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 - **Filtros por listado** (RF-VM-006): cada una de las tres secciones tiene **sus propios** controles de filtro —un **filtro de tipo** (Gasto / Ingreso / **Ambos**, default Ambos) y un **filtro de categoría** (tres estados, default todas)— que filtran **solo esa sección**. El pill contador y el subtotal de cada sección reflejan lo filtrado; los totales del mes son la suma de lo visible en las tres. Los controles **no se muestran en modo orden** (RF-VM-005). El estado es **por pantalla** (no por mes): se mantiene al navegar entre meses y se persiste por usuario (clave `monthListFilters`, ver `data-model.md`). No es global: dashboard y reportes tienen su propio filtro. Detalle visual en `docs/design.md`. Ver "Acciones disponibles" y "Estados".
 - **Lista de movimientos agrupada por tipo** en **tres secciones colapsables** (acordeón) rotuladas — **Únicos**, **Fijos**, **Cuotas** (RF-VM-001, RF-VM-005). El orden de las secciones es el default salvo que el usuario lo haya reordenado (RF-VM-005). Dentro de cada sección, los movimientos se ordenan por **monto descendente** (el monto más alto primero, por magnitud, sin distinguir gasto de ingreso), con el desempate por sección que define el contrato de `GET /movements` (ver `data-model.md`). En **Únicos**, el usuario puede alternar el orden entre **por monto** (default) y **por fecha** (más reciente primero) desde el control de orden de su cabecera (RF-VM-001); el orden se persiste. En **Fijos** y **Cuotas** el orden de ítems no es alterable.
   - **Las tres secciones se muestran siempre**, aunque estén vacías. Cada sección expone una **cabecera de grupo** (rótulo, contador de ítems, subtotal) que actúa como **disclosure**: clic en la cabecera expande/colapsa esa sección. Junto a la cabecera, fuera del modo orden, vive el disparador de filtro de la sección (tipo + categoría, RF-VM-006). La sección **Únicos** suma en su cabecera un **control de orden** (monto ↔ fecha, RF-VM-001) junto al filtro. Las **Cuotas** muestran, por ítem, su número y total (ej: "3/12"); los **Fijos**, sin día específico.
-  - Cada ítem muestra: tipo (gasto/ingreso), monto, categoría, descripción (si la tiene) y su origen (único / fijo / cuota X/N). Los **fijos** muestran además su **frecuencia** (Mensual / Bimestral / Trimestral / Semestral / Anual, RF-MF-006) en vez de fecha; un fijo **anulado** para el mes (RF-MF-005) se sigue mostrando con una **diferenciación visual** de anulado (detalle en `docs/design.md`).
+  - Cada ítem muestra: tipo (gasto/ingreso), monto, categoría, descripción (si la tiene), su **método de pago** (ícono + nombre) si lo tiene asociado (RF-PM-006; el ítem sin método no lo muestra) y su origen (único / fijo / cuota X/N). Un ítem con **débito automático** (`autoDebit = true`, RN-021) suma un **indicador discreto** en su metadata (detalle en `docs/design.md`). Los **fijos** muestran además su **frecuencia** (Mensual / Bimestral / Trimestral / Semestral / Anual, RF-MF-006) en vez de fecha; un fijo **anulado** para el mes (RF-MF-005) se sigue mostrando con una **diferenciación visual** de anulado (detalle en `docs/design.md`).
   - **Moneda y conversión (RF-CUR-005):** el monto que domina en el ítem es el **convertido a la moneda default vigente** (el que entra a los totales). **Solo si la moneda del ítem ≠ la default**, el ítem muestra además un **badge de moneda** (ARS / USD / EUR / BRL) y una **línea con el valor original** (monto + moneda de carga). Si la moneda del ítem **coincide** con la default, el ítem se ve **sin badge ni línea extra** — caso mono-moneda. Un **calculado** usa la moneda/cotización de su origen. El detalle visual (badge, jerarquía monto convertido vs. original) lo define `docs/design.md`.
   - **Sección vacía:** muestra la cabecera completa (contador en 0, subtotal en $0) y un **mensaje de estado vacío inline propio** ("Sin movimientos únicos" / "Sin fijos" / "Sin cuotas"). No hay un mensaje de estado vacío global de la pantalla (ver "Estados"). El detalle visual del acordeón, las cabeceras y el modo orden lo define `control-design` (ver `docs/design.md`).
 
@@ -205,7 +206,7 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 
 ## 5. Formulario de carga de movimiento (modal)
 
-**RF relacionados:** RF-CM-001, RF-MU-001, RF-MU-002, RF-MU-004, RF-MF-001, RF-MF-003, RF-MF-006, RF-MC-001, RF-MC-003, RF-CAT-002, RF-CUR-001, RF-CUR-003, RF-CUR-004; RNF-008
+**RF relacionados:** RF-CM-001, RF-MU-001, RF-MU-002, RF-MU-004, RF-MF-001, RF-MF-003, RF-MF-006, RF-MC-001, RF-MC-003, RF-CAT-002, RF-CUR-001, RF-CUR-003, RF-CUR-004, RF-PM-006; RNF-008
 
 ### Propósito
 
@@ -221,15 +222,17 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
   - **Único** (RF-MU-001): tipo (Gasto/Ingreso), monto, categoría, fecha y hora (default: el momento actual — fecha de hoy y hora actual al abrir el formulario en modo creación), descripción (opcional). El mes contexto **no** aplica al único: su default es siempre hoy/ahora, sin importar desde dónde se abra el modal.
   - **Fijo** (RF-MF-001, RF-MF-006): tipo (Gasto/Ingreso), monto, mes de inicio, **frecuencia**, categoría, descripción (opcional). Sin fecha de día. El mes de inicio tiene como default el **mes contexto** si el modal se abrió desde la Vista del mes (`/mes`), o el **mes actual** en cualquier otro origen (dashboard, sidebar). Es editable y admite meses pasados. La **frecuencia** es un selector con un set cerrado de 5 valores —**Mensual** (default), Bimestral, Trimestral, Semestral, Anual (RF-MF-006)— y debajo una nota de recurrencia que se ajusta a la frecuencia elegida (ver "Estados"; el detalle visual está en `docs/design.md`).
   - **Cuotas** (RF-MC-001): tipo (Gasto/Ingreso), monto por cuota, cantidad de cuotas, mes de inicio, categoría, descripción (opcional). El mes de inicio tiene como default el **mes contexto** si el modal se abrió desde la Vista del mes (`/mes`), o el **mes actual** en cualquier otro origen. Es editable y admite meses pasados.
-- **Bloque moneda + cotización (RF-CUR-001/003/004/006), debajo del campo Monto** en los tabs **Único / Fijo / Cuotas**:
-  - **Selector de moneda** del set curado: **ARS / USD / EUR / BRL**.
-  - **Campo de cotización** (unidades de la default por 1 unidad de la moneda del movimiento): editable. **Se oculta cuando la moneda elegida coincide con la default** del usuario (cotización = 1). El label del par es **`{moneda del movimiento}→{default}`**. **Pre-cargado** con la **cotización de referencia del mes** (RF-CUR-003/006; fallback al último cambio usado si la tabla no tiene dato). Validación: cotización **> 0**. El detalle visual fino lo define `design.md`.
-  - **Copy de la nota del campo:** **"Cotización de referencia del mes"**.
-  - **Granularidad del mes del pre-fill** según el tab (RF-CUR-004): en **Fijo**, el mes de aparición; en **Cuotas**, el `startMonth` del grupo; en **Único**, el mes del movimiento.
-  - El tab/modo **Calculado** (creación desde el kebab de un movimiento) **no** muestra el bloque moneda/cotización: el calculado **hereda** moneda y cotización del origen (RF-CUR-004).
-  - El detalle visual del bloque lo define `docs/design.md`.
 - El selector de categorías se filtra según el tipo: para Gasto se muestran categorías con scope `EXPENSE` o `BOTH`; para Ingreso, scope `INCOME` o `BOTH` (RN-010). Las categorías con soft delete no aparecen.
 - **Botón "+ Nueva" junto al selector de categoría** (RF-MU-004): abre el modal de creación de categoría (pantalla 6, RF-CAT-002) por encima del formulario, sin cerrar el formulario ni perder los datos ya cargados. Presente en los tres tabs (el campo categoría existe en todos). Ver "Acciones disponibles".
+- **Disclosure "Más opciones", último bloque del formulario** (después de todos los demás campos, justo antes de la fila de botones de acción) en los tabs **Único / Fijo / Cuotas**: un único bloque colapsable que agrupa **moneda + cotización** y **método de pago** (con su checkbox condicional). **Arranca colapsado** (también en edición); su resumen colapsado muestra la moneda —y la cotización si ≠ default— y, si hay método elegido, el ícono y nombre del método. El cromo lo define `docs/design.md` (§Disclosure "Más opciones" del form). Contenido:
+  - **Moneda + cotización (RF-CUR-001/003/004/006):**
+    - **Selector de moneda** del set curado: **ARS / USD / EUR / BRL**.
+    - **Campo de cotización** (unidades de la default por 1 unidad de la moneda del movimiento): editable. **Se oculta cuando la moneda elegida coincide con la default** del usuario (cotización = 1). El label del par es **`{moneda del movimiento}→{default}`**. **Pre-cargado** con la **cotización de referencia del mes** (RF-CUR-003/006; fallback al último cambio usado si la tabla no tiene dato). Validación: cotización **> 0**.
+    - **Copy de la nota del campo:** **"Cotización de referencia del mes"**.
+    - **Granularidad del mes del pre-fill** según el tab (RF-CUR-004): en **Fijo**, el mes de aparición; en **Cuotas**, el `startMonth` del grupo; en **Único**, el mes del movimiento.
+  - **Selector de método de pago (opcional)** (RF-PM-006): análogo al selector de categoría. Lista los métodos **activos** del usuario, admite **"(ninguno)"** / vacío y su **default es ninguno**. **No** tiene botón "+ Nueva" inline (a diferencia de categoría). Cada opción se identifica por su ícono, nombre y tipo.
+  - **Checkbox "débito automático" (condicional)** (RF-PM-006, RN-021): un flag **del movimiento** que aparece **solo cuando el método elegido es de tipo Débito**; oculto para Crédito, Efectivo o sin método.
+  - El tab/modo **Calculado** (creación desde el kebab de un movimiento) **no** muestra la sección "Más opciones": el calculado **hereda** del origen la moneda/cotización (RF-CUR-004), el método de pago y el `autoDebit` (RF-PM-006), sin poder editarlos ni tener propios.
 
 **Modo edición:**
 
@@ -444,3 +447,61 @@ Pantalla de **ajustes de la cuenta** del usuario. Reúne las preferencias del us
 - **Cargando:** mientras se obtiene la configuración actual (`GET /settings`).
 - **Con datos:** el selector refleja la moneda default vigente del usuario.
 - **Guardando / error al guardar:** el cambio se confirma al persistir; ante error del backend se informa sin romper la pantalla (RNF-008) y la moneda default queda sin cambios.
+
+---
+
+## 10. Gestión de métodos de pago (`/metodos-pago`)
+
+**RF relacionados:** RF-PM-001, RF-PM-002, RF-PM-003, RF-PM-004, RF-PM-005, RF-PM-006, RF-NAV-001
+
+> **Ruta:** `/metodos-pago`. **Link en el sidebar**, debajo de "Categorías" (orden: Dashboard → Vista del mes → Reportes → Categorías → Métodos de pago → Configuración).
+
+### Propósito
+
+Pantalla dedicada para administrar los métodos de pago del usuario: listar, crear, editar y eliminar. Es **espejo 1:1 de Gestión de categorías** (pantalla 6) en estructura, estados, validaciones, empty y confirmación de borrado; lo propio de esta pantalla es que la identidad visual es un **ícono** (no un color) y que el método tiene un **tipo** con campos condicionales. La creación y edición se resuelven en un modal dentro de la pantalla.
+
+### Contenido
+
+- **Sidebar** con el link "Métodos de pago" marcado como activo.
+- **Lista de métodos de pago activos** del usuario. Cada ítem muestra (ver `docs/design.md`, §Métodos de pago — render en la lista):
+  - **Ícono** del método (identidad visual; en el slot del color-swatch de categorías).
+  - **Nombre** del método.
+  - **Tipo** (Crédito / Débito / Efectivo), como chip neutro.
+  - Contador **"N movimientos"** — cantidad de movimientos asociados. Dato derivado de solo lectura (RF-PM-005).
+- Los métodos con soft delete (`deletedAt`) no aparecen en la lista.
+- **Botón "Nuevo método de pago"** que abre el modal de creación.
+- La cuenta nueva **arranca sin métodos** (no hay defaults): el estado inicial habitual es vacío.
+
+### Acciones disponibles
+
+- **Nuevo método de pago** — abre un modal para crear (RF-PM-001). Ver "Modal de creación / edición".
+- **Editar** un método — abre el mismo modal pre-cargado con los valores actuales (RF-PM-002). Editable: nombre, tipo, ícono y los campos condicionales del tipo.
+- **Eliminar** un método — solicita confirmación; al confirmar aplica soft delete (`deletedAt = now`) y el método desaparece de la lista y del selector del formulario de carga (RF-PM-003). Los movimientos históricos conservan la referencia.
+- Acciones globales del sidebar.
+
+### Modal de creación / edición
+
+- **Abre sin tipo elegido** (creación): el campo **Tipo** (Crédito / Débito / Efectivo) es **obligatorio y sin preselección**; hasta elegir uno no se puede guardar (RF-PM-001).
+- **Campos condicionales según el tipo elegido:**
+  - **Crédito:** **día de cierre** y **día de cobro** (día del mes 1-31, opcionales; informativos).
+  - **Débito:** sin campos extra (el modal es idéntico al de Efectivo). El **débito automático** no vive acá: es un flag del movimiento, en el formulario de carga (ver más abajo).
+  - **Efectivo:** sin campos extra.
+- **Tipo editable en edición** (RF-PM-002): al cambiar de tipo, los campos condicionales que ya no aplican **se descartan**.
+- **Icon-picker** (RF-PM-004), presente en crear y editar: selector de ícono del set curado. En **crear** arranca con `card`; en **editar**, con el ícono actual. **Sin botón "aleatorio"** (a diferencia del color de categorías). El detalle visual del picker lo define `control-design` (`docs/design.md`, §Icon-picker).
+- **Validaciones:** el nombre es obligatorio y no puede estar vacío; no pueden coexistir dos métodos activos con el mismo nombre normalizado del mismo usuario (espejo RN-014 / RN-008). El flujo crear-o-reactivar ante colisión con un método eliminado es idéntico al de categorías (RF-CAT-002 A3 → RF-PM-001 A4).
+- **Acciones:** Guardar (valida y persiste, cierra el modal) y Cancelar (cierra sin guardar).
+
+### Navegación
+
+- **Llega desde:** link "Métodos de pago" del sidebar (RF-NAV-001); acceso directo a `/metodos-pago`.
+- **Lleva a:** permanece en `/metodos-pago` tras crear, editar o eliminar. (El modal de método de pago **no** se abre desde el formulario de carga: el selector del form no tiene "+ Nueva" inline — RF-PM-006.)
+
+### Estados
+
+- **Cargando:** mientras se obtiene la lista de métodos.
+- **Con datos:** lista de métodos activos con ícono, nombre, tipo y contador de movimientos.
+- **Vacío (sin métodos activos):** mensaje de estado vacío. Es el estado de la primera visita (la cuenta nace sin métodos) y también tras eliminar todos.
+- **Modal con error de validación:** nombre vacío, sin tipo elegido o nombre duplicado — se muestra el error y no se guarda.
+- **Prompt de reactivación:** ante colisión de nombre con un método eliminado, se ofrece reactivarlo con su configuración original (RF-PM-001 A4).
+- **Error del backend al guardar (RNF-008):** el modal permanece abierto, conserva los datos y permite reintentar.
+- **Confirmación de eliminación:** se pide confirmar antes del soft delete; cancelar deja el método sin cambios.

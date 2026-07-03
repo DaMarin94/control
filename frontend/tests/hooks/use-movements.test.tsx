@@ -54,6 +54,8 @@ const mockMonthMovements: MonthMovements = {
           color: "#FF5733",
           scope: "BOTH",
         },
+        paymentMethod: null,
+        autoDebit: null,
         calculated: null,
         hasCalculated: false,
         currency: "ARS" as const,
