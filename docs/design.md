@@ -2048,6 +2048,90 @@ Todos los estados de carga se componen sobre las primitivas (mismo resultado vis
 
 ---
 
+## Marca visual pasiva de límites (Límites y Alertas — P2)
+
+> Catálogo de **efectos visuales de la marca pasiva** (decisión D9 del `docs/roadmap-limites-alertas.md`). Un **límite** es una config del usuario que observa un dato (vía su *key* del catálogo §2 del roadmap), lo compara contra un umbral y, si se cumple, **aplica una marca al anclaje** que emite esa key. Esta sección define **qué marcas existen** (vocabulario), **qué marca aplica a qué tipo de anclaje** (mapeo), **el tono/severidad** y **la accesibilidad** — en términos que `control-frontend` implementa sin decidir nada visual por su cuenta. **No define** el shape del límite, el panel de config ni la evaluación (eso es funcional/técnico, del analista y el front).
+>
+> El identificador de efecto que guarda el límite (`effect` en el shape del roadmap) sale del **id estable** de cada primitiva de abajo — es parte del "lenguaje común" front ↔ design.
+
+### Restricción rectora — cero impacto con config vacía
+
+**Con `limits: []` (o con todos los límites evaluando `false`), la app se ve EXACTAMENTE igual que hoy.** El sistema de marcas es **aditivo y opt-in**: impacto visual nulo mientras ningún dato cruce un umbral. Esto es **regla dura del subsistema**, no una aspiración:
+
+1. **Toda marca es condicional.** Un nodo de marca se renderiza **solo** cuando un límite configurado evalúa `true` sobre ese dato concreto renderizado. Sin límites que crucen → no se monta ningún nodo de marca ni se aplica ninguna clase modificadora.
+2. **Las marcas reusan slots que ya colapsan.** Donde una marca **agrega** un elemento (glifo, badge), va en un slot que **ya renderiza vacío** cuando no aplica — el caso canónico es la **zona de estados de la sublínea** del ítem de `/mes` (que "no se renderiza si ninguna bandera aplica", ver *Sublínea del ítem de `/mes`*). Ningún slot **reserva** ancho/alto "por si acaso".
+3. **Las marcas que modifican** (fondo, ring, color, peso) aplican **solo un swap condicional de clase/token**; el estilo base del elemento queda intacto cuando ningún límite cruza. Ningún espaciado, borde o color base cambia **por el mero hecho de que el subsistema exista**.
+4. **Sin cambio global de layout/DOM.** El subsistema no introduce contenedor persistente, columna reservada ni wrapper siempre-presente. Que el blob `limits` no esté vacío **no cambia nada** hasta que un dato efectivamente cruza.
+5. **La marca nunca desplaza a sus vecinos.** Fondos y rings usan mecanismos **que no reflowean** (ring vía `box-shadow` como el focus ring; fill de fondo; inset). Badges y glifos caen en clusters flex que ya crecen/encogen. **La altura de una fila y el layout de una grilla no cambian** por marcar.
+
+### Tono y severidad — una sola familia: **ámbar `--warning`**
+
+- **Cruzar un límite es un aviso (`--warning`, ámbar), no un error ni income/expense.** Ámbar es el token semántico del DS para "advertencia, no error" (ya vigente en el callout de borrado en cascada y en los estados de error de las cards: `AlertTriangle` `--warning-ink`). Es el **único hue libre** con semántica de atención: **no colisiona** con las reservas — rojo=gasto, verde=ingreso (regla dura 1), índigo=marca (regla dura 2), paleta de 40 colores=identidad de categoría. Por eso la marca de límite es **siempre ámbar** (o **neutra por peso**, ver abajo), y **nunca** `--expense`/`--income`/`--accent`/color de categoría.
+- **Condición única, sin escalonado (D1).** Un límite = una condición = **una marca binaria** (cruza o no cruza). No hay gradiente ámbar→rojo dentro de un límite. Si el usuario quiere señalización por tramos (p. ej. quiet al 80%, fuerte al 100%), crea **varios límites sobre la misma key** con distinto umbral y distinto efecto (contemplado en D1 del roadmap): el DS **no construye** escalado, lo **compone** de marcas simples.
+- **El usuario elige el EFECTO, no el hue.** El panel de config ofrece qué primitiva aplicar (cuán fuerte), **no un color arbitrario**. El hue es siempre ámbar (o neutro para el efecto de peso). Es una **restricción deliberada**: dejar elegir color libre arriesgaría que el usuario tome verde/rojo/índigo y rompa las reservas. Se preserva la regla de colores reservados **por construcción**.
+- **Dos registros, ambos curados:**
+  - **Aviso (ámbar)** — `--warning` / `--warning-soft` / `--warning-ink`. El default para "quiero que me avise cuando cruce".
+  - **Neutro (peso, sin hue)** — solo sube el **peso tipográfico** del dato, sin color. El extremo **quiet**: "quiero que el dato resalte al cruzar, sin alarma". Legítimo porque la intención del roadmap incluye *resaltar*, no solo *alarmar*.
+
+### Vocabulario de efectos (primitivas)
+
+Set curado de **7 primitivas**, con id estable (el `effect` del límite). Todas reusan moldes ya vigentes del DS; ninguna inventa cromo nuevo. Ordenadas de **más quiet a más fuerte**:
+
+| id | Efecto | Molde reusado | Tono | Portador no-color (a11y) |
+|---|---|---|---|---|
+| `bold` | **Énfasis de peso** — sube el peso del dato (p. ej. 500→600, 600→700), sin tocar color | escala tipográfica del DS | neutro (sin hue) | el cambio de **peso/forma** es no-color en sí; + aria |
+| `tint` | **Color ámbar del texto** — tiñe la cifra/texto en `--warning-ink` | color de texto | ámbar | **solo permitido sobre cifras/textos neutros** (ver regla); + aria |
+| `glyph` | **Glifo de alerta** — `AlertTriangle` (lucide) `--warning-ink`, 11–16px según contexto, `aria-label`+`title`, svg `aria-hidden` | cluster de glifos de la zona de estados | ámbar | la **forma del glifo** + aria/title |
+| `dot` | **Punto/marcador de alerta** — dot 6px `--warning` (o marcador de esquina en celdas densas) | punto de categoría (6px `rounded-full`) recoloreado a ámbar | ámbar | forma + **aria/tooltip obligatorios** (un dot solo es color) |
+| `badge` | **Badge de límite** — chip `--warning-soft`/`--warning-ink`/`--r-chip` 7px, 11px·600·`.04em`, con `AlertTriangle` 11px opcional + label corto | chip "Anulado" recoloreado a ámbar | ámbar | el **texto del badge** (label del límite) |
+| `fill` | **Fondo tenue** — `--warning-soft` de fondo de fila/total (reemplaza el hover tint condicionalmente) | patrón `-soft` | ámbar | **nunca solo** — siempre + `glyph` o `badge` (fondo solo = color-only) |
+| `ring` | **Ring de alerta** — anillo `--warning` 1px vía `box-shadow` (mecanismo del focus ring, no reflowea), alrededor de celda/bloque de total | focus ring del DS | ámbar | **nunca solo** — siempre + `glyph`/`dot`/tooltip (ring solo = color-only) |
+
+**Regla dura del `tint`:** teñir la **cifra** solo se permite cuando esa cifra es **neutra** (`--ink`/`--ink-2`, magnitud sin tipo: totales de reporte, celdas, métricas de footer, contadores). **Nunca** se tiñe un **monto tipado** (income verde / expense) — su color es portador del **tipo** (regla dura 1); pisarlo con ámbar perdería esa señal. Sobre montos tipados se usa `glyph`/`badge`/`fill`/`ring`/`bold` (marcas adyacentes o de contorno), nunca `tint`.
+
+### Mapeo efecto ↔ tipo de anclaje
+
+Cada key del catálogo (§2 del roadmap) emite en un **tipo de anclaje**. El panel de config ofrece, por key, **solo el subset válido** para su anclaje, con un **default sensato** (el usuario puede cambiarlo). El portador de a11y va entre paréntesis.
+
+| Tipo de anclaje | Keys de ejemplo | Efectos válidos | Default | Ubicación / notas |
+|---|---|---|---|---|
+| **Línea de movimiento** (monto tipado + fila) | `mes.item.monto` | `glyph`, `badge`, `fill`, `bold` | `glyph` | El `glyph` `AlertTriangle` entra en la **zona de estados de la sublínea** (slot que ya colapsa → cero impacto), **primero** del cluster (es lo más relevante, antes de `GitBranch`/`Zap`). `badge` va como **primer segmento de identidad** (mismo slot que "Anulado"). `fill` reemplaza el hover tint de la fila **+ obligatorio un `glyph`**. **Nunca `tint`** (el monto es tipado). Bajo ítem anulado, la marca hereda el `opacity-[0.55]` del contenido (es parte de la fila). |
+| **Total / subtotal de mes** (cifra dominante) | `mes.total.gasto`, `mes.total.ingreso`, `mes.balance`, `mes.seccion.subtotal` | `badge`, `glyph`, `bold`, `tint`†, `ring` | `badge` | `badge` adyacente a la cifra (misma celda, `inline-flex gap justify-end`, como el badge de moneda). `tint`† **solo si la cifra es neutra**; si va coloreada por tipo/signo, `tint` **no se ofrece** para esa key. `ring` para envolver el bloque de total (+ glifo). |
+| **Contador de sección** (pill) | `mes.seccion.conteo` | `glyph`, `badge` | `glyph` | `glyph` a la izquierda del pill contador; o recolorear el pill a `--warning-soft`/`--warning-ink` (`badge`). El contador **no es dinero**, `tint` sería redundante con `badge`. |
+| **Celda de grilla** (fondo ocupado por heatmap) | `reporte.unicos.celda` | `ring`, `dot` | `ring`+`dot` | **`fill` NO disponible** (el fondo lo ocupa la rampa de heatmap, ver *Reporte anual de Únicos*). `ring` ámbar inset 1px + **marcador de esquina** `dot` (la celda ~19px no aloja glifo). Portador a11y = **el texto del tooltip de celda** (que ya existe) enunciando el límite cruzado + `aria-label` de la celda. |
+| **Barra** (color = categoría) | `reporte.cuotas.montoPorCuota`, banda de `by-category` | `glyph`, `badge`, `ring` | `glyph` | La barra ya está teñida por **color de categoría** (identidad) — **no se recolorea**. `glyph` `AlertTriangle` junto a la etiqueta de monto de la barra; `ring` alrededor de la barra. Portador = glifo + tooltip del chart. |
+| **Punto/mes de serie en chart** (Recharts) | `reporte.ie.gastoMes`, `reporte.ie.ingresoMes`, `reporte.infl.*` | `dot`, `ring` | `dot` | Marcador `dot` ámbar sobre el punto/barra del mes que cruza; `ring` para envolver una barra específica. Las barras de `income-expense` van tipadas (verde/rojo) → **no recolorear**, marcar por contorno/marcador. Portador = tooltip del chart + `aria`. |
+| **Métrica de footer / porcentaje** (cifra neutra pequeña) | `reporte.unicos.mesTotal`, `reporte.unicos.promedioDiario`, `reporte.unicos.pctVsPrev`, `reporte.unicos.inflacionMes`, `reporte.infl.*` | `tint`, `glyph`, `bold` | `tint` | Cifras **ya neutras** (`--ink-2`) → `tint` a `--warning-ink` es lo más limpio a ese tamaño. En el `%dif` **se conserva** su glifo de dirección `↑`/`↓` (que sigue en `--ink-2`); el `tint` afecta la cifra, no reemplaza la dirección. Portador = el tooltip rico del footer (que ya lista las métricas) + `aria`. |
+
+† `tint` sobre total/subtotal: disponible **solo** cuando el front confirma que esa cifra se renderiza en color neutro; sobre una cifra tipada por signo/tipo, la key no ofrece `tint`.
+
+### Colisión de marcas — un dato, varios límites
+
+Un mismo dato puede cruzar **más de un límite** (p. ej. dos umbrales sobre la misma key). Para no romper el "cero impacto" ni ensuciar la lectura:
+
+- **Se renderiza una sola marca por dato por familia de efecto.** No se apilan N badges ni N glifos sobre una cifra. Si varios límites disparan, se muestra **la marca más fuerte** entre las que aplican (según el orden quiet→fuerte de la tabla de primitivas) y su **`aria`/tooltip enumera todos los límites cruzados**.
+- **En el cluster de la zona de estados**, la alerta es **un** `AlertTriangle`, no uno por límite; el tooltip lista los que cruzaron.
+- Esto mantiene la huella visual **acotada y predecible**, coherente con la restricción rectora.
+
+### Accesibilidad — nunca solo color
+
+Alineado con la regla dura 4 (compatibilidad en claro/oscuro) y con cómo el DS ya evita depender del color:
+
+- **Toda marca porta una señal no-color.** El hue ámbar **nunca** es la única señal. Portadores admitidos: (a) la **forma** del `AlertTriangle` (`glyph`), (b) el **texto** del `badge`, (c) el **cambio de peso** (`bold`, no-color en sí), o (d) como mínimo `aria-label` + `title` + **texto del tooltip** describiendo el límite (ej. "Supera el límite: gasto del mes > $300.000"). El texto accesible **reusa el `label` del límite** (o su placeholder derivado).
+- **`fill` y `ring` nunca van solos** (son color-only): siempre acompañados de `glyph`/`badge`/`dot` o, como piso, del `aria-label` del dato anunciando el cruce.
+- **`dot` exige aria/tooltip** por la misma razón (un punto solo es color).
+- **Patrón de glifo idéntico al cluster de estados:** wrapper con `aria-label` + `title` nativo, svg `aria-hidden` — el mismo molde de `GitBranch`/`Zap`.
+- **Contraste:** `--warning-ink` sobre `--warning-soft` y sobre `--panel` cumple la misma barra ya validada del callout de advertencia vigente. En **oscuro**, los tokens `warning` toman su valor dark (`-soft` = tinte oscuro saturado, `-ink` sube de luminosidad — ver *Principios de calibración del oscuro*): las marcas funcionan idénticas en ambos modos sin tratamiento extra.
+
+### Cumplimiento de reglas duras
+
+- **Regla dura 1 (verde=ingreso · rojo=gasto):** la marca es **ámbar**, jamás verde/rojo; y **nunca recolorea un monto tipado** (`tint` prohibido sobre income/expense). El tipo lo siguen comunicando exclusivamente el ícono 40×40 y el color/signo del monto.
+- **Regla dura 2 (índigo solo marca):** ningún efecto usa índigo; el índigo sigue siendo cromo de interacción (focus ring de los controles del panel de config), no marca de límite.
+- **Regla dura 3 (dinero en mono tabular):** las marcas **no introducen cifras** fuera de mono; el `badge` de límite lleva label de texto (UI) o, si muestra el umbral, va en mono tabular como cualquier cifra.
+- **Regla dura 4 (ambos modos):** tokens `warning` tienen su par claro/oscuro; verificado que la marca se lee en los dos modos.
+
+---
+
 ## Specs de fase
 
 El lenguaje visual vigente y reutilizable que salió de cada fase de implementación está consolidado en las secciones de arriba. Las decisiones puntuales de cada fase, una vez implementadas, dejan de tener documento propio: lo que sobrevive es la regla en presente; el "cuándo/por qué cambió" vive en el historial de git.
