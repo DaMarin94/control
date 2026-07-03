@@ -461,12 +461,12 @@ Cuando el **método de pago seleccionado es de tipo Débito**, el form de movimi
 
 ### Débito automático — indicador en el ítem de `/mes`
 
-Un movimiento con **débito automático** lleva una señal **discreta y neutra** en la **sublínea** del ítem de `/mes` (el lugar canónico de metadatos del movimiento — ver *Metadatos de relación en la sublínea del ítem de `/mes`*):
+Un movimiento con **débito automático** (`autoDebit === true`) lleva una señal **discreta y neutra** en la **zona de estados** (derecha) de la sublínea del ítem de `/mes` (ver *Sublínea del ítem de `/mes` — dos zonas*):
 
-- **Forma:** un **segmento neutro** (no un chip boxeado — peso liviano, como el segmento de frecuencia o "desde {Origen}"): mini-glifo `Zap` (lucide, 11px, `--muted`, `aria-hidden`) + label **"Débito automático"** en el registro de sublínea (`--muted`, 12px, **no** mono). `title` nativo "Débito automático".
-- **Ubicación:** **segmento final** de la sublínea, después de los metadatos existentes (`Categoría · tipo · [frecuencia] · [desde {Origen}]`). Convive con los chips Anulado / Calculado sin recolorearlos.
-- **Neutralidad:** **nunca** semántico (no es ingreso/gasto) ni índigo (no es marca) — es metadato del movimiento, mismo criterio que el chip de moneda y los segmentos de relación.
-- **Condicional:** solo aparece si el flag es `true`; si es `false`, la sublínea queda igual.
+- **Forma:** **glifo solo, sin texto** — `Zap` (lucide, 13px, `--muted`, el svg `aria-hidden`). **Pierde** el label visible "Débito automático": el significado lo cargan `aria-label` + `title` nativo **"Débito automático"** en el wrapper del glifo. Es un glifo del cluster de estados, no un segmento de texto de la identidad.
+- **Ubicación:** **zona de estados** (derecha, `shrink-0`), como **segundo** glifo del cluster, después del glifo de padre (`GitBranch`) si está. `gap-[8px]` entre glifos del cluster; la zona de estados se separa de la identidad por `gap-[10px]` o un hairline vertical `--hair`.
+- **Neutralidad:** **nunca** semántico (no es ingreso/gasto) ni índigo (no es marca) — es metadato del movimiento.
+- **Condicional:** solo aparece si el flag es `true`; si es `false`, no ocupa lugar.
 - **Bajo anulado:** hereda la atenuación `opacity: 0.55` de la fila como el resto del contenido.
 
 ---
@@ -1578,7 +1578,7 @@ Cada sección tiene **dos controles propios**:
 
 ### Control de orden de la sección Únicos (toggle monto ↔ fecha)
 
-Control **ligero/disimulado** que vive **solo en la cabecera de la sección Únicos** de `/mes`, hermano del `SectionFilterButton` (*Filtros por listado en `/mes`*, arriba). Únicos es la **única** sección con columna fecha ("DD Mmm"); Fijos y Cuotas no tienen día, así que **no llevan este control** (no se renderiza en sus cabeceras). El criterio de orden por defecto del listado es **magnitud `|monto| DESC`** (el mismo del backend, ver *Metadatos de relación…*); este control permite **alternar** ese orden con un orden **por fecha**.
+Control **ligero/disimulado** que vive **solo en la cabecera de la sección Únicos** de `/mes`, hermano del `SectionFilterButton` (*Filtros por listado en `/mes`*, arriba). Únicos es la **única** sección con columna fecha ("DD Mmm"); Fijos y Cuotas no tienen día, así que **no llevan este control** (no se renderiza en sus cabeceras). El criterio de orden por defecto del listado es **magnitud `|monto| DESC`** (el mismo del backend, ver *Sublínea del ítem de `/mes` — dos zonas*); este control permite **alternar** ese orden con un orden **por fecha**.
 
 **Es un toggle de dos órdenes, no un menú.** Dos estados mutuamente excluyentes: **(a) por monto** (`|monto| DESC`, el default de la sección) y **(b) por fecha**. No hay un tercer estado ni dirección configurable por el usuario: cada orden tiene **una** dirección fija (ver default abajo). Un solo clic alterna entre a↔b.
 
@@ -1620,16 +1620,49 @@ Selector del color de categoría en el modal de categoría (crear y editar), que
 - **Botón "Aleatorio":** ghost chico (`Shuffle` 15px) que mueve la selección a un swatch al azar **de la matriz** (nunca un hex fuera de ella).
 - **Crear:** arranca en el color menos usado (subset base, fila L3). **Editar:** arranca en el color actual de la categoría.
 
-### Metadatos de relación en la sublínea del ítem de `/mes` (calculados)
+### Sublínea del ítem de `/mes` — dos zonas (identidad · estados)
 
-La **sublínea** del ítem de `/mes` es el lugar canónico de los metadatos del movimiento (categoría, tipo, frecuencia, cuota, estado anulado). La relación **padre/hijo** de los movimientos calculados se señala ahí, con **chips/segmentos neutros**, sin recolorear el ítem ni el monto:
+La **sublínea** (segunda línea del cuerpo del ítem, col 2, bajo el nombre) es el lugar canónico de los metadatos del movimiento. Se organiza en **dos zonas** dentro de una fila `flex items-center` que ocupa el ancho de la col 2:
 
-- **Hijo (es un calculado):** chip neutro **"Calculado"** (mismo estilo que el chip "Anulado": `--panel-3` / `--muted` / `--r-chip` / 11px·600·`.04em`) con mini-glifo `Link2` (11px), como **primer** segmento de la sublínea; y un segmento final **"desde {Origen}"** (`--muted`, nombre en `--ink-2`, sin mono). Orden si además está anulado: `[Anulado] [Calculado] Categoría · …`.
-- **Padre (tiene calculados derivados):** segmento final con glifo `GitBranch` (13px, `--muted`) + contador mono tabular si hay más de uno, y `title` nativo "Tiene N calculado(s)". Señal más liviana que la del hijo (es info secundaria).
-- El **monto** del calculado puede ser negativo/cero (ver *Paleta y uso de tokens* → regla del signo).
-- **El origen del calculado puede ser fijo, único o cuota — el patrón es transversal.** El chip "Calculado", el "desde {Origen}" del hijo y la marca padre (`GitBranch`) se aplican **idénticos** sin importar el origen; el calculado se **lista en la sección de su origen** (calculado de único → **Únicos**; de cuota → **Cuotas**; de fijo → **Fijos**). Particularidades por sección:
+- **Zona de identidad (izquierda)** — texto, `flex-1 min-w-0`, trunca con elipsis cuando aprieta. Registro de sublínea 12px, texto `--muted`, separadores `·` en `--faint`. Reúne **quién/qué** es el movimiento.
+- **Zona de estados (derecha)** — `shrink-0`, cluster de glifos neutros `--muted` alineado a la derecha, **nunca** trunca. Reúne **banderas** del movimiento (padre, débito automático). Se separa de la identidad por un `gap-[10px]` o, si se prefiere el corte visual, un **hairline vertical** `--hair` de 12px de alto.
+
+**El tipo (gasto/ingreso) NO se rotula en la sublínea.** Lo comunican, sin redundar, el **ícono 40×40 tintado** de la col 1 (flecha `↓` gasto en `--expense` / `↑` ingreso en `--income`) y el **signo + color del monto** de la col 4. No hay segmento textual "gasto"/"ingreso" en ninguna zona.
+
+#### Zona de identidad — orden exacto de segmentos
+
+De izquierda a derecha, **omitiendo** los que no apliquen:
+
+1. **Badge "Anulado"** (solo si `skipped`) — chip neutro; ver *Ítem anulado*. Es el **primer** segmento cuando está.
+2. **Punto de color de categoría** — punto **6px** (`w-[6px] h-[6px] rounded-full shrink-0`), `background: movement.category.color` inline (el color viene del dato tal cual; el campo disponible en el ítem es `movement.category.color`), `aria-hidden`. Va **inmediatamente antes** del nombre de categoría, `gap-[6px]`. Es el **ancla de identidad** de la fila.
+3. **Categoría** — nombre de la categoría en **`--ink-2`** (sube de `--muted` a `--ink-2`: es el **eje de identidad** de la sublínea), 12px, no mono, `truncate`.
+4. **Método de pago** (solo si el movimiento tiene método asociado) — separador `·` + **glifo del método** (lucide del allowlist `PAYMENT_METHOD_ICONS`, 12px, `--muted`, `shrink-0`, `aria-hidden`) + **nombre del método** (`--muted`, 12px, no mono). **Sin** chip de tipo de método (Crédito/Débito/Efectivo no se muestra en el ítem).
+5. **Origen — frecuencia** (solo **fijos** y **calculados de origen fijo**) — separador `·` + glifo `Repeat` (12px, `--muted`, `aria-hidden`) + etiqueta de frecuencia **en minúscula** (mensual / bimestral / trimestral / semestral / anual), `--muted`, no mono. **La cuota X/N de las cuotas NO vive en la sublínea:** sigue en la **col 3** (ver *Sin cambios*), sin duplicarse. Los **únicos** no llevan segmento de origen en la sublínea (su fecha va en col 3).
+6. **"↳ desde {Origen}"** (solo si el movimiento **es un calculado**) — **último** segmento de identidad. Separador `·` + glifo `CornerDownRight` (12px, `--muted`, `aria-hidden`) + texto "desde " (`--muted`) + **nombre del origen** en `--ink-2`, no mono, `truncate`. **Fusiona en un solo segmento** la marca de "es calculado" y la referencia a su origen: **no hay chip boxeado "Calculado"** por separado (se eliminó).
+
+El **monto** del calculado puede ser negativo/cero (ver *Paleta y uso de tokens* → regla del signo).
+
+#### Zona de estados — cluster de glifos (derecha)
+
+Glifos neutros `--muted`, **solo glifo, sin texto**: cada uno comunica su significado con `aria-label` + `title` nativo en el wrapper (el svg va `aria-hidden`). Orden dentro del cluster, de izquierda a derecha, `gap-[8px]` entre glifos:
+
+1. **Padre** (`hasCalculated === true`) — glifo `GitBranch` (13px, `--muted`). `aria-label`/`title`: **"Tiene N calculado(s)"** (el conteo vive solo en el label/tooltip; **sin** contador visible, para mantener el cluster como glifos). Señal liviana (info secundaria).
+2. **Débito automático** (`autoDebit === true`) — glifo `Zap` (13px, `--muted`). `aria-label`/`title`: **"Débito automático"** (ver *Débito automático — indicador en el ítem de `/mes`*).
+
+Si **ninguna** bandera aplica, la zona de estados **no se renderiza** y la identidad usa el ancho completo.
+
+#### Cumplimiento de reglas duras
+
+- **Regla dura 1 (verde = ingreso · rojo = gasto):** el punto de categoría usa la **paleta de 40 colores de categorías** (identificador), que incluye rojos y verdes, pero **no** comunica tipo: está anclado espacialmente al **nombre de categoría** (eje de identidad), es diminuto (6px) y **nunca** toca la cifra ni el ícono 40×40 de tipo. El tipo lo siguen comunicando **exclusivamente** el ícono tintado (col 1) y el signo/color del monto (col 4). Es el **mismo criterio ya vigente** para los swatches `category.color` de gráficos y tooltips, que conviven con montos sin colisionar. El punto es una **tercera familia de color legítima** (paleta de categorías) sobre **identidad**, nunca sobre cifra ni sobre el ícono de tipo.
+- **Regla dura 2 (índigo solo marca):** ningún elemento de la sublínea usa índigo para teñir cifras ni identidad; el punto usa color de categoría, los glifos y textos van en neutros (`--muted` / `--ink-2`).
+- **Regla dura 3 (dinero en mono tabular):** la sublínea **no contiene cifras de dinero** (el monto vive en col 4, mono tabular). Ni el nombre de origen ni los glifos de estado son cifras.
+
+#### Relación padre/calculado — transversal a los tres orígenes
+
+La relación **padre/hijo** de los movimientos calculados se señala como arriba (segmento **"↳ desde {Origen}"** del hijo en la identidad; glifo **padre** `GitBranch` en la zona de estados), sin recolorear el ítem ni el monto:
+- **El origen del calculado puede ser fijo, único o cuota — el patrón es transversal.** El segmento **"↳ desde {Origen}"** del hijo (identidad) y la marca **padre** (`GitBranch`, zona de estados) se aplican **idénticos** sin importar el origen; el calculado se **lista en la sección de su origen** (calculado de único → **Únicos**; de cuota → **Cuotas**; de fijo → **Fijos**). Particularidades por sección:
   - **El hijo toma la forma de su sección de origen.** En **Únicos** lleva la columna fecha "DD Mmm" (heredada del split temporal del origen); en **Cuotas** la columna 3 va **vacía** — el calculado de cuota **no** muestra la etiqueta "Cuota X/N" (es un movimiento propio, no integra el plan de cuotas); en **Fijos** la columna 3 va vacía como cualquier fijo.
-  - **La sublínea sigue la regla de su origen:** el segmento de **frecuencia (`Repeat`)** aparece **solo** cuando el calculado es de **origen fijo**; en calculados de único/cuota la sublínea es `[Calculado] Categoría · gasto/ingreso · desde {Origen}` (sin frecuencia, sin "X/N").
+  - **La sublínea sigue la regla de su origen:** el segmento de **frecuencia (`Repeat`)** aparece **solo** cuando el calculado es de **origen fijo**; en calculados de único/cuota la zona de identidad es `● Categoría · [método] · ↳ desde {Origen}` (sin frecuencia, sin "X/N", sin rótulo de tipo).
   - **Orden dentro de la sección:** el calculado se ordena por **magnitud `|monto| DESC`** mezclado con el resto de los ítems de su sección (mismo criterio único del backend); **no** se ancla junto a su origen ni se agrupa aparte — cae donde su magnitud lo ubique.
   - **Ícono de la caja de origen (form de calculado).** La caja de origen *read-only* del form lleva un glifo lucide que identifica el **tipo del movimiento de origen**, en `--accent-ink` (cromo de UI, no monto): **fijo → `Repeat`** (recurrencia), **único → `Receipt`** (gasto puntual / ticket), **cuota → `CreditCard`** (compra financiada en N pagos). 15px, `shrink-0`, `aria-hidden`. Son afordancias neutras: no tiñen cifras ni colisionan con la regla verde/rojo. No hay convención previa de ícono para único/cuota en listas (Únicos se distingue por la columna fecha; Cuotas por "X/N"), así que estos tres glifos viven por ahora solo en esta caja.
 - **Aviso de borrado en cascada (modal de eliminar):** cuando el movimiento a eliminar es **padre** (`hasCalculated === true`), el modal de confirmación suma un **callout de advertencia** como **último bloque del cuerpo, antes del footer**, avisando que al borrarlo también se borran sus calculados. Es **advertencia (ámbar `--warning`), no error**: el borrado es lo pedido, el callout informa el efecto colateral. Banda `--r-ctl`, fondo `--warning-soft`, borde `--warning`, `AlertTriangle` (lucide, 16px, `--warning-ink`) + texto 13px/500 `--warning-ink`. El botón "Eliminar" del footer **es `danger`** (rojo): advertencia ámbar y acción destructiva roja conviven. Solo aparece si `hasCalculated`; si es `false`, el modal queda igual.
@@ -1640,7 +1673,7 @@ La **sublínea** del ítem de `/mes` es el lugar canónico de los metadatos del 
 
 - **Atenuación de la fila:** todo el contenido de la fila (ícono, nombre, sublínea, monto, columna fecha) a **`opacity: 0.55`**. **No** se atenúa el fondo/hover ni el KebabMenu (que queda a opacidad plena para accionar "Des-anular").
 - **Monto tachado:** `line-through` sobre el monto, además de la atenuación. **Conserva su color por tipo y su signo** — no se recolorea a neutro.
-- **Badge "Anulado":** chip neutro como **primer** segmento de la sublínea (antes de Categoría; si además es calculado: `[Anulado] [Calculado] …`). Mismo molde de chip neutro del DS: `--panel-3` / `--muted` / `--r-chip` 7px / 11px·600·`.04em`. **Mismo texto "Anulado" para los tres orígenes** (no se cambia por "este mes"): el badge señala el estado de cómputo del ítem, no el alcance temporal — ese matiz vive en el rótulo del kebab. Neutro a propósito (no `--warning` ni semántico): "anulado" es un estado de cómputo, no error.
+- **Badge "Anulado":** chip neutro como **primer** segmento de la **zona de identidad** de la sublínea (antes del punto de categoría; si además es calculado, el "↳ desde {Origen}" queda como último segmento de identidad: `[Anulado] ● Categoría · … · ↳ desde {Origen}`). Mismo molde de chip neutro del DS: `--panel-3` / `--muted` / `--r-chip` 7px / 11px·600·`.04em`. **Mismo texto "Anulado" para los tres orígenes** (no se cambia por "este mes"): el badge señala el estado de cómputo del ítem, no el alcance temporal — ese matiz vive en el rótulo del kebab. Neutro a propósito (no `--warning` ni semántico): "anulado" es un estado de cómputo, no error.
 
 **Hover del anulado:** la fila sigue interactiva (`hover:bg-panel-2` + KebabMenu visible); el contenido atenuado **no** vuelve a opacidad plena en hover.
 
@@ -1676,7 +1709,7 @@ El calculado **no es un tab** del modal: se abre en modo propio (sin tabs de tip
 
 La moneda explícita por movimiento, su cotización y la conversión de display a la **moneda default** del usuario aportan piezas reutilizables que **nunca tiñen el monto**. **Regla viva:** **la moneda es cromo neutro** — badge, código y cotización van en **neutros** (`--ink-2` / `--muted` / `--panel-3`); **nunca** verde/rojo (eso es tipo, regla dura 1) ni índigo (eso es marca, regla dura 2). El color del monto lo da su **tipo**; la moneda solo lo **rotula**. Cifra original y convertida van **ambas en mono tabular** (regla dura 3). El índigo aparece solo como **cromo de interacción** (focus ring, thumb activo del segmented).
 
-- **Badge de código de moneda:** chip neutro con el código (`"USD"`, `"ARS"`), **mismo molde que los chips Anulado/Calculado** (`--panel-3` / `--muted` / `--r-chip` 7px / 11px·600·`.04em` / `mono`). Identifica la moneda de origen; no se tiñe.
+- **Badge de código de moneda:** chip neutro con el código (`"USD"`, `"ARS"`), **mismo molde que el chip "Anulado"** (`--panel-3` / `--muted` / `--r-chip` 7px / 11px·600·`.04em` / `mono`). Identifica la moneda de origen; no se tiñe.
 - **Segmented neutro de moneda:** el **segmented del DS sin semánticos** (molde del triple switch de tipo): track `--panel-3`, radio `--r-pill`, padding `2px`; segmentos texto 13px/600 `mono`. Seleccionado = thumb `--panel` + `--shadow-sm`, texto `--ink`, deslizamiento 0.14s; no seleccionado = `--muted` → `--ink-2` en hover. **Sin color semántico ni índigo en los segmentos.** `role="radiogroup"` + `role="radio"`, focus ring `--accent-soft` 3px. Es el selector de moneda en `/configuracion` y en el bloque moneda+cotización de los forms. Tiene **4 segmentos** (ARS/USD/EUR/BRL); su forma completa se detalla en *Monedas configurables — set curado ARS/USD/EUR/BRL*.
 - **Par moneda + cotización (forms de único/fijo/cuotas):** sub-bloque que **modula el Monto** desde dentro del **disclosure colapsable "Más opciones"** —que también contiene el selector de método de pago— ubicado como **último bloque del form, antes de los botones de acción** (ver *#### 4* punto (A) Ubicación). Cuando `moneda ≠ default`: `grid grid-cols-2 gap-[14px]` → Moneda (segmented neutro) + Cotización (input mono con **prefijo de par** de lectura, ej. `"USD→ARS"` / `"ARS→USD"` según la moneda seleccionada, en `mono` 12px `--muted`). Cuando `moneda == default`: el campo Cotización **se oculta** (queda solo el selector). Pre-carga editable: nota *field-note* "Cotización de referencia del mes" (glifo `History` 12px) → "Cotización modificada" al editar. Validación: cotización > 0 (error con borde `--expense` + ring `--expense-soft` + mensaje `--expense-ink`, mismo patrón que el Monto). El **calculado no muestra el bloque** (hereda moneda/cotización del origen, read-only).
 - **Ítem de `/mes` (`MovementItemRow`) — original subordinado al convertido:** **el monto convertido a la default domina** (col 4, 15.5px/600, color por tipo, mono). Cuando `moneda ≠ default` se suman dos elementos **neutros y subordinados**: el **badge de moneda original** a la izquierda del monto (misma celda, `inline-flex items-center gap-[7px] justify-end`) y una **segunda línea** del valor original (*Meta/subtítulos* 12.5px/500 `--muted` `mono`, con el símbolo de su moneda, ej. `US$100,00`, sin signo). **Cuando `moneda = default` el ítem no lleva badge ni línea original.** Bajo anulado, ambos heredan el `opacity-[0.55]`; el convertido conserva su `line-through` + color por tipo.

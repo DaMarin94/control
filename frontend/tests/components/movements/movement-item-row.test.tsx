@@ -687,12 +687,12 @@ describe("MovementItemRow — semántica del KebabMenu", () => {
 // ─── Tests: Fase 1.1.7 — calculados / padre/hijo / monto negativo ────────────
 
 describe("MovementItemRow — Fase 1.1.7: indicadores calculado/padre", () => {
-  it("ítem calculado muestra el chip 'Calculado' en la sublínea", () => {
+  it("ítem calculado NO muestra el chip boxeado 'Calculado' (se fusiona en '↳ desde Origen')", () => {
     renderRow(fijoCalculado);
-    expect(screen.getByText("Calculado")).toBeInTheDocument();
+    expect(screen.queryByText("Calculado")).not.toBeInTheDocument();
   });
 
-  it("ítem calculado muestra 'desde Sueldo' en la sublínea", () => {
+  it("ítem calculado muestra el segmento fusionado 'desde Sueldo' en la sublínea", () => {
     renderRow(fijoCalculado);
     expect(screen.getByText("Sueldo")).toBeInTheDocument();
     expect(screen.getByText("desde")).toBeInTheDocument();
@@ -804,9 +804,9 @@ describe("MovementItemRow — Fase 1.1.7: monto negativo/cero", () => {
 // ─── Tests: Fase 1.1.8 — calculados de único y cuota ─────────────────────────
 
 describe("MovementItemRow — Fase 1.1.8: calculado de único", () => {
-  it("único calculado muestra el chip 'Calculado'", () => {
+  it("único calculado NO muestra el chip 'Calculado'", () => {
     renderRow(unicoCalculado);
-    expect(screen.getByText("Calculado")).toBeInTheDocument();
+    expect(screen.queryByText("Calculado")).not.toBeInTheDocument();
   });
 
   it("único calculado muestra 'desde Almuerzo' en la sublínea", () => {
@@ -864,9 +864,9 @@ describe("MovementItemRow — Fase 1.1.8: calculado de único", () => {
 });
 
 describe("MovementItemRow — Fase 1.1.8: calculado de cuota", () => {
-  it("cuota calculada muestra el chip 'Calculado'", () => {
+  it("cuota calculada NO muestra el chip 'Calculado'", () => {
     renderRow(cuotaCalculada);
-    expect(screen.getByText("Calculado")).toBeInTheDocument();
+    expect(screen.queryByText("Calculado")).not.toBeInTheDocument();
   });
 
   it("cuota calculada muestra 'desde Notebook' en la sublínea", () => {
@@ -1102,23 +1102,55 @@ describe("MovementItemRow — calculado de fijo: acción 'Anular este mes' dispo
   });
 });
 
-// ─── Tests: indicador "Débito automático" en la sublínea (P4) ────────────────
+// ─── Tests: indicador "Débito automático" en la zona de estados (P4 / rediseño sublínea) ──
 
 describe("MovementItemRow — indicador 'Débito automático' (P4)", () => {
-  it("muestra el segmento 'Débito automático' cuando autoDebit === true", () => {
+  it("muestra el glifo (sin texto visible) con aria-label/title 'Débito automático' cuando autoDebit === true", () => {
     const conDebitoAutomatico: MovementItem = { ...unico, autoDebit: true };
     renderRow(conDebitoAutomatico);
-    expect(screen.getByText("Débito automático")).toBeInTheDocument();
+    // Rediseño de sublínea: pierde el label visible, queda solo glifo con aria-label + title
+    expect(screen.queryByText("Débito automático")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Débito automático")).toBeInTheDocument();
   });
 
-  it("NO muestra el segmento cuando autoDebit === false", () => {
+  it("NO muestra el glifo cuando autoDebit === false", () => {
     const sinDebitoAutomatico: MovementItem = { ...unico, autoDebit: false };
     renderRow(sinDebitoAutomatico);
-    expect(screen.queryByText("Débito automático")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Débito automático")).not.toBeInTheDocument();
   });
 
-  it("NO muestra el segmento cuando autoDebit === null", () => {
+  it("NO muestra el glifo cuando autoDebit === null", () => {
     renderRow(unico); // autoDebit: null en el fixture base
-    expect(screen.queryByText("Débito automático")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Débito automático")).not.toBeInTheDocument();
+  });
+});
+
+// ─── Tests: rediseño de la sublínea (dos zonas, punto de categoría, sin rótulo de tipo) ──
+
+describe("MovementItemRow — rediseño de la sublínea (dos zonas)", () => {
+  it("no rotula el tipo con la palabra 'gasto' ni 'ingreso' en la sublínea", () => {
+    renderRow(fijoActivo);
+    expect(screen.queryByText(/^gasto$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^ingreso$/i)).not.toBeInTheDocument();
+  });
+
+  it("el punto de categoría usa movement.category.color como color de fondo", () => {
+    const { container } = renderRow(fijoActivo);
+    const dot = container.querySelector('span[style*="background"]');
+    expect(dot).toBeInTheDocument();
+    expect(dot).toHaveStyle({ background: baseCategory.color });
+  });
+
+  it("zona de estados no se renderiza cuando no hay padre ni débito automático", () => {
+    renderRow(unico); // hasCalculated=false, autoDebit=null
+    expect(screen.queryByTitle("Débito automático")).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/tiene movimiento/i)).not.toBeInTheDocument();
+  });
+
+  it("zona de estados muestra padre (GitBranch) y débito automático juntos cuando ambos aplican", () => {
+    const padreConDebito: MovementItem = { ...fijoPadre, autoDebit: true };
+    renderRow(padreConDebito);
+    expect(screen.getByTitle(/tiene movimiento/i)).toBeInTheDocument();
+    expect(screen.getByTitle("Débito automático")).toBeInTheDocument();
   });
 });

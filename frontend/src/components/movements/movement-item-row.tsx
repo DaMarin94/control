@@ -8,7 +8,8 @@
  *
  * Layout: grid 40px 1fr auto auto auto
  *   1. Ícono 40×40 tintado (expense-soft/expense-ink o income-soft/income-ink)
- *   2. Texto: nombre + sub-línea (categoría · tipo · [frecuencia para fijos])
+ *   2. Texto: nombre + sub-línea en dos zonas (identidad · estados — ver docs/design.md
+ *      "Sublínea del ítem de /mes — dos zonas")
  *   3. Fecha en mono (DD Mmm); en cuotas "Cuota X/N"; fijos: vacío
  *   4. Monto mono 15.5px (gastos con −$, ingresos con +$ en income-ink)
  *   5. KebabMenu de acciones (aparece en hover de la fila)
@@ -22,16 +23,39 @@
  * Fase 1.1.8: "Crear movimiento desde este" habilitado también en únicos y cuotas.
  *   Marca padre (GitBranch) ya no restringida a fijos — aplica a cualquier origen con hasCalculated.
  *
+ * Rediseño de la sublínea (docs/design.md, "Sublínea del ítem de /mes — dos zonas"):
+ *   - El tipo (gasto/ingreso) NO se rotula en texto — lo comunican el ícono 40×40 tintado
+ *     (col 1) y el signo/color del monto (col 4).
+ *   - Zona de identidad (izquierda, flex-1 min-w-0, trunca): [badge Anulado] [● color de
+ *     categoría] Categoría · [glifo + nombre método de pago] · [Repeat frecuencia, fijos] ·
+ *     [CornerDownRight "desde {Origen}", calculados] — el chip boxeado "Calculado" se
+ *     eliminó: se fusiona en el segmento "↳ desde {Origen}".
+ *   - Zona de estados (derecha, shrink-0, nunca trunca): cluster de glifos neutros
+ *     --muted con aria-label + title — GitBranch (padre) y Zap (débito automático, sin
+ *     texto visible). No se renderiza si ninguna bandera aplica.
+ *
  * Ítem anulado (skipped=true):
  *   - Contenido de la fila a opacity 0.55 (no el fondo ni el KebabMenu)
  *   - Monto con line-through conservando color semántico
- *   - Badge "Anulado" como primer segmento de la sublínea
+ *   - Badge "Anulado" como primer segmento de la zona de identidad de la sublínea
  */
 
 import { type MovementItem } from "@/types/movement";
 import { type RecurringFrequency } from "@/types/recurring";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { ArrowDown, ArrowUp, Repeat, Pencil, Trash2, CalendarOff, CalendarPlus, Link2, GitBranch, Calculator, Zap } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Repeat,
+  Pencil,
+  Trash2,
+  CalendarOff,
+  CalendarPlus,
+  CornerDownRight,
+  GitBranch,
+  Calculator,
+  Zap,
+} from "lucide-react";
 import { KebabMenu } from "@/components/ui/kebab-menu";
 import { PaymentMethodIcon } from "@/components/ui/payment-method-icon";
 import { useRecurring } from "@/hooks/use-recurring";
@@ -48,6 +72,16 @@ const FREQUENCY_LABEL: Record<RecurringFrequency, string> = {
   BIANNUAL: "semestral",
   ANNUAL: "anual",
 };
+
+/** Separador "·" entre segmentos de la zona de identidad — punto 3px, --faint, aria-hidden */
+function IdentitySeparator() {
+  return (
+    <span
+      className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
+      aria-hidden="true"
+    />
+  );
+}
 
 interface MovementItemRowProps {
   movement: MovementItem;
@@ -80,6 +114,9 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
   // La marca padre aplica a cualquier origen (fijo, único o cuota) — Fase 1.1.8
   // Un calculado nunca puede ser padre (RF-MCALC-001), por eso !isCalculated
   const isParent = !isCalculated && movement.hasCalculated;
+  const hasAutoDebit = movement.autoDebit === true;
+  // Zona de estados solo se renderiza si hay al menos una bandera (spec: "sin renderizar" si ninguna aplica)
+  const hasStatesZone = isParent || hasAutoDebit;
 
   // Fecha formateada "02 Jun" (solo para únicos)
   const dateFormatted =
@@ -127,8 +164,6 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
   const iconBg = isExpense ? "bg-expense-soft" : "bg-income-soft";
   const iconColor = isExpense ? "text-expense-ink" : "text-income-ink";
 
-  // Sublínea: "Categoría · tipo · [repeat <frecuencia>]"
-  const typeLabel = isExpense ? "gasto" : "ingreso";
   const categoryName = movement.category.name;
 
   // Cuota label: "Cuota X/N"
@@ -224,112 +259,91 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
         <b className="block text-[14.5px] font-semibold tracking-[-0.01em] text-ink leading-snug truncate">
           {movement.description ?? categoryName}
         </b>
-        <span className="flex items-center gap-[7px] text-[12.5px] text-muted flex-wrap">
-          {/* Badge "Anulado" — primer segmento (spec 1.1.1 / 1.1.7 orden: Anulado primero) */}
-          {isSkipped && (
-            <>
+
+        {/* Sublínea — dos zonas: identidad (izquierda, trunca) · estados (derecha, cluster) */}
+        <span className="flex items-center gap-[10px] mt-[1px]">
+          {/* Zona de identidad */}
+          <span className="flex flex-1 min-w-0 items-center gap-[6px] overflow-hidden text-[12px] text-muted">
+            {/* Badge "Anulado" — primer segmento cuando skipped */}
+            {isSkipped && (
               <span
-                className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em]"
+                className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em] shrink-0"
                 aria-label="Movimiento anulado para este mes"
               >
                 Anulado
               </span>
-              <span
-                className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
-                aria-hidden="true"
-              />
-            </>
-          )}
-          {/* Chip "Calculado" — segundo segmento si es calculado (spec 1.a Fase 1.1.7) */}
-          {isCalculated && (
+            )}
+
+            {/* Punto de color de categoría — ancla de identidad, inmediatamente antes del nombre */}
+            <span
+              className="h-[6px] w-[6px] rounded-full shrink-0"
+              style={{ background: movement.category.color }}
+              aria-hidden="true"
+            />
+            <span className="min-w-0 truncate text-ink-2">{categoryName}</span>
+
+            {/* Método de pago — solo si el movimiento lo tiene asociado (RF-PM-006) */}
+            {movement.paymentMethod && (
+              <>
+                <IdentitySeparator />
+                <span className="inline-flex items-center gap-[4px] shrink-0">
+                  <PaymentMethodIcon icon={movement.paymentMethod.icon} size={12} className="text-muted shrink-0" />
+                  {movement.paymentMethod.name}
+                </span>
+              </>
+            )}
+
+            {/* Frecuencia — fijos y calculados de origen fijo (la cuota X/N no vive acá, va en col 3) */}
+            {isFijo && (
+              <>
+                <IdentitySeparator />
+                <span className="inline-flex items-center gap-[4px] shrink-0">
+                  <Repeat size={12} className="text-muted shrink-0" aria-hidden="true" />
+                  {frequencyLabel}
+                </span>
+              </>
+            )}
+
+            {/* "↳ desde {Origen}" — fusiona la marca de "es calculado" y la referencia a su
+                origen en un único segmento; último segmento de identidad. Sin chip "Calculado" separado. */}
+            {isCalculated && movement.calculated?.sourceDescription && (
+              <>
+                <IdentitySeparator />
+                <span className="inline-flex min-w-0 items-center gap-[4px]">
+                  <CornerDownRight size={12} className="text-muted shrink-0" aria-hidden="true" />
+                  <span className="min-w-0 truncate">
+                    <span className="text-muted">desde </span>
+                    <span className="text-ink-2">{movement.calculated.sourceDescription}</span>
+                  </span>
+                </span>
+              </>
+            )}
+          </span>
+
+          {/* Zona de estados — cluster de glifos neutros, derecha, nunca trunca. No se
+              renderiza si ninguna bandera aplica. */}
+          {hasStatesZone && (
             <>
-              <span
-                className="inline-flex items-center gap-[3px] rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em]"
-              >
-                <Link2 size={11} aria-hidden="true" />
-                Calculado
-              </span>
-              <span
-                className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
-                aria-hidden="true"
-              />
-            </>
-          )}
-          <span>{categoryName}</span>
-          <span
-            className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
-            aria-hidden="true"
-          />
-          <span>{typeLabel}</span>
-          {/* Método de pago — solo si el movimiento lo tiene asociado (RF-PM-006) */}
-          {movement.paymentMethod && (
-            <>
-              <span
-                className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
-                aria-hidden="true"
-              />
-              <span className="inline-flex items-center gap-[4px]">
-                <PaymentMethodIcon icon={movement.paymentMethod.icon} size={12} className="opacity-60" />
-                {movement.paymentMethod.name}
-              </span>
-            </>
-          )}
-          {isFijo && (
-            <>
-              <span
-                className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
-                aria-hidden="true"
-              />
-              <span className="inline-flex items-center gap-[4px]">
-                <Repeat size={12} className="opacity-60" aria-hidden="true" />
-                {frequencyLabel}
-              </span>
-            </>
-          )}
-          {/* "desde {Origen}" — solo si es calculado y el origen tiene nombre (spec 1.a) */}
-          {isCalculated && movement.calculated?.sourceDescription && (
-            <>
-              <span
-                className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
-                aria-hidden="true"
-              />
-              <span className="text-[12.5px]">
-                <span className="text-muted">desde </span>
-                <span className="text-ink-2">{movement.calculated.sourceDescription}</span>
-              </span>
-            </>
-          )}
-          {/* Indicador padre: GitBranch + contador (spec 1.b) — último segmento */}
-          {isParent && (
-            <>
-              <span
-                className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
-                aria-hidden="true"
-              />
-              {/* No tenemos conteo de derivados en el ítem; hasCalculated es bool.
-                  Mostramos solo el ícono (no podemos saber cuántos hay sin el conteo).
-                  Si el backend expone el conteo en el futuro, agregar el número aquí. */}
-              <span
-                className="inline-flex items-center gap-[3px] text-muted"
-                title="Tiene movimiento(s) calculado(s)"
-              >
-                <GitBranch size={13} aria-hidden="true" />
-              </span>
-            </>
-          )}
-          {/* Débito automático — segmento final, atributo del movimiento (P4) */}
-          {movement.autoDebit === true && (
-            <>
-              <span
-                className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
-                aria-hidden="true"
-              />
-              <span
-                className="inline-flex items-center gap-[4px] text-muted text-[12px]"
-                title="Débito automático"
-              >
-                <Zap size={11} aria-hidden="true" />
-                Débito automático
+              <span className="h-[12px] w-px bg-hair shrink-0" aria-hidden="true" />
+              <span className="flex items-center gap-[8px] shrink-0">
+                {isParent && (
+                  <span
+                    className="inline-flex text-muted"
+                    aria-label="Tiene movimiento(s) calculado(s)"
+                    title="Tiene movimiento(s) calculado(s)"
+                  >
+                    <GitBranch size={13} aria-hidden="true" />
+                  </span>
+                )}
+                {hasAutoDebit && (
+                  <span
+                    className="inline-flex text-muted"
+                    aria-label="Débito automático"
+                    title="Débito automático"
+                  >
+                    <Zap size={13} aria-hidden="true" />
+                  </span>
+                )}
               </span>
             </>
           )}
