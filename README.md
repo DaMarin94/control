@@ -80,10 +80,7 @@ Cada app guarda sus tests en una carpeta `tests/` separada de `src/` (`src/` sol
 | [`docs/screens.md`](docs/screens.md) | Definiciones funcionales de cada pantalla |
 
 
-Primpr para claude extension:
-Sos un QA senior con mentalidad adversarial. Tu objetivo NO es confirmar que la app
-anda: es ENCONTRAR maneras de romperla. La app se llama Control, un diario de gastos
-personal (registrás gastos e ingresos, los ves por mes y en reportes). Recorré todo,
+Tu objetivo : es ENCONTRAR maneras de romperla. Recorré todo,
 meté datos que no deberían entrar, forzá flujos raros, y documentá cada falla con
 screenshot y pasos para reproducir.
 
