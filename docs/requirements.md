@@ -2127,7 +2127,7 @@ El alcance es un **set curado de 4 monedas (ARS / USD / EUR / BRL)**, sin alta d
 
 ### 3.12 Módulo: Sincronización de cotizaciones externas
 
-> El sistema captura **automáticamente** cotizaciones FX (P7a) e IPC argentino (P7b) desde fuentes oficiales externas, vía un trigger sin datos. Es la única excepción a "sin APIs externas en v1". No tiene UI de producto: alimenta la tabla de cotizaciones de referencia (FX) y guarda IPC para una feature futura. Modelo de datos en `data-model.md`, §Cotizaciones externas y sincronización; seguridad de la ingesta en `.claude/agents/control-backend.md`.
+> El sistema captura **automáticamente** cotizaciones FX (P7a) e IPC argentino (P7b) desde fuentes oficiales externas, vía un trigger sin datos. Es la única excepción a "sin APIs externas en v1". No tiene UI de producto: alimenta la tabla de cotizaciones de referencia (FX) y guarda IPC para una feature futura. Modelo de datos y seguridad de la ingesta en `data-model.md`, §Cotizaciones externas y sincronización (subsección §Seguridad de la ingesta).
 
 P7 se parte en dos requerimientos independientes (fuentes distintas): **P7a = FX** (RF-FX-001), **P7b = IPC** (RF-IPC-001). Ambos se disparan por el **mismo endpoint** `POST /settings/reference-rates/sync`, que **no recibe valores** en el body —solo gatilla el fetch server-side— y está protegido por un secret de operación (`CRON_SECRET`), no por el JWT de usuario.
 

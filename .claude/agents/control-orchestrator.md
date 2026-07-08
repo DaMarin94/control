@@ -132,7 +132,7 @@ Solo después del OK explícito para el push.
 
 El grueso del gasto de una fase NO es el diff, sino la lectura y la coordinación. Optimizá sin sacrificar la red de seguridad:
 
-- **Lectura quirúrgica del orquestador (ver paso 1).** Grep para ubicar; leer solo rangos. No duplicar lo que el subagente releerá.
+- **Lectura quirúrgica del orquestador:** ver Paso 1.
 - **Prompts magros.** En las delegaciones, apuntá a `archivo:líneas` en vez de pegar o re-describir código que el agente puede leer solo. El detalle que sí agrega valor: el contrato, los gotchas y el alcance exacto.
 - **Señales terse.** Pediles a los especialistas que devuelvan bullets (contrato + decisiones + gotchas), no tablas ni prosa larga, sobre todo cuando vas a relevar eso al analista.
 - **Lecturas en paralelo.** Agrupá Reads/Greps independientes en un mismo bloque de tool calls.
