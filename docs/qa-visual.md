@@ -1,0 +1,74 @@
+# QA visual
+
+Validación que ni los tests, ni el build, ni el e2e cubren: pixel, layout, modales cortados o atrapantes, marcas mal puestas, datos inválidos que se guardan. Se corre contra la app andando, en un navegador de escritorio.
+
+**Quién ejecuta:** el orquestador lo corre él mismo contra el navegador conectado vía `/chrome` (herramientas `mcp__claude-in-chrome`) — navega, interactúa, dispara casos borde, saca screenshots y reporta. Si el navegador no está conectado/disponible en la sesión, cae al **fallback**: arma el prompt per-feature y se lo entrega al usuario para que lo corra en el chat de la extensión **Claude para Chrome**. La conexión de `/chrome` no es persistente: se reconecta en cada sesión nueva. En ambos modelos el guion es el mismo — cambia solo quién lo ejecuta.
+
+Este doc es un **asset de trabajo vivo**: el prompt genérico de regresión y la plantilla per-feature se mantienen acá al día con las superficies del producto.
+
+## Alcance y exclusiones
+
+**Valida:**
+- Roturas visuales de layout.
+- Modales cortados o atrapantes (que no se cierran, que pierden datos al cerrar).
+- Opciones inalcanzables (menús que se salen de pantalla, selects que tapan).
+- Datos inválidos que se guardan.
+- Estados vacíos rotos (NaN, undefined, empty feo).
+- Crashes.
+
+Todo en **escritorio normal**.
+
+**Exclusiones vigentes** — se atacan como esfuerzos propios y **no** se incluyen en los prompts por ahora:
+- **Responsive / mobile / resize.**
+- **Accesibilidad**: uso por teclado, foco, contraste, legibilidad, información transmitida solo por color.
+
+## Prompt genérico de regresión adversarial
+
+Doc vivo: cuando una feature agrega una superficie nueva, se agrega a la lista de superficies de este prompt, **en el mismo commit que el código**. El bloque de abajo es el asset a mantener y se pega tal cual.
+
+---
+Sos un QA senior con mentalidad adversarial. Tu objetivo NO es confirmar que la app anda: es ENCONTRAR maneras de romperla. La app se llama Control, un diario de gastos personal. Recorré todo, meté datos que no deberían entrar, forzá flujos raros, y documentá cada falla con screenshot y pasos para reproducir.
+
+FUERA DE ALCANCE (ignoralo): responsive/mobile/resize (testeá en escritorio normal) y accesibilidad (teclado, foco, contraste, legibilidad, info por color).
+
+Enfocate en: datos inválidos que se guardan, roturas visuales de layout, modales cortados, opciones inalcanzables, estados rotos y crashes.
+
+Superficies (recorrelas todas): Login (Google); /mes (movimientos por sección Únicos/Fijos/Cuotas, navegación de meses, menú de acciones editar/eliminar/anular por ítem); alta/edición de movimiento (modal con tipos Único/Fijo/Cuota/Calculado; campos monto, descripción, categoría, fecha, y en "Más opciones" moneda+cotización y método de pago + débito automático); Dashboard; /reportes (crear/configurar 5 tipos de card, filtros por categoría, orden, año, refrescar); /configuracion (solapas General [moneda, tema] y Límites); Categorías (alta/edición/borrado, color, soft delete); Métodos de pago (alta/edición/borrado, tipo crédito/débito/efectivo, campos según tipo).
+
+Mentalidad para romperla, por cada campo:
+- Texto: vacío, solo espacios, 2000+ chars, emojis/unicode RTL, HTML/JS (`<script>`, `<img onerror>`) verificando que NO ejecute, comillas/backslashes/`{{7*7}}`/`'; DROP TABLE`/saltos de línea, espacios al borde, nombres duplicados, recrear con nombre de uno borrado (¿ofrece reactivar?).
+- Numérico (monto, umbral, cotización, día del mes): 0, negativos, decimales largos, notación científica, números enormes (¿desborda?), letras/símbolos/pegar no-numérico, coma vs punto, vacío, cotización 0/negativa, día fuera de 1–31, cuotas 0/1/negativa/999.
+- Fechas: inválidas, año 0001/9999, muy futuras/pasadas, 31 en meses de 30, febrero/bisiesto, fijo/cuota que cruza fin de año.
+- Selects/menús: kebab cerca del borde (¿se corta/queda fuera?), selects largos (¿scrollean/tapan?), guardar sin elegir (¿validación?).
+
+Modales y overlays (foco especial): ¿se ve completo o CORTADO?, contenido largo (¿crece/scrollea/rompe?), cerrar con X/Esc/backdrop (¿alguno cierra perdiendo datos sin avisar?), fondo bloqueado (no scrollea atrás), modal sobre modal (apilado/z-index/orden de cierre).
+
+Flujos que rompen: doble/rápido submit (¿duplicados?), spam de clicks en acciones, guardar/navegar durante carga, borrar categoría/método EN USO (¿lo impide con mensaje?, ¿histórico consistente?), editar+cancelar (¿descarta y reabre con valores originales?), vaciar descripción al editar, anular/des-anular repetido (¿totales y reportes coherentes?), reporte con filtro que no matchea (¿empty prolijo?), reordenar drag y soltar raro, cambiar moneda por defecto (¿recalcula sin mezclar viejos?), cambiar tema claro/oscuro/sistema rápido (¿flashea?).
+
+Estados vacíos y carga pesada: mes/usuario sin movimientos (¿empty prolijo o NaN/undefined?), mes con 30+ movimientos (¿aguanta?, ¿números desbordan?).
+
+Sesión/navegación: F5 en medio de un flujo (modal abierto), botón atrás tras modales/cambio de mes, URL interna deslogueado (¿redirige a login?), sesión expirada (¿mensaje claro, no pantalla blanca?).
+
+Reporte: por hallazgo (1) dónde, (2) pasos, (3) qué pasó, (4) qué esperabas, (5) severidad (rompe/feo/menor), (6) screenshot. Agrupá por severidad; priorizá datos inválidos guardados, modales cortados/atrapantes, opciones inalcanzables, crashes.
+---
+
+## Plantilla del prompt per-feature
+
+Guion per-feature que el orquestador sigue al cierre de cada tarea con superficie visual — lo ejecuta él directo contra el navegador, o lo entrega como prompt al usuario en el fallback. Estructura fija, en este orden, para que salga consistente:
+
+1. **Rol + objetivo** — QA visual adversarial, con las mismas exclusiones (responsive + a11y fuera).
+2. **Contexto breve de la feature** — qué hace, en términos de UI.
+3. **Invariantes críticos** (testear primero) — p. ej. "cero-impacto con config vacía": la app se ve igual si la feature no está activada.
+4. **Recorrido superficie por superficie** de lo que la feature toca — con qué mirar y qué esperar en cada una.
+5. **Casos borde** de input y de estado propios de la feature.
+6. **Modales/overlays nuevos** — cortado, cierre, apilado.
+7. **Formato de reporte** (dónde / pasos / qué pasó / qué esperabas / severidad / screenshot) + **limpieza de datos de prueba**.
+
+El contenido visual esperado (colores, posiciones, estados) sale del **"Checklist de aceptación visual"** del spec de `control-design` de esa feature; el orquestador lo reusa para los puntos 3 y 4.
+
+## Cadencia
+
+| Prompt | Cuándo |
+|--------|--------|
+| Per-feature | **Siempre**, en el paso 5.5 del flujo del orquestador, al cierre de cada tarea con superficie visual/UI. Lo ejecuta el orquestador directo contra `/chrome`; hand-off al usuario como fallback. |
+| Genérico de regresión | **On-demand** y al cerrar una versión. |

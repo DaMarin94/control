@@ -50,6 +50,8 @@ Salen del handoff (`docs/design/README.md`). No se negocian sin decisión explí
 ### 1. Entregar el spec
 Entregá el spec visual al orquestador para que lo derive a `control-frontend`. El spec describe, por elemento: qué token/escala/espaciado/estado visual aplica y por qué — en términos que el frontend pueda implementar sin tomar decisiones visuales por su cuenta.
 
+**Cada spec termina con un "Checklist de aceptación visual":** lista breve y verificable de lo que un tester debería confirmar a ojo (estados, invariantes tipo cero-impacto, posiciones, colores/tokens esperados). El orquestador reusa ese checklist para armar el prompt de QA visual per-feature (`docs/qa-visual.md`).
+
 ### 2. Mantener tu doc
 Si la decisión visual es nueva o cambia el lenguaje vigente, actualizá `docs/design.md` vos mismo (es tu doc). No esperes al analista para eso.
 
