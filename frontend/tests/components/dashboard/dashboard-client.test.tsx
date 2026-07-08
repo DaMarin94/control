@@ -36,6 +36,20 @@ vi.mock("@/components/charts/report-card", () => ({
   ),
 }));
 
+// Mock de useLimits (P2 — Tramo 2): [] = cero impacto, no afecta los tests existentes.
+// Evita cablear usePreferences/useSession real (ver dashboard-client-limits.test.tsx
+// para los tests dedicados de marca visual pasiva en el dashboard).
+vi.mock("@/hooks/use-limits", () => ({
+  useLimits: vi.fn(() => ({
+    limits: [],
+    isLoading: false,
+    isSaving: false,
+    create: vi.fn(),
+    remove: vi.fn(),
+    setEnabled: vi.fn(),
+  })),
+}));
+
 // Mock del hook useApi (requerido por TransactionModal/TransactionForm vía NewTransactionButton)
 vi.mock("@/hooks/use-api", () => ({
   useApi: vi.fn(() => ({

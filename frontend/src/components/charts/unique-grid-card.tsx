@@ -37,11 +37,21 @@ import {
 } from "lucide-react";
 import { useUnicoGrid } from "@/hooks/use-reports";
 import { useSettings } from "@/hooks/use-settings";
+import { useLimits } from "@/hooks/use-limits";
+import {
+  computeUniqueCellMark,
+  computeUniqueFooterMarks,
+  mergeUniqueFooterMarks,
+  type UniqueFooterMarks,
+} from "@/lib/limits/apply-reports";
+import { describeLimitMark, type EvaluatedLimitMark } from "@/lib/limits/evaluate";
+import { limitBoldClass, limitTintClass, LimitGlyph } from "@/components/limits/limit-mark";
 import { formatCurrency, CURRENCY_SYMBOLS } from "@/lib/format";
 import { ChartLegend } from "@/components/ui/chart";
 import { CardCurrencySelect } from "@/components/ui/card-currency-select";
 import type { UnicoGridResponse } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
+import type { LimitConfig } from "@/types/limit";
 import { cn } from "@/lib/utils";
 import { SkeletonBlock, SkeletonLine } from "@/components/ui/skeleton";
 import { Eye, EyeOff, Pencil } from "lucide-react";
@@ -524,11 +534,22 @@ interface FooterCellProps {
   monthIdx: number;
   footer: UnicoGridResponse["footer"][0];
   currency: string;
+  /** Marcas de límite (P2 — Tramo 2): las 5 métricas del footer. */
+  marks: UniqueFooterMarks;
   onMouseEnter: (e: React.MouseEvent<HTMLTableCellElement>) => void;
   onMouseLeave: () => void;
 }
 
-function PctDifDisplay({ value, label }: { value: number | null; label: string }) {
+/** Efecto→clase (tint/bold, default tint) + glyph opcional para una métrica de footer marcada. */
+function footerMetricAdorn(mark: EvaluatedLimitMark | null) {
+  return {
+    valueClassName: cn(limitBoldClass(mark?.effect), limitTintClass(mark?.effect)),
+    glyph:
+      mark?.effect === "glyph" ? <LimitGlyph tooltip={describeLimitMark(mark)} size={9} /> : null,
+  };
+}
+
+function PctDifDisplay({ value, label, mark }: { value: number | null; label: string; mark?: EvaluatedLimitMark | null }) {
   if (value === null) {
     return (
       <div className="flex flex-col gap-[1px]">
@@ -540,11 +561,14 @@ function PctDifDisplay({ value, label }: { value: number | null; label: string }
 
   const isUp = value > 0;
   const Arrow = isUp ? ArrowUp : ArrowDown;
+  const { valueClassName, glyph } = footerMetricAdorn(mark ?? null);
 
   return (
     <div className="flex flex-col gap-[1px]">
       <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-faint leading-none">{label}</span>
-      <span className="mono text-[10.5px] font-semibold text-ink-2 flex items-center gap-[2px]">
+      <span className={cn("mono text-[10.5px] font-semibold text-ink-2 flex items-center gap-[2px]", valueClassName)}>
+        {glyph}
+        {/* La dirección ↑/↓ se conserva siempre (no la reemplaza el tint) */}
         {value !== 0 && (
           <Arrow size={9} strokeWidth={2.5} aria-hidden="true" className="text-ink-2 shrink-0" />
         )}
@@ -572,10 +596,14 @@ function TooltipMetricRow({
   );
 }
 
-function FooterCell({ footer, currency, onMouseEnter, onMouseLeave }: FooterCellProps) {
+function FooterCell({ footer, currency, marks, onMouseEnter, onMouseLeave }: FooterCellProps) {
   const totalAbbr = formatCurrencyAbbr(footer.total, currency);
   const avgAbbr = footer.dailyAvg !== null ? formatCurrencyAbbr(footer.dailyAvg, currency) : null;
   const inflFmt = footer.inflationPct !== null ? `${formatPct(footer.inflationPct)}pts` : null;
+
+  const totalAdorn = footerMetricAdorn(marks.total);
+  const avgAdorn = footerMetricAdorn(marks.dailyAvg);
+  const inflAdorn = footerMetricAdorn(marks.inflation);
 
   return (
     <td
@@ -584,16 +612,25 @@ function FooterCell({ footer, currency, onMouseEnter, onMouseLeave }: FooterCell
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      {/* 1. Total (cifra dominante) */}
-      <div className="mono text-[12px] font-semibold text-ink leading-none mb-[5px]">
+      {/* 1. Total (cifra dominante) — reporte.unicos.mesTotal */}
+      <div
+        className={cn(
+          "mono text-[12px] font-semibold text-ink leading-none mb-[5px] flex items-center gap-[3px]",
+          totalAdorn.valueClassName,
+        )}
+      >
+        {totalAdorn.glyph}
         {totalAbbr}
       </div>
 
-      {/* 2. Promedio diario */}
+      {/* 2. Promedio diario — reporte.unicos.promedioDiario */}
       {avgAbbr !== null ? (
         <div className="flex flex-col gap-[1px] mb-[4px]">
           <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-faint leading-none">prom</span>
-          <span className="mono text-[10.5px] font-medium text-ink-2">{avgAbbr}</span>
+          <span className={cn("mono text-[10.5px] font-medium text-ink-2 flex items-center gap-[3px]", avgAdorn.valueClassName)}>
+            {avgAdorn.glyph}
+            {avgAbbr}
+          </span>
         </div>
       ) : (
         <div className="flex flex-col gap-[1px] mb-[4px]">
@@ -602,17 +639,20 @@ function FooterCell({ footer, currency, onMouseEnter, onMouseLeave }: FooterCell
         </div>
       )}
 
-      {/* 3. %dif vs anterior */}
+      {/* 3. %dif vs anterior — reporte.unicos.pctVsPrev */}
       <div className="mb-[4px]">
-        <PctDifDisplay value={footer.pctVsPrev} label="vs ant" />
+        <PctDifDisplay value={footer.pctVsPrev} label="vs ant" mark={marks.pctVsPrev} />
       </div>
 
-      {/* 4. Inflación */}
+      {/* 4. Inflación — reporte.unicos.inflacionMes */}
       <div className="mb-[4px]">
         {footer.inflationPct !== null ? (
           <div className="flex flex-col gap-[1px]">
             <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-faint leading-none">infl</span>
-            <span className="mono text-[10.5px] font-medium text-ink-2">{inflFmt}</span>
+            <span className={cn("mono text-[10.5px] font-medium text-ink-2 flex items-center gap-[3px]", inflAdorn.valueClassName)}>
+              {inflAdorn.glyph}
+              {inflFmt}
+            </span>
           </div>
         ) : (
           <div className="flex flex-col gap-[1px]">
@@ -622,8 +662,8 @@ function FooterCell({ footer, currency, onMouseEnter, onMouseLeave }: FooterCell
         )}
       </div>
 
-      {/* 5. %dif ajustado por inflación */}
-      <PctDifDisplay value={footer.pctVsPrevAdj} label="real" />
+      {/* 5. %dif ajustado por inflación — reporte.unicos.pctVsPrevAjustado */}
+      <PctDifDisplay value={footer.pctVsPrevAdj} label="real" mark={marks.pctVsPrevAdj} />
     </td>
   );
 }
@@ -637,9 +677,11 @@ interface GridTableProps {
   isDark: boolean;
   isEmpty: boolean;
   colorAnchorCents: number;
+  /** Límites del usuario (P2 — Tramo 2). [] = cero impacto (D9). */
+  limits: LimitConfig[];
 }
 
-function GridTable({ data, year, currency, isDark, isEmpty, colorAnchorCents }: GridTableProps) {
+function GridTable({ data, year, currency, isDark, isEmpty, colorAnchorCents, limits }: GridTableProps) {
   const [cellTooltip, setCellTooltip] = useState<CellTooltipState | null>(null);
   const [footerTooltip, setFooterTooltip] = useState<FooterTooltipState | null>(null);
 
@@ -781,18 +823,24 @@ function GridTable({ data, year, currency, isDark, isEmpty, colorAnchorCents }: 
                   const textColor = getCellTextColor(isDark);
                   const fmtCents = formatCurrencyAbbr(totalCents, currency);
                   const fmtFull = formatCurrency(totalCents, currency);
-                  const dayLabel = `Día ${day}, ${MONTH_LABELS_SHORT[monthIdx]} ${year}: ${fmtFull}`;
+                  // P2 — Tramo 2: reporte.unicos.celda (grid-cell: ring inset 1.5px + marcador
+                  // de esquina dot — "fill" no disponible, el fondo lo ocupa el heatmap).
+                  const cellMark = computeUniqueCellMark(limits, year, monthIdx, totalCents);
+                  const dayLabel = cellMark
+                    ? `Día ${day}, ${MONTH_LABELS_SHORT[monthIdx]} ${year}: ${fmtFull} · ${describeLimitMark(cellMark)}`
+                    : `Día ${day}, ${MONTH_LABELS_SHORT[monthIdx]} ${year}: ${fmtFull}`;
 
                   return (
                     <td
                       key={monthIdx}
                       aria-label={dayLabel}
-                      className="p-0 cursor-default transition-opacity duration-[80ms] hover:opacity-80"
+                      className="p-0 cursor-default transition-opacity duration-[80ms] hover:opacity-80 relative"
                       style={{
                         height: 19,
                         background: bg,
                         outline: "2px solid var(--panel)",
                         color: textColor,
+                        boxShadow: cellMark?.effect === "ring" ? "inset 0 0 0 1.5px var(--warning)" : undefined,
                       }}
                       onMouseEnter={(e) => handleCellMouseEnter(e, day, monthIdx, totalCents, dayIdx)}
                       onMouseLeave={handleCellMouseLeave}
@@ -804,6 +852,14 @@ function GridTable({ data, year, currency, isDark, isEmpty, colorAnchorCents }: 
                       >
                         {fmtCents}
                       </div>
+                      {/* Marcador de esquina (dot) — acompaña "ring" o solo, si el efecto es "dot" */}
+                      {cellMark && (
+                        <span
+                          aria-hidden="true"
+                          className="absolute top-[1px] right-[1px] rounded-full"
+                          style={{ width: 4, height: 4, background: "var(--warning)" }}
+                        />
+                      )}
                     </td>
                   );
                 })}
@@ -823,6 +879,7 @@ function GridTable({ data, year, currency, isDark, isEmpty, colorAnchorCents }: 
                 monthIdx={monthIdx}
                 footer={footerMonth}
                 currency={currency}
+                marks={computeUniqueFooterMarks(limits, year, monthIdx, footerMonth)}
                 onMouseEnter={(e) => handleFooterMouseEnter(e, monthIdx, footerMonth)}
                 onMouseLeave={handleFooterMouseLeave}
               />
@@ -897,6 +954,21 @@ function GridTable({ data, year, currency, isDark, isEmpty, colorAnchorCents }: 
               <div className="text-[12px] text-muted">Sin gastos</div>
             )
           )}
+
+          {/* Nota de límite cruzado (P2 — Tramo 2): portador de a11y de reporte.unicos.celda. */}
+          {(() => {
+            const mark = computeUniqueCellMark(limits, year, cellTooltip.monthIdx, cellTooltip.totalCents);
+            if (!mark) return null;
+            return (
+              <>
+                <div aria-hidden="true" style={{ borderTop: "1px solid var(--hair)", margin: "6px 0" }} />
+                <div className="flex items-center gap-[6px]">
+                  <LimitGlyph tooltip={describeLimitMark(mark)} size={12} />
+                  <span className="text-[11.5px] font-medium text-warning-ink">{describeLimitMark(mark)}</span>
+                </div>
+              </>
+            );
+          })()}
         </div>,
         document.body,
       )}
@@ -907,6 +979,7 @@ function GridTable({ data, year, currency, isDark, isEmpty, colorAnchorCents }: 
           footerTooltip={footerTooltip}
           currency={currency}
           year={year}
+          limits={limits}
         />,
         document.body,
       )}
@@ -922,15 +995,21 @@ function FooterTooltipPortal({
   footerTooltip,
   currency,
   year,
+  limits,
 }: {
   footerTooltip: FooterTooltipState;
   currency: string;
   year: number;
+  limits: LimitConfig[];
 }) {
   const { footer, monthIdx, x, y } = footerTooltip;
   const monthNameLong = MONTH_LABELS_LONG[monthIdx] ?? "";
   const totalFmt = formatCurrency(footer.total, currency);
   const avgFull = footer.dailyAvg !== null ? formatCurrency(footer.dailyAvg, currency) : null;
+  // P2 — Tramo 2: combina las 5 marcas del footer en una sola (la más fuerte
+  // gana) — portador de a11y de las métricas de reporte.unicos.* del mes.
+  const footerMarks = computeUniqueFooterMarks(limits, year, monthIdx, footer);
+  const mergedMark = mergeUniqueFooterMarks(footerMarks);
 
   return (
     <div
@@ -1010,6 +1089,17 @@ function FooterTooltipPortal({
           )}
         </TooltipMetricRow>
       </div>
+
+      {/* Nota de límite cruzado (P2 — Tramo 2): portador de a11y de las 5 métricas. */}
+      {mergedMark && (
+        <>
+          <div aria-hidden="true" style={{ borderTop: "1px solid var(--hair)", margin: "6px 0" }} />
+          <div className="flex items-center gap-[6px]">
+            <LimitGlyph tooltip={describeLimitMark(mergedMark)} size={12} />
+            <span className="text-[11px] font-medium text-warning-ink">{describeLimitMark(mergedMark)}</span>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1057,6 +1147,8 @@ export function UniqueGridCard({
   const effectiveCurrency = currency ?? defaultCurrency;
   const isDark = useIsDarkMode();
   useReducedMotion(); // side-effect: noop aquí pero mantenemos el patrón
+  // P2 — Fase 1 (Tramo 2): límites del usuario (marca visual pasiva). [] = cero impacto (D9).
+  const { limits } = useLimits();
 
   // Calcular `today` en formato YYYY-MM-DD en la zona del navegador
   const today = useMemo(() => {
@@ -1245,6 +1337,7 @@ export function UniqueGridCard({
             isDark={isDark}
             isEmpty={isEmpty}
             colorAnchorCents={data.colorAnchorCents}
+            limits={limits}
           />
 
           {/* Filtro de categorías (chips-toggle debajo del footer) */}

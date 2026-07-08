@@ -58,6 +58,20 @@ vi.mock("@/hooks/use-api", () => ({
   })),
 }));
 
+// Mock de useLimits (P2 — Tramo 2): [] = cero impacto, no afecta los tests existentes.
+// Evita cablear usePreferences/useSession real (ver report-card-limits.test.tsx para
+// los tests dedicados de marca visual pasiva de income-expense / by-category).
+vi.mock("@/hooks/use-limits", () => ({
+  useLimits: vi.fn(() => ({
+    limits: [],
+    isLoading: false,
+    isSaving: false,
+    create: vi.fn(),
+    remove: vi.fn(),
+    setEnabled: vi.fn(),
+  })),
+}));
+
 vi.mock("recharts", () => {
   const React = require("react");
   const MockChart = ({ children, data }: { children?: ReactNode; data?: unknown[] }) =>

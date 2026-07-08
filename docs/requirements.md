@@ -2191,6 +2191,176 @@ P7 se parte en dos requerimientos independientes (fuentes distintas): **P7a = FX
 
 ---
 
+### 3.13 Módulo: Límites
+
+> El usuario configura **límites** sobre datos de la Vista del mes (`/mes`), del dashboard y de los reportes. Se gestionan desde la solapa **Límites** de `/configuracion` (pantalla 9 de `screens.md`). Persisten por usuario en el blob de preferencias (clave `limits`); el backend la trata como blob opaco (igual que `theme` / `reports`). Evaluación 100% client-side. Shape en `data-model.md`, §Claves del blob → `limits`; catálogo de efectos visuales y su mapeo por anclaje en `docs/design.md`; arquitectura en `docs/frontend.md`, §Límites.
+
+Un **límite** observa un dato (identificado por una **key** de un catálogo hardcodeado), lo compara contra un umbral y, si la condición se cumple, dispara un efecto de una de **dos naturalezas**:
+
+- **Marca visual pasiva** (RF-LIM-003) — al renderizar, resalta el dato cuando cruza el umbral. Read-path; sobre datos ya en pantalla. No altera montos, totales ni ningún dato guardado.
+- **Alerta activa** (RF-LIM-004) — al guardar un movimiento, si el resultado proyectado cruzaría el umbral, un aviso **no bloqueante** de confirmación. Write-path; proyecta el estado post-movimiento.
+
+**Alcance por naturaleza:** la marca pasiva cubre **todas** las superficies cableadas — la Vista del mes (`/mes`), el dashboard y los 5 reportes de `/reportes` (keys en RF-LIM-003). La alerta activa se acota a las **7 keys de nivel mes** (`mes.*`), las únicas que un movimiento que se está por guardar modifica en el acto (RF-LIM-004).
+
+---
+
+#### RF-LIM-001 — Anatomía de un límite
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Un límite es una **condición única** sobre un dato: `dato {operador} umbral`. Al cumplirse dispara su efecto según la naturaleza: una **marca visual** (pasiva, RF-LIM-003) o una **alerta al guardar** (activa, RF-LIM-004). |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Composición de un límite:**
+- **Anclaje (key):** el dato que observa, elegido de un catálogo hardcodeado de keys (el "lenguaje común" entre los datos que las emiten y la config que las consume). Las keys cableadas abarcan las superficies de `/mes`, dashboard y reportes (ver RF-LIM-003).
+- **Naturaleza:** `pasiva` (marca visual) o `activa` (alerta al guardar). La activa solo es elegible sobre las 7 keys `mes.*` (RF-LIM-004); las de dashboard/reportes solo admiten pasiva.
+- **Refinamiento (condicional):** algunas keys acotan a una **sección** de `/mes` (Únicos / Fijos / Cuotas) o a una **categoría**. La key de sección exige sección; la de categoría-del-mes exige categoría; la de monto de ítem admite categoría **opcional** (ausente = cualquier ítem).
+- **Operador:** uno de `mayor que` / `mayor o igual` / `menor que` / `menor o igual` / `igual a`. En la naturaleza **activa** se restringe por la polaridad del anclaje (RF-LIM-004).
+- **Umbral:** un **número puro, sin moneda**. La app es equivalente en cuanto a monedas; no se modela moneda en el umbral ni hay conversión en la evaluación. Su tipo (monto / porcentaje / entero) lo fija la unidad de la key.
+- **Alcance temporal** *(solo pasiva)*: `todos los meses` (default) marca cualquier mes navegado que cruce el umbral; `mes en curso` marca solo el mes real de hoy. **No aplica a la activa** (siempre proyecta sobre el mes destino del movimiento, RF-LIM-004).
+- **Efecto** *(solo pasiva)*: el estilo visual de la marca, elegido de un subset válido según el anclaje (catálogo de efectos en `docs/design.md`). La activa no lleva efecto (avisa, no marca).
+- **Nombre (opcional):** rótulo del usuario; ausente = placeholder derivado de la key + la condición.
+- **Estado (`enabled`):** activo / inactivo sin borrar la regla.
+
+**Criterios de aceptación:**
+- [ ] Un límite es exactamente **una** condición `dato {operador} umbral`. No hay condiciones compuestas (AND/OR) ni umbrales escalonados; un efecto escalonado se arma con **varios límites** sobre la misma key con distinto umbral/efecto.
+- [ ] El umbral es un **número puro**: no lleva moneda y se compara directo contra el número del anclaje en la unidad de la key.
+- [ ] El límite es **semántico, no atado a un widget**: se vincula a la key (+ refinamiento), no a una instancia concreta; alcanza todo anclaje que emita esa key.
+- [ ] La naturaleza es **pasiva** (marca visual, no altera dato/total/movimiento) o **activa** (aviso no bloqueante al guardar, no altera lo que persiste el usuario).
+
+---
+
+#### RF-LIM-002 — Gestión de límites (panel de Configuración)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El usuario administra sus límites desde la solapa **Límites** de `/configuracion`: los lista, crea, elimina y activa/desactiva. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Operaciones:**
+- **Crear** — un formulario progresivo: elegir la key → (si aplica) refinamiento → **naturaleza** (pasiva / activa) → operador + umbral → *(rama pasiva)* alcance temporal + efecto → nombre opcional. La rama **activa** omite el alcance temporal y el efecto.
+- **Eliminar** — quita el límite, con confirmación inline.
+- **Activar / desactivar** — toggle `enabled` sin borrar la regla.
+
+**Criterios de aceptación:**
+- [ ] La solapa Límites lista todos los límites del usuario con su nombre (o placeholder derivado), la key legible, su naturaleza (pasiva/activa), su condición (operador + umbral), el switch `enabled` y —solo en pasiva— un preview del efecto.
+- [ ] Crear un límite se hace desde un modal con formulario progresivo; el picker de key ofrece las keys cableadas de **todas** las superficies (`/mes`, dashboard y reportes, RF-LIM-003), agrupadas por superficie con rótulos legibles.
+- [ ] El selector de **naturaleza** habilita **activa solo** para las 7 keys `mes.*`; para keys de dashboard/reportes solo ofrece pasiva.
+- [ ] En la rama **pasiva** el picker de efecto ofrece **solo el subset válido** del anclaje elegido (con preview) y se pide el alcance temporal; en la rama **activa** ambos se **omiten** y los operadores se restringen por la polaridad del anclaje (RF-LIM-004).
+- [ ] **No se edita** un límite existente: para cambiarlo se elimina y se crea de nuevo (el toggle `enabled` permite desactivar sin borrar).
+- [ ] Eliminar pide confirmación inline antes de quitar el límite.
+- [ ] Cada cambio persiste el blob completo vía `PUT /preferences` (`{ ...preferences, limits: [...] }`), semántica de reemplazo total.
+
+---
+
+#### RF-LIM-003 — Marca visual pasiva (todas las superficies)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Al renderizar cualquier superficie cableada (`/mes`, dashboard, reportes), cada dato que emite una key evalúa los límites que la referencian; si un límite habilitado cruza el umbral, el dato recibe su marca visual. |
+| **Actor** | Sistema |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene al menos un límite habilitado sobre una key cableada. |
+
+**Anclajes cableados de `/mes`:**
+
+| Key | Dato | Refinamiento |
+|---|---|---|
+| `mes.total.gasto` | Total de gastos del mes | — |
+| `mes.total.ingreso` | Total de ingresos del mes | — |
+| `mes.balance` | Balance del mes (ingresos − gastos) | — |
+| `mes.seccion.subtotal` | Subtotal de una sección | sección (obligatorio) |
+| `mes.seccion.conteo` | Cantidad de ítems de una sección | sección (obligatorio) |
+| `mes.item.monto` | Monto de una línea de movimiento | categoría (opcional) |
+| `mes.categoria.gastoMes` | Total gastado en una categoría en el mes (derivado) | categoría (obligatorio) |
+
+**Anclajes cableados del dashboard:** el resumen mensual reutiliza las keys `mes.total.gasto` / `mes.total.ingreso` / `mes.balance` (mes en curso); el widget efímero Ingresos vs. Gastos emite las keys `reporte.ie.*` de la tabla siguiente. El dashboard no tiene keys propias.
+
+**Anclajes cableados de los 5 reportes de `/reportes`:**
+
+| Superficie | Key | Dato | Refinamiento |
+|---|---|---|---|
+| Ingresos vs Gastos | `reporte.ie.gastoMes` | Gasto de un mes (serie anual) | — |
+| Ingresos vs Gastos | `reporte.ie.ingresoMes` | Ingreso de un mes (serie anual) | — |
+| Gastos por categoría | `reporte.cat.gastoMesCategoria` | Gasto de una categoría en un mes | categoría (obligatorio) |
+| Gastos por categoría | `reporte.cat.gastoMesTotal` | Total de gasto apilado del mes | — |
+| Gastos Únicos | `reporte.unicos.celda` | Gasto Único de un día (celda) | — |
+| Gastos Únicos | `reporte.unicos.mesTotal` | Total mensual de Únicos (footer) | — |
+| Gastos Únicos | `reporte.unicos.promedioDiario` | Promedio diario del mes (footer) | — |
+| Gastos Únicos | `reporte.unicos.pctVsPrev` | % de diferencia vs. mes anterior (footer) | — |
+| Gastos Únicos | `reporte.unicos.inflacionMes` | Inflación IPC del mes (footer) | — |
+| Gastos Únicos | `reporte.unicos.pctVsPrevAjustado` | % vs. mes anterior ajustado por inflación (footer) | — |
+| Gastos en Cuotas | `reporte.cuotas.montoPorCuota` | Monto por cuota de una compra (barra) | — |
+| Gastos en Cuotas | `reporte.cuotas.cantidadCuotas` | Cantidad total de cuotas del plan (barra) | — |
+| Inflación vs Ingresos | `reporte.infl.inflacionMes` | Inflación IPC del mes (serie) | — |
+| Inflación vs Ingresos | `reporte.infl.ingresoVarMes` | Variación % mensual del ingreso nominal (serie) | — |
+| Inflación vs Ingresos | `reporte.infl.ingresoVarAjustado` | Variación % mensual del ingreso ajustada por inflación (serie) | — |
+
+**Criterios de aceptación:**
+- [ ] Un dato cruza el umbral → recibe la marca del efecto configurado; si no cruza, no cambia.
+- [ ] `mes.categoria.gastoMes` es un **dato derivado** (no hay número propio renderizado): el front lo calcula y marca cada fila de la categoría cruzada.
+- [ ] Un dato observado por **varios límites** que cruzan a la vez muestra **una sola marca** (la más fuerte); la descripción accesible enumera todos los límites cruzados.
+- [ ] El **alcance temporal** filtra la marca: `mes en curso` solo marca el mes real de hoy; `todos los meses` marca cualquier mes navegado.
+- [ ] **Cero impacto con config vacía (regla dura, RN-022):** sin límites configurados (o todos deshabilitados), cada superficie se ve **exactamente igual** que sin la feature. Ningún anclaje cambia de estilo.
+
+---
+
+#### RF-LIM-004 — Alerta activa (aviso al guardar un movimiento)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Al guardar un movimiento, el sistema **proyecta** el estado resultante del mes y, si cruzaría uno o más límites de naturaleza **activa**, muestra un aviso **no bloqueante** de confirmación que enumera los cruces. El usuario decide continuar o cancelar; el guardado **nunca** se bloquea. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene al menos un límite activo habilitado sobre una key `mes.*`. |
+
+**Alcance:** aplica a los **cuatro** formularios de carga de movimiento — único, fijo, cuota y **calculado** — en creación y edición.
+
+**Flujo principal:**
+1. El usuario completa un formulario de movimiento y presiona **Guardar**.
+2. El sistema proyecta el dato post-movimiento y evalúa los límites activos.
+3. **Sin cruces →** el movimiento se guarda como siempre, sin fricción (no aparece ningún aviso).
+4. **Con ≥1 cruce →** el sistema muestra un aviso que enumera el/los límite(s) que se cruzarían, con acciones **"Guardar igual"** y **"Cancelar"**.
+
+**Flujos alternativos:**
+- *A1 — "Guardar igual":* el movimiento se persiste (el aviso no bloquea).
+- *A2 — "Cancelar":* vuelve al formulario sin guardar.
+
+**Keys admitidas y polaridad del operador:** la activa se acota a las **7 keys `mes.*`**. El operador se ofrece según la **polaridad** del anclaje:
+
+| Key | Polaridad | Operadores |
+|---|---|---|
+| `mes.total.gasto` | techo (no superar) | `>` / `≥` |
+| `mes.seccion.subtotal` | techo | `>` / `≥` |
+| `mes.seccion.conteo` | techo | `>` / `≥` |
+| `mes.categoria.gastoMes` | techo | `>` / `≥` |
+| `mes.item.monto` | techo | `>` / `≥` |
+| `mes.balance` | piso (no caer por debajo) | `<` / `≤` |
+| `mes.total.ingreso` | piso (no caer por debajo) | `<` / `≤` |
+
+**Reglas de proyección:**
+- **Mes de proyección:** un **único** proyecta sobre **su** mes; un **fijo**, **cuota** o **calculado recurrente** se chequea contra el **mes en curso** (mes real de hoy).
+- **Qué proyecta cada movimiento:** un **gasto** proyecta `mes.total.gasto`, `mes.balance`, el `mes.seccion.subtotal`+`mes.seccion.conteo` de **su** sección y el `mes.categoria.gastoMes` de **su** categoría (el refinamiento dispara solo si coincide con la sección/categoría del movimiento). Un **ingreso** proyecta `mes.total.ingreso` y `mes.balance`.
+- **`mes.item.monto` es chequeo directo** del monto del movimiento (no acumula): aplica a **cualquier** tipo y dirección.
+- **`mes.seccion.conteo`** proyecta el conteo actual de la sección **+ 1**.
+- **Edición reemplaza, no suma:** se proyecta con el valor **nuevo**, excluyendo la contribución previa del movimiento editado.
+- **Movimiento anulado no proyecta:** un movimiento que se guarda/edita ya anulado no dispara ningún cruce.
+- **Moneda:** el monto se convierte a la moneda canónica **antes** de comparar (el umbral es número puro).
+
+**Criterios de aceptación:**
+- [ ] El aviso aparece **solo** cuando la proyección cruza ≥1 límite activo; sin cruces el guardado es idéntico al de sin la feature (cero fricción).
+- [ ] El aviso **no bloquea**: "Guardar igual" persiste el movimiento, "Cancelar" vuelve al formulario.
+- [ ] Se enumeran **todos** los límites activos que se cruzarían con el guardado.
+- [ ] La activa solo se evalúa sobre las 7 keys `mes.*`; los datos de reportes no la disparan.
+- [ ] El operador de un límite activo respeta la polaridad de su anclaje (techo `>`/`≥`, piso `<`/`≤`).
+- [ ] Aplica a los cuatro formularios (único / fijo / cuota / calculado), en creación y edición.
+
+---
+
 ## 4. Reglas de negocio
 
 | ID | Regla |
@@ -2215,6 +2385,7 @@ P7 se parte en dos requerimientos independientes (fuentes distintas): **P7a = FX
 | RN-018 | **Signo, monto y tipo derivado del movimiento calculado — excepción a RN-001 (RF-MCALC-003).** El movimiento calculado tiene un **switch de signo** que multiplica el resultado de la fórmula por `+1` o `−1`. Por eso su `amountCents` **puede ser negativo o cero**, a diferencia de todo otro movimiento (RN-001, monto > 0). Esta excepción aplica **únicamente** a movimientos calculados; únicos, fijos "normales" y cuotas siguen exigiendo monto > 0. El `type` (`EXPENSE`/`INCOME`) **no se elige**: se **deriva del signo del monto final** —`final < 0` → `EXPENSE`; `final > 0` → `INCOME`; `final == 0` → `EXPENSE` por convención de borde (no afecta totales, RN-019)—. Así signo y tipo son siempre consistentes (positivo = ingreso, negativo = gasto). |
 | RN-019 | **Imputación a totales y reportes por el tipo derivado (RF-MCALC-003).** Cada movimiento suma su **magnitud** (`\|amountCents\|`) al bucket que le corresponde **según su `type`**: un `INCOME` suma a `incomeCents`; un `EXPENSE`, a `expenseCents`. Para movimientos normales el `type` es fijo y `amountCents > 0`. Para un **calculado**, como el `type` se deriva del signo del monto (RN-018), la imputación queda siempre consistente: un calculado de monto `−2000` es `EXPENSE` (tipo derivado) y suma **2000** a `expenseCents`; uno de `+2000` es `INCOME` y suma **2000** a `incomeCents`; un monto 0 no aporta a ningún bucket. No hay restas a un bucket ni reasignación: signo y tipo nunca se contradicen. El balance del mes (`incomeCents − expenseCents`, RF-VM-002 / RF-DASH-002) y la serie anual de reportes (RF-REP-001, ambos tipos) se calculan con esta suma de magnitudes, sin lógica especial. En `by-category` (gastos apilados por categoría) la porción de la categoría de un calculado `EXPENSE` suma su magnitud, preservando la invariante "suma de porciones del mes = `expenseCents` del mes" (`docs/data-model.md`, §Contrato de serie de reportes). |
 | RN-021 | **Métodos de pago (RF-PM-001..006).** Un método de pago es propio del usuario (aislado por `userId`), con **nombre**, **tipo** e **ícono**, y soft delete (el histórico conserva la referencia). El **tipo** es una allowlist en código —`CREDIT` / `DEBIT` / `CASH`— modelada como **string, no enum**, para sumar tipos futuros sin migración (estilo `CurrencyQuote.variant`); rótulos UI Crédito / Débito / Efectivo. Es **obligatorio y sin preselección** al crear. **Campos condicionales por tipo:** `CREDIT` → día de cierre y día de cobro (entero **1-31**; si excede el último día del mes se **clampea** a ese último día; **informativos**: no mueven el mes de imputación del gasto en v1); `DEBIT` y `CASH` → sin campos extra. Al **cambiar de tipo** (editable) se descartan los campos que ya no aplican. El **ícono** sale de un set curado (allowlist en código, default `card`) y es la **única identidad visual** (no hay color); una marca ausente cae a `card`. La **unicidad de nombre** es espejo de categorías (normalización RN-014, crear-o-reactivar sobre soft-deleted). La asociación a un movimiento (único / fijo / cuota) es **opcional**; un **calculado** **hereda** el método del origen y **no lo edita ni tiene uno propio** (mismo patrón que la moneda/cotización del calculado, RF-CUR-004). El método es metadato: **no** afecta totales, balance ni reportes. **Débito automático** es un atributo **del movimiento** (no del método): booleano nullable en `Transaction`, `Recurring` e `InstallmentGroup`, editable en el form solo cuando el método efectivo del movimiento es de tipo `DEBIT`. **Persistencia:** `autoDebit` se guarda como `true`/`false` **solo si** el método efectivo del movimiento es `DEBIT`; sin método o con método `CREDIT`/`CASH` se **fuerza a `null`** aunque el body pida `true`. El **calculado** **no** persiste un `autoDebit` propio: lo **hereda** del origen, derivado al vuelo (mismo tratamiento que el método/currency). Modelo en `data-model.md`, §Métodos de pago. |
+| RN-022 | **Límites — naturaleza pasiva/activa y cero-impacto (RF-LIM-001..004).** Un límite es una **condición única** (`dato {operador} umbral`) sobre una key hardcodeada (de `/mes`, dashboard o reportes) con umbral **número puro, sin moneda** (no hay conversión en la evaluación), de una de dos naturalezas: **pasiva** — aplica una marca visual al dato cuando cruza el umbral (read-path, sobre datos ya renderizados; superficie cableada = `/mes`, dashboard y los 5 reportes de `/reportes`); **activa** — al guardar un movimiento, si el estado proyectado cruzaría el umbral, un aviso **no bloqueante** que enumera los cruces (write-path; solo sobre las 7 keys `mes.*`; operador por polaridad techo/piso del anclaje; aplica a los 4 forms). Ninguna naturaleza modifica montos, totales, reportes ni lo que el usuario decide persistir. La evaluación es **100% client-side**; la clave `limits` del blob es opaca al backend (igual que `theme` / `reports`). **Cero-impacto:** con la config vacía (sin límites o todos deshabilitados) la app se ve **exactamente igual** que sin la feature — toda marca y todo aviso son condicionales. Un dato observado por varios límites pasivos que cruzan muestra **una** marca (la más fuerte); el texto accesible enumera todos. |
 | RN-020 | **Anulación (skip) de movimientos únicos y cuotas (RF-MU-005, RF-MC-004).** Un movimiento **único** se anula con un **flag booleano de la propia fila** (`Transaction.skipped`, sin alcance temporal: anula el movimiento entero). Una **cuota** se anula por **mes puntual** con un registro aparte `(grupo, mes)` que cancela **solo** esa instancia mensual, dejando vivo el resto del grupo. En ambos casos la acción es un **toggle reversible** y aplica a cualquier dirección (gasto/ingreso). A efectos de totales y reportes se comportan igual que la anulación de un fijo (RN-016): el ítem anulado **se sigue listando** con marca de anulado pero su monto **no suma** a los totales del mes ni a la serie anual de los reportes. Los **calculados** derivados de un único o cuota anulado **heredan** ese estado (no tienen skip propio; RF-MCALC-005). El cálculo sigue siendo on-the-fly (RN-006). |
 
 ---
@@ -2269,6 +2440,7 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 | Gasto (`EXPENSE`) | Egreso de dinero. Reduce el balance del mes. |
 | Grupo de cuotas | Registro padre que define monto por cuota, cantidad total de cuotas y mes de inicio. |
 | Ingreso (`INCOME`) | Entrada de dinero. Aumenta el balance del mes. |
+| Límite | Preferencia del usuario que observa un dato (de `/mes`, dashboard o reportes, vía una key hardcodeada), lo compara contra un umbral con una condición única y, si se cumple, dispara su efecto: una **marca visual pasiva** o una **alerta activa** (aviso no bloqueante al guardar un movimiento, solo sobre keys `mes.*`). No altera datos, totales ni lo que el usuario persiste. Se gestiona en la solapa Límites de `/configuracion`; persiste en el blob (`limits`), evaluado client-side. Ver módulo 3.13 (RF-LIM-001..004) y RN-022. |
 | Mes activo | Mes actualmente visualizado en la vista del mes. Por defecto, el mes corriente. |
 | Método de pago | Metadato opcional de un movimiento: con qué se pagó/cobró (tarjeta de crédito, débito, efectivo). Entidad propia del usuario, espejo de Categoría (soft delete, pantalla propia, contador de movimientos), con identidad visual por **ícono** (no color). Días de cierre/cobro (crédito) son informativos en v1. Ver módulo 3.6.b (RF-PM-001..006) y RN-021. |
 | Movimiento | Registro de una transacción económica. Puede ser único, fijo o una cuota. |

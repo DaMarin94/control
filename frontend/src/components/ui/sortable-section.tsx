@@ -40,6 +40,11 @@ interface SortableSectionProps {
    * AccordionSection lo oculta automáticamente en isOrderMode.
    */
   filterSlot?: React.ReactNode;
+  /** P2 — Fase 1: marca visual pasiva de límites (ver AccordionSection). */
+  countAdornment?: React.ReactNode;
+  countClassName?: string;
+  subtotalAdornment?: React.ReactNode;
+  subtotalClassName?: string;
   children: React.ReactNode;
 }
 
@@ -53,6 +58,10 @@ export function SortableSection({
   isOrderMode,
   isActive = false,
   filterSlot,
+  countAdornment,
+  countClassName,
+  subtotalAdornment,
+  subtotalClassName,
   children,
 }: SortableSectionProps) {
   const {
@@ -98,6 +107,10 @@ export function SortableSection({
         gripAttributes={attributes}
         gripListeners={listeners}
         filterSlot={filterSlot}
+        countAdornment={countAdornment}
+        countClassName={countClassName}
+        subtotalAdornment={subtotalAdornment}
+        subtotalClassName={subtotalClassName}
       >
         {children}
       </AccordionSection>

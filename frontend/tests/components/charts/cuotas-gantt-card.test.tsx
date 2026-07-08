@@ -47,6 +47,19 @@ vi.mock("@/hooks/use-settings", () => ({
   })),
 }));
 
+// Mock de useLimits (P2 — Tramo 2): [] = cero impacto, no afecta los tests existentes.
+// Ver cuotas-gantt-card-limits.test.tsx para los tests dedicados de marca visual pasiva.
+vi.mock("@/hooks/use-limits", () => ({
+  useLimits: vi.fn(() => ({
+    limits: [],
+    isLoading: false,
+    isSaving: false,
+    create: vi.fn(),
+    remove: vi.fn(),
+    setEnabled: vi.fn(),
+  })),
+}));
+
 import { useCuotasGantt } from "@/hooks/use-reports";
 import { CuotasGanttCard } from "@/components/charts/cuotas-gantt-card";
 

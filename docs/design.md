@@ -2096,6 +2096,7 @@ Cada key del catálogo (§2 del roadmap) emite en un **tipo de anclaje**. El pan
 | Tipo de anclaje | Keys de ejemplo | Efectos válidos | Default | Ubicación / notas |
 |---|---|---|---|---|
 | **Línea de movimiento** (monto tipado + fila) | `mes.item.monto` | `glyph`, `badge`, `fill`, `bold` | `glyph` | El `glyph` `AlertTriangle` entra en la **zona de estados de la sublínea** (slot que ya colapsa → cero impacto), **primero** del cluster (es lo más relevante, antes de `GitBranch`/`Zap`). `badge` va como **primer segmento de identidad** (mismo slot que "Anulado"). `fill` reemplaza el hover tint de la fila **+ obligatorio un `glyph`**. **Nunca `tint`** (el monto es tipado). Bajo ítem anulado, la marca hereda el `opacity-[0.55]` del contenido (es parte de la fila). |
+| **Línea de movimiento — derivada por categoría** (sin cifra propia) | `mes.categoria.gastoMes` | `glyph`, `badge`, `fill`, `bold` | `glyph` | **Key derivada** (refinamiento = categoría): no tiene número propio renderizado en `/mes`; representa el gasto **acumulado del mes** de una categoría. Al cruzarse, la marca recae **a nivel de fila** sobre **cada movimiento cuya categoría** cruzó el límite → **reusa exactamente el slot y subset de `mes.item.monto`** (mismos mecanismos: `glyph` en la zona de estados, `badge` como primer segmento de identidad, `fill` sobre hover tint + `glyph` obligatorio, `bold`; **nunca `tint`**, el monto de fila es tipado). Diferencia semántica: la marca **se repite** en todas las filas de la categoría (no en una sola), por eso el default `glyph` (el más liviano, slot que ya colapsa) es aún más apropiado que un `badge` repetido. Portador a11y **por fila** = el `aria`/tooltip enuncia el cruce a nivel de categoría-mes (reusa el `label` del límite, ej. "Gasto del mes en {categoría} supera el límite"), no el monto de la fila individual. Bajo ítem anulado, hereda el `opacity-[0.55]` de la fila. |
 | **Total / subtotal de mes** (cifra dominante) | `mes.total.gasto`, `mes.total.ingreso`, `mes.balance`, `mes.seccion.subtotal` | `badge`, `glyph`, `bold`, `tint`†, `ring` | `badge` | `badge` adyacente a la cifra (misma celda, `inline-flex gap justify-end`, como el badge de moneda). `tint`† **solo si la cifra es neutra**; si va coloreada por tipo/signo, `tint` **no se ofrece** para esa key. `ring` para envolver el bloque de total (+ glifo). |
 | **Contador de sección** (pill) | `mes.seccion.conteo` | `glyph`, `badge` | `glyph` | `glyph` a la izquierda del pill contador; o recolorear el pill a `--warning-soft`/`--warning-ink` (`badge`). El contador **no es dinero**, `tint` sería redundante con `badge`. |
 | **Celda de grilla** (fondo ocupado por heatmap) | `reporte.unicos.celda` | `ring`, `dot` | `ring`+`dot` | **`fill` NO disponible** (el fondo lo ocupa la rampa de heatmap, ver *Reporte anual de Únicos*). `ring` ámbar inset 1px + **marcador de esquina** `dot` (la celda ~19px no aloja glifo). Portador a11y = **el texto del tooltip de celda** (que ya existe) enunciando el límite cruzado + `aria-label` de la celda. |
@@ -2129,6 +2130,197 @@ Alineado con la regla dura 4 (compatibilidad en claro/oscuro) y con cómo el DS 
 - **Regla dura 2 (índigo solo marca):** ningún efecto usa índigo; el índigo sigue siendo cromo de interacción (focus ring de los controles del panel de config), no marca de límite.
 - **Regla dura 3 (dinero en mono tabular):** las marcas **no introducen cifras** fuera de mono; el `badge` de límite lleva label de texto (UI) o, si muestra el umbral, va en mono tabular como cualquier cifra.
 - **Regla dura 4 (ambos modos):** tokens `warning` tienen su par claro/oscuro; verificado que la marca se lee en los dos modos.
+
+---
+
+## Panel de gestión de límites (Configuración — P2)
+
+> Spec visual del **gestor de límites**: la solapa de `/configuracion` donde el usuario **crea y elimina** límites (roadmap-limites-alertas §5, decisión D7/D8). Extiende la sección *Marca visual pasiva de límites* (que define **qué marcas existen**) y se articula con *Aviso de alerta activa de límites* (el aviso runtime de la naturaleza activa). Acá se define **cómo el usuario configura** un límite de **cualquiera de las dos naturalezas**: **pasiva** (marca un dato cuando cruza) y **activa** (avisa al guardar un movimiento). El panel expone un **selector de naturaleza** (§3.3) que reconfigura el resto del formulario. El shape del límite, las keys y la evaluación son funcionales/técnicos (analista + front); acá va solo el cromo.
+>
+> **Reutilización total, cero cromo nuevo.** Todo el panel se arma con moldes vigentes: `.card` de `/configuracion`, el segmented de solapas (`.dtabs` del modal de movimiento), la primitiva `Select`, la primitiva `Input`, el listbox rico con íconos (`PaymentMethodSelect`), el molde de modal (`transaction-modal`), la primitiva `Button` y el checkbox del DS. No se introduce ningún control ni token nuevo.
+
+### 1. Ubicación e integración — `/configuracion` pasa a solapas
+
+Hoy `/configuracion` es una card única (Moneda por defecto) sin solapas. Se convierte en pantalla **de dos solapas**, hermanas, bajo la misma cabecera `.phead` ("Ajustes" / "Configuración"):
+
+- **General** — la card de Moneda por defecto vigente, sin cambios.
+- **Límites** — el gestor de límites (esta spec).
+
+- **Chrome de la solapa — se reusa el segmented `.dtabs`** (el mismo del selector Ingreso/Gasto/Transferencia del modal de movimiento): track `bg-panel-3` `rounded-ctl`, `p-1`, `gap-1`; cada solapa `text-[13.5px] font-semibold`, `rounded-[7px]`, `px-3 py-[9px]`; **activa** = `bg-panel text-ink shadow-[--shadow-sm]`, **inactiva** = `text-muted hover:text-ink`; focus ring `--accent-soft` 3px. `role="tablist"` + `role="tab"`/`aria-selected` + `role="tabpanel"`.
+- **Ubicación:** debajo de la `.phead`, **antes** del contenido (`mb-6`). **Ancho al contenido** (no full-width): el segmented abraza sus dos etiquetas, alineado a la izquierda — no ocupa todo el ancho como en el modal. Orden fijo: **General** (izq) · **Límites** (der).
+- **Sin acento en la solapa activa:** el indicador de solapa activa es `--ink` sobre thumb `--panel` (neutro), igual que el resto de los segmenteds del DS; el índigo solo aparece como focus ring (interacción).
+- La solapa Límites **no altera** la solapa General ni la persistencia de moneda: son dos tabpanels independientes.
+
+> Nota de handoff: convertir `/configuracion` en pantalla de solapas es un cambio de estructura de pantalla (funcional, del analista → `screens.md`). Acá se especifica solo el **cromo** de la solapa; la decisión de tabificar la pantalla y el copy de las etiquetas los confirma el analista.
+
+### 2. Solapa Límites — encabezado y lista
+
+Dentro del tabpanel **Límites**:
+
+- **Sub-encabezado del panel** (fila `flex items-center justify-between gap-6`, `mb-4`):
+  - **Izquierda (identidad):** título "Límites" (14.5px/600 `--ink`) + bajada 12.5px/500 `--muted` ("Resaltá un dato cuando cruza un umbral que definís.").
+  - **Derecha (acción):** `Button` **primario** (`variant=default`, `size=default`) con `Plus` 16px + **"Nuevo límite"**. Abre el modal de creación (§3).
+
+- **Lista de límites:** una **card contenedora** (`.card`: `bg-panel`, borde `--line`, `--r-card` 14px, `--shadow-sm`) con los límites como **filas separadas por hairline** (`--hair`), mismo ritmo de lista que `/mes` (`--row-pad` 14px vertical, 22px horizontal). Cada fila tiene **dos zonas** (identidad · estados/acciones), espejo de la sublínea del ítem de `/mes`:
+
+  - **Zona identidad (izquierda, flex-1):**
+    - **Línea 1 — label:** el `label` del usuario, o el **placeholder derivado** (key legible + condición) si está ausente; 14.5px/600 `--ink` (rol *nombre de movimiento*). A su izquierda, un **preview del efecto** (el mark real renderizado a tamaño chico — glifo/badge/dot/tint ámbar según el `effect` del límite) que actúa como identificador visual de qué marca aplica (ver §4).
+    - **Línea 2 — meta (12.5px/500 `--muted`, `mt-[2px]`):** **qué observa** = rótulo legible de la key + refinamiento cuando aplica (ej. "Gasto del mes" · "Comida" · "Únicos"), y un **chip de alcance temporal** (`--r-chip` 7px, `bg-panel-3` `--muted`, 11px/600 `.04em`): "Todos los meses" / "Mes en curso".
+    - **La condición** (`{operador} {umbral}`) va como **chip mono tabular** adyacente al label (ej. `> 300.000`), 12px `mono` `tnum` `--ink-2` sobre `bg-panel-3` `--r-chip` — es cifra, va en mono (regla dura 3). El umbral es **número puro, sin símbolo de moneda** (D3); si el `unit` es porcentaje lleva sufijo `%`, si es conteo lleva un sustantivo neutro ("ítems").
+  - **Zona estados/acciones (derecha, `shrink-0`, `gap-[10px]`):**
+    - **Toggle `enabled`** — **switch** que reusa el mecanismo del thumb del segmented (`CurrencySegmented`): pista `--panel-3`, thumb `--panel` + `--shadow-sm` deslizando 140ms; **encendido** = pista teñida `--accent` (fill de acento como **cromo de interacción**, misma licencia que el check del débito automático y el focus ring — **no** es color de monto ni marca). `role="switch"` + `aria-checked`, `aria-label` "Activar límite: {label}". Apagado = pista `--panel-3`, thumb a la izquierda.
+    - **Eliminar** — `Button` `variant=ghost` `size=icon` con `Trash2` 16px `--muted` (hover `--expense-ink`). Confirmación **inline** (no modal, es acción de bajo riesgo, sin cascada): al pulsar, la zona de acciones se reemplaza por "¿Eliminar? · [Eliminar] [Cancelar]" con `Button` `variant=destructive size=sm` + `variant=ghost size=sm`. Reusa el molde destructive del DS.
+  - **Estado deshabilitado (`enabled=false`):** toda la fila baja a `opacity-[0.55]` (mismo tratamiento que el ítem anulado de `/mes`), salvo el switch y el botón eliminar, que quedan a opacidad plena (siguen operables). Comunica "existe pero no evalúa" sin borrar información.
+
+  - **Fila de límite de naturaleza activa:** un límite **activo** no tiene efecto visual ni alcance temporal (§3.3), así que su fila **no** muestra el preview de efecto de la Línea 1 ni el chip de alcance de la Línea 2. En su lugar, la fila porta la **marca de naturaleza activa**: el glyph `AlertTriangle` **ámbar** (`--warning-ink`, 16px) como identificador a la izquierda del label (rol espejo del preview de efecto de la fila pasiva) + un **chip "Alerta activa"** (`--r-chip` 7px, `bg-panel-3` `--warning-ink`, 11px/600 `.04em`) en la Línea 2, donde la fila pasiva lleva el chip de alcance. El resto de la fila es **idéntico** a la pasiva: label (o placeholder derivado), chip mono de condición (`{operador} {umbral}`), meta de qué observa, toggle `enabled` y eliminar con confirmación inline. La marca ámbar de naturaleza (aviso) se distingue del rojo destructive de la acción eliminar (borrado): coexisten en la misma fila sin cruzarse — ámbar = "avisa al guardar", rojo = "vas a destruir algo".
+
+- **Estado vacío (sin límites):** dentro del tabpanel, bloque centrado (reusa el molde de empty-state del DS): glifo neutro `Gauge`/`Target` (lucide, ~28px, `--faint`), titular 14.5px/600 `--ink` "Todavía no creaste límites", bajada 13px/500 `--muted` ("Creá un límite y Control resaltará ese dato cuando cruce el umbral que definas."), y el `Button` **primario** "Nuevo límite" debajo. **Coherente con la restricción rectora:** sin límites, ni la app ni el panel muestran marca alguna.
+
+### 3. Flujo de crear — modal con formulario progresivo
+
+**Contenedor: modal** (reusa `transaction-modal`: portal, scrim `oklch(0.18 0.02 270 / 0.46)` + `blur(3px)`, diálogo `bg-panel` borde `--line` radio 18px `--shadow-lg` `animate-modal-pop`, header con título 18px/700 "Nuevo límite" + botón cerrar `X`). Es el mismo patrón con el que se crean movimientos, categorías y métodos de pago — coherencia total. **No** es wizard multi-página ni panel inline: es **un formulario en columna** (`space-y-[14px]`) que **revela y adapta** campos según lo elegido. Ancho del diálogo: `max-w-[460px]` (un pelo más que el de movimiento por el picker de efecto).
+
+Orden de los controles (arriba → abajo). Los pasos condicionales **no reservan alto** cuando no aplican (se montan/desmontan), fiel a "cero impacto":
+
+1. **Anclaje (key)** — **primer campo y compuerta.** Reusa el **listbox rico con íconos** (`PaymentMethodSelect`): trigger + panel por portal, porque el catálogo va **agrupado por superficie** y con un glifo de contexto que un `<select>` nativo no puede mostrar. En el panel, **encabezados de grupo no seleccionables** (13px/700 `.1em` uppercase `--muted`, rol *group header*): **Vista del mes** · **Dashboard** · y un grupo por tipo de reporte (Ingresos vs Gastos · Gastos por categoría · Únicos · Cuotas · Inflación vs Ingresos). Cada opción = glifo de superficie 16px `--ink-2` + **rótulo legible de la key** (13.5px `--ink`) + meta a la derecha con el tipo de dato (`money`/`percent`/`count`) como chip `--panel-3` (11px/600). Hasta que no se elige key, el **resto del form no se renderiza** (refuerza la compuerta: sin key no hay unit, ni operadores válidos, ni subset de efecto).
+
+2. **Refinamiento (condicional)** — se monta **solo si la key lo declara**:
+   - `section` → primitiva **`Select`** con Únicos / Fijos / Cuotas (leídos de `monthSections`).
+   - `categoryId` → **listbox rico** (molde `PaymentMethodSelect`) con **swatch de color de categoría** (6px `rounded-full`) + nombre — reusa el picker de categoría del DS. Label del campo: "Categoría".
+   - Si la key no tiene refinamiento, este bloque no existe.
+
+3. **Naturaleza (pasiva / activa)** — **segmented de 2 opciones** que reusa el molde `.dtabs`/`CurrencySegmented` neutro (el mismo del selector de solapas y del alcance temporal): **"Pasiva"** (izq) · **"Activa"** (der). Label del campo arriba (rol label, 12px/600 `.1em` uppercase `--muted`). Se monta **tras el refinamiento** (una vez elegida la key). Es la **compuerta** que reconfigura el resto del formulario:
+   - **"Activa" está deshabilitada salvo que la key admita alerta activa** — solo las **7 keys `mes.*`** (las de la vista del mes) la habilitan. Con cualquier otra key, la opción "Activa" queda **deshabilitada** (`opacity-50`, `cursor-not-allowed`, `aria-disabled`, thumb sin desplazar) y la naturaleza es forzosamente pasiva. El estado deshabilitado **no se oculta**: presente pero apagado, coherente con el resto de disabled del DS. Un `title`/hint muted junto al control explica por qué ("La alerta activa solo aplica a datos del mes en curso") — el copy exacto lo confirma el analista.
+   - **Preselección "Pasiva"** (la naturaleza sin efecto de interceptación; la más común). Cambiar a "Activa" **desmonta** el alcance temporal (§3.5) y el picker de efecto (§3.6) —la activa no tiene ni alcance ni efecto visual— y **restringe la polaridad de operadores** (§3.4). Volver a "Pasiva" los re-monta con sus defaults. Los pasos que se desmontan **no reservan alto** (fieles a "cero impacto"); la transición reusa el mismo montaje/desmontaje condicional del resto del form.
+
+4. **Condición (operador + umbral)** — una fila `flex gap-3`:
+   - **Operador:** `Select` compacto (ancho al contenido) con **glifo mono + palabra**. La oferta depende de la naturaleza:
+     - **Rama pasiva:** los **5 operadores**: `>` mayor que · `≥` mayor o igual · `<` menor que · `≤` menor o igual · `=` igual a. Default `>` (`gt`).
+     - **Rama activa:** **solo la polaridad válida del anclaje de la key** (la activa avisa contra un umbral con dirección única). **Techo** (`>` / `≥`) para las keys de **gasto, subtotal, conteo, categoría e ítem** (cruzar hacia arriba es lo que alarma); **piso** (`<` / `≤`) para **balance e ingreso** (cruzar hacia abajo es lo que alarma). El `Select` solo lista ese par; default el estricto (`>` para techo, `<` para piso). Los operadores fuera de la polaridad **no se ofrecen** (no aparecen deshabilitados: directamente no se listan, porque no tienen lectura de aviso).
+   - **Umbral:** primitiva **`Input`** (`inputMode="decimal"`), cifra **mono tabular alineada a la derecha** (regla dura 3), `placeholder` según `unit`. **Número puro, sin prefijo de moneda** (D3). El `unit` de la key define el adorno **neutro**: `money` → sin símbolo (solo el número, con agrupación de miles al mostrar); `percent` → sufijo `%` como texto `--muted` adosado; `count` → paso entero (`step=1`) y sustantivo neutro. El sufijo/hint es cromo neutro `--muted`, **nunca** verde/rojo/moneda.
+
+5. **Alcance temporal (solo naturaleza pasiva)** — segmented de **2 opciones** (reusa el molde `CurrencySegmented`/`.dtabs`, neutro): **"Todos los meses"** | **"Mes en curso"** (D4). Label del campo arriba (rol label, 12px/600 `.1em` uppercase `--muted`). Preselección visual "Todos los meses" (el más abarcativo); el default definitivo lo confirma el analista. **En rama activa este paso se desmonta** (la activa no tiene `temporalScope`).
+
+6. **Efecto visual — marca pasiva (solo naturaleza pasiva)** — **subset por anclaje, con default.** Ver §4. Se monta **después** de elegir la key (el subset depende del **tipo de anclaje** de la key, no del refinamiento). **En rama activa este paso se desmonta** (la activa no tiene efecto visual; su señal es el aviso runtime al guardar, especificado en *Aviso de alerta activa de límites*).
+
+7. **Nombre (opcional)** — último campo. Primitiva **`Input`** de texto, label "Nombre (opcional)", `placeholder` = el **label derivado** (key legible + condición) para que el usuario vea de antemano cómo se llamará si lo deja vacío.
+
+- **Resumen en lenguaje natural** (feedback, antes del footer): línea 12.5px/500 `--muted` que arma la frase viva, con los fragmentos clave en `--ink-2`/600 y la cifra en mono. Se adapta a la naturaleza:
+  - **Pasiva:** *"Se marcará **Gasto del mes** cuando **supere 300.000**, en **todos los meses**, con un **glifo de alerta**."* — confirma condición + alcance + efecto.
+  - **Activa:** *"Al guardar un movimiento, Control **te avisará** si **Gasto del mes** **supera 300.000**."* — sin fragmentos de alcance ni de efecto (la activa no los tiene); confirma solo la condición y que el resultado es un aviso al guardar.
+- **Footer** (`flex justify-end gap-3`, borde superior `--hair`): `Button` `variant=ghost` "Cancelar" + `Button` primario "Crear límite". El primario queda **deshabilitado** (`opacity-50`) hasta que los campos requeridos son válidos (key + umbral; + refinamiento si la key lo exige). Sin errores hasta el submit; los errores de umbral usan el estado de error de `Input` (borde `--expense`, ring `--expense-soft`, texto `--expense-ink`).
+
+### 4. Efecto — subset por anclaje, default y preview
+
+El picker de efecto es el **consumidor** de la tabla *Mapeo efecto ↔ tipo de anclaje* (sección *Marca visual pasiva de límites*). **No se duplica esa tabla acá.** Regla de derivación:
+
+1. La key elegida determina su **tipo de anclaje** (línea de movimiento / total-subtotal / contador / celda de grilla / barra / punto de serie / métrica de footer) — dato del catálogo funcional.
+2. El panel ofrece **exactamente** el subset "Efectos válidos" de esa fila, **con la primitiva marcada como Default preseleccionada**.
+3. **Nunca** se ofrece un efecto fuera del subset (restricción dura del catálogo: `tint` no aparece sobre montos tipados, `fill` no aparece sobre celdas de heatmap, etc.). El usuario elige **cuán fuerte** marca, no el color: el hue siempre es ámbar `--warning` (o neutro por peso en `bold`).
+
+- **Control:** grupo de **option-cards en radio** (`role="radiogroup"`), una por efecto válido. Cada card: `bg-panel` borde `--line` `--r-ctl`, seleccionada = borde `--accent` + ring `--accent-soft` 3px (cromo de interacción). Contenido de cada card:
+  - **Nombre del efecto** (13px/600 `--ink`): Peso · Tinte · Glifo · Punto · Badge · Fondo · Ring (según ids `bold`/`tint`/`glyph`/`dot`/`badge`/`fill`/`ring`).
+  - **Preview vivo** (feedback del task): el **mark real** aplicado sobre un **dato de muestra** representativo del anclaje — p. ej. una cifra `$300.000` mono tabular con `glyph` `AlertTriangle` ámbar al lado, o un `badge` `--warning-soft`, o el `tint` `--warning-ink` sobre la cifra. El preview usa los **tokens `warning` reales**, así el usuario ve **exactamente** la marca en ambos modos antes de crear. Para `fill`/`ring` (que "nunca van solos", a11y) el preview muestra el efecto **ya acompañado** de su glifo/badge obligatorio.
+- **Default:** la primitiva marcada Default en la tabla queda preseleccionada; el usuario puede cambiar dentro del subset.
+- El preview del picker es la **misma** representación que luego aparece como identificador de efecto en la fila de la lista (§2), para que list ↔ create hablen el mismo idioma visual.
+
+### 5. Coherencia — moldes reusados (resumen)
+
+| Elemento del panel | Molde reusado |
+|---|---|
+| Solapa General / Límites | segmented `.dtabs` (modal de movimiento) |
+| Card contenedora de la lista | `.card` de `/configuracion` |
+| Fila de límite (2 zonas) | sublínea del ítem de `/mes` (identidad · estados) |
+| Chip de condición / alcance | chip `--r-chip` `--panel-3` (mono para la cifra) |
+| Toggle `enabled` | thumb deslizante de `CurrencySegmented`, como switch |
+| Botón "Nuevo límite" / footer | primitiva `Button` (primario / ghost / destructive) |
+| Eliminar + confirmación inline | `Button` icon + variante destructive `size=sm` |
+| Modal de creación | `transaction-modal` (scrim, diálogo, header) |
+| Picker de anclaje / de categoría | listbox rico `PaymentMethodSelect` |
+| Selector de sección / operador | primitiva `Select` |
+| Input de umbral / nombre | primitiva `Input` (mono para el umbral) |
+| Segmented de naturaleza (pasiva/activa) | `CurrencySegmented`/`.dtabs` neutro (con opción "Activa" disabled) |
+| Segmented de alcance temporal | `CurrencySegmented`/`.dtabs` neutro |
+| Preview y marca de efecto | primitivas del catálogo *Marca visual pasiva* (tokens `warning`) |
+| Glyph + chip "Alerta activa" (fila y activa) | `AlertTriangle` `--warning-ink` + chip `--r-chip` `--panel-3` |
+
+**Cumplimiento de reglas duras:** el umbral y la condición van en **mono tabular** (regla 3); el único índigo del panel es **cromo de interacción** (focus ring, thumb del switch encendido, borde de card de efecto seleccionada) — nunca tiñe cifras (regla 2); ningún control usa verde/rojo salvo el estado de **error** de `Input` y el botón **destructive** de eliminar (semántica de error/borrado, no de monto) — la señal de tipo income/expense no se toca (regla 1); la marca de **naturaleza activa** (glyph `AlertTriangle` + chip "Alerta activa") usa **ámbar `--warning`** —aviso, no destrucción ni monto— y se distingue nítidamente del rojo destructive de eliminar; todo el cromo tiene par claro/oscuro (regla 4).
+
+---
+
+## Aviso de alerta activa de límites (Límites y Alertas — P2, fase 2)
+
+> Spec visual del **aviso de confirmación de la naturaleza activa** de un límite (`docs/roadmap-limites-alertas.md` §4 y D10). Un límite de naturaleza **activa** intercepta el **guardado de un movimiento** en el modal de carga (tabs Único / Fijo / Cuota): al pulsar **Guardar**, si el resultado **proyectado** cruzaría el umbral de uno o más límites activos, se muestra un **aviso** que enuncia qué límite(s) se cruzaría(n) y ofrece **continuar o cancelar**. **No bloquea** (D10: avisa y deja continuar). Extiende la familia visual ámbar de *Marca visual pasiva de límites* (mismo token `--warning`); acá va solo el cromo del aviso write-path. El shape del límite, las keys `mes.*`, la evaluación y la **proyección del dato post-movimiento** son funcionales/técnicos (analista + front) — no se especifican acá.
+
+### Restricción rectora — cero fricción sin límites activos cruzados
+
+**El aviso existe SOLO si al menos un límite activo se cruzaría.** Sin límites activos cruzados, el flujo de Guardar es **EXACTAMENTE** el de hoy: el movimiento persiste directo, sin diálogo intermedio, sin cambio de DOM ni de foco. La intercepción es una **compuerta condicional** en el handler de guardado: se proyecta el dato post-movimiento y se evalúan los límites activos; conjunto vacío → persistir como hoy; conjunto no vacío → montar el aviso. Es el espejo write-path de "cero impacto con config vacía".
+
+### Forma y ubicación — diálogo de confirmación apilado, en registro ámbar
+
+- **Es un diálogo de confirmación apilado** sobre el modal de movimiento (mismo molde que los `delete-*-dialog`: portal, scrim `oklch(0.18 0.02 270 / 0.46)` + `blur(3px)`, diálogo `bg-panel` borde `--line` radio 18px `--shadow-lg` `animate-modal-pop`, header + cuerpo + footer). **No** es callout inline dentro del form ni transforma el botón Guardar: es el mismo patrón con el que la app ya confirma acciones consecuentes (borrado). El modal de movimiento **permanece montado detrás** con el form intacto.
+- **Apilamiento (z-index):** el aviso va **por encima** del modal de movimiento (`z-40`), al nivel de los diálogos de confirmación (`z-50`). El scrim del aviso oscurece también el modal de movimiento.
+- **Ancho:** `max-w-[420px]` (entre el diálogo de borrado, 380, y el modal de movimiento, 440; necesita alojar la lista de límites cruzados).
+- **Al pulsar Guardar (interceptado):** el form valida como hoy; si es válido y hay ≥1 límite activo cruzado, en vez de persistir se monta el aviso. El botón Guardar del form vuelve a su estado idle (no queda "guardando") mientras el aviso está abierto.
+
+### Tono — ámbar `--warning`, aviso NO destructivo
+
+- El registro es **advertencia, no error ni destrucción.** Todo el peso de advertencia lo carga un **callout ámbar** (mismo molde que el callout de borrado en cascada: `rounded-ctl`, `bg: --warning-soft`, `border: 1px solid --warning`, `AlertTriangle` `--warning-ink`).
+- **Se distingue explícitamente de una confirmación destructiva:** los diálogos de borrado usan **rojo** (`variant=destructive` + acentos `--expense`) porque son peligrosos; este aviso **no usa rojo en ningún elemento** — callout ámbar + botones neutros. Ámbar = "prestá atención"; rojo = "vas a destruir algo". No se cruzan.
+- **Los botones NO son ámbar.** El ámbar vive en el callout (la información); las acciones son cromo neutro/primario. Teñir el botón de ámbar difuminaría "aviso" (callout) con "acción" (botón).
+
+### Contenido y enumeración de cruces
+
+**Header** — título 18px/700 `--ink`, `tracking-[-0.01em]` (texto, no depende de color; enuncia el hecho, no alarma):
+- 1 límite: **"Este movimiento cruza un límite"**
+- N límites: **"Este movimiento cruza {N} límites"**
+
+**Cuerpo** (`px-[22px] pb-[22px] space-y-[14px]`):
+- **Línea guía** (14px `--ink`): "Al guardar, este movimiento cruzaría {un límite que definiste / estos {N} límites que definiste}:".
+- **Callout ámbar** con la enumeración de cruces:
+  - **Un solo `AlertTriangle`** (16px `--warning-ink`) arriba a la izquierda — **no uno por límite** (coherente con la regla de colisión de la marca pasiva: un glifo; la enumeración lista los cruces).
+  - **Lista de límites cruzados** (`space-y-2`), un ítem por límite. Cada ítem:
+    - **Label** (13.5px/600 `--warning-ink`): el `label` del usuario, o el **placeholder derivado** (métrica legible) si está ausente.
+    - **Condición cruzada** (12.5px/500 `--warning-ink`, énfasis atenuado), separada del label por middot/em-dash: `{verbo} {umbral}` — ej. **"Gasto del mes"** · "supera $300.000". La **cifra va en mono tabular** (`tnum`, regla dura 3). El `verbo` se deriva del operador: `gt`→"supera", `gte`→"alcanza o supera", `lt`/`lte`→"queda por debajo de", `eq`→"llega a". `unit=percent` → sufijo `%`; `count` → sustantivo neutro. *(La redacción exacta del verbo es contenido; su copy definitivo lo confirma el analista.)*
+    - **(Opcional, si el front tiene el proyectado):** addendum muted "quedaría en $X" refuerza la previsibilidad; misma mono tabular. No es obligatorio.
+  - Con múltiples límites, cada ítem puede llevar un **marcador neutro** (dot pequeño o dash) a la izquierda; el `AlertTriangle` único de la cabecera del callout ya porta la semántica.
+- **Nota de cierre** (12.5px/500 `--muted`): "Podés guardarlo igual — Control solo te avisa." (Refuerza D10: informa, no impide.)
+
+El umbral es **número puro sin moneda** (D3); en el aviso se renderiza en **mono tabular con agrupación de miles**, reusando el formateo de cifra vigente (mismo criterio que el tooltip de la marca pasiva).
+
+### Jerarquía de botones y copy
+
+Footer (`flex items-center justify-end gap-3 px-[22px] py-4`, `border-t border-hair bg-panel-2` — idéntico al footer de los `delete-*-dialog`):
+- **"Cancelar"** — `Button variant=ghost size=sm`, a la izquierda. Cierra **solo el aviso**; el modal de movimiento queda abierto con el form intacto (nada se pierde), para ajustar el movimiento.
+- **"Guardar igual"** — `Button variant=default size=sm` (**primario, índigo — NO destructive, NO ámbar**), a la derecha. Es la **acción primaria**: persiste el movimiento (mismo save-path de hoy), cierra el aviso y el modal de movimiento, toast de éxito como siempre. Usar el primario neutro —no el rojo destructive— comunica visualmente "esto NO es destrucción"; el índigo es cromo de interacción legítimo (regla dura 2).
+
+**Cuál es primario:** "Guardar igual" es el **botón primario** — coherente con D10 (no bloquea; continuar debe estar accesible sin fricción, a un clic, visualmente dominante). El aviso se **lee** porque el peso de advertencia lo carga el **callout ámbar** (jerarquía visual: callout dominante arriba, botones secundarios abajo), no porque se entierre la acción de continuar.
+
+### Accesibilidad
+
+- **`role="alertdialog"`** (no solo `dialog`): interrumpe el flujo y requiere respuesta; es advertencia. `aria-modal="true"`, `aria-labelledby` = título, `aria-describedby` = línea guía + lista de cruces (el lector enuncia qué límites se cruzarían).
+- **Foco:** trap dentro del diálogo. **Foco inicial en "Cancelar"** (la opción no consecuente): así un **Enter reflejo** —el usuario acaba de pulsar Guardar/Enter para disparar la intercepción— **no** salta el aviso por accidente. "Guardar igual" queda a un Tab/clic (fricción mínima, un acto deliberado): se preserva "accesible sin fricción" sin permitir blow-through. **Esc = Cancelar.**
+- **No depende solo de color:** la advertencia la portan (a) el **texto del título** ("cruza un límite"), (b) la **forma del `AlertTriangle`**, (c) el **texto enumerado** de cada cruce. El ámbar es refuerzo, nunca la única señal. El texto accesible **reusa el `label`** de cada límite (o su placeholder).
+- **Contraste:** `--warning-ink` sobre `--warning-soft` — misma barra ya validada del callout de advertencia vigente; par claro/oscuro (regla dura 4).
+
+### Cumplimiento de reglas duras
+
+- **Regla 1 (verde=ingreso · rojo=gasto):** el aviso es **ámbar**; **ningún elemento usa rojo** (rojo se reserva para destructive/error) ni verde. El callout no recolorea montos tipados.
+- **Regla 2 (índigo solo marca/interacción):** el único índigo es el botón primario "Guardar igual" (cromo de interacción), nunca cifra.
+- **Regla 3 (dinero en mono tabular):** umbral y proyectado en mono `tnum`; el umbral es número puro (D3).
+- **Regla 4 (ambos modos):** tokens `warning` con par claro/oscuro; el aviso se lee idéntico en ambos.
+
+### Coherencia — moldes reusados
+
+| Elemento del aviso | Molde reusado |
+|---|---|
+| Diálogo apilado (scrim, diálogo, header, footer) | `delete-*-dialog` / `transaction-modal` |
+| Callout de límites cruzados | callout de borrado en cascada (`--warning-soft` / `--warning` / `AlertTriangle`) |
+| `AlertTriangle` único + enumeración | regla de colisión de la *Marca visual pasiva* |
+| Botones (ghost "Cancelar" · primario "Guardar igual") | primitiva `Button` |
+| Cifra del umbral / proyectado | mono tabular del DS |
+
+> **Configuración de la naturaleza activa:** el **selector de naturaleza** (pasiva/activa) desde el que el usuario crea un límite activo está especificado en *Panel de gestión de límites* §3.3 (el segmented pasiva/activa, la habilitación de "Activa" solo con keys `mes.*`, el desmontaje de alcance y efecto, y la polaridad de operadores) y su fila en la lista en §2. Esta sección cubre el **aviso runtime** que ese límite dispara al guardar. El disparo de la intercepción y la proyección del dato son técnicos/funcionales.
 
 ---
 

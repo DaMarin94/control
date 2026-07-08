@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CalculatedForm } from "@/components/movements/calculated-form";
 import { ToastProvider } from "@/components/ui/toast";
@@ -31,6 +31,26 @@ vi.mock("@/hooks/use-calculated", () => ({
   useCalculated: vi.fn(),
 }));
 
+// Mock de use-settings — defaultCurrency ARS (usado por la conversión canónica
+// de la intercepción de límites, P2 — Fase 2 extendida a calculado).
+vi.mock("@/hooks/use-settings", () => ({
+  useSettings: vi.fn(() => ({
+    settings: { defaultCurrency: "ARS", lastExchangeRate: 1200 },
+    defaultCurrency: "ARS",
+    lastExchangeRate: 1200,
+    isLoading: false,
+    isError: false,
+    updateSettings: vi.fn(),
+    isSaving: false,
+  })),
+}));
+
+// P2 — Fase 2 (extensión a calculado): intercepción de límites activos. Por
+// defecto sin límites (cero fricción); los tests de la compuerta lo sobreescriben.
+vi.mock("@/hooks/use-active-limit-projection", () => ({
+  useActiveLimitProjection: vi.fn(() => ({ evaluate: vi.fn(() => []) })),
+}));
+
 vi.mock("@/lib/format", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/format")>();
   return {
@@ -46,9 +66,11 @@ vi.mock("@/app/(app)/categorias/category-form-modal", () => ({
 
 import { useCategories } from "@/hooks/use-categories";
 import { useCalculated } from "@/hooks/use-calculated";
+import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
 
 const mockUseCategories = vi.mocked(useCategories);
 const mockUseCalculated = vi.mocked(useCalculated);
+const mockUseActiveLimitProjection = vi.mocked(useActiveLimitProjection);
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -216,6 +238,23 @@ const calculadoUnicoExistente: MovementItem = {
   convertedAmountCents: 5000,
 };
 
+/** Ítem calculado (origen fijo), pero YA anulado — alimenta el test de D16 */
+const calculadoSkippedExistente: MovementItem = {
+  ...calculadoExistente,
+  id: "calc-skip-1",
+  skipped: true,
+};
+
+/** Ítem fijo de origen en USD (para el test de conversión canónica, D17) */
+const origenFijoUsd: MovementItem = {
+  ...origenFijo,
+  id: "rec-origen-usd",
+  amountCents: 10000, // USD 100,00
+  currency: "USD",
+  exchangeRate: 1000, // 1 USD = 1000 ARS
+  convertedAmountCents: 10000000,
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const mockCreateCalculated = vi.fn();
@@ -275,6 +314,10 @@ beforeEach(() => {
     isCreating: false,
     isUpdating: false,
   });
+
+  // P2 — Fase 2 (extensión a calculado): por defecto sin cruces (cero fricción)
+  // — los tests de la compuerta sobreescriben con mockUseActiveLimitProjection.mockReturnValue(...).
+  mockUseActiveLimitProjection.mockReturnValue({ evaluate: vi.fn(() => []) });
 });
 
 // ─── Tests: estructura del formulario ─────────────────────────────────────────
@@ -585,5 +628,253 @@ describe("CalculatedForm — Fase 1.1.8: editar calculado de origen único", () 
 
     const [, , callSourceType] = mockUpdateCalculated.mock.calls[0] as [string, Record<string, unknown>, string];
     expect(callSourceType).toBe("unico");
+  });
+});
+
+// ─── Tests: intercepción de límites activos (P2 — Fase 2, extensión a calculado) ─
+
+/** Ítem cuota de origen sin categoría compatible con Ingreso — evita depender de otro fixture */
+const mockCrossedLimit = {
+  id: "l1",
+  enabled: true,
+  anchorKey: "mes.total.gasto",
+  operator: "gt" as const,
+  threshold: 100,
+  nature: "active" as const,
+};
+
+function renderCreateWithMonth(
+  origenMovement: MovementItem,
+  viewMonth: string,
+  onClose = vi.fn(),
+) {
+  return render(
+    <CalculatedForm mode="create" movement={origenMovement} onClose={onClose} viewMonth={viewMonth} />,
+    { wrapper: createWrapper() },
+  );
+}
+
+describe("CalculatedForm — intercepción de límites activos (P2, Fase 2 — extensión a calculado)", () => {
+  it("sin cruces: persiste directo, SIN mostrar el aviso (cero fricción)", async () => {
+    const user = userEvent.setup();
+    mockCreateCalculated.mockResolvedValue({ success: true, id: "new-calc-1" });
+    const onClose = vi.fn();
+    renderCreate(origenFijo, onClose);
+
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+    await user.selectOptions(screen.getByRole("combobox"), "cat-income");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(mockCreateCalculated).toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalled();
+    });
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("con cruces: NO persiste directo, muestra el aviso en vez de guardar", async () => {
+    const user = userEvent.setup();
+    mockUseActiveLimitProjection.mockReturnValue({
+      evaluate: vi.fn(() => [mockCrossedLimit]),
+    });
+    renderCreate(origenFijo);
+
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+    await user.selectOptions(screen.getByRole("combobox"), "cat-income");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    expect(mockCreateCalculated).not.toHaveBeenCalled();
+  });
+
+  it("'Cancelar' en el aviso cierra SOLO el aviso — el form sigue abierto e intacto", async () => {
+    const user = userEvent.setup();
+    mockUseActiveLimitProjection.mockReturnValue({
+      evaluate: vi.fn(() => [mockCrossedLimit]),
+    });
+    const onClose = vi.fn();
+    renderCreate(origenFijo, onClose);
+
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+    await user.selectOptions(screen.getByRole("combobox"), "cat-income");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+    const alertDialog = await screen.findByRole("alertdialog");
+
+    await user.click(within(alertDialog).getByRole("button", { name: /^cancelar$/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+    expect(mockCreateCalculated).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    // El operando tipeado sigue en el form
+    expect(screen.getByDisplayValue("10")).toBeInTheDocument();
+  });
+
+  it("'Guardar igual' persiste el movimiento calculado y cierra ambos diálogos", async () => {
+    const user = userEvent.setup();
+    mockCreateCalculated.mockResolvedValue({ success: true, id: "new-calc-1" });
+    mockUseActiveLimitProjection.mockReturnValue({
+      evaluate: vi.fn(() => [mockCrossedLimit]),
+    });
+    const onClose = vi.fn();
+    renderCreate(origenFijo, onClose);
+
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+    await user.selectOptions(screen.getByRole("combobox"), "cat-income");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+    await screen.findByRole("alertdialog");
+
+    await user.click(screen.getByRole("button", { name: /guardar igual/i }));
+
+    await waitFor(() => {
+      expect(mockCreateCalculated).toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
+
+  it("D14: al crear desde un origen fijo evalúa con section 'fijos' y el tipo/monto derivados", async () => {
+    const user = userEvent.setup();
+    const evaluateSpy = vi.fn(() => []);
+    mockUseActiveLimitProjection.mockReturnValue({ evaluate: evaluateSpy });
+    mockCreateCalculated.mockResolvedValue({ success: true, id: "new-calc-1" });
+    renderCreate(origenFijo);
+
+    // Origen $1.000,00 · signo default Positivo · PCT 10 → 10% de 100000 = 10000 (INCOME)
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+    await user.selectOptions(screen.getByRole("combobox"), "cat-income");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => expect(mockCreateCalculated).toHaveBeenCalled());
+    expect(evaluateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "INCOME",
+        convertedAmountCents: 10000,
+        categoryId: "cat-income",
+        section: "fijos",
+        skipped: false,
+        editingId: undefined,
+      }),
+    );
+  });
+
+  it("D14: al crear desde un origen único evalúa con section 'unicos'", async () => {
+    const user = userEvent.setup();
+    const evaluateSpy = vi.fn(() => []);
+    mockUseActiveLimitProjection.mockReturnValue({ evaluate: evaluateSpy });
+    mockCreateCalculated.mockResolvedValue({ success: true, id: "new-calc-unico" });
+    renderCreate(origenUnico);
+
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+    await user.selectOptions(screen.getByRole("combobox"), "cat-income");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => expect(mockCreateCalculated).toHaveBeenCalled());
+    expect(evaluateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ section: "unicos", type: "INCOME" }),
+    );
+  });
+
+  it("D14: al crear desde un origen cuota evalúa con section 'cuotas'", async () => {
+    const user = userEvent.setup();
+    const evaluateSpy = vi.fn(() => []);
+    mockUseActiveLimitProjection.mockReturnValue({ evaluate: evaluateSpy });
+    mockCreateCalculated.mockResolvedValue({ success: true, id: "new-calc-cuota" });
+    renderCreate(origenCuota);
+
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+    await user.selectOptions(screen.getByRole("combobox"), "cat-income");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => expect(mockCreateCalculated).toHaveBeenCalled());
+    expect(evaluateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ section: "cuotas", type: "INCOME" }),
+    );
+  });
+
+  it("D13: calculado de fijo/cuota proyecta sobre el mes en curso real, ignorando viewMonth", () => {
+    // getCurrentMonth() está mockeado a "2026-06"; viewMonth difiere a propósito.
+    renderCreateWithMonth(origenFijo, "2026-03");
+    expect(mockUseActiveLimitProjection).toHaveBeenCalledWith("2026-06");
+  });
+
+  it("D13: calculado de cuota también proyecta sobre el mes en curso real, ignorando viewMonth", () => {
+    renderCreateWithMonth(origenCuota, "2026-03");
+    expect(mockUseActiveLimitProjection).toHaveBeenCalledWith("2026-06");
+  });
+
+  it("D13: calculado de único proyecta sobre su propio mes (viewMonth), no el mes en curso", () => {
+    renderCreateWithMonth(origenUnico, "2026-03");
+    expect(mockUseActiveLimitProjection).toHaveBeenCalledWith("2026-03");
+  });
+
+  it("en edición pasa editingId + section/type/monto derivados del calculado (no del origen)", async () => {
+    const user = userEvent.setup();
+    const evaluateSpy = vi.fn(() => []);
+    mockUseActiveLimitProjection.mockReturnValue({ evaluate: evaluateSpy });
+    mockUpdateCalculated.mockResolvedValue({ success: true, id: "calc-1" });
+    renderEdit(calculadoExistente);
+
+    // Precargado: PCT 10%, signo -1, sourceAmountCents 100000 → -10000 (EXPENSE)
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => expect(mockUpdateCalculated).toHaveBeenCalled());
+    expect(evaluateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "EXPENSE",
+        convertedAmountCents: 10000,
+        categoryId: "cat-expense",
+        section: "fijos",
+        skipped: false,
+        editingId: "calc-1",
+      }),
+    );
+  });
+
+  it("D16: al editar un calculado YA anulado (movement.skipped=true) evalúa con skipped=true", async () => {
+    const user = userEvent.setup();
+    const evaluateSpy = vi.fn(() => []);
+    mockUseActiveLimitProjection.mockReturnValue({ evaluate: evaluateSpy });
+    mockUpdateCalculated.mockResolvedValue({ success: true, id: "calc-skip-1" });
+    renderEdit(calculadoSkippedExistente);
+
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => expect(mockUpdateCalculated).toHaveBeenCalled());
+    expect(evaluateSpy).toHaveBeenCalledWith(expect.objectContaining({ skipped: true }));
+  });
+
+  it("D17: convierte el monto final a la moneda canónica antes de evaluar (origen en USD)", async () => {
+    const user = userEvent.setup();
+    const evaluateSpy = vi.fn(() => []);
+    mockUseActiveLimitProjection.mockReturnValue({ evaluate: evaluateSpy });
+    mockCreateCalculated.mockResolvedValue({ success: true, id: "new-calc-usd" });
+    renderCreate(origenFijoUsd);
+
+    // Origen USD 100,00 (10000) · PCT 10 · signo positivo → 1000 (USD 10,00) → × 1000 (cotización) = 1.000.000
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+    await user.selectOptions(screen.getByRole("combobox"), "cat-income");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => expect(mockCreateCalculated).toHaveBeenCalled());
+    expect(evaluateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ convertedAmountCents: 1_000_000 }),
+    );
   });
 });

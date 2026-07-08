@@ -70,6 +70,12 @@ vi.mock("@/hooks/use-reference-rate", () => ({
   })),
 }));
 
+// P2 — Fase 2: intercepción de límites activos. Por defecto sin límites (cero
+// fricción); los tests de la compuerta lo sobreescriben.
+vi.mock("@/hooks/use-active-limit-projection", () => ({
+  useActiveLimitProjection: vi.fn(() => ({ evaluate: vi.fn(() => []) })),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(() => ({ push: vi.fn() })),
 }));
@@ -87,6 +93,7 @@ import { useInstallments } from "@/hooks/use-installments";
 import { usePaymentMethods } from "@/hooks/use-payment-methods";
 import { useSettings } from "@/hooks/use-settings";
 import { useReferenceRate } from "@/hooks/use-reference-rate";
+import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
 import { useRouter } from "next/navigation";
 
 const mockUseCategories = vi.mocked(useCategories);
@@ -94,6 +101,7 @@ const mockUseInstallments = vi.mocked(useInstallments);
 const mockUsePaymentMethods = vi.mocked(usePaymentMethods);
 const mockUseSettings = vi.mocked(useSettings);
 const mockUseReferenceRate = vi.mocked(useReferenceRate);
+const mockUseActiveLimitProjection = vi.mocked(useActiveLimitProjection);
 const mockUseRouter = vi.mocked(useRouter);
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -174,11 +182,19 @@ const mockDebitMethod: PaymentMethod = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function renderForm(props: { installment?: InstallmentGroup | null; onClose?: () => void }) {
+function renderForm(props: {
+  installment?: InstallmentGroup | null;
+  onClose?: () => void;
+  editingSkipped?: boolean;
+}) {
   const onClose = props.onClose ?? vi.fn();
   return render(
     <ToastProvider>
-      <InstallmentForm installment={props.installment ?? null} onClose={onClose} />
+      <InstallmentForm
+        installment={props.installment ?? null}
+        onClose={onClose}
+        editingSkipped={props.editingSkipped}
+      />
     </ToastProvider>,
   );
 }
@@ -230,6 +246,10 @@ beforeEach(() => {
   });
 
   mockUseRouter.mockReturnValue({ push: mockPush } as unknown as ReturnType<typeof useRouter>);
+
+  // P2 — Fase 2: por defecto sin cruces (cero fricción) — los tests de la
+  // compuerta sobreescriben con mockUseActiveLimitProjection.mockReturnValue(...).
+  mockUseActiveLimitProjection.mockReturnValue({ evaluate: vi.fn(() => []) });
 });
 
 // ─── Tests: sin selector de tipo ─────────────────────────────────────────────
@@ -587,6 +607,79 @@ describe("InstallmentForm — flujo editar", () => {
     // NO debe incluir 'type' en el body del PATCH
     const callBody = mockUpdateInstallment.mock.calls[0][1] as Record<string, unknown>;
     expect(callBody).not.toHaveProperty("type");
+  });
+});
+
+// ─── Tests: intercepción de límites activos (P2 — Fase 2, D11) ───────────────
+
+describe("InstallmentForm — intercepción de límites activos (P2, Fase 2)", () => {
+  it("sin cruces: persiste directo, SIN mostrar el aviso (cero fricción)", async () => {
+    const user = userEvent.setup();
+    mockCreateInstallment.mockResolvedValue({ success: true, installment: mockInstallmentGroup });
+    const onClose = vi.fn();
+    renderForm({ onClose });
+
+    await user.type(screen.getByLabelText(/monto por cuota/i), "500");
+    await user.type(screen.getByLabelText(/cant\. de cuotas/i), "12");
+    await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(mockCreateInstallment).toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalled();
+    });
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("con cruces: muestra el aviso en vez de persistir; 'Guardar igual' persiste", async () => {
+    const user = userEvent.setup();
+    mockCreateInstallment.mockResolvedValue({ success: true, installment: mockInstallmentGroup });
+    mockUseActiveLimitProjection.mockReturnValue({
+      evaluate: vi.fn(() => [
+        {
+          id: "l1",
+          enabled: true,
+          anchorKey: "mes.total.gasto",
+          operator: "gt" as const,
+          threshold: 100,
+          nature: "active" as const,
+        },
+      ]),
+    });
+    renderForm({});
+
+    await user.type(screen.getByLabelText(/monto por cuota/i), "500");
+    await user.type(screen.getByLabelText(/cant\. de cuotas/i), "12");
+    await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    const alertDialog = await screen.findByRole("alertdialog");
+    expect(mockCreateInstallment).not.toHaveBeenCalled();
+
+    await user.click(within(alertDialog).getByRole("button", { name: /guardar igual/i }));
+
+    await waitFor(() => {
+      expect(mockCreateInstallment).toHaveBeenCalled();
+    });
+  });
+
+  it("evalúa la proyección contra el MES EN CURSO (2026-06) y la sección 'cuotas'", async () => {
+    const user = userEvent.setup();
+    const evaluateSpy = vi.fn(() => []);
+    mockUseActiveLimitProjection.mockReturnValue({ evaluate: evaluateSpy });
+    mockCreateInstallment.mockResolvedValue({ success: true, installment: mockInstallmentGroup });
+    renderForm({});
+
+    await user.type(screen.getByLabelText(/monto por cuota/i), "500");
+    await user.type(screen.getByLabelText(/cant\. de cuotas/i), "12");
+    await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => expect(mockCreateInstallment).toHaveBeenCalled());
+    expect(mockUseActiveLimitProjection).toHaveBeenCalledWith("2026-06");
+    expect(evaluateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "EXPENSE", section: "cuotas" }),
+    );
   });
 });
 

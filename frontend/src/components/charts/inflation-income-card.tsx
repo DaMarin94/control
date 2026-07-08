@@ -49,6 +49,10 @@ import {
 } from "lucide-react";
 import { useInflationIncome } from "@/hooks/use-reports";
 import { useSettings } from "@/hooks/use-settings";
+import { useLimits } from "@/hooks/use-limits";
+import { computeInflationIncomeMarks } from "@/lib/limits/apply-reports";
+import { describeLimitMark, mergeLimitMarks, type EvaluatedLimitMark } from "@/lib/limits/evaluate";
+import { renderSeriesPointMark } from "@/components/limits/limit-mark";
 import { ChartContainer, ChartLegend } from "@/components/ui/chart";
 import { CardCurrencySelect } from "@/components/ui/card-currency-select";
 import type { AnnualInflationIncomeResponse } from "@/types/reports";
@@ -414,9 +418,22 @@ interface CustomTooltipProps {
   label?: string | number;
   hiddenSeries: string[];
   year: number;
+  /** Marcas de límite por mes (P2 — Tramo 2): reporte.infl.*. */
+  inflationMarks?: (EvaluatedLimitMark | null)[];
+  incomeVarMarks?: (EvaluatedLimitMark | null)[];
+  incomeVarAdjMarks?: (EvaluatedLimitMark | null)[];
 }
 
-function CustomTooltip({ active, payload, label, hiddenSeries, year }: CustomTooltipProps) {
+export function CustomTooltip({
+  active,
+  payload,
+  label,
+  hiddenSeries,
+  year,
+  inflationMarks,
+  incomeVarMarks,
+  incomeVarAdjMarks,
+}: CustomTooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
 
   // Resolver el monthIndex desde el label (short month name)
@@ -447,6 +464,14 @@ function CustomTooltip({ active, payload, label, hiddenSeries, year }: CustomToo
   }
 
   if (rows.length === 0) return null;
+
+  // P2 — Tramo 2: combina las 3 marcas de este mes (la más fuerte gana) — portador de a11y.
+  let mergedMark: EvaluatedLimitMark | null = null;
+  if (monthIndex >= 0) {
+    mergedMark = mergeLimitMarks(mergedMark, inflationMarks?.[monthIndex] ?? null);
+    mergedMark = mergeLimitMarks(mergedMark, incomeVarMarks?.[monthIndex] ?? null);
+    mergedMark = mergeLimitMarks(mergedMark, incomeVarAdjMarks?.[monthIndex] ?? null);
+  }
 
   return (
     <div
@@ -493,6 +518,17 @@ function CustomTooltip({ active, payload, label, hiddenSeries, year }: CustomToo
           </div>
         ))}
       </div>
+
+      {/* Nota de límite cruzado (P2 — Tramo 2): portador de a11y del punto. */}
+      {mergedMark && (
+        <>
+          <div className="my-[7px]" style={{ borderTop: "1px solid var(--hair)" }} />
+          <div className="flex items-center gap-[6px]">
+            <AlertTriangle size={12} aria-hidden="true" className="shrink-0 text-warning-ink" />
+            <span className="text-[11.5px] font-medium text-warning-ink">{describeLimitMark(mergedMark)}</span>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -537,6 +573,10 @@ interface InflationIncomeCanvasProps {
   year: number;
   reducedMotion: boolean;
   chartHeight: number;
+  /** Marcas de límite por mes (P2 — Tramo 2): reporte.infl.*. [] con limits vacío. */
+  inflationMarks?: (EvaluatedLimitMark | null)[];
+  incomeVarMarks?: (EvaluatedLimitMark | null)[];
+  incomeVarAdjMarks?: (EvaluatedLimitMark | null)[];
 }
 
 function InflationIncomeCanvas({
@@ -550,6 +590,9 @@ function InflationIncomeCanvas({
   year,
   reducedMotion,
   chartHeight,
+  inflationMarks,
+  incomeVarMarks,
+  incomeVarAdjMarks,
 }: InflationIncomeCanvasProps) {
   // Calcular dominio del eje Y con padding
   const allValues: number[] = [];
@@ -629,6 +672,9 @@ function InflationIncomeCanvas({
               <CustomTooltip
                 hiddenSeries={hiddenSeries}
                 year={year}
+                inflationMarks={inflationMarks}
+                incomeVarMarks={incomeVarMarks}
+                incomeVarAdjMarks={incomeVarAdjMarks}
               />
             }
           />
@@ -680,7 +726,8 @@ function InflationIncomeCanvas({
               name="inflation"
               stroke="var(--rate)"
               strokeWidth={2}
-              dot={false}
+              dot={((props: { cx?: number; cy?: number; index?: number }) =>
+                renderSeriesPointMark(props, inflationMarks)) as unknown as boolean}
               activeDot={{ r: 4, stroke: "var(--panel)", strokeWidth: 2, fill: "var(--rate)" }}
               connectNulls={false}
               isAnimationActive={!reducedMotion}
@@ -696,7 +743,8 @@ function InflationIncomeCanvas({
               stroke="var(--income)"
               strokeWidth={2}
               strokeDasharray="6 4"
-              dot={false}
+              dot={((props: { cx?: number; cy?: number; index?: number }) =>
+                renderSeriesPointMark(props, incomeVarAdjMarks)) as unknown as boolean}
               activeDot={{ r: 4, stroke: "var(--panel)", strokeWidth: 2, fill: "var(--income)" }}
               connectNulls={false}
               isAnimationActive={!reducedMotion}
@@ -711,7 +759,8 @@ function InflationIncomeCanvas({
               name="income"
               stroke="var(--income)"
               strokeWidth={2}
-              dot={false}
+              dot={((props: { cx?: number; cy?: number; index?: number }) =>
+                renderSeriesPointMark(props, incomeVarMarks)) as unknown as boolean}
               activeDot={{ r: 4, stroke: "var(--panel)", strokeWidth: 2, fill: "var(--income)" }}
               connectNulls={false}
               isAnimationActive={!reducedMotion}
@@ -863,6 +912,8 @@ export function InflationIncomeCard({
   const { defaultCurrency } = useSettings();
   const effectiveCurrency = currency ?? defaultCurrency;
   const reducedMotion = useReducedMotion();
+  // P2 — Fase 1 (Tramo 2): límites del usuario (marca visual pasiva). [] = cero impacto (D9).
+  const { limits } = useLimits();
 
   // Fecha local para el parámetro ?today= (igual que annual-unicos)
   const today = useMemo(() => {
@@ -957,6 +1008,13 @@ export function InflationIncomeCard({
 
   // ── Datos del gráfico ──────────────────────────────────────────────────────
   const chartData = useMemo(() => (data ? buildChartData(data) : []), [data]);
+
+  // P2 — Fase 1 (Tramo 2): marca visual pasiva de límites — reporte.infl.*.
+  // Con `limits` vacío, evaluateLimits siempre null → cero impacto (D9).
+  const { inflation: inflationMarks, incomeVar: incomeVarMarks, incomeVarAdj: incomeVarAdjMarks } = useMemo(
+    () => (data ? computeInflationIncomeMarks(limits, year, data.months) : { inflation: [], incomeVar: [], incomeVarAdj: [] }),
+    [limits, year, data],
+  );
 
   // ¿Está "vacío"? → todas las series de dato tienen null en todos los meses
   // O todas las 3 series están ocultas.
@@ -1065,6 +1123,9 @@ export function InflationIncomeCard({
             year={year}
             reducedMotion={reducedMotion}
             chartHeight={chartHeight}
+            inflationMarks={inflationMarks}
+            incomeVarMarks={incomeVarMarks}
+            incomeVarAdjMarks={incomeVarAdjMarks}
           />
 
           {/* Leyenda de series (toggle de 3 ítems) */}

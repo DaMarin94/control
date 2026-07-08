@@ -52,6 +52,14 @@ import {
 } from "lucide-react";
 import { useReports } from "@/hooks/use-reports";
 import { useSettings } from "@/hooks/use-settings";
+import { useLimits } from "@/hooks/use-limits";
+import {
+  computeIncomeExpenseMarks,
+  computeByCategoryMarks,
+  type ByCategoryMarks,
+} from "@/lib/limits/apply-reports";
+import { describeLimitMark, mergeLimitMarks, type EvaluatedLimitMark } from "@/lib/limits/evaluate";
+import { renderSeriesPointMark } from "@/components/limits/limit-mark";
 import { formatCurrency, CURRENCY_SYMBOLS } from "@/lib/format";
 import { ChartTooltipContent } from "@/components/ui/chart";
 import { ChartLegend } from "@/components/ui/chart";
@@ -151,9 +159,21 @@ interface Form1TooltipProps {
   currency: string;
   /** Dirección de cómputo — determina qué series aparecen en el tooltip. */
   direction?: "expense" | "income" | "both";
+  /** Marcas de límite por mes (P2 — Tramo 2): reporte.ie.gastoMes / .ingresoMes. */
+  expenseMarks?: (EvaluatedLimitMark | null)[];
+  incomeMarks?: (EvaluatedLimitMark | null)[];
 }
 
-function Form1Tooltip({ active, payload, label, year, currency, direction }: Form1TooltipProps) {
+export function Form1Tooltip({
+  active,
+  payload,
+  label,
+  year,
+  currency,
+  direction,
+  expenseMarks,
+  incomeMarks,
+}: Form1TooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
   const labelStr = String(label ?? "");
   const monthIndex = MONTH_LABELS_SHORT.indexOf(labelStr);
@@ -188,7 +208,15 @@ function Form1Tooltip({ active, payload, label, year, currency, direction }: For
       : []),
   ];
   if (rows.length === 0) return null;
-  return <ChartTooltipContent monthLabel={fullLabel} rows={rows} />;
+
+  // P2 — Tramo 2: la marca de este mes (gasto y/o ingreso) es el portador de a11y del punto.
+  const mergedMark = mergeLimitMarks(
+    showExpense ? expenseMarks?.[monthIndex] ?? null : null,
+    showIncome ? incomeMarks?.[monthIndex] ?? null : null,
+  );
+  const warningNote = mergedMark ? describeLimitMark(mergedMark) : undefined;
+
+  return <ChartTooltipContent monthLabel={fullLabel} rows={rows} warningNote={warningNote} />;
 }
 
 // ─── Tooltip — Forma 2 ────────────────────────────────────────────────────────
@@ -200,9 +228,11 @@ interface Form2TooltipProps {
   data: ReportsMovementsResponse;
   year: number;
   currency: string;
+  /** Marcas de límite (P2 — Tramo 2): reporte.cat.gastoMesCategoria / .gastoMesTotal. */
+  categoryMarks?: ByCategoryMarks;
 }
 
-function Form2Tooltip({ active, payload, label, data, year, currency }: Form2TooltipProps) {
+export function Form2Tooltip({ active, payload, label, data, year, currency, categoryMarks }: Form2TooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
   const labelStr = String(label ?? "");
   const monthIndex = MONTH_LABELS_SHORT.indexOf(labelStr);
@@ -218,7 +248,18 @@ function Form2Tooltip({ active, payload, label, data, year, currency }: Form2Too
     }));
   const totalCents = data.months[monthIndex]?.expenseCents ?? 0;
   const totalRow = { color: "var(--expense)", label: "Total gastos", formattedValue: formatCurrency(totalCents, currency), valueColor: "var(--expense-ink)" };
-  return <ChartTooltipContent monthLabel={fullLabel} rows={catRows} totalRow={totalRow} />;
+
+  // P2 — Tramo 2: combina las marcas de todas las categorías + el total de ESTE mes
+  // en una sola (la más fuerte gana) — portador de a11y del mes hovereado.
+  let mergedMark: EvaluatedLimitMark | null = categoryMarks?.total[monthIndex] ?? null;
+  if (categoryMarks) {
+    for (const marks of categoryMarks.perCategory.values()) {
+      mergedMark = mergeLimitMarks(mergedMark, marks[monthIndex] ?? null);
+    }
+  }
+  const warningNote = mergedMark ? describeLimitMark(mergedMark) : undefined;
+
+  return <ChartTooltipContent monthLabel={fullLabel} rows={catRows} totalRow={totalRow} warningNote={warningNote} />;
 }
 
 // ─── Toggle de vista — tabs underline neutras ────────────────────────────────
@@ -542,9 +583,21 @@ interface Form1ChartInnerProps {
   currency: string;
   /** Dirección de cómputo — determina qué series se renderizan en el chart. */
   direction?: "expense" | "income" | "both";
+  /** Marcas de límite por mes (P2 — Tramo 2): reporte.ie.gastoMes / .ingresoMes. [] con limits vacío. */
+  expenseMarks?: (EvaluatedLimitMark | null)[];
+  incomeMarks?: (EvaluatedLimitMark | null)[];
 }
 
-function Form1ChartInner({ chartData, year, height, reducedMotion, currency, direction }: Form1ChartInnerProps) {
+function Form1ChartInner({
+  chartData,
+  year,
+  height,
+  reducedMotion,
+  currency,
+  direction,
+  expenseMarks,
+  incomeMarks,
+}: Form1ChartInnerProps) {
   const formatYAxisTick = makeYAxisTickFormatter(currency);
   const showIncome = direction !== "expense";
   const showExpense = direction !== "income";
@@ -575,16 +628,42 @@ function Form1ChartInner({ chartData, year, height, reducedMotion, currency, dir
               year={year}
               currency={currency}
               direction={direction}
+              expenseMarks={expenseMarks}
+              incomeMarks={incomeMarks}
             />
           )}
         />
 
         {/* Gastos primero (debajo), ingresos encima — spec design.md */}
         {showExpense && (
-          <Area type="monotone" dataKey="expenseCents" stroke="var(--expense)" strokeWidth={2} fill="url(#areaExpenseRep)" dot={false} activeDot={{ r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 }} isAnimationActive={!reducedMotion} animationDuration={400} animationEasing="ease-out" />
+          <Area
+            type="monotone"
+            dataKey="expenseCents"
+            stroke="var(--expense)"
+            strokeWidth={2}
+            fill="url(#areaExpenseRep)"
+            dot={((props: { cx?: number; cy?: number; index?: number }) =>
+              renderSeriesPointMark(props, expenseMarks)) as unknown as boolean}
+            activeDot={{ r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 }}
+            isAnimationActive={!reducedMotion}
+            animationDuration={400}
+            animationEasing="ease-out"
+          />
         )}
         {showIncome && (
-          <Area type="monotone" dataKey="incomeCents" stroke="var(--income)" strokeWidth={2} fill="url(#areaIncomeRep)" dot={false} activeDot={{ r: 4, fill: "var(--income)", stroke: "var(--panel)", strokeWidth: 2 }} isAnimationActive={!reducedMotion} animationDuration={400} animationEasing="ease-out" />
+          <Area
+            type="monotone"
+            dataKey="incomeCents"
+            stroke="var(--income)"
+            strokeWidth={2}
+            fill="url(#areaIncomeRep)"
+            dot={((props: { cx?: number; cy?: number; index?: number }) =>
+              renderSeriesPointMark(props, incomeMarks)) as unknown as boolean}
+            activeDot={{ r: 4, fill: "var(--income)", stroke: "var(--panel)", strokeWidth: 2 }}
+            isAnimationActive={!reducedMotion}
+            animationDuration={400}
+            animationEasing="ease-out"
+          />
         )}
       </AreaChart>
     </ResponsiveContainer>
@@ -600,9 +679,20 @@ interface Form2ChartInnerProps {
   height: number;
   reducedMotion: boolean;
   currency: string;
+  /**
+   * Marcas de límite (P2 — Tramo 2): reporte.cat.gastoMesCategoria (por banda) y
+   * reporte.cat.gastoMesTotal (banda superior del stack). La barra ya está
+   * teñida por color de categoría (identidad) — no se recolorea; el efecto se
+   * expresa como contorno ámbar (mecanismo "ring") sobre la celda marcada,
+   * cualquiera sea el `effect` elegido (docs/design.md: la banda apilada no
+   * tiene etiqueta de monto propia donde anclar glyph/badge — ver nota en
+   * apply-reports.ts / reporte al orquestador). El portador de a11y completo
+   * es el tooltip (warningNote de Form2Tooltip).
+   */
+  categoryMarks?: ByCategoryMarks;
 }
 
-function Form2ChartInner({ chartData, data, year, height, reducedMotion, currency }: Form2ChartInnerProps) {
+function Form2ChartInner({ chartData, data, year, height, reducedMotion, currency, categoryMarks }: Form2ChartInnerProps) {
   const categories = data.categories;
   const formatYAxisTick = makeYAxisTickFormatter(currency);
   return (
@@ -614,16 +704,36 @@ function Form2ChartInner({ chartData, data, year, height, reducedMotion, currenc
         <Tooltip
           cursor={{ fill: "var(--accent-soft)", fillOpacity: 0.5 }}
           content={({ active, payload, label }) => (
-            <Form2Tooltip active={active} payload={payload as unknown as Array<{ dataKey: string; value: number }>} label={label} data={data} year={year} currency={currency} />
+            <Form2Tooltip
+              active={active}
+              payload={payload as unknown as Array<{ dataKey: string; value: number }>}
+              label={label}
+              data={data}
+              year={year}
+              currency={currency}
+              categoryMarks={categoryMarks}
+            />
           )}
         />
         {categories.map((cat, idx) => {
           const isTop = idx === categories.length - 1;
+          const catMonthMarks = categoryMarks?.perCategory.get(cat.categoryId);
           return (
             <Bar key={cat.categoryId} dataKey={cat.categoryId} stackId="categories" fill={cat.color} stroke="var(--panel)" strokeWidth={1} radius={isTop ? [7, 7, 0, 0] : [0, 0, 0, 0]} isAnimationActive={!reducedMotion} animationDuration={400} animationEasing="ease-out">
-              {chartData.map((_, cellIdx) => (
-                <Cell key={cellIdx} fill={cat.color} />
-              ))}
+              {chartData.map((_, cellIdx) => {
+                const mark = mergeLimitMarks(
+                  catMonthMarks?.[cellIdx] ?? null,
+                  isTop ? (categoryMarks?.total[cellIdx] ?? null) : null,
+                );
+                return (
+                  <Cell
+                    key={cellIdx}
+                    fill={cat.color}
+                    stroke={mark ? "var(--warning)" : "var(--panel)"}
+                    strokeWidth={mark ? 2 : 1}
+                  />
+                );
+              })}
             </Bar>
           );
         })}
@@ -641,6 +751,13 @@ interface FormBChartInnerProps {
   height: number;
   reducedMotion: boolean;
   currency: string;
+  /**
+   * Marcas de límite (P2 — Tramo 2): reporte.cat.gastoMesCategoria (por serie) y
+   * reporte.cat.gastoMesTotal (serie top del stack). Mismo dato que Forma 2 —
+   * acá se expresa como dot/ring sobre el punto de cada serie (anclaje
+   * "series-point"), no como recoloreo/contorno de banda.
+   */
+  categoryMarks?: ByCategoryMarks;
 }
 
 /**
@@ -654,7 +771,7 @@ interface FormBChartInnerProps {
  * Separadores 1px var(--panel) entre bandas para que colores similares no se fusionen.
  * Tooltip: reutiliza Form2Tooltip (mismo patrón que Forma 2 — solo gastos).
  */
-function FormBChartInner({ chartData, data, year, height, reducedMotion, currency }: FormBChartInnerProps) {
+function FormBChartInner({ chartData, data, year, height, reducedMotion, currency, categoryMarks }: FormBChartInnerProps) {
   const expenseCategories = data.categories;
   const formatYAxisTick = makeYAxisTickFormatter(currency);
 
@@ -687,6 +804,7 @@ function FormBChartInner({ chartData, data, year, height, reducedMotion, currenc
               data={data}
               year={year}
               currency={currency}
+              categoryMarks={categoryMarks}
             />
           )}
         />
@@ -694,6 +812,12 @@ function FormBChartInner({ chartData, data, year, height, reducedMotion, currenc
         {/* Stack de GASTO — único stackId */}
         {expenseCategories.map((cat, idx) => {
           const isTop = idx === expenseCategories.length - 1;
+          const catMonthMarks = categoryMarks?.perCategory.get(cat.categoryId);
+          // Mismo merge que la vista Barra: la marca de este punto es la de la
+          // categoría y, si es la serie top del stack, también la del total del mes.
+          const dotMarks = chartData.map((_, i) =>
+            mergeLimitMarks(catMonthMarks?.[i] ?? null, isTop ? (categoryMarks?.total[i] ?? null) : null),
+          );
           return (
             <Area
               key={cat.categoryId}
@@ -703,7 +827,8 @@ function FormBChartInner({ chartData, data, year, height, reducedMotion, currenc
               stroke={isTop ? "var(--expense)" : "var(--panel)"}
               strokeWidth={isTop ? 2 : 1}
               fill={`url(#${gradId(cat.categoryId)})`}
-              dot={false}
+              dot={((props: { cx?: number; cy?: number; index?: number }) =>
+                renderSeriesPointMark(props, dotMarks)) as unknown as boolean}
               activeDot={isTop ? { r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 } : false}
               isAnimationActive={!reducedMotion}
               animationDuration={400}
@@ -1316,6 +1441,8 @@ export function ReportCard({
 }: ReportCardProps) {
   const reducedMotion = useReducedMotion();
   const { defaultCurrency } = useSettings();
+  // P2 — Fase 1 (Tramo 2): límites del usuario (marca visual pasiva). [] = cero impacto (D9).
+  const { limits } = useLimits();
 
   // Moneda efectiva para formatters/charts/eje Y/tooltips:
   //   - Si hay override de card (currency prop presente) → usa ese override.
@@ -1505,6 +1632,30 @@ export function ReportCard({
     color: cat.color,
     label: cat.name,
   }));
+
+  // ── P2 — Fase 1 (Tramo 2): marca visual pasiva de límites ─────────────────
+  // income-expense: reporte.ie.gastoMes / .ingresoMes, un valor por mes de la serie.
+  // by-category: reporte.cat.gastoMesCategoria (por banda) / .gastoMesTotal (stack).
+  // Con `limits` vacío, evaluateLimits siempre null → cero impacto (restricción rectora).
+  const incomeExpenseMarks =
+    type === "income-expense" && data
+      ? computeIncomeExpenseMarks(
+          limits,
+          year,
+          data.months.map((m) => m.expenseCents),
+          data.months.map((m) => m.incomeCents),
+        )
+      : undefined;
+
+  const byCategoryMarks =
+    type === "by-category" && data
+      ? computeByCategoryMarks(
+          limits,
+          year,
+          data.categories,
+          data.months.map((m) => m.expenseCents),
+        )
+      : undefined;
 
   return (
     <div
@@ -1714,6 +1865,8 @@ export function ReportCard({
                     reducedMotion={reducedMotion}
                     currency={effectiveCurrency}
                     direction={direction}
+                    expenseMarks={incomeExpenseMarks?.expense}
+                    incomeMarks={incomeExpenseMarks?.income}
                   />
                 );
               }
@@ -1727,6 +1880,7 @@ export function ReportCard({
                     height={height}
                     reducedMotion={reducedMotion}
                     currency={effectiveCurrency}
+                    categoryMarks={byCategoryMarks}
                   />
                 );
               }
@@ -1739,6 +1893,7 @@ export function ReportCard({
                   height={height}
                   reducedMotion={reducedMotion}
                   currency={effectiveCurrency}
+                  categoryMarks={byCategoryMarks}
                 />
               );
             }}

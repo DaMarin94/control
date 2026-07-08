@@ -65,6 +65,18 @@ import { useApi } from "@/hooks/use-api";
 import { useMovements } from "@/hooks/use-movements";
 import { usePreferences } from "@/hooks/use-preferences";
 import { useSettings } from "@/hooks/use-settings";
+import { useLimits } from "@/hooks/use-limits";
+import { evaluateLimits } from "@/lib/limits/evaluate";
+import { computeCategoryExpenseTotalsCents, evaluateItemLimitMark } from "@/lib/limits/apply-month";
+import {
+  LimitMarkAdorner,
+  LimitGlyph,
+  limitBoldClass,
+  limitTintClass,
+  limitRingCardClass,
+  limitRingInlineClass,
+} from "@/components/limits/limit-mark";
+import { describeLimitMark } from "@/lib/limits/evaluate";
 import { SortableSection } from "@/components/ui/sortable-section";
 import { SkeletonBlock, SkeletonLine, SkeletonCircle, SkeletonPill } from "@/components/ui/skeleton";
 import { SectionFilterButton } from "@/components/ui/section-filter-popover";
@@ -85,7 +97,9 @@ import {
   getCurrentMonth,
 } from "@/lib/format";
 import { sumMovementTotals, groupSubtotalCents, sortUnicosBySort } from "@/lib/movements";
+import { cn } from "@/lib/utils";
 import type { MovementItem } from "@/types/movement";
+import type { LimitConfig } from "@/types/limit";
 import type { Transaction } from "@/types/transaction";
 import type { Recurring } from "@/types/recurring";
 import type { InstallmentGroup } from "@/types/installment";
@@ -314,6 +328,8 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   const { isAuthenticated } = useApi();
   const { data, isLoading, isError } = useMovements(month);
   const { defaultCurrency } = useSettings();
+  // P2 — Fase 1: límites del usuario (marca visual pasiva). [] = cero impacto (D9).
+  const { limits } = useLimits();
 
   // Estado de modales para únicos
   const [editingUnico, setEditingUnico] = useState<MovementItem | null>(null);
@@ -495,6 +511,38 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   const yearName = labelParts[1] ?? "";
 
   const isCurrentMonth = month === getCurrentMonth();
+
+  // ── P2 — Fase 1: marca visual pasiva de límites ───────────────────────────
+  // Anclajes de nivel-mes: mes.total.gasto / mes.total.ingreso / mes.balance.
+  // Valor emitido = número puro en pesos (sin moneda, D3), igual al que muestra
+  // la pantalla (cents / 100). Con `limits` vacío, evaluateLimits siempre
+  // devuelve null → cero impacto (restricción rectora).
+  const expenseLimitMark = evaluateLimits({
+    limits,
+    anchorKey: "mes.total.gasto",
+    value: expenseCents / 100,
+    isCurrentMonth,
+  });
+  const incomeLimitMark = evaluateLimits({
+    limits,
+    anchorKey: "mes.total.ingreso",
+    value: incomeCents / 100,
+    isCurrentMonth,
+  });
+  const balanceLimitMark = evaluateLimits({
+    limits,
+    anchorKey: "mes.balance",
+    value: balanceCents / 100,
+    isCurrentMonth,
+  });
+
+  // mes.categoria.gastoMes — dato derivado (D2): gasto por categoría en el mes,
+  // sobre los movimientos CRUDOS (sin filtros de listado, no es un total de sección).
+  const categoryExpenseTotalsCents = computeCategoryExpenseTotalsCents([
+    ...rawUnicos,
+    ...rawFijos,
+    ...rawCuotas,
+  ]);
 
   // ── Navegación ────────────────────────────────────────────────────────────
 
@@ -931,29 +979,61 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
               className="grid gap-[var(--gap)] mb-6"
               style={{ gridTemplateColumns: "1fr 1fr 1.1fr" }}
             >
-              {/* Gastos */}
-              <div className="bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] flex flex-col gap-[6px]" style={{ padding: "16px 18px" }}>
+              {/* Gastos — mes.total.gasto (P2, Fase 1: marca visual pasiva) */}
+              <div
+                className={cn(
+                  "bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] flex flex-col gap-[6px]",
+                  limitRingCardClass(expenseLimitMark?.effect),
+                )}
+                style={{ padding: "16px 18px" }}
+              >
                 <div className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted">
                   Gastos
                 </div>
-                <div className="text-[23px] font-semibold tracking-[-0.02em] leading-none mono text-ink">
-                  {formatCurrency(expenseCents, defaultCurrency)}
+                <div className="inline-flex items-center gap-[7px]">
+                  <LimitMarkAdorner mark={expenseLimitMark} glyphSize={15} />
+                  <span
+                    className={cn(
+                      "text-[23px] tracking-[-0.02em] leading-none mono text-ink",
+                      limitBoldClass(expenseLimitMark?.effect) ?? "font-semibold",
+                      limitTintClass(expenseLimitMark?.effect),
+                    )}
+                  >
+                    {formatCurrency(expenseCents, defaultCurrency)}
+                  </span>
                 </div>
               </div>
 
-              {/* Ingresos */}
-              <div className="bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] flex flex-col gap-[6px]" style={{ padding: "16px 18px" }}>
+              {/* Ingresos — mes.total.ingreso (tint NO ofrecido: monto tipado income-ink) */}
+              <div
+                className={cn(
+                  "bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] flex flex-col gap-[6px]",
+                  limitRingCardClass(incomeLimitMark?.effect),
+                )}
+                style={{ padding: "16px 18px" }}
+              >
                 <div className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted">
                   Ingresos
                 </div>
-                <div className="text-[23px] font-semibold tracking-[-0.02em] leading-none mono text-income-ink">
-                  {formatCurrency(incomeCents, defaultCurrency)}
+                <div className="inline-flex items-center gap-[7px]">
+                  <LimitMarkAdorner mark={incomeLimitMark} glyphSize={15} />
+                  <span
+                    className={cn(
+                      "text-[23px] tracking-[-0.02em] leading-none mono text-income-ink",
+                      limitBoldClass(incomeLimitMark?.effect) ?? "font-semibold",
+                    )}
+                  >
+                    {formatCurrency(incomeCents, defaultCurrency)}
+                  </span>
                 </div>
               </div>
 
-              {/* Mini-balance */}
+              {/* Mini-balance — mes.balance (tint NO ofrecido: bloque de acento con signo) */}
               <div
-                className="rounded-card relative overflow-hidden text-white shadow-[var(--shadow-md)] flex flex-col gap-[6px]"
+                className={cn(
+                  "rounded-card relative overflow-hidden text-white shadow-[var(--shadow-md)] flex flex-col gap-[6px]",
+                  limitRingCardClass(balanceLimitMark?.effect, "--shadow-md"),
+                )}
                 style={{
                   padding: "16px 18px",
                   background: "linear-gradient(135deg, var(--accent-press), var(--accent))",
@@ -962,10 +1042,18 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                 <div className="text-[12.5px] font-semibold uppercase tracking-[0.08em] text-white/70">
                   Balance
                 </div>
-                <div className="text-[28px] font-semibold tracking-[-0.02em] leading-none mono">
-                  {balanceCents >= 0
-                    ? `+ ${formatCurrency(balanceCents, defaultCurrency)}`
-                    : `− ${formatCurrency(Math.abs(balanceCents), defaultCurrency)}`}
+                <div className="inline-flex items-center gap-[7px]">
+                  <LimitMarkAdorner mark={balanceLimitMark} glyphSize={15} />
+                  <span
+                    className={cn(
+                      "text-[28px] tracking-[-0.02em] leading-none mono",
+                      limitBoldClass(balanceLimitMark?.effect) ?? "font-semibold",
+                    )}
+                  >
+                    {balanceCents >= 0
+                      ? `+ ${formatCurrency(balanceCents, defaultCurrency)}`
+                      : `− ${formatCurrency(Math.abs(balanceCents), defaultCurrency)}`}
+                  </span>
                 </div>
               </div>
             </div>
@@ -999,6 +1087,23 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                     const isCollapsed = collapsedSections.has(key);
                     const filter = listFilters[key];
 
+                    // P2 — Fase 1: marca visual pasiva de límites por sección
+                    // (mes.seccion.subtotal / mes.seccion.conteo, refinamiento por sección).
+                    const subtotalMark = evaluateLimits({
+                      limits,
+                      anchorKey: "mes.seccion.subtotal",
+                      value: groupSubtotalCents(items) / 100,
+                      refinement: { section: key },
+                      isCurrentMonth,
+                    });
+                    const conteoMark = evaluateLimits({
+                      limits,
+                      anchorKey: "mes.seccion.conteo",
+                      value: items.length,
+                      refinement: { section: key },
+                      isCurrentMonth,
+                    });
+
                     return (
                       <SortableSection
                         key={key}
@@ -1010,6 +1115,20 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                         onToggle={() => handleToggleCollapse(key)}
                         isOrderMode={isOrderMode}
                         isActive={activeId === key}
+                        subtotalAdornment={<LimitMarkAdorner mark={subtotalMark} glyphSize={13} />}
+                        subtotalClassName={cn(
+                          limitBoldClass(subtotalMark?.effect),
+                          limitTintClass(subtotalMark?.effect),
+                          limitRingInlineClass(subtotalMark?.effect),
+                        )}
+                        countAdornment={
+                          conteoMark?.effect === "glyph" ? (
+                            <LimitGlyph tooltip={describeLimitMark(conteoMark)} size={12} />
+                          ) : null
+                        }
+                        countClassName={
+                          conteoMark?.effect === "badge" ? "bg-warning-soft text-warning-ink" : undefined
+                        }
                         filterSlot={
                           // Únicos: [control de orden] [filtro] (gap-1 entre ambos)
                           // Fijos / Cuotas: solo [filtro] (sin control de orden)
@@ -1044,6 +1163,9 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                               onEdit={handleEdit}
                               onDelete={handleDelete}
                               onCreateCalculated={handleCreateCalculated}
+                              limits={limits}
+                              categoryExpenseTotalsCents={categoryExpenseTotalsCents}
+                              isCurrentMonth={isCurrentMonth}
                             />
                           </div>
                         )}
@@ -1063,6 +1185,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
           mode="edit-single"
           transaction={movementItemToTransaction(editingUnico)}
           onClose={() => setEditingUnico(null)}
+          editingSkipped={editingUnico.skipped}
         />
       )}
 
@@ -1081,6 +1204,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
           recurring={movementItemToRecurring(editingFijo)}
           onClose={() => setEditingFijo(null)}
           viewMonth={month}
+          editingSkipped={editingFijo.skipped}
         />
       )}
 
@@ -1099,6 +1223,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
           mode="edit-installment"
           installment={movementItemToInstallment(editingCuota)}
           onClose={() => setEditingCuota(null)}
+          editingSkipped={editingCuota.skipped}
         />
       )}
 
@@ -1169,9 +1294,22 @@ interface SectionListProps {
   onDelete: (m: MovementItem) => void;
   /** Handler para "Crear movimiento desde este" (solo para fijos NO calculados) */
   onCreateCalculated?: (m: MovementItem) => void;
+  /** P2 — Fase 1: límites del usuario, para evaluar la marca de cada ítem (mes.item.monto / mes.categoria.gastoMes). */
+  limits: LimitConfig[];
+  categoryExpenseTotalsCents: Map<string, number>;
+  isCurrentMonth: boolean;
 }
 
-function SectionList({ items, viewMonth, onEdit, onDelete, onCreateCalculated }: SectionListProps) {
+function SectionList({
+  items,
+  viewMonth,
+  onEdit,
+  onDelete,
+  onCreateCalculated,
+  limits,
+  categoryExpenseTotalsCents,
+  isCurrentMonth,
+}: SectionListProps) {
   return (
     <div className="bg-panel border border-line rounded-card overflow-hidden shadow-[var(--shadow-sm)]">
       {items.map((item) => (
@@ -1182,6 +1320,7 @@ function SectionList({ items, viewMonth, onEdit, onDelete, onCreateCalculated }:
           onEdit={onEdit}
           onDelete={onDelete}
           onCreateCalculated={onCreateCalculated}
+          limitMark={evaluateItemLimitMark(item, limits, categoryExpenseTotalsCents, isCurrentMonth)}
         />
       ))}
     </div>

@@ -92,6 +92,12 @@ export interface UserPreferences {
    * Ausente equivale a "system".
    */
   theme?: "system" | "light" | "dark";
+  /**
+   * P2 — Límites y Alertas, Fase 1: límites del usuario (marca visual pasiva).
+   * Blob frontend-puro / opaco para el backend, igual que `reports` / `theme`.
+   * Ausente/vacío = sin límites configurados (impacto visual nulo, D9).
+   */
+  limits?: import("@/types/limit").LimitConfig[];
   [key: string]: unknown;
 }
 

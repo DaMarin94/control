@@ -47,6 +47,7 @@ El detalle estructural (arquitectura, componentes, gotchas) vive en `docs/`. Le�
 | Vista del mes y Dashboard, `useMovements`, filtros por listado, `lib/movements.ts` | `docs/frontend.md` §Vista del mes y Dashboard |
 | Navegación global / sidebar | `docs/frontend.md` §Navegación global |
 | Reportes (charting, `useReports`, gotchas Recharts) | `docs/frontend.md` §Reportes |
+| Límites (registro de keys, evaluador, marcas en `/mes`, solapa Límites) | `docs/frontend.md` §Límites |
 | Helpers de moneda/fecha/mes (`lib/format.ts`) | `docs/frontend.md` §Movimientos únicos (Helpers) |
 | Testing (jsdom, fake timers, matchMedia) | `docs/frontend.md` §Testing |
 | Shapes de request/response y contratos de API | `docs/data-model.md` |

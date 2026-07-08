@@ -194,6 +194,37 @@ theme: "system" | "light" | "dark"
 
 - Modo de color elegido desde el chrome global (sidebar, RF-NAV-001): `"system"` (sigue `prefers-color-scheme` del dispositivo), `"light"` o `"dark"`. **Default por ausencia = `"system"`** (la clave ausente se interpreta como Sistema); si el usuario elige "Sistema" explícitamente se persiste `"system"`. Estado de **UI frontend-puro**: el backend **NO lo interpreta** (blob abierto/opaco, igual que el resto de las claves) — el frontend lo mergea sobre el blob en el `PUT /preferences`. Regla funcional en `requirements.md`, RF-APP-001; arquitectura de aplicación (override de tokens, anti-flash) en `docs/frontend.md`, §Modo de color (theming).
 
+#### `limits` — límites del usuario (RF-LIM-001..004)
+
+Persiste los **límites**: un array de reglas declarativas. Evaluación **100% client-side**; el backend **NO valida ni conoce** esta clave (blob opaco, igual que `theme` / `reports`).
+
+```
+limits: LimitConfig[]
+
+LimitConfig = {
+  id: string,                       // id local, generado en el front (key de React / borrar)
+  label?: string,                   // nombre del usuario; ausente = placeholder derivado (key + condición)
+  enabled: boolean,                 // toggle on/off sin borrar la regla
+  anchorKey: string,                // key del catálogo hardcodeado que el límite observa
+  refinement?: {                    // acota la key cuando emite muchas instancias
+    section?: "unicos" | "fijos" | "cuotas",   // keys de sección de /mes
+    categoryId?: string                        // keys por categoría
+  },
+  temporalScope?: "all" | "current", // (SOLO passive) a qué meses aplica la marca: todos (default) | solo el mes en curso. Inaplicable/ausente en active
+  operator: "gt" | "gte" | "lt" | "lte" | "eq",
+  threshold: number,                // número puro, sin moneda (RN-022); su unidad la fija el `unit` de la key
+  nature: "passive" | "active",     // passive = marca visual; active = aviso al guardar (solo keys mes.*)
+  effect?: string                   // (SOLO passive) id del efecto visual; debe pertenecer al subset de la key. Ausente en active
+}
+```
+
+- **`nature: "active"`** solo es válida sobre las 7 keys `mes.*` (RF-LIM-004). Un límite activo **no lleva `effect`** (avisa, no marca) **ni `temporalScope`** (siempre proyecta sobre el mes destino del movimiento); su `operator` queda restringido por la polaridad del anclaje (techo `gt`/`gte`, piso `lt`/`lte`). `nature: "passive"` es la única válida sobre keys de dashboard/reportes y usa `effect` + `temporalScope`.
+
+- **El catálogo de keys es un registro hardcodeado del frontend**, no un contrato de DB: es el "lenguaje común" entre los datos que emiten cada key (anclajes) y los consumidores (panel + evaluador). La fuente de verdad del registro (keys, unidades, refinamientos, subset de efectos y default por anclaje) vive en el frontend (`lib/limits/catalog.ts`, ver `docs/frontend.md`, §Límites); el catálogo de **efectos visuales** y su mapeo por anclaje vive en `docs/design.md`. Reglas funcionales en `requirements.md`, módulo 3.13.
+- **`threshold` es un número puro sin moneda** (RN-022): su tipo (money / signed-money / percent / count) lo determina el `unit` de la key en el registro, no el límite.
+- **Back-compat / normalización.** Clave ausente o `limits: []` → sin límites (cero-impacto, cada superficie idéntica a sin la feature, RN-022). La normalización (entradas malformadas, `anchorKey` desconocida, `effect` fuera del subset de la key) es responsabilidad del front en la lectura del blob; un blob viejo o parcial nunca rompe la pantalla.
+- **El back NO valida ni conoce esta clave** (igual que `monthSections` / `reports` / `theme`): `PUT /preferences` guarda el blob tal cual (reemplazo total). La normalización y los defaults son del frontend consumidor.
+
 #### `monthCategoryFilter` — filtro de categorías de la Vista del mes (RF-VM-006) — **DEPRECADA**
 
 Deprecada. No se lee ni se escribe desde `/mes`; se conserva en el tipo para no romper blobs viejos y **no se migra**. Detalle en §Filtro de categorías → `monthCategoryFilter` (más abajo).

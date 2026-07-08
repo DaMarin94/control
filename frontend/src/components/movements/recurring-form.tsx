@@ -28,11 +28,15 @@ import { useCategories } from "@/hooks/use-categories";
 import { useRecurring } from "@/hooks/use-recurring";
 import { useSettings } from "@/hooks/use-settings";
 import { useReferenceRate } from "@/hooks/use-reference-rate";
+import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
 import { useToast } from "@/hooks/use-toast";
 import { type TransactionType } from "@/types/transaction";
 import { type Category, type CategoryScope } from "@/types/category";
 import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
 import { type Recurring } from "@/types/recurring";
+import { ActiveLimitDialog } from "@/components/limits/active-limit-dialog";
+import { toCanonicalAmountCents } from "@/lib/limits/project";
+import type { LimitConfig } from "@/types/limit";
 import {
   parseCurrencyInput,
   parseExchangeRateInput,
@@ -110,6 +114,19 @@ interface RecurringFormProps {
   onClose: () => void;
   defaultMonth?: string;
   viewMonth?: string;
+  /**
+   * true si, en modo edición, el fijo está ACTUALMENTE anulado (skipped) para
+   * el mes visualizado. El form no expone el toggle de anular — este flag
+   * alimenta la intercepción de límites activos (D16). Ausente = false.
+   */
+  editingSkipped?: boolean;
+}
+
+/** Datos ya validados/parseados, pendientes de persistir tras "Guardar igual" (P2 — Fase 2). */
+interface PendingSave {
+  data: RecurringFormData;
+  amountCents: number;
+  parsedExchangeRate: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -126,7 +143,7 @@ function filterCategoriesByType(
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
-export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: RecurringFormProps) {
+export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, editingSkipped }: RecurringFormProps) {
   const isEditing = recurring !== null;
   const router = useRouter();
   const { toast } = useToast();
@@ -137,6 +154,13 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [exchangeRateError, setExchangeRateError] = useState<string | undefined>();
   const [isExchangeRateModified, setIsExchangeRateModified] = useState(false);
+
+  // P2 — Fase 2: intercepción de límites activos al guardar (D11).
+  const [crossedLimits, setCrossedLimits] = useState<LimitConfig[] | null>(null);
+  const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
+  // Un fijo/cuota (recurrente) se chequea contra el MES EN CURSO real (D13),
+  // sin importar el mes de inicio elegido o el mes visualizado (viewMonth).
+  const { evaluate: evaluateActiveLimits } = useActiveLimitProjection(getCurrentMonth());
 
   const isLoading = isEditing ? isUpdating : isCreating;
 
@@ -299,27 +323,7 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
 
   const noCategoriesAvailable = availableCategories.length === 0;
 
-  async function onSubmit(data: RecurringFormData) {
-    const amountCents = parseCurrencyInput(data.amountInput);
-    if (amountCents === null) return;
-
-    // Cuando moneda === defaultCurrency el campo cotización está oculto (Fase 1.2.4).
-    // El backend ignora exchangeRate en ese caso, así que enviamos 1 directamente.
-    // Solo cuando moneda ≠ default validamos y parseamos el input visible.
-    let parsedExchangeRate: number;
-    if (data.currency === defaultCurrency) {
-      parsedExchangeRate = 1;
-      setExchangeRateError(undefined);
-    } else {
-      const parsed = parseExchangeRateInput(data.exchangeRateInput);
-      if (parsed === null) {
-        setExchangeRateError("Ingresá una cotización mayor a 0");
-        return;
-      }
-      parsedExchangeRate = parsed;
-      setExchangeRateError(undefined);
-    }
-
+  async function persist({ data, amountCents, parsedExchangeRate }: PendingSave) {
     if (isEditing) {
       const result = await updateRecurring(recurring.id, {
         currentMonth: viewMonth ?? getCurrentMonth(),
@@ -368,6 +372,68 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
 
       onClose();
     }
+  }
+
+  async function onSubmit(data: RecurringFormData) {
+    const amountCents = parseCurrencyInput(data.amountInput);
+    if (amountCents === null) return;
+
+    // Cuando moneda === defaultCurrency el campo cotización está oculto (Fase 1.2.4).
+    // El backend ignora exchangeRate en ese caso, así que enviamos 1 directamente.
+    // Solo cuando moneda ≠ default validamos y parseamos el input visible.
+    let parsedExchangeRate: number;
+    if (data.currency === defaultCurrency) {
+      parsedExchangeRate = 1;
+      setExchangeRateError(undefined);
+    } else {
+      const parsed = parseExchangeRateInput(data.exchangeRateInput);
+      if (parsed === null) {
+        setExchangeRateError("Ingresá una cotización mayor a 0");
+        return;
+      }
+      parsedExchangeRate = parsed;
+      setExchangeRateError(undefined);
+    }
+
+    const pending: PendingSave = { data, amountCents, parsedExchangeRate };
+
+    // P2 — Fase 2: compuerta de intercepción (D11). Sin cruces → persiste
+    // directo, EXACTAMENTE como hoy (cero fricción). Con cruces → aviso.
+    const canonicalAmountCents = toCanonicalAmountCents(
+      amountCents,
+      data.currency,
+      defaultCurrency,
+      parsedExchangeRate,
+    );
+    const crossed = evaluateActiveLimits({
+      type: data.type,
+      convertedAmountCents: canonicalAmountCents,
+      categoryId: data.categoryId,
+      section: "fijos",
+      skipped: editingSkipped ?? false,
+      editingId: isEditing ? recurring.id : undefined,
+    });
+
+    if (crossed.length > 0) {
+      setCrossedLimits(crossed);
+      setPendingSave(pending);
+      return;
+    }
+
+    await persist(pending);
+  }
+
+  function handleCancelLimitDialog() {
+    setCrossedLimits(null);
+    setPendingSave(null);
+  }
+
+  async function handleConfirmSaveAnyway() {
+    if (!pendingSave) return;
+    const toPersist = pendingSave;
+    setCrossedLimits(null);
+    setPendingSave(null);
+    await persist(toPersist);
   }
 
   return (
@@ -656,6 +722,16 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth }: R
             setValue("categoryId", cat.id);
             setShowCategoryModal(false);
           }}
+        />
+      )}
+
+      {/* ── Aviso de alerta activa de límites (P2 — Fase 2, D11) ── */}
+      {crossedLimits && (
+        <ActiveLimitDialog
+          crossed={crossedLimits}
+          onCancel={handleCancelLimitDialog}
+          onConfirm={handleConfirmSaveAnyway}
+          isConfirming={isLoading}
         />
       )}
     </>

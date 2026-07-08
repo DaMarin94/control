@@ -59,6 +59,8 @@ export type TransactionModalProps =
       installment?: null;
       calculated?: null;
       onClose: () => void;
+      /** true si el movimiento está ACTUALMENTE anulado — alimenta D16 (Límites, Fase 2). */
+      editingSkipped?: boolean;
     }
   | {
       mode: "edit-fixed";
@@ -68,6 +70,8 @@ export type TransactionModalProps =
       calculated?: null;
       onClose: () => void;
       viewMonth?: string;
+      /** true si el fijo está ACTUALMENTE anulado para el mes visualizado — alimenta D16 (Límites, Fase 2). */
+      editingSkipped?: boolean;
     }
   | {
       mode: "edit-installment";
@@ -76,6 +80,8 @@ export type TransactionModalProps =
       installment: InstallmentGroup;
       calculated?: null;
       onClose: () => void;
+      /** true si la cuota está ACTUALMENTE anulada para el mes visualizado — alimenta D16 (Límites, Fase 2). */
+      editingSkipped?: boolean;
     }
   | {
       /**
@@ -219,15 +225,24 @@ export function TransactionModal(props: TransactionModalProps) {
         ) : isEditing ? (
           <div>
             {mode === "edit-single" ? (
-              <TransactionForm transaction={props.transaction} onClose={onClose} />
+              <TransactionForm
+                transaction={props.transaction}
+                onClose={onClose}
+                editingSkipped={props.editingSkipped}
+              />
             ) : mode === "edit-fixed" ? (
               <RecurringForm
                 recurring={props.recurring}
                 onClose={onClose}
                 viewMonth={props.viewMonth}
+                editingSkipped={props.editingSkipped}
               />
             ) : (
-              <InstallmentForm installment={props.installment} onClose={onClose} />
+              <InstallmentForm
+                installment={props.installment}
+                onClose={onClose}
+                editingSkipped={props.editingSkipped}
+              />
             )}
           </div>
         ) : (

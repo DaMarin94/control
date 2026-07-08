@@ -39,6 +39,7 @@
 import { ChevronRight, GripVertical } from "lucide-react";
 import type { DraggableAttributes } from "@dnd-kit/core";
 import type { SyntheticListenerMap } from "@dnd-kit/core/dist/hooks/utilities";
+import { cn } from "@/lib/utils";
 
 interface AccordionSectionProps {
   id: string;
@@ -48,6 +49,21 @@ interface AccordionSectionProps {
   isCollapsed: boolean;
   onToggle: () => void;
   isOrderMode: boolean;
+  /**
+   * P2 — Fase 1 (marca visual pasiva de límites, `mes.seccion.conteo`).
+   * Nodo opcional renderizado a la izquierda del pill contador (efecto "glyph").
+   * undefined = sin marca, cero impacto (comportamiento idéntico a hoy).
+   */
+  countAdornment?: React.ReactNode;
+  /** Clases extra para RECOLOREAR el pill contador (efecto "badge"). undefined = sin cambio. */
+  countClassName?: string;
+  /**
+   * P2 — Fase 1 (marca visual pasiva de límites, `mes.seccion.subtotal`).
+   * Nodo opcional renderizado a la izquierda del subtotal (efecto "glyph"/"badge"/"ring").
+   */
+  subtotalAdornment?: React.ReactNode;
+  /** Clases extra sobre el propio texto del subtotal (efectos "bold"/"tint"/"ring"). */
+  subtotalClassName?: string;
   /** Cuando true, omite la transición de altura del acordeón (colapso instantáneo).
    * Usado en modo orden para que las alturas sean estables antes del primer drag. */
   noTransition?: boolean;
@@ -77,6 +93,10 @@ export function AccordionSection({
   gripAttributes,
   gripListeners,
   filterSlot,
+  countAdornment,
+  countClassName,
+  subtotalAdornment,
+  subtotalClassName,
   children,
 }: AccordionSectionProps) {
   const bodyId = `${id}-body`;
@@ -166,17 +186,28 @@ export function AccordionSection({
             {label}
           </span>
 
-          {/* Pill contador */}
-          <span className="text-[11.5px] font-semibold text-muted bg-panel-3 rounded-pill px-[9px] py-[1px]">
-            {count}
+          {/* Pill contador — countAdornment (glyph) / countClassName (badge, recolorea el pill) */}
+          <span className="inline-flex items-center gap-[4px]">
+            {countAdornment}
+            <span
+              className={cn(
+                "text-[11.5px] font-semibold text-muted bg-panel-3 rounded-pill px-[9px] py-[1px]",
+                countClassName,
+              )}
+            >
+              {count}
+            </span>
           </span>
 
           {/* Línea divisoria */}
           <span className="flex-1 h-px bg-hair" aria-hidden="true" />
 
-          {/* Subtotal mono */}
-          <span className="text-[13px] font-semibold text-muted mono">
-            {subtotal}
+          {/* Subtotal mono — subtotalAdornment (glyph/badge) + subtotalClassName (bold/tint/ring) */}
+          <span className="inline-flex items-center gap-[6px]">
+            {subtotalAdornment}
+            <span className={cn("text-[13px] font-semibold text-muted mono", subtotalClassName)}>
+              {subtotal}
+            </span>
           </span>
         </button>
 

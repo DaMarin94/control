@@ -27,10 +27,14 @@ import { useCategories } from "@/hooks/use-categories";
 import { useTransactions } from "@/hooks/use-transactions";
 import { useSettings } from "@/hooks/use-settings";
 import { useReferenceRate } from "@/hooks/use-reference-rate";
+import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
 import { useToast } from "@/hooks/use-toast";
 import { type Transaction, type TransactionType } from "@/types/transaction";
 import { type Category, type CategoryScope } from "@/types/category";
 import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
+import { ActiveLimitDialog } from "@/components/limits/active-limit-dialog";
+import { toCanonicalAmountCents } from "@/lib/limits/project";
+import type { LimitConfig } from "@/types/limit";
 import {
   parseCurrencyInput,
   parseExchangeRateInput,
@@ -81,6 +85,21 @@ type TransactionFormData = z.infer<typeof transactionSchema>;
 interface TransactionFormProps {
   transaction: Transaction | null;
   onClose: () => void;
+  /**
+   * true si, en modo edición, el movimiento está ACTUALMENTE anulado (skipped).
+   * El form no expone el toggle de anular (RF-MU-005 vive en el KebabMenu de
+   * /mes) — este flag alimenta la intercepción de límites activos (D16: un
+   * movimiento que se edita YA anulado no proyecta). Ausente = false.
+   */
+  editingSkipped?: boolean;
+}
+
+/** Datos ya validados/parseados, pendientes de persistir tras "Guardar igual" (P2 — Fase 2). */
+interface PendingSave {
+  data: TransactionFormData;
+  amountCents: number;
+  parsedExchangeRate: number;
+  occurredAt: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -121,7 +140,7 @@ function getNowLocalDateAndTime() {
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
-export function TransactionForm({ transaction, onClose }: TransactionFormProps) {
+export function TransactionForm({ transaction, onClose, editingSkipped }: TransactionFormProps) {
   const isEditing = transaction !== null;
   const router = useRouter();
   const { toast } = useToast();
@@ -134,6 +153,10 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
   const [exchangeRateError, setExchangeRateError] = useState<string | undefined>();
   // Rastrear si el usuario modificó el valor de cotización respecto al pre-cargado
   const [isExchangeRateModified, setIsExchangeRateModified] = useState(false);
+
+  // P2 — Fase 2: intercepción de límites activos al guardar (D11).
+  const [crossedLimits, setCrossedLimits] = useState<LimitConfig[] | null>(null);
+  const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
 
   const isLoading = isEditing ? isUpdating : isCreating;
   const timezone = isEditing ? transaction.timezone : getBrowserTimezone();
@@ -206,6 +229,9 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
 
   // Mes del movimiento derivado de la fecha seleccionada (para el endpoint de referencia)
   const movementMonth = selectedDate?.length >= 7 ? selectedDate.substring(0, 7) : nowDate.substring(0, 7);
+
+  // P2 — Fase 2: proyección de límites activos — único proyecta sobre SU mes (D13).
+  const { evaluate: evaluateActiveLimits } = useActiveLimitProjection(movementMonth);
 
   // Hook de cotización de referencia — Fase 1.2.4
   // Solo activo en modo crear y cuando la moneda difiere de la default (currency ≠ default).
@@ -293,29 +319,7 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
 
   const noCategoriesAvailable = availableCategories.length === 0;
 
-  async function onSubmit(data: TransactionFormData) {
-    const amountCents = parseCurrencyInput(data.amountInput);
-    if (amountCents === null) return;
-
-    // Cuando moneda === defaultCurrency el campo cotización está oculto (Fase 1.2.4).
-    // El backend ignora exchangeRate en ese caso, así que enviamos 1 directamente.
-    // Solo cuando moneda ≠ default validamos y parseamos el input visible.
-    let parsedExchangeRate: number;
-    if (data.currency === defaultCurrency) {
-      parsedExchangeRate = 1;
-      setExchangeRateError(undefined);
-    } else {
-      const parsed = parseExchangeRateInput(data.exchangeRateInput);
-      if (parsed === null) {
-        setExchangeRateError("Ingresá una cotización mayor a 0");
-        return;
-      }
-      parsedExchangeRate = parsed;
-      setExchangeRateError(undefined);
-    }
-
-    const occurredAt = localToUtcIso(data.date, data.time, timezone);
-
+  async function persist({ data, amountCents, parsedExchangeRate, occurredAt }: PendingSave) {
     if (isEditing) {
       const result = await updateTransaction(transaction.id, {
         type: data.type,
@@ -366,6 +370,69 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
 
       onClose();
     }
+  }
+
+  async function onSubmit(data: TransactionFormData) {
+    const amountCents = parseCurrencyInput(data.amountInput);
+    if (amountCents === null) return;
+
+    // Cuando moneda === defaultCurrency el campo cotización está oculto (Fase 1.2.4).
+    // El backend ignora exchangeRate en ese caso, así que enviamos 1 directamente.
+    // Solo cuando moneda ≠ default validamos y parseamos el input visible.
+    let parsedExchangeRate: number;
+    if (data.currency === defaultCurrency) {
+      parsedExchangeRate = 1;
+      setExchangeRateError(undefined);
+    } else {
+      const parsed = parseExchangeRateInput(data.exchangeRateInput);
+      if (parsed === null) {
+        setExchangeRateError("Ingresá una cotización mayor a 0");
+        return;
+      }
+      parsedExchangeRate = parsed;
+      setExchangeRateError(undefined);
+    }
+
+    const occurredAt = localToUtcIso(data.date, data.time, timezone);
+    const pending: PendingSave = { data, amountCents, parsedExchangeRate, occurredAt };
+
+    // P2 — Fase 2: compuerta de intercepción (D11). Sin cruces → persiste
+    // directo, EXACTAMENTE como hoy (cero fricción). Con cruces → aviso.
+    const canonicalAmountCents = toCanonicalAmountCents(
+      amountCents,
+      data.currency,
+      defaultCurrency,
+      parsedExchangeRate,
+    );
+    const crossed = evaluateActiveLimits({
+      type: data.type,
+      convertedAmountCents: canonicalAmountCents,
+      categoryId: data.categoryId,
+      section: "unicos",
+      skipped: editingSkipped ?? false,
+      editingId: isEditing ? transaction.id : undefined,
+    });
+
+    if (crossed.length > 0) {
+      setCrossedLimits(crossed);
+      setPendingSave(pending);
+      return;
+    }
+
+    await persist(pending);
+  }
+
+  function handleCancelLimitDialog() {
+    setCrossedLimits(null);
+    setPendingSave(null);
+  }
+
+  async function handleConfirmSaveAnyway() {
+    if (!pendingSave) return;
+    const toPersist = pendingSave;
+    setCrossedLimits(null);
+    setPendingSave(null);
+    await persist(toPersist);
   }
 
   return (
@@ -588,6 +655,16 @@ export function TransactionForm({ transaction, onClose }: TransactionFormProps) 
             setValue("categoryId", cat.id);
             setShowCategoryModal(false);
           }}
+        />
+      )}
+
+      {/* ── Aviso de alerta activa de límites (P2 — Fase 2, D11) ── */}
+      {crossedLimits && (
+        <ActiveLimitDialog
+          crossed={crossedLimits}
+          onCancel={handleCancelLimitDialog}
+          onConfirm={handleConfirmSaveAnyway}
+          isConfirming={isLoading}
         />
       )}
     </>

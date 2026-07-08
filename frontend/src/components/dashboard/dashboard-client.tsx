@@ -17,12 +17,21 @@ import { ArrowDown, ArrowUp, Plus } from "lucide-react";
 import { useMovements } from "@/hooks/use-movements";
 import { useApi } from "@/hooks/use-api";
 import { useSettings } from "@/hooks/use-settings";
+import { useLimits } from "@/hooks/use-limits";
+import { evaluateLimits } from "@/lib/limits/evaluate";
+import {
+  LimitMarkAdorner,
+  limitBoldClass,
+  limitTintClass,
+  limitRingCardClass,
+} from "@/components/limits/limit-mark";
 import { getCurrentMonth, formatMonthLabel, formatCurrency } from "@/lib/format";
 import { NewTransactionButton } from "@/components/movements/new-transaction-button";
 import { TransactionModal } from "@/components/movements/transaction-modal";
 import { ReportCard } from "@/components/charts/report-card";
 import { CurrencyChip } from "@/components/ui/currency-chip";
 import { SkeletonBlock } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 /** Deriva el año actual del helper getCurrentMonth para no usar new Date() directamente. */
 function getCurrentYear(): number {
@@ -36,6 +45,8 @@ export function DashboardClient() {
   const { isAuthenticated } = useApi();
   const { data, isLoading, isError } = useMovements(month);
   const { defaultCurrency } = useSettings();
+  // P2 — Fase 1 (Tramo 2): límites del usuario (marca visual pasiva). [] = cero impacto (D9).
+  const { limits } = useLimits();
 
   // Estado para el CTA "Cargá tu primer movimiento" del estado vacío
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -69,6 +80,30 @@ export function DashboardClient() {
   const totalAbs = expenseCents + incomeCents;
   const incomeRatio = totalAbs > 0 ? (incomeCents / totalAbs) * 100 : 50;
   const expenseRatio = totalAbs > 0 ? (expenseCents / totalAbs) * 100 : 50;
+
+  // ── P2 — Fase 1 (Tramo 2): marca visual pasiva de límites ────────────────
+  // El dashboard reusa mes.total.* / mes.balance (roadmap §2) para el mes en
+  // curso — el resumen del dashboard SIEMPRE muestra el mes real de hoy, así
+  // que isCurrentMonth es incondicionalmente true (a diferencia de /mes, que
+  // navega meses). Con `limits` vacío, evaluateLimits siempre null → cero impacto.
+  const expenseLimitMark = evaluateLimits({
+    limits,
+    anchorKey: "mes.total.gasto",
+    value: expenseCents / 100,
+    isCurrentMonth: true,
+  });
+  const incomeLimitMark = evaluateLimits({
+    limits,
+    anchorKey: "mes.total.ingreso",
+    value: incomeCents / 100,
+    isCurrentMonth: true,
+  });
+  const balanceLimitMark = evaluateLimits({
+    limits,
+    anchorKey: "mes.balance",
+    value: balanceCents / 100,
+    isCurrentMonth: true,
+  });
 
   // Formatear monto de balance con prefijo de signo — símbolo de la moneda default
   function formatBalanceAmount(cents: number): string {
@@ -134,15 +169,27 @@ export function DashboardClient() {
         <div className="space-y-[var(--gap)]">
           {/* Tarjetas de stats: grid 1fr 1fr */}
           <div className="grid grid-cols-2 gap-[var(--gap)]">
-            {/* Gastos */}
-            <div className="bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] p-[var(--card-pad)] flex flex-col gap-[10px] relative overflow-hidden">
+            {/* Gastos — mes.total.gasto (P2, Tramo 2: marca visual pasiva) */}
+            <div
+              className={cn(
+                "bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] p-[var(--card-pad)] flex flex-col gap-[10px] relative overflow-hidden",
+                limitRingCardClass(expenseLimitMark?.effect),
+              )}
+            >
               <div className="flex items-center gap-2 text-[12.5px] font-semibold uppercase tracking-[0.08em] text-muted">
                 <span className="flex h-6 w-6 items-center justify-center rounded-[7px] bg-expense-soft text-expense-ink">
                   <ArrowDown size={14} aria-hidden="true" />
                 </span>
                 Gastos
+                <LimitMarkAdorner mark={expenseLimitMark} glyphSize={13} />
               </div>
-              <div className="text-[30px] font-semibold tracking-[-0.02em] leading-none mono text-ink">
+              <div
+                className={cn(
+                  "text-[30px] tracking-[-0.02em] leading-none mono text-ink",
+                  limitBoldClass(expenseLimitMark?.effect) ?? "font-semibold",
+                  limitTintClass(expenseLimitMark?.effect),
+                )}
+              >
                 {formatCurrency(expenseCents, defaultCurrency)}
               </div>
               <div className="text-[12.5px] text-muted">
@@ -150,15 +197,26 @@ export function DashboardClient() {
               </div>
             </div>
 
-            {/* Ingresos */}
-            <div className="bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] p-[var(--card-pad)] flex flex-col gap-[10px] relative overflow-hidden">
+            {/* Ingresos — mes.total.ingreso (tint NO ofrecido: monto tipado income-ink) */}
+            <div
+              className={cn(
+                "bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] p-[var(--card-pad)] flex flex-col gap-[10px] relative overflow-hidden",
+                limitRingCardClass(incomeLimitMark?.effect),
+              )}
+            >
               <div className="flex items-center gap-2 text-[12.5px] font-semibold uppercase tracking-[0.08em] text-muted">
                 <span className="flex h-6 w-6 items-center justify-center rounded-[7px] bg-income-soft text-income-ink">
                   <ArrowUp size={14} aria-hidden="true" />
                 </span>
                 Ingresos
+                <LimitMarkAdorner mark={incomeLimitMark} glyphSize={13} />
               </div>
-              <div className="text-[30px] font-semibold tracking-[-0.02em] leading-none mono text-income-ink">
+              <div
+                className={cn(
+                  "text-[30px] tracking-[-0.02em] leading-none mono text-income-ink",
+                  limitBoldClass(incomeLimitMark?.effect) ?? "font-semibold",
+                )}
+              >
                 {formatCurrency(incomeCents, defaultCurrency)}
               </div>
               <div className="text-[12.5px] text-muted">
@@ -167,9 +225,12 @@ export function DashboardClient() {
             </div>
           </div>
 
-          {/* Balance hero */}
+          {/* Balance hero — mes.balance (tint NO ofrecido: bloque de acento con signo) */}
           <div
-            className="p-[var(--card-pad)] rounded-card relative overflow-hidden text-white shadow-[var(--shadow-md)]"
+            className={cn(
+              "p-[var(--card-pad)] rounded-card relative overflow-hidden text-white shadow-[var(--shadow-md)]",
+              limitRingCardClass(balanceLimitMark?.effect, "--shadow-md"),
+            )}
             style={{
               background: "linear-gradient(135deg, var(--accent-press), var(--accent))",
             }}
@@ -187,10 +248,16 @@ export function DashboardClient() {
               style={{ border: "1px solid oklch(1 0 0 / 0.14)" }}
             />
 
-            <p className="text-[12.5px] font-semibold uppercase tracking-[0.08em] text-white/70 relative">
+            <p className="text-[12.5px] font-semibold uppercase tracking-[0.08em] text-white/70 relative flex items-center gap-[7px]">
               Balance de {mesName.toLowerCase()}
+              <LimitMarkAdorner mark={balanceLimitMark} glyphSize={13} />
             </p>
-            <div className="text-[46px] font-semibold tracking-[-0.025em] leading-none my-2 mono relative">
+            <div
+              className={cn(
+                "text-[46px] tracking-[-0.025em] leading-none my-2 mono relative",
+                limitBoldClass(balanceLimitMark?.effect) ?? "font-semibold",
+              )}
+            >
               {formatBalanceAmount(balanceCents)}
             </div>
 

@@ -27,10 +27,14 @@ import { useCategories } from "@/hooks/use-categories";
 import { useInstallments } from "@/hooks/use-installments";
 import { useSettings } from "@/hooks/use-settings";
 import { useReferenceRate } from "@/hooks/use-reference-rate";
+import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
 import { useToast } from "@/hooks/use-toast";
 import { type Category, type CategoryScope } from "@/types/category";
 import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
 import { type InstallmentGroup } from "@/types/installment";
+import { ActiveLimitDialog } from "@/components/limits/active-limit-dialog";
+import { toCanonicalAmountCents } from "@/lib/limits/project";
+import type { LimitConfig } from "@/types/limit";
 import {
   parseCurrencyInput,
   parseExchangeRateInput,
@@ -86,6 +90,20 @@ interface InstallmentFormProps {
   installment: InstallmentGroup | null;
   onClose: () => void;
   defaultMonth?: string;
+  /**
+   * true si, en modo edición, la cuota está ACTUALMENTE anulada (skipped) para
+   * el mes visualizado. El form no expone el toggle de anular — este flag
+   * alimenta la intercepción de límites activos (D16). Ausente = false.
+   */
+  editingSkipped?: boolean;
+}
+
+/** Datos ya validados/parseados, pendientes de persistir tras "Guardar igual" (P2 — Fase 2). */
+interface PendingSave {
+  data: InstallmentFormData;
+  amountCents: number;
+  parsedExchangeRate: number;
+  totalInstallments: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -98,7 +116,7 @@ function filterCategoriesForExpense(
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
-export function InstallmentForm({ installment, onClose, defaultMonth }: InstallmentFormProps) {
+export function InstallmentForm({ installment, onClose, defaultMonth, editingSkipped }: InstallmentFormProps) {
   const isEditing = installment !== null;
   const router = useRouter();
   const { toast } = useToast();
@@ -109,6 +127,13 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [exchangeRateError, setExchangeRateError] = useState<string | undefined>();
   const [isExchangeRateModified, setIsExchangeRateModified] = useState(false);
+
+  // P2 — Fase 2: intercepción de límites activos al guardar (D11).
+  const [crossedLimits, setCrossedLimits] = useState<LimitConfig[] | null>(null);
+  const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
+  // Una cuota (recurrente) se chequea contra el MES EN CURSO real (D13), sin
+  // importar el mes de inicio elegido.
+  const { evaluate: evaluateActiveLimits } = useActiveLimitProjection(getCurrentMonth());
 
   const isLoading = isEditing ? isUpdating : isCreating;
 
@@ -248,29 +273,7 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
 
   const noCategoriesAvailable = availableCategories.length === 0;
 
-  async function onSubmit(data: InstallmentFormData) {
-    const amountCents = parseCurrencyInput(data.amountInput);
-    if (amountCents === null) return;
-
-    const totalInstallments = parseInt(data.totalInstallments, 10);
-
-    // Cuando moneda === defaultCurrency el campo cotización está oculto (Fase 1.2.4).
-    // El backend ignora exchangeRate en ese caso, así que enviamos 1 directamente.
-    // Solo cuando moneda ≠ default validamos y parseamos el input visible.
-    let parsedExchangeRate: number;
-    if (data.currency === defaultCurrency) {
-      parsedExchangeRate = 1;
-      setExchangeRateError(undefined);
-    } else {
-      const parsed = parseExchangeRateInput(data.exchangeRateInput);
-      if (parsed === null) {
-        setExchangeRateError("Ingresá una cotización mayor a 0");
-        return;
-      }
-      parsedExchangeRate = parsed;
-      setExchangeRateError(undefined);
-    }
-
+  async function persist({ data, amountCents, parsedExchangeRate, totalInstallments }: PendingSave) {
     if (isEditing) {
       const result = await updateInstallment(installment.id, {
         amountCents,
@@ -320,6 +323,70 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
 
       onClose();
     }
+  }
+
+  async function onSubmit(data: InstallmentFormData) {
+    const amountCents = parseCurrencyInput(data.amountInput);
+    if (amountCents === null) return;
+
+    const totalInstallments = parseInt(data.totalInstallments, 10);
+
+    // Cuando moneda === defaultCurrency el campo cotización está oculto (Fase 1.2.4).
+    // El backend ignora exchangeRate en ese caso, así que enviamos 1 directamente.
+    // Solo cuando moneda ≠ default validamos y parseamos el input visible.
+    let parsedExchangeRate: number;
+    if (data.currency === defaultCurrency) {
+      parsedExchangeRate = 1;
+      setExchangeRateError(undefined);
+    } else {
+      const parsed = parseExchangeRateInput(data.exchangeRateInput);
+      if (parsed === null) {
+        setExchangeRateError("Ingresá una cotización mayor a 0");
+        return;
+      }
+      parsedExchangeRate = parsed;
+      setExchangeRateError(undefined);
+    }
+
+    const pending: PendingSave = { data, amountCents, parsedExchangeRate, totalInstallments };
+
+    // P2 — Fase 2: compuerta de intercepción (D11). Sin cruces → persiste
+    // directo, EXACTAMENTE como hoy (cero fricción). Con cruces → aviso.
+    const canonicalAmountCents = toCanonicalAmountCents(
+      amountCents,
+      data.currency,
+      defaultCurrency,
+      parsedExchangeRate,
+    );
+    const crossed = evaluateActiveLimits({
+      type: "EXPENSE",
+      convertedAmountCents: canonicalAmountCents,
+      categoryId: data.categoryId,
+      section: "cuotas",
+      skipped: editingSkipped ?? false,
+      editingId: isEditing ? installment.id : undefined,
+    });
+
+    if (crossed.length > 0) {
+      setCrossedLimits(crossed);
+      setPendingSave(pending);
+      return;
+    }
+
+    await persist(pending);
+  }
+
+  function handleCancelLimitDialog() {
+    setCrossedLimits(null);
+    setPendingSave(null);
+  }
+
+  async function handleConfirmSaveAnyway() {
+    if (!pendingSave) return;
+    const toPersist = pendingSave;
+    setCrossedLimits(null);
+    setPendingSave(null);
+    await persist(toPersist);
   }
 
   return (
@@ -527,6 +594,16 @@ export function InstallmentForm({ installment, onClose, defaultMonth }: Installm
             setValue("categoryId", cat.id);
             setShowCategoryModal(false);
           }}
+        />
+      )}
+
+      {/* ── Aviso de alerta activa de límites (P2 — Fase 2, D11) ── */}
+      {crossedLimits && (
+        <ActiveLimitDialog
+          crossed={crossedLimits}
+          onCancel={handleCancelLimitDialog}
+          onConfirm={handleConfirmSaveAnyway}
+          isConfirming={isLoading}
         />
       )}
     </>

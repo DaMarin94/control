@@ -1,16 +1,17 @@
 /**
- * Página de configuración — /configuracion (Fase 1.2.3).
+ * Página de configuración — /configuracion (Fase 1.2.3; solapas P2 — Fase 1).
  *
  * Shell idéntico a /categorias (docs/design.md §"A. Pantalla /configuracion"):
  * - div px-10 py-[34px] pb-20 max-w-[1120px] mx-auto animate-screen-fade
  * - Cabecera .phead: eyebrow "Ajustes" + H1 "Configuración"
  * - Bajada opcional: "Preferencias de tu cuenta."
- * - Contenido: tarjeta de ajuste única (Moneda por defecto)
+ * - Contenido: dos solapas hermanas — "General" (Moneda por defecto, sin cambios)
+ *   y "Límites" (gestor de límites, P2 — Fase 1). Ver `configuracion-tabs.tsx`.
  *
- * Server Component — shell estático; el control de settings es client-side.
+ * Server Component — shell estático; el control de tabs/settings es client-side.
  */
 
-import { SettingsClient } from "./settings-client";
+import { ConfiguracionTabs } from "./configuracion-tabs";
 
 export const metadata = {
   title: "Configuración — Control",
@@ -33,8 +34,8 @@ export default function ConfiguracionPage() {
         </p>
       </div>
 
-      {/* Contenido: tarjetas de ajuste */}
-      <SettingsClient />
+      {/* Solapas: General (Moneda) · Límites (P2 — Fase 1) */}
+      <ConfiguracionTabs />
     </div>
   );
 }

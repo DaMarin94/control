@@ -39,11 +39,16 @@ import {
 } from "lucide-react";
 import { useCuotasGantt } from "@/hooks/use-reports";
 import { useSettings } from "@/hooks/use-settings";
+import { useLimits } from "@/hooks/use-limits";
+import { computeInstallmentBarMark } from "@/lib/limits/apply-reports";
+import { describeLimitMark, type EvaluatedLimitMark } from "@/lib/limits/evaluate";
+import { LimitGlyph, LimitBadge } from "@/components/limits/limit-mark";
 import { formatCurrency } from "@/lib/format";
 import { ChartLegend } from "@/components/ui/chart";
 import { CardCurrencySelect } from "@/components/ui/card-currency-select";
 import type { CuotasGanttBar, CuotasGanttResponse } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
+import type { LimitConfig } from "@/types/limit";
 import { cn } from "@/lib/utils";
 import { SkeletonBlock, SkeletonLine } from "@/components/ui/skeleton";
 import { Eye, EyeOff } from "lucide-react";
@@ -436,6 +441,8 @@ interface BarTooltipState {
   categoryColor: string;
   x: number;
   y: number;
+  /** Marca de límite (P2 — Tramo 2): reporte.cuotas.montoPorCuota / .cantidadCuotas. */
+  mark: EvaluatedLimitMark | null;
 }
 
 /**
@@ -483,7 +490,7 @@ function BarTooltipPortal({
   tooltipState: BarTooltipState;
   currency: string;
 }) {
-  const { bar, categoryName, categoryColor, x, y } = tooltipState;
+  const { bar, categoryName, categoryColor, x, y, mark } = tooltipState;
   const amountFmt = formatCurrency(bar.amountCents, currency);
   const periodFmt = formatBarPeriod(bar);
   const descriptionText = bar.description ?? null;
@@ -557,6 +564,17 @@ function BarTooltipPortal({
           </div>
         )}
       </div>
+
+      {/* Nota de límite cruzado (P2 — Tramo 2): portador de a11y de la barra. */}
+      {mark && (
+        <>
+          <div aria-hidden="true" style={{ borderTop: "1px solid var(--hair)", margin: "6px 0" }} />
+          <div className="flex items-center gap-[6px]">
+            <LimitGlyph tooltip={describeLimitMark(mark)} size={12} />
+            <span className="text-[11.5px] font-medium text-warning-ink">{describeLimitMark(mark)}</span>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -583,6 +601,8 @@ interface GanttBarProps {
    * En ese caso la barra no muestra ningún texto interno.
    */
   labelOutside: boolean;
+  /** Marca de límite (P2 — Tramo 2): reporte.cuotas.montoPorCuota / .cantidadCuotas. */
+  mark: EvaluatedLimitMark | null;
   onMouseEnter: (e: React.MouseEvent<HTMLDivElement>, bar: CuotasGanttBar, color: string, name: string) => void;
   onMouseLeave: () => void;
 }
@@ -594,6 +614,7 @@ function GanttBar({
   currency,
   visualRowIndex,
   labelOutside,
+  mark,
   onMouseEnter,
   onMouseLeave,
 }: GanttBarProps) {
@@ -618,7 +639,7 @@ function GanttBar({
 
   const amountFmt = formatCurrency(bar.amountCents, currency);
   const descText = bar.description ?? "";
-  const ariaLabel = `${descText || "Sin descripción"}, ${categoryName}, ${amountFmt} por cuota, ${MONTH_LABELS_SHORT[bar.startMonthIndex] ?? ""} a ${MONTH_LABELS_SHORT[bar.endMonthIndex] ?? ""}${bar.continuesBefore ? ", continúa desde el año anterior" : ""}${bar.continuesAfter ? ", continúa en el año siguiente" : ""}`;
+  const ariaLabel = `${descText || "Sin descripción"}, ${categoryName}, ${amountFmt} por cuota, ${MONTH_LABELS_SHORT[bar.startMonthIndex] ?? ""} a ${MONTH_LABELS_SHORT[bar.endMonthIndex] ?? ""}${bar.continuesBefore ? ", continúa desde el año anterior" : ""}${bar.continuesAfter ? ", continúa en el año siguiente" : ""}${mark ? ` · ${describeLimitMark(mark)}` : ""}`;
 
   return (
     <div
@@ -638,6 +659,8 @@ function GanttBar({
         alignItems: "center",
         transition: "filter 140ms",
         boxSizing: "border-box",
+        // P2 — Tramo 2: reporte.cuotas.* (bar) — efecto "ring" envuelve la barra.
+        boxShadow: mark?.effect === "ring" ? "inset 0 0 0 2px var(--warning)" : undefined,
       }}
       onMouseEnter={(e) => onMouseEnter(e, bar, categoryColor, categoryName)}
       onMouseLeave={onMouseLeave}
@@ -672,6 +695,10 @@ function GanttBar({
           style={{ color: textColor }}
           aria-hidden="true"
         >
+          {/* Marca de límite (P2 — Tramo 2): glyph/badge junto al monto (ring va en el contorno de la barra) */}
+          {mark?.effect === "glyph" && <LimitGlyph tooltip={describeLimitMark(mark)} size={11} />}
+          {mark?.effect === "badge" && <LimitBadge tooltip={describeLimitMark(mark)} />}
+
           {/* Monto — pieza primaria: mono 12px/700, shrink-0 */}
           <span
             className="mono text-[12px] font-bold shrink-0 tabular-nums"
@@ -728,9 +755,11 @@ interface OuterLabelProps {
   bar: CuotasGanttBar;
   currency: string;
   visualRowIndex: number;
+  /** Marca de límite (P2 — Tramo 2): reporte.cuotas.montoPorCuota / .cantidadCuotas. */
+  mark: EvaluatedLimitMark | null;
 }
 
-function OuterLabel({ bar, currency, visualRowIndex }: OuterLabelProps) {
+function OuterLabel({ bar, currency, visualRowIndex, mark }: OuterLabelProps) {
   const spanCols = bar.endMonthIndex - bar.startMonthIndex + 1;
   const barTop = visualRowIndex * (ROW_HEIGHT + ROW_GAP) + Math.floor((ROW_HEIGHT - BAR_HEIGHT) / 2);
   const rightEdgePct = ((bar.startMonthIndex + spanCols) / 12) * 100;
@@ -755,6 +784,10 @@ function OuterLabel({ bar, currency, visualRowIndex }: OuterLabelProps) {
         paddingRight: endsAtEdge ? 6 : 0,
       }}
     >
+      {/* Marca de límite (P2 — Tramo 2): glyph/badge junto al monto exterior */}
+      {mark?.effect === "glyph" && <LimitGlyph tooltip={describeLimitMark(mark)} size={11} />}
+      {mark?.effect === "badge" && <LimitBadge tooltip={describeLimitMark(mark)} />}
+
       {/* Solo el monto — el nombre NUNCA viaja afuera (spec §4 escalón 3) */}
       <span
         className="mono text-[12px] font-bold text-ink shrink-0 tabular-nums"
@@ -773,9 +806,11 @@ interface GanttCanvasProps {
   year: number;
   currency: string;
   isEmpty: boolean;
+  /** Límites del usuario (P2 — Tramo 2). [] = cero impacto (D9). */
+  limits: LimitConfig[];
 }
 
-function GanttCanvas({ data, year, currency, isEmpty }: GanttCanvasProps) {
+function GanttCanvas({ data, year, currency, isEmpty, limits }: GanttCanvasProps) {
   const [tooltipState, setTooltipState] = useState<BarTooltipState | null>(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
@@ -798,9 +833,10 @@ function GanttCanvas({ data, year, currency, isEmpty }: GanttCanvasProps) {
         categoryName: name,
         x: rect.left + rect.width / 2,
         y: rect.top - 8,
+        mark: computeInstallmentBarMark(limits, bar),
       });
     },
-    [],
+    [limits],
   );
 
   const handleBarMouseLeave = useCallback(() => {
@@ -911,6 +947,8 @@ function GanttCanvas({ data, year, currency, isEmpty }: GanttCanvasProps) {
            * En ese caso la barra queda como pastilla de color y el monto va afuera.
            */
           const labelOutside = spanCols === 1 && bar.continuesBefore && bar.continuesAfter;
+          // P2 — Tramo 2: reporte.cuotas.montoPorCuota / .cantidadCuotas (bar).
+          const mark = computeInstallmentBarMark(limits, bar);
 
           return (
             <div key={bar.id}>
@@ -921,6 +959,7 @@ function GanttCanvas({ data, year, currency, isEmpty }: GanttCanvasProps) {
                 currency={currency}
                 visualRowIndex={visualRowIndex}
                 labelOutside={labelOutside}
+                mark={mark}
                 onMouseEnter={handleBarMouseEnter}
                 onMouseLeave={handleBarMouseLeave}
               />
@@ -931,6 +970,7 @@ function GanttCanvas({ data, year, currency, isEmpty }: GanttCanvasProps) {
                   bar={bar}
                   currency={currency}
                   visualRowIndex={visualRowIndex}
+                  mark={mark}
                 />
               )}
             </div>
@@ -992,6 +1032,8 @@ export function CuotasGanttCard({
   const { defaultCurrency } = useSettings();
   const effectiveCurrency = currency ?? defaultCurrency;
   useIsDarkMode(); // mantener el patrón aunque no se use directamente en la card
+  // P2 — Fase 1 (Tramo 2): límites del usuario (marca visual pasiva). [] = cero impacto (D9).
+  const { limits } = useLimits();
 
   const { data, isLoading, isError, isFetching, refetch } = useCuotasGantt(year, categoryIds, currency);
 
@@ -1151,6 +1193,7 @@ export function CuotasGanttCard({
             year={year}
             currency={effectiveCurrency}
             isEmpty={isEmpty}
+            limits={limits}
           />
 
           {/* Filtro de categorías */}

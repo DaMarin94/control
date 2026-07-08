@@ -41,12 +41,17 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useCategories } from "@/hooks/use-categories";
 import { useCalculated } from "@/hooks/use-calculated";
+import { useSettings } from "@/hooks/use-settings";
+import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
 import { useToast } from "@/hooks/use-toast";
 import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
 import { type Category, type CategoryScope } from "@/types/category";
 import { type TransactionType } from "@/types/transaction";
 import type { FormulaOperator, MovementItem } from "@/types/movement";
 import type { RecurringFrequency } from "@/types/recurring";
+import { ActiveLimitDialog } from "@/components/limits/active-limit-dialog";
+import { toCanonicalAmountCents, type ProjectionSection } from "@/lib/limits/project";
+import type { LimitConfig } from "@/types/limit";
 import { formatCurrency, getCurrentMonth } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/logger";
@@ -212,6 +217,13 @@ const calculatedSchema = z.object({
 
 type CalculatedFormData = z.infer<typeof calculatedSchema>;
 
+/** Datos ya validados/parseados, pendientes de persistir tras "Guardar igual" (P2 — Fase 2). */
+interface PendingSave {
+  data: CalculatedFormData;
+  scaledOperand: number;
+  sign: 1 | -1;
+}
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface CalculatedFormProps {
@@ -237,9 +249,14 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
   const { toast } = useToast();
   const { categories } = useCategories();
   const { createCalculated, updateCalculated, isCreating, isUpdating } = useCalculated();
+  const { defaultCurrency } = useSettings();
   // Moneda del movimiento de origen: en crear = la del ítem origen; en editar = la del calculado (heredada del origen)
   const movementCurrency = movement.currency;
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+
+  // P2 — Fase 2 (extensión a calculado): intercepción de límites activos al guardar (D11).
+  const [crossedLimits, setCrossedLimits] = useState<LimitConfig[] | null>(null);
+  const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
 
   const isLoading = isEditing ? isUpdating : isCreating;
 
@@ -255,6 +272,22 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
   const sourceType: "fijo" | "unico" | "cuota" = isEditing
     ? (calc?.sourceType ?? "fijo")
     : (movement.origin as "fijo" | "unico" | "cuota");
+
+  // P2 — Fase 2 (extensión a calculado): mes de proyección de límites activos
+  // (D13), mismo criterio ya aplicado por tipo en los otros 3 forms. Un
+  // calculado de único imputa a su propio mes — como el único solo puede
+  // existir en un mes (data-model.md §Contrato de movimientos calculados), ese
+  // mes ES `viewMonth` (el mes visualizado en el que vive el ítem, en crear y
+  // en editar). Un calculado de fijo o cuota recurre como su origen → mes en
+  // curso real, igual que RecurringForm/InstallmentForm.
+  const projectionMonth =
+    sourceType === "unico" ? (viewMonth ?? getCurrentMonth()) : getCurrentMonth();
+  const { evaluate: evaluateActiveLimits } = useActiveLimitProjection(projectionMonth);
+
+  // Sección de /mes a la que pertenece este calculado (D14) — mapeo directo
+  // del sourceType (el backend emite el ítem con `origin` = tipo del origen).
+  const projectionSection: ProjectionSection =
+    sourceType === "fijo" ? "fijos" : sourceType === "cuota" ? "cuotas" : "unicos";
 
   // Nombre descriptivo del origen
   const originName = isEditing
@@ -399,14 +432,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
 
   // ── Submit ─────────────────────────────────────────────────────────────────
 
-  async function onSubmit(data: CalculatedFormData) {
-    const normalized = data.operandInput.trim().replace(",", ".");
-    const userOpFloat = parseFloat(normalized);
-    if (isNaN(userOpFloat)) return;
-
-    const scaledOperand = scaleOperand(userOpFloat, data.operator);
-    const sign: 1 | -1 = data.sign === "1" ? 1 : -1;
-
+  async function persist({ data, scaledOperand, sign }: PendingSave) {
     if (isEditing) {
       // En edición el id del movimiento calculado + el sourceType del calculado
       const result = await updateCalculated(
@@ -460,6 +486,65 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
       toast.success("Movimiento calculado creado correctamente.");
       onClose();
     }
+  }
+
+  async function onSubmit(data: CalculatedFormData) {
+    const normalized = data.operandInput.trim().replace(",", ".");
+    const userOpFloat = parseFloat(normalized);
+    if (isNaN(userOpFloat)) return;
+
+    const scaledOperand = scaleOperand(userOpFloat, data.operator);
+    const sign: 1 | -1 = data.sign === "1" ? 1 : -1;
+    const pending: PendingSave = { data, scaledOperand, sign };
+
+    // P2 — Fase 2 (extensión a calculado): compuerta de intercepción (D11).
+    // Proyecta sobre el monto/tipo EFECTIVOS que se van a persistir — el
+    // resultado derivado de la fórmula (RF-MCALC-003), no el monto del origen.
+    // Si el origen todavía no resolvió (originCents===null) no hay nada que
+    // proyectar client-side: se persiste directo, igual que antes de P2
+    // (cero fricción / falla abierto, mismo criterio que el hook de proyección).
+    const finalCents =
+      originCents !== null
+        ? computePreview(originCents, data.operator, userOpFloat, sign)
+        : null;
+
+    if (finalCents !== null) {
+      const canonicalAmountCents = toCanonicalAmountCents(
+        Math.abs(finalCents),
+        movementCurrency,
+        defaultCurrency,
+        movement.exchangeRate,
+      );
+      const crossed = evaluateActiveLimits({
+        type: derivedTypeFromCents(finalCents),
+        convertedAmountCents: canonicalAmountCents,
+        categoryId: data.categoryId,
+        section: projectionSection,
+        skipped: isEditing ? movement.skipped : false,
+        editingId: isEditing ? movement.id : undefined,
+      });
+
+      if (crossed.length > 0) {
+        setCrossedLimits(crossed);
+        setPendingSave(pending);
+        return;
+      }
+    }
+
+    await persist(pending);
+  }
+
+  function handleCancelLimitDialog() {
+    setCrossedLimits(null);
+    setPendingSave(null);
+  }
+
+  async function handleConfirmSaveAnyway() {
+    if (!pendingSave) return;
+    const toPersist = pendingSave;
+    setCrossedLimits(null);
+    setPendingSave(null);
+    await persist(toPersist);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -811,6 +896,16 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
             setValue("categoryId", cat.id);
             setShowCategoryModal(false);
           }}
+        />
+      )}
+
+      {/* ── Aviso de alerta activa de límites (P2 — Fase 2, D11) ── */}
+      {crossedLimits && (
+        <ActiveLimitDialog
+          crossed={crossedLimits}
+          onCancel={handleCancelLimitDialog}
+          onConfirm={handleConfirmSaveAnyway}
+          isConfirming={isLoading}
         />
       )}
     </>

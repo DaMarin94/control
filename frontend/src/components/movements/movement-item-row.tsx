@@ -63,6 +63,9 @@ import { useTransactions } from "@/hooks/use-transactions";
 import { useInstallments } from "@/hooks/use-installments";
 import { useSettings } from "@/hooks/use-settings";
 import { useToast } from "@/hooks/use-toast";
+import { LimitGlyph, LimitBadge, limitBoldClass, limitFillClass } from "@/components/limits/limit-mark";
+import { describeLimitMark, type EvaluatedLimitMark } from "@/lib/limits/evaluate";
+import { cn } from "@/lib/utils";
 
 /** Etiqueta en minúscula por valor de frequency (para la sublínea del ítem) */
 const FREQUENCY_LABEL: Record<RecurringFrequency, string> = {
@@ -91,9 +94,15 @@ interface MovementItemRowProps {
   onDelete: (movement: MovementItem) => void;
   /** Handler para "Crear movimiento desde este" — para cualquier ítem NO calculado (Fase 1.1.8) */
   onCreateCalculated?: (movement: MovementItem) => void;
+  /**
+   * Marca de límite ya evaluada para este ítem (P2 — Fase 1), combinando
+   * `mes.item.monto` y `mes.categoria.gastoMes`. undefined/null = sin marca
+   * (comportamiento idéntico al de hoy — cero impacto con `limits` vacío).
+   */
+  limitMark?: EvaluatedLimitMark | null;
 }
 
-export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreateCalculated }: MovementItemRowProps) {
+export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreateCalculated, limitMark }: MovementItemRowProps) {
   const { skipRecurring } = useRecurring();
   const { skipTransaction } = useTransactions();
   const { skipInstallment } = useInstallments();
@@ -115,8 +124,19 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
   // Un calculado nunca puede ser padre (RF-MCALC-001), por eso !isCalculated
   const isParent = !isCalculated && movement.hasCalculated;
   const hasAutoDebit = movement.autoDebit === true;
+
+  // P2 — Fase 1: marca visual pasiva de límites (mes.item.monto / mes.categoria.gastoMes).
+  // limitMark es undefined/null cuando ningún límite cruza — cero impacto (restricción rectora).
+  const limitEffect = limitMark?.effect ?? null;
+  const limitTooltip = limitMark
+    ? describeLimitMark(limitMark, { categoryName: movement.category.name })
+    : null;
+  // "fill" siempre va acompañado de un glyph en la zona de estados (a11y — nunca solo color).
+  const limitShowsGlyphInStates = limitEffect === "glyph" || limitEffect === "fill";
+  const limitShowsBadgeInIdentity = limitEffect === "badge";
+
   // Zona de estados solo se renderiza si hay al menos una bandera (spec: "sin renderizar" si ninguna aplica)
-  const hasStatesZone = isParent || hasAutoDebit;
+  const hasStatesZone = isParent || hasAutoDebit || limitShowsGlyphInStates;
 
   // Fecha formateada "02 Jun" (solo para únicos)
   const dateFormatted =
@@ -241,9 +261,16 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
     },
   ];
 
+  // Efecto "fill" reemplaza el hover tint condicionalmente (docs/design.md) — la fila
+  // toma el fondo ámbar estático en lugar del hover panel-2.
+  const rowFillClass = limitFillClass(limitEffect);
+
   return (
     <div
-      className="group relative grid items-center gap-[14px] px-[18px] cursor-pointer transition-colors duration-[120ms] hover:bg-panel-2 [&+&]:border-t [&+&]:border-hair"
+      className={cn(
+        "group relative grid items-center gap-[14px] px-[18px] cursor-pointer transition-colors duration-[120ms] [&+&]:border-t [&+&]:border-hair",
+        rowFillClass ? rowFillClass : "hover:bg-panel-2",
+      )}
       style={{ gridTemplateColumns: "40px 1fr auto auto auto", padding: `var(--row-pad) 18px` }}
     >
       {/* Col 1: Ícono tintado — afectado por la opacidad del contenido si está anulado */}
@@ -273,6 +300,9 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
                 Anulado
               </span>
             )}
+
+            {/* Badge de límite — efecto "badge" (P2 — Fase 1), mismo slot que "Anulado" */}
+            {limitShowsBadgeInIdentity && limitTooltip && <LimitBadge tooltip={limitTooltip} />}
 
             {/* Punto de color de categoría — ancla de identidad, inmediatamente antes del nombre */}
             <span
@@ -326,6 +356,8 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
             <>
               <span className="h-[12px] w-px bg-hair shrink-0" aria-hidden="true" />
               <span className="flex items-center gap-[8px] shrink-0">
+                {/* Marca de límite — efecto "glyph"/"fill" (P2 — Fase 1), primero del cluster */}
+                {limitShowsGlyphInStates && limitTooltip && <LimitGlyph tooltip={limitTooltip} />}
                 {isParent && (
                   <span
                     className="inline-flex text-muted"
@@ -377,11 +409,14 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
               {movement.currency}
             </span>
           )}
-          {/* Monto convertido — dominante */}
+          {/* Monto convertido — dominante. Efecto "bold" (P2 — Fase 1) sube 600→700. */}
           <span
-            className={`text-[15.5px] font-semibold mono ${
-              isExpense ? "text-ink" : "text-income-ink"
-            } ${isSkipped ? "line-through" : ""}`}
+            className={cn(
+              "text-[15.5px] mono",
+              limitBoldClass(limitEffect) ?? "font-semibold",
+              isExpense ? "text-ink" : "text-income-ink",
+              isSkipped ? "line-through" : "",
+            )}
           >
             {amountDisplay}
           </span>

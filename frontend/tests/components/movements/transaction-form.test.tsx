@@ -66,6 +66,12 @@ vi.mock("@/hooks/use-reference-rate", () => ({
   })),
 }));
 
+// P2 — Fase 2: intercepción de límites activos. Por defecto sin límites (cero
+// fricción); los tests de la compuerta lo sobreescriben.
+vi.mock("@/hooks/use-active-limit-projection", () => ({
+  useActiveLimitProjection: vi.fn(() => ({ evaluate: vi.fn(() => []) })),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(() => ({ push: vi.fn() })),
 }));
@@ -84,6 +90,7 @@ import { useTransactions } from "@/hooks/use-transactions";
 import { usePaymentMethods } from "@/hooks/use-payment-methods";
 import { useSettings } from "@/hooks/use-settings";
 import { useReferenceRate } from "@/hooks/use-reference-rate";
+import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
 import { useRouter } from "next/navigation";
 
 const mockUseCategories = vi.mocked(useCategories);
@@ -91,6 +98,7 @@ const mockUseTransactions = vi.mocked(useTransactions);
 const mockUsePaymentMethods = vi.mocked(usePaymentMethods);
 const mockUseSettings = vi.mocked(useSettings);
 const mockUseReferenceRate = vi.mocked(useReferenceRate);
+const mockUseActiveLimitProjection = vi.mocked(useActiveLimitProjection);
 const mockUseRouter = vi.mocked(useRouter);
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -185,11 +193,19 @@ const mockCreditMethod: PaymentMethod = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function renderForm(props: { transaction?: Transaction | null; onClose?: () => void }) {
+function renderForm(props: {
+  transaction?: Transaction | null;
+  onClose?: () => void;
+  editingSkipped?: boolean;
+}) {
   const onClose = props.onClose ?? vi.fn();
   return render(
     <ToastProvider>
-      <TransactionForm transaction={props.transaction ?? null} onClose={onClose} />
+      <TransactionForm
+        transaction={props.transaction ?? null}
+        onClose={onClose}
+        editingSkipped={props.editingSkipped}
+      />
     </ToastProvider>,
   );
 }
@@ -256,6 +272,10 @@ beforeEach(() => {
   });
 
   mockUseRouter.mockReturnValue({ push: mockPush } as unknown as ReturnType<typeof useRouter>);
+
+  // P2 — Fase 2: por defecto sin cruces (cero fricción) — los tests de la
+  // compuerta sobreescriben con mockUseActiveLimitProjection.mockReturnValue(...).
+  mockUseActiveLimitProjection.mockReturnValue({ evaluate: vi.fn(() => []) });
 });
 
 // ─── Tests: validación del formulario ─────────────────────────────────────────
@@ -587,6 +607,134 @@ describe("TransactionForm — modo edición", () => {
     renderForm({ transaction: mockTransaction });
 
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+  });
+});
+
+// ─── Tests: intercepción de límites activos (P2 — Fase 2, D11) ───────────────
+
+describe("TransactionForm — intercepción de límites activos (P2, Fase 2)", () => {
+  it("sin cruces: persiste directo, SIN mostrar el aviso (cero fricción)", async () => {
+    const user = userEvent.setup();
+    mockCreateTransaction.mockResolvedValue({ success: true, transaction: mockTransaction });
+    const onClose = vi.fn();
+    renderForm({ onClose });
+
+    await user.type(screen.getByLabelText(/monto/i), "100");
+    await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(mockCreateTransaction).toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalled();
+    });
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("con cruces: NO persiste directo, muestra el aviso en vez de guardar", async () => {
+    const user = userEvent.setup();
+    mockUseActiveLimitProjection.mockReturnValue({
+      evaluate: vi.fn(() => [
+        {
+          id: "l1",
+          enabled: true,
+          anchorKey: "mes.total.gasto",
+          operator: "gt" as const,
+          threshold: 100,
+          nature: "active" as const,
+        },
+      ]),
+    });
+    renderForm({});
+
+    await user.type(screen.getByLabelText(/monto/i), "100");
+    await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    expect(mockCreateTransaction).not.toHaveBeenCalled();
+  });
+
+  it("'Cancelar' en el aviso cierra SOLO el aviso — el form sigue abierto e intacto", async () => {
+    const user = userEvent.setup();
+    mockUseActiveLimitProjection.mockReturnValue({
+      evaluate: vi.fn(() => [
+        {
+          id: "l1",
+          enabled: true,
+          anchorKey: "mes.total.gasto",
+          operator: "gt" as const,
+          threshold: 100,
+          nature: "active" as const,
+        },
+      ]),
+    });
+    const onClose = vi.fn();
+    renderForm({ onClose });
+
+    await user.type(screen.getByLabelText(/monto/i), "100");
+    await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+    const alertDialog = await screen.findByRole("alertdialog");
+
+    // El "Cancelar" del aviso es distinto del "Cancelar" del form — se escopea al alertdialog.
+    await user.click(within(alertDialog).getByRole("button", { name: /^cancelar$/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
+    expect(mockCreateTransaction).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    // El monto tipeado sigue en el form
+    expect(screen.getByDisplayValue("100")).toBeInTheDocument();
+  });
+
+  it("'Guardar igual' persiste el movimiento y cierra ambos diálogos", async () => {
+    const user = userEvent.setup();
+    mockCreateTransaction.mockResolvedValue({ success: true, transaction: mockTransaction });
+    mockUseActiveLimitProjection.mockReturnValue({
+      evaluate: vi.fn(() => [
+        {
+          id: "l1",
+          enabled: true,
+          anchorKey: "mes.total.gasto",
+          operator: "gt" as const,
+          threshold: 100,
+          nature: "active" as const,
+        },
+      ]),
+    });
+    const onClose = vi.fn();
+    renderForm({ onClose });
+
+    await user.type(screen.getByLabelText(/monto/i), "100");
+    await user.selectOptions(screen.getByLabelText(/categoría/i), "cat-expense");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+    await screen.findByRole("alertdialog");
+
+    await user.click(screen.getByRole("button", { name: /guardar igual/i }));
+
+    await waitFor(() => {
+      expect(mockCreateTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({ amountCents: 10000, categoryId: "cat-expense" }),
+      );
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
+
+  it("D16: al editar un movimiento YA anulado (editingSkipped=true) no proyecta — persiste directo sin aviso", async () => {
+    const user = userEvent.setup();
+    const evaluateSpy = vi.fn(() => []);
+    mockUseActiveLimitProjection.mockReturnValue({ evaluate: evaluateSpy });
+    mockUpdateTransaction.mockResolvedValue({ success: true, transaction: mockTransaction });
+
+    renderForm({ transaction: mockTransaction, editingSkipped: true });
+
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(mockUpdateTransaction).toHaveBeenCalled();
+    });
+    expect(evaluateSpy).toHaveBeenCalledWith(expect.objectContaining({ skipped: true }));
   });
 });
 

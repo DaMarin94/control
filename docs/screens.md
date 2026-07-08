@@ -246,7 +246,7 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 
 - **Cambiar de tab** (solo en creación) — limpia el formulario; no conserva datos del tab anterior.
 - **Seleccionar tipo** Gasto / Ingreso.
-- **Guardar / Confirmar** — valida y persiste. Al guardar con éxito, el modal se cierra y aparece un toast de confirmación con la acción "Ir a ver" (RF-MU-001, RF-MF-001, RF-MC-001).
+- **Guardar / Confirmar** — valida y persiste. Al guardar con éxito, el modal se cierra y aparece un toast de confirmación con la acción "Ir a ver" (RF-MU-001, RF-MF-001, RF-MC-001). Si la proyección del movimiento cruzaría uno o más límites **activos** (RF-LIM-004), antes de persistir se intercala un **diálogo de aviso** no bloqueante (ver Estados); aplica a los cuatro forms (único / fijo / cuota / calculado).
 - **Crear categoría con "+ Nueva"** (RF-MU-004) — abre el modal de creación de categoría (RF-CAT-002) superpuesto al formulario, en **modo inline**: el formulario de carga queda montado por debajo conservando sus datos, el campo "Tipo" (scope) del modal solo ofrece las opciones compatibles con el tipo del movimiento (oculta el tipo opuesto, pre-selecciona el tipo exacto) y, al crear o reactivar con éxito, la categoría queda **autoseleccionada** en el campo categoría. Detalle del flujo, la restricción de scope y el caso de reactivación (RF-CAT-002 A3) en RF-MU-004. Cancelar no crea ni reactiva nada y devuelve al formulario sin alterar sus datos ni la categoría seleccionada.
 - **Cancelar / Cerrar** — cierra el modal sin guardar, desde cualquier tab.
 
@@ -264,6 +264,7 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 - **Validación con error:** monto en cero/negativo/no numérico, cantidad de cuotas en cero/negativa, o categoría no seleccionada — se muestra el error y no se guarda.
 - **Sin categorías disponibles:** estado de bloqueo con enlace a `/categorias`.
 - **Modal de categoría superpuesto (RF-MU-004):** el modal de creación de categoría (pantalla 6) se muestra por encima del formulario de carga, que permanece montado y con sus datos intactos por debajo. Al cerrarse (por crear, reactivar o cancelar), el formulario vuelve a primer plano.
+- **Aviso de límite activo (RF-LIM-004):** al Guardar, si el estado proyectado del mes cruzaría ≥1 límite activo, un **diálogo de confirmación** superpuesto enumera el/los límite(s) que se cruzarían, con **"Guardar igual"** (persiste, no bloquea) y **"Cancelar"** (vuelve al formulario). Sin cruces no aparece y el guardado es directo. El detalle visual del diálogo lo define `docs/design.md`.
 - **Guardando:** el modal indica que la operación está en curso.
 - **Error del backend al guardar (RNF-008):** el modal permanece abierto, conserva los datos ingresados y permite reintentar sin perder información.
 
@@ -417,36 +418,48 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 
 ## 9. Configuración (`/configuracion`)
 
-**RF relacionados:** RF-CUR-002, RF-CUR-005, RF-CUR-006, RF-NAV-001
+**RF relacionados:** RF-CUR-002, RF-CUR-005, RF-CUR-006, RF-LIM-001, RF-LIM-002, RF-NAV-001
 
 > **Ruta:** `/configuracion`. **Link en el sidebar**, debajo de "Categorías" (orden: Dashboard → Vista del mes → Reportes → Categorías → Configuración).
 
 ### Propósito
 
-Pantalla de **ajustes de la cuenta** del usuario. Reúne las preferencias del usuario en tarjetas de ajuste y queda como **contenedor para ajustes futuros**.
+Pantalla de **ajustes de la cuenta** del usuario, organizada en **dos solapas: "General"** (preferencias de la cuenta) y **"Límites"** (gestor de límites de todas las superficies). Queda como contenedor para ajustes futuros.
 
 ### Contenido
 
 - **Sidebar** con el link "Configuración" marcado como activo.
+- **Selector de solapas: "General" · "Límites".** "General" es la solapa por defecto.
+
+**Solapa General:**
 - **Ajuste "Moneda por defecto"** (RF-CUR-002): selector entre las **4 monedas curadas (ARS / USD / EUR / BRL)**. Es la moneda en la que se expresan todos los totales (vista del mes, dashboard, reportes). Se lee/escribe vía el contrato `/settings` (ver `data-model.md`).
 - **Sin editor de la tabla de cotizaciones de referencia:** la tabla de referencia es **interna y no editable por UI** (RF-CUR-006), así que `/configuracion` **no** la muestra ni la edita.
-- El layout y la presentación los define `docs/design.md`.
+
+**Solapa Límites** (RF-LIM-001..002): gestor de los límites del usuario (marca visual pasiva sobre `/mes`, dashboard y reportes; alerta activa sobre keys `mes.*`). Gestiona **solo límites** — no re-edita moneda, reportes ni secciones.
+- **Lista de límites** del usuario: por fila el nombre (o placeholder derivado), la key legible, su **naturaleza** (pasiva/activa), un chip con la condición (operador + umbral), un **preview del efecto** (solo pasiva), el **switch `enabled`** y la acción **eliminar** (con confirmación inline).
+- **Empty-state** cuando el usuario no tiene límites.
+- **Botón para crear** un límite → abre el modal de creación.
+- **Modal de creación** con formulario progresivo: elegir **key** (agrupada por superficie: `/mes`, dashboard y reportes) → **refinamiento** condicional (selector de sección o de categoría, según la key) → **naturaleza** (pasiva / activa; activa habilitada solo para keys `mes.*`) → **operador + umbral** (input según la unidad de la key, número puro sin moneda; en activa los operadores se restringen por la polaridad del anclaje) → *(rama pasiva)* **alcance temporal** (todos los meses / mes en curso) + **efecto** (solo el subset válido del anclaje, con preview) → **nombre** opcional. La **rama activa omite** el alcance temporal y el efecto.
+
+- El layout, el catálogo de efectos visuales y su preview, y la rama activa del formulario los define `docs/design.md`.
 
 ### Acciones disponibles
 
-- **Cambiar la moneda por defecto** — al elegir una de las 4 monedas, el cambio se persiste (`PATCH /settings`) y **re-expresa los totales en vivo** sin tocar ningún movimiento guardado (RF-CUR-005). No requiere recargar datos de movimientos del backend más allá de re-pedir los totales convertidos.
+- **General — cambiar la moneda por defecto** — al elegir una de las 4 monedas, el cambio se persiste (`PATCH /settings`) y **re-expresa los totales en vivo** sin tocar ningún movimiento guardado (RF-CUR-005).
+- **Límites — crear / eliminar / activar-desactivar** un límite (RF-LIM-002). **No hay editar**: para cambiar un límite se elimina y se crea de nuevo. Cada cambio persiste el blob completo vía `PUT /preferences`.
 - Acciones globales del sidebar.
 
 ### Navegación
 
 - **Llega desde:** link "Configuración" del sidebar; acceso directo a `/configuracion`.
-- **Lleva a:** permanece en `/configuracion`; el efecto del cambio de moneda default se ve al volver a `/mes`, dashboard o reportes.
+- **Lleva a:** permanece en `/configuracion`; el efecto del cambio de moneda default se ve al volver a `/mes`, dashboard o reportes; el efecto de los límites se ve en `/mes`, el dashboard y los reportes (marcas pasivas, RF-LIM-003).
 
 ### Estados
 
-- **Cargando:** mientras se obtiene la configuración actual (`GET /settings`).
-- **Con datos:** el selector refleja la moneda default vigente del usuario.
-- **Guardando / error al guardar:** el cambio se confirma al persistir; ante error del backend se informa sin romper la pantalla (RNF-008) y la moneda default queda sin cambios.
+- **Cargando:** General mientras se obtiene la configuración (`GET /settings`); Límites mientras se resuelve el blob de preferencias.
+- **Con datos:** General refleja la moneda default vigente; Límites lista los límites del usuario.
+- **Vacío (Límites):** empty-state cuando no hay límites configurados.
+- **Guardando / error al guardar:** el cambio se confirma al persistir; ante error del backend se informa sin romper la pantalla (RNF-008) y el ajuste queda sin cambios.
 
 ---
 

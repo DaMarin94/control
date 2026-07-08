@@ -27,6 +27,7 @@
 
 import * as React from "react";
 import { ResponsiveContainer } from "recharts";
+import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── ChartContainer ────────────────────────────────────────────────────────────
@@ -77,6 +78,16 @@ interface ChartTooltipContentProps {
    * Comunica que todos los valores del tooltip son estimados.
    */
   isProjected?: boolean;
+  /**
+   * Nota de límite cruzado (P2 — marca visual pasiva, Tramo 2). Cuando está
+   * presente, se agrega una fila final separada por hairline con un
+   * `AlertTriangle` ámbar + el texto (típicamente `describeLimitMark(...)`,
+   * que enumera todos los límites cruzados). Es el **portador de a11y** de la
+   * marca sobre datos de chart (celda/barra/punto de serie) — docs/design.md
+   * §"Mapeo efecto ↔ tipo de anclaje": "portador = tooltip del chart + aria".
+   * Ausente/undefined → sin fila (cero impacto, ningún cambio de layout).
+   */
+  warningNote?: string;
 }
 
 /**
@@ -90,6 +101,7 @@ export function ChartTooltipContent({
   rows,
   totalRow,
   isProjected,
+  warningNote,
 }: ChartTooltipContentProps) {
   return (
     <div
@@ -146,6 +158,17 @@ export function ChartTooltipContent({
             >
               {totalRow.formattedValue}
             </span>
+          </div>
+        </>
+      )}
+
+      {/* Nota de límite cruzado (P2 — Tramo 2): portador de a11y de la marca pasiva. */}
+      {warningNote && (
+        <>
+          <div className="my-[7px]" style={{ borderTop: "1px solid var(--hair)" }} />
+          <div className="flex items-center gap-[6px]">
+            <AlertTriangle size={12} aria-hidden="true" className="shrink-0 text-warning-ink" />
+            <span className="text-[11.5px] font-medium text-warning-ink">{warningNote}</span>
           </div>
         </>
       )}
