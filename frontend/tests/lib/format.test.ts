@@ -7,6 +7,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   parseCurrencyInput,
+  sanitizeAmountInput,
+  MAX_AMOUNT_CENTS,
   formatCurrency,
   CURRENCY_SYMBOLS,
   localToUtcIso,
@@ -70,6 +72,42 @@ describe("parseCurrencyInput", () => {
     expect(result).not.toBeNull();
     expect(Number.isInteger(result)).toBe(true);
     expect(result).toBeGreaterThan(0);
+  });
+});
+
+// ─── sanitizeAmountInput (solo dígitos + un único separador decimal) ───────
+
+describe("sanitizeAmountInput", () => {
+  it("deja pasar dígitos puros sin cambios", () => {
+    expect(sanitizeAmountInput("1500")).toBe("1500");
+  });
+
+  it("conserva un único separador decimal (coma)", () => {
+    expect(sanitizeAmountInput("15,50")).toBe("15,50");
+  });
+
+  it("conserva un único separador decimal (punto)", () => {
+    expect(sanitizeAmountInput("15.50")).toBe("15.50");
+  });
+
+  it("descarta letras y símbolos, conservando dígitos y el primer separador", () => {
+    expect(sanitizeAmountInput("abc-12.34e5,99xyz")).toBe("12.34599");
+  });
+
+  it("descarta un segundo separador (queda solo el primero)", () => {
+    expect(sanitizeAmountInput("1.234.56")).toBe("1.23456");
+  });
+
+  it("string vacío → string vacío", () => {
+    expect(sanitizeAmountInput("")).toBe("");
+  });
+});
+
+// ─── MAX_AMOUNT_CENTS (tope de monto — espejo del @Max del backend) ────────
+
+describe("MAX_AMOUNT_CENTS", () => {
+  it("es 2^31 - 1 (2147483647)", () => {
+    expect(MAX_AMOUNT_CENTS).toBe(2147483647);
   });
 });
 

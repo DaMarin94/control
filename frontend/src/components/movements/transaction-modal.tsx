@@ -16,6 +16,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { TransactionForm } from "@/components/movements/transaction-form";
 import { RecurringForm } from "@/components/movements/recurring-form";
 import { InstallmentForm } from "@/components/movements/installment-form";
@@ -121,6 +122,8 @@ export function TransactionModal(props: TransactionModalProps) {
   const [activeTab, setActiveTab] = useState<TabId>("single");
   const [mounted, setMounted] = useState(false);
 
+  useBodyScrollLock();
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -157,13 +160,16 @@ export function TransactionModal(props: TransactionModalProps) {
       aria-modal="true"
       aria-labelledby="transaction-modal-title"
     >
-      {/* Diálogo */}
+      {/* Diálogo — columna flex acotada al alto del viewport (contrato de shell,
+          docs/design.md §"Overflow de modales y bloqueo del fondo"): header y
+          tabs pineados (shrink-0), el contenido (form activo) se lleva el alto
+          sobrante y es quien scrollea internamente. */}
       <div
-        className="w-full max-w-[440px] bg-panel border border-line overflow-hidden animate-modal-pop"
+        className="w-full max-w-[440px] bg-panel border border-line overflow-hidden animate-modal-pop max-h-[calc(100dvh-48px)] flex flex-col"
         style={{ borderRadius: "18px", boxShadow: "var(--shadow-lg)" }}
       >
         {/* ── Header ── */}
-        <div className="flex items-center justify-between px-[22px] pt-5 pb-4">
+        <div className="flex items-center justify-between px-[22px] pt-5 pb-4 shrink-0">
           <h2
             id="transaction-modal-title"
             className="text-[18px] font-bold tracking-[-0.01em] text-ink m-0"
@@ -182,7 +188,7 @@ export function TransactionModal(props: TransactionModalProps) {
         {/* ── Tabs .dtabs (solo en modo crear normal, no en calculado) ── */}
         {!isEditing && !isCalculatedMode && (
           <div
-            className="flex gap-1 mx-[22px] mb-4 p-1 rounded-ctl bg-panel-3"
+            className="flex gap-1 mx-[22px] mb-4 p-1 rounded-ctl bg-panel-3 shrink-0"
             role="tablist"
             aria-label="Tipo de movimiento"
           >
@@ -209,7 +215,10 @@ export function TransactionModal(props: TransactionModalProps) {
           </div>
         )}
 
-        {/* ── Contenido ── */}
+        {/* ── Contenido — flex-1/min-h-0: el form activo (su propio <form> es
+            flex-col) se lleva el alto restante y scrollea su cuerpo, con el
+            footer de acciones pineado dentro de cada form (hermano del
+            cuerpo scrolleable, no hijo de él). ── */}
         {isCalculatedMode ? (
           /* Modos de calculado: create-calculated / edit-calculated */
           <CalculatedForm
@@ -223,7 +232,7 @@ export function TransactionModal(props: TransactionModalProps) {
             }
           />
         ) : isEditing ? (
-          <div>
+          <div className="flex-1 min-h-0 flex flex-col">
             {mode === "edit-single" ? (
               <TransactionForm
                 transaction={props.transaction}
@@ -248,12 +257,22 @@ export function TransactionModal(props: TransactionModalProps) {
         ) : (
           <>
             {activeTab === "single" && (
-              <div id="tab-panel-single" role="tabpanel" aria-labelledby="tab-single">
+              <div
+                id="tab-panel-single"
+                role="tabpanel"
+                aria-labelledby="tab-single"
+                className="flex-1 min-h-0 flex flex-col"
+              >
                 <TransactionForm transaction={null} onClose={onClose} />
               </div>
             )}
             {activeTab === "fixed" && (
-              <div id="tab-panel-fixed" role="tabpanel" aria-labelledby="tab-fixed">
+              <div
+                id="tab-panel-fixed"
+                role="tabpanel"
+                aria-labelledby="tab-fixed"
+                className="flex-1 min-h-0 flex flex-col"
+              >
                 <RecurringForm recurring={null} onClose={onClose} defaultMonth={defaultMonth} />
               </div>
             )}
@@ -262,6 +281,7 @@ export function TransactionModal(props: TransactionModalProps) {
                 id="tab-panel-installments"
                 role="tabpanel"
                 aria-labelledby="tab-installments"
+                className="flex-1 min-h-0 flex flex-col"
               >
                 <InstallmentForm
                   installment={null}

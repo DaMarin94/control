@@ -8,6 +8,7 @@ import {
   IsPositive,
   IsString,
   Matches,
+  Max,
   Min,
 } from 'class-validator';
 import { Currency, MovementType } from '@prisma/client';
@@ -34,6 +35,7 @@ export class CreateInstallmentDto {
 
   @IsInt({ message: 'El monto debe ser un entero en centavos' })
   @Min(1, { message: 'El monto debe ser mayor a 0' })
+  @Max(2147483647, { message: 'El monto es demasiado grande' })
   amountCents!: number;
 
   @IsInt({ message: 'La cantidad de cuotas debe ser un entero' })

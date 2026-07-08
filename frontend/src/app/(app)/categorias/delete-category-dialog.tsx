@@ -15,6 +15,7 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useCategories } from "@/hooks/use-categories";
+import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { type Category } from "@/types/category";
 
 interface DeleteCategoryDialogProps {
@@ -26,6 +27,8 @@ export function DeleteCategoryDialog({ category, onClose }: DeleteCategoryDialog
   const [mounted, setMounted] = useState(false);
   const { toast } = useToast();
   const { deleteCategory, isDeleting } = useCategories();
+
+  useBodyScrollLock();
 
   useEffect(() => {
     setMounted(true);
@@ -57,11 +60,11 @@ export function DeleteCategoryDialog({ category, onClose }: DeleteCategoryDialog
     >
       {/* Diálogo */}
       <div
-        className="w-full max-w-[380px] bg-panel border border-line overflow-hidden animate-modal-pop"
+        className="w-full max-w-[380px] bg-panel border border-line overflow-hidden animate-modal-pop max-h-[calc(100dvh-48px)] flex flex-col"
         style={{ borderRadius: "18px", boxShadow: "var(--shadow-lg)" }}
       >
         {/* Header */}
-        <div className="px-[22px] pt-5 pb-4">
+        <div className="px-[22px] pt-5 pb-4 shrink-0">
           <h2
             id="delete-category-title"
             className="text-[18px] font-bold tracking-[-0.01em] text-ink m-0"
@@ -71,7 +74,7 @@ export function DeleteCategoryDialog({ category, onClose }: DeleteCategoryDialog
         </div>
 
         {/* Cuerpo */}
-        <div className="px-[22px] pb-[22px] space-y-[14px]">
+        <div className="flex-1 min-h-0 overflow-y-auto px-[22px] pb-[22px] space-y-[14px]">
           <p className="text-[14px] text-ink">
             ¿Estás seguro de que querés eliminar la categoría{" "}
             <span className="font-semibold">&ldquo;{category.name}&rdquo;</span>?
@@ -84,12 +87,14 @@ export function DeleteCategoryDialog({ category, onClose }: DeleteCategoryDialog
             </p>
           )}
           <p className="text-[12.5px] text-muted">
-            Esta acción es permanente y no se puede deshacer.
+            La categoría dejará de estar disponible para nuevos movimientos. Los movimientos que ya
+            la usan la conservan, y podés reactivarla más adelante si creás otra con el mismo
+            nombre.
           </p>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
+        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2 shrink-0">
           <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isDeleting}>
             Cancelar
           </Button>

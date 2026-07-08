@@ -82,6 +82,11 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  // referenceRate — necesario porque MovementsRepository.loadAllPivotRates
+  // (invocado desde GET /movements?month=...) llama a referenceRate.findMany
+  referenceRate: {
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   $connect: jest.fn(),
   $disconnect: jest.fn(),
   $queryRaw: jest.fn().mockResolvedValue([]),
@@ -186,6 +191,20 @@ describe('Transactions (e2e)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPrisma.category.createMany.mockResolvedValue({ count: 0 });
+    // user.findUnique / user.update: necesarios porque TransactionsService.create/update
+    // llaman a SettingsService.getSettings (anchorCurrency, Fase 1.2.4) y
+    // updateLastExchangeRate. Default ARS sin cotización previa; los tests de
+    // multi-moneda sobreescriben este mock puntualmente.
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: USER_A_ID,
+      defaultCurrency: 'ARS',
+      lastExchangeRate: null,
+    });
+    mockPrisma.user.update.mockResolvedValue({
+      id: USER_A_ID,
+      defaultCurrency: 'ARS',
+      lastExchangeRate: null,
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -249,6 +268,17 @@ describe('Transactions (e2e)', () => {
         .expect(400);
 
       expect(res.body.success).toBe(false);
+    });
+
+    it('400 si amountCents excede el máximo de int4 (overflow de Postgres)', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/transactions')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...VALID_CREATE_BODY, amountCents: 999999999999999 })
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(400);
     });
 
     it('400 si occurredAt no es ISO 8601 válido', async () => {
@@ -500,6 +530,19 @@ describe('Transactions (e2e)', () => {
         .patch('/transactions/tx-e2e-001')
         .set('Authorization', `Bearer ${tokenA}`)
         .send({ amountCents: 0 })
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+    });
+
+    it('400 si amountCents excede el máximo de int4 en PATCH (overflow de Postgres)', async () => {
+      const existing = makeDbTransaction();
+      mockPrisma.transaction.findUnique.mockResolvedValue(existing);
+
+      const res = await request(app.getHttpServer())
+        .patch('/transactions/tx-e2e-001')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ amountCents: 999999999999999 })
         .expect(400);
 
       expect(res.body.success).toBe(false);

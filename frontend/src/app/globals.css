@@ -234,6 +234,21 @@
   }
 
   /*
+   * Reserva siempre el espacio de la scrollbar del documento (aunque no haya
+   * overflow), para que el body-lock de modales (`.body-scroll-locked`) no
+   * produzca un salto de layout al ocultar la barra (docs/design.md
+   * §"Overflow de modales y bloqueo del fondo").
+   */
+  html {
+    scrollbar-gutter: stable;
+  }
+
+  /* Body-lock de modales — ver hooks/use-body-scroll-lock.ts */
+  body.body-scroll-locked {
+    overflow: hidden;
+  }
+
+  /*
    * Transición de color de modo (~0.18s, solo color — nunca layout).
    * Se aplica a nivel raíz para que el flip claro↔oscuro sea suave.
    * prefers-reduced-motion: instantáneo (motion-reduce suprime la transición).

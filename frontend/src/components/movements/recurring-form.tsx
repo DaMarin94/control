@@ -43,6 +43,8 @@ import {
   formatExchangeRate,
   formatMonthLabel,
   getCurrentMonth,
+  sanitizeAmountInput,
+  MAX_AMOUNT_CENTS,
 } from "@/lib/format";
 import { createLogger } from "@/lib/logger";
 import { useRouter } from "next/navigation";
@@ -78,7 +80,14 @@ const recurringSchema = z.object({
     .min(1, "El monto es requerido")
     .refine((val) => parseCurrencyInput(val) !== null, {
       message: "Ingresá un monto mayor a 0",
-    }),
+    })
+    .refine(
+      (val) => {
+        const cents = parseCurrencyInput(val);
+        return cents === null || cents <= MAX_AMOUNT_CENTS;
+      },
+      { message: "El monto es demasiado grande" },
+    ),
   currency: z.enum(["ARS", "USD", "EUR", "BRL"]),
   /**
    * Input de cotización como string. Solo se valida cuando currency !== defaultCurrency.
@@ -221,6 +230,10 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, edi
     resolver: zodResolver(recurringSchema),
     defaultValues,
   });
+
+  // Registro del campo Monto — se reusa en el onChange que sanitiza la entrada
+  // (#4: solo dígitos + un único separador decimal) antes de que RHF la capture.
+  const amountFieldRegister = register("amountInput");
 
   const selectedType = watch("type");
   const selectedCategoryId = watch("categoryId");
@@ -443,8 +456,9 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, edi
           logger.warn("Validación del form de fijo falló", { errors });
         })}
         noValidate
+        className="flex flex-col flex-1 min-h-0"
       >
-        <div className="px-[22px] pb-[22px] space-y-[14px]">
+        <div className="flex-1 min-h-0 overflow-y-auto px-[22px] pb-[22px] space-y-[14px]">
           {/* ── Tipo (toggle o read-only en edición) ── */}
           {isEditing ? (
             <div className="flex flex-col gap-[7px]">
@@ -522,7 +536,11 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, edi
                 inputMode="decimal"
                 placeholder="0,00"
                 className="flex-1 border-none outline-none bg-transparent mono text-[20px] font-semibold tracking-[-0.01em] text-ink placeholder:text-faint"
-                {...register("amountInput")}
+                {...amountFieldRegister}
+                onChange={(e) => {
+                  e.target.value = sanitizeAmountInput(e.target.value);
+                  void amountFieldRegister.onChange(e);
+                }}
               />
             </div>
             {errors.amountInput && (
@@ -689,8 +707,8 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, edi
           />
         </div>
 
-        {/* ── Footer ── */}
-        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
+        {/* ── Footer (pineado — hermano del cuerpo scrolleable, no hijo) ── */}
+        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2 shrink-0">
           <div className="flex gap-3">
             <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
               Cancelar

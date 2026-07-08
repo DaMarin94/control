@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { usePaymentMethods } from "@/hooks/use-payment-methods";
+import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { type PaymentMethod } from "@/types/payment-method";
 
 interface DeletePaymentMethodDialogProps {
@@ -21,6 +22,8 @@ export function DeletePaymentMethodDialog({ paymentMethod, onClose }: DeletePaym
   const [mounted, setMounted] = useState(false);
   const { toast } = useToast();
   const { deletePaymentMethod, isDeleting } = usePaymentMethods();
+
+  useBodyScrollLock();
 
   useEffect(() => {
     setMounted(true);
@@ -52,11 +55,11 @@ export function DeletePaymentMethodDialog({ paymentMethod, onClose }: DeletePaym
     >
       {/* Diálogo */}
       <div
-        className="w-full max-w-[380px] bg-panel border border-line overflow-hidden animate-modal-pop"
+        className="w-full max-w-[380px] bg-panel border border-line overflow-hidden animate-modal-pop max-h-[calc(100dvh-48px)] flex flex-col"
         style={{ borderRadius: "18px", boxShadow: "var(--shadow-lg)" }}
       >
         {/* Header */}
-        <div className="px-[22px] pt-5 pb-4">
+        <div className="px-[22px] pt-5 pb-4 shrink-0">
           <h2
             id="delete-payment-method-title"
             className="text-[18px] font-bold tracking-[-0.01em] text-ink m-0"
@@ -66,7 +69,7 @@ export function DeletePaymentMethodDialog({ paymentMethod, onClose }: DeletePaym
         </div>
 
         {/* Cuerpo */}
-        <div className="px-[22px] pb-[22px] space-y-[14px]">
+        <div className="flex-1 min-h-0 overflow-y-auto px-[22px] pb-[22px] space-y-[14px]">
           <p className="text-[14px] text-ink">
             ¿Estás seguro de que querés eliminar el método de pago{" "}
             <span className="font-semibold">&ldquo;{paymentMethod.name}&rdquo;</span>?
@@ -85,7 +88,7 @@ export function DeletePaymentMethodDialog({ paymentMethod, onClose }: DeletePaym
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
+        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2 shrink-0">
           <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isDeleting}>
             Cancelar
           </Button>

@@ -76,6 +76,11 @@ const mockPrisma = {
     create: jest.fn(),
     delete: jest.fn(),
   },
+  // referenceRate — necesario porque MovementsRepository.loadAllPivotRates
+  // (invocado desde GET /movements?month=...) llama a referenceRate.findMany
+  referenceRate: {
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   $connect: jest.fn(),
   $disconnect: jest.fn(),
 };
@@ -180,6 +185,19 @@ describe('Installments (e2e)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPrisma.category.createMany.mockResolvedValue({ count: 0 });
+    // user.findUnique / user.update: necesarios porque InstallmentsService.create/update
+    // llaman a SettingsService.getSettings (anchorCurrency, Fase 1.2.4) y
+    // updateLastExchangeRate. Default ARS sin cotización previa.
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: USER_A_ID,
+      defaultCurrency: 'ARS',
+      lastExchangeRate: null,
+    });
+    mockPrisma.user.update.mockResolvedValue({
+      id: USER_A_ID,
+      defaultCurrency: 'ARS',
+      lastExchangeRate: null,
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -260,6 +278,16 @@ describe('Installments (e2e)', () => {
         .post('/installments')
         .set('Authorization', `Bearer ${tokenA}`)
         .send({ ...VALID_CREATE_BODY, amountCents: -500 })
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+    });
+
+    it('400 si amountCents excede el máximo de int4 (overflow de Postgres)', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/installments')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...VALID_CREATE_BODY, amountCents: 999999999999999 })
         .expect(400);
 
       expect(res.body.success).toBe(false);
@@ -409,6 +437,19 @@ describe('Installments (e2e)', () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data.amountCents).toBe(8000);
       expect(res.body.data.category).toBeDefined();
+    });
+
+    it('400 si amountCents excede el máximo de int4 en PATCH (overflow de Postgres)', async () => {
+      const existing = makeDbInstallmentGroup();
+      mockPrisma.installmentGroup.findUnique.mockResolvedValue(existing);
+
+      const res = await request(app.getHttpServer())
+        .patch(`/installments/${GROUP_ID}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ amountCents: 999999999999999 })
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
     });
 
     it('200 + shape actualizado (totalInstallments)', async () => {

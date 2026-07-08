@@ -8,6 +8,7 @@ import {
   IsPositive,
   IsString,
   Matches,
+  Max,
   Min,
 } from 'class-validator';
 import { Currency, MovementType, RecurringFrequency } from '@prisma/client';
@@ -38,6 +39,7 @@ export class CreateRecurringDto {
 
   @IsInt({ message: 'El monto debe ser un entero en centavos' })
   @Min(1, { message: 'El monto debe ser mayor a 0' })
+  @Max(2147483647, { message: 'El monto es demasiado grande' })
   amountCents!: number;
 
   @IsString()

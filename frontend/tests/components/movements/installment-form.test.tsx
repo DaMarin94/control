@@ -349,6 +349,23 @@ describe("InstallmentForm — validación", () => {
     expect(mockCreateInstallment).not.toHaveBeenCalled();
   });
 
+  it("muestra 'El monto es demasiado grande' y bloquea el submit cuando supera el tope del backend (2147483647)", async () => {
+    const user = userEvent.setup();
+    renderForm({});
+
+    const amountInput = screen.getByLabelText(/monto por cuota/i);
+    // 99.999.999.999 pesos → 9999999999900 centavos, supera 2147483647
+    await user.type(amountInput, "99999999999");
+
+    const submitBtn = screen.getByRole("button", { name: /^guardar$/i });
+    await user.click(submitBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/el monto es demasiado grande/i)).toBeInTheDocument();
+    });
+    expect(mockCreateInstallment).not.toHaveBeenCalled();
+  });
+
   it("muestra error si la cantidad de cuotas está vacía al enviar", async () => {
     const user = userEvent.setup();
     renderForm({});

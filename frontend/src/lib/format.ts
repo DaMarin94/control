@@ -56,6 +56,36 @@ export function formatCurrency(amountCents: number, currency = "ARS"): string {
 }
 
 /**
+ * Tope de monto aceptado por el backend: 2^31 − 1 (entero de 32 bits de la
+ * columna `amountCents`). Aplica a transactions, recurring e installments (en
+ * cuotas, POR CUOTA) — espejo de UX del `@Max(2147483647)` de los DTOs del
+ * backend (fuente de verdad real). Ver docs/technical.md §Validación.
+ */
+export const MAX_AMOUNT_CENTS = 2_147_483_647;
+
+/**
+ * Sanitiza el input crudo de un campo de monto a medida que se tipea: conserva
+ * solo dígitos y un único separador decimal (coma o punto — el primero que
+ * aparece), descarta cualquier otro carácter (letras, símbolos, separadores
+ * de más). No cambia el formato de guardado — sigue aceptando punto o coma,
+ * igual que `parseCurrencyInput`.
+ * Ej: "abc-12.34e5,99xyz" → "12.34599"
+ */
+export function sanitizeAmountInput(raw: string): string {
+  let result = "";
+  let hasSeparator = false;
+  for (const char of raw) {
+    if (char >= "0" && char <= "9") {
+      result += char;
+    } else if ((char === "," || char === ".") && !hasSeparator) {
+      result += char;
+      hasSeparator = true;
+    }
+  }
+  return result;
+}
+
+/**
  * Convierte un string de monto ingresado por el usuario (pesos con decimales)
  * a centavos enteros para enviar al backend.
  *

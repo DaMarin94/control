@@ -209,3 +209,49 @@ describe("CreateLimitModal — submit en rama activa", () => {
     expect(payload).toHaveProperty("effect");
   });
 });
+
+describe("CreateLimitModal — umbral: signo válido según unit (catalog-driven)", () => {
+  it("unit='money' (Gasto del mes): un umbral negativo muestra error inline y bloquea el submit", async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    await selectAnchor(user, "Gasto del mes");
+    await user.type(screen.getByLabelText(/umbral/i), "-5");
+
+    expect(screen.getByText(/el umbral debe ser mayor a 0/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /crear límite/i })).toBeDisabled();
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("unit='signed-money' (Balance del mes): un umbral negativo es válido (sin error, submit habilitado)", async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    await selectAnchor(user, "Balance del mes");
+    await user.type(screen.getByLabelText(/umbral/i), "-5000");
+
+    expect(screen.queryByText(/el umbral debe ser mayor a 0/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /crear límite/i }));
+
+    await waitFor(() => {
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ anchorKey: "mes.balance", threshold: -5000 }),
+      );
+    });
+  });
+
+  it("unit='count' (Cantidad de ítems de una sección): 0 muestra error inline y bloquea el submit", async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    await selectAnchor(user, "Cantidad de ítems de una sección");
+    await user.selectOptions(screen.getByLabelText(/sección/i), "unicos");
+    await user.type(screen.getByLabelText(/umbral/i), "0");
+
+    expect(
+      screen.getByText(/la cantidad debe ser un entero mayor o igual a 1/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /crear límite/i })).toBeDisabled();
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+});

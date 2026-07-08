@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useCategories } from "@/hooks/use-categories";
+import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import {
   type Category,
   CATEGORY_COLOR_PALETTE,
@@ -69,6 +70,8 @@ export function CategoryFormModal({
   const isEditing = category !== null;
   const [mounted, setMounted] = useState(false);
   const { toast } = useToast();
+
+  useBodyScrollLock();
 
   useEffect(() => {
     setMounted(true);
@@ -211,11 +214,11 @@ export function CategoryFormModal({
     >
       {/* Diálogo */}
       <div
-        className="w-full max-w-[380px] bg-panel border border-line overflow-hidden animate-modal-pop"
+        className="w-full max-w-[380px] bg-panel border border-line overflow-hidden animate-modal-pop max-h-[calc(100dvh-48px)] flex flex-col"
         style={{ borderRadius: "18px", boxShadow: "var(--shadow-lg)" }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-[22px] pt-5 pb-4">
+        <div className="flex items-center justify-between px-[22px] pt-5 pb-4 shrink-0">
           <h2
             id="category-modal-title"
             className="text-[18px] font-bold tracking-[-0.01em] text-ink m-0"
@@ -232,8 +235,8 @@ export function CategoryFormModal({
         </div>
 
         {/* Formulario */}
-        <form onSubmit={handleSubmit(onSubmit)} noValidate>
-          <div className="px-[22px] pb-[22px] space-y-[14px]">
+        <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 min-h-0 overflow-y-auto px-[22px] pb-[22px] space-y-[14px]">
             {/* Campo nombre */}
             <div className="flex flex-col gap-[7px]">
               <Label htmlFor="cat-name" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
@@ -294,8 +297,8 @@ export function CategoryFormModal({
             />
           </div>
 
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
+          {/* Footer (pineado — hermano del cuerpo scrolleable, no hijo) */}
+          <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2 shrink-0">
             <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
               Cancelar
             </Button>

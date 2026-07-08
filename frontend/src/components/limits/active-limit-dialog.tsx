@@ -20,6 +20,7 @@ import { createPortal } from "react-dom";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getAnchorDef, formatThreshold } from "@/lib/limits/catalog";
+import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import type { LimitConfig, LimitOperator } from "@/types/limit";
 
 /**
@@ -48,6 +49,8 @@ export interface ActiveLimitDialogProps {
 export function ActiveLimitDialog({ crossed, onCancel, onConfirm, isConfirming = false }: ActiveLimitDialogProps) {
   const [mounted, setMounted] = useState(false);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
+
+  useBodyScrollLock();
 
   useEffect(() => setMounted(true), []);
 
@@ -88,11 +91,11 @@ export function ActiveLimitDialog({ crossed, onCancel, onConfirm, isConfirming =
     >
       {/* Diálogo */}
       <div
-        className="w-full max-w-[420px] bg-panel border border-line overflow-hidden animate-modal-pop"
+        className="w-full max-w-[420px] bg-panel border border-line overflow-hidden animate-modal-pop max-h-[calc(100dvh-48px)] flex flex-col"
         style={{ borderRadius: "18px", boxShadow: "var(--shadow-lg)" }}
       >
         {/* Header */}
-        <div className="px-[22px] pt-5 pb-4">
+        <div className="px-[22px] pt-5 pb-4 shrink-0">
           <h2
             id="active-limit-dialog-title"
             className="text-[18px] font-bold tracking-[-0.01em] text-ink m-0"
@@ -102,7 +105,10 @@ export function ActiveLimitDialog({ crossed, onCancel, onConfirm, isConfirming =
         </div>
 
         {/* Cuerpo */}
-        <div id="active-limit-dialog-description" className="px-[22px] pb-[22px] space-y-[14px]">
+        <div
+          id="active-limit-dialog-description"
+          className="flex-1 min-h-0 overflow-y-auto px-[22px] pb-[22px] space-y-[14px]"
+        >
           <p className="text-[14px] text-ink">{guideLine}</p>
 
           {/* Callout ámbar — UN solo AlertTriangle (regla de colisión de la marca pasiva) */}
@@ -149,7 +155,7 @@ export function ActiveLimitDialog({ crossed, onCancel, onConfirm, isConfirming =
         </div>
 
         {/* Footer — idéntico al de los delete-*-dialog */}
-        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
+        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2 shrink-0">
           <Button
             ref={cancelButtonRef}
             type="button"

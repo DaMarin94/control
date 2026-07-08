@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  Max,
   Min,
 } from 'class-validator';
 import { Currency, MovementType } from '@prisma/client';
@@ -29,6 +30,7 @@ export class UpdateTransactionDto {
   @IsOptional()
   @IsInt({ message: 'El monto debe ser un entero en centavos' })
   @Min(1, { message: 'El monto debe ser mayor a 0' })
+  @Max(2147483647, { message: 'El monto es demasiado grande' })
   amountCents?: number;
 
   @IsOptional()

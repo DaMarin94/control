@@ -484,6 +484,50 @@ Dos comportamientos de cierre, según el tipo de overlay:
 - **Modales / diálogos** (transaction-modal, category-form-modal y los diálogos de confirmación de borrado — transaction / recurring / installment / category): se cierran **únicamente con el botón ✕ y con `Esc`**. El click en el scrim/backdrop **no** cierra. Son superficies que demandan una decisión explícita; no se descartan por click accidental afuera.
 - **Popovers** (filtro de categorías, filtro de sección, menú de tipo de reporte): se cierran por **clic fuera / `Esc` / re-clic**. Son auxiliares y livianos; descartarlos al tocar fuera es lo esperado.
 
+### Overflow de modales y bloqueo del fondo (contrato de shell)
+
+Regla **transversal a TODOS los modales/diálogos** de la app: transaction-modal, category-form-modal, el modal de método de pago, crear/editar límite, active-limit-dialog y los diálogos de confirmación/borrado. Todos comparten el mismo **contrato de shell** para que se comporten igual cuando el contenido es alto y para que el fondo nunca se mueva. Los diálogos chicos (confirmaciones) casi nunca desbordan, pero **acatan el mismo contrato** para que el comportamiento sea uniforme.
+
+**Anatomía en tres zonas — header pineado · cuerpo scrolleable · footer pineado.** El diálogo es una **columna flex** con tres regiones:
+
+- **Header (pineado arriba):** la fila de título + botón ✕, y —cuando existen— las tabs `.dtabs`. No scrollea: el título, el cierre y la navegación de tabs están **siempre alcanzables**. `shrink-0`.
+- **Cuerpo (única región que scrollea):** el formulario / contenido. Toma el alto sobrante y scrollea internamente cuando desborda (`flex-1`, `min-h-0`, `overflow-y-auto`). Conserva el **padding horizontal del contenido** (`px-[22px]` en transaction-modal) como **carril del scrollbar**, para que la barra viva en el gutter y no se monte sobre los inputs.
+- **Footer de acciones (pineado abajo):** los botones Guardar/Cancelar (y sus equivalentes: Eliminar/Cancelar en confirmaciones, etc.) quedan **fijos al borde inferior del diálogo, FUERA de la región de scroll**. `shrink-0`, fondo **opaco `--panel`** (para que el contenido que scrollea por debajo no se transparente). *Esto obliga a que el footer sea hermano de la región de scroll, no hijo de ella* — hoy los botones viven dentro de cada form, y ahí está el bug: hay que sacarlos del cuerpo scrolleable y montarlos como zona pineada del shell.
+
+> **Por qué footer pineado (no "alcanzable por scroll"):** la acción primaria (Guardar) es el objetivo del modal; no debe exigir scroll para aparecer. Pinearlo da un blanco estable y refuerza el carácter de "decisión explícita" del modal (mismo espíritu que "el modal solo cierra con ✕/`Esc`"). Pinear también el header mantiene el ✕ y las tabs siempre a mano. El precio —el cuerpo pierde unos px de alto útil— es despreciable frente a botones inalcanzables.
+
+**Max-height del diálogo (contemplando el padding del scrim).** El scrim es `fixed inset-0 flex items-center justify-center p-6` (padding **24px**). El diálogo lleva:
+
+- `max-height: calc(100dvh - 48px)` — **48px = 2 × 24px** de padding del scrim (arriba + abajo). Se usa **`dvh`** (dynamic viewport height), no `vh`, para respetar la barra dinámica del navegador en mobile. Si en algún breakpoint el frontend baja el padding del scrim, el `calc` debe seguir a ese valor (siempre `100dvh − 2×padding`).
+- Mientras el contenido **cabe**, el diálogo se dimensiona por su contenido (como hoy) y no aparece scroll ni footer "flotando"; el `max-height` solo entra en juego cuando el contenido supera el alto disponible.
+
+**Tratamiento de la scrollbar interna, radios y clipping.**
+
+- El diálogo mantiene **`overflow-hidden` + radio 18px**: la región de scroll queda **clippeada a las esquinas redondeadas**; nada se derrama por fuera del radio. El header abraza las esquinas superiores, el footer las inferiores.
+- **Scrollbar fina y discreta** (la del SO / overlay alcanza; no se especifica scrollbar custom). Vive en el gutter del padding horizontal del cuerpo, sin comerse los inputs.
+- **Divisores de corte (señal de "hay más"):** cuando el cuerpo desborda, aparece una **hairline `--hair` 1px** entre header↔cuerpo y entre cuerpo↔footer — la "repisa" que avisa que hay contenido recortado arriba/abajo. Cuando **no** hay overflow, **no** hay divisores: el modal se lee como una sola superficie continua. Se usa **divisor de línea, no fade con `mask`** (a diferencia de la leyenda de categorías): un fade sobre un input o un label lo volvería ilegible; la línea marca el corte sin tapar contenido.
+
+**Bloqueo de scroll del fondo (body lock).**
+
+- Mientras haya **al menos un modal abierto**, el fondo (la página detrás) **no scrollea**: rueda del mouse / touch sobre el scrim o sobre el diálogo **no** mueven la página de atrás. Hoy el body queda con overflow visible y scrollea — eso es el bug a corregir.
+- **Sin salto de layout por la scrollbar:** al bloquear, la desaparición de la scrollbar del documento **no debe correr el contenido de fondo** horizontalmente. Se compensa el ancho de la scrollbar (p. ej. `scrollbar-gutter: stable` en el documento, o compensación equivalente al lock). Intención visual: al abrir/cerrar el modal, la página de atrás **no se desplaza**.
+- **Apilamiento:** el scrim/diálogo vive en su capa (hoy `z-40`); si un segundo modal o confirmación se abre encima, monta su propio scrim en una capa superior y el body lock **persiste mientras quede algún modal abierto** (se libera solo cuando se cierra el último).
+
+**Animación.** El `animate-modal-pop` sigue corriendo sobre el diálogo al entrar; la región de scroll **no** anima. Respeta `prefers-reduced-motion`.
+
+#### Checklist de aceptación visual — overflow y body-lock de modales
+
+- [ ] **Fondo inmóvil:** con un modal abierto, girar la rueda / hacer scroll sobre el scrim y sobre el diálogo **no mueve la página de atrás**.
+- [ ] **Sin salto de layout:** al abrir y al cerrar el modal, el contenido de fondo **no se corre** horizontalmente (la scrollbar del documento no produce salto).
+- [ ] **Footer siempre visible:** en el modal de movimiento, pestañas **"Cuotas"** y **"Más opciones"** (las más altas), con el viewport chico: los botones **Guardar/Cancelar** quedan **pineados y visibles** al pie, sin necesidad de scrollear para encontrarlos.
+- [ ] **Header siempre alcanzable:** título + botón **✕** (y las tabs, cuando hay) **no se van** con el scroll — quedan fijos arriba.
+- [ ] **Solo scrollea el cuerpo:** al desbordar, scrollea la zona central; header y footer quedan quietos.
+- [ ] **Sin corte crudo arriba/abajo:** cuando hay overflow, aparece la **hairline** header↔cuerpo y cuerpo↔footer; cuando cabe, **no** hay esas líneas (superficie continua).
+- [ ] **Esquinas limpias:** el contenido que scrollea queda **clippeado al radio 18px**; nada se derrama fuera de las esquinas redondeadas.
+- [ ] **Scrollbar en el gutter:** la barra de scroll no se monta sobre inputs ni labels.
+- [ ] **Cabe sin scroll → se ve normal:** un modal cuyo contenido entra en pantalla (p. ej. una confirmación de borrado) se ve sin scroll, sin líneas de corte y con el footer al pie natural.
+- [ ] **Apilamiento correcto:** si se abre una confirmación sobre otro modal, el fondo sigue bloqueado; al cerrar la de arriba el lock persiste hasta cerrar el último modal.
+
 ### PeriodNav — navegación de período (flechas gigantes laterales + modo `.stepper`)
 
 Patrón **genérico** para navegar un período (mes o año): `‹ contenido ›`, donde **‹ va al período anterior y › al siguiente**. Recibe un rótulo de período ya formateado, handlers anterior/siguiente y dos flags `canGoPrev` / `canGoNext`. **Mismo componente, distinto período.** Tiene **dos formas**:

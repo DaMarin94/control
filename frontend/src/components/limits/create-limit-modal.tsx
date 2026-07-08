@@ -29,12 +29,14 @@ import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useLimits } from "@/hooks/use-limits";
 import { useToast } from "@/hooks/use-toast";
+import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import {
   getAnchorDef,
   LIMIT_OPERATORS,
   formatThreshold,
   deriveLimitLabel,
   getActiveOperators,
+  type LimitUnit,
 } from "@/lib/limits/catalog";
 import { LimitAnchorPicker } from "@/components/limits/limit-anchor-picker";
 import { LimitCategorySelect } from "@/components/limits/limit-category-select";
@@ -102,6 +104,28 @@ function parseThresholdInput(raw: string): number | null {
   const normalized = trimmed.replace(",", ".");
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Valida el signo del umbral según la unidad del anclaje (catalog-driven, el
+ * `unit` de `anchorDef` define qué signos tienen sentido):
+ * - "money"  → debe ser > 0 (un tope de gasto/ingreso negativo no tiene sentido).
+ * - "count"  → entero ≥ 1.
+ * - "signed-money" (Balance) / "percent" → cualquier valor, negativos incluidos.
+ * Retorna el mensaje de error inline, o undefined si el valor es válido.
+ */
+function thresholdSignError(unit: LimitUnit, value: number): string | undefined {
+  switch (unit) {
+    case "money":
+      return value > 0 ? undefined : "El umbral debe ser mayor a 0.";
+    case "count":
+      return Number.isInteger(value) && value >= 1
+        ? undefined
+        : "La cantidad debe ser un entero mayor o igual a 1.";
+    case "signed-money":
+    case "percent":
+      return undefined;
+  }
 }
 
 // ─── Segmented neutro de 2 opciones — alcance temporal ────────────────────────
@@ -216,6 +240,8 @@ export function CreateLimitModal({ onClose }: CreateLimitModalProps) {
   const { toast } = useToast();
   const [mounted, setMounted] = useState(false);
 
+  useBodyScrollLock();
+
   useEffect(() => setMounted(true), []);
 
   const [anchorKey, setAnchorKey] = useState("");
@@ -267,6 +293,9 @@ export function CreateLimitModal({ onClose }: CreateLimitModalProps) {
 
   const thresholdValue = parseThresholdInput(thresholdInput);
 
+  const thresholdError =
+    anchorDef && thresholdValue !== null ? thresholdSignError(anchorDef.unit, thresholdValue) : undefined;
+
   const refinementValid =
     !anchorDef?.refinement || !anchorDef.refinement.required
       ? true
@@ -276,7 +305,11 @@ export function CreateLimitModal({ onClose }: CreateLimitModalProps) {
 
   // Rama activa (D20): sin efecto ni alcance temporal — no se piden.
   const isValid =
-    Boolean(anchorKey) && thresholdValue !== null && refinementValid && (isActive || Boolean(effect));
+    Boolean(anchorKey) &&
+    thresholdValue !== null &&
+    !thresholdError &&
+    refinementValid &&
+    (isActive || Boolean(effect));
 
   async function handleSubmit() {
     if (!isValid || !anchorDef || thresholdValue === null) return;
@@ -443,6 +476,7 @@ export function CreateLimitModal({ onClose }: CreateLimitModalProps) {
                     placeholder={thresholdPlaceholder(anchorDef.unit)}
                     value={thresholdInput}
                     onChange={(e) => setThresholdInput(e.target.value)}
+                    error={thresholdError}
                   />
                 </div>
               </div>

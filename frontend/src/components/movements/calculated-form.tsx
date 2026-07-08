@@ -556,8 +556,9 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
           logger.warn("Validación del form de calculado falló", { errs });
         })}
         noValidate
+        className="flex flex-col flex-1 min-h-0"
       >
-        <div className="px-[22px] pb-[22px] space-y-[14px]">
+        <div className="flex-1 min-h-0 overflow-y-auto px-[22px] pb-[22px] space-y-[14px]">
 
           {/* ── 1. Origen (read-only) ── */}
           <div className="flex flex-col gap-[7px]">
@@ -865,8 +866,8 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
           </div>
         </div>
 
-        {/* ── Footer ── */}
-        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
+        {/* ── Footer (pineado — hermano del cuerpo scrolleable, no hijo) ── */}
+        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2 shrink-0">
           <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
             Cancelar
           </Button>

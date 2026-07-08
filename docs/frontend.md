@@ -75,6 +75,13 @@ Lo visual se define **una sola vez**. Stack: **shadcn/ui + cva** sobre Tailwind 
 - **`SortableSection` (`components/ui/sortable-section.tsx`)** — envuelve `AccordionSection` con `useSortable` de **dnd-kit**; el sortable se activa **solo en modo orden**. Es el patrón estándar para "lista de bloques reordenables por drag". **Sin `DragOverlay`:** el ítem arrastrado se mueve **in-place**, restringido al **eje vertical y al contenedor** con los modifiers `restrictToVerticalAxis` + `restrictToParentElement` de **`@dnd-kit/modifiers`**. El original no se oculta; el "activo" lo computa el padre vía `activeId` y se pasa por prop (`isActive`).
 - **dnd-kit** (`@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`, `@dnd-kit/modifiers`) es el **motor de drag estándar del proyecto**. Todo drag nuevo (reordenar listas, etc.) lo usa, no se implementa drag a mano. Gotchas de uso (sensor `distance:8` con elementos clickeables, `role=region` en jsdom) en `.claude/agents/control-frontend.md`.
 
+### Shell de modales — anatomía de 3 zonas y bloqueo del fondo
+
+Todos los modales por portal comparten una anatomía de **3 zonas**: **header** pineado · **cuerpo** scrolleable (`flex-1 min-h-0 overflow-y-auto`) · **footer** de acciones pineado (`shrink-0`). El diálogo es una **columna flex** con `max-height: calc(100dvh - 48px)`, de modo que header y footer quedan fijos y solo el cuerpo scrollea cuando el contenido excede el alto. Es el **patrón estándar**: todo modal nuevo lo sigue.
+
+- **Bloqueo del scroll del fondo:** mientras haya ≥1 modal abierto, el scroll de la página se bloquea con el hook `useBodyScrollLock` (`frontend/src/hooks/use-body-scroll-lock.ts`), **ref-counted** para soportar modales apilados (el fondo se libera recién al cerrar el último). Usa `scrollbar-gutter: stable` para no saltar el layout al aparecer/desaparecer la scrollbar.
+- El criterio **visual** (valores concretos, hairlines de corte del scroll, checklist de aceptación) vive en `docs/design.md` → «Overflow de modales y bloqueo del fondo»; no se repite acá.
+
 ## Autenticación (Auth.js / NextAuth v5)
 
 NextAuth **orquesta el login** en el front pero **no emite un token de identidad propio**: el JWT que importa lo emite NestJS (ver `docs/architecture.md`). NextAuth solo lo persiste y lo expone para reenviarlo al backend.

@@ -14,6 +14,7 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useCategories } from "@/hooks/use-categories";
+import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { SCOPE_LABELS, type CategoryScope, type Category } from "@/types/category";
 
 interface ReactivationPromptProps {
@@ -31,6 +32,8 @@ export function ReactivationPrompt({ reactivable, onCancel, onReactivated }: Rea
   const [mounted, setMounted] = useState(false);
   const { toast } = useToast();
   const { reactivateCategory, isReactivating } = useCategories();
+
+  useBodyScrollLock();
 
   useEffect(() => {
     setMounted(true);

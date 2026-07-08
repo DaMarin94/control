@@ -311,6 +311,33 @@ describe("TransactionForm — validación", () => {
     });
   });
 
+  it("muestra 'El monto es demasiado grande' y bloquea el submit cuando supera el tope del backend (2147483647)", async () => {
+    const user = userEvent.setup();
+    renderForm({});
+
+    const amountInput = screen.getByLabelText(/monto/i);
+    await user.clear(amountInput);
+    // 99.999.999.999 pesos → 9999999999900 centavos, supera 2147483647
+    await user.type(amountInput, "99999999999");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/el monto es demasiado grande/i)).toBeInTheDocument();
+    });
+    expect(mockCreateTransaction).not.toHaveBeenCalled();
+  });
+
+  it("sanitiza el input de Monto a medida que se tipea: descarta letras/símbolos y un segundo separador", async () => {
+    const user = userEvent.setup();
+    renderForm({});
+
+    const amountInput = screen.getByLabelText(/monto/i) as HTMLInputElement;
+    await user.clear(amountInput);
+    await user.type(amountInput, "abc-12.34e5,99xyz");
+
+    expect(amountInput.value).toBe("12.34599");
+  });
+
   it("muestra error si no se seleccionó categoría", async () => {
     const user = userEvent.setup();
     renderForm({});

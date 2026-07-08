@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { usePaymentMethods } from "@/hooks/use-payment-methods";
+import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { PaymentMethodIcon } from "@/components/ui/payment-method-icon";
 import {
   PAYMENT_METHOD_TYPE_LABELS,
@@ -32,6 +33,8 @@ export function ReactivationPrompt({ reactivable, onCancel, onReactivated }: Rea
   const [mounted, setMounted] = useState(false);
   const { toast } = useToast();
   const { reactivatePaymentMethod, isReactivating } = usePaymentMethods();
+
+  useBodyScrollLock();
 
   useEffect(() => {
     setMounted(true);

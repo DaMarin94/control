@@ -43,6 +43,8 @@ import {
   localToUtcIso,
   utcToLocalDate,
   utcToLocalTime,
+  sanitizeAmountInput,
+  MAX_AMOUNT_CENTS,
 } from "@/lib/format";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -57,7 +59,14 @@ const transactionSchema = z.object({
     .min(1, "El monto es requerido")
     .refine((val) => parseCurrencyInput(val) !== null, {
       message: "Ingresá un monto mayor a 0",
-    }),
+    })
+    .refine(
+      (val) => {
+        const cents = parseCurrencyInput(val);
+        return cents === null || cents <= MAX_AMOUNT_CENTS;
+      },
+      { message: "El monto es demasiado grande" },
+    ),
   currency: z.enum(["ARS", "USD", "EUR", "BRL"]),
   /**
    * Input de cotización como string (puede tener decimales, locale es-AR).
@@ -218,6 +227,10 @@ export function TransactionForm({ transaction, onClose, editingSkipped }: Transa
     resolver: zodResolver(transactionSchema),
     defaultValues,
   });
+
+  // Registro del campo Monto — se reusa en el onChange que sanitiza la entrada
+  // (#4: solo dígitos + un único separador decimal) antes de que RHF la capture.
+  const amountFieldRegister = register("amountInput");
 
   const selectedType = watch("type");
   const selectedCategoryId = watch("categoryId");
@@ -437,8 +450,8 @@ export function TransactionForm({ transaction, onClose, editingSkipped }: Transa
 
   return (
     <>
-      <form onSubmit={handleSubmit(onSubmit)} noValidate>
-        <div className="px-[22px] pb-[22px] space-y-[14px]">
+      <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col flex-1 min-h-0">
+        <div className="flex-1 min-h-0 overflow-y-auto px-[22px] pb-[22px] space-y-[14px]">
           {/* ── Toggle Gasto/Ingreso (.gi) ── */}
           <Controller
             name="type"
@@ -501,7 +514,11 @@ export function TransactionForm({ transaction, onClose, editingSkipped }: Transa
                 inputMode="decimal"
                 placeholder="0,00"
                 className="flex-1 border-none outline-none bg-transparent mono text-[20px] font-semibold tracking-[-0.01em] text-ink placeholder:text-faint"
-                {...register("amountInput")}
+                {...amountFieldRegister}
+                onChange={(e) => {
+                  e.target.value = sanitizeAmountInput(e.target.value);
+                  void amountFieldRegister.onChange(e);
+                }}
               />
             </div>
             {errors.amountInput && (
@@ -624,8 +641,8 @@ export function TransactionForm({ transaction, onClose, editingSkipped }: Transa
           />
         </div>
 
-        {/* ── Footer ── */}
-        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2">
+        {/* ── Footer (pineado — hermano del cuerpo scrolleable, no hijo) ── */}
+        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2 shrink-0">
           <div className="flex gap-3">
             <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
               Cancelar

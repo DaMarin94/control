@@ -72,6 +72,11 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  // referenceRate — necesario porque MovementsRepository.loadAllPivotRates
+  // (invocado desde GET /movements?month=...) llama a referenceRate.findMany
+  referenceRate: {
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   $queryRaw: jest.fn(),
   $connect: jest.fn(),
   $disconnect: jest.fn(),
@@ -278,6 +283,15 @@ describe('Recurring (e2e)', () => {
       expect(res.body.success).toBe(false);
     });
 
+    it('400 si amountCents excede el máximo de int4 (overflow de Postgres)', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/recurring')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...VALID_CREATE_BODY, amountCents: 999999999999999 })
+        .expect(400);
+      expect(res.body.success).toBe(false);
+    });
+
     it('400 si falta startMonth', async () => {
       const { startMonth: _sm, ...body } = VALID_CREATE_BODY;
       const res = await request(app.getHttpServer())
@@ -459,6 +473,17 @@ describe('Recurring (e2e)', () => {
         .patch('/recurring/rec-e2e-001')
         .set('Authorization', `Bearer ${tokenA}`)
         .send({ amountCents: 0, currentMonth: '2026-06' })
+        .expect(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('400 si amountCents excede el máximo de int4 en PATCH (overflow de Postgres)', async () => {
+      const existing = makeDbRecurring();
+      mockPrisma.recurring.findUnique.mockResolvedValue(existing);
+      const res = await request(app.getHttpServer())
+        .patch('/recurring/rec-e2e-001')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ amountCents: 999999999999999, currentMonth: '2026-06' })
         .expect(400);
       expect(res.body.success).toBe(false);
     });
