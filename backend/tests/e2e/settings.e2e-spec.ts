@@ -248,7 +248,7 @@ describe('Settings (e2e)', () => {
       const res = await request(app.getHttpServer())
         .patch('/settings')
         .set('Authorization', `Bearer ${tokenA}`)
-        .send({ defaultCurrency: 'EUR' })
+        .send({ defaultCurrency: 'GBP' })
         .expect(400);
 
       expect(res.body.success).toBe(false);
