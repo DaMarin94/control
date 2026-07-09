@@ -36,7 +36,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, ArrowUpDown, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowUpDown, Check, ArrowRight, ArrowLeft } from "lucide-react";
 import { SectionSortButton } from "@/components/ui/section-sort-button";
 import {
   MonthJumpPanel,
@@ -554,6 +554,10 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
     router.push(`/mes?month=${nextMonth(month)}`);
   }
 
+  function goToCurrentMonth() {
+    router.push(`/mes?month=${getCurrentMonth()}`);
+  }
+
   // ── Handlers editar/eliminar ──────────────────────────────────────────────
 
   function handleEdit(movement: MovementItem) {
@@ -746,6 +750,40 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   const periodLabel = `${mesName} ${yearName}`;
   const statusLabel = isCurrentMonth ? "Mes en curso" : "Histórico";
 
+  // ── Link "Ir al mes en curso" — recentrado temporal (spec docs/design.md) ─
+  // Solo se renderiza cuando isCurrentMonth === false (render condicional por
+  // display, no visibility:hidden — evita un target de foco fantasma).
+  // Se reutiliza la misma referencia de JSX en el bloque desktop y en el
+  // bloque mobile (ambos siempre montados; el breakpoint activo se resuelve
+  // por CSS), igual que CurrencyChip.
+  // Dirección de la flecha: comparación lexicográfica de YYYY-MM alcanza.
+  // Mes visualizado en el pasado (< mes en curso) → ArrowRight, mes visualizado
+  // en el futuro (> mes en curso) → ArrowLeft. La flecha es SIEMPRE leading
+  // (primer hijo): solo cambia el sentido del glifo, nunca su posición.
+  const currentMonth = getCurrentMonth();
+  const isPastMonth = month < currentMonth;
+  const goToCurrentMonthButton = !isCurrentMonth ? (
+    <button
+      type="button"
+      onClick={goToCurrentMonth}
+      className={cn(
+        "inline-flex items-center gap-[5px] whitespace-nowrap cursor-pointer",
+        "text-[12.5px] font-medium text-muted",
+        "hover:text-ink-2 hover:underline hover:underline-offset-[2px]",
+        "transition-colors duration-[140ms]",
+        "rounded-[var(--r-chip)]",
+        "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:underline focus-visible:underline-offset-[2px]",
+      )}
+    >
+      {isPastMonth ? (
+        <ArrowRight size={13} aria-hidden="true" />
+      ) : (
+        <ArrowLeft size={13} aria-hidden="true" />
+      )}
+      Ir al mes en curso
+    </button>
+  ) : null;
+
   // ── Selector de salto mes/año (Ola 1, P4) ────────────────────────────────
 
   const monthJump = useMonthJump({
@@ -778,8 +816,10 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
               </span>
               <CurrencyChip currency={defaultCurrency} />
             </div>
-            {/* H1 envuelto en disparador — el eyebrow y sub-label quedan fuera */}
-            <div className="mt-0.5 mb-1">
+            {/* H1 envuelto en disparador — sin el link "Ir al mes en curso"
+                (spec §4: reversión de la iteración anterior, vuelve a su
+                estado pre-feature, solo el trigger). */}
+            <div className="mt-0.5 mb-1 flex items-center">
               <MonthJumpTriggerDesktop
                 periodLabel={periodLabel}
                 isOpen={monthJump.isOpen}
@@ -787,10 +827,22 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                 triggerRef={monthJump.triggerRefDesktop}
               />
             </div>
-            {/* Sub-label estado — fuera del disparador */}
-            <span className="text-[12.5px] font-medium text-muted">
-              {statusLabel}
-            </span>
+            {/* Sub-label estado + link "Ir al mes en curso" (spec §4/§5).
+                Sin min-h: la fila mide lo mismo con y sin link (misma caja
+                tipográfica de 12.5px en ambos estados — cero-impacto real). */}
+            <div className="flex items-center gap-[8px]">
+              <span className="text-[12.5px] font-medium text-muted">
+                {statusLabel}
+              </span>
+              {!isCurrentMonth && (
+                <>
+                  <span className="text-[12.5px] text-faint" aria-hidden="true">
+                    ·
+                  </span>
+                  {goToCurrentMonthButton}
+                </>
+              )}
+            </div>
           </div>
 
           {/* Stepper compacto — mobile (≤940px) */}
@@ -833,6 +885,9 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
             </div>
             {/* Chip de moneda — accesible, a la derecha del pill */}
             <CurrencyChip currency={defaultCurrency} />
+            {/* Link "Ir al mes en curso" — fuera del pill aria-hidden, último
+                hijo de la fila (spec §4: estabilidad lateral del pill/chip). */}
+            {goToCurrentMonthButton}
           </div>
 
           {/* Acciones del header: "Ordenar secciones" / "Listo" + "+ Nuevo movimiento" */}

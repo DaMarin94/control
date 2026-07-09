@@ -1424,12 +1424,15 @@ La vista del mes muestra todos los movimientos del mes seleccionado (únicos, fi
 
 La navegación de meses es **ilimitada**: no hay rango de año (sin mínimo ni máximo de negocio), por lo que ningún control de navegación se deshabilita por tope. Además del avance secuencial ±1 mes, el rótulo de período actúa como **disparador de salto rápido**: abre un selector de dos ruedas (mes y año) para saltar a cualquier mes/año; al confirmar navega con el mismo mecanismo que el avance secuencial. El único feedback de validación del selector es el botón "Ir" deshabilitado hasta que el año tenga 4 dígitos. El disparador sigue accionable durante el modo orden de secciones (RF-VM-005). El detalle visual del selector vive en `docs/design.md`.
 
+Existe además un **acceso directo al mes en curso** disponible desde cualquier mes navegado. Se muestra **únicamente cuando el mes visualizado no es el mes en curso**; estando en el mes en curso no se renderiza. Lleva un indicador de dirección que se **deriva de la comparación entre el mes visualizado y el mes en curso**: apunta hacia adelante cuando el mes visualizado es anterior al actual y hacia atrás cuando es posterior, coincidiendo con el control de avance secuencial que llevaría al mes en curso. Es navegación pura del frontend: no cambia el modelo de datos ni ningún contrato. El detalle visual vive en `docs/design.md`.
+
 **Criterios de aceptación:**
 - [ ] Existen controles para avanzar al mes siguiente y retroceder al mes anterior.
 - [ ] El rótulo de período abre un selector de dos ruedas que permite saltar a cualquier mes/año; al confirmar, la lista y los totales reflejan el mes elegido.
 - [ ] La navegación no tiene tope de año: ningún control se deshabilita por rango. El botón "Ir" del selector se deshabilita solo mientras el año no tenga 4 dígitos.
 - [ ] La lista y los totales se actualizan para reflejar el mes seleccionado.
 - [ ] Se muestra el nombre del mes y el año del mes activo.
+- [ ] Existe un acceso directo al mes en curso que se muestra únicamente cuando el mes visualizado no es el mes en curso; su indicador de dirección se deriva de comparar el mes visualizado con el mes en curso.
 
 ---
 

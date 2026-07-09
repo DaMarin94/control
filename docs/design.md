@@ -2075,6 +2075,105 @@ Superficie flotante portaleada a body, anclada al disparador. **No** es un calen
 
 > Reutiliza: el rótulo de período (H1 ≥941px / centro del `.stepper` ≤940px) como superficie, sin cambiar su tipografía; el **focus ring `--accent-soft`** del DS; el patrón de **input del form** (`border-line-strong`, `bg-panel`, mono tabular para cifras); el botón **primario índigo** (con su estado **disabled** mientras el año está incompleto) y el **ghost**. Aporta: el **patrón de dos ruedas mes/año cohesivas** (cada rueda = UNA pieza: contenedor único con borde `--line-strong` envolvente + divisores internos `--hair`, zonas ▲/valor/▼ sin fondo propio en reposo; año en mono tabular, mes como nombre en UI), su **affordance `ChevronsUpDown`** en el rótulo de período, y la aplicación de la **regla dura P6** (no cierra por click fuera; cierre por Ir / Cancelar / Esc / re-clic). **Ruedas independientes:** el Mes hace wrap circular sin tocar el año; el año solo cambia con su propia rueda (sin odómetro). **Sin rango de año** (navegación de `/mes` ilimitada): no hay estado de error ni steppers disabled por límite; el único feedback de "todavía no" es "Ir" disabled mientras el año no tenga 4 dígitos.
 
+### Botón "Mes en curso" — recentrado temporal en el header de `/mes`
+
+> **Reescrita 2 (rechazo del usuario a la versión link/13px-600 en la fila del título).** Historial: (1) versión chip/ghost con `LocateFixed`, descartada; (2) versión link de texto **13px/600 en la fila del título** con flecha que saltaba de lado (leading/trailing), también descartada. Lo que sigue reemplaza a **ambas**. Cambios de fondo cerrados con el usuario en esta iteración:
+> - **(a) Más disimulado.** No debe leerse como botón de acción. Baja a **la misma tipografía que `Histórico`** (12.5px/500 `--muted`) — es un link de texto tenue, no una acción destacada.
+> - **(b) Vuelve a la fila del `statusLabel`, junto a `Histórico`.** Ubicación **confirmada explícitamente**. Se lee `Histórico · → Ir al mes en curso` = **estado + su remedio** en la misma línea.
+> - **(c) La flecha ocupa SIEMPRE la misma posición (leading, a la izquierda del texto).** Lo único que cambia es **hacia dónde apunta**. Si saltara de lado, el texto se correría — inaceptable.
+> - **(d) El label mantiene el verbo:** "Ir al mes en curso".
+
+Acción de **recentrado**: cuando el usuario navega **cualquier mes que no es el mes en curso**, un link lo devuelve al mes en curso de un toque, sin contar flechas ‹ › ni adivinar cuántos saltos faltan. Solo UI nueva; al activarse reusa la navegación de período existente (RF-VM-004, navega a `?month=<mes en curso>`).
+
+#### 1. Visibilidad y semántica
+
+- **Se muestra SOLO cuando `isCurrentMonth === false`.** En el mes en curso el link **no existe** (render condicional por `display`, no `visibility:hidden` — sin target de foco fantasma). No hay estado `disabled`: solo aparece cuando es accionable.
+- **Label visible: "Ir al mes en curso"** (literal, con el verbo adentro). El verbo va en el **texto visible**, no en un `aria-label`. Nada de "corriente", "actual", ni "Hoy".
+- **Convive, no reemplaza.** Las flechas ‹ › / pill stepper siguen siendo "anterior/siguiente"; el selector de salto sigue siendo el atajo de salto largo. Este link es el atajo de **un solo destino fijo** (el mes en curso), visible solo cuando estás fuera de él.
+- Semánticamente es un **`<button type="button">`** (dispara una acción de cliente, no navega a una URL propia), **estilizado como link** de texto tenue.
+
+#### 2. Forma — link de texto tenue, espejando `Histórico`
+
+No es un chip: **sin borde, sin fondo, sin padding de botón, sin sombra, sin radio de superficie**. Es texto accionable inline, **calibrado para desaparecer en el ruido de la sublínea** hasta que el ojo lo busca — deliberadamente disimulado (rechazo explícito a que "lea como botón").
+
+- **Tipografía: espeja `Histórico` exactamente → `text-[12.5px] font-medium text-muted`** (12.5px / peso 500 / `--muted`). Misma caja tipográfica que el `statusLabel` contiguo: el link **no** introduce una escala nueva ni un peso mayor en esa fila. Un paso por debajo del H1 (32px/bold) y sin competir con `Histórico`: son dos piezas de la misma meta.
+- **Color reposo: `--muted`** (igual que `Histórico`). No `--ink-2` (era el reposo de la versión-botón descartada, demasiado firme). No `--faint` (se perdería del todo). `--muted` es el tono de la sublínea: el link vive **al mismo nivel** que el estado que remedia.
+- **Sin subrayado en reposo.** La affordance en reposo la dan la flecha direccional + el verbo del label; el subrayado es **feedback de interacción** (ver §6). En reposo el conjunto lee como continuación tenue de la meta.
+- **Nunca** acento índigo (es solo marca), **nunca** verde/rojo (reservados a ingreso/gasto). Utilidad de navegación neutra.
+- **Layout interno:** `inline-flex items-center gap-[5px] whitespace-nowrap`. `gap-[5px]` texto↔flecha (más ceñido que la versión previa de 6px: acompaña la baja de escala a 12.5px).
+
+#### 3. Flecha dinámica direccional — posición fija, sentido variable
+
+Lleva **una** flecha `lucide-react`, **siempre en posición leading (a la izquierda del texto)**. Lo único que cambia entre meses es **hacia dónde apunta**. Esto **deroga la vieja restricción de "ícono no direccional"** — y esa derogación es deliberada, no un olvido: **que nadie la "corrija" de vuelta a un ícono neutro.**
+
+- **Por qué una flecha dinámica, y no un ícono neutro:** una flecha *fija* (siempre →, o siempre ←) **mentiría la mitad de las veces** — apuntaría "adelante" cuando el destino está atrás. Por eso la spec vieja prohibía toda flecha y pedía un glifo neutro (`LocateFixed`, etc.). Una flecha *dinámica*, que apunta al lado real del mes en curso, **no miente nunca**: por eso ahora sí se permite, y es el **corazón del diseño**. El glifo neutro se descarta por mudo.
+- **Mes visualizado en el PASADO** (el mes en curso está *adelante*) → **`ArrowRight` (→)**. Lectura: `→ Ir al mes en curso`.
+- **Mes visualizado en el FUTURO** (el mes en curso está *atrás*) → **`ArrowLeft` (←)**. Lectura: `← Ir al mes en curso`.
+- **Posición SIEMPRE leading (izquierda del texto), en ambos casos.** Solo rota el sentido del glifo. El borde izquierdo del glifo y el borde izquierdo del texto **no se mueven** al cambiar de sentido (→ y ← ocupan la misma caja de 13px): **cero corrimiento horizontal** del label entre meses pasados y futuros.
+- **Refuerzo con la navegación:** el sentido de la flecha **coincide siempre** con el chevron (`‹` / `›`) que el usuario apretaría para llegar caminando mes a mes. Flecha y chevron se refuerzan.
+- **Descartados explícitamente:** `LocateFixed`, `Crosshair`, `Target`, `CalendarCheck` y toda la familia de íconos neutros/no-direccionales. También descartado el patrón **leading/trailing variable** de la iteración anterior (la flecha no cambia de lado).
+- **Tamaño: 13px**, `aria-hidden="true"`, hereda `currentColor` (sigue el color del texto en reposo/hover). 13px es levemente menor que los 14px previos, acorde a la baja de escala del texto a 12.5px; **no debe exceder la caja de línea del texto** (ver §5 — invariante de cero-shift vertical). Fallback: si a 13px el link superara la altura del span `Histórico`, bajar la flecha a **12px** (no subir la línea).
+- **Derivación del sentido:** la calcula el frontend comparando el mes visualizado (`month`, `YYYY-MM`) contra el mes en curso — visualizado `<` en curso ⇒ `ArrowRight`; visualizado `>` en curso ⇒ `ArrowLeft`. (Ya implementado como `isPastMonth = month < currentMonth`.)
+
+#### 4. Ubicación, separador y anti-empuje horizontal
+
+- **Desktop (≥941px): en la fila del `statusLabel`, como hermano posterior del span `Histórico`.** La fila es `flex items-center gap-[8px]` (baja de `gap-[10px]` para ceñir el grupo `estado · remedio`). Orden de fuente: `[span Histórico] · [link]`.
+- **Separador: `·` (middot) en `--faint`.** Se elige el middot — no un simple gap — porque agrupa las dos piezas como **"estado · su remedio"** (patrón de separador de meta ya vigente en el DS, p. ej. la sublínea del ítem de salto). El `·` va en `--faint` (más tenue que ambos textos `--muted`) para recederse a pura puntuación. **Solo se renderiza junto al link** (mes histórico): en mes-en-curso la fila muestra únicamente `Mes en curso`, sin `·` ni link.
+- **En mes-en-curso la fila es idéntica a hoy:** solo el span `Mes en curso` (12.5px/500 `--muted`). El subsistema del link es **aditivo**: no cambia esa fila cuando no aplica.
+- **Mobile (≤940px): fuera del pill `.stepper`**, que está envuelto en `aria-hidden="true"` (meterlo adentro lo volvería inaccesible — el `statusLabel` mobile vive *dentro* del pill, así que el link **no** puede ir junto a él). Se ubica como **último hijo** de la fila flex del header mobile, **después** del pill y del `CurrencyChip`. Al estar fuera del `aria-hidden`, es **plenamente accesible y focalizable** en su orden natural. En teléfonos angostos `flex-wrap` lo baja a su propia línea bajo el pill.
+- **Anti-empuje horizontal:**
+  - **`Histórico`/`Mes en curso` inmunes:** el span de estado está anclado a la izquierda de la fila; `·` y link son **posteriores** y crecen **hacia la derecha, sobre espacio vacío**. Nada a la izquierda del link se desplaza. El flip de sentido de la flecha **no mueve** el borde izquierdo del link (→ y ← misma caja).
+  - **`CurrencyChip` inmune:** en desktop vive en la fila del *eyebrow* (otra fila, arriba); en mobile va **antes** del link en orden de fuente. En ninguno de los dos casos lo toca la aparición del link.
+  - **Cluster de acciones inmune (desktop):** el header exterior es `justify-between`, acciones ancladas al **borde derecho**; ensanchar el cluster izquierdo **no las mueve** mientras no haya `flex-wrap`. El link es corto (`whitespace-nowrap`, ~150px) y a ≥941px sobra ancho: **no se dispara wrap**. (Ítem medible en §8.)
+- **Reversión de la iteración anterior (instrucción para `control-frontend`):** el link **sale de la fila del título**. La fila del título (`MonthJumpTriggerDesktop`) vuelve a su estado pre-feature (solo el trigger; su `gap-[12px]` extra pierde sentido con un único hijo). El `<button>` del link se mueve a la fila del `statusLabel`, después del span y del `·`.
+
+#### 5. Anti-layout-shift vertical y cero-impacto real (baja definitiva del `min-h-[34px]`)
+
+- **El `min-h-[34px]` NO se re-introduce en la fila del `statusLabel`.** La versión chip necesitaba esa reserva porque medía ~36.84px y hubiera empujado el layout al aparecer. Con un link que **es tipográficamente idéntico a `Histórico`** (12.5px/500, misma caja de línea), la fila **no crece** por alojarlo → la reserva es innecesaria. Esto es **cero-impacto real** (la fila conserva su alto original), no el parche de reservar altura. La fila queda `flex items-center gap-[8px]` **sin** `min-h`.
+- **Invariante de alto verificable (números, no "a ojo"):** el alto de la fila lo fija la **caja de línea del texto de 12.5px**, presente en **ambos** estados (`Mes en curso` sola, o `Histórico · [link]`). La flecha de 13px se centra **dentro** de esa caja de línea (13px < caja de línea de un texto de 12.5px) y **no** la excede. Por lo tanto el alto de la fila es **idéntico** con y sin link: `getBoundingClientRect().height` de la fila del `statusLabel` debe dar **el mismo valor** (delta **0px**) alternando entre un mes histórico (con link) y el mes en curso (sin link). Si el medido difiere en algo distinto de 0px, la causa es la flecha excediendo la caja → aplicar el fallback de 12px de §3.
+- **Todo lo que va debajo conserva su `y`:** al no crecer la fila del `statusLabel`, los totales y el label "GASTOS" **conservan su coordenada `y`** (0px de desplazamiento) entre mes-en-curso e histórico.
+- **Fila del título — sin cambios:** su alto lo fija el H1 (32px, `leading-none`); ya no aloja el link, así que es estable por construcción.
+- **Flechas ‹ › inmunes por estructura:** en desktop viven en las columnas laterales del grid de `PeriodNav`; en mobile dentro del pill, y el link es hermano **posterior** al pill.
+- **Mobile — reflow vertical aceptado (trade-off explícito):** por ser el último elemento, su ausencia/presencia nunca mueve lateralmente pill ni chip; en teléfonos angostos aparece en segunda línea y empuja hacia abajo el contenido siguiente. Se acepta ese reflow (viaja con la entrada de vista del cambio de mes) en vez de reservar una línea vacía permanente.
+
+#### 6. Estados
+
+- **Reposo:** texto + flecha `--muted` (`text-muted`), **sin subrayado**, **`cursor: pointer`** (ver §7 — gotcha de Tailwind v4).
+- **Hover:** texto + flecha suben a **`--ink-2`** (un paso más firme que `--muted`) **+ subrayado**: `underline`, `underline-offset-[2px]` (offset menor que los 3px previos, acorde a los 12.5px), grosor por defecto, línea = `currentColor`. Transición de **color a 0.14s** (`duration-[140ms]`, par con el chevron del trigger); el subrayado aparece de inmediato (no se anima `text-decoration`). El salto de tono `--muted → --ink-2` es el feedback que confirma "esto es accionable".
+- **Active (pressed):** mantiene `--ink-2` + subrayado (mismo tratamiento que hover; es un link, no cambia de superficie).
+- **Focus (teclado):** `focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]` + `rounded-[var(--r-chip)]` **+ subrayado visible**, sin outline nativo — mismo anillo y radio que `MonthJumpTriggerDesktop`. El radio `--r-chip` (7px) envuelve el texto de forma prolija.
+- **Disabled:** **no aplica** (§1 — el link solo existe cuando es accionable).
+
+#### 7. Movimiento, `cursor: pointer` y accesibilidad
+
+- **`cursor: pointer` OBLIGATORIO y EXPLÍCITO.** **Gotcha de Tailwind v4:** su preflight asigna `cursor: default` a **todos** los `<button>`. Como este control es un `<button>` estilizado como link, **debe** llevar la clase `cursor-pointer` explícita o el puntero quedará en flecha (contradiciendo su affordance de link). Es el mismo motivo por el que `MonthJumpTriggerDesktop` la lleva explícita (`month-jump-popover.tsx:539`: `inline-flex items-center gap-[8px] cursor-pointer`). **La implementación actual del link NO la tiene — hay que agregarla.**
+- **Aparición:** sin animación bespoke — aparece con el re-render de la vista al cambiar de mes (entrada 0.32s ya existente). **Sin animación posicional.** Solo transición de color en hover/focus (0.14s).
+- **`prefers-reduced-motion`:** no hay movimiento de entrada propio que desactivar; el único movimiento es la transición de color de 140ms en hover/focus (dentro del "movimiento sobrio" del DS, no una animación posicional). No requiere tratamiento especial.
+- **A11y — el verbo ya está en el texto visible:** el nombre accesible es **"Ir al mes en curso"** tomado del contenido de texto. **No hace falta `aria-label` extra** (sería redundante). La flecha es `aria-hidden="true"`.
+- **Contraste:** `--muted` sobre el fondo del header cumple el contraste mínimo para texto (es el mismo tono con que ya se muestra `Histórico`). El subrayado en hover/focus es un portador **no-dependiente-del-color** de la interacción.
+- **Cambio de sentido de la flecha — no se anuncia:** el nombre accesible es **idéntico** apunte → o ← y el destino ("mes en curso") es inequívoco. **No** se usa `aria-live` ni región de anuncio: el flip es refuerzo puramente visual para usuarios videntes.
+- **Orden de foco:** en desktop, tras el disparador de salto (H1) → en la fila del `statusLabel` → antes del cluster de acciones de la derecha. En mobile, en la fila del header tras el pill (que es `aria-hidden`) → focalizable en su orden natural.
+
+#### 8. Checklist de aceptación visual
+
+- [ ] Navegando un mes **distinto** al mes en curso, en la **fila del `statusLabel`** (bajo el H1) se lee `Histórico · → Ir al mes en curso` (o con `←`, según §3): span de estado + `·` + link de texto, **sin borde, sin fondo, sin sombra**.
+- [ ] Estando en el **mes en curso**, la fila muestra **solo** `Mes en curso`: **no** existe `·`, **no** existe link (ni visible, ni placeholder, ni target de foco).
+- [ ] **Tipografía del link idéntica a `Histórico`:** `12.5px` / peso `500` / `--muted` en reposo, **sin subrayado**. (Medible: `font-size`, `font-weight` y `color` computados iguales a los del span `Histórico` contiguo.)
+- [ ] **Flecha en mes PASADO:** navegando un mes **anterior** al mes en curso, la flecha es **`ArrowRight` (→)**, en posición **leading** (izquierda del texto).
+- [ ] **Flecha en mes FUTURO:** navegando un mes **posterior** al mes en curso, la flecha es **`ArrowLeft` (←)**, en posición **leading** (izquierda del texto).
+- [ ] La flecha está **siempre a la izquierda** del texto: alternando entre un mes pasado y uno futuro, el borde izquierdo del texto "Ir al mes en curso" **no se mueve** (delta **0px** en `getBoundingClientRect().left` del texto); solo cambia el sentido del glifo.
+- [ ] La flecha **13px** hereda el color del texto (`--muted` reposo / `--ink-2` hover); `gap` texto↔flecha **5px**; separador `·` en `--faint`; `gap` de la fila **8px**.
+- [ ] **`cursor: pointer`** al pasar el mouse por encima del link (NO la flecha default de `<button>`).
+- [ ] **Hover:** texto+flecha suben a **`--ink-2` con subrayado** (`underline-offset` 2px); transición de color **140ms**. **Focus con teclado:** anillo `--accent-soft` 3px con radio `--r-chip` + subrayado.
+- [ ] El link **no** usa índigo, **ni** verde, **ni** rojo, en ningún estado.
+- [ ] **La fila del `statusLabel` mide lo MISMO con y sin link:** `getBoundingClientRect().height` de esa fila da **el mismo valor (delta 0px)** entre un mes histórico (con link) y el mes en curso (sin link). La fila **no** lleva `min-h-[34px]` ni ninguna reserva de alto.
+- [ ] **Ningún elemento del header se desplaza** al aparecer/desaparecer el link: H1 + `ChevronsUpDown`, `CurrencyChip`, flechas ‹ ›, totales y label "GASTOS" **conservan su `x` e `y`** (0px). Verificable con `getBoundingClientRect` alternando mes histórico ↔ mes en curso.
+- [ ] En **desktop** el cluster de acciones ("Ordenar secciones" / "+ Nuevo movimiento") **no se reposiciona** ni dispara `flex-wrap` a 941px al aparecer el link.
+- [ ] En **desktop** el link **ya no está en la fila del título** (salió de junto al `ChevronsUpDown`) y **está en la fila del `statusLabel`**, después del `·`.
+- [ ] En **mobile** el link está **fuera del pill** (`aria-hidden`) y es **clickeable/focalizable**; pill y chip **no** se mueven lateralmente.
+- [ ] Con `prefers-reduced-motion` el link no tiene animación de entrada; solo la transición de color de hover/focus (no posicional).
+- [ ] Orden de foco por teclado: disparador de salto (H1) → link "Ir al mes en curso" → acciones de la derecha.
+
 ### Skeletons — sistema unificado de estados de carga
 
 Sistema **único y reutilizable** para todos los estados de carga del frontend. Hoy los skeletons son **ad-hoc e inconsistentes** (cada pantalla arma el suyo con `animate-pulse rounded-… bg-panel-3` inline); esta sección define **un solo lenguaje** y un conjunto de **primitivas** que **todos** los procesos de carga —presentes y futuros— deben usar. Un skeleton no es un spinner: es un **fantasma del contenido real** que reserva el layout para que, al llegar el dato, no haya salto.

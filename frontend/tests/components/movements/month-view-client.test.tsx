@@ -519,6 +519,78 @@ describe("MonthViewClient", () => {
     });
   });
 
+  // ── Link "Ir al mes en curso" — recentrado temporal (docs/design.md) ───────
+  // getCurrentMonth() está mockeado arriba para devolver siempre "2026-06".
+
+  describe("Link 'Ir al mes en curso'", () => {
+    beforeEach(() => {
+      mockLoaded(mockWithData);
+    });
+
+    it("no aparece en el DOM cuando se visualiza el mes en curso", () => {
+      renderMonthView("2026-06");
+      expect(
+        screen.queryByRole("button", { name: /ir al mes en curso/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("en un mes pasado, la flecha es ArrowRight y va leading (primer hijo)", () => {
+      renderMonthView("2026-05");
+      // Puede haber una instancia en el bloque desktop y otra en el mobile
+      // (ambos siempre montados; el breakpoint activo se resuelve por CSS —
+      // mismo patrón que el CurrencyChip de este archivo).
+      const buttons = screen.getAllByRole("button", { name: /ir al mes en curso/i });
+      expect(buttons.length).toBeGreaterThanOrEqual(1);
+      buttons.forEach((button) => {
+        const svg = button.querySelector("svg");
+        expect(svg).toBeTruthy();
+        expect(svg?.classList.toString()).toContain("lucide-arrow-right");
+        // La flecha es SIEMPRE leading (primer hijo), en pasado y en futuro.
+        expect(button.firstElementChild?.tagName.toLowerCase()).toBe("svg");
+        expect(button.textContent?.trim()).toBe("Ir al mes en curso");
+      });
+    });
+
+    it("en un mes futuro, la flecha es ArrowLeft y va leading (primer hijo)", () => {
+      renderMonthView("2026-07");
+      const buttons = screen.getAllByRole("button", { name: /ir al mes en curso/i });
+      expect(buttons.length).toBeGreaterThanOrEqual(1);
+      buttons.forEach((button) => {
+        const svg = button.querySelector("svg");
+        expect(svg).toBeTruthy();
+        expect(svg?.classList.toString()).toContain("lucide-arrow-left");
+        // Misma posición leading que en el mes pasado — el borde izquierdo
+        // del texto no se corre al cambiar de sentido.
+        expect(button.firstElementChild?.tagName.toLowerCase()).toBe("svg");
+        expect(button.textContent?.trim()).toBe("Ir al mes en curso");
+      });
+    });
+
+    it("tiene cursor-pointer explícito (gotcha: Tailwind v4 preflight pone cursor:default en <button>)", () => {
+      renderMonthView("2026-05");
+      const buttons = screen.getAllByRole("button", { name: /ir al mes en curso/i });
+      buttons.forEach((button) => {
+        expect(button.className).toContain("cursor-pointer");
+      });
+    });
+
+    it("al clickearlo navega al mes en curso (/mes?month=2026-06)", () => {
+      renderMonthView("2026-05");
+      const [button] = screen.getAllByRole("button", { name: /ir al mes en curso/i });
+      fireEvent.click(button);
+      expect(mockPush).toHaveBeenCalledWith("/mes?month=2026-06");
+    });
+
+    it("el nombre accesible es 'Ir al mes en curso' (texto visible, sin aria-label)", () => {
+      renderMonthView("2026-05");
+      const buttons = screen.getAllByRole("button", { name: /ir al mes en curso/i });
+      buttons.forEach((button) => {
+        expect(button).toHaveAccessibleName("Ir al mes en curso");
+        expect(button).not.toHaveAttribute("aria-label");
+      });
+    });
+  });
+
   // ── Totales (RF-VM-002) ───────────────────────────────────────────────────
 
   describe("Totales del mes", () => {
