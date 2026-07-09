@@ -2,16 +2,19 @@
  * Tests del modal de creación y edición de métodos de pago.
  * Verifica: validación (nombre, tipo obligatorio sin preselección), flujo de creación
  * exitosa, flujo 409 activo, flujo 409 reactivable (dispara prompt), edición exitosa,
- * edición con colisión, campos condicionales por tipo, icon-picker.
+ * edición con colisión, campos condicionales por tipo, icon-picker, y la sección
+ * "Predeterminado para" (RF-PM-007 — la edición del default vive acá, ver
+ * docs/design.md §"Predeterminado por estructura — configuración en el modal…").
  * Espejo de tests/app/categorias/category-form-modal.test.tsx.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { PaymentMethodFormModal } from "@/app/(app)/metodos-pago/payment-method-form-modal";
 import { ToastProvider } from "@/components/ui/toast";
 import type { PaymentMethod } from "@/types/payment-method";
+import type { UserPreferences } from "@/types/auth";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -19,9 +22,15 @@ vi.mock("@/hooks/use-payment-methods", () => ({
   usePaymentMethods: vi.fn(),
 }));
 
+vi.mock("@/hooks/use-preferences", () => ({
+  usePreferences: vi.fn(),
+}));
+
 import { usePaymentMethods } from "@/hooks/use-payment-methods";
+import { usePreferences } from "@/hooks/use-preferences";
 
 const mockUsePaymentMethods = vi.mocked(usePaymentMethods);
+const mockUsePreferences = vi.mocked(usePreferences);
 
 const mockCreditMethod: PaymentMethod = {
   id: "pm-1",
@@ -37,6 +46,20 @@ const mockCreditMethod: PaymentMethod = {
   movementCount: 3,
 };
 
+const mockCashMethod: PaymentMethod = {
+  id: "pm-2",
+  userId: "user-1",
+  name: "Efectivo",
+  type: "CASH",
+  icon: "cash",
+  closingDay: null,
+  paymentDay: null,
+  deletedAt: null,
+  createdAt: "2024-01-01T00:00:00Z",
+  updatedAt: "2024-01-01T00:00:00Z",
+  movementCount: 1,
+};
+
 function renderModal(props: {
   paymentMethod: PaymentMethod | null;
   onClose?: () => void;
@@ -49,6 +72,20 @@ function renderModal(props: {
   );
 }
 
+function mockPreferences(
+  preferences: UserPreferences,
+  setPreferences = vi.fn().mockResolvedValue({ success: true }),
+) {
+  mockUsePreferences.mockReturnValue({
+    preferences,
+    setPreferences,
+    isSaving: false,
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe("PaymentMethodFormModal", () => {
@@ -59,7 +96,7 @@ describe("PaymentMethodFormModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUsePaymentMethods.mockReturnValue({
-      paymentMethods: [],
+      paymentMethods: [mockCreditMethod, mockCashMethod],
       isLoading: false,
       isError: false,
       error: null,
@@ -72,6 +109,7 @@ describe("PaymentMethodFormModal", () => {
       isDeleting: false,
       isReactivating: false,
     });
+    mockPreferences({});
   });
 
   // ─── Validación del formulario ───────────────────────────────────────────────
@@ -435,6 +473,246 @@ describe("PaymentMethodFormModal", () => {
       expect(mockCreatePaymentMethod).toHaveBeenCalledWith(
         expect.objectContaining({ icon: "mastercard" }),
       );
+    });
+  });
+
+  // ─── Sección "Predeterminado para" (RF-PM-007) ───────────────────────────────
+
+  it("sección 'Predeterminado para': label, ayuda y 3 checkboxes destildados al crear", () => {
+    renderModal({ paymentMethod: null });
+
+    expect(screen.getByText("Predeterminado para")).toBeInTheDocument();
+    expect(
+      screen.getByText(/se prellena al crear un movimiento de esta estructura/i),
+    ).toBeInTheDocument();
+
+    expect(screen.getByRole("checkbox", { name: "Únicos" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    expect(screen.getByRole("checkbox", { name: "Fijos" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    expect(screen.getByRole("checkbox", { name: "Cuotas" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+  });
+
+  it("editar: arranca reflejando el estado actual (tildado sin nota en su propio slot; nota 'Hoy:' en el ajeno)", () => {
+    mockPreferences({
+      defaultPaymentMethods: { unico: mockCreditMethod.id, fijo: mockCashMethod.id, cuota: null },
+    });
+    renderModal({ paymentMethod: mockCreditMethod });
+
+    const unico = screen.getByRole("checkbox", { name: "Únicos" });
+    expect(unico).toHaveAttribute("aria-checked", "true");
+    expect(within(unico).queryByText(/^Hoy:/)).not.toBeInTheDocument();
+
+    const fijo = screen.getByRole("checkbox", { name: "Fijos" });
+    expect(fijo).toHaveAttribute("aria-checked", "false");
+    expect(within(fijo).getByText(`Hoy: ${mockCashMethod.name}`)).toBeInTheDocument();
+
+    const cuota = screen.getByRole("checkbox", { name: "Cuotas" });
+    expect(cuota).toHaveAttribute("aria-checked", "false");
+    expect(within(cuota).queryByText(/^Hoy:/)).not.toBeInTheDocument();
+  });
+
+  it("tildar un slot tomado por otro método hace desaparecer la nota 'Hoy:' en esta sesión (antes de guardar)", async () => {
+    const user = userEvent.setup();
+    mockPreferences({
+      defaultPaymentMethods: { unico: null, fijo: mockCashMethod.id, cuota: null },
+    });
+    renderModal({ paymentMethod: mockCreditMethod });
+
+    const fijo = screen.getByRole("checkbox", { name: "Fijos" });
+    expect(within(fijo).getByText(`Hoy: ${mockCashMethod.name}`)).toBeInTheDocument();
+
+    await user.click(fijo);
+
+    expect(fijo).toHaveAttribute("aria-checked", "true");
+    expect(within(fijo).queryByText(/^Hoy:/)).not.toBeInTheDocument();
+  });
+
+  it("editar: tildar un slot tomado por otro método y guardar escribe el blob con exclusividad", async () => {
+    const user = userEvent.setup();
+    const setPreferences = vi.fn().mockResolvedValue({ success: true });
+    mockPreferences(
+      { defaultPaymentMethods: { unico: mockCreditMethod.id, fijo: mockCashMethod.id, cuota: null } },
+      setPreferences,
+    );
+    mockUpdatePaymentMethod.mockResolvedValue({ success: true, paymentMethod: mockCreditMethod });
+
+    renderModal({ paymentMethod: mockCreditMethod });
+
+    await user.click(screen.getByRole("checkbox", { name: "Fijos" }));
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(setPreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultPaymentMethods: {
+            unico: mockCreditMethod.id,
+            fijo: mockCreditMethod.id,
+            cuota: null,
+          },
+        }),
+      );
+    });
+  });
+
+  it("editar: destildar el propio slot lo libera (null) al guardar", async () => {
+    const user = userEvent.setup();
+    const setPreferences = vi.fn().mockResolvedValue({ success: true });
+    mockPreferences(
+      { defaultPaymentMethods: { unico: mockCreditMethod.id, fijo: null, cuota: null } },
+      setPreferences,
+    );
+    mockUpdatePaymentMethod.mockResolvedValue({ success: true, paymentMethod: mockCreditMethod });
+
+    renderModal({ paymentMethod: mockCreditMethod });
+
+    await user.click(screen.getByRole("checkbox", { name: "Únicos" }));
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(setPreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultPaymentMethods: { unico: null, fijo: null, cuota: null },
+        }),
+      );
+    });
+  });
+
+  it("editar: sin tocar la sección de default, guardar NO reescribe el blob de preferencias", async () => {
+    const user = userEvent.setup();
+    const setPreferences = vi.fn().mockResolvedValue({ success: true });
+    mockPreferences(
+      { defaultPaymentMethods: { unico: mockCreditMethod.id, fijo: null, cuota: null } },
+      setPreferences,
+    );
+    mockUpdatePaymentMethod.mockResolvedValue({ success: true, paymentMethod: mockCreditMethod });
+
+    renderModal({ paymentMethod: mockCreditMethod });
+
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(mockUpdatePaymentMethod).toHaveBeenCalled();
+    });
+    expect(setPreferences).not.toHaveBeenCalled();
+  });
+
+  it("crear: tildar 'Únicos' y crear el método asigna el default DESPUÉS de crear, con el id recién devuelto", async () => {
+    const user = userEvent.setup();
+    const setPreferences = vi.fn().mockResolvedValue({ success: true });
+    mockPreferences(
+      { defaultPaymentMethods: { unico: null, fijo: null, cuota: null } },
+      setPreferences,
+    );
+    const created: PaymentMethod = { ...mockCreditMethod, id: "pm-new", name: "Nuevo Método" };
+    mockCreatePaymentMethod.mockResolvedValue({ success: true, paymentMethod: created });
+
+    renderModal({ paymentMethod: null });
+
+    await user.type(screen.getByLabelText(/nombre/i), "Nuevo Método");
+    await user.click(screen.getByRole("button", { name: /^crédito$/i }));
+    await user.click(screen.getByRole("checkbox", { name: "Únicos" }));
+    await user.click(screen.getByRole("button", { name: /crear método de pago/i }));
+
+    await waitFor(() => {
+      expect(mockCreatePaymentMethod).toHaveBeenCalled();
+      expect(setPreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultPaymentMethods: { unico: "pm-new", fijo: null, cuota: null },
+        }),
+      );
+    });
+  });
+
+  it("crear sin tildar ningún checkbox no reescribe el blob de defaults", async () => {
+    const user = userEvent.setup();
+    const setPreferences = vi.fn().mockResolvedValue({ success: true });
+    mockPreferences({}, setPreferences);
+    mockCreatePaymentMethod.mockResolvedValue({ success: true, paymentMethod: mockCreditMethod });
+
+    renderModal({ paymentMethod: null });
+
+    await user.type(screen.getByLabelText(/nombre/i), "Billetera");
+    await user.click(screen.getByRole("button", { name: /^efectivo$/i }));
+    await user.click(screen.getByRole("button", { name: /crear método de pago/i }));
+
+    await waitFor(() => {
+      expect(mockCreatePaymentMethod).toHaveBeenCalled();
+    });
+    expect(setPreferences).not.toHaveBeenCalled();
+  });
+
+  it("dispara un toast `info` de reasignación (además del `success` de CRUD) cuando el guardado desplaza a otro método", async () => {
+    const user = userEvent.setup();
+    const setPreferences = vi.fn().mockResolvedValue({ success: true });
+    mockPreferences(
+      { defaultPaymentMethods: { unico: mockCreditMethod.id, fijo: mockCashMethod.id, cuota: null } },
+      setPreferences,
+    );
+    mockUpdatePaymentMethod.mockResolvedValue({ success: true, paymentMethod: mockCreditMethod });
+
+    renderModal({ paymentMethod: mockCreditMethod });
+
+    await user.click(screen.getByRole("checkbox", { name: "Fijos" }));
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/método de pago actualizado correctamente/i)).toBeInTheDocument();
+      expect(
+        screen.getAllByText(`‘${mockCreditMethod.name}’ ahora es el predeterminado de Fijos.`)
+          .length,
+      ).toBeGreaterThan(0);
+    });
+  });
+
+  it("NO dispara toast info cuando el guardado asigna un slot que estaba libre (sin desplazamiento)", async () => {
+    const user = userEvent.setup();
+    const setPreferences = vi.fn().mockResolvedValue({ success: true });
+    mockPreferences(
+      { defaultPaymentMethods: { unico: mockCreditMethod.id, fijo: null, cuota: null } },
+      setPreferences,
+    );
+    mockUpdatePaymentMethod.mockResolvedValue({ success: true, paymentMethod: mockCreditMethod });
+
+    renderModal({ paymentMethod: mockCreditMethod });
+
+    await user.click(screen.getByRole("checkbox", { name: "Fijos" }));
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/método de pago actualizado correctamente/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/ahora es el predeterminado de/i)).not.toBeInTheDocument();
+  });
+
+  it("toast consolidado (uno solo, no uno por estructura) cuando desplaza más de una estructura del mismo método", async () => {
+    const user = userEvent.setup();
+    const setPreferences = vi.fn().mockResolvedValue({ success: true });
+    mockPreferences(
+      { defaultPaymentMethods: { unico: mockCashMethod.id, fijo: mockCashMethod.id, cuota: null } },
+      setPreferences,
+    );
+    mockUpdatePaymentMethod.mockResolvedValue({ success: true, paymentMethod: mockCreditMethod });
+
+    renderModal({ paymentMethod: mockCreditMethod });
+
+    await user.click(screen.getByRole("checkbox", { name: "Únicos" }));
+    await user.click(screen.getByRole("checkbox", { name: "Fijos" }));
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(
+          `‘${mockCreditMethod.name}’ ahora es el predeterminado de Únicos y Fijos.`,
+        ).length,
+      ).toBeGreaterThan(0);
     });
   });
 });

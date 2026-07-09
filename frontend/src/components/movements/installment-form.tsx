@@ -28,6 +28,7 @@ import { useInstallments } from "@/hooks/use-installments";
 import { useSettings } from "@/hooks/use-settings";
 import { useReferenceRate } from "@/hooks/use-reference-rate";
 import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
+import { useDefaultPaymentMethodPrefill } from "@/hooks/use-default-payment-method-prefill";
 import { useToast } from "@/hooks/use-toast";
 import { type Category, type CategoryScope } from "@/types/category";
 import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
@@ -209,6 +210,15 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
   const exchangeRateInput = watch("exchangeRateInput");
   const selectedPaymentMethodId = watch("paymentMethodId") ?? "";
   const selectedAutoDebit = watch("autoDebit") ?? false;
+
+  // Prefill del método de pago por defecto — solo al crear una cuota
+  // (RF-PM-007). Valor inicial editable; no pisa una selección manual del usuario.
+  useDefaultPaymentMethodPrefill({
+    slot: "cuota",
+    isEditing,
+    currentPaymentMethodId: selectedPaymentMethodId,
+    setPaymentMethodId: (id) => setValue("paymentMethodId", id),
+  });
 
   // Mes relevante para la cotización de referencia:
   // - Crear: mes de inicio seleccionado (o mes actual como fallback)

@@ -226,6 +226,24 @@ LimitConfig = {
 - **Back-compat / normalización.** Clave ausente o `limits: []` → sin límites (cero-impacto, cada superficie idéntica a sin la feature, RN-022). La normalización (entradas malformadas, `anchorKey` desconocida, `effect` fuera del subset de la key) es responsabilidad del front en la lectura del blob; un blob viejo o parcial nunca rompe la pantalla.
 - **El back NO valida ni conoce esta clave** (igual que `monthSections` / `reports` / `theme`): `PUT /preferences` guarda el blob tal cual (reemplazo total). La normalización y los defaults son del frontend consumidor.
 
+#### `defaultPaymentMethods` — método de pago predeterminado por estructura (RF-PM-007)
+
+Método de pago que **prellena** el selector del formulario al **crear** un movimiento, por estructura. Evaluación **100% client-side**; el backend **NO valida ni conoce** esta clave (blob opaco, igual que `theme` / `reports` / `limits`).
+
+```
+defaultPaymentMethods?: {
+  unico: string | null;   // id de método de pago activo, o null (ninguno)
+  fijo:  string | null;
+  cuota: string | null;
+}
+```
+
+- **Tres slots independientes** (`unico` / `fijo` / `cuota`), uno por estructura de movimiento. Cada uno guarda el `id` de un método de pago o `null`.
+- **Ausente ≡ los tres en `null`** (ningún default).
+- **Exclusividad por estructura:** cada slot apunta a lo sumo a un `id`; un mismo `id` puede repetirse en varios slots (un método default de varias estructuras). Escribir un slot reemplaza su valor previo (RF-PM-007).
+- **Validación en lectura (fallback):** un slot cuyo `id` no corresponde a un método de pago **activo** se trata como `null`. Es la fuente de verdad ante un método eliminado: el blob **no se limpia** al borrar el método (RF-PM-007).
+- **El back NO valida ni conoce esta clave:** `PUT /preferences` guarda el blob tal cual (reemplazo total). La normalización, el prefill (solo en creación, editable; no en edición ni en calculados) y los defaults son del frontend consumidor. Regla funcional en `requirements.md`, RF-PM-007.
+
 #### `monthCategoryFilter` — filtro de categorías de la Vista del mes (RF-VM-006) — **DEPRECADA**
 
 Deprecada. No se lee ni se escribe desde `/mes`; se conserva en el tipo para no romper blobs viejos y **no se migra**. Detalle en §Filtro de categorías → `monthCategoryFilter` (más abajo).

@@ -31,6 +31,19 @@ vi.mock("@/hooks/use-installments", () => ({
   useInstallments: vi.fn(),
 }));
 
+// Prefill del método de pago por defecto (RF-PM-007) usa usePreferences
+// internamente — mockeado para no depender de useSession real.
+vi.mock("@/hooks/use-preferences", () => ({
+  usePreferences: vi.fn(() => ({
+    preferences: {},
+    setPreferences: vi.fn(),
+    isSaving: false,
+    isLoading: false,
+    isError: false,
+    error: null,
+  })),
+}));
+
 // PaymentMethodSelect (RF-PM-006) usa usePaymentMethods internamente — mockeado
 // para no depender de useApi/useSession real en este test de formulario.
 vi.mock("@/hooks/use-payment-methods", () => ({
@@ -91,6 +104,7 @@ vi.mock("@/lib/format", async (importOriginal) => {
 import { useCategories } from "@/hooks/use-categories";
 import { useInstallments } from "@/hooks/use-installments";
 import { usePaymentMethods } from "@/hooks/use-payment-methods";
+import { usePreferences } from "@/hooks/use-preferences";
 import { useSettings } from "@/hooks/use-settings";
 import { useReferenceRate } from "@/hooks/use-reference-rate";
 import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
@@ -98,6 +112,7 @@ import { useRouter } from "next/navigation";
 
 const mockUseCategories = vi.mocked(useCategories);
 const mockUseInstallments = vi.mocked(useInstallments);
+const mockUsePreferences = vi.mocked(usePreferences);
 const mockUsePaymentMethods = vi.mocked(usePaymentMethods);
 const mockUseSettings = vi.mocked(useSettings);
 const mockUseReferenceRate = vi.mocked(useReferenceRate);
@@ -174,6 +189,20 @@ const mockDebitMethod: PaymentMethod = {
   icon: "card",
   closingDay: null,
   paymentDay: null,
+  deletedAt: null,
+  createdAt: "2024-01-01T00:00:00Z",
+  updatedAt: "2024-01-01T00:00:00Z",
+  movementCount: 0,
+};
+
+const mockCreditMethod: PaymentMethod = {
+  id: "pm-credit-1",
+  userId: "user-1",
+  name: "Visa Banco Nación",
+  type: "CREDIT",
+  icon: "visa",
+  closingDay: 15,
+  paymentDay: 10,
   deletedAt: null,
   createdAt: "2024-01-01T00:00:00Z",
   updatedAt: "2024-01-01T00:00:00Z",
@@ -947,5 +976,84 @@ describe("InstallmentForm — Débito automático (P4, corrección de alcance)",
         expect.objectContaining({ autoDebit: true, paymentMethodId: "pm-debit-1" }),
       );
     });
+  });
+});
+
+// ─── Tests: prefill de método de pago por defecto (RF-PM-007) ─────────────────
+
+describe("InstallmentForm — prefill de método de pago por defecto", () => {
+  beforeEach(() => {
+    mockUsePaymentMethods.mockReturnValue({
+      paymentMethods: [mockDebitMethod, mockCreditMethod],
+      isLoading: false,
+      isError: false,
+      error: null,
+      createPaymentMethod: vi.fn(),
+      updatePaymentMethod: vi.fn(),
+      deletePaymentMethod: vi.fn(),
+      reactivatePaymentMethod: vi.fn(),
+      isCreating: false,
+      isUpdating: false,
+      isDeleting: false,
+      isReactivating: false,
+    });
+  });
+
+  it("precarga el método de pago por defecto (slot 'cuota') al crear una cuota", () => {
+    mockUsePreferences.mockReturnValue({
+      preferences: { defaultPaymentMethods: { unico: null, fijo: null, cuota: mockDebitMethod.id } },
+      setPreferences: vi.fn(),
+      isSaving: false,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderForm({});
+
+    expect(screen.getAllByText(mockDebitMethod.name).length).toBeGreaterThan(0);
+  });
+
+  it("no precarga nada cuando el id guardado no corresponde a un método activo (fallback en lectura)", () => {
+    mockUsePreferences.mockReturnValue({
+      preferences: { defaultPaymentMethods: { unico: null, fijo: null, cuota: "pm-eliminado" } },
+      setPreferences: vi.fn(),
+      isSaving: false,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderForm({});
+
+    expect(screen.queryAllByText(mockDebitMethod.name)).toHaveLength(0);
+    expect(screen.queryAllByText(mockCreditMethod.name)).toHaveLength(0);
+  });
+
+  it("en edición respeta el método guardado del grupo de cuotas — el default no lo pisa", () => {
+    mockUsePreferences.mockReturnValue({
+      preferences: { defaultPaymentMethods: { unico: null, fijo: null, cuota: mockDebitMethod.id } },
+      setPreferences: vi.fn(),
+      isSaving: false,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderForm({
+      installment: {
+        ...mockInstallmentGroup,
+        paymentMethodId: mockCreditMethod.id,
+        paymentMethod: {
+          id: mockCreditMethod.id,
+          name: mockCreditMethod.name,
+          icon: mockCreditMethod.icon,
+          type: mockCreditMethod.type,
+        },
+      },
+    });
+
+    expect(screen.getAllByText(mockCreditMethod.name).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(mockDebitMethod.name)).toHaveLength(0);
   });
 });

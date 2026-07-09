@@ -219,6 +219,10 @@ El identificador visual del método se renderiza en un **único lugar** (`fronte
 
 El selector de método en el form de movimiento es un **listbox custom** (portal + `fixed`, el patrón de popovers del proyecto), **no** un `<select>` nativo, porque cada opción muestra **ícono + nombre**.
 
+### Default por estructura — prefill one-shot (RF-PM-007)
+
+Prefill del selector de método al **crear** un movimiento con el default de la estructura (único/fijo/cuota), leído del blob `defaultPaymentMethods` (ver `data-model.md`; regla funcional en `requirements.md`, RF-PM-007). **Gotcha:** el prefill **no** puede resolverse en los `defaultValues` de `useForm` — `usePreferences` / `usePaymentMethods` pueden seguir cargando en el primer render. Se dispara desde un **`useEffect` one-shot (ref)** que solo aplica si el campo sigue en `""` (no pisa una selección manual hecha mientras cargaba) y valida el id del slot contra los métodos **activos** (slot inválido → "Sin método de pago"). Hook: `frontend/src/hooks/use-default-payment-method-prefill.ts`. Aplica a los tres forms de creación (único / fijo / cuota), egreso e ingreso; no en edición ni en calculados.
+
 ## Movimientos únicos
 
 Carga de movimientos. El modal de carga se invoca desde el dashboard (`/`); **editar y eliminar quedan cableados desde la Vista del mes** (`/mes`) — ver sección Vista del mes y Dashboard.

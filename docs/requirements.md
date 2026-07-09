@@ -1303,6 +1303,50 @@ Un método de pago clasifica **con qué se pagó o cobró** un movimiento (tarje
 
 ---
 
+#### RF-PM-007 — Método de pago predeterminado por estructura de movimiento
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El usuario puede designar un método de pago como **predeterminado por estructura de movimiento** (único / fijo / cuota). Al **crear** un movimiento de esa estructura, el selector de método de pago del formulario arranca prellenado con el default de esa estructura, como valor inicial editable. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Baja |
+| **Precondiciones** | El usuario tiene sesión activa. Existe al menos un método de pago activo. |
+
+**Configuración (tres slots independientes):**
+- Hay **tres slots** de default —**único**, **fijo**, **cuota**—, independientes; cada uno apunta a **lo sumo un** método de pago activo, o a ninguno.
+- Se configuran **dentro del modal de crear/editar método de pago** (el mismo modal de Nombre / Tipo / Ícono), en una sección **"Predeterminado para"** con tres checkboxes de estructura (Únicos / Fijos / Cuotas). Marcar una estructura fija ese método como default de esa estructura; desmarcarla deja la estructura sin default. Aplica tanto al crear como al editar un método.
+- La **fila de la lista no edita** el default: muestra solo un **indicador de solo lectura** (estrella + pill por estructura) cuando el método es default de ≥1 estructura, y nada cuando no lo es.
+- **Exclusividad por estructura:** un método que toma una estructura la **quita** de cualquier otro (a lo sumo un método default por estructura). Un mismo método **puede** ser default de varias estructuras a la vez. La exclusividad se **resuelve al guardar el modal**, no en vivo mientras se marcan los checkboxes.
+- Al **crear**, los checkboxes arrancan destildados y la asignación se aplica **después de crear el método** (con el id nuevo).
+- Al guardar, si el método toma ≥1 estructura que tenía otro método, se muestra un **toast `info` consolidado** con las reasignaciones, además del toast de éxito del CRUD.
+
+**Prefill (solo al crear, editable):**
+- El prefill aplica **por estructura, tanto a egresos como a ingresos** (el default es de la estructura, no del sentido gasto/ingreso).
+- Es solo el **valor inicial** del selector: el usuario puede cambiarlo a otro método o dejarlo en "Sin método de pago".
+- **No** aplica en **edición**: ahí el selector carga el método guardado del propio movimiento.
+- **No** aplica a movimientos **calculados**: heredan el método del origen y no tienen selector propio (RF-PM-006).
+
+**Fallback en lectura:**
+- El id guardado en cada slot se **valida contra los métodos de pago activos en cada lectura**; si el método fue eliminado (soft delete), ese slot se trata como "ninguno" y el prefill cae a "Sin método de pago".
+- Eliminar un método **no limpia** el blob de preferencias: la validación en lectura es la fuente de verdad.
+
+**Criterios de aceptación:**
+- [ ] Los tres slots (único / fijo / cuota) son independientes; cada uno apunta a lo sumo un método activo o a ninguno.
+- [ ] La configuración vive en el **modal de crear/editar método** de `/metodos-pago` (sección "Predeterminado para"), no en `/configuracion`. La fila de la lista muestra solo un indicador de lectura, no edita.
+- [ ] Marcar una estructura en un método la quita de cualquier otro; un método puede ser default de varias estructuras a la vez. La exclusividad se resuelve al guardar el modal.
+- [ ] Al crear un método, los checkboxes arrancan destildados y la asignación se aplica con el id nuevo; si al guardar se reasigna alguna estructura, se muestra un toast `info` consolidado además del toast de éxito.
+- [ ] Al **crear** un movimiento de una estructura con default, el selector de método arranca con ese default (egreso e ingreso por igual), editable.
+- [ ] El prefill es solo el valor inicial y no pisa una selección hecha manualmente por el usuario.
+- [ ] En **edición** el selector carga el método guardado del movimiento, no el default.
+- [ ] Un movimiento **calculado** no recibe prefill (hereda del origen, RF-PM-006).
+- [ ] Si el método guardado en un slot fue eliminado, ese slot se trata como "ninguno" y el prefill cae a "Sin método de pago"; el blob no se limpia al borrar el método.
+
+**Notas:**
+- Persistencia en el blob `UserPreferences` (clave `defaultPaymentMethods`), sin cambios de backend; shape y semántica en `data-model.md`, §Claves del blob → `defaultPaymentMethods`.
+- El detalle visual de la sección "Predeterminado para" del modal y del indicador de lectura en la fila lo define `control-design`.
+
+---
+
 ### 3.7 Módulo: Vista del mes
 
 La vista del mes muestra todos los movimientos del mes seleccionado (únicos, fijos activos y cuotas) con sus totales.

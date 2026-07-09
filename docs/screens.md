@@ -465,7 +465,7 @@ Pantalla de **ajustes de la cuenta** del usuario, organizada en **dos solapas: "
 
 ## 10. Gestión de métodos de pago (`/metodos-pago`)
 
-**RF relacionados:** RF-PM-001, RF-PM-002, RF-PM-003, RF-PM-004, RF-PM-005, RF-PM-006, RF-NAV-001
+**RF relacionados:** RF-PM-001, RF-PM-002, RF-PM-003, RF-PM-004, RF-PM-005, RF-PM-006, RF-PM-007, RF-NAV-001
 
 > **Ruta:** `/metodos-pago`. **Link en el sidebar**, debajo de "Categorías" (orden: Dashboard → Vista del mes → Reportes → Categorías → Métodos de pago → Configuración).
 
@@ -481,6 +481,7 @@ Pantalla dedicada para administrar los métodos de pago del usuario: listar, cre
   - **Nombre** del método.
   - **Tipo** (Crédito / Débito / Efectivo), como chip neutro.
   - Contador **"N movimientos"** — cantidad de movimientos asociados. Dato derivado de solo lectura (RF-PM-005).
+  - **Indicador de predeterminado** — de **solo lectura**: cuando el método es default de ≥1 estructura, la fila muestra una estrella + pill por estructura (único / fijo / cuota); nada cuando no lo es. La edición del default no vive en la fila, sino en el modal (RF-PM-007).
 - Los métodos con soft delete (`deletedAt`) no aparecen en la lista.
 - **Botón "Nuevo método de pago"** que abre el modal de creación.
 - La cuenta nueva **arranca sin métodos** (no hay defaults): el estado inicial habitual es vacío.
@@ -490,6 +491,7 @@ Pantalla dedicada para administrar los métodos de pago del usuario: listar, cre
 - **Nuevo método de pago** — abre un modal para crear (RF-PM-001). Ver "Modal de creación / edición".
 - **Editar** un método — abre el mismo modal pre-cargado con los valores actuales (RF-PM-002). Editable: nombre, tipo, ícono y los campos condicionales del tipo.
 - **Eliminar** un método — solicita confirmación; al confirmar aplica soft delete (`deletedAt = now`) y el método desaparece de la lista y del selector del formulario de carga (RF-PM-003). Los movimientos históricos conservan la referencia.
+- **Predeterminar por estructura** — se configura **dentro del modal de crear/editar método**, en la sección "Predeterminado para" (checkboxes Únicos / Fijos / Cuotas), exclusivo por estructura, resuelto al guardar (RF-PM-007). El prefill aplica al **crear** un movimiento de esa estructura, como valor inicial editable. La fila de la lista solo muestra el indicador de lectura, no edita.
 - Acciones globales del sidebar.
 
 ### Modal de creación / edición
@@ -501,6 +503,7 @@ Pantalla dedicada para administrar los métodos de pago del usuario: listar, cre
   - **Efectivo:** sin campos extra.
 - **Tipo editable en edición** (RF-PM-002): al cambiar de tipo, los campos condicionales que ya no aplican **se descartan**.
 - **Icon-picker** (RF-PM-004), presente en crear y editar: selector de ícono del set curado. En **crear** arranca con `card`; en **editar**, con el ícono actual. **Sin botón "aleatorio"** (a diferencia del color de categorías). El detalle visual del picker lo define `control-design` (`docs/design.md`, §Icon-picker).
+- **Sección "Predeterminado para"** (RF-PM-007), presente en crear y editar: tres checkboxes de estructura (Únicos / Fijos / Cuotas) para marcar el método como default de cada una. En **crear** arrancan destildados y la asignación se aplica tras crear el método (con el id nuevo). La exclusividad por estructura se resuelve al guardar; si el método toma una estructura que tenía otro, tras guardar se muestra un toast `info` consolidado además del toast de éxito.
 - **Validaciones:** el nombre es obligatorio y no puede estar vacío; no pueden coexistir dos métodos activos con el mismo nombre normalizado del mismo usuario (espejo RN-014 / RN-008). El flujo crear-o-reactivar ante colisión con un método eliminado es idéntico al de categorías (RF-CAT-002 A3 → RF-PM-001 A4).
 - **Acciones:** Guardar (valida y persiste, cierra el modal) y Cancelar (cierra sin guardar).
 

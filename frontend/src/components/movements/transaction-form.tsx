@@ -28,6 +28,7 @@ import { useTransactions } from "@/hooks/use-transactions";
 import { useSettings } from "@/hooks/use-settings";
 import { useReferenceRate } from "@/hooks/use-reference-rate";
 import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
+import { useDefaultPaymentMethodPrefill } from "@/hooks/use-default-payment-method-prefill";
 import { useToast } from "@/hooks/use-toast";
 import { type Transaction, type TransactionType } from "@/types/transaction";
 import { type Category, type CategoryScope } from "@/types/category";
@@ -239,6 +240,15 @@ export function TransactionForm({ transaction, onClose, editingSkipped }: Transa
   const exchangeRateInput = watch("exchangeRateInput");
   const selectedPaymentMethodId = watch("paymentMethodId") ?? "";
   const selectedAutoDebit = watch("autoDebit") ?? false;
+
+  // Prefill del método de pago por defecto — solo al crear un movimiento único
+  // (RF-PM-007). Valor inicial editable; no pisa una selección manual del usuario.
+  useDefaultPaymentMethodPrefill({
+    slot: "unico",
+    isEditing,
+    currentPaymentMethodId: selectedPaymentMethodId,
+    setPaymentMethodId: (id) => setValue("paymentMethodId", id),
+  });
 
   // Mes del movimiento derivado de la fecha seleccionada (para el endpoint de referencia)
   const movementMonth = selectedDate?.length >= 7 ? selectedDate.substring(0, 7) : nowDate.substring(0, 7);

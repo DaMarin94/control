@@ -12,6 +12,13 @@
  *   NO es un campo del método (corrección de alcance P4): es un atributo del
  *   MOVIMIENTO — ver auto-debit-checkbox.tsx en los forms de carga.
  * - Icon-picker en vez de color-picker (RF-PM-004, sin botón "Aleatorio").
+ * - Sección "Predeterminado para" (RF-PM-007; spec visual en docs/design.md,
+ *   §"Predeterminado por estructura — configuración en el modal…"): última
+ *   sección del form, después del Icon-picker, con los 3 checkboxes de
+ *   estructura (Únicos/Fijos/Cuotas). La exclusividad se resuelve AL GUARDAR
+ *   (no en vivo por cada tilde): en crear, arrancan destildados y la asignación
+ *   se aplica después de crear el método (con el id recién devuelto); en editar,
+ *   arrancan reflejando el estado actual.
  */
 
 import { useEffect, useState } from "react";
@@ -25,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { usePaymentMethods } from "@/hooks/use-payment-methods";
+import { usePreferences } from "@/hooks/use-preferences";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { PaymentMethodIcon } from "@/components/ui/payment-method-icon";
 import {
@@ -37,6 +45,14 @@ import {
 } from "@/types/payment-method";
 import { ReactivationPrompt } from "./reactivation-prompt";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_PAYMENT_METHOD_SLOT_ORDER,
+  DEFAULT_PAYMENT_METHOD_SLOT_LABELS,
+  EMPTY_DEFAULT_PAYMENT_METHOD_SLOTS,
+  formatStructureList,
+  type DefaultPaymentMethodSlot,
+  type DefaultPaymentMethodSlots,
+} from "./default-payment-method-slots";
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -85,7 +101,9 @@ export function PaymentMethodFormModal({ paymentMethod, onClose }: PaymentMethod
     setMounted(true);
   }, []);
 
-  const { createPaymentMethod, updatePaymentMethod, isCreating, isUpdating } = usePaymentMethods();
+  const { paymentMethods, createPaymentMethod, updatePaymentMethod, isCreating, isUpdating } =
+    usePaymentMethods();
+  const { preferences, setPreferences } = usePreferences();
 
   // Estado para el prompt de reactivación
   const [reactivable, setReactivable] = useState<{
@@ -94,6 +112,80 @@ export function PaymentMethodFormModal({ paymentMethod, onClose }: PaymentMethod
     type: string;
     icon: string;
   } | null>(null);
+
+  // ─── Sección "Predeterminado para" (RF-PM-007) ─────────────────────────────
+  // En editar arranca reflejando el estado actual del método; en crear, los
+  // tres arrancan destildados (el método aún no existe/no es default de nada).
+  function initialCheckedSlots(): Record<DefaultPaymentMethodSlot, boolean> {
+    const defaults = preferences.defaultPaymentMethods ?? EMPTY_DEFAULT_PAYMENT_METHOD_SLOTS;
+    return {
+      unico: isEditing && defaults.unico === paymentMethod.id,
+      fijo: isEditing && defaults.fijo === paymentMethod.id,
+      cuota: isEditing && defaults.cuota === paymentMethod.id,
+    };
+  }
+  const [checkedSlots, setCheckedSlots] =
+    useState<Record<DefaultPaymentMethodSlot, boolean>>(initialCheckedSlots);
+  // Espejo textual del toast de reasignación, para lectores de pantalla
+  // (docs/design.md §"Accesibilidad").
+  const [announcement, setAnnouncement] = useState("");
+
+  function toggleSlot(slot: DefaultPaymentMethodSlot) {
+    setCheckedSlots((prev) => ({ ...prev, [slot]: !prev[slot] }));
+  }
+
+  /** "Hoy: {Otro}" — solo cuando el slot lo tiene OTRO método y sigue destildado. */
+  function getOtherOwnerName(slot: DefaultPaymentMethodSlot): string | undefined {
+    if (checkedSlots[slot]) return undefined;
+    const ownerId = (preferences.defaultPaymentMethods ?? EMPTY_DEFAULT_PAYMENT_METHOD_SLOTS)[slot];
+    if (!ownerId) return undefined;
+    if (isEditing && ownerId === paymentMethod.id) return undefined;
+    return paymentMethods?.find((pm) => pm.id === ownerId)?.name;
+  }
+
+  /**
+   * Aplica la asignación de "Predeterminado para" con exclusividad, AL GUARDAR
+   * (no en vivo). Devuelve las estructuras desplazadas de OTRO método, para el
+   * toast `info` consolidado.
+   */
+  async function applyDefaultPaymentMethods(
+    methodId: string,
+    methodName: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    const current = preferences.defaultPaymentMethods ?? EMPTY_DEFAULT_PAYMENT_METHOD_SLOTS;
+    const next: DefaultPaymentMethodSlots = { ...current };
+    const displaced: DefaultPaymentMethodSlot[] = [];
+    let changed = false;
+
+    for (const slot of DEFAULT_PAYMENT_METHOD_SLOT_ORDER) {
+      if (checkedSlots[slot]) {
+        if (current[slot] !== methodId) {
+          if (current[slot] !== null) displaced.push(slot);
+          next[slot] = methodId;
+          changed = true;
+        }
+      } else if (current[slot] === methodId) {
+        next[slot] = null;
+        changed = true;
+      }
+    }
+
+    if (!changed) return { success: true };
+
+    const result = await setPreferences({ ...preferences, defaultPaymentMethods: next });
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+
+    if (displaced.length > 0) {
+      const structures = formatStructureList(displaced.map((slot) => DEFAULT_PAYMENT_METHOD_SLOT_LABELS[slot]));
+      const message = `‘${methodName}’ ahora es el predeterminado de ${structures}.`;
+      toast.info(message);
+      setAnnouncement(message);
+    }
+
+    return { success: true };
+  }
 
   const defaultValues: PaymentMethodFormData = isEditing
     ? {
@@ -144,6 +236,7 @@ export function PaymentMethodFormModal({ paymentMethod, onClose }: PaymentMethod
             paymentDay: "",
           },
     );
+    setCheckedSlots(initialCheckedSlots());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentMethod?.id, reset]);
 
@@ -178,6 +271,10 @@ export function PaymentMethodFormModal({ paymentMethod, onClose }: PaymentMethod
       }
 
       toast.success("Método de pago actualizado correctamente.");
+      const defaultsResult = await applyDefaultPaymentMethods(paymentMethod.id, data.name);
+      if (!defaultsResult.success) {
+        toast.error(defaultsResult.error ?? "No se pudo guardar el predeterminado.");
+      }
       onClose();
     } else {
       const result = await createPaymentMethod(payload);
@@ -198,6 +295,12 @@ export function PaymentMethodFormModal({ paymentMethod, onClose }: PaymentMethod
       }
 
       toast.success("Método de pago creado correctamente.");
+      if (result.paymentMethod) {
+        const defaultsResult = await applyDefaultPaymentMethods(result.paymentMethod.id, data.name);
+        if (!defaultsResult.success) {
+          toast.error(defaultsResult.error ?? "No se pudo guardar el predeterminado.");
+        }
+      }
       onClose();
     }
   }
@@ -343,6 +446,86 @@ export function PaymentMethodFormModal({ paymentMethod, onClose }: PaymentMethod
                 <IconPicker value={field.value} onChange={field.onChange} />
               )}
             />
+
+            {/* Predeterminado para — divisor + 3 checkboxes de estructura (RF-PM-007) */}
+            <div className="pt-[14px] mt-[2px] border-t border-hair">
+              <div className="flex flex-col gap-[2px] mb-[4px]">
+                <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+                  Predeterminado para
+                </Label>
+                <p className="text-[12px] text-muted">
+                  Se prellena al crear un movimiento de esta estructura. Podés cambiarlo al
+                  cargar.
+                </p>
+              </div>
+
+              <div>
+                {DEFAULT_PAYMENT_METHOD_SLOT_ORDER.map((slot) => {
+                  const checked = checkedSlots[slot];
+                  const otherOwnerName = getOtherOwnerName(slot);
+
+                  return (
+                    <div
+                      key={slot}
+                      role="checkbox"
+                      aria-checked={checked}
+                      aria-label={DEFAULT_PAYMENT_METHOD_SLOT_LABELS[slot]}
+                      tabIndex={0}
+                      onClick={() => toggleSlot(slot)}
+                      onKeyDown={(e) => {
+                        if (e.key === " " || e.key === "Enter") {
+                          e.preventDefault();
+                          toggleSlot(slot);
+                        }
+                      }}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-[9px] py-[7px] px-1 -mx-1 rounded-ctl",
+                        "hover:bg-panel-2 transition-colors duration-[140ms]",
+                        "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+                      )}
+                    >
+                      {/* Checkbox visual — reuso del checkbox del DS */}
+                      <span
+                        className={cn(
+                          "flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors duration-[140ms]",
+                          checked ? "border-accent bg-accent" : "border-line bg-panel",
+                        )}
+                        aria-hidden="true"
+                      >
+                        {checked && (
+                          <svg width="10" height="8" viewBox="0 0 10 8" fill="none" aria-hidden="true">
+                            <path
+                              d="M1 4L3.5 6.5L9 1"
+                              stroke="white"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        )}
+                      </span>
+
+                      {/* Label de estructura */}
+                      <span className="text-[13px] font-medium text-ink">
+                        {DEFAULT_PAYMENT_METHOD_SLOT_LABELS[slot]}
+                      </span>
+
+                      {/* Nota de titular actual — solo cuando el slot lo tiene OTRO método */}
+                      {otherOwnerName && (
+                        <span className="flex-1 truncate text-right text-[12px] text-muted">
+                          Hoy: {otherOwnerName}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Espejo textual del toast de reasignación (accesibilidad) */}
+          <div aria-live="polite" className="sr-only">
+            {announcement}
           </div>
 
           {/* Footer (pineado — hermano del cuerpo scrolleable, no hijo) */}

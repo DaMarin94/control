@@ -44,6 +44,7 @@ El detalle estructural (arquitectura, componentes, gotchas) vive en `docs/`. Le�
 | Autenticación, `useApi`, gate `isAuthenticated` | `docs/frontend.md` §Autenticación |
 | Preferencias (`usePreferences`, blob, merge en el llamador) | `docs/frontend.md` §Preferencias de usuario |
 | Categorías, `ColorPicker`, uso dual del modal, z-index | `docs/frontend.md` §Categorías |
+| Métodos de pago (CRUD, selector en el form, default por estructura + prefill one-shot) | `docs/frontend.md` §Métodos de pago |
 | Movimientos únicos / fijos / cuotas / calculados | `docs/frontend.md` (sección de cada tipo) |
 | Vista del mes y Dashboard, `useMovements`, filtros por listado, `lib/movements.ts` | `docs/frontend.md` §Vista del mes y Dashboard |
 | Navegación global / sidebar | `docs/frontend.md` §Navegación global |

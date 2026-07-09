@@ -50,6 +50,19 @@ vi.mock("@/hooks/use-recurring", () => ({
   useRecurring: vi.fn(),
 }));
 
+// Prefill del método de pago por defecto (RF-PM-007) usa usePreferences
+// internamente — mockeado para no depender de useSession real.
+vi.mock("@/hooks/use-preferences", () => ({
+  usePreferences: vi.fn(() => ({
+    preferences: {},
+    setPreferences: vi.fn(),
+    isSaving: false,
+    isLoading: false,
+    isError: false,
+    error: null,
+  })),
+}));
+
 vi.mock("@/hooks/use-settings", () => ({
   useSettings: vi.fn(() => ({
     settings: { defaultCurrency: "ARS", lastExchangeRate: 1200 },
@@ -91,6 +104,7 @@ vi.mock("@/lib/format", async (importOriginal) => {
 import { useCategories } from "@/hooks/use-categories";
 import { useRecurring } from "@/hooks/use-recurring";
 import { usePaymentMethods } from "@/hooks/use-payment-methods";
+import { usePreferences } from "@/hooks/use-preferences";
 import { useSettings } from "@/hooks/use-settings";
 import { useReferenceRate } from "@/hooks/use-reference-rate";
 import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
@@ -99,6 +113,7 @@ import { useRouter } from "next/navigation";
 const mockUseCategories = vi.mocked(useCategories);
 const mockUseRecurring = vi.mocked(useRecurring);
 const mockUsePaymentMethods = vi.mocked(usePaymentMethods);
+const mockUsePreferences = vi.mocked(usePreferences);
 const mockUseSettings = vi.mocked(useSettings);
 const mockUseReferenceRate = vi.mocked(useReferenceRate);
 const mockUseActiveLimitProjection = vi.mocked(useActiveLimitProjection);
@@ -175,6 +190,20 @@ const mockDebitMethod: PaymentMethod = {
   icon: "card",
   closingDay: null,
   paymentDay: null,
+  deletedAt: null,
+  createdAt: "2024-01-01T00:00:00Z",
+  updatedAt: "2024-01-01T00:00:00Z",
+  movementCount: 0,
+};
+
+const mockCreditMethod: PaymentMethod = {
+  id: "pm-credit-1",
+  userId: "user-1",
+  name: "Visa Banco Nación",
+  type: "CREDIT",
+  icon: "visa",
+  closingDay: 15,
+  paymentDay: 10,
   deletedAt: null,
   createdAt: "2024-01-01T00:00:00Z",
   updatedAt: "2024-01-01T00:00:00Z",
@@ -997,5 +1026,105 @@ describe("RecurringForm — Débito automático (P4, corrección de alcance)", (
         expect.objectContaining({ autoDebit: true, paymentMethodId: "pm-debit-1" }),
       );
     });
+  });
+});
+
+// ─── Tests: prefill de método de pago por defecto (RF-PM-007) ─────────────────
+
+describe("RecurringForm — prefill de método de pago por defecto", () => {
+  beforeEach(() => {
+    mockUsePaymentMethods.mockReturnValue({
+      paymentMethods: [mockDebitMethod, mockCreditMethod],
+      isLoading: false,
+      isError: false,
+      error: null,
+      createPaymentMethod: vi.fn(),
+      updatePaymentMethod: vi.fn(),
+      deletePaymentMethod: vi.fn(),
+      reactivatePaymentMethod: vi.fn(),
+      isCreating: false,
+      isUpdating: false,
+      isDeleting: false,
+      isReactivating: false,
+    });
+  });
+
+  it("precarga el método de pago por defecto (slot 'fijo') al crear un fijo", () => {
+    mockUsePreferences.mockReturnValue({
+      preferences: { defaultPaymentMethods: { unico: null, fijo: mockDebitMethod.id, cuota: null } },
+      setPreferences: vi.fn(),
+      isSaving: false,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderForm({});
+
+    expect(screen.getAllByText(mockDebitMethod.name).length).toBeGreaterThan(0);
+  });
+
+  it("no precarga nada cuando el id guardado no corresponde a un método activo (fallback en lectura)", () => {
+    mockUsePreferences.mockReturnValue({
+      preferences: { defaultPaymentMethods: { unico: null, fijo: "pm-eliminado", cuota: null } },
+      setPreferences: vi.fn(),
+      isSaving: false,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderForm({});
+
+    expect(screen.queryAllByText(mockDebitMethod.name)).toHaveLength(0);
+    expect(screen.queryAllByText(mockCreditMethod.name)).toHaveLength(0);
+  });
+
+  it("precarga también al crear un ingreso fijo — el default es por estructura, no por tipo", async () => {
+    mockUsePreferences.mockReturnValue({
+      preferences: { defaultPaymentMethods: { unico: null, fijo: mockDebitMethod.id, cuota: null } },
+      setPreferences: vi.fn(),
+      isSaving: false,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    const user = userEvent.setup();
+    renderForm({});
+
+    const ingresoBtn = screen.getByRole("button", { name: /^ingreso$/i });
+    await user.click(ingresoBtn);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(mockDebitMethod.name).length).toBeGreaterThan(0);
+    });
+  });
+
+  it("en edición respeta el método guardado del fijo — el default no lo pisa", () => {
+    mockUsePreferences.mockReturnValue({
+      preferences: { defaultPaymentMethods: { unico: null, fijo: mockDebitMethod.id, cuota: null } },
+      setPreferences: vi.fn(),
+      isSaving: false,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderForm({
+      recurring: {
+        ...mockRecurring,
+        paymentMethodId: mockCreditMethod.id,
+        paymentMethod: {
+          id: mockCreditMethod.id,
+          name: mockCreditMethod.name,
+          icon: mockCreditMethod.icon,
+          type: mockCreditMethod.type,
+        },
+      },
+    });
+
+    expect(screen.getAllByText(mockCreditMethod.name).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(mockDebitMethod.name)).toHaveLength(0);
   });
 });

@@ -98,6 +98,22 @@ export interface UserPreferences {
    * Ausente/vacío = sin límites configurados (impacto visual nulo, D9).
    */
   limits?: import("@/types/limit").LimitConfig[];
+  /**
+   * Método de pago por defecto por estructura (RF-PM-007; shape en data-model.md).
+   * Un slot por estructura — unico / fijo / cuota — cada uno con el `id` de un
+   * método de pago o `null` ("ninguno"). Ausente equivale a los tres en `null`.
+   * Exclusividad por estructura: cada slot apunta a lo sumo a un id (un método
+   * puede ser default de varias estructuras, pero cada estructura tiene un único método).
+   * Prefill solo al CREAR, por estructura, tanto en egresos como en ingresos (nunca
+   * en edición ni en movimientos calculados); el id guardado se valida contra los
+   * métodos de pago activos en lectura — si no corresponde a ninguno, se trata
+   * como `null` (fallback al eliminar un método).
+   */
+  defaultPaymentMethods?: {
+    unico: string | null;
+    fijo: string | null;
+    cuota: string | null;
+  };
   [key: string]: unknown;
 }
 

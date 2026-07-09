@@ -469,6 +469,67 @@ Un movimiento con **débito automático** (`autoDebit === true`) lleva una seña
 - **Condicional:** solo aparece si el flag es `true`; si es `false`, no ocupa lugar.
 - **Bajo anulado:** hereda la atenuación `opacity: 0.55` de la fila como el resto del contenido.
 
+### Predeterminado por estructura — configuración en el modal + indicador de solo-lectura en la fila de `/metodos-pago`
+
+Feature "Método de pago predeterminado por estructura". Cada método puede marcarse como **predeterminado** para una o varias de las tres **estructuras** de movimiento (**Únicos / Fijos / Cuotas**), con **exclusividad por estructura**: una estructura tiene a lo sumo un método (asignarla a uno se la quita a cualquier otro). El default **prellena** el selector de método al **crear un movimiento de esa estructura** — aplica a **egreso e ingreso** por igual — y sigue **editable** en el form de carga. Es prefill, no restricción.
+
+> **Corrección de copy vigente (reemplaza al lenguaje anterior).** El default es por **estructura**, no por "tipo de gasto". **Prohibido** el término "gastos" en esta superficie: prellena movimientos de ambas polaridades. Header/subtítulo neutros (abajo). Las etiquetas de estructura son "Únicos" / "Fijos" / "Cuotas" (plural, consistente con los group headers de `/mes`).
+
+**Decisión de alojamiento — la edición vive en el modal de crear/editar método; la fila es solo-lectura.** (Reemplaza el patrón anterior de celda-disparador + popover en la fila, que se **elimina**.) El default es una **propiedad de configuración del método**, no una acción de escaneo rápido sobre la lista: pertenece al mismo lugar donde se define nombre/tipo/ícono. Ventajas frente al popover-en-fila: (a) una sola superficie de edición del método (menos afordancias sueltas, menos carga cognitiva sobre la fila); (b) la fila queda limpia y legible como *inventario* (identidad + estado), sin controles activos que compitan con el kebab; (c) crear y editar comparten exactamente el mismo control. La fila conserva el **lenguaje visual del estado** (estrella + pills) pero **sin afordancia de edición** — para cambiarlo, se abre *Editar*.
+
+**Star = default (lenguaje unificado, se mantiene).** El glifo `Star` (lucide) relleno `--accent` marca "predeterminado". El acento acá es **cromo de UI/estado, no monto** (misma licencia que el punto del filtro, el thumb del segmented y el check del checkbox; regla dura 2 intacta — no hay cifras en esta pantalla). Se distingue del **chip de tipo neutro** (Crédito/Débito/Efectivo, `--panel-3`/`--muted`) por color, posición y por el prefijo estrella.
+
+#### Sección "Predeterminado para" dentro del modal (`PaymentMethodFormModal`)
+
+**Ubicación.** **Última sección** del cuerpo del form, **después del Icon-picker**, precedida por un **divisor `--hair` full-width** (con `pt`/`mt` de aire). Racional de jerarquía: Nombre/Tipo/Ícono definen **qué es** el método (identidad); esta sección define **cómo se usa** (comportamiento de prefill) — se lee como grupo distinto, subordinado a la identidad, sin interrumpir el flujo de alta. Aplica **igual en crear y en editar**, y para **cualquier tipo** de método (independiente de Crédito/Débito/Efectivo).
+
+- **Label de sección:** "Predeterminado para" — mismo molde que los labels del modal (12.5px / 600 `--ink-2`, `tracking-[0.01em]`), **sin** marca `required` (es opcional).
+- **Ayuda:** debajo del label, 12px `--muted`: **"Se prellena al crear un movimiento de esta estructura. Podés cambiarlo al cargar."** Sin la palabra "gastos"; neutro respecto de egreso/ingreso.
+- **Tres filas de checkbox**, una por estructura, **orden fijo Únicos → Fijos → Cuotas**, reusando el **checkbox del DS** (el mismo de `CategoryFilterPopover` / débito automático — cuadro `--line`/`--panel` destildado, fill `--accent` + check blanco tildado). Cada fila: `flex items-center gap-[9px]`, `py-[7px]`, toda la fila clickeable (`role="checkbox"`, `aria-checked`, tabbable, Space/Enter): checkbox + **label de estructura** (13px / 500 `--ink`) + a la derecha `flex-1 text-right truncate` la **nota de titular** (abajo). Hover de fila `--panel-2`; focus ring `--accent-soft` 3px.
+  - **Tildado** = este método será/es default de esa estructura.
+  - **Estados del checkbox:** destildado `--panel`/`--line`; tildado fill `--accent` + check; hover borde `--line-strong`; focus ring `--accent-soft` 3px.
+- **Neutralidad de color:** el único color de la sección es el acento del check (interacción). **No** verde/rojo (no comunica ingreso/gasto), **no** tiñe nada como monto.
+
+**Exclusividad — feedback preventivo dentro del modal.** Junto a cada estructura que **hoy tiene OTRO método**, nota **"Hoy: {OtroMétodo}"** (12px `--muted`, `truncate`, alineada a la derecha de la fila). Declara a quién se le va a quitar **antes** de tildar (misma idea que la nota del popover anterior, ahora en el modal). Reglas: estructura tomada por otro → nota + (destildada, salvo que el usuario la tilde en esta sesión); estructura del propio método (editar) → tildada, **sin** nota; estructura libre → destildada, sin nota.
+
+**Modelo mental del CREAR (método sin `id` todavía).** En creación los checkboxes marcan **intención**: la sección se ve y se opera **idéntica** a editar (mismo divisor, mismo control, dentro del mismo form y footer "Crear método de pago" → queda claro que es **parte del alta**, no un paso aparte). Al abrir en modo crear, los tres arrancan **destildados** (el método aún no es default de nada); la nota "Hoy:" funciona igual contra los defaults vigentes. La **asignación con exclusividad se aplica al guardar**, cuando el método ya tiene `id`. En editar, arrancan reflejando el estado actual.
+
+**Comunicación de la reasignación al guardar.** La exclusividad se resuelve **al guardar el modal** (no en vivo por cada tilde, porque en crear no hay `id` y para consistencia también en editar). Feedback:
+1. **Preventivo:** la nota "Hoy: {Otro}" en la sección (antes de guardar).
+2. **Confirmación al guardar OK:** se mantiene el toast `success` de CRUD ("Método de pago {creado/actualizado} correctamente."). **Además**, si al guardar el método **tomó ≥1 estructura que tenía otro titular**, un toast `info` consolidado: **"‘{Método}’ ahora es el predeterminado de {Estructuras}."** (`{Estructuras}` = lista separada por comas de las estructuras reasignadas, p. ej. "Únicos y Fijos"). Racional: cubre el caso de que la fila desplazada esté **fuera de viewport**; un solo toast info (no uno por estructura) evita el toast-storm. El toast de éxito confirma el guardado; el info confirma el desplazamiento. Sin displacement → solo el `success`.
+3. **En la lista:** al cerrarse el modal, las filas se re-renderizan y las pills reflejan el nuevo reparto (invariante "una sola pill por estructura en toda la lista").
+
+#### Indicador de solo-lectura en la fila
+
+Reemplaza a la celda-botón + popover, que **se eliminan**. La columna "Predeterminado" (entre contador y kebab; grid de fila sin cambios: `34px 1fr auto auto auto auto`) pasa a ser un **indicador estático informativo**: **no** es `<button>`, **no** tiene `aria-haspopup`, **no** tiene hover-reveal de afordancia, **no** es foco de tab, **no** abre nada.
+
+- **Método SIN defaults (la mayoría):** la celda **no renderiza contenido** → **cero impacto** (la fila se ve idéntica a una lista sin config, igual que hoy). Ya **no** aparece ninguna afordancia "Predeterminar" en hover.
+- **Método CON ≥1 default:** **siempre visible**: `Star` **relleno 11px** `--accent` + una **pill por estructura** en orden fijo Únicos → Fijos → Cuotas. Pill: fondo `--accent-soft`, texto `--accent-ink`, `--r-chip`, **11px / 600**, `px-[7px] py-[2px]`, gap `4px`. **Sin** hover-bg, **sin** cursor pointer, **sin** ring de botón (no es interactivo).
+- **Touch / ≤940px:** si hay >1 pill, colapsa a una sola pill **"Predet. ×N"** (`N` mono); el detalle se ve al abrir *Editar*.
+- **Edición:** exclusivamente vía **kebab → "Editar"** (abre el modal, que trae la sección). El indicador no ofrece atajo de edición (evita afordancia ambigua sobre un elemento informativo).
+
+**Accesibilidad.** El indicador de la fila es texto legible (pills con label) + estrella `aria-hidden`, envuelto con `aria-label`/`title` que enuncia el estado ("Predeterminado de: Únicos, Fijos"); **no** interactivo, fuera del orden de tab. Dentro del modal: checkboxes rotulados, nota "Hoy:" textual, foco visible, el estado nunca depende solo del color. Se mantiene una región `aria-live="polite"` (espejo textual del toast de reasignación) para el momento del guardado.
+
+**Copy.** Label de sección: "Predeterminado para". Ayuda: "Se prellena al crear un movimiento de esta estructura. Podés cambiarlo al cargar." Labels/pills: "Únicos" / "Fijos" / "Cuotas". Nota de titular: "Hoy: {Método}". Toast de reasignación: "‘{Método}’ ahora es el predeterminado de {Estructuras}." **Nunca** "gasto/gastos" en esta superficie.
+
+> Reutiliza: el checkbox del DS (*Débito automático* / filtros), el lenguaje `Star`=default + pill `--accent-soft`, el sistema de toasts, el chrome del modal (`PaymentMethodFormModal`). Cambia respecto de la versión anterior: la edición **migra de la fila al modal**; la fila pasa a **solo-lectura**; el copy deja de hablar de "gastos" y pasa a **estructura**; la exclusividad se resuelve **al guardar** (no por tilde en vivo).
+
+#### Checklist de aceptación visual — predeterminado por estructura
+
+- [ ] **Copy sin "gastos":** ni en el modal ni en la fila ni en toasts aparece la palabra "gasto/gastos"; la ayuda dice "…al crear un **movimiento** de esta estructura".
+- [ ] **Sección en el modal:** al abrir crear o editar, después del Icon-picker hay un divisor `--hair` y la sección "Predeterminado para" con 3 checkboxes (Únicos/Fijos/Cuotas) + línea de ayuda.
+- [ ] **Fila sin celda editable:** la fila **no** tiene botón "Predeterminar" ni popover; no aparece nada de eso en hover; la columna sólo muestra estrella + pills cuando el método es default.
+- [ ] **Cero impacto sin config:** lista sin ningún default → filas idénticas a hoy, sin estrella ni pills ni afordancia.
+- [ ] **Estado visible (solo-lectura):** un método default muestra `★` + pill(s) (`--accent-soft`/`--accent-ink`) **siempre**; el indicador no tiene hover-bg, no es foco de tab, no abre nada.
+- [ ] **Una pill por estructura en toda la lista:** cada estructura (Únicos/Fijos/Cuotas) aparece como pill en **a lo sumo una** fila.
+- [ ] **Nota de titular en el modal:** una estructura tomada por otro método muestra "Hoy: {Otro}"; la del propio método (editar), tildada sin nota; libre, destildada sin nota.
+- [ ] **Crear = intención:** en el modal de creación los 3 checkboxes arrancan destildados; la sección se ve igual que en editar y vive dentro del mismo form/footer de alta.
+- [ ] **Exclusividad al guardar:** tildar una estructura ya tomada y guardar → la pill de esa estructura pasa a este método y desaparece de la otra fila.
+- [ ] **Toast de reasignación:** guardar con desplazamiento dispara toast `info` "‘{Método}’ ahora es el predeterminado de {Estructuras}", además del `success` de CRUD.
+- [ ] **Neutralidad de color:** estrella/pills/check usan acento (UI), nunca verde/rojo; el chip de tipo sigue neutro y no se confunde con las pills.
+- [ ] **Touch / ≤940px:** el indicador con >1 default colapsa a "Predet. ×N" (N mono); la edición se hace desde *Editar*.
+- [ ] **Focus:** en el modal, filas de checkbox muestran ring `--accent-soft` 3px por teclado; el indicador de la fila no toma foco.
+
 ---
 
 ## Patrones de componentes vigentes

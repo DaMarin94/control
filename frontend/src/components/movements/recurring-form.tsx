@@ -29,6 +29,7 @@ import { useRecurring } from "@/hooks/use-recurring";
 import { useSettings } from "@/hooks/use-settings";
 import { useReferenceRate } from "@/hooks/use-reference-rate";
 import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
+import { useDefaultPaymentMethodPrefill } from "@/hooks/use-default-payment-method-prefill";
 import { useToast } from "@/hooks/use-toast";
 import { type TransactionType } from "@/types/transaction";
 import { type Category, type CategoryScope } from "@/types/category";
@@ -242,6 +243,15 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, edi
   const exchangeRateInput = watch("exchangeRateInput");
   const selectedPaymentMethodId = watch("paymentMethodId") ?? "";
   const selectedAutoDebit = watch("autoDebit") ?? false;
+
+  // Prefill del método de pago por defecto — solo al crear un movimiento fijo
+  // (RF-PM-007). Valor inicial editable; no pisa una selección manual del usuario.
+  useDefaultPaymentMethodPrefill({
+    slot: "fijo",
+    isEditing,
+    currentPaymentMethodId: selectedPaymentMethodId,
+    setPaymentMethodId: (id) => setValue("paymentMethodId", id),
+  });
 
   // Mes relevante para la cotización de referencia:
   // - Crear: mes de inicio seleccionado (o mes actual como fallback)

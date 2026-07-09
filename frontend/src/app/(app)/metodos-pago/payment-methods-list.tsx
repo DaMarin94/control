@@ -9,10 +9,15 @@
  * Layout:
  *   - Header: eyebrow "Configuración" + h1 "Métodos de pago" + botón "+ Nuevo método de pago"
  *   - Bajada explicativa
- *   - Lista: filas [tile ícono] [nombre] [chip tipo] [contador] [acciones]
+ *   - Lista: filas [tile ícono] [nombre] [chip tipo] [contador] [predeterminado] [acciones]
  *
  * Maneja estados: cargando, vacío, con datos.
  * Abre los modales de editar y eliminar.
+ *
+ * "Predeterminado" es un indicador de SOLO LECTURA de la feature "Método de pago
+ * predeterminado por estructura" (RF-PM-007; spec visual en docs/design.md). La
+ * edición vive en PaymentMethodFormModal (kebab → Editar) — ver
+ * default-payment-method-cell.tsx.
  */
 
 import { useState } from "react";
@@ -20,21 +25,31 @@ import { Button } from "@/components/ui/button";
 import { KebabMenu } from "@/components/ui/kebab-menu";
 import { Pencil, Trash2 } from "lucide-react";
 import { usePaymentMethods } from "@/hooks/use-payment-methods";
+import { usePreferences } from "@/hooks/use-preferences";
 import { PaymentMethodIcon } from "@/components/ui/payment-method-icon";
 import { type PaymentMethod, PAYMENT_METHOD_TYPE_LABELS } from "@/types/payment-method";
 import { PaymentMethodFormModal } from "./payment-method-form-modal";
 import { DeletePaymentMethodDialog } from "./delete-payment-method-dialog";
 import { SkeletonLine, SkeletonBlock } from "@/components/ui/skeleton";
+import {
+  DefaultPaymentMethodCell,
+  EMPTY_DEFAULT_PAYMENT_METHOD_SLOTS,
+  type DefaultPaymentMethodSlots,
+} from "./default-payment-method-cell";
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export function PaymentMethodsList() {
   const { paymentMethods, isLoading, isError } = usePaymentMethods();
+  const { preferences } = usePreferences();
 
   // Modal de creación/edición: null = cerrado; PaymentMethod = editar ese; "new" = crear
   const [editingMethod, setEditingMethod] = useState<PaymentMethod | "new" | null>(null);
   // Diálogo de confirmación de eliminación
   const [deletingMethod, setDeletingMethod] = useState<PaymentMethod | null>(null);
+
+  const defaultPaymentMethods: DefaultPaymentMethodSlots =
+    preferences.defaultPaymentMethods ?? EMPTY_DEFAULT_PAYMENT_METHOD_SLOTS;
 
   // ─── Estados de carga / error ─────────────────────────────────────────────
 
@@ -132,6 +147,7 @@ export function PaymentMethodsList() {
               <PaymentMethodRow
                 key={method.id}
                 method={method}
+                defaultPaymentMethods={defaultPaymentMethods}
                 onEdit={() => setEditingMethod(method)}
                 onDelete={() => setDeletingMethod(method)}
               />
@@ -163,11 +179,17 @@ export function PaymentMethodsList() {
 
 interface PaymentMethodRowProps {
   method: PaymentMethod;
+  defaultPaymentMethods: DefaultPaymentMethodSlots;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-function PaymentMethodRow({ method, onEdit, onDelete }: PaymentMethodRowProps) {
+function PaymentMethodRow({
+  method,
+  defaultPaymentMethods,
+  onEdit,
+  onDelete,
+}: PaymentMethodRowProps) {
   const movementLabel =
     method.movementCount === 0
       ? "Sin movimientos"
@@ -178,7 +200,7 @@ function PaymentMethodRow({ method, onEdit, onDelete }: PaymentMethodRowProps) {
   return (
     <li
       className="group grid items-center gap-4 px-5 py-[15px] transition-colors duration-[120ms] hover:bg-panel-2 [&+li]:border-t [&+li]:border-hair"
-      style={{ gridTemplateColumns: "34px 1fr auto auto auto" }}
+      style={{ gridTemplateColumns: "34px 1fr auto auto auto auto" }}
     >
       {/* Tile de ícono — analogía del swatch de color de categorías */}
       <span
@@ -200,6 +222,9 @@ function PaymentMethodRow({ method, onEdit, onDelete }: PaymentMethodRowProps) {
 
       {/* Contador */}
       <span className="text-[12.5px] text-muted whitespace-nowrap">{movementLabel}</span>
+
+      {/* Predeterminado — indicador de solo-lectura (edición vía kebab → Editar) */}
+      <DefaultPaymentMethodCell method={method} defaultPaymentMethods={defaultPaymentMethods} />
 
       {/* Acciones (visibles en hover) — KebabMenu por portal+fixed (overflow-hidden de tarjeta) */}
       <KebabMenu
