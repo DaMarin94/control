@@ -51,12 +51,6 @@ pnpm dev
 > En Windows, los scripts del backend apuntan directo al binario en `node_modules` en lugar de los shims de `.bin/` (los shims son scripts bash que Node no ejecuta en Windows). Es la convención del proyecto; ver `docs/technical.md`.
 
 ## TODO
-P0 - R e s p o n s i v n e s s
-P1 - gastos fijos: agregar la posibilidad de elegir cada cuantos meses se va a repetir desde un selector de numeros del 1 al 12, entonces si selecciono "1" significa "cada mes" si selecciono "2" significa cada 2 meses (bimestral). Y asi... En la pantalla de mes mantener la palabra. bimestral/trimestral/cuatrimestral/etcmestral. se entiende?
-P2 - limites y alertas: Me gustaria que cada reporte, segun corresponda tenga un pequeño lugar donde pueda (con un hover o similar) listar que limites se encuentran activados ahi. No se puede editar ni nada por el estilo, es solo informativo.
-P3 - limites y alertas. reporte Gastos diarios. El reporte tiene un rango que colorea los valores ingresados en el dia segun el monto. Esa caracteristica deberia poder ser editable desde los limites. donde se pueda elegir rango de color y los limites que lo colorean.
-P4 - vista de mes: Una manera de visualizaren cada gasto fijo en que mes arranca.
-P6 - pantalla de configuracion: repensar diseño, principalmente el switch ese es horrible
 
 ## Tests
 
