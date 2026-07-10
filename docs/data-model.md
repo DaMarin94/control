@@ -195,6 +195,14 @@ theme: "system" | "light" | "dark"
 
 - Modo de color elegido desde el chrome global (sidebar, RF-NAV-001): `"system"` (sigue `prefers-color-scheme` del dispositivo), `"light"` o `"dark"`. **Default por ausencia = `"system"`** (la clave ausente se interpreta como Sistema); si el usuario elige "Sistema" explícitamente se persiste `"system"`. Estado de **UI frontend-puro**: el backend **NO lo interpreta** (blob abierto/opaco, igual que el resto de las claves) — el frontend lo mergea sobre el blob en el `PUT /preferences`. Regla funcional en `requirements.md`, RF-APP-001; arquitectura de aplicación (override de tokens, anti-flash) en `docs/frontend.md`, §Modo de color (theming).
 
+#### `sidebarOpen` — estado mostrar/ocultar del sidebar (RF-NAV-002)
+
+```
+sidebarOpen: boolean
+```
+
+- Sidebar (RF-NAV-001) abierto (`true`) u oculto (`false`). **Default por ausencia = `true`** (abierto). Estado de **UI frontend-puro**: el backend **NO lo interpreta** (blob abierto/opaco, igual que el resto de las claves) — el frontend lo mergea sobre el blob en el `PUT /preferences`. Regla funcional en `requirements.md`, RF-NAV-002.
+
 #### `limits` — límites del usuario (RF-LIM-001..004)
 
 Persiste los **límites**: un array de reglas declarativas. Evaluación **100% client-side**; el backend **NO valida ni conoce** esta clave (blob opaco, igual que `theme` / `reports`).

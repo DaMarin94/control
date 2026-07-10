@@ -22,18 +22,16 @@
  */
 
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { usePaymentMethods } from "@/hooks/use-payment-methods";
 import { usePreferences } from "@/hooks/use-preferences";
-import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
+import { ModalShell, ModalShellHeader, ModalShellBody, ModalShellFooter } from "@/components/ui/modal-shell";
 import { PaymentMethodIcon } from "@/components/ui/payment-method-icon";
 import {
   type PaymentMethod,
@@ -92,14 +90,7 @@ interface PaymentMethodFormModalProps {
 
 export function PaymentMethodFormModal({ paymentMethod, onClose }: PaymentMethodFormModalProps) {
   const isEditing = paymentMethod !== null;
-  const [mounted, setMounted] = useState(false);
   const { toast } = useToast();
-
-  useBodyScrollLock();
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const { paymentMethods, createPaymentMethod, updatePaymentMethod, isCreating, isUpdating } =
     usePaymentMethods();
@@ -305,8 +296,6 @@ export function PaymentMethodFormModal({ paymentMethod, onClose }: PaymentMethod
     }
   }
 
-  if (!mounted) return null;
-
   // Si hay un prompt de reactivación activo, renderizarlo
   if (reactivable) {
     return (
@@ -321,41 +310,18 @@ export function PaymentMethodFormModal({ paymentMethod, onClose }: PaymentMethod
     );
   }
 
-  return createPortal(
-    /* Scrim */
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-6"
-      style={{ background: "oklch(0.18 0.02 270 / 0.46)", backdropFilter: "blur(3px)" }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="payment-method-modal-title"
-    >
-      {/* Diálogo */}
-      <div
-        className="w-full max-w-[380px] bg-panel border border-line overflow-hidden animate-modal-pop max-h-[calc(100dvh-48px)] flex flex-col"
-        style={{ borderRadius: "18px", boxShadow: "var(--shadow-lg)" }}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-[22px] pt-5 pb-4 shrink-0">
-          <h2
-            id="payment-method-modal-title"
-            className="text-[18px] font-bold tracking-[-0.01em] text-ink m-0"
-          >
-            {isEditing ? "Editar método de pago" : "Nuevo método de pago"}
-          </h2>
-          <button
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
-          >
-            <X size={18} aria-hidden="true" />
-          </button>
-        </div>
+  return (
+    <ModalShell variant="form" onClose={onClose} labelledBy="payment-method-modal-title">
+      <ModalShellHeader
+        titleId="payment-method-modal-title"
+        title={isEditing ? "Editar método de pago" : "Nuevo método de pago"}
+        onClose={onClose}
+      />
 
-        {/* Formulario */}
-        <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 min-h-0 overflow-y-auto px-[22px] pb-[22px] space-y-[14px]">
-            {/* Campo nombre */}
+      {/* Formulario */}
+      <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col flex-1 min-h-0">
+        <ModalShellBody>
+          {/* Campo nombre */}
             <div className="flex flex-col gap-[7px]">
               <Label htmlFor="pm-name" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Nombre
@@ -521,28 +487,25 @@ export function PaymentMethodFormModal({ paymentMethod, onClose }: PaymentMethod
                 })}
               </div>
             </div>
-          </div>
+        </ModalShellBody>
 
-          {/* Espejo textual del toast de reasignación (accesibilidad) */}
-          <div aria-live="polite" className="sr-only">
-            {announcement}
-          </div>
+        {/* Espejo textual del toast de reasignación (accesibilidad) */}
+        <div aria-live="polite" className="sr-only">
+          {announcement}
+        </div>
 
-          {/* Footer (pineado — hermano del cuerpo scrolleable, no hijo) */}
-          <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2 shrink-0">
-            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
-              Cancelar
-            </Button>
-            <Button type="submit" size="sm" disabled={isLoading}>
-              {isLoading
-                ? isEditing ? "Guardando..." : "Creando..."
-                : isEditing ? "Guardar cambios" : "Crear método de pago"}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>,
-    document.body,
+        <ModalShellFooter>
+          <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
+            Cancelar
+          </Button>
+          <Button type="submit" size="sm" disabled={isLoading}>
+            {isLoading
+              ? isEditing ? "Guardando..." : "Creando..."
+              : isEditing ? "Guardar cambios" : "Crear método de pago"}
+          </Button>
+        </ModalShellFooter>
+      </form>
+    </ModalShell>
   );
 }
 

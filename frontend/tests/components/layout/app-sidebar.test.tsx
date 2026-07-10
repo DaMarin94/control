@@ -1,7 +1,10 @@
 /**
- * Tests del AppSidebar (RF-NAV-001).
+ * Tests del AppSidebar (RF-NAV-001 + RF-NAV-002).
  * Fase 1.1.5: renombre /anual → /reportes, "Anual" → "Reportes".
  * Ola 4: toggle de tema (ThemeIconToggle) en el bloque inferior del sidebar.
+ * Rework RF-NAV-002: sidebar toggleable (docs/design.md §"Sidebar — mostrar/ocultar").
+ *   El componente ya no maneja su propio estado de apertura (drawer mobile +
+ *   hamburguesa); recibe `open` y `onToggle` del padre (AppShell).
  *
  * Verifica:
  * - Renderiza el logo "Control" con link al dashboard.
@@ -10,15 +13,17 @@
  * - Dashboard activo solo en "/" exacto (no en /mes ni /categorias ni /reportes).
  * - El link "Reportes" se ubica entre "Vista del mes" y "Categorías" (RF-NAV-001).
  * - En /reportes el link "Reportes" tiene aria-current="page".
- * - El botón hamburguesa aparece (accesible por aria-label).
  * - Renderiza el botón "Nuevo movimiento".
  * - Renderiza el UserMenu con el email recibido.
  * - Toggle de tema: label "Tema" visible, radiogroup "Modo de color" con 3 opciones,
  *   click en una opción llama setTheme, deshabilitado mientras isSaving.
+ * - RF-NAV-002: abierto muestra el botón "Ocultar menú" (aria-expanded=true) y
+ *   NO el chip "Mostrar menú"; cerrado es al revés — nunca los dos a la vez.
+ *   Clic en cualquiera de los dos llama a onToggle.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 
@@ -64,9 +69,13 @@ import { useTheme } from "@/hooks/use-theme";
 const mockUseTheme = vi.mocked(useTheme);
 
 function setupTheme({
-  theme = "system" as const,
-  resolvedTheme = "light" as const,
+  theme = "system",
+  resolvedTheme = "light",
   isSaving = false,
+}: {
+  theme?: "system" | "light" | "dark";
+  resolvedTheme?: "light" | "dark";
+  isSaving?: boolean;
 } = {}) {
   mockUseTheme.mockReturnValue({
     theme,
@@ -78,8 +87,12 @@ function setupTheme({
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
-function renderSidebar(email = "test@example.com") {
-  return render(<AppSidebar email={email} />);
+function renderSidebar({
+  email = "test@example.com",
+  open = true,
+  onToggle = vi.fn(),
+}: { email?: string; open?: boolean; onToggle?: () => void } = {}) {
+  return render(<AppSidebar email={email} open={open} onToggle={onToggle} />);
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -173,27 +186,54 @@ describe("AppSidebar", () => {
 
   it("renderiza el UserMenu con el email recibido", () => {
     mockUsePathname.mockReturnValue("/");
-    renderSidebar("usuario@ejemplo.com");
+    renderSidebar({ email: "usuario@ejemplo.com" });
 
     expect(screen.getByTestId("user-menu")).toHaveTextContent("usuario@ejemplo.com");
   });
 
-  it("el botón hamburguesa está presente (aria-label 'Abrir menú')", () => {
-    mockUsePathname.mockReturnValue("/");
-    renderSidebar();
+  // ── Mostrar/ocultar (RF-NAV-002) ─────────────────────────────────────────
 
-    expect(screen.getByRole("button", { name: /abrir menú/i })).toBeInTheDocument();
-  });
+  describe("Mostrar/ocultar (RF-NAV-002)", () => {
+    it("abierto: muestra el botón 'Ocultar menú' con aria-expanded=true y NO el chip 'Mostrar menú'", () => {
+      mockUsePathname.mockReturnValue("/");
+      renderSidebar({ open: true });
 
-  it("al hacer clic en hamburguesa se muestra el panel del drawer mobile", async () => {
-    const user = userEvent.setup();
-    mockUsePathname.mockReturnValue("/");
-    renderSidebar();
+      const collapseButton = screen.getByRole("button", { name: "Ocultar menú" });
+      expect(collapseButton).toHaveAttribute("aria-expanded", "true");
+      expect(screen.queryByRole("button", { name: "Mostrar menú" })).not.toBeInTheDocument();
+    });
 
-    await user.click(screen.getByRole("button", { name: /abrir menú/i }));
+    it("cerrado: muestra el chip 'Mostrar menú' con aria-expanded=false y NO el botón 'Ocultar menú'", () => {
+      mockUsePathname.mockReturnValue("/");
+      renderSidebar({ open: false });
 
-    // Al abrir el drawer, aparece el botón de cerrar
-    expect(screen.getByRole("button", { name: /cerrar menú/i })).toBeInTheDocument();
+      const openButton = screen.getByRole("button", { name: "Mostrar menú" });
+      expect(openButton).toHaveAttribute("aria-expanded", "false");
+      // El sidebar sigue montado (para poder animar la transición) pero queda
+      // aria-hidden/inert — no debe aparecer en el árbol de accesibilidad.
+      expect(screen.queryByRole("button", { name: "Ocultar menú" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
+    });
+
+    it("clic en 'Ocultar menú' llama a onToggle", async () => {
+      const user = userEvent.setup();
+      const onToggle = vi.fn();
+      mockUsePathname.mockReturnValue("/");
+      renderSidebar({ open: true, onToggle });
+
+      await user.click(screen.getByRole("button", { name: "Ocultar menú" }));
+      expect(onToggle).toHaveBeenCalledTimes(1);
+    });
+
+    it("clic en 'Mostrar menú' llama a onToggle", async () => {
+      const user = userEvent.setup();
+      const onToggle = vi.fn();
+      mockUsePathname.mockReturnValue("/");
+      renderSidebar({ open: false, onToggle });
+
+      await user.click(screen.getByRole("button", { name: "Mostrar menú" }));
+      expect(onToggle).toHaveBeenCalledTimes(1);
+    });
   });
 
   // ── Toggle de tema (Ola 4) ────────────────────────────────────────────────
@@ -230,13 +270,14 @@ describe("AppSidebar", () => {
       expect(screen.getByRole("radio", { name: "Tema oscuro" })).toHaveAttribute("aria-checked", "true");
     });
 
-    it("click en 'Tema oscuro' llama setTheme con 'dark'", () => {
+    it("click en 'Tema oscuro' llama setTheme con 'dark'", async () => {
+      const user = userEvent.setup();
       mockSetTheme.mockResolvedValue({ success: true });
       setupTheme({ theme: "system", resolvedTheme: "light" });
       mockUsePathname.mockReturnValue("/");
       renderSidebar();
 
-      fireEvent.click(screen.getByRole("radio", { name: "Tema oscuro" }));
+      await user.click(screen.getByRole("radio", { name: "Tema oscuro" }));
       expect(mockSetTheme).toHaveBeenCalledWith("dark");
     });
 

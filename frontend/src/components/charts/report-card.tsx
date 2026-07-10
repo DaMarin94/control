@@ -561,12 +561,16 @@ interface ChartResponsiveAreaProps {
 }
 
 function ChartResponsiveArea({ desktopHeight, children }: ChartResponsiveAreaProps) {
+  // Container query sobre <main> (`@wide:`/`@max-wide:`), no media query de
+  // viewport: la altura del gráfico depende del ancho REAL de contenido
+  // disponible (que se estrecha con el sidebar abierto), no del viewport
+  // crudo — docs/design.md §"Ancho de contenido de página".
   return (
     <>
-      <div className="[@media(max-width:940px)]:hidden" style={{ height: desktopHeight }}>
+      <div className="@max-wide:hidden" style={{ height: desktopHeight }}>
         {children(desktopHeight)}
       </div>
-      <div className="[@media(min-width:941px)]:hidden" style={{ height: 220 }}>
+      <div className="@wide:hidden" style={{ height: 220 }}>
         {children(220)}
       </div>
     </>
@@ -1667,17 +1671,17 @@ export function ReportCard({
         Spec visual: docs/design.md §"Título editable de la card de reporte (Ola 2, P4)"
         y §"Toggle Barra ↔ Línea en la card by-category".
 
-        income-expense (Total-only, ≥941px):
+        income-expense (Total-only, amplio ≥--bp-wide):
           Fila única flex justify-between:
             Izq: [título editable]
             Der: [stepper · moneda · X]
-          ≤940px: wrap natural — controles bajan a segunda línea.
+          Compacto (<--bp-wide): wrap natural — controles bajan a segunda línea.
 
-        by-category (con toggle Barra/Línea, ≥941px):
+        by-category (con toggle Barra/Línea, amplio ≥--bp-wide):
           Línea 1 (ancho completo): [título editable]
           Línea 2 flex justify-between: [ViewTabs Barra/Línea izq] / [stepper · moneda · X der]
             items-start para alinear los controles al tope de la columna identidad.
-          ≤940px: wrap natural — orden vertical: [título] → [tabs] → [controles].
+          Compacto (<--bp-wide): wrap natural — orden vertical: [título] → [tabs] → [controles].
       */}
 
       {/* ── BLOQUE income-expense ──────────────────────────────────────────────────

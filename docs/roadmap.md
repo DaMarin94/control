@@ -8,7 +8,10 @@
 
 Orden acordado:
 
-**P0-a → P0-b → P6 → P1 + P4 → P2 + P3**
+**P0-a ✅ → P0-b ✅ → P6 → P1 + P4 → P2 + P3**
+
+P0-a: **cerrado** (política enganchada al workflow: `docs/design.md`, `docs/qa-visual.md` y los agentes).
+P0-b: **cerrado** (barrido de la deuda responsive de las superficies existentes).
 
 ### Por qué P0-a va primero
 
@@ -25,13 +28,13 @@ Los tres cambios de contrato —`frequency` (P1), `startMonth` del fijo (P4) y e
 
 ---
 
-## P0-a — Responsiveness como política permanente
+## P0-a — Responsiveness como política permanente ✅ CERRADO
 
 **No es una tarea, es una regla vigente de acá en adelante.**
 
 ### Criterio de contención — cuatro invariantes verificables
 
-1. Sin scroll horizontal del `body`. Nunca.
+1. Sin scroll horizontal del `body` en todo ancho `≥ 640px` (el ancho mínimo soportado). Por debajo del piso la app no promete contención.
 2. Modales completos y scrolleables: no cortados, no atrapantes.
 3. Ninguna acción inalcanzable (fuera de pantalla o tapada).
 4. Las superficies anchas scrollean **dentro de sí mismas**, no rompen el layout de la página.
@@ -67,11 +70,9 @@ No hay config de `screens`. **`control-design` debe nombrar el `941` como token*
 
 ---
 
-## P0-b — Barrido de la deuda existente
+## P0-b — Barrido de la deuda existente ✅ CERRADO
 
 Aplicar el criterio de P0-a a lo que ya existe.
-
-**Estado actual:** **7 de 80 archivos** `.tsx` tienen algo responsive.
 
 Ya cumplen:
 

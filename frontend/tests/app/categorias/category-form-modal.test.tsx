@@ -221,6 +221,35 @@ describe("CategoryFormModal", () => {
     });
   });
 
+  it("409 reactivable: el prompt hereda el contrato de ModalShell (max-height dvh, no vh — ex-offender)", async () => {
+    const user = userEvent.setup();
+    mockCreateCategory.mockResolvedValue({
+      success: false,
+      reactivable: {
+        id: "cat-deleted-1",
+        name: "Alimentación",
+        scope: "BOTH",
+        color: L3_FIRST,
+      },
+    });
+
+    renderModal({ category: null });
+
+    await user.type(screen.getByLabelText(/nombre/i), "Alimentación");
+    await user.click(screen.getByRole("button", { name: /crear categoría/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/categoría eliminada encontrada/i)).toBeInTheDocument();
+    });
+
+    const panel = screen.getByRole("dialog").firstElementChild as HTMLElement;
+    expect(panel.className).toContain("max-h-[calc(100dvh-48px)]");
+    expect(panel.className).not.toMatch(/max-h-\[calc\(100vh/);
+    // Antes de consumir ModalShell este diálogo no declaraba max-height ni
+    // región de scroll (offender #2, docs/design.md).
+    expect(panel.className).toMatch(/overflow-hidden/);
+  });
+
   it("prompt de reactivación: Cancelar vuelve al formulario sin crear nada", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();

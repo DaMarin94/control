@@ -255,3 +255,36 @@ describe("CreateLimitModal — umbral: signo válido según unit (catalog-driven
     expect(mockCreate).not.toHaveBeenCalled();
   });
 });
+
+describe("CreateLimitModal — hereda el contrato de ModalShell (ex-offender)", () => {
+  it("el panel usa max-height dvh (no vh — offender original: max-h-[90vh])", () => {
+    renderModal();
+
+    const panel = screen.getByRole("dialog").firstElementChild as HTMLElement;
+    expect(panel.className).toContain("max-h-[calc(100dvh-48px)]");
+    expect(panel.className).not.toMatch(/max-h-\[90vh\]/);
+    expect(panel.className).not.toMatch(/max-h-\[calc\(100vh/);
+  });
+
+  it("es el form más alto de la app: el cuerpo scrollea (flex-1 min-h-0 overflow-y-auto) y el footer queda fuera de esa región", () => {
+    renderModal();
+
+    const bodyRegion = screen.getByLabelText(/dato a observar/i).closest('[class*="overflow-y-auto"]');
+    expect(bodyRegion).not.toBeNull();
+    expect(bodyRegion!.className).toMatch(/flex-1/);
+    expect(bodyRegion!.className).toMatch(/min-h-0/);
+
+    const footer = screen.getByRole("button", { name: /crear límite/i }).closest("div")!;
+    expect(footer.className).toMatch(/shrink-0/);
+    expect(footer.className).not.toMatch(/overflow-y-auto/);
+  });
+
+  it("Esc cierra el modal (heredado del shell, sin listener propio duplicado)", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderModal(onClose);
+
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});

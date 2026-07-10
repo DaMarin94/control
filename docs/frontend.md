@@ -75,12 +75,38 @@ Lo visual se define **una sola vez**. Stack: **shadcn/ui + cva** sobre Tailwind 
 - **`SortableSection` (`components/ui/sortable-section.tsx`)** — envuelve `AccordionSection` con `useSortable` de **dnd-kit**; el sortable se activa **solo en modo orden**. Es el patrón estándar para "lista de bloques reordenables por drag". **Sin `DragOverlay`:** el ítem arrastrado se mueve **in-place**, restringido al **eje vertical y al contenedor** con los modifiers `restrictToVerticalAxis` + `restrictToParentElement` de **`@dnd-kit/modifiers`**. El original no se oculta; el "activo" lo computa el padre vía `activeId` y se pasa por prop (`isActive`).
 - **dnd-kit** (`@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`, `@dnd-kit/modifiers`) es el **motor de drag estándar del proyecto**. Todo drag nuevo (reordenar listas, etc.) lo usa, no se implementa drag a mano. Gotchas de uso (sensor `distance:8` con elementos clickeables, `role=region` en jsdom) en `.claude/agents/control-frontend.md`.
 
-### Shell de modales — anatomía de 3 zonas y bloqueo del fondo
+### Shell de modales — `ModalShell` (componente compartido)
 
-Todos los modales por portal comparten una anatomía de **3 zonas**: **header** pineado · **cuerpo** scrolleable (`flex-1 min-h-0 overflow-y-auto`) · **footer** de acciones pineado (`shrink-0`). El diálogo es una **columna flex** con `max-height: calc(100dvh - 48px)`, de modo que header y footer quedan fijos y solo el cuerpo scrollea cuando el contenido excede el alto. Es el **patrón estándar**: todo modal nuevo lo sigue.
+`ModalShell` (`frontend/src/components/ui/modal-shell.tsx`) es el **componente único de shell** que consumen **los 12 modales/diálogos** de la app. Encapsula el scrim, el panel, la anatomía de 3 zonas, el `max-height`, el clipping y el bloqueo del fondo; el modal concreto aporta solo su **contenido** y sus **acciones**. Se compone con tres subcomponentes: **`ModalShellHeader`** (header pineado), **`ModalShellBody`** (cuerpo scrolleable, `flex-1 min-h-0 overflow-y-auto`) y **`ModalShellFooter`** (footer de acciones pineado, `shrink-0`). El panel es una **columna flex** con `max-height: calc(100dvh - 48px)`: header y footer quedan fijos y solo el cuerpo scrollea cuando el contenido excede el alto.
 
-- **Bloqueo del scroll del fondo:** mientras haya ≥1 modal abierto, el scroll de la página se bloquea con el hook `useBodyScrollLock` (`frontend/src/hooks/use-body-scroll-lock.ts`), **ref-counted** para soportar modales apilados (el fondo se libera recién al cerrar el último). Usa `scrollbar-gutter: stable` para no saltar el layout al aparecer/desaparecer la scrollbar.
-- El criterio **visual** (valores concretos, hairlines de corte del scroll, checklist de aceptación) vive en `docs/design.md` → «Overflow de modales y bloqueo del fondo»; no se repite acá.
+- **Ningún modal arma su propio scrim ni llama `useBodyScrollLock` por su cuenta:** lo hace el shell. Todo modal nuevo consume `ModalShell` — no se copia el markup del scrim ni la anatomía a mano.
+- **Dos variantes** (`dialog` / `form`), que difieren en ancho y densidad, no en anatomía ni contrato. Los anchos salen de la variante (ver `docs/design.md`).
+- **Bloqueo del scroll del fondo:** mientras haya ≥1 modal abierto, el shell bloquea el scroll de la página con el hook `useBodyScrollLock` (`frontend/src/hooks/use-body-scroll-lock.ts`), **ref-counted** para soportar modales apilados (el fondo se libera recién al cerrar el último). Usa `scrollbar-gutter: stable` para no saltar el layout al aparecer/desaparecer la scrollbar.
+- El criterio **visual** (valores concretos, hairlines de corte del scroll, anatomía canónica, checklist de aceptación) vive en `docs/design.md` → «Shell de modal compartido (`ModalShell`)» y «Overflow de modales y bloqueo del fondo»; no se repite acá.
+
+### Sombra de corte en carriles con scroll interno — `useScrollShadow`
+
+`useScrollShadow` (`frontend/src/hooks/use-scroll-shadow.ts`) provee la affordance de corte en superficies con scroll interno (grillas, tablas, gantt): señala que hay más contenido fuera de vista con un **`box-shadow`** en el borde del carril. **No usa `mask` / fade:** un degradado sobre las celdas de la grilla taparía una cifra de dinero — el corte se marca con sombra, que no oculta contenido.
+
+### Portal para overlays anclados dentro de superficies con overflow (regla)
+
+Todo **popover / kebab / tooltip / confirmación** anclado dentro de una superficie con `overflow` se monta por **`createPortal` a `document.body`**, posicionado `fixed` a partir del `getBoundingClientRect()` de su anclaje. Sin el portal, el `overflow` de la superficie contenedora recortaría el overlay. Es lo que sostiene el **invariante 3** (ninguna acción inalcanzable) de `docs/design.md` § Contención responsive. Los `<select>` **nativos** no lo necesitan (el navegador ya los renderiza fuera del flujo). Casos aplicados: `KebabMenu`, el listbox de método de pago, `SectionFilterPopover`.
+
+### Breakpoint — variantes `wide:` / `max-wide:`
+
+La disposición responsive se decide con las variantes **`wide:`** (`width ≥ 941px`) y **`max-wide:`** (`width < 941px`), habilitadas por el token `--breakpoint-wide: 941px` declarado en `@theme` (Tailwind v4) en `frontend/src/app/globals.css`. **El número `941` no se repite en ningún `.tsx`** y no se escriben media queries a mano para la disposición general (ver `docs/design.md` § Contención responsive para la política del breakpoint y el ancho mínimo soportado).
+
+Hay un **segundo breakpoint nombrado**: `--breakpoint-floor: 640px` en el mismo `@theme`, junto a `--breakpoint-wide`. Habilita las variantes **`floor:`** / **`max-floor:`**. Como con `941`, **el número `640` no se escribe a mano fuera de esa definición** (el copy del gate no menciona ningún número). Lo consume `ViewportGate` (ver sección siguiente).
+
+### Gate por debajo del ancho mínimo — `ViewportGate` (RF-APP-002)
+
+`ViewportGate` (`src/components/layout/viewport-gate.tsx`) bloquea la app por debajo de `640px` con un mensaje a viewport completo. Se monta en `src/app/layout.tsx` (root layout — el único que envuelve tanto el route group `(app)` como `/login`), así que cubre toda la app incluido el login. Implementa RF-APP-002.
+
+**Mecanismo: CSS puro, sin una línea de JS.**
+
+- `<body>` lleva `max-floor:invisible max-floor:overflow-hidden`; `<html>` lleva `max-floor:overflow-hidden`.
+- **Se usa `visibility: hidden`, no `display: none`**, porque la visibilidad **se hereda por el árbol del DOM real**. `ModalShell` portalea a `document.body`, así que sus overlays viven **fuera** del wrapper de React de `{children}`: con `display:none` sobre ese wrapper, un modal abierto seguiría visible al cruzar el piso. Con `visibility:hidden` en `<body>`, el modal queda oculto y **fuera del tab order** — los elementos con `visibility:hidden` no son focusables ni entran al árbol de accesibilidad.
+- `ViewportGate` **revierte la herencia sobre sí mismo** (`max-floor:visible max-floor:flex`) para mostrarse mientras el resto del `<body>` queda invisible. Por defecto es `hidden`, así que a `≥640px` no aparece ni ocupa layout.
 
 ## Autenticación (Auth.js / NextAuth v5)
 
@@ -363,30 +389,25 @@ Componente reutilizable **`components/ui/period-nav.tsx`**: navegación genéric
 | `onPrev` / `onNext` | `() => void` | Handlers de navegación. |
 | `canGoPrev` / `canGoNext` | `boolean` (default `true`) | `false` → flecha `aria-disabled`, sin hover, no dispara el handler. En `/mes` siempre `true` (no hay topes de navegación). |
 
-### Estructura: grid de 3 columnas
+### Estructura: bloque canónico + flechas overlay
 
-`PeriodNav` es un **grid de 3 columnas** con `mx-auto` dentro de `<main>` y `align-items: stretch`:
+`PeriodNav` **no es un grid**. Son dos piezas independientes dentro de un wrapper raíz `relative` que ocupa el **100% del ancho de `<main>`** (sin padding propio) — ese wrapper es el sistema de referencia de las flechas:
 
-| Columna | Ancho | Contenido |
-| --- | --- | --- |
-| Izquierda | `auto` | Flecha ‹ (anterior). |
-| Central | `minmax(0, 1120px)` | Contenido (`children`) con tope **1120px**, `px-10` interno y `min-width: 0`. |
-| Derecha | `auto` | Flecha › (siguiente). |
+- **Bloque de contenido** — usa el **mismo mecanismo canónico que las otras cinco pantallas** (`/`, `/categorias`, `/metodos-pago`, `/reportes`, `/configuracion`): `max-w-[1120px] mx-auto`. Es un bloque, no un track de grid: llena el ancho disponible de `<main>` y capea a 1120px centrado. El `px-10` y el padding vertical los aporta el **consumidor** sobre `children`; `PeriodNav` solo aporta `max-w-[1120px] mx-auto`.
+- **Flechas ‹ ›** — **overlay `position:absolute`** respecto del wrapper raíz (por lo tanto respecto del ancho de `<main>`, no del bloque ya capeado). **No reservan ancho**: su presencia no angosta ni empuja el bloque; lo flanquean desde afuera. Tamaño único **64×64** (glifo 46px), sin variantes por breakpoint. Detalle visual en `docs/design.md`.
 
-- **`grid-template-columns: auto minmax(0, 1120px) auto`.** Las columnas laterales `auto` hacen las flechas simétricas respecto del contenido. El cap de 1120px + el `px-10` viven en la **columna central** del propio componente — el consumidor (`page.tsx`) ya **no** lleva `max-w-[1120px] mx-auto`.
-- **Flechas:** **ancladas al centro vertical del viewport** — el botón usa `sticky top-[50vh]` + `translateY(-50%)`, de modo que permanecen centradas en el viewport al scrollear. Para que el centrado al viewport funcione también con **listas cortas**, las celdas laterales llevan `min-height: 100vh`, que le da al `sticky` recorrido suficiente cuando el contenido es más bajo que el viewport. Tamaño único **64×64** (glifo 46px), sin variantes por breakpoint. Detalle visual fino en `docs/design.md`.
+**Offset horizontal de las flechas — CSS puro, sin JS ni medición.** El `left` de la ‹ y el `right` de la › valen ambos `max(0px, calc((100% - 1120px) / 2 - 84px))`, donde `100%` = ancho de `<main>` y `84px` = botón (64) + aire (20). Con contenido ancho la flecha cae entera en el margen exterior; en el rango donde el bloque llena `<main>` la fórmula clampea a 0 y la flecha se pega al borde de `<main>`, solapando la banda de `px-10` — nunca sale de `<main>` (invariante 3 de contención).
+
+**Centrado vertical al viewport.** Cada flecha vive en dos capas anidadas: la **exterior** hace el overlay horizontal (`absolute inset-y-0`, estirada al alto del wrapper raíz); la **interior** centra al viewport (`sticky top-0 h-screen flex items-center`). Como la capa exterior es `absolute`, **no aporta alto al documento** → sin scroll fantasma con listas cortas (el alto del documento lo define solo el bloque de contenido; la capa sticky de 100vh desborda visualmente pero no infla la página).
 
 ### Dos regímenes
 
-| Ancho | Régimen |
+| Ancho de contenido | Régimen |
 | --- | --- |
-| ≥941px | Grid de 3 columnas (flechas a los costados). |
-| ≤940px | Colapsa al **pill stepper** en el header (sin flechas laterales). |
+| ≥941px | Flechas overlay ‹ › a los costados. |
+| ≤940px | Flechas `hidden`; el consumidor renderiza el **stepper compacto** en el header. |
 
-### Gotchas técnicos
-
-1. **`grid-template-columns` va por `style` inline, no como clase Tailwind.** `auto minmax(0, 1120px) auto` mezcla `auto` y `minmax()`, y Tailwind v4 no lo resuelve como utilidad `grid-cols-[...]`.
-2. **`min-width: 0` en la celda central es obligatorio.** Sin él, `minmax(0, 1120px)` no puede encoger por debajo del ancho intrínseco del contenido (gotcha estándar de grid).
+El umbral se mide por **container query sobre `<main>`** (`@wide:`/`@max-wide:`, mismo 941px que `--bp-wide`), **no** contra el viewport: con el sidebar abierto a viewport 1000px el contenido real mide ~712px → régimen compacto (ver §Navegación global, gotcha del `@container`).
 
 ## Vista del mes y Dashboard
 
@@ -411,7 +432,7 @@ El dashboard es `src/app/page.tsx` en **`/`** (no hay `/dashboard`). Redirects:
 ### Vista del mes (`/mes`)
 
 - Lee el mes de **`?month=YYYY-MM`** (default: mes actual en la zona del navegador, vía `getCurrentMonth`).
-- **`month-view-client.tsx` envuelve su contenido en `PeriodNav`** (flechas gigantes ‹ ›) para la navegación prev / next, que cambia `?month=` (con `prevMonth` / `nextMonth`). El rótulo del mes (`formatMonthLabel`) se promueve al **header `.phead`** en ≥941px; en ≤940px el header lleva un **stepper compacto** en lugar de las flechas. Ambos siempre `canGoPrev`/`canGoNext` (en `/mes` no hay topes de navegación). El cap de 1120px y el `px-10` los aporta el propio `PeriodNav` (columna central del grid); `page.tsx` no lleva `max-w-[1120px] mx-auto` (ver sección Navegación de período).
+- **`month-view-client.tsx` envuelve su contenido en `PeriodNav`** (flechas gigantes ‹ ›) para la navegación prev / next, que cambia `?month=` (con `prevMonth` / `nextMonth`). El rótulo del mes (`formatMonthLabel`) se promueve al **header `.phead`** en ≥941px; en ≤940px el header lleva un **stepper compacto** en lugar de las flechas. Ambos siempre `canGoPrev`/`canGoNext` (en `/mes` no hay topes de navegación). El cap de 1120px lo aporta el propio `PeriodNav` (bloque `max-w-[1120px] mx-auto`); el `px-10` y el padding vertical los agrega `month-view-client.tsx` sobre `children`, y `page.tsx` no lleva `max-w-[1120px] mx-auto` (ver sección Navegación de período).
 - **Totales del mes** (de `data.totals`).
 - **Lista agrupada en secciones colapsables + reordenables Únicos / Fijos / Cuotas** (RF-VM-005). Las **tres secciones se muestran siempre**; una sección vacía muestra cabecera completa + empty inline propio (no hay empty global de la pantalla). Se renderizan con `AccordionSection` / `SortableSection` (ver Sistema de componentes). Cada ítem (`movement-item-row`) muestra tipo, monto, categoría, descripción y badge de origen, con acciones **Editar** y **Eliminar** que abren el flujo según el origen: únicos → `TransactionModal` (`edit-single`) / `DeleteTransactionDialog`; fijos → `TransactionModal` (`edit-fixed`) / `delete-recurring-dialog`; cuotas → `TransactionModal` (`edit-installment`) / `delete-installment-dialog`.
 - **Filtros por listado (RF-VM-006) — filtrado y totales en cliente.** Cada sección (Únicos/Fijos/Cuotas) tiene su disparador de filtro de **tipo + categoría** (`components/ui/section-filter-popover.tsx`, ver Sistema de componentes), renderizado como `filterSlot` de `AccordionSection` (oculto en modo orden). **`month-view-client.tsx` filtra cada lista en cliente y recalcula los totales del mes** sobre lo visible: los `data.totals` que devuelve el backend **no se usan en `/mes`** (sí en el dashboard). `useMovements(month)` se llama **sin** `categories` (trae todo el mes en una sola llamada).
@@ -445,7 +466,7 @@ El dashboard es `src/app/page.tsx` en **`/`** (no hay `/dashboard`). Redirects:
 
 La navegación entre `/`, `/mes` y `/categorias` se hace por el **sidebar global** (ver sección siguiente) y, en paralelo, por los **accesos definidos en cada pantalla** (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL). Ambos conviven.
 
-## Navegación global (sidebar — RF-NAV-001)
+## Navegación global (sidebar — RF-NAV-001/002)
 
 Feature 100% frontend. Resuelve la navegación entre secciones, la acción primaria de nuevo movimiento y el menú de usuario, persistente en pantallas autenticadas.
 
@@ -456,13 +477,14 @@ Las tres pantallas autenticadas (`/` dashboard, `/mes`, `/categorias`) viven den
 - **Los route groups de Next.js no alteran las URLs:** `/`, `/mes` y `/categorias` siguen siendo idénticas — `(app)` es solo organización de archivos.
 - **`login` y `registro` quedan FUERA del grupo** → no heredan el layout, por eso no muestran sidebar (cumple el criterio de RF-NAV-001 "no se muestra en pantallas no autenticadas").
 - **Regla para pantallas futuras: toda pantalla nueva con sesión debe vivir bajo `app/(app)/`** para heredar el sidebar. No remontar el sidebar por pantalla.
-- El `<main className="min-h-screen ...">` con el contenedor `mx-auto max-w-2xl` vive en este layout; **las páginas hijas solo devuelven su contenido**, no su propio `<main>` ni contenedor.
+- El `<main>` lo monta **`AppShell`** (no `layout.tsx`) y es el **`@container`** de la app autenticada; **las páginas hijas solo devuelven su contenido** con su propio bloque de ancho (`max-w-[1120px] mx-auto` + `px-10`), no su propio `<main>` ni contenedor.
 - Los componentes co-ubicados de categorías (`categories-list`, `category-form-modal`, `delete-category-dialog`, `reactivation-prompt`) viven junto a su `page.tsx` dentro de `(app)/categorias/`.
 
 ### Componentes
 
-- **`app/(app)/layout.tsx`** — Server Component. Obtiene el email con **`auth()`** y lo pasa como **prop** a `AppSidebar`.
-- **`components/layout/app-sidebar.tsx`** — Client Component (usa `usePathname()` para la sección activa y estado de colapsado).
+- **`app/(app)/layout.tsx`** — Server Component. En una sola pasada de **`auth()`** obtiene el email **y** la preferencia `sidebarOpen`, y delega el shell a `AppShell` pasándole `email` + `initialSidebarOpen` (server-rendered).
+- **`components/layout/app-shell.tsx`** — Client Component. **Dueño del estado abierto/cerrado del sidebar** (`useSidebarOpen`); monta `AppSidebar` + el `<main>` (`@container`) hermanos, y ajusta el offset de `<main>` según el estado. Pasa `open`/`onToggle` a `AppSidebar`.
+- **`components/layout/app-sidebar.tsx`** — Client Component **controlado** (recibe `open`/`onToggle`, no gestiona su propio estado); usa `usePathname()` para la sección activa.
 - **`components/layout/user-menu.tsx`** — avatar + desplegable con "Cerrar sesión" (RF-AUTH-004).
 
 ### Contenido
@@ -471,7 +493,12 @@ Logo/nombre "Control" → `/`; links **Dashboard** (`/`), **Vista del mes** (`/m
 
 ### Decisiones y gotchas
 
-- **Sidebar colapsable:** fijo a la izquierda en desktop; en pantallas chicas se colapsa con botón hamburguesa.
+- **Mostrar/ocultar por el usuario (RF-NAV-002):** un control manual alterna el sidebar entre abierto (ocupa su ancho y empuja el contenido) y oculto (el contenido ocupa el ancho completo), en **todos los anchos**. **No auto-colapsa por breakpoint** — el estado depende solo de la acción del usuario, no del viewport.
+  - **Estado en `app-shell.tsx` (owner), persistido vía `usePreferences` (clave `sidebarOpen`, boolean).** El hook `useSidebarOpen` guarda el estado en React (optimista) y persiste como el resto de las preferencias (ver §Preferencias de usuario): default **abierto** (`true`) si la clave falta; el llamador manda el blob completo (`{ ...preferences, sidebarOpen: valor }`) porque la semántica del backend es reemplazo total. Shape de la clave y "el back no valida ni conoce esta clave" en `docs/data-model.md` (§Claves del blob → `sidebarOpen`).
+  - **Estado inicial server-rendered, sin script anti-FOUC.** `initialSidebarOpen` se lee de `session.preferences` en el layout (Server Component) y baja como prop; el primer HTML ya refleja el sidebar abierto/cerrado correcto y la hidratación coincide — **no hay flash al hidratar**. A diferencia del modo de color, acá no hace falta tocar el DOM antes del primer paint: la estructura correcta viaja en el propio HTML server-rendered.
+  - La ubicación, ícono y animación del control los define `docs/design.md`; acá solo el comportamiento y la persistencia.
+- **El umbral compacto/amplio del área autenticada se mide contra el ancho de `<main>`, NO del viewport.** El `<main>` del shell es `@container`; todo lo que vive bajo él usa `@wide:`/`@max-wide:` (mismo 941px que `--bp-wide`) sobre el ancho **real disponible**, no el del viewport. Con el sidebar abierto a viewport 1000px el contenido mide ~712px → régimen **compacto**. Fuera del área autenticada (login/registro) no hay `@container`: el umbral vuelve a ser media query de viewport (`wide:`/`max-wide:`).
+- **El offset de `<main>` según el sidebar va por `margin-left` (248↔0), NO `padding-left`.** Es estructural, no cosmético: una container query `inline-size` mide el tamaño propio del contenedor **incluyendo su padding** — offsetear con padding haría que `<main>` se "creyera" más ancho de lo que el contenido puede usar y montaría régimen amplio cuando no corresponde. `margin-left` no participa del tamaño propio del elemento, así que el ancho medido por `@container` coincide con el ancho de contenido real (viewport − 248px si está abierto).
 - **Avatar = inicial del email** (no hay imagen para usuarios de email).
 - **Email via prop drilling desde el Server layout, NO `useSession()` en el sidebar.** El layout (Server) lo resuelve con `auth()`. Si el email es `null`, fallback a string vacío (inofensivo: el middleware ya redirigió a usuarios sin sesión).
 - **Sección activa — match EXACTO para `/`:** el link Dashboard compara `pathname === "/"`. Con `startsWith("/")` quedaría activo en **todas** las rutas. Los links `/mes` y `/categorias` usan `startsWith` (no hay subrutas que colisionen).

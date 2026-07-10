@@ -251,7 +251,7 @@ El control del modo de color vive en el **chrome global** (el sidebar / `AppSide
 - **Estados (idénticos al segmented neutro del DS):** *seleccionado* = thumb `--panel` + `--shadow-sm`, icono `--ink`. *No seleccionado* = icono `--muted` → `--ink-2` en hover. *Focus (teclado)* = ring `--accent-soft` 3px sobre el segmento activo. *Disabled* = `opacity-50` + `cursor-not-allowed` mientras persiste el cambio. El índigo aparece **solo** como focus ring (cromo de interacción), nunca tiñendo iconos.
 - **A11y:** `role="radiogroup"` con `aria-label="Modo de color"` + 3 `role="radio"` con `aria-checked` y `aria-label` por opción (con el modo resuelto en Sistema, arriba); flechas ←/→ ciclan por los 3. Como no hay texto visible, **cada segmento debe tener su `aria-label`** (no basta el `aria-label` del grupo).
 - **Persistencia:** persiste **en vivo** al seleccionar (sin botón Guardar). El cambio aplica el nuevo modo a toda la app de inmediato (con la transición de color de ~0.18s descrita arriba). Mientras persiste, el toggle queda *disabled* (estado de arriba). **No** lleva toast: es un control de chrome de feedback inmediato, donde el flip de color **es** la confirmación.
-- **Responsive (drawer mobile ≤940px):** el toggle vive en el **mismo bloque inferior** del drawer overlay (que reusa el `sidebarContent`), en su fila propia encima del `UserMenu`. Mismo tamaño y forma que en desktop (el drawer también es de 248px). No hay variante mobile separada del control; cambia solo el contenedor (drawer vs. sidebar fijo). El toggle de iconos cabe holgado en ambos.
+- **Responsive:** el toggle vive en el **mismo bloque inferior** del sidebar, en su fila propia encima del `UserMenu`, en todos los anchos. El sidebar es un **único elemento de 248px** cuyo mostrar/ocultar lo controla el usuario (ver §Sidebar — mostrar/ocultar); no hay variante mobile separada ni drawer aparte. El toggle de iconos cabe holgado. Cuando el sidebar está cerrado, el control de tema queda oculto junto con el resto del bloque inferior.
 - **Skeleton:** si el bloque inferior del sidebar tiene estado de carga, el placeholder del toggle es un `SkeletonPill` (radio `--r-pill`) del alto del control (~36px) y ancho del toggle de 3 iconos (~108px). En la práctica el tema se resuelve antes del primer paint (sin FOUC), así que el toggle no suele requerir skeleton propio.
 
 > **Resumen.** El control de modo de color **es** un toggle de iconos (`Monitor` Sistema · `Sun` Claro · `Moon` Oscuro, sin label visible) que vive en el bloque inferior de `AppSidebar`, en fila propia encima del `UserMenu`, con label "Tema" `--faint` a la izquierda y el toggle alineado a la derecha. Sus valores visuales (track, thumb, focus ring, estados, transición y a11y) son los descritos arriba en esta sección.
@@ -260,10 +260,135 @@ El control del modo de color vive en el **chrome global** (el sidebar / `AppSide
 
 ## Principios de jerarquía y layout
 
-- **Desktop-first.** El target principal es desktop web. En ≤940px la sidebar se oculta (nav mobile pendiente) y el login pasa a 1 columna.
+- **Desktop-first.** El target principal es desktop web. El **sidebar** (248px) es chrome que el usuario **muestra u oculta** a voluntad en cualquier ancho soportado (ver §Sidebar — mostrar/ocultar), no un elemento que auto-colapsa por breakpoint. Debajo del breakpoint el login pasa a 1 columna y las grillas colapsan a 1 columna.
 - **Jerarquía por peso + tamaño + color, no por decoración.** El monto y los totales dominan visualmente; la meta (categoría, fecha, contadores) va en neutros terciarios.
 - **Semántica antes que estética:** el color de un monto comunica ingreso/gasto, nunca es decorativo.
 - **Movimiento sobrio:** entrada de pantalla fade + translateY (.32s), modal `pop` (scale .98→1, .22s), toast slide-up (.3s), hover .14s. Respetar `prefers-reduced-motion`.
+
+---
+
+## Contención responsive
+
+El producto es **desktop-first** y se diseña para desktop web. En pantalla chica el compromiso no es adaptar ni rediseñar: es **contener**. No se promete una buena experiencia en pantalla chica; se promete que **no se rompe**. Esta distinción es deliberada y acota el trabajo: nada se rediseña para mobile.
+
+### El breakpoint — un solo umbral nombrado
+
+El sistema tiene **un único breakpoint**: `--bp-wide` = **941px**. Es la frontera entre las dos disposiciones del layout:
+
+- **Amplio** (`min-width: 941px`, `≥ --bp-wide`): disposición desktop plena — grillas multicolumna, login a 2 columnas, flechas laterales de `PeriodNav` visibles.
+- **Compacto** (`max-width: 940px`, `< --bp-wide`): grillas colapsan a 1 columna; login a 1 columna; flechas laterales de `PeriodNav` ocultas (stepper compacto en el header). **El sidebar ya no depende de este umbral:** su presencia la controla el usuario en cualquier ancho, no el breakpoint (ver §Sidebar — mostrar/ocultar). **Regla de resumen-primero:** cuando una grilla de resumen colapsa al stack de 1 columna, la tarjeta más importante lidera el stack aunque en amplio ocupe otra posición. En las stat-cards de `/mes` (Gastos · Ingresos · Balance) el **Balance** —el resultado neto, el dato que el usuario busca primero— se reordena al tope en compacto (`order-first`), mientras que en amplio conserva su columna hero a la derecha (`1.1fr`). Es reordenamiento visual sobre tarjetas no interactivas: no afecta foco ni orden de lectura de contenido relevante.
+
+No existe escala de breakpoints (`sm`/`md`/`lg`) ni config de `screens`: hay un solo umbral y se lo nombra `--bp-wide`. Cualquier media query nueva usa este umbral (o lo justifica explícitamente si necesita otro). Los valores sueltos `lg:`/`md:`/`sm:` que aún aparecen en el código son deuda, no escala vigente.
+
+El umbral está **materializado en el código** como `--breakpoint-wide: 941px` dentro de `@theme` (Tailwind v4) en `frontend/src/app/globals.css`. Eso habilita las variantes `wide:` (`width ≥ 941px`) y `max-wide:` (`width < 941px`), complemento exacto. El número **no se repite** en ningún `.tsx`: la disposición se decide con `wide:` / `max-wide:`, no con media queries a mano.
+
+### Ancho mínimo soportado — 640px (`--bp-floor`)
+
+La app **promete contención desde `640px` hacia arriba**. Por debajo de ese ancho no promete nada: no es un viewport soportado. Los cuatro invariantes rigen en todo ancho `≥ 640px`; el "sin scroll horizontal del `body`" (invariante 1) vale sobre ese piso, no de forma absoluta.
+
+**Token del piso.** El piso se nombra `--bp-floor` = **640px**, materializado en el código como `--breakpoint-floor` dentro de `@theme` (Tailwind v4) en `frontend/src/app/globals.css`. Habilita las variantes `floor:` (`width ≥ 640px`) y `max-floor:` (`width < 640px`), complemento exacto que gobierna el gate. El número no se repite en ningún `.tsx`. **Antes era 768px; bajó a 640px** por decisión del usuario (el gate arranca recién bajo 640, y entre 640 y 768 la app debe estar contenida, no gateada).
+
+El piso existe por una razón estructural, no por convención: el ancho mínimo de una columna `fr` de una grilla lo fija el **`min-content` de su contenido**, y en las stat-cards ese contenido es una **cifra de dinero**. Por eso una grilla de montos **no tiene un ancho mínimo fijo**: el ancho al que deja de entrar **depende de los datos del usuario** — cifras más largas rompen a viewports más anchos. Bajar el piso a `640px` **estrecha ese margen**: en la franja `640–768px`, y todavía más con el sidebar abierto (que le resta 248px al ancho de contenido), una cifra larga puede exceder el `min-content` de su card. La contención en ese caso **no se resuelve truncando el monto** (la cifra es el dato, nunca se corta): la card colapsa a 1 columna y, si aun así no entra, la superficie **scrollea dentro de sí misma** (invariante 4). El `body` nunca scrollea. Regla de diseño: al dimensionar una grilla de montos, no se asume un ancho mínimo fijo; se asume que lo fija el dato, y que el ancho disponible puede ser `viewport − 248px` cuando el sidebar está abierto.
+
+### El gate — qué pasa por debajo del piso
+
+Por debajo del ancho mínimo soportado (`< 640px`) no se contiene ni se adapta: se **gatea**. Una pantalla a viewport completo **impide usar la app** y le dice al usuario qué hacer (agrandar la ventana o usar una pantalla más grande). Cubre **toda la app, incluido el login**, y es un **bloqueo** sin escape: no hay "continuar igual". No genera scroll. La regla funcional, el alcance y el copy exacto son canónicos en `requirements.md`, RF-APP-002 — acá no se repiten. **El gate se decide por el ancho del viewport, no por el ancho de contenido:** que el sidebar esté abierto y estreche el contenido a menos de 640px **no** dispara el gate (el usuario puede cerrarlo para recuperar ancho).
+
+Es **CSS puro**: la aparición y desaparición del gate se deciden con una media query sobre el ancho del viewport (`max-width: 639px`), no con JavaScript. Así, al cruzar el piso (rotar, redimensionar), la app aparece o desaparece **sin recargar ni parpadear**. Una solución con JS reintroduciría el parpadeo de hidratación y la recarga: por eso la condición es estructuralmente CSS, no una elección de estilo.
+
+Visualmente el gate **reusa tokens y primitivas ya existentes** del design system (no introduce valores nuevos): superficie de fondo de la app (`paper`), tipografía UI del sistema, colores de texto `ink`/`muted`/`faint`, y el espaciado estándar. Es una pantalla de una sola columna centrada, jerarquizada en tres capas: **ícono monolínea** (ancla visual que declara "esto es intencional, no está roto"), **título** y **una línea de apoyo**, sin controles. El texto de apoyo es **agnóstico de dispositivo** (no asume desktop ni orientación) y **no expone el umbral en px** al usuario. Al cruzar el piso por rotación o redimensionado, la media query `max-floor` reevalúa el ancho del viewport y muestra/oculta el gate **en vivo, sin recarga ni parpadeo**: no hay manejo especial de rotación. Funciona idéntico en claro y oscuro (todos sus tokens son theme-aware).
+
+### Los cuatro invariantes de contención
+
+Todo lo que se diseña respeta estos cuatro invariantes en todo ancho **`≥ 640px`** (el ancho mínimo soportado), **en cualquiera de los dos estados del sidebar** (abierto o cerrado). Son verificables a ojo y material permanente del QA visual (no los detecta ni el build ni los tests):
+
+1. **Sin scroll horizontal del `body`** en todo ancho `≥ 640px` (el ancho mínimo soportado), con el sidebar abierto o cerrado. Por debajo del piso la app no promete contención.
+2. **Modales completos y scrolleables:** no cortados, no atrapantes — el usuario siempre puede ver el modal entero y salir de él.
+3. **Ninguna acción inalcanzable:** ningún control queda fuera de pantalla ni tapado.
+4. **Las superficies anchas scrollean dentro de sí mismas** (tablas, gráficos, filas anchas), sin romper el layout de la página.
+
+### Ancho de contenido de página — llenar hasta el cap, después centrar
+
+Regla transversal para el ancho del contenido en **todas** las pantallas del área autenticada (`/`, `/mes`, `/categorias`, `/metodos-pago`, `/reportes`, `/configuracion`). Un solo comportamiento, idéntico en las seis:
+
+- El contenido **llena el ancho disponible** del `<main>` menos el padding lateral de página (`px-10` = 40px por lado), **hasta un tope de 1120px**.
+- Alcanzado 1120px, el contenido **capea y se centra**; el sobrante queda como margen exterior parejo a ambos lados. Este comportamiento por encima de 1120 es correcto y deseado — no se toca.
+- **Nunca hay banda muerta al costado del contenido por debajo de 1120px.** Entre el piso soportado (640px) y 1120px el contenido **crece para ocupar el ancho**. Que el contenido quede angosto (a su `max-content`) y pegado a un lado, dejando media pantalla vacía, es un **defecto** — y arrastra síntomas (columnas aplastadas, nombres truncados a una letra en la lista de `/mes`).
+- **El "ancho disponible" es el del `<main>`, no el del viewport.** Con el sidebar **abierto**, el `<main>` está corrido 248px y su ancho es `viewport − 248px`; con el sidebar **cerrado**, el `<main>` ocupa el viewport completo. El tope de 1120px y el centrado se miden **contra el ancho del `<main>`** (el ancho de contenido), no contra el viewport. Consecuencia: el contenido cabe en 1120 y se centra cuando el `<main>` supera 1120 + gutters, lo que ocurre a viewport ≈1160 con sidebar cerrado y a viewport ≈1408 con sidebar abierto. En ambos casos el comportamiento visual es el mismo; solo cambia el viewport al que se alcanza el cap, porque el offset del sidebar ahora es **toggle-driven, no breakpoint-driven**.
+- **El régimen de disposición (compacto/amplio) también se decide por el ancho del `<main>`, no por el viewport.** El umbral `--bp-wide` (941px) que colapsa grillas a 1 columna y muestra/oculta las flechas de `PeriodNav` debe evaluarse sobre el **ancho de contenido disponible** (`viewport − 248px` si el sidebar está abierto), no sobre el viewport crudo. Motivo: con el sidebar abierto a viewport 1000px el contenido mide ~712px; si el layout creyera "amplio" por el viewport, montaría grillas multicolumna en un hueco de 712px y desbordaría → scroll horizontal del `body` (rompe el invariante 1). El mecanismo natural es una **container query sobre `<main>`** en vez de una media query sobre el viewport; el mecanismo exacto lo resuelve `control-frontend`, pero el contrato es: **la disposición sigue al ancho de contenido, no al viewport.**
+- **Flechas ‹ › de `PeriodNav` — overlay, NO gutters.** Son las flechas laterales del patrón de navegación de período. Aparecen **solo cuando el ancho de contenido es ≥ 941px** (régimen amplio, medido sobre `<main>` por **container query**, no por viewport). Por debajo se ocultan y el consumidor renderiza el stepper compacto en el header. Con el sidebar **cerrado** aparecen a viewport ≥941; con el sidebar **abierto** recién a viewport ≈1189 (941 + 248), porque hasta ahí el contenido no llega a 941.
+  - **No reservan ancho de columna.** Corrige el modelo anterior (grilla `auto min(…) auto` con dos gutters de 84px que le comían 168px al contenido y dejaban `/mes` más angosto que las otras cinco pantallas al mismo viewport — defecto medido en el navegador). El bloque de contenido de `/mes` usa **exactamente el mismo mecanismo que el resto** (`px-10 max-w-[1120px] mx-auto`: llena hasta 1120, capea y centra) y por lo tanto tiene el **mismo ancho a igual viewport**. Las flechas son **overlay**: posicionadas en valor **absoluto respecto del bloque de contenido** y centradas verticalmente al viewport (sticky, sin cambios). Flanquean el bloque **desde afuera, sin empujarlo ni angostarlo**.
+  - **Posición horizontal de la flecha overlay:**
+    - *Margen exterior holgado (≥84px por lado = botón 64 + 20 de aire; ocurre en viewports muy anchos, cuando el bloque ya capeó a 1120 y sobra margen):* la flecha se ubica **entera en el margen exterior**, con **20px de aire** entre su borde interior y el borde del bloque. Caso limpio.
+    - *Margen exterior más angosto que la flecha (el caso típico del régimen amplio: contenido ~941–1120, donde el bloque llena el `<main>` y el margen exterior va de 0 a 84px):* la flecha **flota sobre el borde exterior del bloque**, aterrizando en la banda de padding `px-10` (40px, estructuralmente vacía), **clampeada para no salirse nunca del `<main>`** → queda siempre entera, on-screen y clickeable (invariante 3). En el piso (margen 0) el botón solapa ~24px sobre el filo del contenido; ese solape cae sobre el borde de baja densidad del bloque y, **en reposo, es solo el glifo tenue** (el disco de fondo aparece únicamente en hover/active, cuando el usuario ya está interactuando deliberadamente).
+  - **Borde resuelto (por qué el gutter existía).** Cuando el margen exterior es más angosto que la flecha se eligió **solapar sobre el filo del contenido, acotado a la banda `px-10`** (opción 1), no ocultar la flecha (el usuario las quiere presentes) ni reservar un gutter mínimo (opción 3: reintroduce exactamente el angostamiento que es el defecto a corregir). El solape es tolerable porque el `px-10` es padding vacío y el reposo es un glifo fino, no un disco; y nunca deja la flecha fuera de pantalla.
+- **Mecanismo canónico de ancho (las seis páginas):** `px-10 max-w-[1120px] mx-auto` sobre un `div` de bloque. Un bloque con `max-width` **llena** el ancho disponible y solo capea al máximo. Las seis páginas lo usan para el **ancho de contenido**, incluida `/mes` (dentro de `PeriodNav`, el bloque central es este mismo patrón); las flechas de `/mes` se superponen encima como overlay, sin participar del cálculo de ancho.
+- **Trampa retirada (grilla con gutters):** el modelo previo de `PeriodNav` como grilla `auto min(calc(100% − 168px), 1120px) auto` queda **descartado**. Causaba dos defectos medidos: (a) contenido de `/mes` 168px más angosto que las demás pantallas; (b) a ~785px la pista central colapsaba a ~0 y las stat-cards quedaban en slivers de ~40px. Ambos desaparecen con el modelo overlay: el ancho lo da el bloque canónico (nunca colapsa a `max-content`, nunca se angosta por las flechas) y las flechas dejan de tocar el layout de ancho. El mecanismo CSS exacto del overlay lo resuelve `control-frontend`.
+
+### Obligación sobre los specs
+
+**Todo spec de diseño declara el comportamiento en pantalla chica.** Es obligatorio: un spec sin la sección de contención (qué pasa en compacto, cómo se cumplen los cuatro invariantes en ese elemento) está incompleto. El comportamiento en compacto no es un extra opcional del spec — es parte de la definición del elemento.
+
+### Franja de checkpoints — anchos de referencia (con el sidebar en juego)
+
+Anchos concretos que el QA visual verifica a ojo. El **ancho de contenido** = `viewport − 248px` con el sidebar abierto, o `= viewport` con el sidebar cerrado. La disposición sigue al **ancho de contenido**, no al viewport.
+
+| Viewport | Sidebar | Ancho de contenido | Disposición esperada |
+|---|---|---|---|
+| `< 640px` | — | — | **Gate** (bloqueo, sin app). No importa el estado del sidebar. |
+| `640px` (piso) | cerrado | 640px | Compacto: grillas a 1 columna, sin flechas, stepper en header. Sin scroll del `body`. |
+| `640px` (piso) | abierto | 392px | Compacto extremo: 1 columna. Los montos no se truncan; si una cifra no entra, su superficie scrollea dentro de sí (invariante 4). Sin scroll del `body`. |
+| `~700px` | cerrado | 700px | Compacto, 1 columna. |
+| `~700px` | abierto | ~452px | Compacto, 1 columna (mismo régimen que un viewport angosto). |
+| `941px` | cerrado | 941px | **Umbral amplio:** grillas multicolumna, **flechas ‹ › visibles**. |
+| `941px` | abierto | 693px | Sigue **compacto** (el contenido no llega a 941): sin flechas, 1 columna. |
+| `~1189px` | abierto | ~941px | Con el sidebar abierto recién acá aparecen flechas y multicolumna. |
+| `~1160px` | cerrado | 1120px | El contenido alcanza el **cap de 1120px**: capea y se centra; aparece margen exterior parejo. |
+| `~1408px` | abierto | 1120px | Con el sidebar abierto el cap se alcanza acá. Mismo resultado visual (capea y centra). |
+
+**Regla de lectura:** ninguna fila puede producir scroll horizontal del `body`, modal cortado, acción inalcanzable ni banda muerta por debajo del cap. Los checkpoints que más rompen históricamente son los de **sidebar abierto a ancho apretado** (640–941 viewport): ahí el contenido es angosto y el layout debe estar en régimen compacto, no amplio.
+
+---
+
+## Sidebar — mostrar/ocultar (chrome toggleable)
+
+Implementa **RF-NAV-002**. El sidebar (`AppSidebar`, 248px) deja de auto-colapsar por breakpoint: es **chrome que el usuario muestra u oculta a voluntad en cualquier ancho** ≥640px. Un solo elemento, dos estados (**abierto** / **cerrado**). No hay drawer mobile aparte, no hay overlay, no hay rail de íconos. El estado persiste en la preferencia `sidebarOpen` (default **abierto**).
+
+### Estado abierto (default)
+
+- El sidebar es el de RF-NAV-001 tal cual: **248px de ancho, `fixed inset-y-0 left-0`, `bg-panel`, `border-r border-line`, `px-4 py-[22px]`**. Contenido sin cambios: logo, label "Menú", nav, spacer, CTA "Nuevo movimiento", fila de Tema, `UserMenu`.
+- **Empuja el contenido:** el `<main>` está corrido `pl-[248px]`; su ancho es `viewport − 248px`. Confirmado — es el comportamiento actual, no cambia.
+- **Control de colapsar (vive dentro del sidebar):** un botón **al extremo derecho de la fila del logo**, alineado con el gem (`items-center`, el logo a la izquierda, el botón `ml-auto`). No es un ítem de nav; es chrome del propio sidebar.
+  - **Ícono:** `PanelLeftClose` (lucide), 18px, `strokeWidth` default. Comunica "plegar el panel lateral" mejor que un hamburguesa (que lee "abrir menú"). `aria-label="Ocultar menú"`, `aria-expanded="true"`.
+  - **Caja:** botón `~32px` (`p-1.5`), `rounded-ctl`. Glifo en reposo `text-muted`.
+  - **Estados:** hover `bg-panel-2` + glifo `text-ink`; active `bg-panel-3`; focus-visible `shadow-[0_0_0_3px_var(--accent-soft)]` (anillo DS); transición `duration-[140ms] motion-reduce:transition-none`. Mismo vocabulario que el resto de los controles de chrome.
+
+### Estado cerrado
+
+- El sidebar **desaparece por completo**: no queda rail de íconos ni franja. **Decisión deliberada:** un rail parcial obligaría a rediseñar una tercera variante del sidebar (¿dónde van la CTA, el Tema, el `UserMenu`?) y contradice el objetivo del cierre, que es **dar todo el ancho al contenido**. Un solo elemento con dos estados (presente/ausente) es más consistente y barato de mantener que tres.
+- El `<main>` pasa a `pl-0`: el contenido ocupa el **ancho completo del viewport** (menos su `px-10` propio), respetando el mismo contrato de ancho de contenido (llena hasta 1120, después capea y centra).
+- **Control de abrir (vive sobre el contenido):** como el sidebar ya no está, hace falta un affordance persistente para reabrirlo. Es un **botón flotante fijo arriba-izquierda** (`fixed top-4 left-4 z-40`), en la posición donde hoy vive el hamburguesa.
+  - **Ícono:** `PanelLeft` (lucide), 20px. `aria-label="Mostrar menú"`, `aria-expanded="false"`.
+  - **Caja como chip de chrome:** a diferencia del botón de colapsar (que vive sobre el `bg-panel` del sidebar), este flota **sobre contenido arbitrario de la página**, así que necesita cuerpo propio para leerse: `bg-panel`, `border border-line`, `rounded-ctl`, `shadow-[var(--shadow-sm)]`, caja `~40px` (`p-2.5`) para target táctil holgado (~44px con el área de toque). Glifo `text-ink-2` en reposo.
+  - **Estados:** hover `bg-panel-2` + glifo `text-ink`; active `bg-panel-3`; focus-visible anillo `--accent-soft`; misma transición 140ms.
+  - **No tapa la acción de la página:** al estar `top-4 left-4` y ser un chip de 40px, convive con el header de cada pantalla (que arranca con su `px-10`/`pt` propio). Si en alguna pantalla el chip se encimara con el título, el frontend reserva el aire correspondiente — pero el chip **manda** (es chrome persistente, no puede quedar tapado; invariante 3).
+
+> **Un control lógico, dos encarnaciones.** No hay dos botones simultáneos: cuando el sidebar está **abierto**, se ve solo el botón de **colapsar** (dentro del sidebar); cuando está **cerrado**, se ve solo el botón **flotante de abrir**. El hamburguesa/drawer anterior (`Menu` + overlay `wide:hidden`) **se retira**: ya no hay lógica por breakpoint.
+
+### Borde crítico — sidebar abierto a ancho apretado: empuja, no overlay
+
+Con el sidebar **abierto** a un viewport chico (ej. 700px → contenido ~452px), el sidebar **empuja y estrecha el contenido**; **nunca** pasa a overlay por encima del contenido. Razón: el overlay reintroduciría exactamente la variante mobile/drawer que este rework elimina, y rompería el modelo de "un elemento, dos estados" válido en todos los anchos. La consecuencia (contenido angosto a viewport chico con sidebar abierto) se absorbe con los mecanismos de contención ya definidos: **la disposición sigue al ancho de contenido** (colapsa a compacto/1-columna) y las superficies anchas **scrollean dentro de sí** (invariante 4). Es coherente con la filosofía de contención: no se promete buena experiencia a 452px, se promete que **no se rompe**. Si el usuario quiere más ancho, cierra el sidebar — es su decisión, no la del breakpoint.
+
+### Transición de abrir/cerrar
+
+- **Qué se mueve:** el sidebar se desliza horizontalmente (entra/sale por el borde izquierdo) y, **en sincronía**, el `<main>` reajusta su offset izquierdo (248→0 al cerrar, 0→248 al abrir). El contenido se reacomoda hacia la izquierda al cerrar y hacia la derecha al abrir, como un solo movimiento coordinado.
+- **Duración y easing:** **0.24s** con `cubic-bezier(0.4, 0, 0.2, 1)` (ease-in-out estándar). Cae entre el modal `pop` (.22s) y la entrada de pantalla (.32s); es chrome, no una entrada dramática.
+- **Sin fades de contenido:** el contenido de la página no hace fade; solo se reacomoda su posición/ancho. El sidebar puede acompañar su deslizamiento con un fade sutil de opacidad si ayuda al slide, pero no es requisito.
+- **`prefers-reduced-motion`:** sin transición — el cambio de estado es instantáneo.
+
+### Carga inicial sin flash
+
+El estado inicial (`sidebarOpen`) viene de la preferencia del usuario (blob, server-rendered, igual que `theme`). **No debe haber flash de estado incorrecto al montar:** la app no puede pintar el sidebar abierto y luego cerrarlo (ni al revés) al hidratar. El primer paint ya refleja el `sidebarOpen` correcto. El mecanismo (render del estado inicial desde la preferencia provista por el servidor, sin salto de hidratación) lo resuelve `control-frontend`, análogo al anti-FOUC del modo de color. Es un requisito de **comportamiento visual**, no una sugerencia.
 
 ---
 
@@ -576,6 +701,28 @@ Regla **transversal a TODOS los modales/diálogos** de la app: transaction-modal
 
 **Animación.** El `animate-modal-pop` sigue corriendo sobre el diálogo al entrar; la región de scroll **no** anima. Respeta `prefers-reduced-motion`.
 
+#### Shell de modal compartido (`ModalShell`) — pieza única, no convención copiada
+
+El contrato de arriba **no se cumple copiando el mismo markup a mano en cada modal** (así es como hoy 3 de 12 lo incumplen: nada obliga la regla). Se cumple con **un único componente de shell** —`ModalShell`— que **todos** los modales/diálogos de la app consumen. El modal concreto aporta solo su **contenido** (los campos del form, el texto de la confirmación) y sus **acciones**; el shell aporta el scrim, el panel, las tres zonas, el `max-height`, el clipping, el body-lock y los divisores de corte. Ningún modal vuelve a escribir el scrim ni a llamar `useBodyScrollLock` por su cuenta. **Prohibido el parche por archivo:** cualquier modal que hoy arma su propio scrim se migra a consumir el shell; no se corrige el `max-height` archivo por archivo.
+
+**Anatomía canónica que encapsula el shell** (valores exactos, tomados del modal que ya cumple, `transaction-modal.tsx`):
+
+- **Scrim (portal a `document.body`):** `fixed inset-0 z-40 flex items-center justify-center p-6`; fondo `oklch(0.18 0.02 270 / 0.46)` + `backdropFilter: blur(3px)`. El `p-6` (**24px**) es el que define el `48px` del `calc`: **van atados** (`max-height: calc(100dvh − 2 × padding-del-scrim)`). Si el shell algún día baja ese padding, el `calc` lo sigue por construcción (una sola fuente: es el mismo componente).
+- **Panel:** `w-full bg-panel border border-line overflow-hidden animate-modal-pop max-h-[calc(100dvh-48px)] flex flex-col`; `borderRadius: 18px`; `boxShadow: var(--shadow-lg)`. El `flex flex-col` + `overflow-hidden` es lo que hace que las tres zonas funcionen y que la región de scroll quede clippeada al radio 18px.
+- **Zona 1 — Header (`shrink-0`):** `flex items-center justify-between px-[22px] pt-5 pb-4`. Título + ✕. Si el modal tiene tabs (`.dtabs`), viven también acá, pineadas (`shrink-0`). Nunca scrollea.
+- **Zona 2 — Cuerpo (`flex-1 min-h-0 overflow-y-auto`):** **única** región que scrollea. Padding horizontal `px-[22px]` como carril del scrollbar. Ritmo interno según el contenido (`space-y-[14px]` en forms).
+- **Zona 3 — Footer (`shrink-0`):** `flex justify-end gap-3 px-[22px] py-4`, **fuera** de la región de scroll, hermano del cuerpo (no hijo). Fondo **opaco**: `--panel` por defecto; una confirmación puede apoyarlo en `--panel-2` (también opaco) — lo que no se admite es footer translúcido. Divisor superior `border-t border-hair` **cuando** el cuerpo desborda (señal de corte); ver contrato de divisores arriba.
+
+**Dos variantes del mismo shell** (difieren en tamaño y densidad, **no** en anatomía ni en el contrato):
+
+- **`dialog` — confirmación / diálogo chico** (borrados, reactivación, `active-limit-dialog`): `max-w-[440px]`, sin tabs, cuerpo corto que casi nunca desborda. **Igual acata** las tres zonas y el `max-height`: cuando el contenido entra, no hay scroll, no hay divisores y el footer se apoya al pie natural (se ve como un diálogo normal). El `max-height` solo actúa en el peor caso (viewport muy bajo).
+- **`form` — formulario largo** (`transaction-modal`, `category-form-modal`, método de pago, **crear/editar límite**): `max-w-[460px]`, puede llevar tabs en el header, cuerpo alto que **sí** desborda en viewport chico → el cuerpo scrollea y header+footer quedan pineados. Es el caso donde el contrato se nota.
+
+**Deuda concreta a barrer con esta pieza** (los 3 que hoy incumplen el `max-height`, todos por no consumir un shell común):
+
+- `create-limit-modal.tsx` — hoy usa `max-h-[90vh]` (variante `form`). Debe pasar a `calc(100dvh-48px)` (**`dvh`, no `vh`**) al consumir el shell. Es el form más alto de la app: es exactamente el caso que el contrato existe para proteger.
+- `categorias/reactivation-prompt.tsx` y `metodos-pago/reactivation-prompt.tsx` — hoy **no declaran `max-height` ni región de scroll** (variante `dialog`). Al consumir el shell heredan el `max-height` y las tres zonas sin tocar su contenido.
+
 #### Checklist de aceptación visual — overflow y body-lock de modales
 
 - [ ] **Fondo inmóvil:** con un modal abierto, girar la rueda / hacer scroll sobre el scrim y sobre el diálogo **no mueve la página de atrás**.
@@ -588,12 +735,67 @@ Regla **transversal a TODOS los modales/diálogos** de la app: transaction-modal
 - [ ] **Scrollbar en el gutter:** la barra de scroll no se monta sobre inputs ni labels.
 - [ ] **Cabe sin scroll → se ve normal:** un modal cuyo contenido entra en pantalla (p. ej. una confirmación de borrado) se ve sin scroll, sin líneas de corte y con el footer al pie natural.
 - [ ] **Apilamiento correcto:** si se abre una confirmación sobre otro modal, el fondo sigue bloqueado; al cerrar la de arriba el lock persiste hasta cerrar el último modal.
+- [ ] **`dvh`, no `vh`:** el panel usa `max-h-[calc(100dvh-48px)]`. Verificación específica en el navegador con barra dinámica (mobile): el modal **no** queda cortado por debajo de la barra del navegador (síntoma de `vh`).
+- [ ] **Los 3 offenders migrados:** en viewport bajo, **crear límite** (`create-limit-modal`, el form más alto) pinea footer y scrollea el cuerpo; los dos **`reactivation-prompt`** (categorías y métodos de pago) también respetan el `max-height` y las tres zonas. Ninguno arma su propio scrim: todos consumen `ModalShell`.
+
+### Superficies con scroll interno — contención de tablas y gráficos anchos
+
+Instancia del **invariante 4** (*"las superficies anchas scrollean dentro de sí mismas, sin romper el layout de la página"*) para las tres superficies que no se pueden achicar sin volverse ilegibles: la grilla día×mes de Únicos, el gantt de Cuotas y la lista de límites de `/configuracion`. **Contener ≠ adaptar:** no se rediseña ninguna para pantalla chica; se garantiza que **el scroll vive dentro de la superficie** y **nunca lo hereda el `body`** (invariante 1).
+
+#### Regla transversal — el scroll horizontal vive en la card, y los overlays escapan por portal
+
+1. **El carril de scroll es la card, no la página.** La superficie ancha va envuelta en un contenedor con `overflow-x: auto` (`WebkitOverflowScrolling: touch`). El `body` no scrollea horizontal jamás; el desborde lo absorbe la card. Esto **ya está** en `unique-grid-card` y `cuotas-gantt-card` (`<div class="… overflow-x-auto">`); esta sección lo ratifica y le agrega la **affordance de corte** (abajo), que hoy falta.
+2. **Regla dura de overlays dentro de scroll (invariante 3).** Cualquier **popover, menú kebab, tooltip o confirmación** anclado a un elemento que vive dentro de una superficie con `overflow`, **se renderiza por `createPortal` a `document.body`** con posición `fixed` calculada desde el `getBoundingClientRect()` del ancla. Motivo: un overlay hijo de un contenedor con `overflow-x/y: auto` se **clippea** o se **corta** contra el borde del carril → una acción queda inalcanzable. Los dos cards ya lo hacen (el `RemoveConfirmPopover` y todos los tooltips van portaled); **es la regla, no una excepción de esos archivos**. Los `<Select>` nativos del DS no necesitan portal (el dropdown nativo no lo clippea el overflow).
+3. **Affordance de "hay más" (obligatoria, hoy ausente).** Cuando el contenido excede el ancho del carril, el borde por el que hay contenido oculto muestra una **sombra de corte** de 1px→transparente: `box-shadow` interior `inset -14px 0 12px -12px oklch(0.18 0.02 270 / 0.18)` sobre el borde derecho (hay más a la derecha) y su espejo `inset 14px 0 …` sobre el izquierdo (hay más a la izquierda, es decir cuando ya se scrolleó). En modo oscuro la sombra usa `oklch(0 0 0 / 0.4)`. La sombra **aparece/desaparece según la posición de scroll** (sin sombra en el extremo alcanzado). No se usa fade con `mask` sobre celdas con cifras (taparía un monto); se usa la sombra de borde, que no oculta contenido. Es **la misma familia** de "señal de corte" que la hairline de los modales, adaptada al eje horizontal.
+
+#### `unique-grid-card` — grilla día × mes (31 filas × 12 columnas)
+
+- **Eje de scroll: horizontal.** El ancho es el que desborda: 12 columnas × mínimo **64px** + columna de días **28px** ≈ **796px**, que no entra en compacto. Las 31 filas de día caben en alto; el scroll **vertical** de la grilla lo hace la **página** (no la card), así que la grilla no se recorta en alto.
+- **Sticky que importa: la columna de días (`sticky left-0`).** Al scrollear horizontal, la columna de números de día (1–31) queda **fija a la izquierda** para no perder de vista a qué día corresponde cada celda. Ya está implementado (`th sticky left-0`), se ratifica. La celda esquina (día×header) también es `sticky left-0 top-0`.
+- **Header de meses (`sticky top-0`):** se mantiene como está. Su utilidad real es acotada (el scroll vertical es de página, no del carril), pero es inocuo y coherente con el gantt; **la contención en compacto la resuelve el scroll horizontal + la columna de días sticky**, no el header sticky.
+- **Affordance:** sombra de corte derecha/izquierda por regla transversal §3, sobre el carril `overflow-x-auto`. Debe **respetar la columna de días sticky** (la sombra izquierda aparece por fuera de esa columna, indicando que hay meses ocultos a la izquierda).
+- **Overlays:** tooltip de celda, tooltip de footer y `RemoveConfirmPopover` **ya van portaled** — cumplen §2 sin cambios.
+
+**Comportamiento en pantalla chica (compacto, `< --bp-wide`).** La card conserva su ancho de columna; la grilla scrollea horizontal dentro de la card. Invariante 1: el `body` no scrollea horizontal (lo absorbe el carril). Invariante 3: los tooltips/popover portaled no se clippean. Invariante 4: el scroll vive en la card. La columna de días sticky garantiza que el eje de lectura nunca se pierde. No se reduce el mínimo de 64px por columna (por debajo, las cifras `mono` se vuelven ilegibles) — se prefiere scroll a ilegibilidad.
+
+#### `cuotas-gantt-card` — gantt de barras horizontales (12 meses)
+
+- **Eje de scroll: horizontal.** Ancho = 12 columnas × mínimo **64px** = **768px** (`minWidth: calc(12 * 64px)`, ya presente). Desborda en compacto → scroll horizontal dentro de la card.
+- **Sticky: header de meses (`sticky top-0`, ya presente).** El gantt **no tiene columna de etiquetas de fila** (las barras se rotulan inline con monto·descripción), así que **no hay sticky-left que definir** — el eje de identidad de cada barra viaja con la barra. Se ratifica el header de meses sticky como está.
+- **Affordance:** sombra de corte derecha/izquierda por §3, sobre el carril `overflow-x-auto`. Complementa —no reemplaza— los chevrons `‹`/`›` de las barras, que significan "la cuota continúa en otro año", **no** "hay scroll" (son dos señales distintas y no deben confundirse).
+- **Overlays:** `BarTooltipPortal` y `RemoveConfirmPopover` **ya van portaled** — cumplen §2.
+
+**Comportamiento en pantalla chica (compacto).** Idéntico a Únicos: card de ancho fijo, gantt scrollea horizontal adentro, `body` sin scroll horizontal (inv. 1), overlays portaled sin clip (inv. 3), scroll en la card (inv. 4). Mínimo 64px/mes: por debajo, el monto `mono` dentro de una barra de 1 mes no entra — se prefiere scroll.
+
+#### Tabla de límites (`limits-tab` + `limit-row`) — lista, no tabla ancha
+
+Honestidad de diagnóstico: esta superficie **no es una tabla ancha de columnas fijas** como las dos anteriores; es una **lista vertical de filas** (`flex flex-col`, card con `overflow-hidden` y radio 14px). Su contención **no** es scroll horizontal interno, sino **truncado + wrap** — forzar un scroll horizontal acá sería inventar un problema que no existe. La regla que aplica:
+
+- **Fila (`limit-row`):** `flex items-center justify-between gap-6`. Zona **identidad** izquierda `flex-1 min-w-0` con el label `truncate`; zona **acciones** derecha `shrink-0` (toggle + borrar). Como identidad puede encogerse a 0 (por `min-w-0` + `truncate`) y las acciones son `shrink-0`, la fila **nunca empuja scroll horizontal del body** (inv. 1): a lo sumo el label se trunca. Se ratifica.
+- **Sublínea de metadatos (chips):** `flex-wrap` (ya presente) — los chips de condición (`mono tabular`) y de alcance **envuelven** a la línea siguiente en vez de desbordar. Se ratifica.
+- **Confirmación inline de borrado (invariante 3):** al pedir borrar, la zona de acciones muestra `¿Eliminar? [Eliminar] [Cancelar]` (`shrink-0`, `whitespace-nowrap`). En compacto muy angosto estos tres controles + la identidad `min-w-0` conviven porque identidad cede ancho; **ninguna acción queda inalcanzable ni tapada**. Es confirmación **inline**, no popover → no hay riesgo de clipping por overflow (no aplica §2). Se ratifica el patrón; si en el ancho mínimo la confirmación apretara demasiado, la salida es que la **identidad ceda** (ya lo hace), nunca que los botones se salgan.
+
+**Comportamiento en pantalla chica (compacto).** La card de la lista mantiene su ancho de columna del panel; las filas se contienen por truncado (identidad) y wrap (chips). No hay scroll interno porque no hace falta: la fila no tiene ancho mínimo rígido. Inv. 1: sin scroll horizontal del body. Inv. 3: toggle, borrar y la confirmación inline siempre alcanzables (identidad cede ancho antes que las acciones). Inv. 4: no aplica (no es superficie ancha); la contención es truncado+wrap.
+
+#### Checklist de aceptación visual — superficies con scroll interno
+
+- [ ] **`unique-grid` — sin scroll horizontal del body (inv. 1):** en compacto, la grilla scrollea horizontal **dentro de la card**; la página no gana barra horizontal.
+- [ ] **`unique-grid` — columna de días sticky (inv. 4):** al scrollear la grilla a la derecha, la columna de números de día 1–31 queda fija a la izquierda.
+- [ ] **`unique-grid` — affordance de corte:** con contenido oculto a la derecha aparece la sombra de borde derecho; al scrollear aparece la del borde izquierdo; en los extremos, sin sombra.
+- [ ] **`unique-grid` — overlays no clippeados (inv. 3):** tooltip de celda, tooltip de footer y popover de "quitar reporte" se ven completos, sin recorte contra el borde del carril.
+- [ ] **`cuotas-gantt` — sin scroll horizontal del body (inv. 1):** el gantt scrollea horizontal dentro de la card; la página no gana barra horizontal.
+- [ ] **`cuotas-gantt` — header de meses sticky (inv. 4):** el header Ene…Dic permanece durante el scroll del carril.
+- [ ] **`cuotas-gantt` — affordance de corte:** sombra de borde derecho/izquierdo según posición de scroll; los chevrons `‹`/`›` de barra se distinguen de la sombra (son continuidad de año, no scroll).
+- [ ] **`cuotas-gantt` — overlays no clippeados (inv. 3):** tooltip de barra y popover de "quitar reporte" completos, sin recorte.
+- [ ] **`limits-tab` — sin scroll horizontal del body (inv. 1):** en compacto, la fila trunca el label y envuelve los chips; la página no gana barra horizontal.
+- [ ] **`limits-tab` — acciones alcanzables (inv. 3):** toggle, botón borrar y la confirmación inline `¿Eliminar?/[Eliminar]/[Cancelar]` siempre visibles y clickeables; la identidad cede ancho antes que las acciones.
 
 ### PeriodNav — navegación de período (flechas gigantes laterales + modo `.stepper`)
 
 Patrón **genérico** para navegar un período (mes o año): `‹ contenido ›`, donde **‹ va al período anterior y › al siguiente**. Recibe un rótulo de período ya formateado, handlers anterior/siguiente y dos flags `canGoPrev` / `canGoNext`. **Mismo componente, distinto período.** Tiene **dos formas**:
 
-- **Forma lateral (canónica, a ancho de página):** layout de **3 columnas** `[ ‹ ] [ contenido ] [ › ]` (`grid-template-columns: auto minmax(0, 1120px) auto`, `mx-auto`), con las flechas en columnas propias que flanquean el contenido (simetría del **contenido**, no del viewport). Cada flecha: `button` circular **64×64px**, glifo `ChevronLeft`/`ChevronRight` (lucide) **46px** `stroke-width 1.75`, **sin fill** en reposo, glifo `--faint`. Aire flecha↔contenido 20px. **Vigente en `/mes`** (período = mes; flags siempre `true`) y en **reportes** (mismo patrón).
+- **Forma lateral (canónica, a ancho de página):** el contenido es el **bloque canónico** `‹ contenido ›` y las flechas ‹ › son **overlay** que lo flanquean **sin reservar ancho** (simetría respecto del **contenido**, no del viewport). Cada flecha: `button` circular **64×64px**, glifo `ChevronLeft`/`ChevronRight` (lucide) **46px** `stroke-width 1.75`, **sin fill** en reposo, glifo `--faint`. **Vigente en `/mes`** (período = mes; flags siempre `true`) y en **reportes** (mismo patrón).
+  - **Ancho de la columna central = ancho de contenido de página:** rige la regla *Ancho de contenido de página* (§ Contención responsive). El bloque central usa el **mismo mecanismo que las otras cinco pantallas** (`px-10 max-w-[1120px] mx-auto`: llena el ancho disponible del `<main>` hasta **1120px**, y de ahí capea y centra) → **mismo ancho a igual viewport**. Las flechas **NO consumen ancho de columna** (se retiró el modelo de gutters de 84px/lado que angostaba `/mes` respecto del resto). Son overlay, absolutas respecto del bloque, centradas verticalmente al viewport. **Posición horizontal:** con margen exterior ≥84px (64 + 20 de aire) la flecha va **entera en el margen exterior** con 20px de aire al borde del bloque; con margen menor (caso típico ~941–1120, bloque llenando el `<main>`) **flota sobre la banda de padding `px-10`** (40px, vacía), **clampeada dentro del `<main>`** para no salirse de pantalla — en el piso solapa ~24px sobre el filo del contenido, tolerado porque el reposo es solo glifo tenue sobre padding. Detalle y racional del borde: § Contención responsive → *Flechas ‹ › de `PeriodNav` — overlay, NO gutters*.
   - **Centrado vertical de las flechas:** la flecha está **centrada verticalmente en el VIEWPORT**, siempre, sin importar el largo del listado, y **permanece anclada al centro del viewport** mientras se hace scroll y con cualquier cantidad de contenido. El mecanismo técnico exacto lo resuelve control-frontend (p. ej. garantizar que el área de las celdas laterales tenga alto suficiente —`min-height` del viewport— para que el anclaje pueda centrar también con listas cortas); el **comportamiento visual a cumplir** es: flecha centrada verticalmente en el viewport, constante al scrollear, con cualquier cantidad de contenido.
 - **Forma compacta (`.stepper` pill):** el **modo de colapso** del mismo patrón, también usado **embebido** cuando no hay lugar para flechas laterales (cards apiladas, mobile). Pill `.stepper` del DS: `--r-pill`, `--panel`, borde `--line`, `--shadow-sm`, padding 4px; dos botones circulares **32px** (chevron-left/right, glifo 18px, `--ink-2` → `--ink` sobre `--panel-2` en hover) y, al centro, el rótulo del período (si es número → **mono tabular**, regla dura 3). **Vigente como control de año embebido per-card** en `/reportes` y en el Dashboard (ver *card de reporte* abajo).
 
@@ -607,7 +809,7 @@ Patrón **genérico** para navegar un período (mes o año): `‹ contenido ›`
 
 `aria-label` según el período: "Mes anterior/siguiente" (mes) o "Año anterior/siguiente" (año).
 
-**Responsive (forma lateral):** dos regímenes. **≥941px (con lugar):** flechas laterales simétricas que se encogen parejo al angostar. **≤940px (sidebar oculta):** colapsa a la forma compacta `.stepper` en el header. **No existe** un modo intermedio de "flechas con fondo pegadas al borde".
+**Responsive (forma lateral) — medido por container query sobre `<main>`, no por viewport.** Dos regímenes. **Ancho de contenido ≥941px (con lugar):** el contenido es el bloque canónico `px-10 max-w-[1120px] mx-auto` (llena hasta 1120, capea y centra) y las flechas laterales aparecen como **overlay** flanqueándolo (ver posición horizontal arriba); el contenido **no se angosta** por las flechas. **Ancho de contenido ≤940px (compacto):** las flechas laterales se ocultan y colapsa a la forma compacta `.stepper` en el header; el bloque de contenido es el mismo `px-10 max-w-[1120px] mx-auto`, idéntico a las otras cinco pantallas. En ambos regímenes el ancho de contenido es el mismo mecanismo — lo único que cambia es la presencia (overlay) o no de las flechas. **No existe** un modo intermedio de "flechas con fondo pegadas al borde" ni gutters que reserven ancho.
 
 **Movimiento:** hover 0.14s; el cambio de período dispara el re-render de la vista (entrada de pantalla 0.32s); las flechas no animan posición — permanecen ancladas al centro del viewport mientras se scrollea (sin desplazamiento visible). Respeta `prefers-reduced-motion`.
 
@@ -2382,7 +2584,7 @@ Dentro del tabpanel **Límites**:
 
 ### 3. Flujo de crear — modal con formulario progresivo
 
-**Contenedor: modal** (reusa `transaction-modal`: portal, scrim `oklch(0.18 0.02 270 / 0.46)` + `blur(3px)`, diálogo `bg-panel` borde `--line` radio 18px `--shadow-lg` `animate-modal-pop`, header con título 18px/700 "Nuevo límite" + botón cerrar `X`). Es el mismo patrón con el que se crean movimientos, categorías y métodos de pago — coherencia total. **No** es wizard multi-página ni panel inline: es **un formulario en columna** (`space-y-[14px]`) que **revela y adapta** campos según lo elegido. Ancho del diálogo: `max-w-[460px]` (un pelo más que el de movimiento por el picker de efecto).
+**Contenedor: modal** (reusa `transaction-modal`: portal, scrim `oklch(0.18 0.02 270 / 0.46)` + `blur(3px)`, diálogo `bg-panel` borde `--line` radio 18px `--shadow-lg` `animate-modal-pop`, header con título 18px/700 "Nuevo límite" + botón cerrar `X`). Es el mismo patrón con el que se crean movimientos, categorías y métodos de pago — coherencia total. **No** es wizard multi-página ni panel inline: es **un formulario en columna** (`space-y-[14px]`) que **revela y adapta** campos según lo elegido. Ancho del diálogo: `max-w-[460px]` — es variante `form` del shell, el mismo ancho que el modal de movimiento (el ancho sale de la variante, no de un número por pantalla).
 
 Orden de los controles (arriba → abajo). Los pasos condicionales **no reservan alto** cuando no aplican (se montan/desmontan), fiel a "cero impacto":
 
@@ -2464,7 +2666,7 @@ El picker de efecto es el **consumidor** de la tabla *Mapeo efecto ↔ tipo de a
 
 - **Es un diálogo de confirmación apilado** sobre el modal de movimiento (mismo molde que los `delete-*-dialog`: portal, scrim `oklch(0.18 0.02 270 / 0.46)` + `blur(3px)`, diálogo `bg-panel` borde `--line` radio 18px `--shadow-lg` `animate-modal-pop`, header + cuerpo + footer). **No** es callout inline dentro del form ni transforma el botón Guardar: es el mismo patrón con el que la app ya confirma acciones consecuentes (borrado). El modal de movimiento **permanece montado detrás** con el form intacto.
 - **Apilamiento (z-index):** el aviso va **por encima** del modal de movimiento (`z-40`), al nivel de los diálogos de confirmación (`z-50`). El scrim del aviso oscurece también el modal de movimiento.
-- **Ancho:** `max-w-[420px]` (entre el diálogo de borrado, 380, y el modal de movimiento, 440; necesita alojar la lista de límites cruzados).
+- **Ancho:** `max-w-[440px]` — es variante `dialog` del shell (el ancho sale de la variante, no de un número por pantalla). Aloja la lista de límites cruzados.
 - **Al pulsar Guardar (interceptado):** el form valida como hoy; si es válido y hay ≥1 límite activo cruzado, en vez de persistir se monta el aviso. El botón Guardar del form vuelve a su estado idle (no queda "guardando") mientras el aviso está abierto.
 
 ### Tono — ámbar `--warning`, aviso NO destructivo

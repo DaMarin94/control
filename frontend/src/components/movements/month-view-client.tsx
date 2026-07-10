@@ -5,7 +5,7 @@
  *
  * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
  * Fase 1.1.3 (revisado 2026-06-16): PeriodNav es el grid de 3 columnas;
- * flechas gigantes laterales en ≥941px; pill stepper compacto en ≤940px.
+ * flechas gigantes laterales en amplio (≥--bp-wide); pill stepper compacto en compacto (<--bp-wide).
  * Fase 1.1.4 (2026-06-16): P5 acordeón + P6 reordenar secciones.
  *   - Las 3 secciones (Únicos / Fijos / Cuotas) se muestran SIEMPRE.
  *   - Cada sección es colapsable/expandible individualmente (acordeón).
@@ -20,10 +20,16 @@
  *   - Estado persistido en preferences.monthListFilters.
  *
  * Layout:
- *   - PeriodNav (grid 3 col: auto | minmax(0,1120px) | auto):
- *       Columnas laterales: celdas de flecha ‹ / ›, ocultas en ≤940px.
- *       Columna central: contenido con px-10, max-w controlado por el grid.
- *   - Header dentro de la columna central (.phead en ≥941px / stepper en ≤940px):
+ *   - PeriodNav (overlay, sin grid — ver docstring de period-nav.tsx):
+ *       Bloque de contenido: max-w-[1120px] mx-auto (PeriodNav) + px-10
+ *       py-[34px] pb-20 (acá, este div) = mismo mecanismo canónico que las
+ *       otras cinco pantallas, mismo ancho a igual viewport.
+ *       Flechas ‹ / ›: overlay absolute respecto de PeriodNav, ocultas en
+ *       compacto (ancho de contenido <941px), NO reservan ancho de columna.
+ *       El régimen amplio/compacto se mide con CONTAINER QUERY sobre <main>
+ *       (`@wide:`/`@max-wide:`), no con media query de viewport — ver
+ *       docs/design.md §"Ancho de contenido de página" y la nota en period-nav.tsx.
+ *   - Header dentro de la columna central (.phead en amplio / stepper en compacto, ambos por `@wide:`/`@max-wide:`):
  *       Desktop: eyebrow "Tu mes" + H1 período "Junio 2026" + sub-línea estado.
  *       Mobile:  pill stepper compacto (‹ rótulo ›).
  *       Siempre: botón "Ordenar secciones" / "Listo" + botón "+ Nuevo movimiento" a la derecha.
@@ -802,12 +808,12 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
       canGoPrev={true}
       canGoNext={true}
     >
-      <div className="px-10 space-y-0">
+      <div className="px-10 py-[34px] pb-20 space-y-0">
         {/* ── Header ──────────────────────────────────────────────── */}
         <div className="flex items-end justify-between gap-5 mb-6 flex-wrap">
 
-          {/* Bloque de título — desktop (≥941px) */}
-          <div className="hidden [@media(min-width:941px)]:flex flex-col gap-0">
+          {/* Bloque de título — amplio (ancho de contenido ≥941px, container query sobre <main>) */}
+          <div className="hidden @wide:flex flex-col gap-0">
             {/* Fila del eyebrow: label + chip de moneda default (a la derecha del eyebrow).
                 Quedan FUERA del disparador (per spec §1). */}
             <div className="flex items-center gap-[10px] mb-0.5">
@@ -845,14 +851,14 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
             </div>
           </div>
 
-          {/* Stepper compacto — mobile (≤940px) */}
+          {/* Stepper compacto — compacto (ancho de contenido <941px, container query sobre <main>) */}
           {/*
            * El contenedor flex envuelve el stepper pill (aria-hidden, evita
            * duplicados en jsdom) y el CurrencyChip accesible (fuera del aria-hidden).
            * El chip va a la derecha del stepper (gap-[10px]); si no entra, flex-wrap
            * lo baja a su propia línea alineado a la derecha (spec).
            */}
-          <div className="[@media(min-width:941px)]:hidden flex items-center gap-[10px] flex-wrap">
+          <div className="@wide:hidden flex items-center gap-[10px] flex-wrap">
             {/*
              * Pill stepper — aria-hidden para evitar duplicados de botones en jsdom.
              * El disparador accesible del selector mes/año es el botón desktop (que
@@ -955,11 +961,16 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
          */}
         {(!data && (!isAuthenticated || isLoading)) ? (
           <>
-            {/* Skeleton de totales */}
-            <div className="grid gap-[var(--gap)] mb-6" style={{ gridTemplateColumns: "1fr 1fr 1.1fr" }} aria-label="Cargando totales" role="status">
-              <SkeletonBlock height={90} />
-              <SkeletonBlock height={90} />
-              <SkeletonBlock height={90} />
+            {/* Skeleton de totales — mismo template que el bloque real (ver más abajo),
+                para que no salte al aterrizar. */}
+            <div
+              className="grid grid-cols-1 @wide:grid-cols-[1fr_1fr_1.1fr] gap-[var(--gap)] mb-6"
+              aria-label="Cargando totales"
+              role="status"
+            >
+              <SkeletonBlock height={90} className="min-w-0" />
+              <SkeletonBlock height={90} className="min-w-0" />
+              <SkeletonBlock height={90} className="order-first @wide:order-none min-w-0" />
             </div>
 
             {/* Skeleton de las 3 secciones (Únicos / Fijos / Cuotas) — Ola 1, P5.
@@ -1029,15 +1040,19 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
           </div>
         ) : (
           <>
-            {/* Tarjetas de totales compactas: grid 1fr 1fr 1.1fr */}
-            <div
-              className="grid gap-[var(--gap)] mb-6"
-              style={{ gridTemplateColumns: "1fr 1fr 1.1fr" }}
-            >
+            {/* Tarjetas de totales compactas: grid 1fr 1fr 1.1fr en amplio (ancho de
+                contenido ≥941px, container query sobre <main> — `@wide:`, no `wide:`
+                de viewport: con el sidebar abierto el contenido puede ser angosto
+                aunque el viewport sea ancho), 1 columna en compacto — docs/design.md
+                §Contención responsive.
+                min-w-0 en los items desactiva el piso de min-content de las columnas fr
+                (si no, la cifra de dinero fuerza un ancho mínimo y el hero de Balance
+                se aplasta). Mismo template que el skeleton de arriba. */}
+            <div className="grid grid-cols-1 @wide:grid-cols-[1fr_1fr_1.1fr] gap-[var(--gap)] mb-6">
               {/* Gastos — mes.total.gasto (P2, Fase 1: marca visual pasiva) */}
               <div
                 className={cn(
-                  "bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] flex flex-col gap-[6px]",
+                  "bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] flex flex-col gap-[6px] min-w-0",
                   limitRingCardClass(expenseLimitMark?.effect),
                 )}
                 style={{ padding: "16px 18px" }}
@@ -1062,7 +1077,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
               {/* Ingresos — mes.total.ingreso (tint NO ofrecido: monto tipado income-ink) */}
               <div
                 className={cn(
-                  "bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] flex flex-col gap-[6px]",
+                  "bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] flex flex-col gap-[6px] min-w-0",
                   limitRingCardClass(incomeLimitMark?.effect),
                 )}
                 style={{ padding: "16px 18px" }}
@@ -1086,7 +1101,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
               {/* Mini-balance — mes.balance (tint NO ofrecido: bloque de acento con signo) */}
               <div
                 className={cn(
-                  "rounded-card relative overflow-hidden text-white shadow-[var(--shadow-md)] flex flex-col gap-[6px]",
+                  "rounded-card relative overflow-hidden text-white shadow-[var(--shadow-md)] flex flex-col gap-[6px] min-w-0 order-first @wide:order-none",
                   limitRingCardClass(balanceLimitMark?.effect, "--shadow-md"),
                 )}
                 style={{

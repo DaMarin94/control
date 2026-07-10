@@ -3,37 +3,106 @@
 /**
  * PeriodNav — Navegación de período con flechas gigantes laterales.
  *
- * Patrón genérico: ‹ [contenido] › donde las flechas viven en columnas
- * propias a los costados de la columna de contenido.
+ * Patrón genérico: ‹ [contenido] › donde las flechas ‹ › van al período
+ * anterior / siguiente.
  *
- * Layout de 3 columnas (spec Fase 1.1.3 — revisado Fase 1.2.0):
- *   grid-template-columns: auto  minmax(0, 1120px)  auto
- *   - Las dos columnas laterales son "auto" (ancho intrínseco del botón + aire),
- *     lo que las hace SIMÉTRICAS respecto del contenido, independientemente de
- *     que el <main> esté corrido por el sidebar.
- *   - La columna central lleva el cap de 1120px y el px-10 interno.
- *   - align-items: stretch → las celdas de flecha son tan altas como el contenido
- *     (o 100vh como mínimo — ver abajo).
+ * Modelo vigente (fix banda muerta + fix angostamiento — docs/design.md
+ * §"Ancho de contenido de página" → "Flechas ‹ › de PeriodNav — overlay, NO
+ * gutters"). Reemplaza el modelo anterior de grilla de 3 columnas
+ * (`auto min(calc(100% − 168px), 1120px) auto`), que estaba ROTO en dos
+ * frentes medidos en el navegador:
+ *   (a) las columnas laterales le restaban 168px al ancho disponible de la
+ *       pista central → `/mes` quedaba 168px más angosto que las otras cinco
+ *       pantallas al mismo viewport.
+ *   (b) por debajo de cierto ancho la pista central colapsaba a ~0 (el grid
+ *       no distribuía el espacio sobrante correctamente) y las stat-cards
+ *       quedaban en slivers de ~40px.
  *
- * Dos regímenes responsive:
- *  - ≥941px: layout de 3 columnas. Flechas 64×64, glifo 46px, sin fondo en reposo.
- *  - ≤940px: las celdas de flecha se ocultan; el consumidor renderiza el stepper
- *    compacto en el encabezado (sin cambios respecto de la versión anterior).
+ * Estructura nueva — sin grid, dos piezas independientes:
  *
- * Centrado vertical de las flechas al VIEWPORT (Fase 1.2.0 — spec canónica):
- *  - La flecha está SIEMPRE centrada en el centro vertical del viewport,
- *    tanto con listas largas como con listas cortas.
- *  - Implementación (Ola 0 — fix E1): las celdas laterales son sticky top-0
- *    con height:100vh y flex items-center. El botón se centra dentro de la celda.
- *    La celda sticky ocupa 100vh visualmente pero, al ser sticky, no aporta
- *    al alto del documento más allá del contenido real → sin scroll fantasma
- *    cuando el contenido es más corto que el viewport.
- *  - Caso de listas largas: la celda sticky permanece en pantalla mientras se
- *    scrollea, la flecha queda siempre centrada al viewport.
- *  - Caso de listas cortas: la celda no infla el documento; sin scroll fantasma.
+ * 1) ANCHO — el bloque de contenido usa el mecanismo CANÓNICO, el mismo que
+ *    las otras cinco pantallas (`/`, `/categorias`, `/metodos-pago`,
+ *    `/reportes`, `/configuracion`): `max-w-[1120px] mx-auto` (el `px-10` y
+ *    el padding vertical los agrega el consumidor sobre `children`, igual
+ *    que antes). Es un BLOQUE, no un track de grid: llena el disponible y
+ *    recién capea al llegar a 1120px — nunca colapsa a `max-content` ni dejar
+ *    banda muerta. Este bloque vive dentro de un wrapper raíz `relative` que
+ *    ocupa el 100% del ancho de `<main>` (sin padding propio), que es el
+ *    sistema de referencia que usan las flechas para calcular su offset.
+ *
+ * 2) FLECHAS — overlay `position:absolute` respecto del wrapper raíz (por lo
+ *    tanto respecto del ancho de `<main>`, NO del bloque de contenido). NO
+ *    reservan ancho de columna: su presencia no angosta ni empuja el bloque.
+ *
+ *    Offset horizontal — fórmula derivada del cap de 1120 (docs/design.md):
+ *      M = margen exterior que queda una vez que el contenido capea a 1120
+ *        = max((anchoDeContenido − 1120px) / 2, 0)
+ *      offset = max(M − 84px, 0px)     // 84px = botón 64px + 20px de aire
+ *    `offset` es simultáneamente el `left` de la flecha ‹ y el `right` de la
+ *    flecha › (caso simétrico). Un único `max()` anidado la resuelve sin
+ *    JS ni container query — es CSS puro, relativo al 100% del wrapper raíz
+ *    (que mide exactamente el ancho de `<main>`, sin padding propio):
+ *      offset = max(0px, calc((100% - 1120px) / 2 - 84px))
+ *    Verificación en los dos regímenes:
+ *      - anchoDeContenido ≥ 1204px (M ≥ 84px, "margen holgado"): offset =
+ *        M − 84 > 0 → la flecha cae ENTERA en el margen exterior, con 20px
+ *        de aire hasta el borde del bloque (64 + 20 = 84, exacto).
+ *      - anchoDeContenido < 1204px (M < 84px, incluido TODO el rango
+ *        941–1120px donde el bloque llena `<main>` y M = 0 exacto): la
+ *        fórmula clampea a 0 → la flecha se pega al borde izquierdo/derecho
+ *        del wrapper raíz (que es el borde de `<main>`), flotando sobre la
+ *        banda de padding `px-10` (40px) del bloque. En el piso (M = 0) el
+ *        botón (64px) avanza 24px más allá del borde del padding (64 − 40 =
+ *        24), el solape ~24px descrito en el spec — consecuencia directa del
+ *        clamp, sin necesidad de un caso especial. Nunca sale de `<main>`
+ *        (invariante 3: ningún control queda fuera de pantalla).
+ *
+ *    Aparición — SIGUE gateada por el umbral `--bp-wide` (941px), medido con
+ *    CONTAINER QUERY sobre `<main>` (`@wide:`/`@max-wide:`), no viewport (el
+ *    <main> del shell autenticado es `@container`, ver app-shell.tsx). Con
+ *    el sidebar abierto a viewport 1000px el contenido mide ~712px — si esto
+ *    se midiera contra el viewport montaría las flechas en un hueco angosto
+ *    y podría desbordar. Por debajo de 941px de contenido las flechas van
+ *    `hidden`; el consumidor renderiza el stepper compacto en el header.
+ *
+ * Centrado vertical de las flechas al VIEWPORT (sin cambios de comportamiento
+ * respecto de la versión anterior, solo de mecanismo de anidado):
+ *  - Cada flecha vive en dos capas anidadas. La EXTERIOR es la que hace el
+ *    overlay horizontal: `absolute inset-y-0` (estirada al alto del wrapper
+ *    raíz, que a su vez mide el alto real del contenido, porque el wrapper
+ *    raíz es `position:relative` con altura automática determinada por su
+ *    único hijo en flujo normal — el bloque de contenido; las capas
+ *    absolutas no aportan a esa altura). La INTERIOR es la que centra al
+ *    viewport: `sticky top-0 h-screen flex items-center` — igual que en la
+ *    versión de grid, el offset vertical lo resuelve `position:sticky` con
+ *    una altura fija de 100vh, no `min-height`.
+ *  - Por qué no hay scroll fantasma con listas cortas: la capa EXTERIOR es
+ *    `position:absolute`, así que queda completamente fuera del cálculo de
+ *    alto del documento (un elemento absolutamente posicionado nunca aporta
+ *    al alto de su contenedor en flujo normal, sea cual sea el alto de sus
+ *    propios hijos). El alto del documento lo define únicamente el bloque de
+ *    contenido. Si la capa interior (100vh) es más alta que el contenido,
+ *    simplemente desborda visualmente la capa exterior sin inflar el
+ *    documento — a diferencia del modelo de grid anterior, acá no depende de
+ *    cómo el motor de grid decide el alto de un track auto a partir de un
+ *    ítem con `align-self` no-stretch (ambigüedad que el modelo de grid
+ *    exigía razonar con cuidado); es una garantía estructural del modelo de
+ *    caja: absolute nunca participa del alto en flujo normal del padre.
+ *  - Caso de listas largas: el wrapper raíz mide el alto real del contenido
+ *    (varios miles de px); la capa exterior (absolute, inset-y-0) se estira
+ *    a esa altura; dentro, la capa sticky (100vh) tiene recorrido de sobra
+ *    para permanecer anclada al centro del viewport mientras se scrollea.
+ *  - Caso de listas cortas: el wrapper raíz mide poco alto (el del
+ *    contenido corto); la capa exterior se estira a eso nomás; la capa
+ *    sticky (100vh) la desborda visualmente pero no aporta alto al
+ *    documento (ver arriba) → sin scroll fantasma, flecha centrada al
+ *    viewport igual (no hay recorrido de scroll real para "destickear" antes
+ *    de que se acabe la página, porque la página no llega a medir 100vh).
  *
  * Props:
- *  - children: contenido de la columna central (ya debe incluir px-10 y max-w).
+ *  - children: contenido de la columna central (el consumidor agrega su
+ *    propio `px-10` y padding vertical; PeriodNav solo aporta `max-w-[1120px]
+ *    mx-auto`).
  *  - prevLabel: aria-label del botón anterior (ej. "Mes anterior").
  *  - nextLabel: aria-label del botón siguiente (ej. "Mes siguiente").
  *  - onPrev: handler al ir al período anterior.
@@ -58,6 +127,12 @@ interface PeriodNavProps {
   canGoNext?: boolean;
 }
 
+// Offset horizontal compartido por ambas flechas (ver derivación arriba):
+// max(0px, (anchoDisponible − 1120px) / 2 − 84px). Relativo al 100% del
+// wrapper raíz, que mide exactamente el ancho de <main> (sin padding
+// propio) — por eso "100%" acá y no una container query unit.
+const ARROW_OFFSET = "max(0px, calc((100% - 1120px) / 2 - 84px))";
+
 export function PeriodNav({
   children,
   prevLabel,
@@ -68,87 +143,52 @@ export function PeriodNav({
   canGoNext = true,
 }: PeriodNavProps) {
   return (
-    /*
-     * Grid de 3 columnas: [flecha ‹] [contenido max 1120px] [flecha ›]
-     *
-     * - Las celdas de flecha son "auto" (toman el ancho del botón + su padding).
-     * - Ambas son el mismo "auto" → simétricas respecto del contenido.
-     * - align-items: stretch → celdas de flecha tan altas como el contenido,
-     *   permitiendo que la flecha se centre dentro de su propia celda.
-     * - justify-content: center → las 3 pistas se centran como bloque dentro del
-     *   área de <main> (mx-auto no centra pistas de grid; solo justify-content lo hace).
-     * - En ≤940px las celdas de flecha van hidden; el stepper vive en el header.
-     *
-     * Implementado con estilo inline para los valores no soportables
-     * como clase arbitraria de Tailwind (grid-template-columns con
-     * minmax + auto simultáneo).
-     */
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "auto minmax(0, 1120px) auto",
-        alignItems: "stretch",
-        justifyContent: "center",
-      }}
-    >
-      {/* ── Celda flecha anterior ‹ ─────────────────────────────────── */}
-      {/*
-       * hidden en ≤940px; visible (flex) en ≥941px.
-       * padding-right: 20px → aire flecha↔contenido (el único separador, sin column-gap).
-       *
-       * Fix E1 — scroll fantasma (Ola 0):
-       * La solución anterior usaba min-height:100vh + sticky en el botón. El
-       * problema: min-height:100vh en las celdas laterales aportaba alto real al
-       * documento → cuando el contenido era más corto que el viewport, el grid
-       * forzaba la página a ser de al menos 100vh y aparecía scroll fantasma.
-       *
-       * Solución: las celdas laterales son sticky top-0 con height:100vh.
-       * - sticky top-0: la celda se "pega" al inicio del viewport al scrollear;
-       *   nunca sale de pantalla mientras haya contenido.
-       * - height:100vh (no min-height): la celda ocupa exactamente el viewport de
-       *   alto en el layout, pero al ser sticky no contribuye al alto del documento
-       *   más allá de lo que el contenido real ya define.
-       * - El botón se centra con flexbox (items-center justify-center) dentro de
-       *   esa celda de 100vh → queda anclado al centro del viewport.
-       * Casos verificados:
-       *   (a) lista larga (scroll real): la celda sticky se mantiene en pantalla
-       *       mientras se scrollea; la flecha permanece centrada al viewport. ✓
-       *   (b) todo colapsado (contenido corto): la celda sticky no infla el documento
-       *       más allá del contenido; sin scroll fantasma, flecha centrada. ✓
-       */}
+    // Wrapper raíz: 100% del ancho de <main>, sin padding propio — el
+    // sistema de referencia de las flechas overlay (ver ARROW_OFFSET).
+    // position:relative para que las flechas (absolute) se posicionen
+    // respecto de este ancho, no del bloque de contenido ya capeado.
+    <div className="relative">
+      {/* ── Flecha anterior ‹ — overlay, oculta en compacto ─────────────── */}
       <div
-        className="hidden [@media(min-width:941px)]:flex items-center justify-center"
-        style={{ paddingRight: 20, position: "sticky", top: 0, height: "100vh", alignSelf: "flex-start" }}
+        className="hidden @wide:flex absolute inset-y-0 w-16 items-center justify-center z-10"
+        style={{ left: ARROW_OFFSET }}
       >
-        <PeriodNavButton
-          label={prevLabel}
-          disabled={!canGoPrev}
-          onClick={onPrev}
-          side="prev"
-        />
+        {/* Capa de centrado vertical al viewport — ver docstring arriba */}
+        <div className="sticky top-0 h-screen w-full flex items-center justify-center">
+          <PeriodNavButton
+            label={prevLabel}
+            disabled={!canGoPrev}
+            onClick={onPrev}
+            side="prev"
+          />
+        </div>
       </div>
 
-      {/* ── Columna de contenido ─────────────────────────────────────── */}
+      {/* ── Bloque de contenido — mecanismo canónico ─────────────────────── */}
       {/*
-       * min-width: 0 obligatorio para que minmax(0, 1120px) realmente pueda
-       * encoger por debajo de 1120px (sin esto la celda no se encoge).
+       * max-w-[1120px] mx-auto: el mismo mecanismo que las otras cinco
+       * pantallas. El px-10 y el padding vertical los aporta el consumidor
+       * sobre `children` (no acá), igual que antes.
+       * min-w-0: un hijo de bloque normal no lo necesita para no colapsar
+       * (a diferencia de un ítem de grid/flex), pero se preserva por si
+       * algún descendiente todavía asume un contexto flex/grid ancestro
+       * para su propio truncado de texto.
        */}
-      <div style={{ minWidth: 0 }}>
-        {children}
-      </div>
+      <div className="max-w-[1120px] mx-auto min-w-0">{children}</div>
 
-      {/* ── Celda flecha siguiente › ─────────────────────────────────── */}
-      {/* Mismo patrón sticky top-0 height:100vh que la celda anterior. */}
+      {/* ── Flecha siguiente › — overlay, oculta en compacto ────────────── */}
       <div
-        className="hidden [@media(min-width:941px)]:flex items-center justify-center"
-        style={{ paddingLeft: 20, position: "sticky", top: 0, height: "100vh", alignSelf: "flex-start" }}
+        className="hidden @wide:flex absolute inset-y-0 w-16 items-center justify-center z-10"
+        style={{ right: ARROW_OFFSET }}
       >
-        <PeriodNavButton
-          label={nextLabel}
-          disabled={!canGoNext}
-          onClick={onNext}
-          side="next"
-        />
+        <div className="sticky top-0 h-screen w-full flex items-center justify-center">
+          <PeriodNavButton
+            label={nextLabel}
+            disabled={!canGoNext}
+            onClick={onNext}
+            side="next"
+          />
+        </div>
       </div>
     </div>
   );
@@ -174,8 +214,9 @@ function PeriodNavButton({ label, disabled, onClick, side }: PeriodNavButtonProp
        * Tamaño único: 64×64px circular (spec 1.1.3 revisada).
        * Glifo: 46px, stroke-width 1.75 (ver ChevronLeft/Right abajo).
        *
-       * El centrado al viewport lo maneja el div contenedor (sticky top-0 height:100vh
-       * + flex items-center). El botón en sí no necesita posicionamiento propio.
+       * El centrado al viewport lo maneja el div contenedor (sticky top-0
+       * h-screen + flex items-center). El botón en sí no necesita
+       * posicionamiento propio.
        *
        * Estados:
        *  reposo:  glifo --faint, fondo transparente.

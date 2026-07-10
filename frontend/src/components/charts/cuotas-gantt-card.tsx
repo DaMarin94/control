@@ -46,6 +46,7 @@ import { LimitGlyph, LimitBadge } from "@/components/limits/limit-mark";
 import { formatCurrency } from "@/lib/format";
 import { ChartLegend } from "@/components/ui/chart";
 import { CardCurrencySelect } from "@/components/ui/card-currency-select";
+import { useScrollShadow, getScrollShadowStyle } from "@/hooks/use-scroll-shadow";
 import type { CuotasGanttBar, CuotasGanttResponse } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
 import type { LimitConfig } from "@/types/limit";
@@ -806,14 +807,21 @@ interface GanttCanvasProps {
   year: number;
   currency: string;
   isEmpty: boolean;
+  isDark: boolean;
   /** Límites del usuario (P2 — Tramo 2). [] = cero impacto (D9). */
   limits: LimitConfig[];
 }
 
-function GanttCanvas({ data, year, currency, isEmpty, limits }: GanttCanvasProps) {
+function GanttCanvas({ data, year, currency, isEmpty, isDark, limits }: GanttCanvasProps) {
   const [tooltipState, setTooltipState] = useState<BarTooltipState | null>(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
+  // Affordance de corte del carril horizontal (docs/design.md §"Superficies
+  // con scroll interno" → "Affordance de 'hay más'"). box-shadow, no mask
+  // (taparía las cifras mono de las barras).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollShadow = useScrollShadow(scrollRef);
 
   /** Mapa categoryId → { name, color } para resolución rápida. */
   const categoryMap = useMemo(() => {
@@ -851,8 +859,12 @@ function GanttCanvas({ data, year, currency, isEmpty, limits }: GanttCanvasProps
 
   return (
     <div
+      ref={scrollRef}
       className="overflow-x-auto"
-      style={{ WebkitOverflowScrolling: "touch" }}
+      style={{
+        WebkitOverflowScrolling: "touch",
+        boxShadow: getScrollShadowStyle(scrollShadow, isDark),
+      }}
     >
       {/* Header de meses — sticky arriba */}
       <div
@@ -1031,7 +1043,7 @@ export function CuotasGanttCard({
 }: CuotasGanttCardProps) {
   const { defaultCurrency } = useSettings();
   const effectiveCurrency = currency ?? defaultCurrency;
-  useIsDarkMode(); // mantener el patrón aunque no se use directamente en la card
+  const isDark = useIsDarkMode();
   // P2 — Fase 1 (Tramo 2): límites del usuario (marca visual pasiva). [] = cero impacto (D9).
   const { limits } = useLimits();
 
@@ -1193,6 +1205,7 @@ export function CuotasGanttCard({
             year={year}
             currency={effectiveCurrency}
             isEmpty={isEmpty}
+            isDark={isDark}
             limits={limits}
           />
 

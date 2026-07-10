@@ -3,9 +3,10 @@
 /**
  * Modal de creación y edición de categorías (RF-CAT-002 / RF-CAT-003).
  *
- * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
- * - Scrim: fijo, ink/0.46 + blur(3px)
- * - Diálogo: max-width 380px, radio 18px, shadow-lg, animación modal-pop
+ * Consume el shell compartido `ModalShell` (variant="form", stacked — puede
+ * abrirse inline por encima de `TransactionModal`, docs/design.md §"Apilado
+ * de modales — gotcha de z-index"): scrim, panel, max-height y body-lock
+ * viven ahí.
  * - Scope picker: .scopepick (tres botones Ambos/Gasto/Ingreso, activo en accent)
  * - Color picker: grid 8×5, ring de selección neutro (--ink), botón "Aleatorio" (Fase 1.1.2)
  *
@@ -13,17 +14,16 @@
  */
 
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { X, Shuffle } from "lucide-react";
+import { Shuffle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useCategories } from "@/hooks/use-categories";
-import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
+import { ModalShell, ModalShellHeader, ModalShellBody, ModalShellFooter } from "@/components/ui/modal-shell";
 import {
   type Category,
   CATEGORY_COLOR_PALETTE,
@@ -68,14 +68,7 @@ export function CategoryFormModal({
   onCreated,
 }: CategoryFormModalProps) {
   const isEditing = category !== null;
-  const [mounted, setMounted] = useState(false);
   const { toast } = useToast();
-
-  useBodyScrollLock();
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const { createCategory, updateCategory, isCreating, isUpdating, categories } = useCategories();
 
@@ -177,8 +170,6 @@ export function CategoryFormModal({
     }
   }
 
-  if (!mounted) return null;
-
   // Si hay un prompt de reactivación activo, renderizarlo
   if (reactivable) {
     return (
@@ -203,115 +194,89 @@ export function CategoryFormModal({
     return true;
   });
 
-  return createPortal(
-    /* Scrim */
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-6"
-      style={{ background: "oklch(0.18 0.02 270 / 0.46)", backdropFilter: "blur(3px)" }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="category-modal-title"
-    >
-      {/* Diálogo */}
-      <div
-        className="w-full max-w-[380px] bg-panel border border-line overflow-hidden animate-modal-pop max-h-[calc(100dvh-48px)] flex flex-col"
-        style={{ borderRadius: "18px", boxShadow: "var(--shadow-lg)" }}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-[22px] pt-5 pb-4 shrink-0">
-          <h2
-            id="category-modal-title"
-            className="text-[18px] font-bold tracking-[-0.01em] text-ink m-0"
-          >
-            {isEditing ? "Editar categoría" : "Nueva categoría"}
-          </h2>
-          <button
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
-          >
-            <X size={18} aria-hidden="true" />
-          </button>
-        </div>
+  return (
+    <ModalShell variant="form" stacked onClose={onClose} labelledBy="category-modal-title">
+      <ModalShellHeader
+        titleId="category-modal-title"
+        title={isEditing ? "Editar categoría" : "Nueva categoría"}
+        onClose={onClose}
+      />
 
-        {/* Formulario */}
-        <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 min-h-0 overflow-y-auto px-[22px] pb-[22px] space-y-[14px]">
-            {/* Campo nombre */}
-            <div className="flex flex-col gap-[7px]">
-              <Label htmlFor="cat-name" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
-                Nombre
-              </Label>
-              <Input
-                id="cat-name"
-                type="text"
-                placeholder="Ej: Alimentación"
-                error={errors.name?.message}
-                {...register("name")}
-              />
-            </div>
-
-            {/* Scope picker */}
-            <div className="flex flex-col gap-[7px]">
-              <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
-                Alcance
-              </Label>
-              <Controller
-                name="scope"
-                control={control}
-                render={({ field }) => (
-                  <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${visibleOptions.length}, 1fr)` }}>
-                    {visibleOptions.map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => field.onChange(opt.value)}
-                        className={cn(
-                          "text-[13px] font-semibold cursor-pointer px-2 py-[10px] rounded-ctl border transition-colors duration-[140ms]",
-                          field.value === opt.value
-                            ? "border-accent bg-accent-soft text-accent-ink"
-                            : "border-line bg-panel text-muted hover:text-ink",
-                        )}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              />
-              <p className="text-[12.5px] text-muted">
-                Define si esta categoría aplica a gastos, ingresos o ambos.
-              </p>
-            </div>
-
-            {/* Color picker */}
-            <Controller
-              name="color"
-              control={control}
-              render={({ field }) => (
-                <ColorPicker
-                  value={field.value}
-                  onChange={field.onChange}
-                />
-              )}
+      {/* Formulario */}
+      <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col flex-1 min-h-0">
+        <ModalShellBody>
+          {/* Campo nombre */}
+          <div className="flex flex-col gap-[7px]">
+            <Label htmlFor="cat-name" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+              Nombre
+            </Label>
+            <Input
+              id="cat-name"
+              type="text"
+              placeholder="Ej: Alimentación"
+              error={errors.name?.message}
+              {...register("name")}
             />
           </div>
 
-          {/* Footer (pineado — hermano del cuerpo scrolleable, no hijo) */}
-          <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2 shrink-0">
-            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
-              Cancelar
-            </Button>
-            <Button type="submit" size="sm" disabled={isLoading}>
-              {isLoading
-                ? isEditing ? "Guardando..." : "Creando..."
-                : isEditing ? "Guardar cambios" : "Crear categoría"}
-            </Button>
+          {/* Scope picker */}
+          <div className="flex flex-col gap-[7px]">
+            <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+              Alcance
+            </Label>
+            <Controller
+              name="scope"
+              control={control}
+              render={({ field }) => (
+                <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${visibleOptions.length}, 1fr)` }}>
+                  {visibleOptions.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => field.onChange(opt.value)}
+                      className={cn(
+                        "text-[13px] font-semibold cursor-pointer px-2 py-[10px] rounded-ctl border transition-colors duration-[140ms]",
+                        field.value === opt.value
+                          ? "border-accent bg-accent-soft text-accent-ink"
+                          : "border-line bg-panel text-muted hover:text-ink",
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            />
+            <p className="text-[12.5px] text-muted">
+              Define si esta categoría aplica a gastos, ingresos o ambos.
+            </p>
           </div>
-        </form>
-      </div>
-    </div>,
-    document.body,
+
+          {/* Color picker */}
+          <Controller
+            name="color"
+            control={control}
+            render={({ field }) => (
+              <ColorPicker
+                value={field.value}
+                onChange={field.onChange}
+              />
+            )}
+          />
+        </ModalShellBody>
+
+        <ModalShellFooter>
+          <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
+            Cancelar
+          </Button>
+          <Button type="submit" size="sm" disabled={isLoading}>
+            {isLoading
+              ? isEditing ? "Guardando..." : "Creando..."
+              : isEditing ? "Guardar cambios" : "Crear categoría"}
+          </Button>
+        </ModalShellFooter>
+      </form>
+    </ModalShell>
   );
 }
 

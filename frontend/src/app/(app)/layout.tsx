@@ -2,22 +2,22 @@
  * Layout del grupo de rutas autenticadas — (app)
  *
  * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
+ * Rework RF-NAV-002: sidebar toggleable (docs/design.md §"Sidebar — mostrar/ocultar").
  *
- * Aplica a: / (dashboard), /mes, /categorias.
+ * Aplica a: / (dashboard), /mes, /categorias, /metodos-pago, /reportes, /configuracion.
  * NO aplica a: /login, /registro (están fuera del route group).
  *
  * Responsabilidades:
- * - Obtener el email del usuario vía auth() (Server Component).
- * - Renderizar el AppSidebar con el email ya disponible.
- * - Dar la estructura de dos columnas: sidebar fijo 248px + contenido scrollable.
- *
- * El sidebar se posiciona fixed en desktop (≥941px, 248px).
- * El contenido principal recibe padding-left equivalente en desktop.
- * El <main> tiene el padding y max-width del DS (content area).
+ * - Obtener el email del usuario Y la preferencia `sidebarOpen` vía auth()
+ *   (Server Component) — misma pasada, sin pedidos extra.
+ * - Delegar el shell (sidebar + <main>) a AppShell (Client Component), pasando
+ *   `initialSidebarOpen` server-rendered para que el primer paint ya refleje
+ *   el estado correcto sin flash al hidratar (docs/design.md §"Carga inicial
+ *   sin flash").
  */
 
 import { auth } from "@/auth";
-import { AppSidebar } from "@/components/layout/app-sidebar";
+import { AppShell } from "@/components/layout/app-shell";
 
 export default async function AppLayout({
   children,
@@ -29,15 +29,13 @@ export default async function AppLayout({
   // Fallback defensivo: string vacío (el avatar mostraría "").
   const email = session?.user?.email ?? "";
 
-  return (
-    <div className="min-h-screen bg-paper">
-      {/* Sidebar: fixed en desktop, drawer en mobile */}
-      <AppSidebar email={email} />
+  // Preferencia `sidebarOpen` (RF-NAV-002): ausente o no-booleana → default abierto.
+  const rawSidebarOpen = session?.preferences?.sidebarOpen;
+  const initialSidebarOpen = typeof rawSidebarOpen === "boolean" ? rawSidebarOpen : true;
 
-      {/* Contenido principal: desplazado a la derecha del sidebar en desktop */}
-      <main className="[@media(min-width:941px)]:pl-[248px] min-h-screen">
-        {children}
-      </main>
-    </div>
+  return (
+    <AppShell email={email} initialSidebarOpen={initialSidebarOpen}>
+      {children}
+    </AppShell>
   );
 }

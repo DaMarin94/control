@@ -19,6 +19,40 @@
    @theme — tokens que Tailwind v4 mapea a utilidades
    ============================================================ */
 @theme {
+  /* Contención responsive — único breakpoint nombrado (docs/design.md §Contención responsive).
+     Habilita las variantes `wide:` (min-width:941px) y `max-wide:` (width<941px, el
+     complemento exacto — no usar max-width:940px a mano). Es una MEDIA QUERY de
+     viewport: solo la usan superficies fuera de <main> cuyo ancho real siempre
+     coincide con el viewport (p. ej. el grid a 2 columnas de login/registro, que
+     no conviven con el sidebar). Dentro del área de contenido autenticada (bajo
+     <main>) NO se usa: ahí el régimen amplio/compacto se mide contra el ancho de
+     contenido disponible (`viewport − 248px` con el sidebar abierto), no contra
+     el viewport — ver `--container-wide` más abajo. */
+  --breakpoint-wide: 941px;
+
+  /* Contención responsive — variante CONTAINER QUERY del mismo umbral (941px),
+     anclada a <main> (docs/design.md §"Ancho de contenido de página" — "El
+     régimen de disposición también se decide por el ancho del <main>, no por
+     el viewport"). <main> es `@container` (ver app-shell.tsx); esto habilita
+     `@wide:` (min-width de contenido ≥941px) y `@max-wide:` (complemento) para
+     todo lo que vive bajo <main> — stat-cards, PeriodNav, y cualquier layout
+     que dependa del ancho REAL disponible, no del viewport crudo (con el
+     sidebar abierto a viewport 1000px el contenido mide ~712px: si el layout
+     creyera "amplio" por el viewport montaría grillas multicolumna en un hueco
+     angosto y desbordaría → scroll horizontal del body). Mismo número que
+     --breakpoint-wide por diseño (un solo umbral nombrado); dos mecanismos
+     porque dos cosas distintas necesitan medir dos anchos distintos. */
+  --container-wide: 941px;
+
+  /* Ancho mínimo soportado — gate por debajo del piso (RF-APP-002, docs/design.md
+     §Contención responsive → "Ancho mínimo soportado"). Habilita las variantes
+     `floor:` (min-width del piso) y `max-floor:` (por debajo del piso, el
+     complemento exacto — no hardcodear ese ancho a mano en ningún lado más).
+     Por debajo del piso la app no promete contención: se gatea (ViewportGate
+     en el root layout). El valor vive únicamente acá. Antes 768px; bajó a
+     640px por decisión del usuario (docs/design.md §"Ancho mínimo soportado"). */
+  --breakpoint-floor: 640px;
+
   /* Acento índigo */
   --color-accent:       oklch(0.52 0.17 264);
   --color-accent-press: oklch(0.45 0.17 264);

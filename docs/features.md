@@ -31,6 +31,7 @@
 | Vista del mes — filtros por listado (tipo + categoría por sección, filtrado en front) | RF-VM-006 | Implementado |
 | Reportes + listado — filtro vía leyenda interactiva en cards y orden configurable de Únicos | RF-REP-002/006, RF-VM-001 | Implementado |
 | Navegación global — sidebar persistente | RF-NAV-001 | Implementado |
+| Navegación global — sidebar mostrable/ocultable por el usuario en todos los anchos, estado persistido (blob `sidebarOpen`, default abierto) | RF-NAV-002 | Definido (no implementado) |
 | Crear categoría desde el formulario de movimiento | RF-MU-004 | Implementado |
 | Reportes — pantalla configurable por cards + widget en dashboard | RF-REP-001..005 | Implementado |
 | Reportes — toggle de representación Barra / Línea en la card Gastos por categoría | RF-REP-006 | Implementado |
@@ -46,6 +47,7 @@
 | Reportes — botón de refrescar per-card (los 5 tipos + widget del Dashboard; refetch independiente, feedback solo-spinner) | RF-REP-016 | Implementado |
 | Multi-moneda — set curado 4 (ARS/USD/EUR/BRL) + tabla de cotizaciones de referencia + pantalla `/configuracion` | RF-CUR-001..006, RN-009 | Implementado |
 | Modo de color — toggle Sistema/Claro/Oscuro en el chrome global (sidebar), persistido (blob `theme`) | RF-APP-001 | Implementado |
+| Gate por debajo del ancho mínimo soportado (640px) — bloqueo CSS puro a viewport completo, cubre toda la app incluido login | RF-APP-002 | Implementado |
 | Límites — marca visual pasiva (todas las superficies: `/mes`, dashboard y los 5 reportes de `/reportes`) + alerta activa (aviso no bloqueante al guardar en los 4 forms de movimiento, keys `mes.*`) + panel en la solapa Límites de `/configuracion` (blob `limits`, client-side) | RF-LIM-001..004, RN-022 | Implementado |
 | Sincronización de cotizaciones externas — FX (dolarapi/Frankfurter) + IPC (datos.gob.ar) vía trigger sin datos | RF-FX-001, RF-IPC-001, RF-SYNC-001 | Definido (no implementado) |
 | Preferencias de usuario — cimiento (blob JSON + sesión) | — | Implementado (sin UI de producto) |

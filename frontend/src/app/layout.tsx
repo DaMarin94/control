@@ -17,6 +17,7 @@ import { ReactQueryProvider } from "@/lib/react-query";
 import { ToastProvider } from "@/components/ui/toast";
 import { AuthSessionProvider } from "@/lib/session-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { ViewportGate } from "@/components/layout/viewport-gate";
 import { auth } from "@/auth";
 import "./globals.css";
 
@@ -63,12 +64,19 @@ export default async function RootLayout({
   const session = await auth();
 
   return (
-    <html lang="es" suppressHydrationWarning>
+    <html lang="es" suppressHydrationWarning className="max-floor:overflow-hidden">
       {/* Script inline síncrono — resuelve el tema ANTES del primer paint (anti-FOUC) */}
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} antialiased`}>
+      <body
+        className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} antialiased max-floor:invisible max-floor:overflow-hidden`}
+      >
+        {/* Gate por debajo del ancho mínimo soportado (RF-APP-002) — CSS puro,
+            cubre toda la app (login incluido). El resto del subárbol (más
+            abajo) se vuelve invisible/no-focuseable vía `max-floor:invisible`
+            en <body>; este componente revierte esa herencia sobre sí mismo. */}
+        <ViewportGate />
         <AuthSessionProvider session={session}>
           <ReactQueryProvider>
             <ThemeProvider>

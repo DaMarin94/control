@@ -14,8 +14,8 @@
  *   afordancia, NO es foco de tab, NO abre nada.
  * - Método SIN defaults: no renderiza contenido (cero impacto).
  * - Método CON ≥1 default: Star relleno 11px + una pill por estructura, orden
- *   fijo Únicos → Fijos → Cuotas. En touch/≤940px con >1 pill, colapsa a
- *   "Predet. ×N".
+ *   fijo Únicos → Fijos → Cuotas. En compacto (ancho de contenido <941px,
+ *   container query sobre <main>) con >1 pill, colapsa a "Predet. ×N".
  */
 
 import { Star } from "lucide-react";
@@ -62,8 +62,9 @@ export function DefaultPaymentMethodCell({
     >
       <Star size={11} className="shrink-0 text-accent" fill="currentColor" aria-hidden="true" />
 
-      {/* Desktop (≥941px): una pill por estructura, orden fijo Únicos → Fijos → Cuotas */}
-      <span className="hidden [@media(min-width:941px)]:flex items-center gap-1">
+      {/* Amplio (ancho de contenido ≥941px, container query sobre <main>): una
+          pill por estructura, orden fijo Únicos → Fijos → Cuotas */}
+      <span className="hidden @wide:flex items-center gap-1">
         {activeSlots.map((slot) => (
           <span
             key={slot}
@@ -74,8 +75,8 @@ export function DefaultPaymentMethodCell({
         ))}
       </span>
 
-      {/* Touch/≤940px: colapsa a "Predet. ×N" cuando hay más de una */}
-      <span className="[@media(min-width:941px)]:hidden flex items-center">
+      {/* Compacto (ancho de contenido <941px): colapsa a "Predet. ×N" cuando hay más de una */}
+      <span className="@wide:hidden flex items-center">
         <span className="inline-flex items-center rounded-chip bg-accent-soft px-[7px] py-[2px] text-[11px] font-semibold text-accent-ink">
           {activeSlots.length > 1 ? (
             <>

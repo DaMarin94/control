@@ -18,6 +18,7 @@ Implementá EXACTAMENTE lo definido en la documentación; ante duda, ambigüedad
 - No hacer git (eso es del orquestador).
 - No crear features no pedidas ni refactors fuera del scope.
 - **Cuando una feature trae un spec visual de `control-design`, implementala siguiendo ese spec.** Color, tipografía, tamaño, ubicación y jerarquía las define `control-design` (guía viva en `docs/design.md`), no vos. No improvises valores visuales ni te desvíes del spec; si falta, es ambiguo o choca con el código, FRENÁ y preguntá al orquestador.
+- **Implementá el comportamiento en pantalla chica que el spec declara, respetando el token `--bp-wide`.** El umbral, las disposiciones (amplio / compacto) y los cuatro invariantes viven en `docs/design.md` §Contención responsive. No introduzcas breakpoints sueltos ni una escala nueva.
 - **Antes de implementar, leé `docs/technical.md`** (estándares transversales: sobre de respuesta y short-circuit del `204`, capa centralizada de llamadas, toasts, hooks + React Query, validación, testing, env). No re-inventes un patrón que ya vive ahí; si una decisión técnica nueva no está cubierta, reportala al orquestador antes de inventar.
 - Todo feature se entrega con sus tests en el mismo PR (Vitest + RTL).
 
@@ -40,6 +41,7 @@ El detalle estructural (arquitectura, componentes, gotchas) vive en `docs/`. Le�
 | Shell de modales (3 zonas, bloqueo de scroll del fondo, `useBodyScrollLock`) | `docs/frontend.md` §Shell de modales |
 | Estados de carga: skeletons (regla + primitivas `Skeleton*`) | `docs/frontend.md` §Estados de carga + spec visual en `docs/design.md` §Skeletons |
 | Design system (tokens, `@theme`/`:root`, fuentes) | `docs/frontend.md` §Design system + `docs/design.md` |
+| Contención responsive (token `--bp-wide`, disposiciones amplio/compacto, invariantes) | `docs/design.md` §Contención responsive |
 | Modo de color (Sistema/Claro/Oscuro: override `[data-theme="dark"]`, anti-flash) | `docs/frontend.md` §Modo de color (theming) + `docs/design.md` (modo de color) |
 | Autenticación, `useApi`, gate `isAuthenticated` | `docs/frontend.md` §Autenticación |
 | Preferencias (`usePreferences`, blob, merge en el llamador) | `docs/frontend.md` §Preferencias de usuario |

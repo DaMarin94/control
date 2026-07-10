@@ -12,9 +12,14 @@
  * Suspense necesario porque MonthViewWrapper usa useSearchParams().
  *
  * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
- * Fase 1.1.3 (revisado): PeriodNav es ahora el grid de 3 columnas.
- * El cap de 1120px y el px-10 viven en la columna central de PeriodNav
- * (dentro de MonthViewClient), no en un wrapper de esta página.
+ * PeriodNav ya no es un grid (ver docstring de period-nav.tsx): el ancho de
+ * contenido (max-w-[1120px] mx-auto) lo aporta PeriodNav, y el px-10 +
+ * padding vertical (py-[34px] pb-20) los aporta el div de contenido dentro
+ * de MonthViewClient — mismo mecanismo canónico que las otras cinco
+ * pantallas. Esta página solo envuelve con la animación de entrada; el
+ * fallback de Suspense (visible brevemente antes de montar MonthViewWrapper)
+ * replica el mismo bloque canónico para no saltar al aterrizar el contenido
+ * real.
  */
 
 import { Suspense } from "react";
@@ -22,19 +27,11 @@ import { MonthViewWrapper } from "@/components/movements/month-view-wrapper";
 
 export default function MesPage() {
   return (
-    /*
-     * Wrapper de animación y espaciado vertical.
-     * SIN max-w ni px: el cap de 1120px y el px-10 viven en la columna
-     * central del grid de PeriodNav (dentro de MonthViewClient).
-     */
-    <div className="py-[34px] pb-20 animate-screen-fade">
+    <div className="animate-screen-fade">
       {/* Suspense necesario porque MonthViewWrapper usa useSearchParams */}
       <Suspense
         fallback={
-          <div
-            className="mx-auto px-10 space-y-[var(--gap)]"
-            style={{ maxWidth: 1120 }}
-          >
+          <div className="px-10 py-[34px] pb-20 max-w-[1120px] mx-auto space-y-[var(--gap)]">
             <div className="h-12 animate-pulse rounded-card bg-panel-3" />
             <div className="grid grid-cols-3 gap-[var(--gap)]">
               <div className="h-[90px] animate-pulse rounded-card bg-panel-3" />

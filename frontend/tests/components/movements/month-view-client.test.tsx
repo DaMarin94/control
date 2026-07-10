@@ -612,6 +612,23 @@ describe("MonthViewClient", () => {
       expect(screen.getByText("+ $0,00")).toBeInTheDocument();
     });
 
+    // ── Contención responsive (docs/design.md §Contención responsive) ─────────
+    // Las stat-cards colapsan a 1 columna en compacto y usan el template real
+    // 1fr 1fr 1.1fr solo en amplio (ancho de contenido ≥941px, variante
+    // `@wide:` — container query sobre <main>, no media query de viewport).
+    // Sin `style` inline: la grilla debe poder sobreescribirse por container query.
+    it("la grilla de totales colapsa a 1 columna en compacto y usa 1fr 1fr 1.1fr en amplio", () => {
+      mockLoaded(mockWithData);
+      renderMonthView();
+
+      const gastosCard = screen.getByText("Gastos").parentElement;
+      const grid = gastosCard?.parentElement;
+      expect(grid).toHaveClass("grid-cols-1");
+      expect(grid).toHaveClass("@wide:grid-cols-[1fr_1fr_1.1fr]");
+      // No debe quedar gridTemplateColumns inline (por eso nunca colapsaba).
+      expect(grid?.getAttribute("style") ?? "").not.toContain("grid-template-columns");
+    });
+
     // ── Bug E1 — gasto calculado con amountCents negativo (RN-019) ───────────
     // El backend devuelve calculados EXPENSE con amountCents < 0. El cliente
     // debe sumar la MAGNITUD (Math.abs), no el crudo, para que los totales
@@ -1390,6 +1407,26 @@ describe("MonthViewClient", () => {
 
       expect(screen.getByLabelText("Cargando totales")).toBeInTheDocument();
     });
+
+    it("el skeleton de totales usa el mismo template responsive que el bloque real (sin salto al aterrizar)", () => {
+      mockUseMovements.mockReturnValue({
+        data: undefined,
+        isLoading: true,
+        isError: false,
+        isPending: true,
+        isSuccess: false,
+        error: null,
+        status: "pending",
+        fetchStatus: "fetching",
+      } as ReturnType<typeof useMovements>);
+
+      renderMonthView();
+
+      const skeletonGrid = screen.getByLabelText("Cargando totales");
+      expect(skeletonGrid).toHaveClass("grid-cols-1");
+      expect(skeletonGrid).toHaveClass("@wide:grid-cols-[1fr_1fr_1.1fr]");
+      expect(skeletonGrid.getAttribute("style") ?? "").not.toContain("grid-template-columns");
+    });
   });
 
   // ── Enrutamiento de borrado de calculados por sourceType (Fase 1.1.8) ────────
@@ -1975,7 +2012,7 @@ describe("MonthViewClient — chip de moneda default", () => {
       error: null,
       status: "success",
       fetchStatus: "idle",
-    } as ReturnType<typeof useMovements>);
+    } as unknown as ReturnType<typeof useMovements>);
   }
 
   it("el chip de moneda aparece en el header de /mes (ARS por defecto)", () => {

@@ -17,11 +17,13 @@
  *
  * v1 (D8): SOLO crear. Sin editar — para cambiar un límite se borra y se crea
  * de nuevo (el panel de listado, `limits-tab.tsx`, es quien borra).
+ *
+ * Consume el shell compartido `ModalShell` (variant="form"): scrim, panel,
+ * max-height (`dvh`, no `vh` — ex-offender, docs/design.md §"Shell de modal
+ * compartido") y body-lock viven ahí.
  */
 
 import { useState, useEffect } from "react";
-import { createPortal } from "react-dom";
-import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +31,7 @@ import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useLimits } from "@/hooks/use-limits";
 import { useToast } from "@/hooks/use-toast";
-import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
+import { ModalShell, ModalShellHeader, ModalShellBody, ModalShellFooter } from "@/components/ui/modal-shell";
 import {
   getAnchorDef,
   LIMIT_OPERATORS,
@@ -238,11 +240,6 @@ export interface CreateLimitModalProps {
 export function CreateLimitModal({ onClose }: CreateLimitModalProps) {
   const { create } = useLimits();
   const { toast } = useToast();
-  const [mounted, setMounted] = useState(false);
-
-  useBodyScrollLock();
-
-  useEffect(() => setMounted(true), []);
 
   const [anchorKey, setAnchorKey] = useState("");
   const [section, setSection] = useState<LimitSectionRefinement | "">("");
@@ -282,14 +279,6 @@ export function CreateLimitModal({ onClose }: CreateLimitModalProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive, anchorKey]);
-
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
 
   const thresholdValue = parseThresholdInput(thresholdInput);
 
@@ -348,8 +337,6 @@ export function CreateLimitModal({ onClose }: CreateLimitModalProps) {
     }
   }
 
-  if (!mounted) return null;
-
   const namePlaceholder =
     anchorKey && thresholdValue !== null ? deriveLimitLabel(anchorKey, operator, thresholdValue) : undefined;
 
@@ -375,34 +362,12 @@ export function CreateLimitModal({ onClose }: CreateLimitModalProps) {
       ? { anchorLabel: anchorDef.label, conditionPhrase }
       : null;
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-40 flex items-center justify-center p-6"
-      style={{ background: "oklch(0.18 0.02 270 / 0.46)", backdropFilter: "blur(3px)" }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="create-limit-modal-title"
-    >
-      <div
-        className="w-full max-w-[460px] bg-panel border border-line overflow-hidden animate-modal-pop max-h-[90vh] flex flex-col"
-        style={{ borderRadius: "18px", boxShadow: "var(--shadow-lg)" }}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-[22px] pt-5 pb-4 shrink-0">
-          <h2 id="create-limit-modal-title" className="text-[18px] font-bold tracking-[-0.01em] text-ink m-0">
-            Nuevo límite
-          </h2>
-          <button
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
-          >
-            <X size={18} aria-hidden="true" />
-          </button>
-        </div>
+  return (
+    <ModalShell variant="form" onClose={onClose} labelledBy="create-limit-modal-title">
+      <ModalShellHeader titleId="create-limit-modal-title" title="Nuevo límite" onClose={onClose} />
 
-        {/* Body — formulario progresivo, en columna */}
-        <div className="px-[22px] pb-5 space-y-[14px] overflow-y-auto">
+      {/* Body — formulario progresivo, en columna */}
+      <ModalShellBody>
           {/* 1. Anclaje — primer campo y compuerta */}
           <div className="flex flex-col gap-1">
             <Label htmlFor="limit-anchor">Dato a observar</Label>
@@ -530,19 +495,16 @@ export function CreateLimitModal({ onClose }: CreateLimitModalProps) {
               )}
             </>
           )}
-        </div>
+      </ModalShellBody>
 
-        {/* Footer */}
-        <div className="flex justify-end gap-3 px-[22px] py-4 border-t border-hair shrink-0">
-          <Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>
-            Cancelar
-          </Button>
-          <Button type="button" onClick={handleSubmit} disabled={!isValid || submitting}>
-            Crear límite
-          </Button>
-        </div>
-      </div>
-    </div>,
-    document.body,
+      <ModalShellFooter>
+        <Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>
+          Cancelar
+        </Button>
+        <Button type="button" onClick={handleSubmit} disabled={!isValid || submitting}>
+          Crear límite
+        </Button>
+      </ModalShellFooter>
+    </ModalShell>
   );
 }

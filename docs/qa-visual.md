@@ -15,11 +15,18 @@ Este doc es un **asset de trabajo vivo**: el prompt genérico de regresión y la
 - Datos inválidos que se guardan.
 - Estados vacíos rotos (NaN, undefined, empty feo).
 - Crashes.
+- **Contención responsive** — los cuatro invariantes de `docs/design.md` § Contención responsive, verificados entre el **ancho mínimo soportado (`640px`) y arriba** (incluyendo la disposición compacta, `< --bp-wide`, 640–940px, además del amplio). Por debajo de `640px` la app no promete contención (muestra el gate): fuera de alcance.
+  1. Sin scroll horizontal del `body` en todo ancho `≥ 640px`.
+  2. Modales completos y scrolleables: no cortados, no atrapantes.
+  3. Ninguna acción inalcanzable (fuera de pantalla o tapada).
+  4. Las superficies anchas scrollean dentro de sí mismas, no rompen el layout de la página.
 
-Todo en **escritorio normal**.
+El grueso del recorrido va en **escritorio normal**; los cuatro invariantes de contención se verifican **siempre**, también achicando la ventana entre `640px` y `--bp-wide` (disposición compacta). Por debajo de `640px` no se verifica: no es un ancho soportado.
+
+> **El régimen responsive del área autenticada se juzga contra el ancho de `<main>`, no del viewport.** El sidebar abierto le resta ~248px al ancho disponible, así que la disposición compacta/amplia puede cambiar con el sidebar abierto o cerrado al mismo viewport. Hay que QA-ear la contención **con el sidebar abierto Y cerrado**.
 
 **Exclusiones vigentes** — se atacan como esfuerzos propios y **no** se incluyen en los prompts por ahora:
-- **Responsive / mobile / resize.**
+- **Adaptación / rediseño mobile:** evaluar si la experiencia en pantalla chica es *buena* o *cómoda*. Lo único que se verifica en pantalla chica es que **no se rompe** (los cuatro invariantes de contención, arriba); adaptar o rediseñar para mobile queda fuera.
 - **Accesibilidad**: uso por teclado, foco, contraste, legibilidad, información transmitida solo por color.
 
 ## Prompt genérico de regresión adversarial
@@ -29,7 +36,13 @@ Doc vivo: cuando una feature agrega una superficie nueva, se agrega a la lista d
 ---
 Sos un QA senior con mentalidad adversarial. Tu objetivo NO es confirmar que la app anda: es ENCONTRAR maneras de romperla. La app se llama Control, un diario de gastos personal. Recorré todo, meté datos que no deberían entrar, forzá flujos raros, y documentá cada falla con screenshot y pasos para reproducir.
 
-FUERA DE ALCANCE (ignoralo): responsive/mobile/resize (testeá en escritorio normal) y accesibilidad (teclado, foco, contraste, legibilidad, info por color).
+FUERA DE ALCANCE (ignoralo): adaptación/rediseño mobile —si la experiencia en pantalla chica es *cómoda* o *buena* no es tu problema— y accesibilidad (teclado, foco, contraste, legibilidad, info por color).
+
+DENTRO DE ALCANCE, SIEMPRE — contención responsive: además de probar en escritorio normal, achicá la ventana hasta 640px (el ancho mínimo soportado), pasando por la disposición compacta (640–940px), y verificá los cuatro invariantes. No bajes de 640px: por debajo de ese ancho la app muestra el gate y no promete contención. Ojo: el régimen compacto/amplio del área autenticada se mide contra el ancho de `<main>`, no del viewport — el sidebar abierto resta ~248px, así que probá con el sidebar abierto Y cerrado.
+1. El `body` no tiene scroll horizontal en ningún ancho ≥ 640px.
+2. Los modales se ven completos y scrollean: ni cortados ni atrapantes.
+3. Ninguna acción queda fuera de pantalla ni tapada.
+4. Las superficies anchas (tablas, grillas, gráficos) scrollean dentro de sí mismas sin romper el layout de la página.
 
 Enfocate en: datos inválidos que se guardan, roturas visuales de layout, modales cortados, opciones inalcanzables, estados rotos y crashes.
 
@@ -56,7 +69,7 @@ Reporte: por hallazgo (1) dónde, (2) pasos, (3) qué pasó, (4) qué esperabas,
 
 Guion per-feature que el orquestador sigue al cierre de cada tarea con superficie visual — lo ejecuta él directo contra el navegador, o lo entrega como prompt al usuario en el fallback. Estructura fija, en este orden, para que salga consistente:
 
-1. **Rol + objetivo** — QA visual adversarial, con las mismas exclusiones (responsive + a11y fuera).
+1. **Rol + objetivo** — QA visual adversarial, con las mismas exclusiones (adaptación/rediseño mobile y a11y fuera) y el mismo chequeo permanente de los cuatro invariantes de contención responsive entre el ancho mínimo soportado (`640px`) y arriba (sin bajar de `640px`), con el sidebar abierto Y cerrado.
 2. **Contexto breve de la feature** — qué hace, en términos de UI.
 3. **Invariantes críticos** (testear primero) — p. ej. "cero-impacto con config vacía": la app se ve igual si la feature no está activada.
 4. **Recorrido superficie por superficie** de lo que la feature toca — con qué mirar y qué esperar en cada una.

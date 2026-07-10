@@ -1542,6 +1542,28 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 
 ---
 
+#### RF-NAV-002 — Mostrar/ocultar el sidebar
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El usuario **muestra u oculta** el sidebar (RF-NAV-001) con un control manual, disponible en **todos los anchos de viewport**. Abierto, el sidebar ocupa su ancho y empuja el contenido; cerrado, se oculta y el contenido ocupa el ancho completo. El estado persiste por usuario en el blob de preferencias (clave `sidebarOpen`). |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Criterios de aceptación:**
+- [ ] Existe un control manual que **alterna** entre sidebar abierto y cerrado, accesible en **cualquier ancho de viewport soportado** (≥ 640px, RF-APP-002).
+- [ ] **Abierto** (estado por defecto): el sidebar se comporta como en RF-NAV-001 — ocupa su ancho y **empuja** el contenido de la pantalla.
+- [ ] **Cerrado**: el sidebar queda **oculto** y el contenido de la pantalla ocupa el **ancho completo**.
+- [ ] El estado abierto/cerrado **no depende del breakpoint**: el sidebar **no auto-colapsa** por ancho de viewport. La única causa del cambio de estado es la acción del usuario sobre el control.
+- [ ] El estado **persiste por usuario** en el blob de preferencias (clave `sidebarOpen`): sobrevive al cierre de sesión, al cambio de dispositivo y a limpiar el navegador. Si la clave falta, el default es **abierto**. Modelo de datos en `data-model.md`, §Claves del blob → `sidebarOpen`.
+
+**Notas:**
+- La ubicación, el ícono, el rótulo y el comportamiento visual del control (incluida la animación de apertura/cierre) los define `control-design` (`docs/design.md`). Este RF solo fija el comportamiento funcional.
+- **Interacción con RNF-003 (acceso a "Nuevo movimiento" en ≤2 interacciones):** con el sidebar **cerrado**, la CTA "Nuevo movimiento" (que vive en el sidebar, RF-NAV-001) **no está visible**. Crear un movimiento cuesta abrir el sidebar (1) + click en la CTA (2) = **2 interacciones**, dentro del límite de RNF-003. Es aceptable por decisión de producto: no se agrega un acceso alternativo a la carga.
+
+---
+
 ### 3.9 Módulo: Reportes
 
 El módulo de Reportes visualiza los movimientos del usuario a lo largo de un año, mes a mes. El eje X son los 12 meses del año; el eje Y es el monto. Ofrece **dos tipos de reporte** —ingresos vs. gastos por mes, y gastos por categoría apilados— implementados como un **widget de reporte autónomo, configurable por props**, que lleva embebidos su propia navegación de año y su propio filtro de categorías. La pantalla `/reportes` es **configurable**: el usuario arma su vista agregando y quitando **cards de reporte**; el dashboard monta una sola instancia del widget (ver RF-DASH-001/002).
@@ -2169,6 +2191,27 @@ El alcance es un **set curado de 4 monedas (ARS / USD / EUR / BRL)**, sin alta d
 - [ ] **Claro** y **Oscuro** fuerzan ese modo con independencia del dispositivo.
 - [ ] La elección **persiste por usuario** en el blob de preferencias (clave `theme`): sobrevive al cierre de sesión, al cambio de dispositivo y a limpiar el navegador. No vive en `/settings` (la moneda default sí; esto no).
 - [ ] **Compatibilidad visual total en ambos modos y en cualquier tipo de dispositivo:** toda pantalla y todo control se ven correctos tanto en claro como en oscuro. Las reglas semánticas son **idénticas** en los dos modos: verde = ingreso, rojo = gasto, índigo solo como color de marca, cifras de dinero en fuente monoespaciada. El detalle visual de cada modo lo define `control-design` (`docs/design.md`).
+
+---
+
+#### RF-APP-002 — Gate por debajo del ancho mínimo soportado (640px)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Por debajo del ancho mínimo soportado (viewport `< 640px`), la app muestra un **gate**: una pantalla que **impide usarla**. El ancho mínimo soportado (640px) y la política de contención viven en `docs/design.md`, §Contención responsive. |
+| **Actor** | Cualquier visitante (autenticado o no) |
+| **Prioridad** | Media |
+| **Precondiciones** | Viewport `< 640px`. |
+
+**Criterios de aceptación:**
+- [ ] El gate se muestra cuando el viewport es **`< 640px`** (por debajo del ancho mínimo soportado) y **cubre toda la app**, incluida la pantalla de login. El login queda gateado porque por debajo del piso la app no se puede usar: ofrecer una puerta a una casa inaccesible no tiene sentido.
+- [ ] Es un **bloqueo, no un aviso descartable**: no hay botón "continuar igual" ni forma de saltearlo. Mientras el viewport esté por debajo del piso, no hay acceso a ninguna pantalla de la app.
+- [ ] Cuando el viewport vuelve a **`≥ 640px`** (al rotar el dispositivo o redimensionar la ventana), la app aparece **sin recargar** y sin parpadeo. Por eso la condición del gate es **CSS puro** (media query sobre el ancho del viewport): sin listener de `resize`, sin estado en JS, sin depender de hidratación. Es una decisión técnica, no cosmética — cualquier implementación basada en JS reintroduce el parpadeo y la necesidad de recargar.
+- [ ] El gate **ocupa el viewport y no genera scroll** (ni vertical ni horizontal).
+- [ ] **Copy (es-AR):**
+  - Título: **Necesitás una pantalla más grande**
+  - Línea: **Control necesita más espacio para mostrarte tus movimientos con claridad. Agrandá la ventana o abrilo en una pantalla más grande.**
+- [ ] La composición visual (jerarquía, tamaño, color, tipografía) reusa **tokens y primitivas ya existentes** del design system; no introduce valores nuevos. El detalle visual lo enmarca `control-design` (`docs/design.md`, §Contención responsive).
 
 ---
 

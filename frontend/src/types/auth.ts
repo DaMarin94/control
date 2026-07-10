@@ -114,6 +114,12 @@ export interface UserPreferences {
     fijo: string | null;
     cuota: string | null;
   };
+  /**
+   * Estado mostrar/ocultar del sidebar global (RF-NAV-002).
+   * Ausente equivale a `true` (abierto). Blob frontend-puro / opaco para el
+   * backend, igual que `theme` / `reports`.
+   */
+  sidebarOpen?: boolean;
   [key: string]: unknown;
 }
 

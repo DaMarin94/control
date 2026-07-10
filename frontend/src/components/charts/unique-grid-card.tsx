@@ -49,6 +49,7 @@ import { limitBoldClass, limitTintClass, LimitGlyph } from "@/components/limits/
 import { formatCurrency, CURRENCY_SYMBOLS } from "@/lib/format";
 import { ChartLegend } from "@/components/ui/chart";
 import { CardCurrencySelect } from "@/components/ui/card-currency-select";
+import { useScrollShadow, getScrollShadowStyle } from "@/hooks/use-scroll-shadow";
 import type { UnicoGridResponse } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
 import type { LimitConfig } from "@/types/limit";
@@ -738,8 +739,21 @@ function GridTable({ data, year, currency, isDark, isEmpty, colorAnchorCents, li
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
+  // Affordance de corte del carril horizontal (docs/design.md §"Superficies
+  // con scroll interno" → "Affordance de 'hay más'"). box-shadow, no mask
+  // (taparía las cifras mono de las celdas).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollShadow = useScrollShadow(scrollRef);
+
   return (
-    <div className="relative overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+    <div
+      ref={scrollRef}
+      className="relative overflow-x-auto"
+      style={{
+        WebkitOverflowScrolling: "touch",
+        boxShadow: getScrollShadowStyle(scrollShadow, isDark),
+      }}
+    >
       {/* Overlay vacío */}
       {isEmpty && (
         <div
