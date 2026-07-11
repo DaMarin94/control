@@ -6,6 +6,10 @@ Validación que ni los tests, ni el build, ni el e2e cubren: pixel, layout, moda
 
 **Sembrado de datos de prueba:** el orquestador **siembra la data que el caso requiera** (categorías, movimientos únicos/fijos/cuotas, calculados, límites, etc.) cuando la cuenta conectada no tiene los casos necesarios para ejercitar la feature. Es **parte esperada** de correr el QA, no un paso extraordinario: sin los datos adecuados el recorrido no prueba nada.
 
+**La base de datos local de desarrollo es descartable.** Sus datos no tienen valor. Al correr QA (o cualquier prueba), el orquestador **crea, modifica y elimina** libremente lo que necesite —categorías, movimientos, métodos de pago, calculados, etc.— **sin pedir permiso** y **sin obligación de revertir** la data de prueba. La data no se trata como preciosa. Esto aplica **solo a la base local de desarrollo**, no a datos de producción.
+
+**Único límite (regla de seguridad):** el orquestador **no crea cuentas de usuario, no ingresa credenciales/contraseñas ni realiza el login** (incluido Google OAuth). Si una prueba requiere una sesión autenticada, la autenticación la resuelve el usuario; el resto —los datos— lo maneja el orquestador sin fricción.
+
 Este doc es un **asset de trabajo vivo**: el prompt genérico de regresión y la plantilla per-feature se mantienen acá al día con las superficies del producto.
 
 ## Alcance y exclusiones
@@ -77,7 +81,7 @@ Guion per-feature que el orquestador sigue al cierre de cada tarea con superfici
 4. **Recorrido superficie por superficie** de lo que la feature toca — con qué mirar y qué esperar en cada una.
 5. **Casos borde** de input y de estado propios de la feature.
 6. **Modales/overlays nuevos** — cortado, cierre, apilado.
-7. **Formato de reporte** (dónde / pasos / qué pasó / qué esperabas / severidad / screenshot) + **limpieza de datos de prueba**.
+7. **Formato de reporte** (dónde / pasos / qué pasó / qué esperabas / severidad / screenshot). No hay paso de limpieza: la data de prueba de la base local no se revierte (ver arriba).
 
 El contenido visual esperado (colores, posiciones, estados) sale del **"Checklist de aceptación visual"** del spec de `control-design` de esa feature; el orquestador lo reusa para los puntos 3 y 4.
 
