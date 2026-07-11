@@ -208,6 +208,10 @@ El join de movimientos y el cálculo de totales **no filtran por `Category.delet
 - **`findFijosByMonth` usa Prisma ORM normal** (no `$queryRaw`, no `AT TIME ZONE`): los fijos operan **a nivel mes**, sin día/hora/zona, así que no hay bucketeo por timezone que resolver.
 - **Condición de actividad en un mes:** `startMonth <= month AND (deletedFrom IS NULL OR deletedFrom > month)` **más** la condición de frecuencia `isOnFrequency(startMonth, frequency, month)` (RN-016). El rango se compara **léxicamente sobre strings `YYYY-MM`** —válido porque ese formato ordena cronológicamente como texto (`"2026-02" < "2026-10"`)— y la frecuencia se aplica en JS (ver **Cálculo de aparición de fijos por mes**). Se corresponde con RF-MF-002 / RF-MF-006.
 - **Los totales del mes suman únicos + fijos activos.** El `MovementItem` de un fijo viene con `occurredAt` y `timezone` en `null`, y con `frequency` / `skipped` poblados (ver shape en `docs/data-model.md`). **Un fijo anulado para el mes (`skipped: true`, RF-MF-005) se incluye en la lista pero se excluye de los totales.**
+- **Arranque y fin del fijo se resuelven por cadena (`loadChainBounds`, RF-MF-007 / RF-VM-007).** El helper `loadChainBounds(chainIds)` resuelve, por cada `chainId`, los dos bordes del fijo lógico en una sola query que trae las filas de la cadena:
+  - **`startMonth`** (arranque) = el `startMonth` **mínimo** de la cadena (la **primera** fila).
+  - **`endMonth`** (fin/vigencia) = el `deletedFrom` de la fila con **mayor `startMonth`** de la cadena (la **fila vigente**), `"YYYY-MM"` exclusivo; `null` = activo indefinidamente.
+  **Gotcha estructural:** tras un split de edición (RF-MF-003) la fila **vigente** tiene el `startMonth` del **último split**, no el del fijo — mostrar ese campo afirmaría un arranque falso; y su `deletedFrom` es la terminación real del fijo. Por eso ambos bordes se resuelven **por cadena**, no por la fila suelta. Un **calculado de fijo** resuelve sus bordes por **su propio `chainId`** (no `sourceChainId`): muestra su propio arranque y su propio fin, no los del origen.
 
 ### Integración de cuotas en `/movements`
 
@@ -333,7 +337,7 @@ Gestión de movimientos fijos, **scopeada por `userId` del JWT**. El módulo exp
 | `DELETE /recurring/:id` | query: `currentMonth`, `fromCurrentMonth` | `204 No Content` | `404` |
 
 - **`type`, `startMonth` y `frequency` no son editables** por PATCH: solo `amountCents`, `categoryId` y `description` (RF-MF-003). El `startMonth` del POST es el mes actual que envía el front.
-- **`frequency`:** opcional en el `POST`, default **`MONTHLY`** si se omite. Set cerrado: `MONTHLY | BIMONTHLY | QUARTERLY | BIANNUAL | ANNUAL` (`400` si el valor no es del enum). Es **inmutable** (como `type`): no se acepta en PATCH; en el split (abajo) la fila nueva R2 la **hereda del original**. La respuesta del `POST` incluye `frequency`. Detalle del cálculo "¿este fijo aparece en este mes?" en **Cálculo de aparición de fijos por mes** (abajo).
+- **`frequency`:** **entero 1..12** (meses entre apariciones), opcional en el `POST`, default **`1`** (mensual) si se omite. `400` si no es entero o cae fuera de 1..12 (validado en el DTO; no hay CHECK en la DB). Es **inmutable** (como `type`): no se acepta en PATCH; en el split (abajo) la fila nueva R2 la **hereda del original**. La respuesta del `POST` incluye `frequency`. Detalle del cálculo "¿este fijo aparece en este mes?" en **Cálculo de aparición de fijos por mes** (abajo).
 - **`POST /recurring/:id/skip` — toggle de anulación:** anula / des-anula la aparición de un fijo en un mes puntual (RF-MF-005). Body `{ month: "YYYY-MM" }`. Es un **toggle**: si ya existe el skip `(fijo, mes)` lo borra (`data: { skipped: false, month }`); si no existe lo crea (`data: { skipped: true, month }`). `404` si el fijo no existe o no es del usuario; `400` si el `month` no cumple `YYYY-MM`. **No valida** que el mes sea una aparición real del fijo según su frecuencia (solo formato y ownership) — esa validación semántica es del frontend, que ya tiene el ítem del mes. Un mes anulado **se sigue listando** en `GET /movements` con `skipped: true` pero **no suma** a los totales ni a la serie anual.
 - **Validación de categoría:** idéntica a la de movimientos únicos — categoría propia, activa y con scope compatible (RN-010); inexistente / ajena / eliminada / scope incompatible son todas `400` (ver `validateCategory` abajo).
 
@@ -348,10 +352,9 @@ Esto materializa "el pasado es inmutable" (RF-MF-003) sin generar filas por inst
 
 ### Cálculo de aparición de fijos por mes — frecuencia (P2) y skips (P1)
 
-La lógica "¿este fijo aparece en este mes?" está **centralizada en dos helpers exportados desde `movements.repository.ts`** y reutilizada por `findFijosByMonth`, la proyección anual y los tests:
+La lógica "¿este fijo aparece en este mes?" está **centralizada en el helper `isOnFrequency` exportado desde `movements.repository.ts`** y reutilizada por `findFijosByMonth`, la proyección anual y los tests:
 
-- **`frequencyStep(frequency)`** → paso en meses: `MONTHLY=1`, `BIMONTHLY=2`, `QUARTERLY=3`, `BIANNUAL=6`, `ANNUAL=12`.
-- **`isOnFrequency(startMonth, frequency, month)`** → `monthDiff(startMonth, month) % frequencyStep(frequency) === 0`. La frecuencia está **anclada al `startMonth`**.
+- **`isOnFrequency(startMonth, frequency, month)`** → `monthDiff(startMonth, month) % frequency === 0`, con `frequency` el entero 1..12 directo (RN-016). La frecuencia está **anclada al `startMonth`**.
 
 Un fijo aparece en `month` si: `startMonth <= month` **y** (`deletedFrom IS NULL OR deletedFrom > month`) **y** `isOnFrequency(startMonth, frequency, month)` (RN-016). El primer par de condiciones (rango de actividad) se filtra en Prisma por comparación léxica de `YYYY-MM`; la condición de frecuencia se aplica en JS sobre los candidatos. **Cualquier cambio al cálculo de fijos por mes debe pasar por estos helpers, no re-duplicarse.**
 
@@ -393,6 +396,14 @@ Análogo a RN-006 (fijos/cuotas no generan filas por mes). Cada calculado se iny
 - Para cada calculado, `amountCents = applyFormula(montoOrigen, operator, operand, sign)` y `type` se **deriva del signo**: `> 0 → INCOME`, `≤ 0 → EXPENSE` (default `0 = EXPENSE`). Para **cuota**, `montoOrigen` = **monto por cuota** del grupo (no el total); para **único**, el monto del `Transaction`.
 - **Presencia gobernada SOLO por el origen.** Un calculado aparece en el mes **sii el origen aparece en ese mes**: fijo → fila activa en el mes (no aplicar `isOnFrequency` con su **propio** `startMonth` — desalinea con step > 1, fue causa de un bug; hereda frecuencia, actividad y **skip** del origen); único → solo el mes del único; cuota → cada mes del rango `startMonth ≤ mes < startMonth + totalInstallments` del grupo.
 - **Orden de cada lista por `Math.abs(amountCents)` DESC**, porque un calculado puede ser negativo y no debe quedar relegado al final.
+
+### Detección de derivados en el origen (`hasCalculated` + `calculatedChildren`)
+
+El `MovementItem` de un ítem **origen** expone sus calculados derivados: `hasCalculated` (booleano) y `calculatedChildren` (la lista; shape `CalculatedChild` en `docs/data-model.md`, §Contrato de movimientos del mes). Se resuelve para los **tres orígenes** —único, fijo y cuota pueden ser padres (RF-MCALC-008)— con alcance **estrictamente el mes consultado**:
+
+- Por cada ítem origen se buscan los calculados que lo referencian por su FK (`sourceChainId` para fijo, `sourceMovementId` para único, `sourceInstallmentGroupId` para cuota) y que **aparecen ese mes** (misma regla de presencia gobernada por el origen). Un derivado que no cae en el mes (por frecuencia o skip del origen) **no entra**.
+- `calculatedChildren` = esos derivados con su monto ya derivado al vuelo y convertido a la default; `hasCalculated = calculatedChildren.length > 0`.
+- Un calculado **nunca es padre** (RF-MCALC-001): su `hasCalculated` es `false` y su `calculatedChildren` es `[]` (sin encadenamiento).
 
 ### Imputación a totales (RN-019)
 
@@ -521,7 +532,7 @@ CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca m�
 
 ### Método y débito automático en movimientos + herencia del calculado
 
-`GET /movements` embebe `paymentMethod: { id, name, icon, type } | null` en cada ítem (`null` si no tiene) y expone `autoDebit: boolean | null` **a nivel del ítem** (fuera del objeto `paymentMethod`). El **calculado hereda método y `autoDebit` de su origen**: se **derivan al vuelo, nunca persiste unos propios** (mismo tratamiento que `currency`/`exchangeRate`). Contrato del ítem en `docs/data-model.md`, §Contrato de movimientos del mes.
+`GET /movements` embebe `paymentMethod: { id, name, icon, type, closingDay, paymentDay } | null` en cada ítem (`null` si no tiene) y expone `autoDebit: boolean | null` **a nivel del ítem** (fuera del objeto `paymentMethod`). `closingDay`/`paymentDay` (día del mes 1-31) se pueblan **solo para `type === "CREDIT"`** (null en `DEBIT`/`CASH`) y alimentan la sublínea del crédito de la card de detalle (RF-VM-007). El **calculado hereda método y `autoDebit` de su origen**: se **derivan al vuelo, nunca persiste unos propios** (mismo tratamiento que `currency`/`exchangeRate`). Contrato del ítem en `docs/data-model.md`, §Contrato de movimientos del mes.
 
 **`autoDebit` es campo del movimiento, no del método** (RN-021). Es columna `autoDebit Boolean?` en `Transaction`, `Recurring` e `InstallmentGroup`. Los bodies `POST`/`PATCH` de transactions / recurring / installments aceptan `autoDebit?: boolean` (el **calculado no**, lo hereda). **Regla de persistencia** — validador `resolveAutoDebit`: solo se guarda `true`/`false` si el **método efectivo del movimiento es de tipo `DEBIT`**; sin método o con método `CREDIT`/`CASH` se fuerza a `null` aunque el body pida `true`.
 

@@ -17,7 +17,7 @@
  */
 import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { CategoryScope, Currency, MovementType, RecurringFrequency } from '@prisma/client';
+import { CategoryScope, Currency, MovementType } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { MovementsService } from '../../../src/movements/movements.service';
 import {
@@ -87,9 +87,12 @@ function makeUnicoItem(overrides: Partial<MovementItem> = {}): MovementItem {
     autoDebit: null,
     installment: null,
     frequency: null,
+    startMonth: null,
+    endMonth: null,
     skipped: false,
     calculated: null,
     hasCalculated: false,
+    calculatedChildren: [],
     ...overrides,
   };
   // Si el caller sobrescribió amountCents pero no convertedAmountCents, sincronizar
@@ -120,10 +123,13 @@ function makeFijoItem(overrides: Partial<MovementItem> = {}): MovementItem {
     paymentMethod: null,
     autoDebit: null,
     installment: null,
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
+    startMonth: '2026-01',
+    endMonth: null,
     skipped: false,
     calculated: null,
     hasCalculated: false,
+    calculatedChildren: [],
     ...overrides,
   };
   if (overrides.amountCents !== undefined && overrides.convertedAmountCents === undefined) {
@@ -158,9 +164,12 @@ function makeCuotaItem(overrides: Partial<MovementItem> = {}): MovementItem {
       startMonth: '2026-04',
     },
     frequency: null,
+    startMonth: null,
+    endMonth: null,
     skipped: false,
     calculated: null,
     hasCalculated: false,
+    calculatedChildren: [],
     ...overrides,
   };
   if (overrides.amountCents !== undefined && overrides.convertedAmountCents === undefined) {

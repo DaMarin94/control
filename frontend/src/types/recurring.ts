@@ -12,16 +12,13 @@ import type { CurrencyCode } from "@/types/settings";
 import type { EmbeddedPaymentMethod } from "@/types/payment-method";
 
 /**
- * Frecuencia de recurrencia de un movimiento fijo (P2 — Fase 1.1.1).
- * Set cerrado: sin frecuencias libres ni custom.
- * Back-compat: los fijos existentes son MONTHLY.
+ * Frecuencia de recurrencia de un movimiento fijo (P2 — Fase 1.1.1; P1/P4 —
+ * pasa de enum string a entero).
+ * Entero 1..12 = cantidad de meses del período (la instancia cae cuando
+ * `monthDiff(startMonth, mes) % N === 0`). Set cerrado 1..12, sin valores libres.
+ * Back-compat: los fijos existentes son 1 (mensual).
  */
-export type RecurringFrequency =
-  | "MONTHLY"
-  | "BIMONTHLY"
-  | "QUARTERLY"
-  | "BIANNUAL"
-  | "ANNUAL";
+export type RecurringFrequency = number;
 
 /** Categoría embebida en la respuesta de un fijo */
 export interface RecurringCategory {
@@ -49,8 +46,8 @@ export interface Recurring {
   /** Mes desde el que está eliminado (YYYY-MM), null si está activo */
   deletedFrom: string | null;
   /**
-   * Frecuencia de recurrencia (P2 — Fase 1.1.1).
-   * Default MONTHLY para los fijos existentes (back-compat).
+   * Frecuencia de recurrencia (P2 — Fase 1.1.1; P1/P4 — entero 1..12).
+   * Default 1 (mensual) para los fijos existentes (back-compat).
    */
   frequency: RecurringFrequency;
   /** Moneda original del fijo (Fase 1.2.3). Default "ARS". */
@@ -82,8 +79,8 @@ export interface CreateRecurringRequest {
   /** Mes de inicio en formato YYYY-MM — debe ser el mes actual del navegador */
   startMonth: string;
   /**
-   * Frecuencia de recurrencia (P2 — Fase 1.1.1).
-   * Opcional; default MONTHLY en el backend si se omite.
+   * Frecuencia de recurrencia (P2 — Fase 1.1.1; P1/P4 — entero 1..12).
+   * Opcional; default 1 (mensual) en el backend si se omite. Inmutable tras crear.
    */
   frequency?: RecurringFrequency;
   description?: string;

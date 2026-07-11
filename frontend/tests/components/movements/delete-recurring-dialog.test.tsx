@@ -52,7 +52,9 @@ const mockFijoMovement: MovementItem = {
   occurredAt: null,
   timezone: null,
   installment: null,
-  frequency: "MONTHLY",
+  frequency: 1,
+  startMonth: "2026-01",
+  endMonth: null,
   skipped: false,
   category: {
     id: "cat-1",
@@ -67,6 +69,7 @@ const mockFijoMovement: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 150000,
+  calculatedChildren: [],
 };
 
 /** Calculado de origen único — fixture para la variante calculated-simple */
@@ -80,6 +83,8 @@ const mockCalculatedUnicoMovement: MovementItem = {
   timezone: "America/Argentina/Buenos_Aires",
   installment: null,
   frequency: null,
+  startMonth: null,
+  endMonth: null,
   skipped: false,
   category: {
     id: "cat-2",
@@ -103,6 +108,7 @@ const mockCalculatedUnicoMovement: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 5000,
+  calculatedChildren: [],
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

@@ -166,7 +166,7 @@ const mockRecurring: Recurring = {
   description: "Alquiler",
   startMonth: "2026-01",
   deletedFrom: null,
-  frequency: "MONTHLY",
+  frequency: 1,
   currency: "ARS",
   exchangeRate: 1,
   createdAt: "2026-01-01T00:00:00Z",
@@ -709,25 +709,32 @@ describe("RecurringForm — selector de frecuencia (crear)", () => {
     expect(screen.getByLabelText(/frecuencia/i)).toBeInTheDocument();
   });
 
-  it("el selector de frecuencia tiene 'Mensual' como valor por defecto", () => {
+  it("el selector de frecuencia tiene 1 (Mensual) como valor por defecto", () => {
     renderForm({});
     const select = screen.getByLabelText(/frecuencia/i) as HTMLSelectElement;
-    expect(select.value).toBe("MONTHLY");
+    expect(select.value).toBe("1");
   });
 
-  it("el selector de frecuencia tiene todas las opciones en orden correcto", () => {
+  it("el selector de frecuencia tiene las 12 opciones (1..12) en orden correcto", () => {
     renderForm({});
     const select = screen.getByLabelText(/frecuencia/i);
     expect(screen.getByRole("option", { name: "Mensual" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Bimestral" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Trimestral" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Cuatrimestral" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Cada 5 meses" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Semestral" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Cada 7 meses" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Cada 8 meses" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Cada 9 meses" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Cada 10 meses" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Cada 11 meses" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Anual" })).toBeInTheDocument();
     // Verificar que el select existe
     expect(select).toBeInTheDocument();
   });
 
-  it("crear envía la frequency seleccionada al backend", async () => {
+  it("crear envía la frequency seleccionada (entero) al backend", async () => {
     const user = userEvent.setup();
     mockCreateRecurring.mockResolvedValue({ success: true, recurring: mockRecurring });
 
@@ -736,9 +743,9 @@ describe("RecurringForm — selector de frecuencia (crear)", () => {
     const amountInput = screen.getByLabelText(/monto/i);
     await user.type(amountInput, "1500");
 
-    // Seleccionar frecuencia BIMONTHLY
+    // Seleccionar frecuencia Bimestral (valor 2)
     const freqSelect = screen.getByLabelText(/frecuencia/i);
-    await user.selectOptions(freqSelect, "BIMONTHLY");
+    await user.selectOptions(freqSelect, "2");
 
     const categorySelect = screen.getByLabelText(/categoría/i);
     await user.selectOptions(categorySelect, "cat-expense");
@@ -748,7 +755,7 @@ describe("RecurringForm — selector de frecuencia (crear)", () => {
     await waitFor(() => {
       expect(mockCreateRecurring).toHaveBeenCalledWith(
         expect.objectContaining({
-          frequency: "BIMONTHLY",
+          frequency: 2,
         }),
       );
     });
@@ -764,7 +771,7 @@ describe("RecurringForm — selector de frecuencia (crear)", () => {
     renderForm({});
 
     const freqSelect = screen.getByLabelText(/frecuencia/i);
-    await user.selectOptions(freqSelect, "ANNUAL");
+    await user.selectOptions(freqSelect, "12");
 
     await waitFor(() => {
       expect(screen.getByText(/cada año a partir del mes de inicio/i)).toBeInTheDocument();
@@ -1120,6 +1127,8 @@ describe("RecurringForm — prefill de método de pago por defecto", () => {
           name: mockCreditMethod.name,
           icon: mockCreditMethod.icon,
           type: mockCreditMethod.type,
+          closingDay: mockCreditMethod.closingDay,
+          paymentDay: mockCreditMethod.paymentDay,
         },
       },
     });

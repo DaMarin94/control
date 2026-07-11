@@ -584,9 +584,11 @@ Cuando el **método de pago seleccionado es de tipo Débito**, el form de movimi
   - **Focus:** ring `--accent-soft` 3px (focus ring del DS).
 - **Neutralidad semántica:** el control **no** usa verde/rojo (no comunica ingreso/gasto) ni tiñe cifras; el único índigo es el del check/focus (interacción). Es el **único** campo condicional por tipo de método en el form; no se agregan otros.
 
-### Débito automático — indicador en el ítem de `/mes`
+### Débito automático — indicador en la card de detalle
 
-Un movimiento con **débito automático** (`autoDebit === true`) lleva una señal **discreta y neutra** en la **zona de estados** (derecha) de la sublínea del ítem de `/mes` (ver *Sublínea del ítem de `/mes` — dos zonas*):
+> **Actualizado (Card de detalle):** el débito automático ya **no** se indica en la fila de `/mes` (se retiró el glifo `Zap` de la zona de estados). Ahora es una **fila de la ficha de la card de detalle** ("Débito automático · Sí", solo si `autoDebit === true`) — ver *Card de detalle de movimiento*. Lo de abajo describe el lenguaje del glifo, que se **reusa dentro de la card** (mismo `Zap` 14px `--muted` + rótulo), no en la fila.
+
+Un movimiento con **débito automático** (`autoDebit === true`) lleva una señal **discreta y neutra** con el glifo `Zap` (lucide, `--muted`), reusado en la card de detalle:
 
 - **Forma:** **glifo solo, sin texto** — `Zap` (lucide, 13px, `--muted`, el svg `aria-hidden`). **Pierde** el label visible "Débito automático": el significado lo cargan `aria-label` + `title` nativo **"Débito automático"** en el wrapper del glifo. Es un glifo del cluster de estados, no un segmento de texto de la identidad.
 - **Ubicación:** **zona de estados** (derecha, `shrink-0`), como **segundo** glifo del cluster, después del glifo de padre (`GitBranch`) si está. `gap-[8px]` entre glifos del cluster; la zona de estados se separa de la identidad por `gap-[10px]` o un hairline vertical `--hair`.
@@ -1938,14 +1940,15 @@ La **sublínea** (segunda línea del cuerpo del ítem, col 2, bajo el nombre) es
 
 #### Zona de identidad — orden exacto de segmentos
 
+> **Actualizado (Card de detalle):** el **método de pago** ya **no** vive en la sublínea — migró a la card de detalle (ver *Card de detalle de movimiento*). La identidad queda `● Categoría · [frecuencia] · [↳ desde {Origen}]`.
+
 De izquierda a derecha, **omitiendo** los que no apliquen:
 
 1. **Badge "Anulado"** (solo si `skipped`) — chip neutro; ver *Ítem anulado*. Es el **primer** segmento cuando está.
 2. **Punto de color de categoría** — punto **6px** (`w-[6px] h-[6px] rounded-full shrink-0`), `background: movement.category.color` inline (el color viene del dato tal cual; el campo disponible en el ítem es `movement.category.color`), `aria-hidden`. Va **inmediatamente antes** del nombre de categoría, `gap-[6px]`. Es el **ancla de identidad** de la fila.
 3. **Categoría** — nombre de la categoría en **`--ink-2`** (sube de `--muted` a `--ink-2`: es el **eje de identidad** de la sublínea), 12px, no mono, `truncate`.
-4. **Método de pago** (solo si el movimiento tiene método asociado) — separador `·` + **glifo del método** (lucide del allowlist `PAYMENT_METHOD_ICONS`, 12px, `--muted`, `shrink-0`, `aria-hidden`) + **nombre del método** (`--muted`, 12px, no mono). **Sin** chip de tipo de método (Crédito/Débito/Efectivo no se muestra en el ítem).
-5. **Origen — frecuencia** (solo **fijos** y **calculados de origen fijo**) — separador `·` + glifo `Repeat` (12px, `--muted`, `aria-hidden`) + etiqueta de frecuencia **en minúscula** (mensual / bimestral / trimestral / semestral / anual), `--muted`, no mono. **La cuota X/N de las cuotas NO vive en la sublínea:** sigue en la **col 3** (ver *Sin cambios*), sin duplicarse. Los **únicos** no llevan segmento de origen en la sublínea (su fecha va en col 3).
-6. **"↳ desde {Origen}"** (solo si el movimiento **es un calculado**) — **último** segmento de identidad. Separador `·` + glifo `CornerDownRight` (12px, `--muted`, `aria-hidden`) + texto "desde " (`--muted`) + **nombre del origen** en `--ink-2`, no mono, `truncate`. **Fusiona en un solo segmento** la marca de "es calculado" y la referencia a su origen: **no hay chip boxeado "Calculado"** por separado (se eliminó).
+4. **Origen — frecuencia** (solo **fijos** y **calculados de origen fijo**) — separador `·` + glifo `Repeat` (12px, `--muted`, `aria-hidden`) + etiqueta de frecuencia **en minúscula** (set de **12 valores** enteros 1..12, ver *Frecuencia del fijo — entero 1..12 y sus etiquetas*), `--muted`, no mono. **La cuota X/N de las cuotas NO vive en la sublínea:** sigue en la **col 3** (ver *Sin cambios*), sin duplicarse. Los **únicos** no llevan segmento de origen en la sublínea (su fecha va en col 3). **El arranque del fijo (`startMonth`) NO vive en la sublínea ni en la col 3:** migró a la card de detalle (ver *Card de detalle de movimiento*).
+5. **"↳ desde {Origen}"** (solo si el movimiento **es un calculado**) — **último** segmento de identidad. Separador `·` + glifo `CornerDownRight` (12px, `--muted`, `aria-hidden`) + texto "desde " (`--muted`) + **nombre del origen** en `--ink-2`, no mono, `truncate`. **Fusiona en un solo segmento** la marca de "es calculado" y la referencia a su origen: **no hay chip boxeado "Calculado"** por separado (se eliminó).
 
 El **monto** del calculado puede ser negativo/cero (ver *Paleta y uso de tokens* → regla del signo).
 
@@ -1953,8 +1956,10 @@ El **monto** del calculado puede ser negativo/cero (ver *Paleta y uso de tokens*
 
 Glifos neutros `--muted`, **solo glifo, sin texto**: cada uno comunica su significado con `aria-label` + `title` nativo en el wrapper (el svg va `aria-hidden`). Orden dentro del cluster, de izquierda a derecha, `gap-[8px]` entre glifos:
 
-1. **Padre** (`hasCalculated === true`) — glifo `GitBranch` (13px, `--muted`). `aria-label`/`title`: **"Tiene N calculado(s)"** (el conteo vive solo en el label/tooltip; **sin** contador visible, para mantener el cluster como glifos). Señal liviana (info secundaria).
-2. **Débito automático** (`autoDebit === true`) — glifo `Zap` (13px, `--muted`). `aria-label`/`title`: **"Débito automático"** (ver *Débito automático — indicador en el ítem de `/mes`*).
+1. **Marca de límite** (efecto `glyph`/`fill`) — ver *Marca visual pasiva de límites*.
+2. **Padre** (`hasCalculated === true`) — glifo `GitBranch` (13px, `--muted`). `aria-label`/`title`: **"Tiene N calculado(s)"** (el conteo vive solo en el label/tooltip; **sin** contador visible, para mantener el cluster como glifos). Señal liviana (info secundaria).
+
+> **Actualizado (Card de detalle):** el glifo `Zap` de **débito automático** ya **no** vive en la zona de estados de la fila — migró a la card de detalle (ver *Card de detalle de movimiento*). El cluster queda con la marca de límite y el glifo de padre (`GitBranch`).
 
 Si **ninguna** bandera aplica, la zona de estados **no se renderiza** y la identidad usa el ancho completo.
 
@@ -1968,7 +1973,7 @@ Si **ninguna** bandera aplica, la zona de estados **no se renderiza** y la ident
 
 La relación **padre/hijo** de los movimientos calculados se señala como arriba (segmento **"↳ desde {Origen}"** del hijo en la identidad; glifo **padre** `GitBranch` en la zona de estados), sin recolorear el ítem ni el monto:
 - **El origen del calculado puede ser fijo, único o cuota — el patrón es transversal.** El segmento **"↳ desde {Origen}"** del hijo (identidad) y la marca **padre** (`GitBranch`, zona de estados) se aplican **idénticos** sin importar el origen; el calculado se **lista en la sección de su origen** (calculado de único → **Únicos**; de cuota → **Cuotas**; de fijo → **Fijos**). Particularidades por sección:
-  - **El hijo toma la forma de su sección de origen.** En **Únicos** lleva la columna fecha "DD Mmm" (heredada del split temporal del origen); en **Cuotas** la columna 3 va **vacía** — el calculado de cuota **no** muestra la etiqueta "Cuota X/N" (es un movimiento propio, no integra el plan de cuotas); en **Fijos** la columna 3 va vacía como cualquier fijo.
+  - **El hijo toma la forma de su sección de origen.** En **Únicos** lleva la columna fecha "DD Mmm" (heredada del split temporal del origen); en **Cuotas** la columna 3 va **vacía** — el calculado de cuota **no** muestra la etiqueta "Cuota X/N" (es un movimiento propio, no integra el plan de cuotas); en **Fijos** la columna 3 muestra **su propio arranque** ("desde Mmm AAAA", ver *Arranque del fijo en `/mes` — col 3*) — un calculado es un fijo con **cadena propia** y exhibe su arranque, no el del origen.
   - **La sublínea sigue la regla de su origen:** el segmento de **frecuencia (`Repeat`)** aparece **solo** cuando el calculado es de **origen fijo**; en calculados de único/cuota la zona de identidad es `● Categoría · [método] · ↳ desde {Origen}` (sin frecuencia, sin "X/N", sin rótulo de tipo).
   - **Orden dentro de la sección:** el calculado se ordena por **magnitud `|monto| DESC`** mezclado con el resto de los ítems de su sección (mismo criterio único del backend); **no** se ancla junto a su origen ni se agrupa aparte — cae donde su magnitud lo ubique.
   - **Ícono de la caja de origen (form de calculado).** La caja de origen *read-only* del form lleva un glifo lucide que identifica el **tipo del movimiento de origen**, en `--accent-ink` (cromo de UI, no monto): **fijo → `Repeat`** (recurrencia), **único → `Receipt`** (gasto puntual / ticket), **cuota → `CreditCard`** (compra financiada en N pagos). 15px, `shrink-0`, `aria-hidden`. Son afordancias neutras: no tiñen cifras ni colisionan con la regla verde/rojo. No hay convención previa de ícono para único/cuota en listas (Únicos se distingue por la columna fecha; Cuotas por "X/N"), así que estos tres glifos viven por ahora solo en esta caja.
@@ -1992,14 +1997,160 @@ La relación **padre/hijo** de los movimientos calculados se señala como arriba
   - Los íconos `CalendarOff`/`CalendarPlus` se **reusan tal cual** también en el único: no se introduce ícono nuevo (sin "ojito" ni glifo alternativo). Aunque el calendario alude a "mes", se prioriza mantener el toggle **reconocible e idéntico** entre los tres orígenes; el matiz de alcance lo carga el rótulo.
 - **Crear movimiento desde este** — abre el form de calculado (abajo) con el origen fijado. Ícono `Calculator`. **No** aparece sobre un ítem que ya es calculado (sin encadenamiento). Todos los orígenes no-calculados pueden ser origen.
 
+### Frecuencia del fijo — entero 1..12 y sus etiquetas
+
+La frecuencia del fijo es un **entero 1..12** (número de meses del período; la instancia cae cuando `monthDiff(startMonth, mes) % N === 0`). No existen palabras en castellano para todos los períodos, así que las etiquetas son **híbridas**: nombre canónico donde existe, "Cada N meses" donde no. Este set es la **fuente única** de las tres superficies (opción del select, ayuda del form, sublínea del ítem):
+
+| N | Select (capitalizada) | Ayuda del form (minúscula, va en "Se registra automáticamente __ …") | Sublínea del ítem (minúscula, terso) |
+|---|---|---|---|
+| 1 | Mensual | cada mes | mensual |
+| 2 | Bimestral | cada dos meses | bimestral |
+| 3 | Trimestral | cada tres meses | trimestral |
+| 4 | Cuatrimestral | cada cuatro meses | cuatrimestral |
+| 5 | Cada 5 meses | cada cinco meses | cada 5 meses |
+| 6 | Semestral | cada seis meses | semestral |
+| 7 | Cada 7 meses | cada siete meses | cada 7 meses |
+| 8 | Cada 8 meses | cada ocho meses | cada 8 meses |
+| 9 | Cada 9 meses | cada nueve meses | cada 9 meses |
+| 10 | Cada 10 meses | cada diez meses | cada 10 meses |
+| 11 | Cada 11 meses | cada once meses | cada 11 meses |
+| 12 | Anual | cada año | anual |
+
+**Racional de los tres registros.** La **ayuda del form** deletrea el número en palabras ("cada cuatro meses") porque es la superficie donde el usuario **confirma una decisión irreversible** (la frecuencia es inmutable, RF-MF-006): ahí la desambiguación explícita vale más que la brevedad, y resuelve la confusión clásica de "bimestral/cuatrimestral". La **sublínea** usa dígito ("cada 5 meses") porque es una línea de metadatos densa que trunca: el dígito es más terso y se lee de un vistazo. El **orden del select es estrictamente 1→12** (período creciente): la posición N-ésima es N meses, así el propio orden ancla el conteo aunque el nombre no lo diga.
+
 ### Selector de frecuencia del form de fijo
 
-El bloque **Frecuencia** del form de fijo (entre Mes de inicio y Categoría en crear; entre Monto y Categoría en editar) sigue el patrón de bloque del form (`Label` arriba + control). Etiquetas por valor: `MONTHLY` → Mensual, `BIMONTHLY` → Bimestral, `QUARTERLY` → Trimestral, `BIANNUAL` → Semestral, `ANNUAL` → Anual; orden de menor a mayor período.
+El bloque **Frecuencia** del form de fijo (entre Mes de inicio y Categoría en crear; entre Monto y Categoría en editar) sigue el patrón de bloque del form (`Label` arriba + control). Etiquetas por valor: las 12 de la tabla anterior, columna *Select*, en orden 1→12.
 
-- **Crear:** `Select` del DS, `required`, default **Mensual** (sin placeholder vacío).
-- **Editar (inmutable):** caja **read-only con badge**, mismo patrón que "Tipo" en edición (`rounded-ctl border-line bg-panel-2 px-[13px] py-[11px]`): glifo `Repeat` 15px `--accent-ink` + la etiqueta capitalizada.
+- **Crear:** `Select` **nativo** del DS (el mismo molde `.input.select` ya usado para Categoría/Método), `required`, **12 `<option>`**, default **Mensual** (valor 1, sin placeholder vacío). Se mantiene el select nativo — no segmented ni picker custom: 12 opciones en un segmented serían targets diminutos que envuelven; el dropdown nativo las lista y scrollea con carga cognitiva mínima y patrón familiar. El texto de cada `<option>` es la etiqueta capitalizada de la tabla, **sin** prefijo numérico (el orden ya ancla el conteo; el número explícito es notación de enumeración, no lenguaje natural).
+- **Ayuda (solo en crear):** bajo Categoría, `Repeat` 14px `--accent-ink` + texto 12.5px `--muted`: "Se registra automáticamente **{ayuda}** a partir del mes de inicio." donde `{ayuda}` es la columna *Ayuda del form* de la tabla. Recalcula en vivo al cambiar el select.
+- **Editar (inmutable):** caja **read-only con badge**, mismo patrón que "Tipo" en edición (`rounded-ctl border-line bg-panel-2 px-[13px] py-[11px]`): glifo `Repeat` 15px `--accent-ink` + la etiqueta capitalizada de la tabla. Sin ayuda debajo (no hay decisión que confirmar). No hay control editable: la frecuencia no se cambia tras crearse.
 
-> La frecuencia también se muestra en la **sublínea del ítem** (segmento `Repeat` 12px + etiqueta en minúscula: mensual/bimestral/…), sin badge ni decoración extra.
+> La frecuencia también se muestra en la **sublínea del ítem** (segmento `Repeat` 12px + etiqueta en minúscula de la tabla: mensual / bimestral / … / cada 5 meses / … / anual), sin badge ni decoración extra.
+
+### Arranque y vigencia del fijo — en la card de detalle
+
+> **Actualizado (Card de detalle):** el arranque del fijo (`startMonth`) ya **no** vive en la col 3 de la fila — **la col 3 vuelve a ir vacía para fijos**. El arranque migró a la card de detalle, donde se combina con el **fin** (`endMonth`, dato nuevo del contrato) en una sola línea de **"Vigencia"** (`Desde Mar 2024 · activo` o rango `Mar 2024 – Jun 2026`). Ver *Card de detalle de movimiento*. Lo de abajo queda como referencia histórica del formato `formatMonthShort`, que la card reusa.
+
+El **arranque del fijo lógico** = `MovementItem.startMonth` de la **primera fila de la cadena** (`chainId`), no el del último split. Ya **no** se muestra en la col 3 (locator vacío para fijos); vive en la card. Referencia de formato:
+
+- **Formato:** `desde {Mmm AAAA}` — mes **abreviado a 3 letras capitalizado** + año completo (ej. `desde Mar 2024`). Es un formato de mes compacto nuevo (análogo al "Jun" de `formatDate`); no es cifra de dinero, por lo tanto **no va en mono** (regla dura 3 no aplica — es un rótulo, no un monto).
+- **Peso visual:** subordinado. `text-[12.5px]`, la preposición "desde" en `--faint` y el mes-año en `--muted`; `text-right`, `whitespace-nowrap`. Queda **exactamente al nivel de prominencia** de la fecha de un único (quieto, chico, a la derecha), que es la jerarquía correcta: un locator de contexto, no un dato que compita con el nombre ni el monto.
+- **Por qué col 3 y no la zona de identidad:** (a) evita el choque de dos "desde" en los calculados de origen fijo, cuya identidad ya lleva "↳ desde {Origen}" — tener "desde Mar 2024 · ↳ desde Alquiler" en la misma línea sería ambiguo; la separación física en col 3 lo resuelve. (b) No engorda ni acelera el truncado de la zona de identidad. (c) Reusa el slot vacío de col 3 en vez de sumar un segmento nuevo.
+- **Alcance:** aparece en **fijos** y en **calculados de origen fijo** (que muestran **su propia** cadena, no la del origen). Los únicos siguen con su fecha, las cuotas con "Cuota X/N": la col 3 nunca muestra dos cosas a la vez.
+- **Anulado (`skipped`):** hereda el `opacity-[0.55]` de la fila como el resto de la col 3.
+
+### Card de detalle de movimiento (`/mes`) — apertura, contenido read-only y fila adelgazada
+
+La **fila de `/mes`** (`MovementItemRow`) deja de amontonar metadatos secundarios: pasa a ser un **vistazo** (identidad + monto + un discriminador) y todo el dato secundario se lee en una **card de detalle read-only** que se abre al clickear la fila. La card es **read-only pura**: solo consulta, **no edita nada** ni lleva botón de acción. Editar vive en el **kebab "⋮" de la fila** (el botón en la card sería redundante). La card se abre para "espiar" y se cierra con ✕/Esc/scrim.
+
+#### Forma — modal centrado sobre `ModalShell` (variante `dialog`), NO panel lateral
+
+La card es un **modal centrado** que consume el **`ModalShell`** existente (variante `dialog`, `max-w-[440px]`, radio 18px, `--shadow-lg`, scrim con blur, tres zonas header/cuerpo/footer). **Por qué reusar `ModalShell` y no inventar un panel lateral (side-sheet):** (a) el contenido es una **ficha compacta read-only** (lista de pares rótulo·valor), no una superficie de trabajo persistente que justifique un drawer; (b) `ModalShell` ya resuelve —gratis— los cuatro invariantes de contención (`max-h: calc(100dvh − 48px)` en `dvh`, cuerpo scrolleable, footer pineado, body-lock, portal, clipping al radio 18px); un side-sheet obligaría a redefinir posicionamiento, transición y contención desde cero, sin beneficio para contenido compacto; (c) mantiene la **consistencia de overlays** de la app. Una solución nueva tendría que justificar por qué no reusa el patrón vigente — acá no hay justificación.
+
+- **Sin estado de carga / vacío / error:** la card **no dispara fetch** — renderiza el `MovementItem` que la lista **ya tiene en memoria**. No hay skeleton, empty ni error propios; es presentación pura del dato ya cargado.
+- **Cierre (excepción justificada a la regla de modales):** la card es **read-only y auxiliar** — no demanda una decisión explícita, se abre para "espiar". Por eso se cierra con **✕, `Esc` Y clic en el scrim** (cierre tipo popover), a diferencia de los modales de decisión (transaction-modal, confirmaciones), que **no** cierran por clic afuera. Es la misma lógica del DS (*Cierre de overlays*): "auxiliar y liviano → se descarta al tocar fuera". El chrome es de modal (`ModalShell`), el **cierre** es de popover.
+- **Animación:** `animate-modal-pop` del shell (respeta `prefers-reduced-motion`).
+
+#### Conflicto de invocación — cuerpo abre card, kebab abre menú
+
+La fila tiene **dos zonas de clic**: el **cuerpo** (cols 1–4) abre la card; el **"⋮" (kebab, col 5)** abre su menú de acciones rápidas (Editar / Anular-Des-anular / Crear desde este / Eliminar — sin cambios). Resolución:
+
+- **Cuerpo de la fila:** el contenedor de la fila es clickeable → abre la card. `role="button"`, `tabIndex=0`, `onKeyDown` con `Enter`/`Espacio`, `aria-label="Ver detalle de {nombre}"`, `cursor-pointer` (ya presente). El hover `--panel-2` (o el fill de límite) ya comunica que la fila es interactiva.
+- **Kebab:** sigue siendo un `<button>` real; su `onClick`/`onKeyDown` hace **`stopPropagation`** para que su clic **no** burbujee al cuerpo (no abre la card). Cada ítem del menú también corta la propagación. Orden de tab: fila → kebab.
+- **A11y (caveat de anidado):** para no anidar un `<button>` dentro de otro `<button>`, la fila usa `role="button"` sobre un `div` (no un `<button>` nativo) y el kebab queda como botón hermano interactivo; el `stopPropagation` garantiza que activar el kebab nunca dispare la card. El mecanismo exacto lo cierra `control-frontend`; el comportamiento a cumplir es el de arriba.
+- **Editar vive solo en el kebab.** La card es read-only pura y **no** ofrece camino a editar; la única puerta a edición es "Editar" en el menú del "⋮", que abre el modal de edición actual (no se rediseña).
+
+#### Qué QUEDA en la fila adelgazada (vistazo)
+
+Grid sin cambios (`40px 1fr auto auto auto`). Queda **solo** lo glanceable:
+
+- **Col 1:** ícono 40×40 tintado por tipo (sin cambios).
+- **Col 2 — nombre + sublínea de identidad:** `[Anulado] [badge de límite] ● Categoría · [Repeat frecuencia] (solo fijos y calculados de origen fijo) · [↳ desde {Origen}] (solo calculados)`. **Zona de estados** (cluster derecho) reducida a: `[glifo de límite]` + `[GitBranch padre]`. Ver *Sublínea del ítem — dos zonas* (actualizada).
+- **Col 3 — un solo discriminador:** fecha `DD Mmm` del único **(solo la fecha, la hora migra a la card)** · `Cuota X/N` de la cuota · **vacía** para el fijo (el arranque migró a la card).
+- **Col 4 — monto convertido dominante:** mono 15.5px, color por tipo, signo. **Siempre una sola línea** (se retira el badge de moneda y la segunda línea de valor original — migran a la card). El efecto `bold`/`fill` de límite se conserva.
+- **Col 5 — kebab** (sin cambios).
+- **Estados que quedan:** badge **"Anulado"** (con `line-through` + `opacity-0.55` de la fila) y las **marcas de límite** (badge/glyph/fill). Sin cambios de semántica.
+
+#### Qué MIGRA de la fila a la card
+
+Se **sacan de la fila** y pasan a la card (todos ya en el contrato `MovementItem`): **método de pago** (icono + nombre + tipo) · **badge de moneda + monto original + cotización** (cross-rate) · **débito automático** (glifo `Zap`) · **arranque del fijo** (`startMonth`, ex "desde Mmm AAAA" de col 3) · **fórmula completa del calculado** (la fila conserva solo `↳ desde {Origen}`) · **hora exacta** del único (`occurredAt`). Suma **dato nuevo del contrato**: **fin/vigencia del fijo** (`endMonth: string | null`, "YYYY-MM" exclusivo; null = activo indefinido).
+
+#### Anatomía de la card (read-only)
+
+La card es **read-only pura**: se compone de **título + ✕ + hero + ficha**, y **no lleva footer ni botón de acción**. Cierra con ✕/Esc/scrim.
+
+**Header (pineado):** `flex items-center justify-between px-[22px] pt-5 pb-4`. **Nombre** del movimiento (rol *Título de diálogo*, 18px/700 `-.01em`, `--ink`, `truncate`) + botón **✕** del DS. Nunca scrollea.
+
+**Cuerpo (única zona scrolleable):** `px-[22px] py-[18px] space-y-[16px]`. De arriba a abajo:
+
+1. **Badge "Anulado"** (solo si `skipped`) — chip neutro del DS (`--panel-3`/`--muted`/`--r-chip`/11px·600·`.04em`), como primera línea; el hero de monto va con `line-through` (mismo lenguaje que la fila).
+2. **Bloque hero del monto** — `flex items-center gap-[14px]`:
+   - **Ícono 40×40 tintado** por tipo (idéntico a col 1 de la fila — continuidad visual fila↔card).
+   - **Cifra convertida** dominante: mono, rol *Stat valor* (**30px/600 `-.02em`**), **color por tipo** (`--ink` gasto / `--income-ink` ingreso — regla del signo), con signo y símbolo de la default. `line-through` si `skipped`. **El tipo NO se rotula en texto** (lo comunican el ícono tintado + signo/color, igual que en la fila; no se agrega badge "Gasto/Ingreso" para movimientos normales — sí en el bloque de fórmula del calculado, donde el tipo es derivado).
+   - Si **cross-rate** (`currency ≠ default`): a la derecha de la cifra, el **badge de código** de moneda original (chip neutro `--panel-3`/`--muted`/`mono`, ej. `USD`) — marca el ítem como cross-rate, misma pieza que hoy vive en la fila.
+3. **Divisor `--hair`** full-width.
+4. **Ficha de detalle — lista de pares rótulo·valor.** Patrón de fila reusable: `flex flex-wrap items-start justify-between gap-x-[16px] gap-y-[2px]`, ritmo `space-y-[10px]`. **Rótulo** a la izquierda (rol *Meta*, 12.5px/500, `--muted`). **Valor** a la derecha (`text-right`, `--ink-2`; cifras, fechas y horas en **mono tabular**). Filas (omitiendo las que no apliquen):
+   - **Categoría** — `● category.color` (punto 6px) + `category.name`.
+   - **Método de pago** (solo si `paymentMethod ≠ null`) — glifo del método (`PaymentMethodIcon` 14px `--ink-2`) + nombre (`--ink-2`) + **chip de tipo neutro** (`Crédito`/`Débito`/`Efectivo`, `--panel-3`/`--muted`/`--r-chip`). Si no hay método, la fila **se omite** (dato opcional; su ausencia no es informativa).
+     - **Sublínea de días del crédito** (solo si `type === "CREDIT"` **y** al menos uno de `closingDay`/`paymentDay` tiene valor) — **segunda línea secundaria muted** bajo el nombre del método, **alineada a la derecha** (misma columna de valor; el bloque del valor apila nombre+chip arriba y esta sublínea abajo con gap `2px`). Tono **`--muted`, 11.5px**, en **mono tabular** (son días del mes, dígitos que se alinean). Formato: `Cierre día {closingDay} · Cobro día {paymentDay}`, **orden fijo cierre → cobro** (el orden mental del ciclo de tarjeta: primero cierra el resumen, después se cobra), separador `·`. Si solo uno de los dos días está cargado, se muestra **solo ese segmento** (sin separador). Es informativa solo para crédito (fechas del ciclo del resumen); para Débito/Efectivo estos campos no existen y la sublínea **no se renderiza**.
+   - **Débito automático** (solo si `autoDebit === true`) — glifo `Zap` 14px `--muted` + valor **"Sí"**. Se omite si es `false`/`null`.
+   - **Cross-rate (solo si `currency ≠ default`)** — dos filas: **"Monto original"** = `formatCurrency(|amountCents|, currency)` con símbolo de su moneda (ej. `US$20,00`, mono `--ink-2`, sin signo); **"Cotización"** = `1 {currency} = {símbolo default}{cotización}` (ej. `1 USD = $1.100,00`, mono `--muted`).
+   - **Único → "Fecha"** — `formatDate(occurredAt, timezone)` + `·` + `formatTime(occurredAt, timezone)` (ej. `02/06/2026 · 14:30`, mono `--ink-2`). **Acá vive la hora exacta** que la col 3 de la fila no muestra.
+   - **Fijo → "Frecuencia"** — etiqueta **capitalizada** de la tabla de frecuencias (ej. `Mensual`, `Cada 5 meses`). (La fila muestra la variante en minúscula; la card el registro capitalizado de una ficha.)
+   - **Fijo → "Vigencia"** — arranque + fin en una línea:
+     - `endMonth === null` (activo indefinido): **`Desde {formatMonthShort(startMonth)} · activo`** (ej. `Desde Mar 2024 · activo`; "activo" en `--muted`).
+     - `endMonth` presente: **rango** `{formatMonthShort(startMonth)} – {formatMonthShort(último mes activo)}` con guion medio "–". **`endMonth` es exclusivo** → el último mes activo es `prevMonth(endMonth)` (ej. `endMonth = "2026-07"` ⇒ `Mar 2024 – Jun 2026`). Si arranque == último mes activo, colapsa a un solo mes (`Mar 2024`).
+   - **Cuota → "Plan de cuotas"** — `Cuota {number} de {total}` + `·` + `desde {formatMonthShort(installment.startMonth)}` (números en mono).
+5. **Bloque del calculado** (solo si `calculated ≠ null`) — precedido por **divisor `--hair`**:
+   - **"Origen"** — caja read-only estilo *form de calculado* (`rounded-ctl border-line bg-panel-2`, glifo por tipo de origen `Repeat`/`Receipt`/`CreditCard` 15px `--accent-ink` + `sourceDescription`; a la derecha su tipo/frecuencia si aplica).
+   - **"Fórmula"** — la **expresión legible completa** del cálculo, **reusando el builder del preview del form de calculado**: expresión en `--muted` mono (ej. `10% de $5.000`) + `=` + **resultado** (cifra mono con color por tipo y signo, ej. `= $500`), más el **badge de tipo derivado** tintado (`Gasto` `--expense-ink/-soft` / `Ingreso` `--income-ink/-soft`) — acá el badge sí aplica porque el tipo del calculado es **derivado**. Si `sourceAmountCents === null`, se muestra la fórmula en forma abstracta (operador + operando + origen) sin la cifra del origen; el resultado siempre está disponible del propio monto.
+6. **Bloque "Calculados" — derivados del origen** (solo si el movimiento es **origen** de ≥1 calculado **en el mes**: `MovementItem.calculatedChildren.length >= 1`) — precedido por **divisor `--hair`**. Es el **espejo del bloque "Origen"** (item 5): mismo contenedor con borde, **read-only, no clickeable**. Donde el calculado muestra *su* origen (uno), el origen muestra *sus* derivados (N) → una **lista** de esas mismas cajas, una por derivado. Cada derivado del contrato (`MovementItem.calculatedChildren`) trae `id`, `description` (nombre), `type` (`EXPENSE`/`INCOME`) y `convertedAmountCents` (magnitud; el signo se deriva del `type`).
+   - **Rótulo de la sección: "Calculados"** — mismo estilo que "Origen"/"Fórmula" (12.5px/600 `--ink-2` `tracking-[0.01em]`). Nombra las entidades (son movimientos *calculados* derivados de éste), es el término de dominio que el usuario ya conoce y es tan corto como "Origen". (Se evaluó **"Derivados"** / **"Calculados derivados"**: describen mejor la dirección de la relación pero son más largos y menos concretos que el sustantivo de dominio; "Calculados" es inequívoco dentro de la card.) **Sin contador** en el rótulo: la lista visible ya comunica la cantidad, y "Origen" tampoco lleva contador.
+   - **Layout — `flex flex-col gap-[7px]`** (rótulo → lista); la lista apila las cajas de derivado con `gap-[7px]`. **Cada ítem derivado espeja la caja de "Origen" exactamente:** `flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px]`.
+     - **Ícono de tipo (izq):** flecha diagonal de tipo derivado, **tintada por tipo** — `ArrowUpRight` ingreso (`--income-ink`) / `ArrowDownRight` gasto (`--expense-ink`), 15px, `shrink-0`. Ocupa el **mismo slot** que el ícono de "Origen" (misma posición y tamaño) y **reusa los glifos de tipo derivado** que el badge del bloque *Fórmula* ya usa. **Por qué tintado por tipo y no `--accent-ink` neutro como "Origen":** todos los derivados comparten el mismo tipo estructural ("calculado"), así que un ícono estructural neutro sería idéntico en cada fila y no aportaría; lo que **varía y conviene discriminar de un vistazo es el tipo (gasto/ingreso)**. Usar income/expense sobre un ícono que *significa* tipo cumple la regla dura 1 (es su uso legítimo, no la viola).
+     - **Nombre:** `child.description`, `text-[14px] font-semibold text-ink-2 flex-1 min-w-0 truncate` — idéntico al nombre de "Origen".
+     - **Monto del derivado (der.):** `child.convertedAmountCents` en **mono tabular**, color por tipo según la convención de esta card (gasto `--ink`, ingreso `--income-ink`), con signo (`formatSignedAmount`), `shrink-0 whitespace-nowrap`, ~13.5px/600, ocupando el slot que en "Origen" usa el descriptor de frecuencia. **Racional:** "Origen" no muestra monto porque el monto del calculado ya es el **hero** de *su* card; acá, en cambio, cada derivado es **otro** movimiento cuyo monto **no aparece en ninguna otra parte de esta card** — mostrarlo convierte "estos son mis derivados" en "estos son mis derivados **y cuánto impactan**", que es la lectura útil de un diario de gastos.
+   - **Read-only, no clickeable** (igual que "Origen"): sin hover interactivo, sin `role="button"`, sin `cursor-pointer`, sin navegación. Lectura pura. (Un futuro "saltar al derivado" sería alcance nuevo y requiere decisión explícita.)
+   - **Sin fórmula por derivado:** a diferencia del bloque de un calculado (que muestra la fórmula de su **único** origen), la lista de N derivados **no** repite N fórmulas — sobrecargaría la card y rompería el escaneo (carga cognitiva). Cada caja muestra solo tipo + nombre + monto.
+   - **Relación con el bloque del calculado (item 5):** son **mutuamente excluyentes en la práctica** (un calculado no es origen de otro; un origen no es calculado). Si por dato ambos aplicaran, "Calculados" va **después** del bloque del calculado. En cualquier caso es el **último bloque** de la card, tras la ficha y precedido por su `--hair`.
+
+**Sin footer ni botón de acción.** La card es read-only pura: el cuerpo (ficha) es el último bloque y la card cierra con **✕, `Esc` y clic en el scrim**. No hay footer pineado ni botón "Editar" (editar vive en el kebab de la fila).
+
+#### Reglas duras en la card
+
+- **R1 (verde=ingreso/rojo=gasto):** el color de la cifra hero y del resultado del calculado lo da el **tipo**; el punto de categoría usa la paleta de categorías (identidad, nunca sobre cifra); el badge de tipo del calculado y el **ícono de tipo + monto de cada derivado** del bloque "Calculados" usan income/expense por su significado real. Método, moneda, cotización y chips de tipo van en **neutros**.
+- **R2 (índigo solo marca):** el único índigo es cromo de interacción (focus del ✕). Ninguna cifra se tiñe de índigo.
+- **R3 (dinero en mono tabular):** hero, monto original, cotización, resultado de fórmula, los números de cuota y el **monto de cada derivado** del bloque "Calculados" van en **mono tabular**.
+
+#### Comportamiento en pantalla chica (compacto, `< --bp-wide` / hasta el piso 640px, sidebar abierto o cerrado)
+
+- **La card hereda la contención del `ModalShell`:** `max-h: calc(100dvh − 48px)` (**`dvh`**), cuerpo `overflow-y-auto`, header pineado, body-lock, portal, clipping al radio 18px. **Invariante 2** (modal completo y scrolleable) cubierto por el shell; la card no tiene footer/acción, así que no aplica el invariante de control pineado al pie.
+- **Panel `w-full max-w-[440px]`:** en contenido angosto (piso 392px con sidebar abierto) el panel encoge a `viewport − 2×24px` de scrim. Las **filas rótulo·valor son `flex-wrap`:** cuando el valor no entra al lado del rótulo, **envuelve a su propia línea** debajo — el rótulo nunca empuja a la cifra ni la trunca.
+- **Ninguna cifra se trunca (regla dura).** Si en el ancho mínimo una cifra (hero, original, cotización) no entra, su bloque **scrollea dentro de sí** (invariante 4); **nunca** desborda el body (invariante 1) ni corta el número.
+- **Bloque "Calculados" (compacto):** cada caja de derivado sigue el mecanismo de "Origen" — ícono de tipo `shrink-0`, **nombre `truncate min-w-0`** (cede primero), **monto `shrink-0 whitespace-nowrap` en mono nunca truncado** (regla dura). Las cajas apilan verticalmente; sin scroll horizontal. Si en el ancho mínimo el nombre + monto no entran juntos, el nombre trunca con elipsis y el monto queda íntegro.
+- **La fila adelgazada mejora su contención** respecto de hoy: col 4 pasa a una sola línea y la sublínea pierde segmentos → menos presión de ancho. Mantiene su grid; col 2 (identidad) trunca con `min-w-0`; col 4 (cifra mono) nunca trunca; la lista sigue el mecanismo de contención vigente de `/mes` (inv. 1 y 4). El clic para abrir la card funciona igual en compacto (la card queda contenida por el shell).
+
+#### Checklist de aceptación visual — card de detalle + fila adelgazada
+
+- [ ] **Fila adelgazada — col 2:** la sublínea ya **no** muestra método de pago ni el glifo `Zap` de autodébito; quedan `● Categoría`, la frecuencia (fijos) y `↳ desde {Origen}` (calculados). El cluster de estados solo muestra límite y `GitBranch` (padre).
+- [ ] **Fila — col 3:** único = fecha `DD Mmm` (sin hora); cuota = `Cuota X/N`; **fijo = vacía** (ya no dice "desde Mmm AAAA").
+- [ ] **Fila — col 4:** una sola línea siempre; sin badge de código de moneda ni segunda línea de valor original (aun en cross-rate).
+- [ ] **Apertura por cuerpo:** clic (o `Enter`/`Espacio`) en el cuerpo de la fila abre la card; clic en el **⋮** abre el menú y **no** abre la card.
+- [ ] **Cierre:** la card cierra con **✕, `Esc` y clic en el scrim** (a diferencia del modal de edición, que no cierra por clic afuera).
+- [ ] **Hero:** ícono 40×40 tintado + cifra convertida grande (mono, color por tipo, signo); en cross-rate aparece el badge `USD` junto a la cifra.
+- [ ] **Ficha:** filas Categoría / Método (+chip tipo) / Débito automático ("Sí", solo si aplica) / y las condicionales por tipo con los rótulos correctos.
+- [ ] **Método — sublínea de crédito:** para un método **Crédito** con días cargados aparece una **segunda línea muted (11.5px, mono), alineada a la derecha bajo el nombre**, con `Cierre día {n} · Cobro día {n}` (orden cierre → cobro). Con un solo día cargado se muestra solo ese segmento; para **Débito/Efectivo** (o crédito sin días) la sublínea **no aparece**.
+- [ ] **Único:** fila "Fecha" muestra **fecha + hora** (`02/06/2026 · 14:30`).
+- [ ] **Fijo:** "Frecuencia" capitalizada + "Vigencia" (`Desde Mar 2024 · activo` cuando `endMonth` null; rango `Mar 2024 – Jun 2026` con fin = mes anterior a `endMonth` cuando presente).
+- [ ] **Cuota:** "Plan de cuotas" = `Cuota 3 de 12 · desde Mar 2024`.
+- [ ] **Calculado:** bloque Origen (caja read-only) + Fórmula legible con resultado y badge de tipo derivado.
+- [ ] **Origen de calculados:** si el movimiento es origen de ≥1 derivado **en el mes**, aparece el bloque **"Calculados"** (último bloque, tras la ficha, precedido por `--hair`) con **una caja por derivado**, espejo de "Origen": ícono de tipo tintado (↗ ingreso `--income-ink` / ↘ gasto `--expense-ink`) + nombre truncable + **monto por tipo**. Las cajas son **read-only, no clickeables** (sin hover ni cursor de interacción). Si el movimiento **no** tiene derivados, el bloque **no aparece**.
+- [ ] **Derivados — monto:** cada caja muestra `convertedAmountCents` en **mono tabular**, color por tipo (gasto `--ink` / ingreso `--income-ink`), con signo; en compacto el nombre trunca antes y el monto **nunca** se trunca.
+- [ ] **Anulado:** badge "Anulado" en la card y hero con `line-through`.
+- [ ] **Read-only pura:** la card **no** tiene footer, botón "Editar" ni ninguna acción — es solo consulta; se cierra con ✕/Esc/scrim. Editar se accede desde el kebab "⋮" de la fila, no desde la card.
+- [ ] **Reglas duras:** todas las cifras en mono tabular; ningún monto teñido de índigo; color de cifra = tipo.
+- [ ] **Compacto (≤940px, hasta 640/392px):** card completa y scrolleable, filas rótulo·valor que envuelven, ninguna cifra truncada, sin scroll horizontal del `body`.
 
 ### Form de movimiento calculado
 
@@ -2019,7 +2170,7 @@ La moneda explícita por movimiento, su cotización y la conversión de display 
 - **Badge de código de moneda:** chip neutro con el código (`"USD"`, `"ARS"`), **mismo molde que el chip "Anulado"** (`--panel-3` / `--muted` / `--r-chip` 7px / 11px·600·`.04em` / `mono`). Identifica la moneda de origen; no se tiñe.
 - **Segmented neutro de moneda:** el **segmented del DS sin semánticos** (molde del triple switch de tipo): track `--panel-3`, radio `--r-pill`, padding `2px`; segmentos texto 13px/600 `mono`. Seleccionado = thumb `--panel` + `--shadow-sm`, texto `--ink`, deslizamiento 0.14s; no seleccionado = `--muted` → `--ink-2` en hover. **Sin color semántico ni índigo en los segmentos.** `role="radiogroup"` + `role="radio"`, focus ring `--accent-soft` 3px. Es el selector de moneda en `/configuracion` y en el bloque moneda+cotización de los forms. Tiene **4 segmentos** (ARS/USD/EUR/BRL); su forma completa se detalla en *Monedas configurables — set curado ARS/USD/EUR/BRL*.
 - **Par moneda + cotización (forms de único/fijo/cuotas):** sub-bloque que **modula el Monto** desde dentro del **disclosure colapsable "Más opciones"** —que también contiene el selector de método de pago— ubicado como **último bloque del form, antes de los botones de acción** (ver *#### 4* punto (A) Ubicación). Cuando `moneda ≠ default`: `grid grid-cols-2 gap-[14px]` → Moneda (segmented neutro) + Cotización (input mono con **prefijo de par** de lectura, ej. `"USD→ARS"` / `"ARS→USD"` según la moneda seleccionada, en `mono` 12px `--muted`). Cuando `moneda == default`: el campo Cotización **se oculta** (queda solo el selector). Pre-carga editable: nota *field-note* "Cotización de referencia del mes" (glifo `History` 12px) → "Cotización modificada" al editar. Validación: cotización > 0 (error con borde `--expense` + ring `--expense-soft` + mensaje `--expense-ink`, mismo patrón que el Monto). El **calculado no muestra el bloque** (hereda moneda/cotización del origen, read-only).
-- **Ítem de `/mes` (`MovementItemRow`) — original subordinado al convertido:** **el monto convertido a la default domina** (col 4, 15.5px/600, color por tipo, mono). Cuando `moneda ≠ default` se suman dos elementos **neutros y subordinados**: el **badge de moneda original** a la izquierda del monto (misma celda, `inline-flex items-center gap-[7px] justify-end`) y una **segunda línea** del valor original (*Meta/subtítulos* 12.5px/500 `--muted` `mono`, con el símbolo de su moneda, ej. `US$100,00`, sin signo). **Cuando `moneda = default` el ítem no lleva badge ni línea original.** Bajo anulado, ambos heredan el `opacity-[0.55]`; el convertido conserva su `line-through` + color por tipo.
+- **Ítem de `/mes` (`MovementItemRow`) — solo el convertido, una línea:** **el monto convertido a la default domina y es lo único que la fila muestra** (col 4, 15.5px/600, color por tipo, mono, **una sola línea siempre**). Bajo anulado conserva `line-through` + color por tipo. **Actualizado (Card de detalle):** el **badge de código de moneda** y la **segunda línea de valor original** (cross-rate) ya **no** viven en la fila — migraron a la card de detalle (hero con badge `USD` + filas "Monto original" y "Cotización"); ver *Card de detalle de movimiento*. En la card se conserva el molde neutro del badge y del valor original (símbolo de su moneda, sin signo).
 - **Tarjeta de ajuste (patrón reutilizable, `/configuracion`):** `.card` del DS con **fila de ajuste** `flex items-center justify-between gap-6` (izquierda: título 14.5px/600 `--ink` + descripción *Meta/subtítulos* `--muted`; derecha: el control). Molde para ajustes (un ajuste = una fila). El único ajuste vigente: "Moneda por defecto" (segmented neutro de moneda), que persiste **en vivo** al seleccionar (sin botón Guardar; toast de confirmación) y **recomputa el display** de `/mes` y reportes sin tocar lo guardado.
 - **Sidebar:** link **"Configuración"** (`Settings` 18px) como **último** ítem de nav, mismo molde/estados que el resto; activo por prefijo `startsWith("/configuracion")`.
 - **Reportes:** **no cambian** — ya operan sobre datos convertidos a la default (la conversión es capa de display aguas arriba del gráfico); no se rotula moneda ni se muestran originales en las cards. El cambio de default recomputa sus valores en vivo.

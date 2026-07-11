@@ -263,7 +263,7 @@ function movementItemToRecurring(item: MovementItem): Recurring {
     description: item.description,
     startMonth: getCurrentMonth(), // Relleno válido para el schema (no se envía en PATCH)
     deletedFrom: null,
-    frequency: item.frequency ?? "MONTHLY",
+    frequency: item.frequency ?? 1,
     currency: item.currency,
     exchangeRate: item.exchangeRate,
     createdAt: "",

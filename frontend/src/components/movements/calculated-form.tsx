@@ -48,21 +48,32 @@ import { CategoryFormModal } from "@/app/(app)/configuracion/categorias/category
 import { type Category, type CategoryScope } from "@/types/category";
 import { type TransactionType } from "@/types/transaction";
 import type { FormulaOperator, MovementItem } from "@/types/movement";
-import type { RecurringFrequency } from "@/types/recurring";
 import { ActiveLimitDialog } from "@/components/limits/active-limit-dialog";
 import { toCanonicalAmountCents, type ProjectionSection } from "@/lib/limits/project";
 import type { LimitConfig } from "@/types/limit";
 import { formatCurrency, getCurrentMonth } from "@/lib/format";
+import { descaleOperand, buildFormulaExpression } from "@/lib/formula";
 import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/logger";
 
-/** Etiqueta en minúscula por valor de frecuencia (para la caja de origen fijo) */
-const FREQUENCY_LABEL_LOWER: Record<RecurringFrequency, string> = {
-  MONTHLY: "mensual",
-  BIMONTHLY: "bimestral",
-  QUARTERLY: "trimestral",
-  BIANNUAL: "semestral",
-  ANNUAL: "anual",
+/**
+ * Etiqueta en minúscula por valor de frecuencia (entero 1..12), para la caja
+ * de origen fijo. Fuente única: docs/design.md "Frecuencia del fijo — entero
+ * 1..12 y sus etiquetas", columna "Sublínea del ítem" (misma variante terse).
+ */
+const FREQUENCY_LABEL_LOWER: Record<number, string> = {
+  1: "mensual",
+  2: "bimestral",
+  3: "trimestral",
+  4: "cuatrimestral",
+  5: "cada 5 meses",
+  6: "semestral",
+  7: "cada 7 meses",
+  8: "cada 8 meses",
+  9: "cada 9 meses",
+  10: "cada 10 meses",
+  11: "cada 11 meses",
+  12: "anual",
 };
 
 /** Etiqueta de tipo de origen para la caja de origen read-only */
@@ -114,23 +125,6 @@ function scaleOperand(value: number, operator: FormulaOperator): number {
       return Math.round(value * 1_000_000);
     case "PCT":
       return Math.round(value * 100);
-  }
-}
-
-/**
- * Desescala el operando almacenado (entero del backend) al float de usuario.
- * Inverso de scaleOperand.
- */
-function descaleOperand(scaled: number, operator: FormulaOperator): number {
-  switch (operator) {
-    case "ADD":
-    case "SUB":
-      return scaled / 100;
-    case "MUL":
-    case "DIV":
-      return scaled / 1_000_000;
-    case "PCT":
-      return scaled / 100;
   }
 }
 
@@ -401,18 +395,12 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
   }
 
   // ── Expresión legible para el preview ─────────────────────────────────────
+  // Reusa el builder compartido (lib/formula.ts) — la card de detalle de
+  // movimiento reutiliza el mismo helper para su bloque "Fórmula" (read-only).
 
   function buildExpression(): string {
-    if (userOperand === null) return "—";
     // Los montos del origen y del operando ADD/SUB van en la moneda del movimiento de origen
-    const originFmt = originCents !== null ? formatCurrency(originCents, movementCurrency) : "origen";
-    switch (selectedOperator) {
-      case "ADD": return `${originFmt} + ${formatCurrency(userOperand * 100, movementCurrency)}`;
-      case "SUB": return `${originFmt} − ${formatCurrency(userOperand * 100, movementCurrency)}`;
-      case "MUL": return `${originFmt} × ${String(userOperand).replace(".", ",")}`;
-      case "DIV": return `${originFmt} ÷ ${String(userOperand).replace(".", ",")}`;
-      case "PCT": return `${String(userOperand).replace(".", ",")}% de ${originFmt}`;
-    }
+    return buildFormulaExpression(originCents, selectedOperator, userOperand, movementCurrency);
   }
 
   // ── Formato del resultado para el preview ─────────────────────────────────

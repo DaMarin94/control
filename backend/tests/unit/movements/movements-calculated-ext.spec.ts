@@ -24,7 +24,6 @@ import {
   Currency,
   FormulaOperator,
   MovementType,
-  RecurringFrequency,
 } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import {
@@ -47,7 +46,7 @@ type RecurringRow = {
   description: string | null;
   startMonth: string;
   deletedFrom: string | null;
-  frequency: RecurringFrequency;
+  frequency: number;
   chainId: string;
   sourceChainId: string | null;
   sourceMovementId: string | null;
@@ -87,7 +86,7 @@ function makeCalcDeUnico(overrides: Partial<RecurringRow> = {}): RecurringRow {
     description: 'Impuesto sobre gasto',
     startMonth: '2026-06',
     deletedFrom: '2026-07',
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     chainId: 'chain-calc-tx-001',
     sourceChainId: null,
     sourceMovementId: TX_ID,
@@ -117,7 +116,7 @@ function makeCalcDeCuota(overrides: Partial<RecurringRow> = {}): RecurringRow {
     description: 'Seguro de cuota',
     startMonth: '2026-01',
     deletedFrom: null,
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     chainId: 'chain-calc-cuota-001',
     sourceChainId: null,
     sourceMovementId: null,
@@ -147,7 +146,7 @@ function makeCalcDeFijo(overrides: Partial<RecurringRow> = {}): RecurringRow {
     description: 'Calc de fijo',
     startMonth: '2026-01',
     deletedFrom: null,
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     chainId: 'chain-calc-fijo-001',
     sourceChainId: ORIGIN_CHAIN_ID,
     sourceMovementId: null,
@@ -177,7 +176,7 @@ function makeNormalFijo(overrides: Partial<RecurringRow> = {}): RecurringRow {
     description: 'Alquiler',
     startMonth: '2026-01',
     deletedFrom: null,
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     chainId: ORIGIN_CHAIN_ID,
     sourceChainId: null,
     sourceMovementId: null,
@@ -477,6 +476,166 @@ describe('[REGRESIÓN] Calculados en su sección de origen — no en fijos', () 
   });
 
   // -------------------------------------------------------------------------
+  // calculatedChildren (Fase 1.1.9 — "calculados en el origen")
+  // -------------------------------------------------------------------------
+
+  describe('campo calculatedChildren (Fase 1.1.9)', () => {
+    it('fijo origen: calculatedChildren trae el derivado del mes con sus datos', async () => {
+      mockPrisma.recurring.findMany.mockResolvedValue([makeNormalFijo(), makeCalcDeFijo()]);
+
+      const fijos = await repo.findFijosByMonth(USER_A, '2026-06');
+
+      const origenItem = fijos.find((f) => f.id === 'normal-fijo-001')!;
+      expect(origenItem.hasCalculated).toBe(true);
+      expect(origenItem.calculatedChildren).toHaveLength(1);
+      expect(origenItem.calculatedChildren[0]).toEqual({
+        id: CALC_FIJO_ID,
+        description: 'Calc de fijo',
+        type: MovementType.INCOME, // 10% de 10000 = +1000 → INCOME
+        convertedAmountCents: 1000,
+        formulaOperator: FormulaOperator.PCT,
+        formulaOperand: 1000,
+        formulaSign: 1,
+      });
+    });
+
+    it('el calculado de fijo (hijo) nunca es padre: su propio calculatedChildren es []', async () => {
+      mockPrisma.recurring.findMany.mockResolvedValue([makeNormalFijo(), makeCalcDeFijo()]);
+
+      const fijos = await repo.findFijosByMonth(USER_A, '2026-06');
+
+      const calcItem = fijos.find((f) => f.id === CALC_FIJO_ID)!;
+      expect(calcItem.calculatedChildren).toEqual([]);
+      expect(calcItem.hasCalculated).toBe(false);
+    });
+
+    it('único origen: calculatedChildren trae el derivado del mes con sus datos', async () => {
+      // $queryRaw devuelve la fila del único origen (para que aparezca como ítem padre)
+      mockPrisma.$queryRaw.mockResolvedValue([
+        {
+          id: TX_ID,
+          userId: USER_A,
+          type: 'EXPENSE',
+          amountCents: TX_DATA.amountCents,
+          description: TX_DATA.description,
+          occurredAt: TX_OCCURRED_AT,
+          timezone: TX_TIMEZONE,
+          currency: 'ARS',
+          exchangeRate: '1',
+          anchorCurrency: 'ARS',
+          skipped: false,
+          categoryId: CAT_TX,
+          categoryName: 'Viajes',
+          categoryColor: '#123456',
+          categoryScope: 'EXPENSE',
+          paymentMethodId: null,
+          paymentMethodName: null,
+          paymentMethodIcon: null,
+          paymentMethodType: null,
+          paymentMethodClosingDay: null,
+          paymentMethodPaymentDay: null,
+          autoDebit: null,
+        },
+      ]);
+      mockPrisma.recurring.findMany.mockResolvedValueOnce([makeCalcDeUnico()]);
+      mockPrisma.transaction.findMany.mockResolvedValue([TX_DATA]);
+
+      const unicos = await repo.findUnicosByMonth(USER_A, '2026-06');
+
+      const origenItem = unicos.find((u) => u.id === TX_ID)!;
+      expect(origenItem).toBeDefined();
+      expect(origenItem.hasCalculated).toBe(true);
+      expect(origenItem.calculatedChildren).toHaveLength(1);
+      expect(origenItem.calculatedChildren[0]).toEqual({
+        id: CALC_TX_ID,
+        description: 'Impuesto sobre gasto',
+        type: MovementType.INCOME, // 10% de 10000 = +1000 → INCOME
+        convertedAmountCents: 1000,
+        formulaOperator: FormulaOperator.PCT,
+        formulaOperand: 1000,
+        formulaSign: 1,
+      });
+
+      const calcItem = unicos.find((u) => u.id === CALC_TX_ID)!;
+      expect(calcItem.calculatedChildren).toEqual([]);
+    });
+
+    it('cuota origen: calculatedChildren trae el derivado del mes con sus datos', async () => {
+      const groupRow = {
+        id: GROUP_ID,
+        type: MovementType.EXPENSE,
+        amountCents: GROUP_DATA.amountCents,
+        description: GROUP_DATA.description,
+        totalInstallments: GROUP_DATA.totalInstallments,
+        startMonth: GROUP_DATA.startMonth,
+        currency: 'ARS',
+        exchangeRate: '1',
+        anchorCurrency: 'ARS',
+        category: { id: CAT_CUOTA, name: 'Tecnología', color: '#654321', scope: CategoryScope.EXPENSE },
+        paymentMethod: null,
+        autoDebit: null,
+        skips: [],
+      };
+      mockPrisma.installmentGroup.findMany
+        .mockResolvedValueOnce([groupRow]) // grupos normales (aparece como ítem padre)
+        .mockResolvedValueOnce([GROUP_DATA]); // orígenes de calculados
+      mockPrisma.recurring.findMany.mockResolvedValueOnce([makeCalcDeCuota()]);
+
+      const cuotas = await repo.findCuotasByMonth(USER_A, '2026-03');
+
+      const origenItem = cuotas.find((c) => c.id === GROUP_ID)!;
+      expect(origenItem).toBeDefined();
+      expect(origenItem.hasCalculated).toBe(true);
+      expect(origenItem.calculatedChildren).toHaveLength(1);
+      expect(origenItem.calculatedChildren[0]).toEqual({
+        id: CALC_CUOTA_ID,
+        description: 'Seguro de cuota',
+        type: MovementType.INCOME, // 5% de 5000 = +250 → INCOME
+        convertedAmountCents: 250,
+        formulaOperator: FormulaOperator.PCT,
+        formulaOperand: 500,
+        formulaSign: 1,
+      });
+
+      const calcItem = cuotas.find((c) => c.id === CALC_CUOTA_ID)!;
+      expect(calcItem.calculatedChildren).toEqual([]);
+    });
+
+    it('origen con múltiples calculados derivados: calculatedChildren lista los N correctamente', async () => {
+      const segundoCalc = makeCalcDeFijo({
+        id: 'calc-fijo-002',
+        chainId: 'chain-calc-fijo-002',
+        description: 'Segundo derivado',
+        formulaOperator: FormulaOperator.SUB,
+        formulaOperand: 2000, // 10000 - 2000 = 8000 → INCOME
+        formulaSign: 1,
+      });
+      mockPrisma.recurring.findMany.mockResolvedValue([
+        makeNormalFijo(),
+        makeCalcDeFijo(),
+        segundoCalc,
+      ]);
+
+      const fijos = await repo.findFijosByMonth(USER_A, '2026-06');
+
+      const origenItem = fijos.find((f) => f.id === 'normal-fijo-001')!;
+      expect(origenItem.calculatedChildren).toHaveLength(2);
+      const ids = origenItem.calculatedChildren.map((c) => c.id).sort();
+      expect(ids).toEqual([CALC_FIJO_ID, 'calc-fijo-002'].sort());
+    });
+
+    it('fijo origen sin calculados en el mes: calculatedChildren es []', async () => {
+      mockPrisma.recurring.findMany.mockResolvedValue([makeNormalFijo()]);
+
+      const fijos = await repo.findFijosByMonth(USER_A, '2026-06');
+
+      const origenItem = fijos.find((f) => f.id === 'normal-fijo-001')!;
+      expect(origenItem.calculatedChildren).toEqual([]);
+      expect(origenItem.hasCalculated).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Separación estricta: los tres tipos van a secciones distintas
   // -------------------------------------------------------------------------
 
@@ -559,7 +718,7 @@ function makeCalcDeUnicoAnual(overrides: Partial<RecurringForAnnual> = {}): Recu
     anchorCurrency: Currency.ARS,
     startMonth: '2026-06',
     deletedFrom: '2026-07',
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     skippedMonths: new Set(),
     categoryId: CAT_TX,
     categoryName: 'Impuestos',
@@ -586,7 +745,7 @@ function makeCalcDeCuotaAnual(overrides: Partial<RecurringForAnnual> = {}): Recu
     anchorCurrency: Currency.ARS,
     startMonth: '2026-01',
     deletedFrom: null,
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     skippedMonths: new Set(),
     categoryId: CAT_CUOTA,
     categoryName: 'Seguros',

@@ -11,7 +11,7 @@
  */
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { CategoryScope, MovementType, RecurringFrequency } from '@prisma/client';
+import { CategoryScope, MovementType } from '@prisma/client';
 import { MovementsRepository, MovementItem } from '../../../src/movements/movements.repository';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 
@@ -27,7 +27,7 @@ type RecurringRow = {
   description: string | null;
   startMonth: string;
   deletedFrom: string | null;
-  frequency: RecurringFrequency;
+  frequency: number;
   chainId: string;
   sourceChainId: string | null;
   sourceMovementId: string | null;
@@ -50,7 +50,7 @@ type RecurringTotalsRow = {
   type: MovementType;
   amountCents: number;
   startMonth: string;
-  frequency: RecurringFrequency;
+  frequency: number;
   chainId: string;
   sourceChainId: string | null;
   sourceMovementId: string | null;
@@ -99,7 +99,7 @@ function makeRecurringRow(overrides: Partial<RecurringRow> = {}): RecurringRow {
     description: null,
     startMonth: '2026-01',
     deletedFrom: null,
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     chainId: 'chain-001',
     sourceChainId: null,
     sourceMovementId: null,
@@ -125,7 +125,7 @@ function makeTotalsRow(overrides: Partial<RecurringTotalsRow> = {}): RecurringTo
     type: MovementType.EXPENSE,
     amountCents: 5000,
     startMonth: '2026-01',
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     chainId: 'chain-001',
     sourceChainId: null,
     sourceMovementId: null,
@@ -164,17 +164,17 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
 
   describe('findFijosByMonth — frecuencia', () => {
     it('MONTHLY: aparece en todos los meses (back-compat)', async () => {
-      const row = makeRecurringRow({ startMonth: '2026-01', frequency: RecurringFrequency.MONTHLY });
+      const row = makeRecurringRow({ startMonth: '2026-01', frequency: 1 });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
 
       const result = await repo.findFijosByMonth(USER_A, '2026-06');
 
       expect(result).toHaveLength(1);
-      expect(result[0].frequency).toBe(RecurringFrequency.MONTHLY);
+      expect(result[0].frequency).toBe(1);
     });
 
     it('BIMONTHLY: aparece en meses pares del anclaje (startMonth=marzo, mes=mayo → aparece)', async () => {
-      const row = makeRecurringRow({ startMonth: '2026-03', frequency: RecurringFrequency.BIMONTHLY });
+      const row = makeRecurringRow({ startMonth: '2026-03', frequency: 2 });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
 
       const result = await repo.findFijosByMonth(USER_A, '2026-05');
@@ -183,7 +183,7 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
     });
 
     it('BIMONTHLY: NO aparece en mes impar del anclaje (startMonth=marzo, mes=abril → no aparece)', async () => {
-      const row = makeRecurringRow({ startMonth: '2026-03', frequency: RecurringFrequency.BIMONTHLY });
+      const row = makeRecurringRow({ startMonth: '2026-03', frequency: 2 });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
 
       const result = await repo.findFijosByMonth(USER_A, '2026-04');
@@ -192,7 +192,7 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
     });
 
     it('QUARTERLY: aparece solo cada 3 meses (startMonth=enero, mes=abril → aparece)', async () => {
-      const row = makeRecurringRow({ startMonth: '2026-01', frequency: RecurringFrequency.QUARTERLY });
+      const row = makeRecurringRow({ startMonth: '2026-01', frequency: 3 });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
 
       const result = await repo.findFijosByMonth(USER_A, '2026-04');
@@ -201,7 +201,7 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
     });
 
     it('QUARTERLY: NO aparece en mes intermedio (startMonth=enero, mes=febrero → no aparece)', async () => {
-      const row = makeRecurringRow({ startMonth: '2026-01', frequency: RecurringFrequency.QUARTERLY });
+      const row = makeRecurringRow({ startMonth: '2026-01', frequency: 3 });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
 
       const result = await repo.findFijosByMonth(USER_A, '2026-02');
@@ -210,7 +210,7 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
     });
 
     it('BIANNUAL: aparece cada 6 meses (startMonth=enero, mes=julio → aparece)', async () => {
-      const row = makeRecurringRow({ startMonth: '2026-01', frequency: RecurringFrequency.BIANNUAL });
+      const row = makeRecurringRow({ startMonth: '2026-01', frequency: 6 });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
 
       const result = await repo.findFijosByMonth(USER_A, '2026-07');
@@ -219,7 +219,7 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
     });
 
     it('BIANNUAL: NO aparece en mes intermedio (startMonth=enero, mes=junio → no aparece)', async () => {
-      const row = makeRecurringRow({ startMonth: '2026-01', frequency: RecurringFrequency.BIANNUAL });
+      const row = makeRecurringRow({ startMonth: '2026-01', frequency: 6 });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
 
       const result = await repo.findFijosByMonth(USER_A, '2026-06');
@@ -228,7 +228,7 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
     });
 
     it('ANNUAL: aparece solo en el mes de startMonth del año siguiente', async () => {
-      const row = makeRecurringRow({ startMonth: '2026-06', frequency: RecurringFrequency.ANNUAL });
+      const row = makeRecurringRow({ startMonth: '2026-06', frequency: 12 });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
 
       const resultSame = await repo.findFijosByMonth(USER_A, '2026-06');
@@ -243,7 +243,7 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
     });
 
     it('ANNUAL: NO aparece en un mes distinto del anclaje', async () => {
-      const row = makeRecurringRow({ startMonth: '2026-06', frequency: RecurringFrequency.ANNUAL });
+      const row = makeRecurringRow({ startMonth: '2026-06', frequency: 12 });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
 
       const result = await repo.findFijosByMonth(USER_A, '2026-07');
@@ -252,13 +252,13 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
     });
 
     it('expone frequency correcto en el MovementItem', async () => {
-      const row = makeRecurringRow({ frequency: RecurringFrequency.QUARTERLY });
+      const row = makeRecurringRow({ frequency: 3 });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
 
       // QUARTERLY, startMonth='2026-01', mes='2026-04' → diff=3, 3%3=0 → aparece
       const result = await repo.findFijosByMonth(USER_A, '2026-04');
 
-      expect(result[0].frequency).toBe(RecurringFrequency.QUARTERLY);
+      expect(result[0].frequency).toBe(3);
     });
   });
 
@@ -321,7 +321,7 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
 
   describe('getFijosTotalsByMonth — frecuencia y skips', () => {
     it('MONTHLY activo sin skip → suma al total (back-compat)', async () => {
-      const row = makeTotalsRow({ amountCents: 5000, frequency: RecurringFrequency.MONTHLY, skips: [] });
+      const row = makeTotalsRow({ amountCents: 5000, frequency: 1, skips: [] });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
 
       const result = await repo.getFijosTotalsByMonth(USER_A, '2026-06');
@@ -333,7 +333,7 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
       const row = makeTotalsRow({
         amountCents: 5000,
         startMonth: '2026-03',
-        frequency: RecurringFrequency.BIMONTHLY,
+        frequency: 2,
         skips: [],
       });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
@@ -347,7 +347,7 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
       const row = makeTotalsRow({
         amountCents: 5000,
         startMonth: '2026-03',
-        frequency: RecurringFrequency.BIMONTHLY,
+        frequency: 2,
         skips: [],
       });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
@@ -361,7 +361,7 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
       const row = makeTotalsRow({
         amountCents: 5000,
         startMonth: '2026-01',
-        frequency: RecurringFrequency.MONTHLY,
+        frequency: 1,
         skips: [{ month: '2026-06' }],
       });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
@@ -373,8 +373,8 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
 
     it('dos fijos: uno skippeado y otro no → solo el no-skippeado suma', async () => {
       const rows: RecurringTotalsRow[] = [
-        makeTotalsRow({ amountCents: 5000, startMonth: '2026-01', frequency: RecurringFrequency.MONTHLY, skips: [] }),
-        makeTotalsRow({ amountCents: 3000, startMonth: '2026-01', frequency: RecurringFrequency.MONTHLY, skips: [{ month: '2026-06' }] }),
+        makeTotalsRow({ amountCents: 5000, startMonth: '2026-01', frequency: 1, skips: [] }),
+        makeTotalsRow({ amountCents: 3000, startMonth: '2026-01', frequency: 1, skips: [{ month: '2026-06' }] }),
       ];
       mockPrisma.recurring.findMany.mockResolvedValue(rows);
 
@@ -387,7 +387,7 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
       const row = makeTotalsRow({
         amountCents: 10000,
         startMonth: '2026-01',
-        frequency: RecurringFrequency.QUARTERLY,
+        frequency: 3,
         skips: [{ month: '2026-04' }],
       });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
@@ -402,7 +402,7 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
       const row = makeTotalsRow({
         amountCents: 10000,
         startMonth: '2026-01',
-        frequency: RecurringFrequency.QUARTERLY,
+        frequency: 3,
         skips: [],
       });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
@@ -417,7 +417,7 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
         type: MovementType.INCOME,
         amountCents: 80000,
         startMonth: '2026-01',
-        frequency: RecurringFrequency.MONTHLY,
+        frequency: 1,
         skips: [],
       });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
@@ -433,7 +433,7 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
         type: MovementType.INCOME,
         amountCents: 80000,
         startMonth: '2026-01',
-        frequency: RecurringFrequency.MONTHLY,
+        frequency: 1,
         skips: [{ month: '2026-06' }],
       });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
@@ -450,14 +450,14 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
 
   describe('MovementItem — campos nuevos (frequency y skipped)', () => {
     it('origin="fijo" tiene frequency no-null', async () => {
-      const row = makeRecurringRow({ frequency: RecurringFrequency.BIANNUAL });
+      const row = makeRecurringRow({ frequency: 6 });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
 
       // BIANNUAL, startMonth='2026-01', mes='2026-07' → diff=6, 6%6=0 → aparece
       const result = await repo.findFijosByMonth(USER_A, '2026-07');
 
       expect(result[0].origin).toBe('fijo');
-      expect(result[0].frequency).toBe(RecurringFrequency.BIANNUAL);
+      expect(result[0].frequency).toBe(6);
       expect(result[0].skipped).toBeDefined();
     });
 
@@ -482,7 +482,7 @@ describe('MovementsRepository — fijos con frecuencia y skips (Fase 1.1.1)', ()
       // de MovementsService, pero aquí verificamos la interfaz.
       // El test de MovementsService ya cubre esto.
       // Simplemente verificamos que los campos del MovementItem de fijo son los correctos.
-      const row = makeRecurringRow({ frequency: RecurringFrequency.MONTHLY });
+      const row = makeRecurringRow({ frequency: 1 });
       mockPrisma.recurring.findMany.mockResolvedValue([row]);
 
       const result: MovementItem[] = await repo.findFijosByMonth(USER_A, '2026-06');

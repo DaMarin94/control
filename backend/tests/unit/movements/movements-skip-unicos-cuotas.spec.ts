@@ -29,7 +29,6 @@ import {
   Currency,
   FormulaOperator,
   MovementType,
-  RecurringFrequency,
 } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import {
@@ -154,7 +153,7 @@ describe('MovementsRepository — skip de únicos (P3)', () => {
       description: 'Impuesto',
       startMonth: MONTH,
       deletedFrom: '2026-07',
-      frequency: RecurringFrequency.MONTHLY,
+      frequency: 1,
       chainId: 'chain-calc-tx-skip',
       sourceChainId: null,
       sourceMovementId: TX_ID,
@@ -311,7 +310,7 @@ describe('MovementsRepository — skip de cuotas (P3)', () => {
       description: 'Seguro',
       startMonth: '2026-01',
       deletedFrom: null,
-      frequency: RecurringFrequency.MONTHLY,
+      frequency: 1,
       chainId: 'chain-calc-cuota-skip',
       sourceChainId: null,
       sourceMovementId: null,
@@ -575,7 +574,7 @@ describe('MovementsService.getReportsMovements — skip de únicos/cuotas en el 
       anchorCurrency: Currency.ARS,
       startMonth: '2026-06',
       deletedFrom: '2026-07',
-      frequency: RecurringFrequency.MONTHLY,
+      frequency: 1,
       skippedMonths: new Set<string>(),
       categoryId: CAT_CALC_TX,
       categoryName: 'Impuestos',
@@ -642,7 +641,7 @@ describe('MovementsService.getReportsMovements — skip de únicos/cuotas en el 
       anchorCurrency: Currency.ARS,
       startMonth: '2026-01',
       deletedFrom: null,
-      frequency: RecurringFrequency.MONTHLY,
+      frequency: 1,
       skippedMonths: new Set<string>(),
       categoryId: CAT_CALC_CUOTA,
       categoryName: 'Seguros',

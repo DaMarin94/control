@@ -116,6 +116,10 @@ export interface EmbeddedPaymentMethod {
   name: string;
   icon: string;
   type: PaymentMethodType;
+  /** Día del mes 1-31; poblado solo si type === "CREDIT" (null en DEBIT/CASH) */
+  closingDay: number | null;
+  /** Día del mes 1-31; poblado solo si type === "CREDIT" (null en DEBIT/CASH) */
+  paymentDay: number | null;
 }
 
 /** Body de POST /payment-methods */

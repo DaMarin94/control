@@ -52,6 +52,8 @@ pnpm dev
 
 ## TODO
 
+- Ante un fallo de carga de datos, la UI muestra un estado vacío indistinguible de una cuenta genuinamente vacía (enmascara errores de backend/sesión). A revisar.
+
 ## Tests
 
 Cada app guarda sus tests en una carpeta `tests/` separada de `src/` (`src/` solo contiene código; ver `docs/technical.md`).

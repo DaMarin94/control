@@ -233,14 +233,24 @@ El proyecto usa **Prisma 7**, que mueve la configuración de conexión fuera del
    ```
    prisma migrate diff \
      --from-migrations ./prisma/migrations \
-     --to-schema-datamodel ./prisma/schema.prisma \
+     --to-schema ./prisma/schema.prisma \
      --script > prisma/migrations/<timestamp>_<nombre>/migration.sql
    ```
+   > El flag para apuntar al datamodel se llama **`--to-schema`** (antes `--to-schema-datamodel`).
 2. **Aplicar el cambio a la DB** con `prisma db push` (sincroniza el schema sin pasar por el motor de migraciones).
 3. **Marcar la migración como aplicada** en el historial con `prisma migrate resolve --applied <timestamp>_<nombre>`, para que `migrate deploy` (prod/CI) no intente reaplicarla.
 4. **Regenerar el client** con `prisma generate` y revisar el `migration.sql` a mano antes de commitearlo (se commitea como cualquier otra migración).
 
 No usar `migrate dev` mientras no haya permisos de shadow DB. La migración resultante es un archivo SQL normal en `prisma/migrations/` y `migrate deploy` la aplica determinísticamente en producción.
+
+#### Migración que preserva datos con un mapeo custom
+
+Cuando el cambio de schema debe **convertir datos existentes** con un mapeo propio (p. ej. cambiar una columna de un `enum` a `Int` traduciendo cada valor), **no** sirve el diff automático: el `migration.sql` que genera `prisma migrate diff` hace **`DROP COLUMN` + `ADD COLUMN`**, que **pierde los datos** de esa columna. Hay que **escribir el SQL a mano**:
+
+1. Escribir el `migration.sql` manualmente: **columna temporal** nueva → poblarla con un `CASE` que traduzca cada valor viejo al nuevo → dropear la vieja → renombrar la temporal → `DROP TYPE` del enum si queda huérfano.
+2. Aplicarlo a la DB con **`prisma db execute --file prisma/migrations/<timestamp>_<nombre>/migration.sql`** (en vez de `prisma db push`, que re-diffearía y volvería a proponer el `DROP`/`ADD` destructivo).
+3. **`prisma migrate resolve --applied <timestamp>_<nombre>`** para registrarla en el historial.
+4. **`prisma generate`** para regenerar el client contra el schema nuevo.
 
 ### Seed de desarrollo
 

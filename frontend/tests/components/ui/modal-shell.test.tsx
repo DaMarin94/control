@@ -15,6 +15,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
+import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
@@ -118,6 +119,59 @@ describe("ModalShell — cierre", () => {
     const { scrim } = getScrimAndPanel();
     await user.click(scrim);
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe("ModalShell — closeOnScrimClick (excepción opt-in, ej: card de detalle)", () => {
+  it("closeOnScrimClick=true: un click en el scrim SÍ invoca onClose", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderShell(onClose, { closeOnScrimClick: true });
+
+    const { scrim } = getScrimAndPanel();
+    await user.click(scrim);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("closeOnScrimClick=true: un click DENTRO del panel NO invoca onClose", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderShell(onClose, { closeOnScrimClick: true });
+
+    await user.click(screen.getByText("Cuerpo del modal"));
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("closeOnScrimClick=true: el shell montado como hijo de un disparador con su propio onClick no se reabre al cerrar por scrim (gotcha: el evento sintético de React burbujea por el árbol de React, no el de DOM, aunque el shell se porte a document.body)", async () => {
+    const user = userEvent.setup();
+    // Reproduce el caso real: MovementItemRow abre la card con
+    // onClick={() => setIsDetailOpen(true)} en un contenedor que envuelve
+    // (en el árbol de React) al ModalShell portado.
+    function Trigger() {
+      const [open, setOpen] = useState(true);
+      return (
+        <div onClick={() => setOpen(true)} data-testid="row">
+          {open && (
+            <ModalShell
+              variant="dialog"
+              onClose={() => setOpen(false)}
+              labelledBy="trigger-title"
+              closeOnScrimClick
+            >
+              <ModalShellHeader titleId="trigger-title" title="Detalle" />
+              <ModalShellBody>
+                <p>Contenido</p>
+              </ModalShellBody>
+            </ModalShell>
+          )}
+        </div>
+      );
+    }
+    render(<Trigger />);
+
+    const { scrim } = getScrimAndPanel();
+    await user.click(scrim);
+    expect(screen.queryByText("Contenido")).not.toBeInTheDocument();
   });
 });
 

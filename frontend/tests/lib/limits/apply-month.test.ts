@@ -19,6 +19,8 @@ function makeItem(overrides: Partial<MovementItem> = {}): MovementItem {
     timezone: "America/Argentina/Buenos_Aires",
     installment: null,
     frequency: null,
+    startMonth: null,
+    endMonth: null,
     skipped: false,
     category: { id: "cat-1", name: "Comida", color: "#E23B3B", scope: "BOTH" },
     paymentMethod: null,
@@ -28,6 +30,7 @@ function makeItem(overrides: Partial<MovementItem> = {}): MovementItem {
     exchangeRate: 1,
     convertedAmountCents: 10000,
     autoDebit: null,
+    calculatedChildren: [],
     ...overrides,
   };
 }

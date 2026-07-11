@@ -641,28 +641,58 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | Al crear un movimiento fijo, el usuario elige su **frecuencia** de aparición de un set cerrado: **mensual (default), bimestral, trimestral, semestral, anual**. La frecuencia está **anclada al mes de inicio** y define en qué meses aparece el fijo. No se puede cambiar después de creado. |
+| **Descripción** | Al crear un movimiento fijo, el usuario elige su **frecuencia** de aparición: un **entero de 1 a 12** que expresa cuántos meses transcurren entre apariciones. La frecuencia está **anclada al mes de inicio** y define en qué meses aparece el fijo. No se puede cambiar después de creado. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | El usuario tiene sesión activa. Existe al menos una categoría disponible. |
 
 **Flujo principal:**
-1. El usuario carga un movimiento fijo (RF-MF-001) y, además del mes de inicio, selecciona una **frecuencia**.
+1. El usuario carga un movimiento fijo (RF-MF-001) y, además del mes de inicio, selecciona una **frecuencia** (1 a 12).
 2. El sistema crea el fijo con esa frecuencia.
-3. El fijo aparece en su mes de inicio y luego en cada mes que dicta la frecuencia, anclada al mes de inicio.
+3. El fijo aparece en su mes de inicio y luego cada N meses, anclado al mes de inicio.
+
+**Etiquetas:** cada valor tiene un rótulo en el selector:
+
+| Valor | Etiqueta | Valor | Etiqueta |
+|---|---|---|---|
+| 1 | Mensual | 6 | Semestral |
+| 2 | Bimestral | 7..11 | Cada N meses |
+| 3 | Trimestral | 12 | Anual |
+| 4 | Cuatrimestral | | |
+| 5 | Cada 5 meses | | |
 
 **Criterios de aceptación:**
-- [ ] La frecuencia es un **set cerrado** de 5 valores: **mensual, bimestral, trimestral, semestral, anual**. No hay frecuencias libres ni personalizadas.
-- [ ] El **default** al crear es **mensual**.
-- [ ] La frecuencia está **anclada al mes de inicio**: un fijo bimestral que arranca en marzo aparece en marzo, mayo, julio, etc.; uno trimestral que arranca en enero aparece en enero, abril, julio, octubre; y así con los demás pasos (mensual = cada mes, bimestral = cada 2 meses, trimestral = cada 3, semestral = cada 6, anual = cada 12).
+- [ ] La frecuencia es un **entero de 1 a 12** (meses entre apariciones). No hay frecuencias libres fuera de ese rango ni custom.
+- [ ] El **default** al crear es **1** (Mensual).
+- [ ] La frecuencia está **anclada al mes de inicio**: un fijo con frecuencia 2 que arranca en marzo aparece en marzo, mayo, julio, etc.; uno con frecuencia 3 que arranca en enero aparece en enero, abril, julio, octubre; y así con cualquier N (aparece cada N meses desde el mes de inicio).
 - [ ] Un fijo aparece en un mes solo si, además de estar activo en el rango (RF-MF-002), ese mes cae en su frecuencia respecto del mes de inicio.
-- [ ] La frecuencia **no es editable** después de creado el fijo (igual que el tipo): el formulario de edición la muestra de solo lectura. Cambiar la cadencia de un fijo equivale a crear otro.
-- [ ] **Back-compat:** todos los movimientos fijos existentes antes de esta capacidad quedan como **mensuales**.
+- [ ] La frecuencia **es inmutable** tras crearse (igual que el tipo): el selector aparece **solo al crear**; en el formulario de edición se muestra de **solo lectura**. Cambiar la cadencia de un fijo equivale a crear otro.
 - [ ] El cálculo de qué fijo cae en cada mes sigue siendo **on-the-fly** (RN-006): no se generan filas por instancia mensual.
 
 **Notas:**
 - El detalle visual del selector de frecuencia y de la etiqueta de frecuencia en el ítem del mes lo define `control-design` (`docs/design.md`).
 - La regla de cálculo de la frecuencia está formalizada en RN-016. La anulación de un mes puntual (RF-MF-005) opera sobre **una** de las apariciones que dicta la frecuencia.
+
+---
+
+#### RF-MF-007 — Arranque y vigencia del fijo en la card de detalle
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | La **card de detalle** (RF-VM-007) de un ítem fijo muestra su **vigencia**: el **mes de arranque** del fijo lógico y su **mes de fin** cuando lo tiene. Ambos son del **fijo lógico**, independientes del mes visualizado. La **fila de `/mes` no muestra el arranque** — se consulta en la card. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Baja |
+| **Precondiciones** | La card de detalle de un ítem fijo está abierta. |
+
+**Criterios de aceptación:**
+- [ ] La card muestra el arranque del **fijo lógico**, no el de la fila vigente: un fijo creado en marzo 2024 y editado luego sigue mostrando marzo 2024 como arranque, aunque la edición haya partido la cadena (ver RN-005 y `docs/data-model.md`, §Identidad de cadena estable).
+- [ ] La card muestra el **fin (vigencia)** del fijo cuando tiene una terminación programada (`endMonth`); un fijo sin fin programado se muestra como **activo indefinidamente**.
+- [ ] Un **calculado de origen fijo** muestra su **propio** arranque y su **propio** fin (los de su cadena), no los del origen: un calculado creado en enero 2026 sobre un fijo de marzo 2024 muestra enero 2026.
+- [ ] El arranque **no** aparece en la fila de `/mes` (RF-VM-001); vive solo en la card.
+- [ ] La ubicación y forma visual del dato en la card la define `control-design` (`docs/design.md`).
+
+**Notas:**
+- El backend expone arranque y fin en `MovementItem.startMonth` / `MovementItem.endMonth` para fijos (ver `docs/data-model.md`, §Contrato de movimientos del mes); la resolución por cadena vive en `docs/backend.md`, §Movimientos fijos.
 
 ---
 
@@ -1366,7 +1396,7 @@ La vista del mes muestra todos los movimientos del mes seleccionado (únicos, fi
 - [ ] Se listan las transacciones únicas cuya `date` esté dentro del mes activo.
 - [ ] Se listan los fijos donde `startMonth <= mesActivo` y (`deletedFrom` es null o `deletedFrom > mesActivo`).
 - [ ] Se listan las cuotas donde `startMonth <= mesActivo < startMonth + totalInstallments meses`.
-- [ ] Cada ítem muestra: tipo (gasto/ingreso), monto, categoría, descripción (si la tiene) y su origen (único / fijo / cuota X/N).
+- [ ] Cada fila muestra **lo glanceable**: tipo (gasto/ingreso), nombre, categoría, frecuencia (fijos), un **discriminador** (fecha del único / "Cuota X/N"), monto y los estados (Anulado, marcas de límite). El **detalle secundario** (método de pago, moneda/cotización, débito automático, hora del único, vigencia del fijo, plan de la cuota, fórmula del calculado) **no** vive en la fila: se consulta en la **card de detalle** (RF-VM-007).
 - [ ] La lista está agrupada por tipo en tres secciones separadas y rotuladas, **Únicos**, **Fijos**, **Cuotas** (orden default; reordenable por el usuario, RF-VM-005). Dentro de cada sección, los movimientos se ordenan por **monto descendente** (`amountCents` DESC: el monto más alto primero, por magnitud, sin distinguir gasto de ingreso). Ante montos iguales, el desempate estable es por sección: Únicos por instante (fecha y hora) descendente; Fijos por fecha de creación descendente; Cuotas por identificador ascendente. El reordenamiento de secciones entre sí (RF-VM-005) aplica **solo a las secciones**, nunca a los ítems dentro de una sección.
 - [ ] **Orden de la sección Únicos — alternable por el usuario.** La sección **Únicos** permite alternar el orden de sus movimientos entre **por monto** (descendente, default) y **por fecha** (más reciente primero; desempate por monto descendente). El control vive en la cabecera de la sección Únicos. El orden elegido se **persiste por usuario** (clave `unicosSort`, default `"amount"`; shape en `docs/data-model.md`). Aplica **solo a Únicos**: Fijos y Cuotas no tienen fecha y conservan el orden por monto descendente. El orden de los ítems en Fijos y Cuotas **no** es alterable por el usuario.
 - [ ] Las **tres secciones se muestran siempre**, aunque estén vacías. Una sección sin movimientos muestra su cabecera completa (rótulo, contador en 0, subtotal en $0) y un mensaje de estado vacío inline propio ("Sin movimientos únicos" / "Sin fijos" / "Sin cuotas").
@@ -1491,6 +1521,44 @@ Existe además un **acceso directo al mes en curso** disponible desde cualquier 
 
 **Notas:**
 - El **filtrado es 100% en el frontend**: `/mes` trae todo el mes en una sola llamada y filtra cada lista en cliente; los totales del mes se recalculan en cliente sobre lo visible. El query param `categories` de `GET /movements` **no se usa desde `/mes`** (lo usa `/reportes`); ver `docs/data-model.md`, §Filtro de categorías.
+
+---
+
+#### RF-VM-007 — Card de detalle de movimiento
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Al hacer clic en el **cuerpo** de una fila de la Vista del mes (`/mes`) se abre una **card de detalle read-only** del movimiento. Muestra los datos que la fila no muestra; no tiene acciones ni edita nada in-situ. La edición y demás acciones viven en el **kebab (⋮)** de la fila. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | Existe al menos un movimiento en la lista del mes. |
+
+**Flujo principal:**
+1. El usuario hace clic en el cuerpo de una fila (o la activa con Enter/Espacio).
+2. El sistema abre la card de detalle del movimiento en modo **solo lectura**.
+3. El usuario consulta los datos y cierra la card.
+
+**Contenido de la card (read-only):** muestra el detalle que la fila deja fuera. Común a todos los tipos: nombre, monto convertido, **método de pago** (nombre + tipo; si es **Crédito**, además su **día de cierre** y su **día de cobro** — RF-PM-001), **moneda + cotización + monto original** cuando la moneda del ítem difiere de la default (cross-rate), **débito automático** (si aplica, RN-021), categoría y estado de anulación. Y por tipo:
+- **Único:** la **fecha con hora** exacta del movimiento.
+- **Fijo:** su **frecuencia** (RF-MF-006) y su **vigencia** (arranque + fin, RF-MF-007).
+- **Cuota:** el **plan** (cuota N de M + mes de inicio del grupo).
+- **Calculado:** su **origen** y la **fórmula** completa con el resultado derivado (RF-MCALC-002/007).
+- **Origen de calculados:** cuando el movimiento es **origen** de uno o más calculados, la card lista sus **derivados del mes** (nombre + monto), read-only. Es el **espejo** del bloque que muestra el "Origen" desde un calculado: la card es bidireccional origen ↔ derivados (RF-MCALC-007).
+
+**Acciones disponibles:**
+- **Cerrar** — la card se cierra con **✕**, con **Esc** y con **clic en el scrim** (fondo). Es su única acción: la card no tiene footer de acción ni botón "Editar". Editar, anular, crear-desde y eliminar viven en el **kebab (⋮)** de la fila.
+
+**Criterios de aceptación:**
+- [ ] El clic en el **cuerpo** de la fila (o Enter/Espacio) abre la card; el clic en el **kebab (⋮)** abre su menú de acciones rápidas y **no** abre la card. El kebab concentra todas las acciones del movimiento (Editar / Anular-Des-anular / Crear movimiento desde este / Eliminar).
+- [ ] La card es **solo lectura pura**: no tiene footer de acción ni botón "Editar"; su único control es cerrar. No modifica el movimiento in-situ.
+- [ ] La card muestra las filas de contenido definidas arriba, mostrando **solo las que aplican** al tipo y omitiendo las que no (ej.: método de pago solo si el movimiento tiene uno; cross-rate solo si la moneda del ítem difiere de la default).
+- [ ] Si el movimiento es **origen** de calculados, la card lista sus **derivados del mes** (nombre + monto, read-only, no clickeable); si no tiene derivados, esa sección se omite.
+- [ ] Para un método de pago de tipo **Crédito**, la card muestra su **día de cierre** y su **día de cobro**; para Débito/Efectivo esos datos no existen y no se muestran.
+- [ ] La card cierra con ✕, Esc y clic en el scrim.
+- [ ] La card **no dispara una carga propia**: presenta el `MovementItem` que la lista del mes ya tiene en memoria; no tiene estados de carga, vacío ni error propios.
+
+**Notas:**
+- La anatomía visual de la card, el reparto exacto fila/card y el comportamiento de apertura/cierre los define `control-design` (`docs/design.md`).
 
 ---
 
@@ -2470,7 +2538,7 @@ Un **límite** observa un dato (identificado por una **key** de un catálogo har
 | RN-013 | Cada categoría tiene un color tomado de una **matriz de colores predefinidos** (40 colores). El usuario lo **elige y edita** al crear o editar la categoría; solo se aceptan colores de la matriz (sin hex libre). Al **crear**, el sistema pre-selecciona como default el color "menos usado" entre las categorías activas del usuario, calculado sobre los **8 colores base** (un subconjunto de la matriz). Las categorías por defecto del alta se asignan automáticamente. El color es de presentación únicamente: no afecta montos, scope ni ninguna regla de negocio. |
 | RN-014 | Para comparar nombres de categoría a efectos de unicidad, el nombre se **normaliza**: trim de espacios, insensible a mayúsculas/minúsculas e insensible a acentos/tildes. Ej: "comida", "Comida" y "Cómida" se consideran el mismo nombre. Esta normalización aplica tanto a la detección de duplicado contra categorías **activas** (bloqueo, RN-008) como contra categorías **eliminadas** (soft delete) para proponer reactivarla (RF-CAT-002). La regla se valida en **ambas capas** —backend como fuente de verdad y frontend para UX— y ambas deben mantenerse alineadas (ver `docs/technical.md`). |
 | RN-015 | Para la agregación anual de los reportes (RF-REP-001), el mes al que se imputa cada movimiento se determina con el **mismo criterio ya definido** para la Vista del mes, sin introducir una regla de zona horaria nueva: para los movimientos **únicos**, el mes se calcula en la **zona horaria propia de cada registro** (RN-011, igual que el bucketeo de `GET /movements`); para los **fijos** y las **cuotas**, que operan a nivel mes (RN-006), el mes es el de su `startMonth` `YYYY-MM` (los fijos caen en cada mes donde están activos; las cuotas, en cada mes de su tramo). Un movimiento se imputa a un año determinado solo si su mes resuelto pertenece a ese año. |
-| RN-016 | **Frecuencia y anulación de movimientos fijos (RF-MF-005, RF-MF-006).** Un movimiento fijo con mes de inicio `S` y frecuencia `F` aparece en el mes `M` si y solo si: `S <= M` **y** (`deletedFrom` es null **o** `deletedFrom > M`) **y** `monthDiff(S, M) % step(F) === 0`, donde el paso por frecuencia es `MONTHLY=1`, `BIMONTHLY=2`, `QUARTERLY=3`, `BIANNUAL=6`, `ANNUAL=12`. La frecuencia está **anclada al mes de inicio** (no al mes consultado). Una **anulación** `(fijo, mes)` no cambia si el fijo aparece o no según esta regla: un fijo anulado para un mes **se sigue listando** en `GET /movements` con la marca de anulado, pero su monto **no suma** a los totales del mes ni a la serie anual de los reportes. La anulación es **reversible** (toggle) y solo tiene sentido sobre meses donde el fijo efectivamente aparece según `F`. El cálculo sigue siendo on-the-fly (RN-006): no se generan filas por instancia mensual. |
+| RN-016 | **Frecuencia y anulación de movimientos fijos (RF-MF-005, RF-MF-006).** Un movimiento fijo con mes de inicio `S` y frecuencia `N` (entero 1..12, meses entre apariciones) aparece en el mes `M` si y solo si: `S <= M` **y** (`deletedFrom` es null **o** `deletedFrom > M`) **y** `monthDiff(S, M) % N === 0`. La frecuencia está **anclada al mes de inicio** (no al mes consultado). Una **anulación** `(fijo, mes)` no cambia si el fijo aparece o no según esta regla: un fijo anulado para un mes **se sigue listando** en `GET /movements` con la marca de anulado, pero su monto **no suma** a los totales del mes ni a la serie anual de los reportes. La anulación es **reversible** (toggle) y solo tiene sentido sobre meses donde el fijo efectivamente aparece según `F`. El cálculo sigue siendo on-the-fly (RN-006): no se generan filas por instancia mensual. |
 | RN-017 | **Fórmula y redondeo del movimiento calculado (RF-MCALC-002).** El monto de un movimiento calculado se deriva del monto del fijo de origen **del mes en cuestión** aplicando **una** operación: un operador de `{ +, −, ×, ÷, % }` y un **operando** numérico común. El cálculo por operador es: `+` → `origen + operando`; `−` → `origen − operando`; `×` → `origen × operando`; `÷` → `origen ÷ operando`; `%` → `origen × operando ÷ 100`. El **operando 0 no se acepta** en `÷` ni en `%` (división por cero); el resto acepta cualquier operando numérico. El resultado se **redondea a centavos enteros** (`round`, mantiene RN-002): **no** se persiste ni propaga precisión sub-centavo. La presentación siempre muestra 2 decimales. El signo final lo aplica RN-018, no la fórmula. El cálculo es **on-the-fly por mes** (RN-006): el monto **no se persiste**, se deriva al vuelo del origen en cada lectura, así que sigue automáticamente cualquier cambio del origen (RF-MCALC-004). |
 | RN-018 | **Signo, monto y tipo derivado del movimiento calculado — excepción a RN-001 (RF-MCALC-003).** El movimiento calculado tiene un **switch de signo** que multiplica el resultado de la fórmula por `+1` o `−1`. Por eso su `amountCents` **puede ser negativo o cero**, a diferencia de todo otro movimiento (RN-001, monto > 0). Esta excepción aplica **únicamente** a movimientos calculados; únicos, fijos "normales" y cuotas siguen exigiendo monto > 0. El `type` (`EXPENSE`/`INCOME`) **no se elige**: se **deriva del signo del monto final** —`final < 0` → `EXPENSE`; `final > 0` → `INCOME`; `final == 0` → `EXPENSE` por convención de borde (no afecta totales, RN-019)—. Así signo y tipo son siempre consistentes (positivo = ingreso, negativo = gasto). |
 | RN-019 | **Imputación a totales y reportes por el tipo derivado (RF-MCALC-003).** Cada movimiento suma su **magnitud** (`\|amountCents\|`) al bucket que le corresponde **según su `type`**: un `INCOME` suma a `incomeCents`; un `EXPENSE`, a `expenseCents`. Para movimientos normales el `type` es fijo y `amountCents > 0`. Para un **calculado**, como el `type` se deriva del signo del monto (RN-018), la imputación queda siempre consistente: un calculado de monto `−2000` es `EXPENSE` (tipo derivado) y suma **2000** a `expenseCents`; uno de `+2000` es `INCOME` y suma **2000** a `incomeCents`; un monto 0 no aporta a ningún bucket. No hay restas a un bucket ni reasignación: signo y tipo nunca se contradicen. El balance del mes (`incomeCents − expenseCents`, RF-VM-002 / RF-DASH-002) y la serie anual de reportes (RF-REP-001, ambos tipos) se calculan con esta suma de magnitudes, sin lógica especial. En `by-category` (gastos apilados por categoría) la porción de la categoría de un calculado `EXPENSE` suma su magnitud, preservando la invariante "suma de porciones del mes = `expenseCents` del mes" (`docs/data-model.md`, §Contrato de serie de reportes). |
@@ -2527,7 +2595,7 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 | Categoría | Clasificador asignado a cada movimiento. Personalizable por usuario. |
 | Cuota | Instancia mensual de un grupo de cuotas. Representa un pago parcial de una compra dividida. |
 | `deletedFrom` | Primer día del mes desde el cual un movimiento fijo deja de aparecer. Si es `null`, el fijo sigue activo. |
-| Frecuencia (de un fijo) | Periodicidad de aparición de un movimiento fijo, de un set cerrado: mensual, bimestral, trimestral, semestral, anual. Anclada al mes de inicio. Default mensual. No editable tras crearse. Ver RF-MF-006, RN-016. |
+| Frecuencia (de un fijo) | Periodicidad de aparición de un movimiento fijo, un **entero 1..12** = meses entre apariciones (1 Mensual … 12 Anual). Anclada al mes de inicio. Default 1 (mensual). Inmutable tras crearse. Ver RF-MF-006, RN-016. |
 | Gasto (`EXPENSE`) | Egreso de dinero. Reduce el balance del mes. |
 | Grupo de cuotas | Registro padre que define monto por cuota, cantidad total de cuotas y mes de inicio. |
 | Ingreso (`INCOME`) | Entrada de dinero. Aumenta el balance del mes. |

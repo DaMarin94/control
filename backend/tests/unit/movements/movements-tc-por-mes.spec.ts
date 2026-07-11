@@ -19,7 +19,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import {
   Currency,
   MovementType,
-  RecurringFrequency,
   FormulaOperator,
   CategoryScope,
 } from '@prisma/client';
@@ -84,7 +83,7 @@ function makeRecurring(overrides: Record<string, unknown> = {}) {
     anchorCurrency: Currency.ARS,
     startMonth: '2026-01',
     deletedFrom: null,
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     chainId: 'chain-001',
     sourceChainId: null,
     sourceMovementId: null,

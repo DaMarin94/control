@@ -93,7 +93,9 @@ const fijoActivo: MovementItem = {
   occurredAt: null,
   timezone: null,
   installment: null,
-  frequency: "MONTHLY",
+  frequency: 1,
+  startMonth: "2026-01",
+  endMonth: null,
   skipped: false,
   category: baseCategory,
   paymentMethod: null,
@@ -103,6 +105,7 @@ const fijoActivo: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 150000,
+  calculatedChildren: [],
 };
 
 const fijoAnulado: MovementItem = {
@@ -112,26 +115,32 @@ const fijoAnulado: MovementItem = {
 
 const fijoBimestral: MovementItem = {
   ...fijoActivo,
-  frequency: "BIMONTHLY",
+  frequency: 2,
   description: "Seguro",
 };
 
 const fijoTrimestral: MovementItem = {
   ...fijoActivo,
-  frequency: "QUARTERLY",
+  frequency: 3,
   description: "Cuota anual",
 };
 
 const fijoSemestral: MovementItem = {
   ...fijoActivo,
-  frequency: "BIANNUAL",
+  frequency: 6,
   description: "Impuesto",
 };
 
 const fijoAnual: MovementItem = {
   ...fijoActivo,
-  frequency: "ANNUAL",
+  frequency: 12,
   description: "Renovación",
+};
+
+const fijoCadaCincoMeses: MovementItem = {
+  ...fijoActivo,
+  frequency: 5,
+  description: "Mantenimiento",
 };
 
 const unico: MovementItem = {
@@ -144,6 +153,8 @@ const unico: MovementItem = {
   timezone: "America/Argentina/Buenos_Aires",
   installment: null,
   frequency: null,
+  startMonth: null,
+  endMonth: null,
   skipped: false,
   category: { id: "cat-2", name: "Alimentación", color: "#00FF00", scope: "BOTH" },
   paymentMethod: null,
@@ -153,6 +164,7 @@ const unico: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 10000,
+  calculatedChildren: [],
 };
 
 const cuota: MovementItem = {
@@ -165,6 +177,8 @@ const cuota: MovementItem = {
   timezone: null,
   installment: { number: 3, total: 12, startMonth: "2026-01" },
   frequency: null,
+  startMonth: null,
+  endMonth: null,
   skipped: false,
   category: { id: "cat-3", name: "Tecnología", color: "#0000FF", scope: "EXPENSE" },
   paymentMethod: null,
@@ -174,6 +188,7 @@ const cuota: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 50000,
+  calculatedChildren: [],
 };
 
 /** Fijo calculado (hijo) */
@@ -382,30 +397,79 @@ describe("MovementItemRow — render básico", () => {
   });
 });
 
+// ─── Tests: Card de detalle de movimiento — invocación cuerpo↔kebab (P4) ─────
+
+describe("MovementItemRow — Card de detalle: invocación cuerpo abre card, kebab abre menú", () => {
+  it("el cuerpo de la fila es role=button con aria-label 'Ver detalle de {nombre}'", () => {
+    renderRow(fijoActivo);
+    expect(screen.getByRole("button", { name: "Ver detalle de Alquiler" })).toBeInTheDocument();
+  });
+
+  it("clic en el cuerpo de la fila abre la card de detalle", () => {
+    renderRow(fijoActivo);
+    fireEvent.click(screen.getByRole("button", { name: "Ver detalle de Alquiler" }));
+    // La card muestra la ficha (rótulo "Categoría" es exclusivo de la card)
+    expect(screen.getByText("Categoría")).toBeInTheDocument();
+  });
+
+  it("Enter en el cuerpo de la fila (con foco) abre la card de detalle", () => {
+    renderRow(fijoActivo);
+    const row = screen.getByRole("button", { name: "Ver detalle de Alquiler" });
+    fireEvent.keyDown(row, { key: "Enter" });
+    expect(screen.getByText("Categoría")).toBeInTheDocument();
+  });
+
+  it("clic en el kebab NO abre la card de detalle (stopPropagation)", () => {
+    renderRow(fijoActivo);
+    const trigger = screen.getByRole("button", { name: /acciones de alquiler/i });
+    fireEvent.click(trigger);
+    // El menú de acciones abrió (ítem "Editar" visible), pero la card no
+    expect(screen.getByRole("menuitem", { name: /editar/i })).toBeInTheDocument();
+    expect(screen.queryByText("Categoría")).not.toBeInTheDocument();
+  });
+
+  it("'Editar' del kebab llama a onEdit sin pasar por la card", () => {
+    const onEdit = vi.fn();
+    render(
+      <MovementItemRow movement={fijoActivo} viewMonth="2026-06" onEdit={onEdit} onDelete={vi.fn()} />,
+      { wrapper: createWrapper() },
+    );
+    fireEvent.click(screen.getByRole("button", { name: /acciones de alquiler/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /editar/i }));
+    expect(onEdit).toHaveBeenCalledWith(fijoActivo);
+    expect(screen.queryByText("Categoría")).not.toBeInTheDocument();
+  });
+});
+
 // ─── Tests: frecuencia dinámica en sublínea (P2 — Fase 1.1.1) ────────────────
 
-describe("MovementItemRow — frecuencia dinámica en la sublínea (P2)", () => {
-  it("muestra 'mensual' para MONTHLY", () => {
+describe("MovementItemRow — frecuencia dinámica en la sublínea (P2 / P1-P4 entero 1..12)", () => {
+  it("muestra 'mensual' para frequency=1", () => {
     renderRow(fijoActivo);
     expect(screen.getByText("mensual")).toBeInTheDocument();
   });
 
-  it("muestra 'bimestral' para BIMONTHLY", () => {
+  it("muestra 'bimestral' para frequency=2", () => {
     renderRow(fijoBimestral);
     expect(screen.getByText("bimestral")).toBeInTheDocument();
   });
 
-  it("muestra 'trimestral' para QUARTERLY", () => {
+  it("muestra 'trimestral' para frequency=3", () => {
     renderRow(fijoTrimestral);
     expect(screen.getByText("trimestral")).toBeInTheDocument();
   });
 
-  it("muestra 'semestral' para BIANNUAL", () => {
+  it("muestra 'cada 5 meses' para frequency=5 (etiqueta híbrida)", () => {
+    renderRow(fijoCadaCincoMeses);
+    expect(screen.getByText("cada 5 meses")).toBeInTheDocument();
+  });
+
+  it("muestra 'semestral' para frequency=6", () => {
     renderRow(fijoSemestral);
     expect(screen.getByText("semestral")).toBeInTheDocument();
   });
 
-  it("muestra 'anual' para ANNUAL", () => {
+  it("muestra 'anual' para frequency=12", () => {
     renderRow(fijoAnual);
     expect(screen.getByText("anual")).toBeInTheDocument();
   });
@@ -413,6 +477,35 @@ describe("MovementItemRow — frecuencia dinámica en la sublínea (P2)", () => 
   it("no muestra segmento de frecuencia para movimientos únicos", () => {
     renderRow(unico);
     expect(screen.queryByText(/mensual|bimestral|trimestral|semestral|anual/i)).not.toBeInTheDocument();
+  });
+});
+
+// ─── Tests: col 3 — un solo discriminador (P4 — Card de detalle de movimiento) ──
+// El arranque del fijo ("desde Mmm AAAA") migró a la card de detalle
+// (docs/design.md §"Card de detalle de movimiento"); la col 3 de la fila
+// vuelve a ir vacía para fijos. Cobertura del arranque: movement-detail-card.test.tsx.
+
+describe("MovementItemRow — col 3 (un solo discriminador)", () => {
+  it("fijo: la col 3 NO muestra el arranque (col vacía)", () => {
+    renderRow(fijoActivo);
+    expect(screen.queryByText("desde")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ene 2026")).not.toBeInTheDocument();
+  });
+
+  it("único: sigue mostrando su fecha (sin hora)", () => {
+    renderRow(unico);
+    expect(screen.queryByText(/^desde$/)).not.toBeInTheDocument();
+  });
+
+  it("cuota: sigue mostrando 'Cuota X/N'", () => {
+    renderRow(cuota);
+    expect(screen.getByText("Cuota 3/12")).toBeInTheDocument();
+    expect(screen.queryByText(/^desde$/)).not.toBeInTheDocument();
+  });
+
+  it("un calculado de origen fijo tampoco muestra arranque en la fila", () => {
+    renderRow({ ...fijoCalculado, startMonth: "2026-03" });
+    expect(screen.queryByText("Mar 2026")).not.toBeInTheDocument();
   });
 });
 
@@ -694,8 +787,12 @@ describe("MovementItemRow — Fase 1.1.7: indicadores calculado/padre", () => {
 
   it("ítem calculado muestra el segmento fusionado 'desde Sueldo' en la sublínea", () => {
     renderRow(fijoCalculado);
-    expect(screen.getByText("Sueldo")).toBeInTheDocument();
-    expect(screen.getByText("desde")).toBeInTheDocument();
+    const origenNode = screen.getByText("Sueldo");
+    expect(origenNode).toBeInTheDocument();
+    // El segmento "↳ desde {Origen}" es el padre inmediato del nombre de origen en la
+    // sublínea — distinto del "desde" de col 3 (arranque del fijo, P4), que también
+    // está presente en la fila porque fijoCalculado es un calculado de origen fijo.
+    expect(origenNode.parentElement).toHaveTextContent("desde Sueldo");
   });
 
   it("ítem no calculado NO muestra el chip 'Calculado'", () => {
@@ -978,17 +1075,20 @@ describe("MovementItemRow — Fase 1.2.3: display cross-rate", () => {
     expect(screen.getByText("−$1.800,00")).toBeInTheDocument();
   });
 
-  it("muestra el badge de moneda original 'USD' en cross-rate", () => {
+  // Card de detalle de movimiento (P4): el badge de código de moneda y la
+  // segunda línea de valor original migraron a la card — la fila (col 4)
+  // muestra SIEMPRE una sola línea, aun en cross-rate. Cobertura del badge y
+  // el valor original: movement-detail-card.test.tsx.
+  it("NO muestra el badge de código de moneda en la fila, aun en cross-rate", () => {
     renderRow(unicoUSD);
-    // El badge usa aria-label o el texto
-    const badge = screen.getByText("USD");
-    expect(badge).toBeInTheDocument();
+    expect(screen.queryByText("USD")).not.toBeInTheDocument();
   });
 
-  it("muestra el valor original en la segunda línea con símbolo 'US$15,00' (Fase 1.2.3-ext)", () => {
+  it("NO muestra segunda línea de valor original en la fila, aun en cross-rate (col 4 una sola línea)", () => {
     renderRow(unicoUSD);
-    // Fase 1.2.3-ext: el valor original usa el símbolo "US$" en vez del código "USD X"
-    expect(screen.getByText("US$15,00")).toBeInTheDocument();
+    expect(screen.queryByText("US$15,00")).not.toBeInTheDocument();
+    // Solo la cifra convertida dominante
+    expect(screen.getAllByText(/\$\d/)).toHaveLength(1);
   });
 
   it("NO muestra badge ni segunda línea cuando currency === defaultCurrency (ARS)", () => {
@@ -1102,15 +1202,16 @@ describe("MovementItemRow — calculado de fijo: acción 'Anular este mes' dispo
   });
 });
 
-// ─── Tests: indicador "Débito automático" en la zona de estados (P4 / rediseño sublínea) ──
+// ─── Tests: "Débito automático" migró a la card de detalle (P4 — Card de detalle) ──
+// El glifo Zap ya no vive en la zona de estados de la fila — cobertura de su
+// presencia en la ficha: movement-detail-card.test.tsx.
 
-describe("MovementItemRow — indicador 'Débito automático' (P4)", () => {
-  it("muestra el glifo (sin texto visible) con aria-label/title 'Débito automático' cuando autoDebit === true", () => {
+describe("MovementItemRow — 'Débito automático' NO vive en la fila (P4)", () => {
+  it("NO muestra el glifo aunque autoDebit === true", () => {
     const conDebitoAutomatico: MovementItem = { ...unico, autoDebit: true };
     renderRow(conDebitoAutomatico);
-    // Rediseño de sublínea: pierde el label visible, queda solo glifo con aria-label + title
     expect(screen.queryByText("Débito automático")).not.toBeInTheDocument();
-    expect(screen.getByTitle("Débito automático")).toBeInTheDocument();
+    expect(screen.queryByTitle("Débito automático")).not.toBeInTheDocument();
   });
 
   it("NO muestra el glifo cuando autoDebit === false", () => {
@@ -1141,16 +1242,15 @@ describe("MovementItemRow — rediseño de la sublínea (dos zonas)", () => {
     expect(dot).toHaveStyle({ background: baseCategory.color });
   });
 
-  it("zona de estados no se renderiza cuando no hay padre ni débito automático", () => {
-    renderRow(unico); // hasCalculated=false, autoDebit=null
-    expect(screen.queryByTitle("Débito automático")).not.toBeInTheDocument();
+  it("zona de estados no se renderiza cuando no hay padre ni marca de límite", () => {
+    renderRow(unico); // hasCalculated=false
     expect(screen.queryByTitle(/tiene movimiento/i)).not.toBeInTheDocument();
   });
 
-  it("zona de estados muestra padre (GitBranch) y débito automático juntos cuando ambos aplican", () => {
+  it("zona de estados muestra el glifo de padre (GitBranch) cuando aplica — sin débito automático (migró a la card)", () => {
     const padreConDebito: MovementItem = { ...fijoPadre, autoDebit: true };
     renderRow(padreConDebito);
     expect(screen.getByTitle(/tiene movimiento/i)).toBeInTheDocument();
-    expect(screen.getByTitle("Débito automático")).toBeInTheDocument();
+    expect(screen.queryByTitle("Débito automático")).not.toBeInTheDocument();
   });
 });

@@ -20,7 +20,6 @@ import {
   Currency,
   FormulaOperator,
   MovementType,
-  RecurringFrequency,
 } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { RecurringService } from '../../../src/recurring/recurring.service';
@@ -77,7 +76,7 @@ class InMemoryRecurringDB {
       description: data.description ?? null,
       startMonth: data.startMonth,
       deletedFrom: data.deletedFrom ?? null,
-      frequency: data.frequency ?? RecurringFrequency.MONTHLY,
+      frequency: data.frequency ?? 1,
       chainId,
       sourceChainId: data.sourceChainId ?? null,
       sourceMovementId: data.sourceMovement?.connect?.id ?? data.sourceMovementId ?? null,
@@ -649,7 +648,7 @@ describe('Bug B — flujo real: crear fijo → split → crear calculado', () =>
       amountCents: 120000,
       categoryId: CATEGORY_ID,
       startMonth: '2026-01',
-      frequency: RecurringFrequency.QUARTERLY,
+      frequency: 3,
     });
 
     // Calculado creado con startMonth='2026-02' (mes "desalineado" para QUARTERLY).
@@ -690,7 +689,7 @@ describe('Bug B — flujo real: crear fijo → split → crear calculado', () =>
       amountCents: 50000,
       categoryId: CATEGORY_ID,
       startMonth: '2026-01',
-      frequency: RecurringFrequency.BIMONTHLY,
+      frequency: 2,
     });
 
     // Calculado creado con startMonth='2026-02' (desalineado: BIMONTHLY desde 2026-02
@@ -730,7 +729,7 @@ describe('Bug B — flujo real: crear fijo → split → crear calculado', () =>
       amountCents: 100000,
       categoryId: CATEGORY_ID,
       startMonth: '2026-01',
-      frequency: RecurringFrequency.QUARTERLY,
+      frequency: 3,
     });
 
     // Crear calculado ANTES del split

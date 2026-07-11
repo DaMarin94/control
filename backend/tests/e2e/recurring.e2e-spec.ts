@@ -20,7 +20,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { JwtService } from '@nestjs/jwt';
-import { CategoryScope, MovementType, RecurringFrequency } from '@prisma/client';
+import { CategoryScope, MovementType } from '@prisma/client';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { ResponseInterceptor } from '../../src/common/interceptors/response.interceptor';
@@ -110,7 +110,7 @@ function makeDbRecurring(overrides: Record<string, unknown> = {}) {
     userId: USER_A_ID,
     categoryId: CAT_ID,
     type: MovementType.EXPENSE,
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     amountCents: 5000,
     description: null,
     startMonth: '2026-06',

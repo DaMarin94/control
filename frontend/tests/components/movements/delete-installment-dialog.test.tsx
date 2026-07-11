@@ -40,6 +40,8 @@ const mockCuotaMovement: MovementItem = {
     startMonth: "2026-01",
   },
   frequency: null,
+  startMonth: null,
+  endMonth: null,
   skipped: false,
   category: {
     id: "cat-1",
@@ -54,6 +56,7 @@ const mockCuotaMovement: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 50000,
+  calculatedChildren: [],
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

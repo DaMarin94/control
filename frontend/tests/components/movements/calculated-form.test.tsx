@@ -120,7 +120,9 @@ const origenFijo: MovementItem = {
   occurredAt: null,
   timezone: null,
   installment: null,
-  frequency: "MONTHLY",
+  frequency: 1,
+  startMonth: "2026-01",
+  endMonth: null,
   skipped: false,
   category: { id: "cat-income", name: "Sueldo", color: "#00FF00", scope: "INCOME" },
   paymentMethod: null,
@@ -130,6 +132,7 @@ const origenFijo: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 100000,
+  calculatedChildren: [],
 };
 
 /** Ítem único de origen — Fase 1.1.8 */
@@ -143,6 +146,8 @@ const origenUnico: MovementItem = {
   timezone: "America/Argentina/Buenos_Aires",
   installment: null,
   frequency: null,
+  startMonth: null,
+  endMonth: null,
   skipped: false,
   category: { id: "cat-expense", name: "Servicios", color: "#FF5733", scope: "EXPENSE" },
   paymentMethod: null,
@@ -152,6 +157,7 @@ const origenUnico: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 50000,
+  calculatedChildren: [],
 };
 
 /** Ítem cuota de origen — Fase 1.1.8 */
@@ -165,6 +171,8 @@ const origenCuota: MovementItem = {
   timezone: null,
   installment: { number: 2, total: 6, startMonth: "2026-05" },
   frequency: null,
+  startMonth: null,
+  endMonth: null,
   skipped: false,
   category: { id: "cat-expense", name: "Tecnología", color: "#0000FF", scope: "EXPENSE" },
   paymentMethod: null,
@@ -174,6 +182,7 @@ const origenCuota: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 30000,
+  calculatedChildren: [],
 };
 
 /** Ítem calculado (para modo editar — origen fijo) */
@@ -186,7 +195,9 @@ const calculadoExistente: MovementItem = {
   occurredAt: null,
   timezone: null,
   installment: null,
-  frequency: "MONTHLY",
+  frequency: 1,
+  startMonth: "2026-01",
+  endMonth: null,
   skipped: false,
   category: { id: "cat-expense", name: "Servicios", color: "#FF5733", scope: "EXPENSE" },
   paymentMethod: null,
@@ -205,6 +216,7 @@ const calculadoExistente: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: -10000,
+  calculatedChildren: [],
 };
 
 /** Ítem calculado de origen único (para modo editar — Fase 1.1.8) */
@@ -218,6 +230,8 @@ const calculadoUnicoExistente: MovementItem = {
   timezone: "America/Argentina/Buenos_Aires",
   installment: null,
   frequency: null,
+  startMonth: null,
+  endMonth: null,
   skipped: false,
   category: { id: "cat-expense", name: "Servicios", color: "#FF5733", scope: "EXPENSE" },
   paymentMethod: null,
@@ -236,6 +250,7 @@ const calculadoUnicoExistente: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 5000,
+  calculatedChildren: [],
 };
 
 /** Ítem calculado (origen fijo), pero YA anulado — alimenta el test de D16 */

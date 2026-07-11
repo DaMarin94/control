@@ -1049,6 +1049,8 @@ describe("InstallmentForm — prefill de método de pago por defecto", () => {
           name: mockCreditMethod.name,
           icon: mockCreditMethod.icon,
           type: mockCreditMethod.type,
+          closingDay: mockCreditMethod.closingDay,
+          paymentDay: mockCreditMethod.paymentDay,
         },
       },
     });

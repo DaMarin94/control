@@ -1025,7 +1025,14 @@ describe("TransactionForm — Débito automático (P4, corrección de alcance)",
     const debitTx: Transaction = {
       ...mockTransaction,
       paymentMethodId: "pm-debit-1",
-      paymentMethod: { id: "pm-debit-1", name: "Débito Banco Nación", icon: "card", type: "DEBIT" },
+      paymentMethod: {
+        id: "pm-debit-1",
+        name: "Débito Banco Nación",
+        icon: "card",
+        type: "DEBIT",
+        closingDay: null,
+        paymentDay: null,
+      },
       autoDebit: true,
     };
     renderForm({ transaction: debitTx });
@@ -1129,6 +1136,8 @@ describe("TransactionForm — prefill de método de pago por defecto", () => {
           name: mockCreditMethod.name,
           icon: mockCreditMethod.icon,
           type: mockCreditMethod.type,
+          closingDay: mockCreditMethod.closingDay,
+          paymentDay: mockCreditMethod.paymentDay,
         },
       },
     });

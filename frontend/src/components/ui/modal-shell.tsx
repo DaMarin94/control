@@ -55,6 +55,13 @@ export interface ModalShellProps {
   role?: "dialog" | "alertdialog";
   /** true = este shell se abre ENCIMA de otro modal ya montado (z-50 en vez de z-40). */
   stacked?: boolean;
+  /**
+   * true = el clic en el scrim cierra el modal (excepción del cierre tipo
+   * popover — ver docs/design.md §"Card de detalle de movimiento": read-only
+   * y auxiliar, no demanda una decisión explícita). Default false: el resto
+   * de los modales (confirmaciones, forms) NO cierran por clic afuera.
+   */
+  closeOnScrimClick?: boolean;
   children: ReactNode;
 }
 
@@ -65,6 +72,7 @@ export function ModalShell({
   describedBy,
   role = "dialog",
   stacked = false,
+  closeOnScrimClick = false,
   children,
 }: ModalShellProps) {
   const [mounted, setMounted] = useState(false);
@@ -88,7 +96,19 @@ export function ModalShell({
   if (!mounted) return null;
 
   return createPortal(
-    /* Scrim — click afuera NO cierra: son superficies que demandan una decisión explícita. */
+    /*
+     * Scrim — por default el click afuera NO cierra: son superficies que
+     * demandan una decisión explícita. `closeOnScrimClick` es la excepción
+     * opt-in (card de detalle de movimiento, read-only/auxiliar).
+     *
+     * stopPropagation SIEMPRE (no solo cuando closeOnScrimClick): el shell se
+     * monta vía portal a `document.body`, pero el evento sintético de React
+     * burbujea por el árbol de REACT (donde el shell sigue siendo hijo del
+     * componente que lo abre), no por el árbol de DOM. Sin este corte, un
+     * click en el scrim sigue de largo hasta el `onClick` del disparador (ej:
+     * la fila que abre la card con `onClick={() => setIsDetailOpen(true)}`),
+     * reabriéndolo en el mismo tick y neutralizando el cierre.
+     */
     <div
       className={cn(
         "fixed inset-0 flex items-center justify-center p-6",
@@ -99,17 +119,24 @@ export function ModalShell({
       aria-modal="true"
       aria-labelledby={labelledBy}
       aria-describedby={describedBy}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (closeOnScrimClick) onClose();
+      }}
     >
       {/* Panel — columna flex acotada al alto del viewport. El padding del
           scrim (p-6 = 24px) y el max-height (calc(100dvh-48px)) están atados:
           48px = 2 × 24px. Si el padding del scrim cambia, este calc lo sigue
-          por construcción (única fuente: este componente). */}
+          por construcción (única fuente: este componente).
+          stopPropagation: el clic DENTRO del panel nunca debe burbujear al
+          scrim (evitaría cerrar por error un modal con closeOnScrimClick). */}
       <div
         className={cn(
           "w-full bg-panel border border-line overflow-hidden animate-modal-pop max-h-[calc(100dvh-48px)] flex flex-col",
           VARIANT_MAX_WIDTH[variant],
         )}
         style={{ borderRadius: "18px", boxShadow: "var(--shadow-lg)" }}
+        onClick={(e) => e.stopPropagation()}
       >
         {children}
       </div>
@@ -130,7 +157,7 @@ export interface ModalShellHeaderProps {
 export function ModalShellHeader({ titleId, title, onClose }: ModalShellHeaderProps) {
   return (
     <div className="flex items-center justify-between px-[22px] pt-5 pb-4 shrink-0">
-      <h2 id={titleId} className="text-[18px] font-bold tracking-[-0.01em] text-ink m-0">
+      <h2 id={titleId} className="text-[18px] font-bold tracking-[-0.01em] text-ink m-0 min-w-0 flex-1 truncate">
         {title}
       </h2>
       {onClose && (

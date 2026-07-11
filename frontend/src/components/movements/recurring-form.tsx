@@ -56,22 +56,44 @@ const logger = createLogger("RecurringForm");
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
-/** Opciones de frecuencia: valor → etiqueta capitalizada (para el select) */
+/**
+ * Opciones de frecuencia: valor (entero 1..12) → etiqueta capitalizada (para
+ * el select). Fuente única: docs/design.md "Frecuencia del fijo — entero
+ * 1..12 y sus etiquetas", columna "Select". Orden estrictamente 1→12.
+ */
 const FREQUENCY_OPTIONS: { value: RecurringFrequency; label: string }[] = [
-  { value: "MONTHLY", label: "Mensual" },
-  { value: "BIMONTHLY", label: "Bimestral" },
-  { value: "QUARTERLY", label: "Trimestral" },
-  { value: "BIANNUAL", label: "Semestral" },
-  { value: "ANNUAL", label: "Anual" },
+  { value: 1, label: "Mensual" },
+  { value: 2, label: "Bimestral" },
+  { value: 3, label: "Trimestral" },
+  { value: 4, label: "Cuatrimestral" },
+  { value: 5, label: "Cada 5 meses" },
+  { value: 6, label: "Semestral" },
+  { value: 7, label: "Cada 7 meses" },
+  { value: 8, label: "Cada 8 meses" },
+  { value: 9, label: "Cada 9 meses" },
+  { value: 10, label: "Cada 10 meses" },
+  { value: 11, label: "Cada 11 meses" },
+  { value: 12, label: "Anual" },
 ];
 
-/** Etiqueta en minúscula para la nota de recurrencia */
-const FREQUENCY_LABEL_LOWER: Record<RecurringFrequency, string> = {
-  MONTHLY: "cada mes",
-  BIMONTHLY: "cada dos meses",
-  QUARTERLY: "cada tres meses",
-  BIANNUAL: "cada seis meses",
-  ANNUAL: "cada año",
+/**
+ * Etiqueta en minúscula (palabras deletreadas) para la nota de recurrencia
+ * del form. Columna "Ayuda del form" de la misma tabla — deletrea el número
+ * porque el usuario confirma acá una decisión irreversible (RF-MF-006).
+ */
+const FREQUENCY_LABEL_LOWER: Record<number, string> = {
+  1: "cada mes",
+  2: "cada dos meses",
+  3: "cada tres meses",
+  4: "cada cuatro meses",
+  5: "cada cinco meses",
+  6: "cada seis meses",
+  7: "cada siete meses",
+  8: "cada ocho meses",
+  9: "cada nueve meses",
+  10: "cada diez meses",
+  11: "cada once meses",
+  12: "cada año",
 };
 
 const recurringSchema = z.object({
@@ -99,11 +121,11 @@ const recurringSchema = z.object({
     .min(1, "El mes de inicio es requerido")
     .regex(/^\d{4}-\d{2}$/, "El mes debe tener formato YYYY-MM"),
   /**
-   * Frecuencia — siempre presente en el schema.
-   * En edición se inicializa con el valor del fijo existente (o MONTHLY como fallback)
+   * Frecuencia — entero 1..12, siempre presente en el schema.
+   * En edición se inicializa con el valor del fijo existente (o 1 como fallback)
    * para satisfacer el schema; NO se envía en el PATCH (el backend no permite cambiarla).
    */
-  frequency: z.enum(["MONTHLY", "BIMONTHLY", "QUARTERLY", "BIANNUAL", "ANNUAL"]),
+  frequency: z.number().int().min(1).max(12),
   categoryId: z.string().min(1, "La categoría es requerida"),
   /** Método de pago opcional (RF-PM-006). "" = ninguno. */
   paymentMethodId: z.string().optional(),
@@ -188,9 +210,9 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, edi
         currency: recurring.currency ?? defaultCurrency,
         exchangeRateInput: initialEditingExchangeRateInput,
         startMonth: getCurrentMonth(),
-        // frequency: se inicializa con el valor del fijo (o MONTHLY como fallback) para
+        // frequency: se inicializa con el valor del fijo (o 1 como fallback) para
         // satisfacer la validación del schema en edición — NO se envía en el PATCH.
-        frequency: recurring.frequency ?? "MONTHLY",
+        frequency: recurring.frequency ?? 1,
         categoryId: recurring.categoryId,
         paymentMethodId: recurring.paymentMethodId ?? "",
         autoDebit: recurring.autoDebit ?? false,
@@ -202,7 +224,7 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, edi
         currency: defaultCurrency,
         exchangeRateInput: "",
         startMonth: defaultMonth ?? getCurrentMonth(),
-        frequency: "MONTHLY",
+        frequency: 1,
         categoryId: "",
         paymentMethodId: "",
         autoDebit: false,
@@ -281,7 +303,7 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, edi
         currency: newCurrency,
         exchangeRateInput: formatExchangeRate(recurring.exchangeRate ?? 1),
         startMonth: getCurrentMonth(),
-        frequency: recurring.frequency ?? "MONTHLY",
+        frequency: recurring.frequency ?? 1,
         categoryId: recurring.categoryId,
         paymentMethodId: recurring.paymentMethodId ?? "",
         autoDebit: recurring.autoDebit ?? false,
@@ -603,7 +625,7 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, edi
                   <Select
                     id="rec-frequency"
                     value={field.value}
-                    onChange={field.onChange}
+                    onChange={(e) => field.onChange(Number(e.target.value))}
                     error={errors.frequency?.message}
                   >
                     {FREQUENCY_OPTIONS.map((opt) => (

@@ -233,6 +233,25 @@ export function formatMonthLabel(month: string): string {
 }
 
 /**
+ * Formatea un mes en formato YYYY-MM como rótulo compacto: mes abreviado a
+ * 3 letras capitalizado + año completo. Usado para el arranque del fijo en
+ * la col 3 de `/mes` ("desde Mar 2024") — distinto de `formatMonthLabel`
+ * (mes completo, "marzo 2024") y de `formatDate` (día/mes, "02 Jun").
+ * Ej: "2024-03" → "Mar 2024"
+ */
+export function formatMonthShort(month: string): string {
+  const date = new Date(`${month}-01T12:00:00Z`);
+  const formatter = new Intl.DateTimeFormat("es-AR", {
+    month: "short",
+    timeZone: "UTC",
+  });
+  const monthPart = formatter.format(date);
+  const capitalized = monthPart.charAt(0).toUpperCase() + monthPart.slice(1);
+  const year = date.getUTCFullYear();
+  return `${capitalized} ${year}`;
+}
+
+/**
  * Dado un mes YYYY-MM, devuelve el mes anterior en formato YYYY-MM.
  * Ej: "2026-01" → "2025-12"
  */

@@ -18,7 +18,7 @@
  */
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { CategoryScope, FormulaOperator, MovementType, RecurringFrequency } from '@prisma/client';
+import { CategoryScope, FormulaOperator, MovementType } from '@prisma/client';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { MovementsRepository } from '../../../src/movements/movements.repository';
@@ -41,7 +41,7 @@ type RecurringRow = {
   description: string | null;
   startMonth: string;
   deletedFrom: string | null;
-  frequency: RecurringFrequency;
+  frequency: number;
   chainId: string;
   sourceChainId: string | null;
   sourceMovementId: string | null;
@@ -105,7 +105,7 @@ function makeNormalRow(overrides: Partial<RecurringRow> = {}): RecurringRow {
     description: 'Alquiler',
     startMonth: '2026-01',
     deletedFrom: null,
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     chainId: ORIGIN_CHAIN_ID,
     sourceChainId: null,
     sourceMovementId: null,
@@ -138,7 +138,7 @@ function makeCalcRow(overrides: Partial<RecurringRow> = {}): RecurringRow {
     description: 'Expensas (10% del alquiler)',
     startMonth: '2026-01',
     deletedFrom: null,
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     chainId: CALC_CHAIN_ID,
     sourceChainId: ORIGIN_CHAIN_ID,
     sourceMovementId: null,
@@ -600,6 +600,23 @@ describe('MovementsRepository — calculados (Fase 1.1.7)', () => {
       const result = await repo.findFijosByMonth(USER_A, '2026-06');
 
       expect(result[0].hasCalculated).toBe(false);
+    });
+
+    it('fijo origen con calculado activo trae el derivado en calculatedChildren (Fase 1.1.9)', async () => {
+      const origin = makeNormalRow({ amountCents: 10000 });
+      const calc = makeCalcRow();
+      mockPrisma.recurring.findMany.mockResolvedValue([origin, calc]);
+
+      const result = await repo.findFijosByMonth(USER_A, '2026-06');
+
+      const originItem = result.find((r) => r.id === 'normal-001')!;
+      expect(originItem.calculatedChildren).toHaveLength(1);
+      expect(originItem.calculatedChildren[0].id).toBe('calc-001');
+      // 10% de 10000 = 1000
+      expect(originItem.calculatedChildren[0].convertedAmountCents).toBe(1000);
+
+      const calcItem = result.find((r) => r.id === 'calc-001')!;
+      expect(calcItem.calculatedChildren).toEqual([]);
     });
   });
 

@@ -130,6 +130,8 @@ const mockMovementExpense = {
   timezone: "America/Argentina/Buenos_Aires",
   installment: null,
   frequency: null,
+  startMonth: null,
+  endMonth: null,
   skipped: false,
   category: { id: "cat-1", name: "Alimentación", color: "#FF5733", scope: "BOTH" as const },
   paymentMethod: null,
@@ -139,6 +141,7 @@ const mockMovementExpense = {
   currency: "ARS" as const,
   exchangeRate: 1,
   convertedAmountCents: 500000, // $5000
+  calculatedChildren: [],
 };
 
 const mockData: MonthMovements = {

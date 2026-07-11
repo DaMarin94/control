@@ -8,7 +8,7 @@
 
 Orden acordado:
 
-**P0-a ✅ → P0-b ✅ → P6 ✅ → P1 + P4 → P2 + P3**
+**P0-a ✅ → P0-b ✅ → P6 ✅ → P1 ✅ + P4 ✅ → P2 + P3**
 
 P0-a: **cerrado** (política enganchada al workflow: `docs/design.md`, `docs/qa-visual.md` y los agentes).
 P0-b: **cerrado** (barrido de la deuda responsive de las superficies existentes).
@@ -111,7 +111,7 @@ El segmented no está mal hecho, está **mal usado**. Un segmented control es un
 
 ---
 
-## P1 — Periodicidad del fijo: entero 1..12
+## P1 — Periodicidad del fijo: entero 1..12 ✅ CERRADO
 
 **Cambia el modelo. Requiere migración.**
 
@@ -142,7 +142,7 @@ No existen palabras en castellano para 5, 7, 8, 9, 10 y 11 meses:
 
 ---
 
-## P4 — Mes de arranque de cada fijo en `/mes`
+## P4 — Mes de arranque de cada fijo en `/mes` ✅ CERRADO
 
 **Cambia el contrato.**
 
@@ -169,6 +169,16 @@ Razón: un calculado creado en enero 2026 sobre un origen de marzo 2024 no exist
 ### Diseño
 
 Ubicación y forma visual del dato en la línea del ítem: la define `control-design`.
+
+---
+
+## Card de detalle de movimiento ✅ CERRADO
+
+**Surgió durante P1 + P4.** Al adelgazar la línea del ítem fijo se decidió mover **todo** el metadato secundario de la fila de `/mes` a una **card de detalle read-only** que se abre al clickear el cuerpo de la fila; la fila queda solo con lo glanceable (identidad + discriminador + monto). El arranque del fijo (P4) dejó de ir en la fila y pasó a la card, combinado con un dato nuevo del contrato: **`endMonth`** (fin/vigencia del fijo).
+
+- **Contrato:** `MovementItem` suma `endMonth: string \| null` (fin del fijo lógico, resuelto por cadena con `loadChainBounds`, hermano de la resolución de `startMonth`); el método de pago embebido suma `closingDay`/`paymentDay` (crédito). La card es **bidireccional origen ↔ derivados**: además de mostrar el "Origen" desde un calculado, un ítem **origen** de calculados suma `calculatedChildren: CalculatedChild[]` (los derivados del mes, resueltos para los 3 orígenes) y la card los lista read-only. Ver `docs/data-model.md`.
+- **Frontend:** `MovementDetailCard` (read-only sobre `ModalShell`), prop `closeOnScrimClick`, `lib/formula.ts` (extraído de `calculated-form`), `FREQUENCY_LABEL` + `formatConvertedAmountDisplay` en `lib/movements.ts`. Ver `docs/frontend.md`.
+- **Funcional / diseño:** RF-VM-007 (+ RF-MF-007 reescrito) en `requirements.md` / `screens.md`; anatomía visual en `docs/design.md`. **QA visual: verificado.**
 
 ---
 

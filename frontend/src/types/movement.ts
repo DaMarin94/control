@@ -83,6 +83,23 @@ export interface CalculatedInfo {
 /** Tipo de movimiento */
 export type MovementType = "EXPENSE" | "INCOME";
 
+/**
+ * Movimiento calculado derivado de este ítem (item es su origen), tal como
+ * aparece en `MovementItem.calculatedChildren` (Card de detalle — bloque
+ * "Calculados", docs/design.md §"Card de detalle de movimiento").
+ * Un ítem que es él mismo calculado nunca tiene derivados.
+ */
+export interface CalculatedChild {
+  id: string;
+  description: string | null;
+  type: MovementType;
+  /** Monto convertido a la moneda default vigente — el que se muestra en la caja. */
+  convertedAmountCents: number;
+  formulaOperator: FormulaOperator;
+  formulaOperand: number;
+  formulaSign: number;
+}
+
 /** Categoría embebida en cada MovementItem */
 export interface MovementCategory {
   id: string;
@@ -131,11 +148,28 @@ export interface MovementItem {
    */
   installment: InstallmentInfo | null;
   /**
-   * Frecuencia de recurrencia (P2 — Fase 1.1.1).
-   * Presente solo para origin==="fijo" (su frecuencia: MONTHLY, BIMONTHLY, etc.).
+   * Frecuencia de recurrencia (P2 — Fase 1.1.1; P1/P4 — entero 1..12).
+   * Presente solo para origin==="fijo" (su frecuencia, ej. 1=mensual, 12=anual).
    * null para "unico" y "cuota".
    */
   frequency: RecurringFrequency | null;
+  /**
+   * Mes de arranque del FIJO LÓGICO (P4), resuelto por cadena en el backend:
+   * `startMonth` de la primera fila de la cadena (`chainId`), no el del último split.
+   * Formato YYYY-MM. Presente (no-null) solo para origin==="fijo" — para calculados
+   * de origen fijo, es el arranque de SU PROPIA cadena (no la del origen).
+   * null para "unico" y "cuota" (la cuota conserva su `installment.startMonth`).
+   */
+  startMonth: string | null;
+  /**
+   * Mes de fin/vigencia del FIJO LÓGICO (Card de detalle de movimiento).
+   * Formato YYYY-MM, EXCLUSIVO: el mes indicado ya NO forma parte de la
+   * vigencia del fijo (el último mes activo es `prevMonth(endMonth)`).
+   * `null` = activo indefinidamente (sin fecha de fin).
+   * Presente (no-null u null) solo para origin==="fijo"; null para "unico"
+   * y "cuota".
+   */
+  endMonth: string | null;
   /**
    * Indica si el ítem está anulado para el mes consultado.
    * "fijo": P1 — Fase 1.1.1. "unico"/"cuota": P3 (extiende el toggle de skip).
@@ -184,6 +218,12 @@ export interface MovementItem {
    * Un calculado hereda el autoDebit de su origen — no persiste uno propio.
    */
   autoDebit: boolean | null;
+  /**
+   * Movimientos calculados derivados de este ítem, EN EL MES consultado
+   * (Card de detalle — bloque "Calculados"). [] si el ítem no tiene derivados
+   * o si el ítem mismo ES un calculado (un calculado nunca es origen de otro).
+   */
+  calculatedChildren: CalculatedChild[];
 }
 
 /** Totales del mes */

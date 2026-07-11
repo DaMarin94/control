@@ -43,6 +43,8 @@ function makeItem(
     timezone: null,
     installment: null,
     frequency: null,
+    startMonth: null,
+    endMonth: null,
     skipped: false,
     category: { id: "cat-1", name: "Test", color: "#000", scope: "BOTH" },
     paymentMethod: null,
@@ -52,6 +54,7 @@ function makeItem(
     currency: convertedAmountCents !== undefined ? "USD" : "ARS",
     exchangeRate: convertedAmountCents !== undefined ? 1200 : 1,
     convertedAmountCents: convertedAmountCents ?? amountCents,
+    calculatedChildren: [],
   };
 }
 
@@ -73,6 +76,8 @@ function makeUnico(
     timezone: null,
     installment: null,
     frequency: null,
+    startMonth: null,
+    endMonth: null,
     skipped: false,
     category: { id: "cat-1", name: "Test", color: "#000", scope: "BOTH" },
     paymentMethod: null,
@@ -82,6 +87,7 @@ function makeUnico(
     currency: "ARS",
     exchangeRate: 1,
     convertedAmountCents: amountCents,
+    calculatedChildren: [],
   };
 }
 

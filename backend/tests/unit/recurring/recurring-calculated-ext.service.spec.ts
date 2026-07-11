@@ -16,7 +16,6 @@ import {
   Currency,
   FormulaOperator,
   MovementType,
-  RecurringFrequency,
 } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { RecurringService } from '../../../src/recurring/recurring.service';
@@ -123,7 +122,7 @@ function makeCalculadoWithCategory(overrides: Partial<RecurringWithCategory> = {
     description: null,
     startMonth: '2026-06',
     deletedFrom: '2026-07',
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     chainId: 'chain-calc-001',
     sourceChainId: null,
     sourceMovementId: TX_ID,

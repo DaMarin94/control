@@ -19,6 +19,7 @@
  */
 
 import type { MovementItem } from "@/types/movement";
+import { formatCurrency } from "@/lib/format";
 
 /**
  * Dada una lista de MovementItem, devuelve la suma de magnitudes convertidas por tipo.
@@ -61,6 +62,54 @@ export function groupSubtotalCents(items: MovementItem[]): number {
   const { expense, income } = sumMovementTotals(items);
   return income - expense;
 }
+
+/**
+ * Cifra convertida dominante (a la moneda default) con su signo de
+ * presentación, compartida entre `MovementItemRow` (col 4) y
+ * `MovementDetailCard` (hero) — mismo cálculo, dos lugares (docs/design.md
+ * §"Card de detalle de movimiento").
+ *
+ * Para calculados: `convertedAmountCents` es SIEMPRE una magnitud (≥ 0); el
+ * signo real vive en `amountCents` (con signo). Para no-calculados: gastos
+ * con −$, ingresos con +$ (Math.abs de `convertedAmountCents`).
+ */
+export function formatConvertedAmountDisplay(
+  movement: MovementItem,
+  defaultCurrency: string,
+): string {
+  if (movement.calculated) {
+    const magnitude = Math.abs(movement.convertedAmountCents);
+    const signedCents = movement.amountCents;
+    if (signedCents === 0) return formatCurrency(0, defaultCurrency); // "$0,00" sin signo
+    if (signedCents < 0) return `−${formatCurrency(magnitude, defaultCurrency)}`; // "−$1.234,56"
+    return formatCurrency(magnitude, defaultCurrency); // positivo sin prefijo (valor derivado)
+  }
+  const cents = movement.convertedAmountCents;
+  const amountFormatted = formatCurrency(Math.abs(cents), defaultCurrency);
+  return movement.type === "EXPENSE" ? `−${amountFormatted}` : `+${amountFormatted}`;
+}
+
+/**
+ * Etiqueta en minúscula por valor de frequency (entero 1..12) — usada en la
+ * sublínea de `MovementItemRow` y (capitalizada) en la ficha de
+ * `MovementDetailCard`. Fuente única: docs/design.md "Frecuencia del fijo —
+ * entero 1..12 y sus etiquetas", columna "Sublínea del ítem" (híbrida: nombre
+ * canónico donde existe, "cada N meses" con dígito donde no).
+ */
+export const FREQUENCY_LABEL: Record<number, string> = {
+  1: "mensual",
+  2: "bimestral",
+  3: "trimestral",
+  4: "cuatrimestral",
+  5: "cada 5 meses",
+  6: "semestral",
+  7: "cada 7 meses",
+  8: "cada 8 meses",
+  9: "cada 9 meses",
+  10: "cada 10 meses",
+  11: "cada 11 meses",
+  12: "anual",
+};
 
 /**
  * Ordena los ítems únicos según el criterio elegido (client-side, Ola 2 Sub-fase C).

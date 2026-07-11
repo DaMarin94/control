@@ -17,6 +17,7 @@ import {
   getBrowserTimezone,
   getCurrentMonth,
   formatMonthLabel,
+  formatMonthShort,
   prevMonth,
   nextMonth,
 } from "@/lib/format";
@@ -328,6 +329,22 @@ describe("formatMonthLabel", () => {
     const result = formatMonthLabel("2026-01");
     expect(result).toContain("2026");
     expect(result.toLowerCase()).toMatch(/ene/);
+  });
+});
+
+// ─── formatMonthShort (P4 — arranque del fijo, col 3 de /mes) ────────────────
+
+describe("formatMonthShort", () => {
+  it("formatea '2024-03' como 'Mar 2024' (mes abreviado capitalizado + año)", () => {
+    expect(formatMonthShort("2024-03")).toBe("Mar 2024");
+  });
+
+  it("formatea '2026-01' como 'Ene 2026'", () => {
+    expect(formatMonthShort("2026-01")).toBe("Ene 2026");
+  });
+
+  it("formatea '2026-12' como 'Dic 2026'", () => {
+    expect(formatMonthShort("2026-12")).toBe("Dic 2026");
   });
 });
 

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { CategoryScope, Currency, FormulaOperator, MovementType, RecurringFrequency, Prisma } from '@prisma/client';
+import { CategoryScope, Currency, FormulaOperator, MovementType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { applyFormula } from '../recurring/formula.helper';
 import { convertToDisplayCurrency, convertToDisplayCurrencyByMonth, PivotRates, buildPivotRates, resolveNearestYearMonth } from '../common/currency.helper';
@@ -74,7 +74,8 @@ export interface RecurringForAnnual {
   anchorCurrency: Currency;
   startMonth: string;
   deletedFrom: string | null;
-  frequency: RecurringFrequency;
+  /** Periodicidad del fijo en meses (P1 — entero 1..12). */
+  frequency: number;
   /** Set de meses salteados (YYYY-MM) — vacío si no tiene skips */
   skippedMonths: Set<string>;
   categoryId: string;
@@ -185,6 +186,10 @@ export interface MovementEmbeddedPaymentMethod {
   name: string;
   icon: string;
   type: string;
+  /** Día de cierre del resumen (solo CREDIT; null para DEBIT/CASH — RN-021). */
+  closingDay: number | null;
+  /** Día de pago del resumen (solo CREDIT; null para DEBIT/CASH — RN-021). */
+  paymentDay: number | null;
 }
 
 /**
@@ -260,6 +265,29 @@ export interface CalculatedInfo {
 }
 
 /**
+ * Un derivado (calculado) del ítem PADRE, para el mes consultado (Fase 1.1.9 —
+ * "calculados en el origen"). Espejo minimalista de `CalculatedInfo` visto desde el
+ * origen: alcanza para renderizar una mini-fila read-only en el bloque "Derivados"
+ * de la card de detalle del padre (nombre, signo/color por type, monto mostrado,
+ * y los datos de fórmula por si el bloque los expone).
+ *
+ * Un calculado NUNCA es padre (RF-MCALC-001): para un ítem que ES un calculado,
+ * `calculatedChildren` es siempre `[]`.
+ */
+export interface CalculatedChild {
+  /** id del Recurring calculado derivado (mismo id que su propio MovementItem en el mes) */
+  id: string;
+  description: string | null;
+  /** Signo/color del derivado en este mes (derivado del signo del monto — RN-018) */
+  type: MovementType;
+  /** Monto convertido a la moneda de display, ya con el signo aplicado en |abs| (igual criterio que MovementItem.convertedAmountCents) */
+  convertedAmountCents: number;
+  formulaOperator: FormulaOperator;
+  formulaOperand: number;
+  formulaSign: number;
+}
+
+/**
  * MovementItem — ítem de la lista unificada del mes.
  *
  * El campo `origin` discrimina el tipo de movimiento para el front:
@@ -275,9 +303,27 @@ export interface CalculatedInfo {
  * - Cuotas: { number, total, startMonth }
  * - Únicos y fijos: null / ausente
  *
- * P2 (Fase 1.1.1) — campo frequency:
- * - Fijos: la frecuencia del fijo (RecurringFrequency)
+ * P1 — campo frequency:
+ * - Fijos: la frecuencia del fijo, entero 1..12 (meses de paso)
  * - Únicos y cuotas: null (no aplica)
+ *
+ * P4 — campo startMonth:
+ * - Fijos (origin==='fijo', normales y calculados de fijo): arranque del fijo LÓGICO,
+ *   resuelto por cadena (startMonth de la primera fila del chainId propio del ítem).
+ *   Un calculado de fijo ES un fijo con cadena propia: muestra SU PROPIO arranque
+ *   (el de su propio chainId), no el del origen.
+ * - Únicos y cuotas: null a este nivel (las cuotas lo siguen trayendo en installment.startMonth).
+ *
+ * Card de detalle de movimiento — campo endMonth:
+ * - Fijos (origin==='fijo', normales y calculados de fijo): fin del fijo LÓGICO
+ *   (vigencia), resuelto por cadena — el deletedFrom de la ÚLTIMA fila del chainId
+ *   propio del ítem (la de mayor startMonth = la fila vigente). Formato "YYYY-MM",
+ *   EXCLUSIVO (mismo criterio que Recurring.deletedFrom): el mes indicado ya NO
+ *   aparece. `null` = activo indefinidamente.
+ *   Un calculado de fijo ES un fijo con cadena propia: muestra SU PROPIO fin
+ *   (el de su propio chainId), no el del origen.
+ * - Únicos y cuotas: null (no aplica; las cuotas tienen su propio fin implícito
+ *   vía installment.number/total, no vigencia abierta).
  *
  * P1 (Fase 1.1.1) / P3 (Fase 1.1.1.ext) — campo skipped:
  * - Fijos: true si el fijo está anulado para este mes puntual (no suma a totales)
@@ -290,9 +336,18 @@ export interface CalculatedInfo {
  * - Presente si el ítem ES un calculado (hijo): contiene info del origen y la fórmula.
  * - null si el ítem no es un calculado (fijo normal, único o cuota).
  *
- * Fase 1.1.7 — campo hasCalculated:
- * - true si el ítem es un fijo de origen que tiene ≥1 calculado derivado en este mes.
- * - false para todos los demás ítems.
+ * Fase 1.1.7 / 1.1.9 — campo hasCalculated:
+ * - true si el ítem es un ORIGEN (fijo, único o cuota) que tiene ≥1 calculado
+ *   derivado en este mes, es decir, `calculatedChildren.length > 0`.
+ * - false para todos los demás ítems (incluidos los propios calculados: un
+ *   calculado nunca es padre — RF-MCALC-001).
+ *
+ * Fase 1.1.9 — campo calculatedChildren ("calculados en el origen"):
+ * - Lista de los derivados (calculados) que aparecen en el MISMO mes consultado
+ *   para este ítem padre (mismo alcance temporal que `hasCalculated`, no la
+ *   cadena entera del calculado). Aplica a los 3 orígenes (fijo/único/cuota).
+ * - `[]` si el ítem no tiene derivados en el mes, o si el ítem ES un calculado
+ *   (un calculado nunca es padre — RF-MCALC-001).
  *
  * NOTA sobre amountCents de calculados (RN-018):
  * Para calculados, amountCents es el monto derivado on-the-fly: sign × round(formula(sourceAmount)).
@@ -341,14 +396,28 @@ export interface MovementItem {
    */
   autoDebit: boolean | null;
   installment: InstallmentInfo | null;
-  /** Frecuencia del fijo. null para únicos y cuotas. */
-  frequency: RecurringFrequency | null;
+  /** Frecuencia del fijo (entero 1..12, meses de paso). null para únicos y cuotas. */
+  frequency: number | null;
+  /**
+   * Arranque del fijo LÓGICO (P4), resuelto por cadena. Presente solo para origin==='fijo'
+   * (normales y calculados de fijo, cada uno con SU PROPIO chainId). null para único y cuota.
+   */
+  startMonth: string | null;
+  /**
+   * Fin del fijo LÓGICO (vigencia), resuelto por cadena — "YYYY-MM", EXCLUSIVO
+   * (mismo criterio que Recurring.deletedFrom). Presente solo para origin==='fijo'
+   * (normales y calculados de fijo, cada uno con SU PROPIA cadena). `null` = activo
+   * indefinidamente, o si origin no es 'fijo' (único/cuota).
+   */
+  endMonth: string | null;
   /** true si el fijo está anulado para este mes. Siempre false para únicos y cuotas. */
   skipped: boolean;
   /** Fase 1.1.7: info del calculado si este ítem ES un calculado; null si no lo es. */
   calculated: CalculatedInfo | null;
-  /** Fase 1.1.7: true si el ítem es un fijo origen que tiene ≥1 calculado en este mes. */
+  /** Fase 1.1.7/1.1.9: true si el ítem es un origen que tiene ≥1 calculado en este mes. */
   hasCalculated: boolean;
+  /** Fase 1.1.9: derivados del ítem padre en este mes (ver doc de la interface). */
+  calculatedChildren: CalculatedChild[];
 }
 
 /**
@@ -379,6 +448,10 @@ interface RawTransactionRow {
   paymentMethodName: string | null;
   paymentMethodIcon: string | null;
   paymentMethodType: string | null;
+  /** Solo aplica a CREDIT; null para DEBIT/CASH (RN-021). */
+  paymentMethodClosingDay: number | null;
+  /** Solo aplica a CREDIT; null para DEBIT/CASH (RN-021). */
+  paymentMethodPaymentDay: number | null;
   /** Débito automático (P4 — corrección de alcance). Atributo del movimiento. */
   autoDebit: boolean | null;
 }
@@ -439,6 +512,55 @@ export class MovementsRepository {
     if (resolved === null) return null;
 
     return allRates.get(resolved) ?? null;
+  }
+
+  /**
+   * Resuelve el arranque y el fin del fijo LÓGICO por cadena (P4/detalle de movimiento):
+   * para cada chainId dado, devuelve:
+   * - startMonth: el startMonth de la PRIMERA fila (el mínimo, comparación lexicográfica
+   *   válida porque el formato "YYYY-MM" ordena igual que cronológicamente).
+   * - endMonth: el deletedFrom de la ÚLTIMA fila (el máximo startMonth = la fila vigente),
+   *   exclusivo (mismo formato que Recurring.deletedFrom). null = activo indefinidamente.
+   *
+   * Un fijo lógico es una cadena de filas con el mismo chainId (splits de PATCH);
+   * la fila vigente en un mes dado tiene el startMonth del ÚLTIMO split, no el
+   * arranque real, pero SÍ trae el deletedFrom vigente para toda la cadena (solo
+   * la última fila puede tener deletedFrom no-null; splits anteriores terminan
+   * exactamente donde empieza el siguiente, por construcción del PATCH).
+   * Este método resuelve ambos extremos recorriendo TODA la cadena.
+   */
+  private async loadChainBounds(
+    chainIds: string[],
+  ): Promise<Map<string, { startMonth: string; endMonth: string | null }>> {
+    const map = new Map<string, { startMonth: string; endMonth: string | null }>();
+    if (chainIds.length === 0) return map;
+
+    const uniqueChainIds = Array.from(new Set(chainIds));
+    const rows = await this.prisma.recurring.findMany({
+      where: { chainId: { in: uniqueChainIds } },
+      select: { chainId: true, startMonth: true, deletedFrom: true },
+    });
+
+    // startMonth: mínimo de la cadena. endMonth: deletedFrom de la fila con MAYOR startMonth.
+    const lastRowStartMonth = new Map<string, string>();
+    for (const r of rows) {
+      const current = map.get(r.chainId);
+      if (current === undefined) {
+        map.set(r.chainId, { startMonth: r.startMonth, endMonth: r.deletedFrom });
+        lastRowStartMonth.set(r.chainId, r.startMonth);
+        continue;
+      }
+      if (r.startMonth < current.startMonth) {
+        current.startMonth = r.startMonth;
+      }
+      const lastStart = lastRowStartMonth.get(r.chainId)!;
+      if (r.startMonth > lastStart) {
+        lastRowStartMonth.set(r.chainId, r.startMonth);
+        current.endMonth = r.deletedFrom;
+      }
+    }
+
+    return map;
   }
 
   /**
@@ -530,6 +652,8 @@ export class MovementsRepository {
           pm.name                         AS "paymentMethodName",
           pm.icon                         AS "paymentMethodIcon",
           pm.type                         AS "paymentMethodType",
+          pm."closingDay"                 AS "paymentMethodClosingDay",
+          pm."paymentDay"                 AS "paymentMethodPaymentDay",
           t."autoDebit"                   AS "autoDebit"
         FROM "Transaction" t
         JOIN "Category" c ON c.id = t."categoryId"
@@ -544,6 +668,13 @@ export class MovementsRepository {
     ]);
 
     const unicosItems = rows.map((row) => this.mapRowToMovementItem(row, displayCurrency, pivotRates));
+
+    // Mapa transactionId → ítem del único, para poblar calculatedChildren/hasCalculated
+    // cuando se procesen los calculados de único más abajo (Fase 1.1.9).
+    const unicoItemByTxId = new Map<string, MovementItem>();
+    for (const item of unicosItems) {
+      unicoItemByTxId.set(item.id, item);
+    }
 
     // Calculados de único: Recurring con sourceMovementId != null activos en el mes
     const calculadosDeUnico = await this.prisma.recurring.findMany({
@@ -581,7 +712,9 @@ export class MovementsRepository {
       select: {
         id: true, amountCents: true, description: true, occurredAt: true, timezone: true,
         currency: true, exchangeRate: true, anchorCurrency: true, skipped: true,
-        paymentMethod: { select: { id: true, name: true, icon: true, type: true } },
+        paymentMethod: {
+          select: { id: true, name: true, icon: true, type: true, closingDay: true, paymentDay: true },
+        },
         autoDebit: true,
       },
     });
@@ -638,6 +771,21 @@ export class MovementsRepository {
         pivotRates,
       );
 
+      // Fase 1.1.9: registrar este calculado como hijo del único origen (mismo mes).
+      const parentItem = calc.sourceMovementId ? unicoItemByTxId.get(calc.sourceMovementId) : undefined;
+      if (parentItem) {
+        parentItem.calculatedChildren.push({
+          id: calc.id,
+          description: calc.description,
+          type: derivedType,
+          convertedAmountCents: convertedAmount,
+          formulaOperator: calc.formulaOperator as FormulaOperator,
+          formulaOperand: calc.formulaOperand!,
+          formulaSign: calc.formulaSign!,
+        });
+        parentItem.hasCalculated = true;
+      }
+
       unicosItems.push({
         id: calc.id,
         origin: 'unico' as const,
@@ -661,6 +809,8 @@ export class MovementsRepository {
         autoDebit: txData.autoDebit,
         installment: null,
         frequency: null,
+        startMonth: null,
+        endMonth: null,
         skipped,
         calculated: {
           sourceType: 'unico',
@@ -673,6 +823,7 @@ export class MovementsRepository {
           sourceAmountCents: txData.amountCents,
         },
         hasCalculated: false,
+        calculatedChildren: [],
       });
     }
 
@@ -734,7 +885,7 @@ export class MovementsRepository {
             },
           },
           paymentMethod: {
-            select: { id: true, name: true, icon: true, type: true },
+            select: { id: true, name: true, icon: true, type: true, closingDay: true, paymentDay: true },
           },
           skips: {
             where: { month },
@@ -752,6 +903,15 @@ export class MovementsRepository {
     );
     // Calculados de fijo: gating por el origen
     const calculadosDeFijo = recurrings.filter((r) => r.sourceChainId !== null);
+
+    // P4 / detalle de movimiento: resolver arranque y fin del fijo LÓGICO por cadena
+    // (chainId propio de cada ítem). Un calculado de fijo tiene su PROPIA cadena
+    // (calc.chainId) — se resuelve independiente de la cadena del origen (sourceChainId).
+    const chainIds = [
+      ...normales.map((r) => r.chainId),
+      ...calculadosDeFijo.map((c) => c.chainId),
+    ];
+    const chainBounds = await this.loadChainBounds(chainIds);
 
     // Construir mapa chainId → datos del origen para los fijos normales activos en el mes.
     const originMap = new Map<string, {
@@ -780,15 +940,11 @@ export class MovementsRepository {
       });
     }
 
-    // Determinar qué chainIds tienen calculados activos en este mes
-    const chainsWithCalculados = new Set<string>();
-    for (const calc of calculadosDeFijo) {
-      if (calc.sourceChainId && originMap.has(calc.sourceChainId)) {
-        chainsWithCalculados.add(calc.sourceChainId);
-      }
-    }
-
     const result: MovementItem[] = [];
+
+    // Mapa chainId → ítem del fijo normal ya pusheado a result (Fase 1.1.9), para
+    // poblar calculatedChildren/hasCalculated en la segunda pasada (calculados de fijo).
+    const fijoItemByChainId = new Map<string, MovementItem>();
 
     // Agregar fijos normales
     for (const r of normales) {
@@ -803,7 +959,7 @@ export class MovementsRepository {
         exchangeRate,
         r.anchorCurrency,
       );
-      result.push({
+      const item: MovementItem = {
         id: r.id,
         origin: 'fijo' as const,
         type: r.type,
@@ -824,10 +980,18 @@ export class MovementsRepository {
         autoDebit: r.autoDebit,
         installment: null,
         frequency: r.frequency,
+        // P4: arranque del fijo lógico, resuelto por cadena (fallback al startMonth de la fila).
+        startMonth: chainBounds.get(r.chainId)?.startMonth ?? r.startMonth,
+        // Fin del fijo lógico, resuelto por cadena (deletedFrom de la última fila; fallback
+        // al deletedFrom de la propia fila si por algún motivo la cadena no resolvió).
+        endMonth: chainBounds.get(r.chainId)?.endMonth ?? r.deletedFrom,
         skipped,
         calculated: null,
-        hasCalculated: chainsWithCalculados.has(r.chainId),
-      });
+        hasCalculated: false,
+        calculatedChildren: [],
+      };
+      result.push(item);
+      fijoItemByChainId.set(r.chainId, item);
     }
 
     // Agregar calculados de fijo (con monto derivado on-the-fly)
@@ -856,6 +1020,22 @@ export class MovementsRepository {
         originData.anchorCurrency,
       );
 
+      // Fase 1.1.9: registrar este calculado como hijo del ítem padre (fijo normal
+      // activo este mes), si el origen tiene un ítem en el mes.
+      const parentItem = calc.sourceChainId ? fijoItemByChainId.get(calc.sourceChainId) : undefined;
+      if (parentItem) {
+        parentItem.calculatedChildren.push({
+          id: calc.id,
+          description: calc.description,
+          type: derivedType,
+          convertedAmountCents,
+          formulaOperator: calc.formulaOperator as FormulaOperator,
+          formulaOperand: calc.formulaOperand!,
+          formulaSign: calc.formulaSign!,
+        });
+        parentItem.hasCalculated = true;
+      }
+
       result.push({
         id: calc.id,
         origin: 'fijo' as const,
@@ -879,6 +1059,11 @@ export class MovementsRepository {
         autoDebit: originData.autoDebit,
         installment: null,
         frequency: calc.frequency,
+        // P4: un calculado de fijo ES un fijo con cadena PROPIA — muestra su propio
+        // arranque (calc.chainId), no el del origen (sourceChainId).
+        startMonth: chainBounds.get(calc.chainId)?.startMonth ?? calc.startMonth,
+        // Fin del fijo lógico del calculado, resuelto por SU PROPIA cadena (no la del origen).
+        endMonth: chainBounds.get(calc.chainId)?.endMonth ?? calc.deletedFrom,
         skipped,
         calculated: {
           sourceType: 'fijo',
@@ -891,6 +1076,7 @@ export class MovementsRepository {
           sourceAmountCents: originData.amountCents,
         },
         hasCalculated: false,
+        calculatedChildren: [],
       });
     }
 
@@ -934,7 +1120,7 @@ export class MovementsRepository {
             },
           },
           paymentMethod: {
-            select: { id: true, name: true, icon: true, type: true },
+            select: { id: true, name: true, icon: true, type: true, closingDay: true, paymentDay: true },
           },
           // Skip de la instancia (mes) puntual de este grupo (P3 — Fase 1.1.1.ext)
           skips: {
@@ -947,6 +1133,10 @@ export class MovementsRepository {
     ]);
 
     const result: MovementItem[] = [];
+
+    // Mapa installmentGroupId → ítem de la cuota, para poblar calculatedChildren/hasCalculated
+    // cuando se procesen los calculados de cuota más abajo (Fase 1.1.9).
+    const cuotaItemByGroupId = new Map<string, MovementItem>();
 
     for (const g of groups) {
       const endMonth = addMonths(g.startMonth, g.totalInstallments);
@@ -967,7 +1157,7 @@ export class MovementsRepository {
         g.anchorCurrency,
       );
 
-      result.push({
+      const item: MovementItem = {
         id: g.id,
         origin: 'cuota' as const,
         type: g.type,
@@ -992,10 +1182,15 @@ export class MovementsRepository {
           startMonth: g.startMonth,
         },
         frequency: null,
+        startMonth: null,
+        endMonth: null,
         skipped,
         calculated: null,
         hasCalculated: false,
-      });
+        calculatedChildren: [],
+      };
+      result.push(item);
+      cuotaItemByGroupId.set(g.id, item);
     }
 
     // Calculados de cuota: Recurring con sourceInstallmentGroupId != null activos en el mes
@@ -1038,7 +1233,7 @@ export class MovementsRepository {
           exchangeRate: true,
           anchorCurrency: true,
           paymentMethod: {
-            select: { id: true, name: true, icon: true, type: true },
+            select: { id: true, name: true, icon: true, type: true, closingDay: true, paymentDay: true },
           },
           autoDebit: true,
           skips: {
@@ -1108,6 +1303,23 @@ export class MovementsRepository {
           groupData.anchorCurrency,
         );
 
+        // Fase 1.1.9: registrar este calculado como hijo del grupo de cuota origen (mismo mes).
+        const parentItem = calc.sourceInstallmentGroupId
+          ? cuotaItemByGroupId.get(calc.sourceInstallmentGroupId)
+          : undefined;
+        if (parentItem) {
+          parentItem.calculatedChildren.push({
+            id: calc.id,
+            description: calc.description,
+            type: derivedType,
+            convertedAmountCents,
+            formulaOperator: calc.formulaOperator as FormulaOperator,
+            formulaOperand: calc.formulaOperand!,
+            formulaSign: calc.formulaSign!,
+          });
+          parentItem.hasCalculated = true;
+        }
+
         result.push({
           id: calc.id,
           origin: 'cuota' as const,
@@ -1131,6 +1343,8 @@ export class MovementsRepository {
           autoDebit: groupData.autoDebit,
           installment: null,
           frequency: null,
+          startMonth: null,
+          endMonth: null,
           skipped,
           calculated: {
             sourceType: 'cuota',
@@ -1143,6 +1357,7 @@ export class MovementsRepository {
             sourceAmountCents: groupData.amountCents,
           },
           hasCalculated: false,
+          calculatedChildren: [],
         });
       }
     }
@@ -1957,14 +2172,19 @@ export class MovementsRepository {
             name: row.paymentMethodName!,
             icon: row.paymentMethodIcon!,
             type: row.paymentMethodType!,
+            closingDay: row.paymentMethodClosingDay,
+            paymentDay: row.paymentMethodPaymentDay,
           }
         : null,
       autoDebit: row.autoDebit,
       installment: null,
       frequency: null,
+      startMonth: null,
+      endMonth: null,
       skipped: row.skipped,
       calculated: null,
       hasCalculated: false,
+      calculatedChildren: [],
     };
   }
 }
@@ -1974,33 +2194,21 @@ export class MovementsRepository {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Helper de frecuencia (P2 — Fase 1.1.1)
+// Helper de frecuencia (P1 — entero 1..12)
 // ---------------------------------------------------------------------------
 
 /**
- * Devuelve el step (en meses) correspondiente a cada RecurringFrequency.
- */
-export function frequencyStep(frequency: RecurringFrequency): number {
-  switch (frequency) {
-    case RecurringFrequency.MONTHLY:    return 1;
-    case RecurringFrequency.BIMONTHLY:  return 2;
-    case RecurringFrequency.QUARTERLY:  return 3;
-    case RecurringFrequency.BIANNUAL:   return 6;
-    case RecurringFrequency.ANNUAL:     return 12;
-  }
-}
-
-/**
  * Devuelve true si el fijo aparece en el mes dado según su frecuencia.
+ * frequency es un entero 1..12 (meses de paso), anclado al startMonth:
+ * monthDiff(startMonth, month) % frequency === 0.
  */
 export function isOnFrequency(
   startMonth: string,
-  frequency: RecurringFrequency,
+  frequency: number,
   month: string,
 ): boolean {
   const diff = monthDiff(startMonth, month);
-  const step = frequencyStep(frequency);
-  return diff % step === 0;
+  return diff % frequency === 0;
 }
 
 /**

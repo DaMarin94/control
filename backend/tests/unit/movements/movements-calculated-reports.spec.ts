@@ -9,7 +9,7 @@
  */
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { Currency, FormulaOperator, RecurringFrequency } from '@prisma/client';
+import { Currency, FormulaOperator } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { MovementsService } from '../../../src/movements/movements.service';
 import {
@@ -60,7 +60,7 @@ function makeOriginFijo(overrides: Partial<RecurringForAnnual> = {}): RecurringF
     anchorCurrency: Currency.ARS,
     startMonth: '2026-01',
     deletedFrom: null,
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     skippedMonths: new Set(),
     categoryId: CAT_ORIGIN,
     categoryName: 'Alquiler',
@@ -87,7 +87,7 @@ function makeCalcFijo(overrides: Partial<RecurringForAnnual> = {}): RecurringFor
     anchorCurrency: Currency.ARS,
     startMonth: '2026-01',
     deletedFrom: null,
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     skippedMonths: new Set(),
     categoryId: CAT_CALC,
     categoryName: 'Expensas',

@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Currency, FormulaOperator, MovementType, RecurringFrequency } from '@prisma/client';
+import { Currency, FormulaOperator, MovementType } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { CategoryValidatorService } from '../categories/category-validator.service';
 import { PaymentMethodValidatorService } from '../payment-methods/payment-method-validator.service';
@@ -69,7 +69,7 @@ export class RecurringService {
       type: dto.type,
       amountCents: dto.amountCents,
       startMonth: dto.startMonth,
-      frequency: dto.frequency ?? RecurringFrequency.MONTHLY,
+      frequency: dto.frequency ?? 1,
       description: dto.description ?? null,
       ...(dto.currency !== undefined && { currency: dto.currency }),
       exchangeRate: effectiveExchangeRate,
@@ -520,7 +520,7 @@ export class RecurringService {
       amountCents: 0, // placeholder; monto real se deriva on-the-fly
       startMonth,
       deletedFrom: deletedFromMonth, // autolimitado a 1 mes
-      frequency: RecurringFrequency.MONTHLY, // default; no se usa para el gating
+      frequency: 1, // default; no se usa para el gating (calculado de único/cuota no tiene frecuencia propia)
       description: dto.description ?? null,
       sourceMovement: { connect: { id: tx.id } }, // FK a Transaction
       formulaOperator: dto.formulaOperator,
@@ -651,7 +651,7 @@ export class RecurringService {
       amountCents: 0, // placeholder; monto real se deriva on-the-fly
       startMonth: group.startMonth, // hereda el startMonth del grupo
       deletedFrom: null, // rango ilimitado: lo limita la proyección on-the-fly del grupo
-      frequency: RecurringFrequency.MONTHLY, // default; no se usa para el gating
+      frequency: 1, // default; no se usa para el gating (calculado de único/cuota no tiene frecuencia propia)
       description: dto.description ?? null,
       sourceInstallmentGroup: { connect: { id: group.id } }, // FK a InstallmentGroup
       formulaOperator: dto.formulaOperator,

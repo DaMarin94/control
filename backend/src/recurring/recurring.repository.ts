@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Currency, FormulaOperator, MovementType, RecurringFrequency, Prisma } from '@prisma/client';
+import { Currency, FormulaOperator, MovementType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -27,7 +27,7 @@ export interface EmbeddedPaymentMethod {
 
 /**
  * Shape completo de un fijo con categoría embebida.
- * Incluye frequency (P2 — Fase 1.1.1), campos de calculado (Fase 1.1.7 + 1.1.7.ext) y chainId.
+ * Incluye frequency (P1 — entero 1..12), campos de calculado (Fase 1.1.7 + 1.1.7.ext) y chainId.
  */
 export interface RecurringWithCategory {
   id: string;
@@ -38,7 +38,8 @@ export interface RecurringWithCategory {
   description: string | null;
   startMonth: string;
   deletedFrom: string | null;
-  frequency: RecurringFrequency;
+  /** Periodicidad del fijo, en meses (P1 — entero 1..12). Inmutable tras crearse. */
+  frequency: number;
   chainId: string;
   /** null en fijos normales; chainId del origen en calculados de fijo */
   sourceChainId: string | null;

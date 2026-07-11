@@ -12,7 +12,7 @@
  */
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { FormulaOperator, MovementType, RecurringFrequency } from '@prisma/client';
+import { FormulaOperator, MovementType } from '@prisma/client';
 import { MovementsRepository } from '../../../src/movements/movements.repository';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 
@@ -20,8 +20,12 @@ const USER_A = 'user-pm-test';
 const CAT_ID = 'cat-pm-test';
 const MONTH = '2026-06';
 
-const PM_VISA = { id: 'pm-visa', name: 'Visa Crédito', icon: 'visa', type: 'CREDIT' };
-const PM_EFECTIVO = { id: 'pm-cash', name: 'Efectivo', icon: 'cash', type: 'CASH' };
+const PM_VISA = {
+  id: 'pm-visa', name: 'Visa Crédito', icon: 'visa', type: 'CREDIT', closingDay: 10, paymentDay: 20,
+};
+const PM_EFECTIVO = {
+  id: 'pm-cash', name: 'Efectivo', icon: 'cash', type: 'CASH', closingDay: null, paymentDay: null,
+};
 
 const mockPrisma = {
   recurring: { findMany: jest.fn() },
@@ -80,6 +84,8 @@ describe('MovementsRepository — método de pago embebido (P4)', () => {
           paymentMethodName: PM_VISA.name,
           paymentMethodIcon: PM_VISA.icon,
           paymentMethodType: PM_VISA.type,
+          paymentMethodClosingDay: PM_VISA.closingDay,
+          paymentMethodPaymentDay: PM_VISA.paymentDay,
         },
       ]);
 
@@ -111,6 +117,8 @@ describe('MovementsRepository — método de pago embebido (P4)', () => {
           paymentMethodName: null,
           paymentMethodIcon: null,
           paymentMethodType: null,
+          paymentMethodClosingDay: null,
+          paymentMethodPaymentDay: null,
         },
       ]);
 
@@ -168,7 +176,7 @@ describe('MovementsRepository — método de pago embebido (P4)', () => {
           sourceChainId: null,
           startMonth: '2026-01',
           deletedFrom: null,
-          frequency: RecurringFrequency.MONTHLY,
+          frequency: 1,
           type: MovementType.EXPENSE,
           amountCents: 5000,
           currency: 'ARS',
@@ -195,7 +203,7 @@ describe('MovementsRepository — método de pago embebido (P4)', () => {
           sourceChainId: null,
           startMonth: '2026-01',
           deletedFrom: null,
-          frequency: RecurringFrequency.MONTHLY,
+          frequency: 1,
           type: MovementType.EXPENSE,
           amountCents: 5000,
           currency: 'ARS',
@@ -222,7 +230,7 @@ describe('MovementsRepository — método de pago embebido (P4)', () => {
           sourceChainId: null,
           startMonth: '2026-01',
           deletedFrom: null,
-          frequency: RecurringFrequency.MONTHLY,
+          frequency: 1,
           type: MovementType.EXPENSE,
           amountCents: 10000,
           currency: 'ARS',
@@ -240,7 +248,7 @@ describe('MovementsRepository — método de pago embebido (P4)', () => {
           sourceChainId: 'chain-origin',
           startMonth: '2026-01',
           deletedFrom: null,
-          frequency: RecurringFrequency.MONTHLY,
+          frequency: 1,
           type: MovementType.EXPENSE,
           amountCents: 0,
           currency: 'ARS',

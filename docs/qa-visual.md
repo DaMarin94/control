@@ -4,6 +4,8 @@ Validación que ni los tests, ni el build, ni el e2e cubren: pixel, layout, moda
 
 **Quién ejecuta:** el orquestador lo corre él mismo contra el navegador conectado vía `/chrome` (herramientas `mcp__claude-in-chrome`) — navega, interactúa, dispara casos borde, saca screenshots y reporta. Si el navegador no está conectado/disponible en la sesión, cae al **fallback**: arma el prompt per-feature y se lo entrega al usuario para que lo corra en el chat de la extensión **Claude para Chrome**. La conexión de `/chrome` no es persistente: se reconecta en cada sesión nueva. En ambos modelos el guion es el mismo — cambia solo quién lo ejecuta.
 
+**Sembrado de datos de prueba:** el orquestador **siembra la data que el caso requiera** (categorías, movimientos únicos/fijos/cuotas, calculados, límites, etc.) cuando la cuenta conectada no tiene los casos necesarios para ejercitar la feature. Es **parte esperada** de correr el QA, no un paso extraordinario: sin los datos adecuados el recorrido no prueba nada.
+
 Este doc es un **asset de trabajo vivo**: el prompt genérico de regresión y la plantilla per-feature se mantienen acá al día con las superficies del producto.
 
 ## Alcance y exclusiones

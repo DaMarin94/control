@@ -244,6 +244,8 @@ const mockMovementExpense = {
   timezone: "America/Argentina/Buenos_Aires",
   installment: null,
   frequency: null as null,
+  startMonth: null as null,
+  endMonth: null,
   skipped: false,
   category: { id: "cat-1", name: "Alimentación", color: "#FF5733", scope: "BOTH" as const },
   paymentMethod: null,
@@ -253,6 +255,7 @@ const mockMovementExpense = {
   currency: "ARS" as const,
   exchangeRate: 1,
   convertedAmountCents: 15000,
+  calculatedChildren: [],
 };
 
 const mockMovementIncome = {
@@ -265,6 +268,8 @@ const mockMovementIncome = {
   timezone: "America/Argentina/Buenos_Aires",
   installment: null,
   frequency: null as null,
+  startMonth: null as null,
+  endMonth: null,
   skipped: false,
   category: { id: "cat-2", name: "Sueldo", color: "#33FF57", scope: "INCOME" as const },
   paymentMethod: null,
@@ -274,6 +279,7 @@ const mockMovementIncome = {
   currency: "ARS" as const,
   exchangeRate: 1,
   convertedAmountCents: 500000,
+  calculatedChildren: [],
 };
 
 const mockMovementFijo = {
@@ -285,7 +291,9 @@ const mockMovementFijo = {
   occurredAt: null,
   timezone: null,
   installment: null,
-  frequency: "MONTHLY" as const,
+  frequency: 1 as const,
+  startMonth: "2026-01",
+  endMonth: null,
   skipped: false,
   category: { id: "cat-3", name: "Servicios", color: "#5733FF", scope: "EXPENSE" as const },
   paymentMethod: null,
@@ -295,6 +303,7 @@ const mockMovementFijo = {
   currency: "ARS" as const,
   exchangeRate: 1,
   convertedAmountCents: 150000,
+  calculatedChildren: [],
 };
 
 const mockMovementCuota = {
@@ -311,6 +320,8 @@ const mockMovementCuota = {
     startMonth: "2026-01",
   },
   frequency: null as null,
+  startMonth: null as null,
+  endMonth: null,
   skipped: false,
   category: { id: "cat-4", name: "Tecnología", color: "#FF33AA", scope: "EXPENSE" as const },
   paymentMethod: null,
@@ -320,6 +331,7 @@ const mockMovementCuota = {
   currency: "ARS" as const,
   exchangeRate: 1,
   convertedAmountCents: 50000,
+  calculatedChildren: [],
 };
 
 const mockWithData: MonthMovements = {
@@ -370,7 +382,9 @@ const mockMovementCalculadoExpense = {
   occurredAt: null,
   timezone: null,
   installment: null,
-  frequency: "MONTHLY" as const,
+  frequency: 1 as const,
+  startMonth: "2026-01",
+  endMonth: null,
   skipped: false,
   category: { id: "cat-3", name: "Servicios", color: "#5733FF", scope: "EXPENSE" as const },
   paymentMethod: null,
@@ -389,6 +403,7 @@ const mockMovementCalculadoExpense = {
   currency: "ARS" as const,
   exchangeRate: 1,
   convertedAmountCents: -5000,
+  calculatedChildren: [],
 };
 
 // Calculados por tipo de origen (Fase 1.1.8)

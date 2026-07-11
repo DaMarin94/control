@@ -25,7 +25,6 @@ import {
   Currency,
   FormulaOperator,
   MovementType,
-  RecurringFrequency,
 } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import {
@@ -51,7 +50,7 @@ type RecurringRow = {
   description: string | null;
   startMonth: string;
   deletedFrom: string | null;
-  frequency: RecurringFrequency;
+  frequency: number;
   chainId: string;
   sourceChainId: string | null;
   sourceMovementId: string | null;
@@ -97,7 +96,7 @@ function makeOriginRow(overrides: Partial<RecurringRow> = {}): RecurringRow {
     description: 'Alquiler',
     startMonth: '2026-01',
     deletedFrom: null,
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     chainId: ORIGIN_CHAIN,
     sourceChainId: null,
     sourceMovementId: null,
@@ -130,7 +129,7 @@ function makeCalcRow(overrides: Partial<RecurringRow> = {}): RecurringRow {
     description: 'Expensas (10% alquiler)',
     startMonth: '2026-01',
     deletedFrom: null,
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     chainId: CALC_CHAIN,
     sourceChainId: ORIGIN_CHAIN,
     sourceMovementId: null,
@@ -348,7 +347,7 @@ describe('MovementsService.getReportsMovements — skip propio del calculado de 
       anchorCurrency: Currency.ARS,
       startMonth: '2026-01',
       deletedFrom: null,
-      frequency: RecurringFrequency.MONTHLY,
+      frequency: 1,
       skippedMonths: new Set<string>(),
       categoryId: CAT_ORIGIN,
       categoryName: 'Vivienda',
@@ -376,7 +375,7 @@ describe('MovementsService.getReportsMovements — skip propio del calculado de 
       anchorCurrency: Currency.ARS,
       startMonth: '2026-01',
       deletedFrom: null,
-      frequency: RecurringFrequency.MONTHLY,
+      frequency: 1,
       skippedMonths: new Set<string>(),
       categoryId: CAT_CALC,
       categoryName: 'Expensas',

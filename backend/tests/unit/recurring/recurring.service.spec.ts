@@ -16,7 +16,7 @@
  */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { CategoryScope, Currency, MovementType, RecurringFrequency } from '@prisma/client';
+import { CategoryScope, Currency, MovementType } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { RecurringService } from '../../../src/recurring/recurring.service';
 import {
@@ -97,7 +97,7 @@ function makeRecurring(
     description: null,
     startMonth: '2026-01',
     deletedFrom: null,
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     chainId: 'chain-001',
     sourceChainId: null,
     sourceMovementId: null,
@@ -1045,7 +1045,7 @@ describe('RecurringService', () => {
 
   describe('create con frequency', () => {
     it('persiste MONTHLY como default cuando no se pasa frequency', async () => {
-      mockRepo.create.mockResolvedValue(makeRecurring({ frequency: RecurringFrequency.MONTHLY }));
+      mockRepo.create.mockResolvedValue(makeRecurring({ frequency: 1 }));
 
       await service.create(USER_A, {
         type: MovementType.EXPENSE,
@@ -1056,52 +1056,52 @@ describe('RecurringService', () => {
       });
 
       expect(mockRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ frequency: RecurringFrequency.MONTHLY }),
+        expect.objectContaining({ frequency: 1 }),
       );
     });
 
     it('persiste BIMONTHLY cuando se pasa', async () => {
-      mockRepo.create.mockResolvedValue(makeRecurring({ frequency: RecurringFrequency.BIMONTHLY }));
+      mockRepo.create.mockResolvedValue(makeRecurring({ frequency: 2 }));
 
       await service.create(USER_A, {
         type: MovementType.EXPENSE,
         amountCents: 5000,
         categoryId: CAT_ID,
         startMonth: '2026-06',
-        frequency: RecurringFrequency.BIMONTHLY,
+        frequency: 2,
       });
 
       expect(mockRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ frequency: RecurringFrequency.BIMONTHLY }),
+        expect.objectContaining({ frequency: 2 }),
       );
     });
 
     it('persiste QUARTERLY cuando se pasa', async () => {
-      mockRepo.create.mockResolvedValue(makeRecurring({ frequency: RecurringFrequency.QUARTERLY }));
+      mockRepo.create.mockResolvedValue(makeRecurring({ frequency: 3 }));
 
       await service.create(USER_A, {
         type: MovementType.EXPENSE,
         amountCents: 5000,
         categoryId: CAT_ID,
         startMonth: '2026-06',
-        frequency: RecurringFrequency.QUARTERLY,
+        frequency: 3,
       });
 
       expect(mockRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ frequency: RecurringFrequency.QUARTERLY }),
+        expect.objectContaining({ frequency: 3 }),
       );
     });
 
     it('split: R2 hereda frequency del original (no es editable)', async () => {
       const existing = makeRecurring({
         startMonth: '2026-01',
-        frequency: RecurringFrequency.BIMONTHLY,
+        frequency: 2,
       });
       mockRepo.findById.mockResolvedValue(existing);
       const r2 = makeRecurring({
         id: 'rec-002',
         startMonth: '2026-06',
-        frequency: RecurringFrequency.BIMONTHLY,
+        frequency: 2,
       });
       mockRepo.update.mockResolvedValue({ ...existing, deletedFrom: '2026-06' });
       mockRepo.create.mockResolvedValue(r2);
@@ -1112,7 +1112,7 @@ describe('RecurringService', () => {
       });
 
       expect(mockRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ frequency: RecurringFrequency.BIMONTHLY }),
+        expect.objectContaining({ frequency: 2 }),
       );
     });
   });

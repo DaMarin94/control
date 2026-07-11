@@ -23,7 +23,7 @@
  *   - Ids desconocidos/no existentes → simplemente no matchean (no es error)
  */
 import { Test, TestingModule } from '@nestjs/testing';
-import { Currency, RecurringFrequency } from '@prisma/client';
+import { Currency } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { MovementsService } from '../../../src/movements/movements.service';
 import {
@@ -136,7 +136,7 @@ function makeFijo(overrides: Partial<RecurringForAnnual> = {}): RecurringForAnnu
     anchorCurrency: Currency.ARS,
     startMonth: '2026-01',
     deletedFrom: null,
-    frequency: RecurringFrequency.MONTHLY,
+    frequency: 1,
     skippedMonths: new Set<string>(),
     categoryId: CAT_A,
     categoryName: 'Servicios',
@@ -2410,7 +2410,7 @@ describe('MovementsService — getReportsMovements', () => {
           makeFijo({
             id: 'annual-fijo', chainId: 'chain-annual',
             startMonth: '2025-06', amountCents: 12000, deletedFrom: null,
-            frequency: RecurringFrequency.ANNUAL, type: 'EXPENSE' as any,
+            frequency: 12, type: 'EXPENSE' as any,
           }),
         ]);
         setupEmptyCuotasMock();

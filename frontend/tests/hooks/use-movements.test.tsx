@@ -47,6 +47,8 @@ const mockMonthMovements: MonthMovements = {
         timezone: "America/Argentina/Buenos_Aires",
         installment: null,
         frequency: null,
+        startMonth: null,
+        endMonth: null,
         skipped: false,
         category: {
           id: "cat-1",
@@ -61,6 +63,7 @@ const mockMonthMovements: MonthMovements = {
         currency: "ARS" as const,
         exchangeRate: 1,
         convertedAmountCents: 15000,
+        calculatedChildren: [],
       },
     ],
     fijos: [],

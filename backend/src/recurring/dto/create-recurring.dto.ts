@@ -11,7 +11,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { Currency, MovementType, RecurringFrequency } from '@prisma/client';
+import { Currency, MovementType } from '@prisma/client';
 
 /**
  * DTO para crear un movimiento fijo (POST /recurring).
@@ -22,10 +22,11 @@ import { Currency, MovementType, RecurringFrequency } from '@prisma/client';
  * - categoryId: string no vacío, obligatorio
  * - startMonth: mes en formato YYYY-MM (obligatorio). El front lo calcula con browser tz;
  *   el backend es tz-agnóstico (D2).
- * - frequency: enum RecurringFrequency (P2 — Fase 1.1.1), opcional — default MONTHLY.
- *   Set cerrado: MONTHLY | BIMONTHLY | QUARTERLY | BIANNUAL | ANNUAL.
- *   La frecuencia está anclada al startMonth: un fijo BIMONTHLY que arranca en marzo
- *   aparece en marzo, mayo, julio, etc.
+ * - frequency: entero 1..12 (P1), opcional — default 1 (mensual).
+ *   Meses de paso: 1 = mensual, 2 = bimestral, 3 = trimestral, 6 = semestral, 12 = anual, etc.
+ *   La frecuencia está anclada al startMonth: un fijo frequency=2 que arranca en marzo
+ *   aparece en marzo, mayo, julio, etc. Inmutable tras crearse (RF-MF-006): el selector
+ *   aparece solo al crear; en edición no se acepta (ver UpdateRecurringDto).
  * - description: texto libre, opcional
  *
  * El userId NO se acepta en el body — se toma siempre de request.user.userId.
@@ -53,10 +54,10 @@ export class CreateRecurringDto {
   startMonth!: string;
 
   @IsOptional()
-  @IsEnum(RecurringFrequency, {
-    message: 'La frecuencia debe ser MONTHLY, BIMONTHLY, QUARTERLY, BIANNUAL o ANNUAL',
-  })
-  frequency?: RecurringFrequency;
+  @IsInt({ message: 'La frecuencia debe ser un entero' })
+  @Min(1, { message: 'La frecuencia debe estar entre 1 y 12' })
+  @Max(12, { message: 'La frecuencia debe estar entre 1 y 12' })
+  frequency?: number;
 
   @IsOptional()
   @IsString()

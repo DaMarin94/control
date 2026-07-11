@@ -35,6 +35,8 @@ Considerar: arquitectura, tipos, build, features existentes, otros archivos afec
 Listar exactamente qué archivos se van a tocar, por qué, y qué agente lo implementa.
 **Esperar aprobación explícita antes de delegar nada.**
 
+**Distinguir lo definido de lo que agregás vos.** Al proponer el plan, separá explícitamente **lo definido** (requerimientos, pantallas o pedido del usuario) de **lo que el orquestador agrega por su cuenta** (elementos, acciones, capacidades o defaults no triviales). Todo agregado que introduzca **capacidad o alcance nuevo** se surfacea como decisión abierta y requiere OK explícito del usuario — no se enuncia como hecho consumado ni se delega. La **ejecución visual** de algo ya acordado (ícono, color, tamaño, tono, ubicación) va a `control-design`, sin fricción. Heurística: *agrega capacidad/alcance → se pregunta; cómo se ve algo ya decidido → design.*
+
 ### 4. Delegar la implementación
 Según el impacto:
 - Solo frontend → invocar `control-frontend`

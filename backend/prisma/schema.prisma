@@ -36,23 +36,6 @@ enum CategoryScope {
   INCOME
 }
 
-// Frecuencia de aparición de un movimiento fijo (P2 — Fase 1.1.1).
-// Set cerrado: no hay frecuencias libres ni custom.
-// La frecuencia está anclada al startMonth del fijo:
-//   - MONTHLY (step 1):   aparece cada mes a partir de startMonth
-//   - BIMONTHLY (step 2): cada 2 meses (ej: startMonth=marzo → mar, may, jul...)
-//   - QUARTERLY (step 3): cada 3 meses
-//   - BIANNUAL (step 6):  cada 6 meses
-//   - ANNUAL (step 12):   una vez por año
-// Back-compat: todos los fijos existentes quedan con MONTHLY (default de migración).
-enum RecurringFrequency {
-  MONTHLY
-  BIMONTHLY
-  QUARTERLY
-  BIANNUAL
-  ANNUAL
-}
-
 // Operadores de la fórmula de un movimiento calculado (Fase 1.1.7).
 // El monto del calculado es: sign × round(operator(sourceAmount, operand))
 //   ADD:  sourceAmount + operand           (operand en centavos)
@@ -339,11 +322,12 @@ model Recurring {
   // Formato "YYYY-MM"
   deletedFrom String?
 
-  // frequency: periodicidad del fijo (P2 — Fase 1.1.1).
-  // Default MONTHLY para back-compat con todos los fijos anteriores a 1.1.1.
-  // La frecuencia está anclada al startMonth: monthDiff(startMonth, mes) % step === 0
-  // determina si el fijo aparece en ese mes.
-  frequency RecurringFrequency @default(MONTHLY)
+  // frequency: periodicidad del fijo, en meses (P1 — entero 1..12).
+  // Rango lógico 1..12 (validado en el DTO; sin CHECK constraint en DB).
+  // Anclada al startMonth: monthDiff(startMonth, mes) % frequency === 0
+  // determina si el fijo aparece en ese mes. 1 = mensual, 12 = anual, etc.
+  // Inmutable tras crearse (RF-MF-006): solo se define al alta.
+  frequency Int @default(1)
 
   // Multi-moneda (Fase 1.2.3 / 1.2.4):
   // La cotización es POR MES DE APARICIÓN: cuando el usuario edita con split, la fila

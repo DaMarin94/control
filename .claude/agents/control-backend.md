@@ -37,7 +37,7 @@ El detalle estructural (contratos, gotchas, decisiones) vive en `docs/`. Leé la
 | Endpoints (rutas, bodies, códigos de error) | `docs/backend.md` §Endpoints y la sección de cada módulo |
 | Movimientos del mes (bucketeo SQL, totales, integración de orígenes) | `docs/backend.md` §Movimientos del mes |
 | Serie de reportes + reporte anual de Únicos (consume `InflationRate`; param `today` = fecha local del usuario para el divisor del promedio) | `docs/backend.md` §Serie de reportes |
-| Únicos / fijos / cuotas / calculados | `docs/backend.md` (sección de cada módulo) |
+| Únicos / fijos / cuotas / calculados | `docs/backend.md` (sección de cada módulo). **Gotcha:** el arranque del fijo lógico se resuelve por la **primera fila de la cadena** (`chainId`), no por la fila vigente (que tras un split trae el `startMonth` del último split) — ver §Movimientos fijos. |
 | Categorías, pool de colores, validación de categoría | `docs/backend.md` §Categorías, §CategoryValidatorService |
 | Auth, JWT, categorías por defecto al alta | `docs/backend.md` §Autenticación |
 | Preferencias | `docs/backend.md` §Preferencias de usuario |

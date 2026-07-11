@@ -10,8 +10,11 @@
  *   1. Ícono 40×40 tintado (expense-soft/expense-ink o income-soft/income-ink)
  *   2. Texto: nombre + sub-línea en dos zonas (identidad · estados — ver docs/design.md
  *      "Sublínea del ítem de /mes — dos zonas")
- *   3. Fecha en mono (DD Mmm); en cuotas "Cuota X/N"; fijos: vacío
- *   4. Monto mono 15.5px (gastos con −$, ingresos con +$ en income-ink)
+ *   3. Un solo discriminador: fecha DD Mmm (único, sin hora) / "Cuota X/N" (cuota) /
+ *      vacía (fijo — el arranque migró a la card de detalle)
+ *   4. Monto mono 15.5px, SIEMPRE una sola línea (gastos con −$, ingresos con +$ en
+ *      income-ink) — sin badge de moneda ni segunda línea de valor original (migraron
+ *      a la card de detalle)
  *   5. KebabMenu de acciones (aparece en hover de la fila)
  *
  * Acciones editar/borrar: via KebabMenu (portal+fixed por overflow-hidden de la tarjeta).
@@ -23,16 +26,28 @@
  * Fase 1.1.8: "Crear movimiento desde este" habilitado también en únicos y cuotas.
  *   Marca padre (GitBranch) ya no restringida a fijos — aplica a cualquier origen con hasCalculated.
  *
+ * Card de detalle de movimiento (docs/design.md §"Card de detalle de movimiento"):
+ *   - Fila adelgazada: se retiran de acá (migran a la card) el método de pago, el
+ *     glifo Zap de débito automático, el badge de código de moneda + 2da línea de
+ *     valor original, y el arranque del fijo (startMonth, ex "desde Mmm AAAA" de col 3).
+ *   - El CUERPO de la fila (cols 1–4) abre la card de detalle: `role="button"`,
+ *     `tabIndex=0`, `onKeyDown` Enter/Espacio, `aria-label="Ver detalle de {nombre}"`.
+ *   - El KebabMenu (col 5) sigue siendo un botón hermano — ya hace `stopPropagation`
+ *     en su trigger y en cada ítem del menú (kebab-menu.tsx), así que su clic nunca
+ *     abre la card (un solo overlay a la vez).
+ *   - La card es read-only pura (sin footer ni acción de edición) — "Editar" vive
+ *     únicamente en el kebab, que llama a `onEdit(movement)` del padre.
+ *
  * Rediseño de la sublínea (docs/design.md, "Sublínea del ítem de /mes — dos zonas"):
  *   - El tipo (gasto/ingreso) NO se rotula en texto — lo comunican el ícono 40×40 tintado
  *     (col 1) y el signo/color del monto (col 4).
  *   - Zona de identidad (izquierda, flex-1 min-w-0, trunca): [badge Anulado] [● color de
- *     categoría] Categoría · [glifo + nombre método de pago] · [Repeat frecuencia, fijos] ·
- *     [CornerDownRight "desde {Origen}", calculados] — el chip boxeado "Calculado" se
- *     eliminó: se fusiona en el segmento "↳ desde {Origen}".
+ *     categoría] Categoría · [Repeat frecuencia, fijos] · [CornerDownRight "desde
+ *     {Origen}", calculados] — el chip boxeado "Calculado" se eliminó: se fusiona en el
+ *     segmento "↳ desde {Origen}".
  *   - Zona de estados (derecha, shrink-0, nunca trunca): cluster de glifos neutros
- *     --muted con aria-label + title — GitBranch (padre) y Zap (débito automático, sin
- *     texto visible). No se renderiza si ninguna bandera aplica.
+ *     --muted con aria-label + title — GitBranch (padre) y marca de límite. No se
+ *     renderiza si ninguna bandera aplica.
  *
  * Ítem anulado (skipped=true):
  *   - Contenido de la fila a opacity 0.55 (no el fondo ni el KebabMenu)
@@ -40,9 +55,10 @@
  *   - Badge "Anulado" como primer segmento de la zona de identidad de la sublínea
  */
 
+import { useState } from "react";
 import { type MovementItem } from "@/types/movement";
-import { type RecurringFrequency } from "@/types/recurring";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
+import { formatConvertedAmountDisplay, FREQUENCY_LABEL } from "@/lib/movements";
 import {
   ArrowDown,
   ArrowUp,
@@ -54,10 +70,8 @@ import {
   CornerDownRight,
   GitBranch,
   Calculator,
-  Zap,
 } from "lucide-react";
 import { KebabMenu } from "@/components/ui/kebab-menu";
-import { PaymentMethodIcon } from "@/components/ui/payment-method-icon";
 import { useRecurring } from "@/hooks/use-recurring";
 import { useTransactions } from "@/hooks/use-transactions";
 import { useInstallments } from "@/hooks/use-installments";
@@ -65,16 +79,8 @@ import { useSettings } from "@/hooks/use-settings";
 import { useToast } from "@/hooks/use-toast";
 import { LimitGlyph, LimitBadge, limitBoldClass, limitFillClass } from "@/components/limits/limit-mark";
 import { describeLimitMark, type EvaluatedLimitMark } from "@/lib/limits/evaluate";
+import { MovementDetailCard } from "@/components/movements/movement-detail-card";
 import { cn } from "@/lib/utils";
-
-/** Etiqueta en minúscula por valor de frequency (para la sublínea del ítem) */
-const FREQUENCY_LABEL: Record<RecurringFrequency, string> = {
-  MONTHLY: "mensual",
-  BIMONTHLY: "bimestral",
-  QUARTERLY: "trimestral",
-  BIANNUAL: "semestral",
-  ANNUAL: "anual",
-};
 
 /** Separador "·" entre segmentos de la zona de identidad — punto 3px, --faint, aria-hidden */
 function IdentitySeparator() {
@@ -109,8 +115,9 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
   const { toast } = useToast();
   const { defaultCurrency } = useSettings();
 
-  // Fase 1.2.3: mostrar badge y valor original solo cuando moneda ≠ default
-  const isCrossRate = movement.currency !== defaultCurrency;
+  // Card de detalle de movimiento (docs/design.md §"Card de detalle de movimiento") —
+  // abierta por el cuerpo de la fila, cerrada por ✕/Esc/clic en el scrim o al pasar a Editar.
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
 
   const isExpense = movement.type === "EXPENSE";
   const isFijo = movement.origin === "fijo";
@@ -123,7 +130,6 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
   // La marca padre aplica a cualquier origen (fijo, único o cuota) — Fase 1.1.8
   // Un calculado nunca puede ser padre (RF-MCALC-001), por eso !isCalculated
   const isParent = !isCalculated && movement.hasCalculated;
-  const hasAutoDebit = movement.autoDebit === true;
 
   // P2 — Fase 1: marca visual pasiva de límites (mes.item.monto / mes.categoria.gastoMes).
   // limitMark es undefined/null cuando ningún límite cruza — cero impacto (restricción rectora).
@@ -135,8 +141,10 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
   const limitShowsGlyphInStates = limitEffect === "glyph" || limitEffect === "fill";
   const limitShowsBadgeInIdentity = limitEffect === "badge";
 
-  // Zona de estados solo se renderiza si hay al menos una bandera (spec: "sin renderizar" si ninguna aplica)
-  const hasStatesZone = isParent || hasAutoDebit || limitShowsGlyphInStates;
+  // Zona de estados — reducida a límite + GitBranch (padre). El débito automático
+  // migró a la card de detalle (P4 — Card de detalle de movimiento), ya no aplica acá.
+  // Sin renderizar si ninguna bandera aplica (spec).
+  const hasStatesZone = isParent || limitShowsGlyphInStates;
 
   // Fecha formateada "02 Jun" (solo para únicos)
   const dateFormatted =
@@ -146,38 +154,10 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
 
   // Monto principal: convertedAmountCents (en la moneda default del usuario) como CIFRA;
   // el SIGNO se deriva de amountCents (con signo real; negativo ⇒ EXPENSE con signo −).
-  // Para calculados: el backend devuelve convertedAmountCents como magnitud absoluta (≥ 0);
-  // el signo real vive en amountCents (negativo cuando formulaSign=-1).
-  // Para no calculados: gastos con −$, ingresos con +$.
-  // Fase 1.2.3 / 1.2.3-ext: usar convertedAmountCents como cifra dominante;
-  // símbolo de la moneda default (todos los convertidos van en la default del usuario).
-  function buildAmountDisplay(): string {
-    if (isCalculated) {
-      // convertedAmountCents es siempre magnitud (≥ 0) para calculados;
-      // el signo real lo indica amountCents (con signo).
-      const magnitude = Math.abs(movement.convertedAmountCents);
-      const signedCents = movement.amountCents;
-      if (signedCents === 0) return formatCurrency(0, defaultCurrency); // "$0,00" sin signo
-      if (signedCents < 0) return `−${formatCurrency(magnitude, defaultCurrency)}`; // "−$1.234,56"
-      return formatCurrency(magnitude, defaultCurrency); // positivo sin prefijo (valor derivado)
-    }
-    // Movimiento normal: gastos con −$, ingresos con +$ (Math.abs de convertedAmountCents)
-    const cents = movement.convertedAmountCents;
-    const amountFormatted = formatCurrency(Math.abs(cents), defaultCurrency);
-    return isExpense ? `−${amountFormatted}` : `+${amountFormatted}`;
-  }
-  const amountDisplay = buildAmountDisplay();
-
-  // Fase 1.2.3 / 1.2.3-ext: valor original (monto en la moneda original) — solo si cross-rate.
-  // Formato: símbolo de la moneda original + cifra, sin signo, en --muted.
-  // Ej: "US$15,00" cuando currency="USD". El badge de código "USD" sigue presente
-  // junto al monto convertido; esta línea usa el símbolo para la cifra original.
-  function buildOriginalAmountDisplay(): string {
-    // amountCents puede ser negativo en calculados — mostrar abs (solo es referencia)
-    const originalCents = Math.abs(movement.amountCents);
-    return formatCurrency(originalCents, movement.currency);
-  }
-  const originalAmountDisplay = isCrossRate ? buildOriginalAmountDisplay() : null;
+  // Helper compartido con MovementDetailCard (lib/movements.ts) — mismo cálculo, dos lugares.
+  // Col 4 SIEMPRE una sola línea (P4 — Card de detalle: sin badge de moneda ni 2da línea
+  // de valor original, migraron a la card).
+  const amountDisplay = formatConvertedAmountDisplay(movement, defaultCurrency);
 
   // Ícono y clases de color por tipo
   const IconComponent = isExpense ? ArrowDown : ArrowUp;
@@ -265,10 +245,28 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
   // toma el fondo ámbar estático en lugar del hover panel-2.
   const rowFillClass = limitFillClass(limitEffect);
 
+  const rowLabel = movement.description ?? categoryName;
+
+  // Card de detalle — el cuerpo de la fila abre la card (docs/design.md §"Conflicto de
+  // invocación — cuerpo abre card, kebab abre menú"). El kebab ya hace stopPropagation
+  // en su trigger y en cada ítem (kebab-menu.tsx), así que su clic nunca llega acá.
+  function handleRowKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      setIsDetailOpen(true);
+    }
+  }
+
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={`Ver detalle de ${rowLabel}`}
+      onClick={() => setIsDetailOpen(true)}
+      onKeyDown={handleRowKeyDown}
       className={cn(
         "group relative grid items-center gap-[14px] px-[18px] cursor-pointer transition-colors duration-[120ms] [&+&]:border-t [&+&]:border-hair",
+        "focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--accent-soft)]",
         rowFillClass ? rowFillClass : "hover:bg-panel-2",
       )}
       style={{ gridTemplateColumns: "40px 1fr auto auto auto", padding: `var(--row-pad) 18px` }}
@@ -311,17 +309,6 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
               aria-hidden="true"
             />
             <span className="min-w-0 truncate text-ink-2">{categoryName}</span>
-
-            {/* Método de pago — solo si el movimiento lo tiene asociado (RF-PM-006) */}
-            {movement.paymentMethod && (
-              <>
-                <IdentitySeparator />
-                <span className="inline-flex items-center gap-[4px] shrink-0">
-                  <PaymentMethodIcon icon={movement.paymentMethod.icon} size={12} className="text-muted shrink-0" />
-                  {movement.paymentMethod.name}
-                </span>
-              </>
-            )}
 
             {/* Frecuencia — fijos y calculados de origen fijo (la cuota X/N no vive acá, va en col 3) */}
             {isFijo && (
@@ -367,67 +354,36 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
                     <GitBranch size={13} aria-hidden="true" />
                   </span>
                 )}
-                {hasAutoDebit && (
-                  <span
-                    className="inline-flex text-muted"
-                    aria-label="Débito automático"
-                    title="Débito automático"
-                  >
-                    <Zap size={13} aria-hidden="true" />
-                  </span>
-                )}
               </span>
             </>
           )}
         </span>
       </div>
 
-      {/* Col 3: Fecha / cuota — fijos: vacío — atenuado si anulado */}
+      {/* Col 3: un solo discriminador — fecha (único, sin hora) / Cuota X/N / vacía (fijo) */}
       <div className={`text-right ${isSkipped ? "opacity-[0.55]" : ""}`}>
-        {!isFijo && (
-          <span className="block text-[12.5px] text-muted mono whitespace-nowrap">
-            {isCuota ? (installmentLabel ?? "") : (dateFormatted ?? "")}
-          </span>
-        )}
+        <span className="block text-[12.5px] text-muted mono whitespace-nowrap">
+          {isFijo ? "" : isCuota ? (installmentLabel ?? "") : (dateFormatted ?? "")}
+        </span>
       </div>
 
-      {/* Col 4: Monto mono — tachado si anulado, conservando color semántico */}
-      {/* Fase 1.2.3: si cross-rate, la celda se convierte en columna (flex-col) */}
+      {/* Col 4: Monto mono — SIEMPRE una sola línea, tachado si anulado, color semántico */}
       <div
-        className={`flex flex-col items-end text-right min-w-[100px] ${
+        className={`flex items-center justify-end text-right min-w-[100px] ${
           isSkipped ? "opacity-[0.55]" : ""
         }`}
       >
-        {/* Fila principal del monto: badge de moneda (si cross-rate) + cifra convertida */}
-        <span className="inline-flex items-center gap-[7px] justify-end">
-          {/* Badge de moneda original (solo si cross-rate) */}
-          {isCrossRate && (
-            <span
-              className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em] mono"
-              aria-label={`Moneda original: ${movement.currency}`}
-            >
-              {movement.currency}
-            </span>
+        {/* Monto convertido — dominante. Efecto "bold" (P2 — Fase 1) sube 600→700. */}
+        <span
+          className={cn(
+            "text-[15.5px] mono",
+            limitBoldClass(limitEffect) ?? "font-semibold",
+            isExpense ? "text-ink" : "text-income-ink",
+            isSkipped ? "line-through" : "",
           )}
-          {/* Monto convertido — dominante. Efecto "bold" (P2 — Fase 1) sube 600→700. */}
-          <span
-            className={cn(
-              "text-[15.5px] mono",
-              limitBoldClass(limitEffect) ?? "font-semibold",
-              isExpense ? "text-ink" : "text-income-ink",
-              isSkipped ? "line-through" : "",
-            )}
-          >
-            {amountDisplay}
-          </span>
+        >
+          {amountDisplay}
         </span>
-
-        {/* Valor original (segunda línea, solo si cross-rate) */}
-        {isCrossRate && originalAmountDisplay && (
-          <span className="text-[12.5px] font-medium text-muted mono mt-[2px]">
-            {originalAmountDisplay}
-          </span>
-        )}
       </div>
 
       {/* Col 5: KebabMenu de acciones (portal+fixed — ver CLAUDE.md) */}
@@ -437,6 +393,9 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
         className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
         items={menuItems}
       />
+
+      {/* Card de detalle de movimiento — read-only, cierra con ✕/Esc/clic en el scrim */}
+      {isDetailOpen && <MovementDetailCard movement={movement} onClose={() => setIsDetailOpen(false)} />}
     </div>
   );
 }
