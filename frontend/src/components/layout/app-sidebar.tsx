@@ -37,8 +37,6 @@ import {
   LayoutDashboard,
   CalendarDays,
   BarChart2,
-  Tags,
-  CreditCard,
   Settings,
   PanelLeftClose,
   PanelLeft,
@@ -56,8 +54,6 @@ const NAV_LINKS = [
   { href: "/", label: "Dashboard", exact: true, Icon: LayoutDashboard },
   { href: "/mes", label: "Vista del mes", exact: false, Icon: CalendarDays },
   { href: "/reportes", label: "Reportes", exact: false, Icon: BarChart2 },
-  { href: "/categorias", label: "Categorías", exact: false, Icon: Tags },
-  { href: "/metodos-pago", label: "Métodos de pago", exact: false, Icon: CreditCard },
   { href: "/configuracion", label: "Configuración", exact: false, Icon: Settings },
 ] as const;
 

@@ -473,7 +473,7 @@ describe("InstallmentForm — filtrado de categorías por scope", () => {
 // ─── Tests: sin categorías disponibles ───────────────────────────────────────
 
 describe("InstallmentForm — sin categorías disponibles", () => {
-  it("bloquea el submit y muestra enlace a /categorias cuando no hay categorías de gasto", () => {
+  it("bloquea el submit y muestra enlace a /configuracion/categorias cuando no hay categorías de gasto", () => {
     // Solo categoría de ingreso — ninguna compatible con EXPENSE
     mockUseCategories.mockReturnValue({
       categories: [mockIncomeCategory],
@@ -496,10 +496,10 @@ describe("InstallmentForm — sin categorías disponibles", () => {
     const submitBtn = screen.getByRole("button", { name: /^guardar$/i });
     expect(submitBtn).toBeDisabled();
 
-    // Debe mostrar enlace a /categorias
+    // Debe mostrar enlace a /configuracion/categorias
     const link = screen.getByRole("link", { name: /creá una categoría/i });
     expect(link).toBeInTheDocument();
-    expect(link).toHaveAttribute("href", "/categorias");
+    expect(link).toHaveAttribute("href", "/configuracion/categorias");
   });
 });
 

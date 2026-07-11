@@ -444,7 +444,7 @@ Un movimiento único es un gasto o ingreso que ocurrió una sola vez en una fech
 - [ ] El botón abre el modal de creación de categoría ya existente (RF-CAT-002), superpuesto al formulario de carga.
 - [ ] Los datos ya cargados en el formulario de carga (monto, fecha, hora, descripción, mes de inicio, cantidad de cuotas, según el tipo) se conservan al abrir el modal y al volver de él.
 - [ ] Al abrir el modal desde el formulario de carga (modo inline), el campo "Tipo" (scope) **solo ofrece las opciones compatibles** con el tipo del movimiento en curso: Gasto → "Gasto" y "Ambos" (se oculta "Ingreso"); Ingreso → "Ingreso" y "Ambos" (se oculta "Gasto"). La opción pre-seleccionada es el tipo exacto del movimiento. El usuario puede cambiar a "Ambos" pero no puede elegir el tipo opuesto.
-- [ ] La restricción de opciones de scope aplica **únicamente** en modo inline (modal abierto desde el formulario de carga). Cuando el modal se abre desde su lugar normal en `/categorias`, sigue ofreciendo las tres opciones (Gasto / Ingreso / Ambos) con default "Ambos".
+- [ ] La restricción de opciones de scope aplica **únicamente** en modo inline (modal abierto desde el formulario de carga). Cuando el modal se abre desde su lugar normal en la sección Categorías de Configuración (`/configuracion/categorias`), sigue ofreciendo las tres opciones (Gasto / Ingreso / Ambos) con default "Ambos".
 - [ ] Al crear la categoría con éxito, el modal se cierra y la categoría recién creada queda autoseleccionada en el campo categoría del formulario de carga.
 - [ ] Si la creación choca con una categoría eliminada, se reutiliza el prompt de reactivación (RF-CAT-002 A3); al reactivar, la categoría reactivada queda autoseleccionada en el campo categoría.
 - [ ] Cancelar el modal de categoría no crea ni reactiva nada y devuelve el foco al formulario de carga sin alterar sus datos ni su categoría seleccionada.
@@ -452,7 +452,7 @@ Un movimiento único es un gasto o ingreso que ocurrió una sola vez en una fech
 
 **Notas:**
 - Es un cambio **solo de frontend**. No se agrega ni modifica ningún endpoint ni contrato de API: se reutilizan el modal de creación de categoría (RF-CAT-002), el flujo crear-o-reactivar y la validación de unicidad ya existentes. La categoría creada/reactivada ya está disponible en el listado de categorías que alimenta el selector del formulario (RF-CAT-002: "disponible inmediatamente en los selectores").
-- **Caso borde — scope incompatible (RESUELTO 2026-06-13):** se elimina de raíz restringiendo las opciones de scope en modo inline. El campo "Tipo" del modal, cuando se abre desde el formulario de carga, **no ofrece el tipo opuesto** al del movimiento en curso (solo el tipo exacto y "Ambos"). Así el usuario no puede crear una categoría incompatible y la autoselección posterior siempre es válida; no hace falta lógica de aviso, bloqueo ni manejo del caso "fantasma". Esta restricción aplica **solo** en modo inline; el modal abierto desde `/categorias` mantiene las tres opciones con default "Ambos".
+- **Caso borde — scope incompatible (RESUELTO 2026-06-13):** se elimina de raíz restringiendo las opciones de scope en modo inline. El campo "Tipo" del modal, cuando se abre desde el formulario de carga, **no ofrece el tipo opuesto** al del movimiento en curso (solo el tipo exacto y "Ambos"). Así el usuario no puede crear una categoría incompatible y la autoselección posterior siempre es válida; no hace falta lógica de aviso, bloqueo ni manejo del caso "fantasma". Esta restricción aplica **solo** en modo inline; el modal abierto desde `/configuracion/categorias` mantiene las tres opciones con default "Ambos".
 
 ---
 
@@ -1074,7 +1074,7 @@ Las categorías clasifican los movimientos. Son personalizables por usuario y ti
 - [ ] El scope puede ser: AMBOS, GASTO, INGRESO. Default: AMBOS.
 - [ ] El usuario **elige el color** de la categoría desde la matriz de colores (RF-CAT-005). El sistema **pre-selecciona** el color "menos usado" como default, pero el usuario puede cambiarlo (incluye un botón "aleatorio").
 - [ ] La categoría creada está disponible inmediatamente en los selectores de movimientos.
-- [ ] La gestión de categorías (crear, editar, eliminar y listar) vive en una pantalla separada y dedicada, accesible desde el link "Categorías" del sidebar (RF-NAV-001). No es un modal ni una sección embebida en otra pantalla.
+- [ ] La gestión de categorías (crear, editar, eliminar y listar) vive en la **sección Categorías del hub de Configuración**, accesible en `/configuracion/categorias` (RF-NAV-001; ver `screens.md`, §6). Es una superficie de gestión dedicada, no un modal.
 
 **Notas:**
 - La unicidad de nombre de categoría activa se valida en **lógica de aplicación**, no con un constraint `@@unique` de base de datos. Motivo: la comparación normalizada (trim + insensible a mayúsculas y acentos) y el flujo "crear-o-reactivar" no caben en un constraint de DB. Ver `docs/data-model.md`.
@@ -1118,7 +1118,7 @@ Las categorías clasifican los movimientos. Son personalizables por usuario y ti
 
 **Criterios de aceptación:**
 - [ ] La categoría eliminada no aparece en los selectores al crear o editar movimientos.
-- [ ] La categoría eliminada desaparece de la pantalla de gestión de categorías (`/categorias`): mientras está eliminada no se ve su fila ni su contador (RF-CAT-006).
+- [ ] La categoría eliminada desaparece de la sección de gestión de categorías (`/configuracion/categorias`): mientras está eliminada no se ve su fila ni su contador (RF-CAT-006).
 - [ ] Los movimientos históricos que tenían esa categoría siguen mostrando su nombre.
 - [ ] La eliminación es lógica — los datos no se borran de la base de datos.
 - [ ] El sistema solicita confirmación antes de eliminar.
@@ -1169,7 +1169,7 @@ Las categorías clasifican los movimientos. Son personalizables por usuario y ti
 
 ### 3.6.b Submódulo: Métodos de pago
 
-Un método de pago clasifica **con qué se pagó o cobró** un movimiento (tarjeta de crédito, débito, efectivo). Es una entidad **espejo de Categoría**: propia del usuario, con soft delete (el histórico conserva la referencia), pantalla de gestión dedicada (`/metodos-pago`) y contador de movimientos. La asociación de un movimiento a un método es **opcional**. La identidad visual del método es un **ícono** (no un color); el set de íconos y su cromo los define `control-design` (ver `docs/design.md`, §Métodos de pago — identificador de ícono). La regla de negocio compacta vive en RN-021; el modelo en `data-model.md`, §Métodos de pago.
+Un método de pago clasifica **con qué se pagó o cobró** un movimiento (tarjeta de crédito, débito, efectivo). Es una entidad **espejo de Categoría**: propia del usuario, con soft delete (el histórico conserva la referencia), gestor dedicado como **sección del hub de Configuración** (`/configuracion/metodos-pago`) y contador de movimientos. La asociación de un movimiento a un método es **opcional**. La identidad visual del método es un **ícono** (no un color); el set de íconos y su cromo los define `control-design` (ver `docs/design.md`, §Métodos de pago — identificador de ícono). La regla de negocio compacta vive en RN-021; el modelo en `data-model.md`, §Métodos de pago.
 
 > La cuenta nueva **nace sin métodos de pago**: la feature es 100% opcional (a diferencia de las categorías por defecto, RF-CAT-001).
 
@@ -1185,7 +1185,7 @@ Un método de pago clasifica **con qué se pagó o cobró** un movimiento (tarje
 | **Precondiciones** | El usuario tiene sesión activa. |
 
 **Flujo principal:**
-1. El usuario abre el modal "Nuevo método de pago" desde `/metodos-pago`. El modal abre **sin tipo elegido**.
+1. El usuario abre el modal "Nuevo método de pago" desde la sección Métodos de pago de Configuración (`/configuracion/metodos-pago`). El modal abre **sin tipo elegido**.
 2. Ingresa el nombre (obligatorio).
 3. Elige el **tipo**: **Crédito** / **Débito** / **Efectivo** (obligatorio, sin default — hasta elegir uno no se puede guardar).
 4. Según el tipo, el modal muestra los campos condicionales:
@@ -1242,7 +1242,7 @@ Un método de pago clasifica **con qué se pagó o cobró** un movimiento (tarje
 
 **Criterios de aceptación:**
 - [ ] El sistema solicita confirmación antes de eliminar.
-- [ ] El método eliminado no aparece en la lista de `/metodos-pago` ni en el selector de método del formulario de carga.
+- [ ] El método eliminado no aparece en la lista de la sección Métodos de pago (`/configuracion/metodos-pago`) ni en el selector de método del formulario de carga.
 - [ ] Los movimientos que tenían ese método conservan la referencia y siguen mostrándolo.
 - [ ] La eliminación es lógica (`deletedAt`); un método eliminado puede **reactivarse** vía crear-o-reactivar (RF-PM-001 A4).
 - [ ] Eliminar un método **no afecta** los totales del mes, el balance ni los reportes: el método es metadato, no entra a ningún cálculo de dinero (el único conteo que cambia es el contador "N movimientos", RF-PM-005).
@@ -1276,7 +1276,7 @@ Un método de pago clasifica **con qué se pagó o cobró** un movimiento (tarje
 | **Descripción** | En la pantalla de gestión de métodos de pago, cada método muestra la cantidad de movimientos asociados. Es un dato derivado de solo lectura. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Baja |
-| **Precondiciones** | El usuario accede a `/metodos-pago`. |
+| **Precondiciones** | El usuario accede a la sección Métodos de pago de Configuración (`/configuracion/metodos-pago`). |
 
 **Criterios de aceptación:**
 - [ ] Cada método de la lista muestra un contador "N movimientos" (espejo de RF-CAT-006), suma de los movimientos únicos, fijos y grupos de cuotas que lo referencian.
@@ -1332,7 +1332,7 @@ Un método de pago clasifica **con qué se pagó o cobró** un movimiento (tarje
 
 **Criterios de aceptación:**
 - [ ] Los tres slots (único / fijo / cuota) son independientes; cada uno apunta a lo sumo un método activo o a ninguno.
-- [ ] La configuración vive en el **modal de crear/editar método** de `/metodos-pago` (sección "Predeterminado para"), no en `/configuracion`. La fila de la lista muestra solo un indicador de lectura, no edita.
+- [ ] La configuración vive en el **modal de crear/editar método** de la sección Métodos de pago (`/configuracion/metodos-pago`, sección "Predeterminado para" del modal), no en la sección General ni en otra sección del hub. La fila de la lista muestra solo un indicador de lectura, no edita.
 - [ ] Marcar una estructura en un método la quita de cualquier otro; un método puede ser default de varias estructuras a la vez. La exclusividad se resuelve al guardar el modal.
 - [ ] Al crear un método, los checkboxes arrancan destildados y la asignación se aplica con el id nuevo; si al guardar se reasigna alguna estructura, se muestra un toast `info` consolidado además del toast de éxito.
 - [ ] Al **crear** un movimiento de una estructura con default, el selector de método arranca con ese default (egreso e ingreso por igual), editable.
@@ -1512,13 +1512,12 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 **Contenido:**
 
 - **Logo / nombre "Control"** (parte superior): actúa como enlace al dashboard.
-- **Links de navegación** (en este orden):
+- **Links de navegación** (cuatro, en este orden):
   - **Dashboard** — lleva al dashboard (RF-DASH-001).
   - **Vista del mes** — lleva a la vista del mes (RF-VM-001), abierta en el mes actual.
   - **Reportes** — lleva a la pantalla de reportes configurable (`/reportes`, RF-REP-003).
-  - **Categorías** — lleva a la gestión de categorías (módulo 3.6).
-  - **Métodos de pago** — lleva a la gestión de métodos de pago (`/metodos-pago`, módulo 3.6.b), debajo de "Categorías".
-  - **Configuración** — lleva a la pantalla de configuración (`/configuracion`, RF-CUR-002), debajo de "Métodos de pago".
+  - **Configuración** — lleva al hub de administración de la cuenta (`/configuracion`, RF-CUR-002), debajo de "Reportes".
+- **Categorías y Métodos de pago no son links del sidebar.** Se administran como **secciones del hub de Configuración**, cada una con su ruta anidada deep-linkable (`/configuracion/categorias`, `/configuracion/metodos-pago`). Ver `screens.md`, §9.
 - **Botón "Nuevo movimiento"** (acción primaria): abre el formulario de carga de movimiento (RF-CM-001).
 - **Control de modo de color** (parte inferior, en su propia fila encima del menú de usuario): toggle de iconos Sistema / Claro / Oscuro que aplica y persiste el modo de color de la app (RF-APP-001).
 - **Menú de usuario** (parte inferior): representado por el avatar del usuario. Al activarlo, despliega la opción **"Cerrar sesión"** (RF-AUTH-004).
@@ -1527,10 +1526,10 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 - [ ] El sidebar está presente en todas las pantallas accesibles con sesión activa.
 - [ ] El sidebar no se muestra en la pantalla de login ni en otras pantallas no autenticadas.
 - [ ] El logo/nombre "Control" lleva al dashboard.
-- [ ] Los links Dashboard, Vista del mes, Reportes, Categorías, Métodos de pago y Configuración navegan a sus respectivas pantallas, en ese orden.
+- [ ] Los cuatro links Dashboard, Vista del mes, Reportes y Configuración navegan a sus respectivas pantallas, en ese orden.
 - [ ] El link "Vista del mes" abre la vista en el mes actual.
-- [ ] El link "Reportes" lleva a `/reportes` (RF-REP-003) y se ubica entre "Vista del mes" y "Categorías".
-- [ ] El link "Métodos de pago" lleva a `/metodos-pago` (módulo 3.6.b) y se ubica entre "Categorías" y "Configuración".
+- [ ] El link "Reportes" lleva a `/reportes` (RF-REP-003) y se ubica entre "Vista del mes" y "Configuración".
+- [ ] El sidebar **no** tiene links "Categorías" ni "Métodos de pago": ambos se administran como secciones del hub de Configuración, por ruta anidada deep-linkable (`/configuracion/categorias`, `/configuracion/metodos-pago`).
 - [ ] El botón "Nuevo movimiento" abre el formulario de carga (RF-CM-001) desde cualquier pantalla, cumpliendo el límite de 2 interacciones (RNF-003).
 - [ ] El sidebar indica visualmente cuál es la sección activa.
 - [ ] El control de modo de color (toggle Sistema / Claro / Oscuro) vive en la parte inferior del sidebar, en su propia fila encima del menú de usuario, y dispara RF-APP-001.
@@ -1661,7 +1660,7 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 - [ ] Cada card monta un **widget de reporte autónomo** (RF-REP-002) en **modo persistido**: navega su año y filtra sus categorías de forma independiente, y persiste cada cambio.
 - [ ] El **orden de las cards** en pantalla es el orden del array `reports` (RF-REP-004).
 - [ ] **Estado vacío inicial:** la primera vez (clave ausente o array vacío), la pantalla muestra solo el "[+]".
-- [ ] La pantalla es accesible desde el sidebar (RF-NAV-001) con el link **"Reportes"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Reportes → Categorías).
+- [ ] La pantalla es accesible desde el sidebar (RF-NAV-001) con el link **"Reportes"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Reportes → Configuración).
 - [ ] La definición funcional completa (contenido, acciones, navegación y estados) vive en `docs/screens.md`. El detalle visual (layout, tamaños, colores, comportamiento de las flechas embebidas) lo define `control-design`.
 
 ---
@@ -2534,7 +2533,7 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 | Ingreso (`INCOME`) | Entrada de dinero. Aumenta el balance del mes. |
 | Límite | Preferencia del usuario que observa un dato (de `/mes`, dashboard o reportes, vía una key hardcodeada), lo compara contra un umbral con una condición única y, si se cumple, dispara su efecto: una **marca visual pasiva** o una **alerta activa** (aviso no bloqueante al guardar un movimiento, solo sobre keys `mes.*`). No altera datos, totales ni lo que el usuario persiste. Se gestiona en la solapa Límites de `/configuracion`; persiste en el blob (`limits`), evaluado client-side. Ver módulo 3.13 (RF-LIM-001..004) y RN-022. |
 | Mes activo | Mes actualmente visualizado en la vista del mes. Por defecto, el mes corriente. |
-| Método de pago | Metadato opcional de un movimiento: con qué se pagó/cobró (tarjeta de crédito, débito, efectivo). Entidad propia del usuario, espejo de Categoría (soft delete, pantalla propia, contador de movimientos), con identidad visual por **ícono** (no color). Días de cierre/cobro (crédito) son informativos en v1. Ver módulo 3.6.b (RF-PM-001..006) y RN-021. |
+| Método de pago | Metadato opcional de un movimiento: con qué se pagó/cobró (tarjeta de crédito, débito, efectivo). Entidad propia del usuario, espejo de Categoría (soft delete, gestor dedicado como sección de Configuración, contador de movimientos), con identidad visual por **ícono** (no color). Días de cierre/cobro (crédito) son informativos en v1. Ver módulo 3.6.b (RF-PM-001..006) y RN-021. |
 | Movimiento | Registro de una transacción económica. Puede ser único, fijo o una cuota. |
 | Movimiento calculado | Movimiento **fijo** cuyo monto no se ingresa: se deriva al vuelo del monto de un movimiento de origen mediante una fórmula (operador + operando) con signo. El **origen puede ser un fijo, un único o un grupo de cuotas** (RF-MCALC-008); el calculado espeja la cadencia del origen (de cuota deriva del monto por cuota). Tiene categoría y descripción propias; su **tipo (Gasto/Ingreso) se deriva del signo del monto** (negativo → Gasto, positivo → Ingreso). Puede tener monto negativo o cero. Sigue el ciclo de vida del origen; el calculado de único/cuota se borra de forma total (RF-MCALC-009). Ver submódulo 3.4.b (RF-MCALC-001..010), RN-017/018/019. |
 | Identidad de cadena de un fijo | Identificador estable, compartido por todas las filas `Recurring` de un mismo fijo lógico, que sobrevive a los splits del pasado. Es a lo que se vincula un movimiento calculado (no a una fila puntual). Ver `docs/data-model.md`, §Identidad de cadena estable. |

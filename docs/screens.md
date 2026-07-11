@@ -13,17 +13,17 @@
 3. [Dashboard (`/`)](#3-dashboard-)
 4. [Vista del mes (`/mes`)](#4-vista-del-mes-mes)
 5. [Formulario de carga de movimiento (modal)](#5-formulario-de-carga-de-movimiento-modal)
-6. [Gestión de categorías (`/categorias`)](#6-gestión-de-categorías-categorias)
+6. [Categorías — sección de Configuración (`/configuracion/categorias`)](#6-categorías--sección-de-configuración-configuracioncategorias)
 7. [Reportes (pantalla configurable)](#7-reportes-pantalla-configurable)
 8. [Widget de reporte autónomo (componente reutilizable)](#8-widget-de-reporte-autónomo-componente-reutilizable)
 9. [Configuración (`/configuracion`)](#9-configuración-configuracion)
-10. [Gestión de métodos de pago (`/metodos-pago`)](#10-gestión-de-métodos-de-pago-metodos-pago)
+10. [Métodos de pago — sección de Configuración (`/configuracion/metodos-pago`)](#10-métodos-de-pago--sección-de-configuración-configuracionmetodos-pago)
 
 ---
 
 ## Convenciones
 
-- El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Reportes, Categorías, Métodos de pago, Configuración) y **no** se muestra en las pantallas no autenticadas (Login, Registro). Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo. Orden de los links: Dashboard → Vista del mes → Reportes → Categorías → Métodos de pago → Configuración. Aloja, en su parte inferior, el **control de modo de color** (toggle Sistema / Claro / Oscuro) sobre el menú de usuario (RF-APP-001).
+- El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Reportes, Configuración y sus secciones —Categorías, Métodos de pago, Límites—) y **no** se muestra en las pantallas no autenticadas (Login, Registro). Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo. **Tiene cuatro links**, en este orden: Dashboard → Vista del mes → Reportes → Configuración. **Categorías y Métodos de pago no son links del sidebar**: se administran como secciones del hub de Configuración (§9), cada una en su ruta anidada deep-linkable (`/configuracion/categorias`, `/configuracion/metodos-pago`); estando en ellas, el link activo del sidebar es "Configuración". Aloja, en su parte inferior, el **control de modo de color** (toggle Sistema / Claro / Oscuro) sobre el menú de usuario (RF-APP-001).
   - **Estado de implementación: implementado.** El sidebar (RF-NAV-001) **ya está implementado** (ver `features.md`). Los accesos definidos en cada pantalla (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL directa) se conservan y conviven con el sidebar.
 - El **formulario de carga** (pantalla 5) es un modal sin ruta propia. Se invoca desde el sidebar y desde el dashboard, y se superpone a la pantalla actual.
 - **Chip de moneda default en el header.** Las pantallas con montos/totales —**Dashboard**, **Vista del mes** y **Reportes**— muestran en su header (fila del eyebrow) un **chip indicador de la moneda default vigente** del usuario (código de la moneda del set curado: ARS / USD / EUR / BRL, RF-CUR-002). Es **informativo**: comunica en qué moneda están expresados los montos y totales de la pantalla y **linkea a `/configuracion`** (no cambia la moneda in-situ). Se muestra **siempre**, también en mono-moneda. **`/configuracion` NO lo lleva** (es donde la moneda se edita). El patrón es común a las tres pantallas y no se repite su definición en cada una; el detalle visual lo define `control-design` (ver `docs/design.md`).
@@ -140,7 +140,7 @@ No muestra lista de movimientos (decisión 2026-06-03, ex RF-DASH-004 fuera de a
 ### Navegación
 
 - **Llega desde:** login exitoso; link "Dashboard" o logo "Control" del sidebar; redirección automática al autenticarse.
-- **Lleva a:** Vista del mes (`/mes`) vía "Ver todos" o link del sidebar; modal de carga; Gestión de categorías y demás secciones vía sidebar.
+- **Lleva a:** Vista del mes (`/mes`) vía "Ver todos" o link del sidebar; modal de carga; Reportes y Configuración vía sidebar.
 
 ### Estados
 
@@ -254,7 +254,7 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 
 - **Se invoca desde:** botón "Nuevo movimiento" del sidebar (cualquier pantalla autenticada); acceso de carga del dashboard; estado vacío del dashboard (CTA "Cargá tu primer movimiento"); acción editar de la vista del mes (modo edición).
 - **Tras guardar:** el modal se cierra y el usuario permanece en la pantalla en la que estaba. El toast de confirmación ofrece "Ir a ver", que navega a la vista del mes del movimiento guardado (mes de la fecha en únicos; mes de inicio en fijos y cuotas). Si el usuario no interactúa con el toast, este desaparece y el usuario sigue en su pantalla.
-- **Sin categorías disponibles:** si no existe ninguna categoría aplicable al tipo seleccionado, el formulario bloquea el guardado y ofrece un enlace a la pantalla de Gestión de categorías (`/categorias`) para crear una. (Independientemente de este caso, el botón "+ Nueva" junto al selector de categoría permite crear una categoría sin salir del formulario — RF-MU-004.)
+- **Sin categorías disponibles:** si no existe ninguna categoría aplicable al tipo seleccionado, el formulario bloquea el guardado y ofrece un enlace a la sección Categorías del hub de Configuración (`/configuracion/categorias`) para crear una. (Independientemente de este caso, el botón "+ Nueva" junto al selector de categoría permite crear una categoría sin salir del formulario — RF-MU-004.)
 
 ### Estados
 
@@ -262,7 +262,7 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 - **Tab Fijo, nota de recurrencia (solo en creación):** debajo de la categoría, una nota se ajusta a la frecuencia elegida — *"Se registra automáticamente {cada mes / cada dos meses / cada tres meses / cada seis meses / cada año} a partir del mes de inicio."* (RF-MF-006).
 - **Edición:** sin tabs, campos pre-cargados con los valores actuales. En el tab Fijo, la **frecuencia** aparece de solo lectura.
 - **Validación con error:** monto en cero/negativo/no numérico, cantidad de cuotas en cero/negativa, o categoría no seleccionada — se muestra el error y no se guarda.
-- **Sin categorías disponibles:** estado de bloqueo con enlace a `/categorias`.
+- **Sin categorías disponibles:** estado de bloqueo con enlace a la sección Categorías de Configuración (`/configuracion/categorias`).
 - **Modal de categoría superpuesto (RF-MU-004):** el modal de creación de categoría (pantalla 6) se muestra por encima del formulario de carga, que permanece montado y con sus datos intactos por debajo. Al cerrarse (por crear, reactivar o cancelar), el formulario vuelve a primer plano.
 - **Aviso de límite activo (RF-LIM-004):** al Guardar, si el estado proyectado del mes cruzaría ≥1 límite activo, un **diálogo de confirmación** superpuesto enumera el/los límite(s) que se cruzarían, con **"Guardar igual"** (persiste, no bloquea) y **"Cancelar"** (vuelve al formulario). Sin cruces no aparece y el guardado es directo. El detalle visual del diálogo lo define `docs/design.md`.
 - **Guardando:** el modal indica que la operación está en curso.
@@ -270,17 +270,19 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 
 ---
 
-## 6. Gestión de categorías (`/categorias`)
+## 6. Categorías — sección de Configuración (`/configuracion/categorias`)
 
 **RF relacionados:** RF-CAT-001, RF-CAT-002, RF-CAT-003, RF-CAT-004, RF-CAT-005, RF-CAT-006, RF-MU-004
 
+> **Ruta:** `/configuracion/categorias`. Es una **sección del hub de Configuración** (§9), accesible desde la navegación vertical de secciones y por URL directa (deep-link). No es un link del sidebar.
+
 ### Propósito
 
-Pantalla dedicada para administrar las categorías del usuario: listar, crear, editar y eliminar. La creación y edición se resuelven mediante un modal dentro de esta pantalla.
+Sección del hub de Configuración dedicada a administrar las categorías del usuario: listar, crear, editar y eliminar. La creación y edición se resuelven mediante un modal dentro de esta sección.
 
 ### Contenido
 
-- **Sidebar** con el link "Categorías" marcado como activo.
+- **Sidebar** con el link "Configuración" marcado como activo (esta superficie es una sección del hub de Configuración).
 - **Lista de categorías activas** del usuario. Cada ítem muestra:
   - Color de la categoría (indicador visual; el usuario lo elige/edita desde el modal — RF-CAT-005).
   - Nombre de la categoría.
@@ -298,8 +300,8 @@ Pantalla dedicada para administrar las categorías del usuario: listar, crear, e
 
 ### Modal de creación / edición
 
-- **Creación (origen `/categorias`):** modal con campos vacíos; el campo "Tipo" (scope) ofrece las **tres** opciones (Gasto / Ingreso / Ambos) con **default "Ambos"**.
-- **Creación desde el formulario de carga de movimiento — modo inline (RF-MU-004):** el mismo modal se abre también desde el botón "+ Nueva" del formulario de carga (pantalla 5). En este origen el campo "Tipo" (scope) se comporta **distinto** —solo ofrece las opciones compatibles con el tipo del movimiento y oculta el tipo opuesto, con el tipo exacto pre-seleccionado— y al crear/reactivar deja la categoría autoseleccionada en el formulario. Detalle completo de la restricción de scope inline en RF-MU-004. El resto del comportamiento del modal (validaciones, prompt de reactivación) es idéntico. Abierto desde `/categorias`, el scope conserva las tres opciones con default "Ambos".
+- **Creación (origen `/configuracion/categorias`):** modal con campos vacíos; el campo "Tipo" (scope) ofrece las **tres** opciones (Gasto / Ingreso / Ambos) con **default "Ambos"**.
+- **Creación desde el formulario de carga de movimiento — modo inline (RF-MU-004):** el mismo modal se abre también desde el botón "+ Nueva" del formulario de carga (pantalla 5). En este origen el campo "Tipo" (scope) se comporta **distinto** —solo ofrece las opciones compatibles con el tipo del movimiento y oculta el tipo opuesto, con el tipo exacto pre-seleccionado— y al crear/reactivar deja la categoría autoseleccionada en el formulario. Detalle completo de la restricción de scope inline en RF-MU-004. El resto del comportamiento del modal (validaciones, prompt de reactivación) es idéntico. Abierto desde `/configuracion/categorias`, el scope conserva las tres opciones con default "Ambos".
 - **Edición:** el mismo modal pre-cargado con nombre, scope y color actuales.
 - **Picker de color — matriz (RF-CAT-005), presente en crear y editar.** El modal incluye un selector de color con la **matriz de 70 colores** (7 tonalidades × 10 hues). En **crear**, arranca con el color **"menos usado"** pre-seleccionado como default (calculado sobre los 10 colores base); en **editar**, arranca con el **color actual** de la categoría seleccionado. Incluye un botón **"aleatorio"** que elige un color al azar de la matriz. Solo se puede elegir un color de la matriz (sin hex libre). El detalle visual del picker lo define `control-design` (`docs/design.md`).
 - **Validaciones:** el nombre es obligatorio y no puede estar vacío; no pueden coexistir dos categorías activas con el mismo nombre para el mismo usuario (RN-008).
@@ -307,9 +309,9 @@ Pantalla dedicada para administrar las categorías del usuario: listar, crear, e
 
 ### Navegación
 
-- **Llega desde:** link "Categorías" del sidebar; enlace desde el formulario de carga cuando no hay categorías disponibles para el tipo en curso.
-- **Modal invocado desde otra pantalla:** el modal de creación de categoría también se abre desde el botón "+ Nueva" del formulario de carga de movimiento (pantalla 5, RF-MU-004), superpuesto a ese formulario y **sin** navegar a `/categorias`.
-- **Lleva a:** permanece en `/categorias` tras crear, editar o eliminar.
+- **Llega desde:** la navegación vertical de secciones del hub de Configuración (§9); URL directa a `/configuracion/categorias` (deep-link); enlace desde el formulario de carga cuando no hay categorías disponibles para el tipo en curso.
+- **Modal invocado desde otra pantalla:** el modal de creación de categoría también se abre desde el botón "+ Nueva" del formulario de carga de movimiento (pantalla 5, RF-MU-004), superpuesto a ese formulario y **sin** navegar a `/configuracion/categorias`.
+- **Lleva a:** permanece en `/configuracion/categorias` tras crear, editar o eliminar.
 
 ### Estados
 
@@ -418,64 +420,78 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 
 ## 9. Configuración (`/configuracion`)
 
-**RF relacionados:** RF-CUR-002, RF-CUR-005, RF-CUR-006, RF-LIM-001, RF-LIM-002, RF-NAV-001
+**RF relacionados:** RF-CUR-002, RF-CUR-005, RF-CUR-006, RF-LIM-001, RF-LIM-002, RF-NAV-001. Las secciones **Categorías** (RF-CAT-*) y **Métodos de pago** (RF-PM-*) montan los gestores documentados en §6 y §10.
 
-> **Ruta:** `/configuracion`. **Link en el sidebar**, debajo de "Categorías" (orden: Dashboard → Vista del mes → Reportes → Categorías → Configuración).
+> **Ruta:** `/configuracion`. **Link en el sidebar**, debajo de "Reportes" (orden: Dashboard → Vista del mes → Reportes → Configuración).
 
 ### Propósito
 
-Pantalla de **ajustes de la cuenta** del usuario, organizada en **dos solapas: "General"** (preferencias de la cuenta) y **"Límites"** (gestor de límites de todas las superficies). Queda como contenedor para ajustes futuros.
+**Hub de administración de la cuenta.** Concentra los ajustes y gestores de la cuenta en **cuatro secciones** dispuestas con **navegación vertical** (columna de secciones a un lado, contenido de la sección activa al otro; patrón de settings tipo GitHub/Stripe). El **ruteo es anidado y deep-linkable**: cada sección es una **URL propia** a la que se puede entrar directo. Las secciones, en este orden:
+
+1. **General** (`/configuracion`, sección por defecto) — preferencias de la cuenta (moneda por defecto).
+2. **Categorías** (`/configuracion/categorias`) — gestor de categorías (§6).
+3. **Métodos de pago** (`/configuracion/metodos-pago`) — gestor de métodos de pago (§10).
+4. **Límites** (`/configuracion/limites`) — gestor de límites.
 
 ### Contenido
 
-- **Sidebar** con el link "Configuración" marcado como activo.
-- **Selector de solapas: "General" · "Límites".** "General" es la solapa por defecto.
+- **Sidebar** con el link "Configuración" marcado como activo (en cualquiera de las cuatro secciones).
+- **Navegación vertical de secciones:** una columna que lista las cuatro secciones (General, Categorías, Métodos de pago, Límites) y marca la activa; al lado se muestra el contenido de la sección seleccionada.
 
-**Solapa General:**
+**Sección General:**
 - **Ajuste "Moneda por defecto"** (RF-CUR-002): selector entre las **4 monedas curadas (ARS / USD / EUR / BRL)**. Es la moneda en la que se expresan todos los totales (vista del mes, dashboard, reportes). Se lee/escribe vía el contrato `/settings` (ver `data-model.md`).
-- **Sin editor de la tabla de cotizaciones de referencia:** la tabla de referencia es **interna y no editable por UI** (RF-CUR-006), así que `/configuracion` **no** la muestra ni la edita.
+- **Sin editor de la tabla de cotizaciones de referencia:** la tabla de referencia es **interna y no editable por UI** (RF-CUR-006), así que General **no** la muestra ni la edita.
 
-**Solapa Límites** (RF-LIM-001..002): gestor de los límites del usuario (marca visual pasiva sobre `/mes`, dashboard y reportes; alerta activa sobre keys `mes.*`). Gestiona **solo límites** — no re-edita moneda, reportes ni secciones.
+**Sección Categorías:** monta el gestor de categorías descrito en **§6**, en `/configuracion/categorias`. Su contenido, acciones, modal y estados son los de §6.
+
+**Sección Métodos de pago:** monta el gestor de métodos de pago descrito en **§10**, en `/configuracion/metodos-pago`. Su contenido, acciones, modal y estados son los de §10.
+
+**Sección Límites** (RF-LIM-001..002): gestor de los límites del usuario (marca visual pasiva sobre `/mes`, dashboard y reportes; alerta activa sobre keys `mes.*`). Gestiona **solo límites** — no re-edita moneda, reportes ni secciones.
 - **Lista de límites** del usuario: por fila el nombre (o placeholder derivado), la key legible, su **naturaleza** (pasiva/activa), un chip con la condición (operador + umbral), un **preview del efecto** (solo pasiva), el **switch `enabled`** y la acción **eliminar** (con confirmación inline).
 - **Empty-state** cuando el usuario no tiene límites.
 - **Botón para crear** un límite → abre el modal de creación.
 - **Modal de creación** con formulario progresivo: elegir **key** (agrupada por superficie: `/mes`, dashboard y reportes) → **refinamiento** condicional (selector de sección o de categoría, según la key) → **naturaleza** (pasiva / activa; activa habilitada solo para keys `mes.*`) → **operador + umbral** (input según la unidad de la key, número puro sin moneda; en activa los operadores se restringen por la polaridad del anclaje) → *(rama pasiva)* **alcance temporal** (todos los meses / mes en curso) + **efecto** (solo el subset válido del anclaje, con preview) → **nombre** opcional. La **rama activa omite** el alcance temporal y el efecto.
 
-- El layout, el catálogo de efectos visuales y su preview, y la rama activa del formulario los define `docs/design.md`.
+- El layout del hub y de la navegación vertical, el catálogo de efectos visuales de Límites y su preview, y la rama activa del formulario los define `docs/design.md`.
 
 ### Acciones disponibles
 
+- **Navegar entre secciones** — la navegación vertical cambia la sección activa y la **URL anidada** sin salir del hub (deep-linkable).
 - **General — cambiar la moneda por defecto** — al elegir una de las 4 monedas, el cambio se persiste (`PATCH /settings`) y **re-expresa los totales en vivo** sin tocar ningún movimiento guardado (RF-CUR-005).
+- **Categorías — crear / editar / eliminar** — según §6.
+- **Métodos de pago — crear / editar / eliminar / predeterminar por estructura** — según §10.
 - **Límites — crear / eliminar / activar-desactivar** un límite (RF-LIM-002). **No hay editar**: para cambiar un límite se elimina y se crea de nuevo. Cada cambio persiste el blob completo vía `PUT /preferences`.
 - Acciones globales del sidebar.
 
 ### Navegación
 
-- **Llega desde:** link "Configuración" del sidebar; acceso directo a `/configuracion`.
-- **Lleva a:** permanece en `/configuracion`; el efecto del cambio de moneda default se ve al volver a `/mes`, dashboard o reportes; el efecto de los límites se ve en `/mes`, el dashboard y los reportes (marcas pasivas, RF-LIM-003).
+- **Llega desde:** link "Configuración" del sidebar (abre en **General**); URL directa a cualquier sección (deep-link); chip de moneda default del header de otras pantallas (abre General); enlace desde el formulario de carga cuando no hay categorías disponibles (abre la sección Categorías).
+- **Entre secciones:** la navegación vertical cambia de sección sin salir del hub, actualizando la ruta anidada.
+- **Lleva a:** permanece en Configuración; el efecto del cambio de moneda default se ve al volver a `/mes`, dashboard o reportes; el efecto de los límites se ve en `/mes`, el dashboard y los reportes (marcas pasivas, RF-LIM-003).
 
 ### Estados
 
-- **Cargando:** General mientras se obtiene la configuración (`GET /settings`); Límites mientras se resuelve el blob de preferencias.
-- **Con datos:** General refleja la moneda default vigente; Límites lista los límites del usuario.
-- **Vacío (Límites):** empty-state cuando no hay límites configurados.
+- **Sección activa por URL:** entrar a `/configuracion` abre General; entrar directo a `/configuracion/categorias`, `/configuracion/metodos-pago` o `/configuracion/limites` abre esa sección con su link vertical marcado.
+- **Cargando:** cada sección resuelve sus propios datos —General vía `GET /settings`; Categorías y Métodos de pago sus listas (§6, §10); Límites el blob de preferencias.
+- **Con datos:** General refleja la moneda default vigente; Categorías y Métodos de pago sus gestores; Límites lista los límites del usuario.
+- **Vacío (Límites):** empty-state cuando no hay límites configurados. (Los vacíos de Categorías y Métodos de pago se describen en §6 y §10.)
 - **Guardando / error al guardar:** el cambio se confirma al persistir; ante error del backend se informa sin romper la pantalla (RNF-008) y el ajuste queda sin cambios.
 
 ---
 
-## 10. Gestión de métodos de pago (`/metodos-pago`)
+## 10. Métodos de pago — sección de Configuración (`/configuracion/metodos-pago`)
 
 **RF relacionados:** RF-PM-001, RF-PM-002, RF-PM-003, RF-PM-004, RF-PM-005, RF-PM-006, RF-PM-007, RF-NAV-001
 
-> **Ruta:** `/metodos-pago`. **Link en el sidebar**, debajo de "Categorías" (orden: Dashboard → Vista del mes → Reportes → Categorías → Métodos de pago → Configuración).
+> **Ruta:** `/configuracion/metodos-pago`. Es una **sección del hub de Configuración** (§9), accesible desde la navegación vertical de secciones y por URL directa (deep-link). No es un link del sidebar.
 
 ### Propósito
 
-Pantalla dedicada para administrar los métodos de pago del usuario: listar, crear, editar y eliminar. Es **espejo 1:1 de Gestión de categorías** (pantalla 6) en estructura, estados, validaciones, empty y confirmación de borrado; lo propio de esta pantalla es que la identidad visual es un **ícono** (no un color) y que el método tiene un **tipo** con campos condicionales. La creación y edición se resuelven en un modal dentro de la pantalla.
+Sección del hub de Configuración dedicada a administrar los métodos de pago del usuario: listar, crear, editar y eliminar. Es **espejo 1:1 de la sección Categorías** (pantalla 6) en estructura, estados, validaciones, empty y confirmación de borrado; lo propio de esta sección es que la identidad visual es un **ícono** (no un color) y que el método tiene un **tipo** con campos condicionales. La creación y edición se resuelven en un modal dentro de la sección.
 
 ### Contenido
 
-- **Sidebar** con el link "Métodos de pago" marcado como activo.
+- **Sidebar** con el link "Configuración" marcado como activo (esta superficie es una sección del hub de Configuración).
 - **Lista de métodos de pago activos** del usuario. Cada ítem muestra (ver `docs/design.md`, §Métodos de pago — render en la lista):
   - **Ícono** del método (identidad visual; en el slot del color-swatch de categorías).
   - **Nombre** del método.
@@ -509,8 +525,8 @@ Pantalla dedicada para administrar los métodos de pago del usuario: listar, cre
 
 ### Navegación
 
-- **Llega desde:** link "Métodos de pago" del sidebar (RF-NAV-001); acceso directo a `/metodos-pago`.
-- **Lleva a:** permanece en `/metodos-pago` tras crear, editar o eliminar. (El modal de método de pago **no** se abre desde el formulario de carga: el selector del form no tiene "+ Nueva" inline — RF-PM-006.)
+- **Llega desde:** la navegación vertical de secciones del hub de Configuración (§9); URL directa a `/configuracion/metodos-pago` (deep-link).
+- **Lleva a:** permanece en `/configuracion/metodos-pago` tras crear, editar o eliminar. (El modal de método de pago **no** se abre desde el formulario de carga: el selector del form no tiene "+ Nueva" inline — RF-PM-006.)
 
 ### Estados
 

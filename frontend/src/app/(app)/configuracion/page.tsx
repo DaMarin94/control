@@ -1,41 +1,28 @@
 /**
- * Página de configuración — /configuracion (Fase 1.2.3; solapas P2 — Fase 1).
+ * Sección "General" de /configuracion (P6 — hub de administración).
  *
- * Shell idéntico a /categorias (docs/design.md §"A. Pantalla /configuracion"):
- * - div px-10 py-[34px] pb-20 max-w-[1120px] mx-auto animate-screen-fade
- * - Cabecera .phead: eyebrow "Ajustes" + H1 "Configuración"
- * - Bajada opcional: "Preferencias de tu cuenta."
- * - Contenido: dos solapas hermanas — "General" (Moneda por defecto, sin cambios)
- *   y "Límites" (gestor de límites, P2 — Fase 1). Ver `configuracion-tabs.tsx`.
+ * docs/design.md §"Panel de gestión de límites" → 1.b "Jerarquía de cabecera
+ * del hub": cabecera de sección `h2` 18/700 "General", SIN bajada y SIN botón
+ * (las cards de esta sección son autodescriptivas) + `SettingsClient` (card
+ * Moneda por defecto, intacta).
  *
- * Server Component — shell estático; el control de tabs/settings es client-side.
+ * Server Component — shell estático; el control de moneda es client-side.
  */
 
-import { ConfiguracionTabs } from "./configuracion-tabs";
+import { SettingsClient } from "./settings-client";
 
 export const metadata = {
   title: "Configuración — Control",
   description: "Preferencias de tu cuenta",
 };
 
-export default function ConfiguracionPage() {
+export default function ConfiguracionGeneralPage() {
   return (
-    <div className="px-10 py-[34px] pb-20 max-w-[1120px] mx-auto animate-screen-fade">
-      {/* Cabecera .phead */}
-      <div className="mb-6">
-        <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted mb-1">
-          Ajustes
-        </p>
-        <h1 className="text-[32px] font-bold tracking-[-0.02em] text-ink leading-tight">
-          Configuración
-        </h1>
-        <p className="text-[14px] text-muted mt-2">
-          Preferencias de tu cuenta.
-        </p>
+    <div>
+      <div className="mb-4">
+        <h2 className="text-[18px] font-bold tracking-[-0.01em] text-ink">General</h2>
       </div>
-
-      {/* Solapas: General (Moneda) · Límites (P2 — Fase 1) */}
-      <ConfiguracionTabs />
+      <SettingsClient />
     </div>
   );
 }

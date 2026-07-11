@@ -19,7 +19,7 @@ Organización **por tipo de archivo**:
 frontend/src/
 ├── app/            (rutas del App Router)
 │   ├── login/, registro/   (públicas, sin sidebar)
-│   └── (app)/              (route group autenticado con layout+sidebar compartido: /, /mes, /categorias)
+│   └── (app)/              (route group autenticado con layout+sidebar compartido: /, /mes, /reportes, /configuracion/*)
 ├── components/     (todos los componentes de UI)
 ├── hooks/          (todos los hooks: useToast, hooks de datos, etc.)
 ├── lib/            (capa de API centralizada, config, helpers)
@@ -179,9 +179,32 @@ const { preferences, isLoading, isSaving, setPreferences } = usePreferences()
 - **`setPreferences(newBlob)`** — persiste con **`PUT /preferences`** y, al confirmar, actualiza la sesión con **`useSession().update()`** (dispara el `trigger === "update"` del callback `jwt`). Devuelve `{ success, preferences?, error? }`.
 - **El llamador hace el merge.** Como la semántica del backend es **reemplazo total** (no merge), para cambiar una sola clave el consumidor parte del blob actual y manda el objeto completo: `setPreferences({ ...preferences, clave: valor })`. Omitir una clave la **borra**.
 
-## Categorías (`/categorias`)
+## Hub de Configuración (`/configuracion`) — destino canónico
 
-CRUD de categorías. Se accede desde el **link "Categorías" del sidebar** (RF-NAV-001) y por URL. Vive bajo el route group `app/(app)/categorias/` (ver sección Navegación global).
+`/configuracion` es un **hub de administración** de la cuenta con **layout compartido** y **cuatro secciones deep-linkables**, no una pantalla tabificada. Reglas funcionales y contenido de cada sección en `docs/screens.md` (§9) y `requirements.md`; acá la arquitectura frontend.
+
+**Layout compartido (`app/(app)/configuracion/layout.tsx`, Client Component):** contiene lo **persistente** entre secciones —para que no se re-monte al navegar entre rutas hijas—:
+- La **cabecera de página persistente** (eyebrow "Ajustes" + **único H1 "Configuración"** + bajada). Es el único H1 y único eyebrow de la superficie.
+- La **columna de navegación vertical de secciones**: landmark **`<nav>`** con **`<Link>`** (next/link) por sección y **`aria-current="page"`** en la activa. La sección activa se deriva de **`usePathname()` por comparación exacta** (las 4 rutas son hojas, sin subrutas que colisionen). **NO es un tablist/tab/tabpanel** ni estado efímero: son URLs reales.
+
+**Cuatro secciones = cuatro rutas anidadas**, en orden fijo, cada una una page hoja que renderiza su gestor bajo un `h2` de sección:
+
+| Sección | Ruta | Contenido |
+| --- | --- | --- |
+| General | `/configuracion` | preferencias de la cuenta (moneda por defecto) |
+| Categorías | `/configuracion/categorias` | gestor de categorías (§ Categorías) |
+| Métodos de pago | `/configuracion/metodos-pago` | gestor de métodos de pago (§ Métodos de pago) |
+| Límites | `/configuracion/limites` | gestor de límites (§ Límites) |
+
+- **Gestores colocados bajo las rutas del hub:** los componentes de Categorías y Métodos de pago viven **co-ubicados** bajo `app/(app)/configuracion/categorias/` y `app/(app)/configuracion/metodos-pago/`, junto a su `page.tsx`.
+- **Bloque de ancho canónico una sola vez:** el layout del hub aplica `max-w-[1120px] mx-auto` + `px-10` para las cuatro secciones; las pages hijas solo devuelven su contenido.
+- **Jerarquía de cabecera de 3 niveles:** H1 de página persistente (en el layout) · `h2` de sección (por ruta) · títulos de card. Los gestores de Categorías/Métodos **no** tienen eyebrow ni H1 propio.
+- **Rutas viejas `/categorias` y `/metodos-pago` → redirects permanentes (308)** a las rutas anidadas, definidos en `next.config.ts` (`redirects()`).
+- **No son links del sidebar:** Categorías y Métodos de pago se alcanzan como secciones del hub, no desde el sidebar (ver § Navegación global).
+
+## Categorías (`/configuracion/categorias`)
+
+CRUD de categorías. Es la **sección Categorías del hub de Configuración** (deep-linkable por URL; ver § Hub de Configuración). Componentes co-ubicados bajo `app/(app)/configuracion/categorias/`.
 
 ### Pantalla
 
@@ -212,7 +235,7 @@ La matriz de colores vive como **constante propia del front** en `types/category
 
 El mismo `CategoryFormModal` se usa en **dos modos**, diferenciados **solo por props opcionales** — no hay flag explícito de modo:
 
-- **Standalone (desde `/categorias`):** comportamiento normal. El selector de scope ofrece las tres opciones (`AMBOS` / `GASTO` / `INGRESO`) con default **"Ambos"**.
+- **Standalone (desde `/configuracion/categorias`):** comportamiento normal. El selector de scope ofrece las tres opciones (`AMBOS` / `GASTO` / `INGRESO`) con default **"Ambos"**.
 - **Inline (desde los formularios de movimiento, RF-MU-004):** se activa pasando las props **`lockScopeToType`** y **`onCreated`**:
   - `lockScopeToType` (el tipo del movimiento en curso, `EXPENSE` / `INCOME`) **restringe el selector de scope** a ese tipo + "Ambos" y **preselecciona el tipo exacto**.
   - Al crear o reactivar con éxito, el modal **devuelve la categoría al padre vía `onCreated`** para que el formulario de movimiento la **autoseleccione**.
@@ -231,7 +254,7 @@ Cuando `CategoryFormModal` se abre **inline** (por encima del modal de movimient
 
 ## Métodos de pago (íconos)
 
-Frontend del CRUD `/metodos-pago` y del selector de método en los forms de movimiento. Reglas funcionales en `requirements.md`, §3.6.b; pantalla en `docs/screens.md`, pantalla 10.
+Frontend del CRUD de métodos de pago —sección **`/configuracion/metodos-pago`** del hub (ver § Hub de Configuración), componentes co-ubicados bajo `app/(app)/configuracion/metodos-pago/`— y del selector de método en los forms de movimiento. Reglas funcionales en `requirements.md`, §3.6.b; pantalla en `docs/screens.md`, pantalla 10.
 
 ### Allowlist de íconos — espejo del backend (gotcha)
 
@@ -265,7 +288,7 @@ Carga de movimientos. El modal de carga se invoca desde el dashboard (`/`); **ed
 ### transaction-form
 
 - Tipo **Gasto** (default) / **Ingreso**; monto **en pesos** (se convierte a centavos al enviar); selector de categoría **filtrado por scope** (RN-010) que **reusa `["categories"]`** (`CATEGORIES_QUERY_KEY`); fecha + hora (default: ahora); descripción opcional.
-- **Estados:** Guardando; **Sin categorías disponibles** (link a `/categorias`); **Error backend** — el modal **queda abierto y conserva los datos** ingresados (RNF-008).
+- **Estados:** Guardando; **Sin categorías disponibles** (link a `/configuracion/categorias`); **Error backend** — el modal **queda abierto y conserva los datos** ingresados (RNF-008).
 
 ### Moneda y cotización en los forms de movimiento (multi-moneda)
 
@@ -393,7 +416,7 @@ Componente reutilizable **`components/ui/period-nav.tsx`**: navegación genéric
 
 `PeriodNav` **no es un grid**. Son dos piezas independientes dentro de un wrapper raíz `relative` que ocupa el **100% del ancho de `<main>`** (sin padding propio) — ese wrapper es el sistema de referencia de las flechas:
 
-- **Bloque de contenido** — usa el **mismo mecanismo canónico que las otras cinco pantallas** (`/`, `/categorias`, `/metodos-pago`, `/reportes`, `/configuracion`): `max-w-[1120px] mx-auto`. Es un bloque, no un track de grid: llena el ancho disponible de `<main>` y capea a 1120px centrado. El `px-10` y el padding vertical los aporta el **consumidor** sobre `children`; `PeriodNav` solo aporta `max-w-[1120px] mx-auto`.
+- **Bloque de contenido** — usa el **mismo mecanismo canónico que las demás pantallas** (`/`, `/reportes` y el hub `/configuracion` con sus cuatro secciones): `max-w-[1120px] mx-auto`. Es un bloque, no un track de grid: llena el ancho disponible de `<main>` y capea a 1120px centrado. El `px-10` y el padding vertical los aporta el **consumidor** sobre `children`; `PeriodNav` solo aporta `max-w-[1120px] mx-auto`.
 - **Flechas ‹ ›** — **overlay `position:absolute`** respecto del wrapper raíz (por lo tanto respecto del ancho de `<main>`, no del bloque ya capeado). **No reservan ancho**: su presencia no angosta ni empuja el bloque; lo flanquean desde afuera. Tamaño único **64×64** (glifo 46px), sin variantes por breakpoint. Detalle visual en `docs/design.md`.
 
 **Offset horizontal de las flechas — CSS puro, sin JS ni medición.** El `left` de la ‹ y el `right` de la › valen ambos `max(0px, calc((100% - 1120px) / 2 - 84px))`, donde `100%` = ancho de `<main>` y `84px` = botón (64) + aire (20). Con contenido ancho la flecha cae entera en el margen exterior; en el rango donde el bloque llena `<main>` la fórmula clampea a 0 y la flecha se pega al borde de `<main>`, solapando la banda de `px-10` — nunca sale de `<main>` (invariante 3 de contención).
@@ -464,7 +487,7 @@ El dashboard es `src/app/page.tsx` en **`/`** (no hay `/dashboard`). Redirects:
 
 ### Navegación entre pantallas
 
-La navegación entre `/`, `/mes` y `/categorias` se hace por el **sidebar global** (ver sección siguiente) y, en paralelo, por los **accesos definidos en cada pantalla** (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL). Ambos conviven.
+La navegación entre las pantallas autenticadas se hace por el **sidebar global** (ver sección siguiente) y, en paralelo, por los **accesos definidos en cada pantalla** (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL). Ambos conviven.
 
 ## Navegación global (sidebar — RF-NAV-001/002)
 
@@ -472,13 +495,13 @@ Feature 100% frontend. Resuelve la navegación entre secciones, la acción prima
 
 ### Punto único de montaje: route group `app/(app)/`
 
-Las tres pantallas autenticadas (`/` dashboard, `/mes`, `/categorias`) viven dentro del **route group `app/(app)/`**, con un `layout.tsx` compartido que monta el sidebar **una sola vez**.
+Las pantallas autenticadas (`/` dashboard, `/mes`, `/reportes` y el hub `/configuracion` con sus secciones anidadas) viven dentro del **route group `app/(app)/`**, con un `layout.tsx` compartido que monta el sidebar **una sola vez**.
 
-- **Los route groups de Next.js no alteran las URLs:** `/`, `/mes` y `/categorias` siguen siendo idénticas — `(app)` es solo organización de archivos.
+- **Los route groups de Next.js no alteran las URLs:** `(app)` es solo organización de archivos; las rutas se mantienen idénticas.
 - **`login` y `registro` quedan FUERA del grupo** → no heredan el layout, por eso no muestran sidebar (cumple el criterio de RF-NAV-001 "no se muestra en pantallas no autenticadas").
 - **Regla para pantallas futuras: toda pantalla nueva con sesión debe vivir bajo `app/(app)/`** para heredar el sidebar. No remontar el sidebar por pantalla.
-- El `<main>` lo monta **`AppShell`** (no `layout.tsx`) y es el **`@container`** de la app autenticada; **las páginas hijas solo devuelven su contenido** con su propio bloque de ancho (`max-w-[1120px] mx-auto` + `px-10`), no su propio `<main>` ni contenedor.
-- Los componentes co-ubicados de categorías (`categories-list`, `category-form-modal`, `delete-category-dialog`, `reactivation-prompt`) viven junto a su `page.tsx` dentro de `(app)/categorias/`.
+- El `<main>` lo monta **`AppShell`** (no `layout.tsx`) y es el **`@container`** de la app autenticada; **las páginas hijas solo devuelven su contenido** con su propio bloque de ancho (`max-w-[1120px] mx-auto` + `px-10`), no su propio `<main>` ni contenedor. En el hub `/configuracion` ese bloque de ancho lo aporta el **layout del hub** para las cuatro secciones (ver § Hub de Configuración).
+- Los componentes co-ubicados de categorías (`categories-list`, `category-form-modal`, `delete-category-dialog`, `reactivation-prompt`) viven junto a su `page.tsx` dentro de `(app)/configuracion/categorias/`; los de métodos de pago, bajo `(app)/configuracion/metodos-pago/`.
 
 ### Componentes
 
@@ -489,7 +512,7 @@ Las tres pantallas autenticadas (`/` dashboard, `/mes`, `/categorias`) viven den
 
 ### Contenido
 
-Logo/nombre "Control" → `/`; links **Dashboard** (`/`), **Vista del mes** (`/mes`, siempre abre en el mes actual porque la página defaultea a `getCurrentMonth`), **Categorías** (`/categorias`); botón **"Nuevo movimiento"** que reusa `NewTransactionButton` y abre `TransactionModal` en modo `create` (1 clic, RNF-003); **menú de usuario** abajo con avatar = **inicial del email en mayúscula**.
+Logo/nombre "Control" → `/`; **cuatro links** en orden: **Dashboard** (`/`), **Vista del mes** (`/mes`, siempre abre en el mes actual porque la página defaultea a `getCurrentMonth`), **Reportes** (`/reportes`), **Configuración** (`/configuracion`); botón **"Nuevo movimiento"** que reusa `NewTransactionButton` y abre `TransactionModal` en modo `create` (1 clic, RNF-003); **menú de usuario** abajo con avatar = **inicial del email en mayúscula**. Categorías y Métodos de pago **no** son links del sidebar: se alcanzan como secciones del hub de Configuración.
 
 ### Decisiones y gotchas
 
@@ -501,7 +524,7 @@ Logo/nombre "Control" → `/`; links **Dashboard** (`/`), **Vista del mes** (`/m
 - **El offset de `<main>` según el sidebar va por `margin-left` (248↔0), NO `padding-left`.** Es estructural, no cosmético: una container query `inline-size` mide el tamaño propio del contenedor **incluyendo su padding** — offsetear con padding haría que `<main>` se "creyera" más ancho de lo que el contenido puede usar y montaría régimen amplio cuando no corresponde. `margin-left` no participa del tamaño propio del elemento, así que el ancho medido por `@container` coincide con el ancho de contenido real (viewport − 248px si está abierto).
 - **Avatar = inicial del email** (no hay imagen para usuarios de email).
 - **Email via prop drilling desde el Server layout, NO `useSession()` en el sidebar.** El layout (Server) lo resuelve con `auth()`. Si el email es `null`, fallback a string vacío (inofensivo: el middleware ya redirigió a usuarios sin sesión).
-- **Sección activa — match EXACTO para `/`:** el link Dashboard compara `pathname === "/"`. Con `startsWith("/")` quedaría activo en **todas** las rutas. Los links `/mes` y `/categorias` usan `startsWith` (no hay subrutas que colisionen).
+- **Sección activa — match EXACTO para `/`:** el link Dashboard compara `pathname === "/"`. Con `startsWith("/")` quedaría activo en **todas** las rutas. Los links `/mes`, `/reportes` y `/configuracion` usan `startsWith` (el de Configuración queda activo en las cuatro secciones anidadas del hub; no hay subrutas que colisionen).
 - **`<Suspense>` en `(app)/mes/page.tsx`:** se mantiene envolviendo `MonthViewWrapper` (que usa `useSearchParams()`); sin él el build de Next 15 falla. El cambio de carpeta al route group no lo altera (ver gotcha de `<Suspense>` en la sección Vista del mes).
 
 ## Reportes (RF-REP-001..012)
@@ -612,7 +635,7 @@ Límites configurables de dos naturalezas: **marca visual pasiva** sobre `/mes`,
 - **`active-limit-dialog.tsx`** (`ActiveLimitDialog`) — diálogo que enumera los cruces con "Guardar igual" / "Cancelar".
 - **Compuerta en el `onSubmit` de los 4 forms** (`transaction-form`, `recurring-form`, `installment-form`, `calculated-form`): antes de persistir llaman `evaluate`; con cruces abren el diálogo, sin cruces guardan directo. Cada form resuelve su `projectionMonth` según el tipo (único → su mes; fijo/cuota/calculado-recurrente → mes en curso).
 
-**Componentes (`components/limits/`):** `limit-mark.tsx` (render de la marca sobre el dato), `active-limit-dialog.tsx` (diálogo de la alerta activa), `limit-anchor-picker` / `limit-effect-picker` / `limit-category-select` y `create-limit-modal` (formulario progresivo; la rama activa omite alcance temporal y efecto, y restringe operadores por polaridad), `limit-row` + `limits-tab` (lista y solapa Límites de `/configuracion`). Hook **`use-limits.ts`** sobre `usePreferences` (lee/escribe la clave `limits` con la semántica de reemplazo total del blob). La config es tabificada (`configuracion-tabs.tsx`: General + Límites).
+**Componentes (`components/limits/`):** `limit-mark.tsx` (render de la marca sobre el dato), `active-limit-dialog.tsx` (diálogo de la alerta activa), `limit-anchor-picker` / `limit-effect-picker` / `limit-category-select` y `create-limit-modal` (formulario progresivo; la rama activa omite alcance temporal y efecto, y restringe operadores por polaridad), `limit-row` + `limits-tab` (lista y gestor de la sección Límites del hub, en la ruta `/configuracion/limites`). Hook **`use-limits.ts`** sobre `usePreferences` (lee/escribe la clave `limits` con la semántica de reemplazo total del blob). La sección Límites es una de las cuatro rutas anidadas del hub de Configuración (ver § Hub de Configuración).
 
 **Gotchas (destino canónico):**
 - **`lib/limits/catalog.ts` es la única fuente del subset de efectos y del default por anclaje**, y debe mantenerse **en sync con el mapeo efecto↔anclaje de `docs/design.md`**. Si design cambia qué efectos admite un tipo de anclaje, hay que actualizar el `effects`/`defaultEffect` de las keys de ese tipo en el registro (no hay validación cruzada automática: son dos fuentes que se espejan a mano, como la paleta de colores de categorías).

@@ -2,10 +2,14 @@
 
 /**
  * Lista de categorías activas con acciones de editar y eliminar.
- * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
+ *
+ * Sección "Categorías" del hub /configuracion (P6): cabecera degradada a
+ * nivel 2 (docs/design.md §"Panel de gestión de límites" → 1.b "Jerarquía de
+ * cabecera del hub") — SIN eyebrow, h2 18/700 + bajada 13/500 + botón
+ * primario con ícono `Plus` en la fila del h2.
  *
  * Layout:
- *   - Header: eyebrow "Configuración" + h1 "Categorías" + botón "+ Nueva categoría"
+ *   - Header: h2 "Categorías" + botón "Nueva categoría" (Plus + label)
  *   - Bajada explicativa
  *   - Lista .cat-list: filas .catrow (swatch · nombre · contador · badge scope · acciones en hover)
  *
@@ -16,7 +20,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { KebabMenu } from "@/components/ui/kebab-menu";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useCategories } from "@/hooks/use-categories";
 import { type Category, SCOPE_LABELS } from "@/types/category";
 import { CategoryFormModal } from "./category-form-modal";
@@ -66,15 +70,13 @@ export function CategoriesList() {
   if (isLoading) {
     return (
       <div role="status" aria-label="Cargando categorías">
-        {/* Header skeleton */}
-        <div className="flex items-end justify-between gap-5 mb-6">
+        {/* Header skeleton — cabecera de sección (sin eyebrow, título ~18px) */}
+        <div className="flex items-center justify-between gap-5 flex-wrap mb-4">
           <div className="flex flex-col gap-2">
-            {/* Eyebrow ~12px, ~96px */}
-            <SkeletonLine height={12} width={96} />
-            {/* H1 ~32px, ~144px */}
-            <SkeletonLine height={32} width={144} />
+            {/* Título de sección ~18px, ~144px */}
+            <SkeletonLine height={18} width={144} />
           </div>
-          {/* Botón "+ Nueva categoría" ~40×144 */}
+          {/* Botón "Nueva categoría" ~40×144 */}
           <SkeletonBlock height={40} width={144} radius="ctl" />
         </div>
 
@@ -113,28 +115,22 @@ export function CategoriesList() {
 
   return (
     <>
-      {/* ── Header .phead ── */}
-      <div className="flex items-end justify-between gap-5 mb-2 flex-wrap">
+      {/* ── Cabecera de sección (nivel 2 del hub, docs/design.md §1.b) ── */}
+      <div className="flex items-center justify-between gap-5 flex-wrap mb-4">
         <div>
-          <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted mb-[6px]">
-            Configuración
+          <h2 className="text-[18px] font-bold tracking-[-0.01em] text-ink">Categorías</h2>
+          <p className="text-[13px] font-medium text-muted mt-[3px]">
+            <span className="mono font-semibold text-ink">{count}</span>{" "}
+            {count === 1 ? "categoría activa" : "categorías activas"}. El{" "}
+            <b className="font-semibold text-ink">alcance</b> define en qué tipo de movimiento
+            aparece cada una al cargar.
           </p>
-          <h1 className="text-[32px] font-bold tracking-[-0.02em] leading-[1.05] text-ink m-0">
-            Categorías
-          </h1>
         </div>
         <Button size="default" onClick={() => setEditingCategory("new")}>
-          + Nueva categoría
+          <Plus size={16} aria-hidden="true" />
+          Nueva categoría
         </Button>
       </div>
-
-      {/* ── Bajada ── */}
-      <p className="text-[14px] text-muted mb-6">
-        <span className="mono font-semibold text-ink">{count}</span>{" "}
-        {count === 1 ? "categoría activa" : "categorías activas"}. El{" "}
-        <b className="font-semibold text-ink">alcance</b> define en qué tipo de movimiento
-        aparece cada una al cargar.
-      </p>
 
       {/* ── Lista o estado vacío ── */}
       {!categories || categories.length === 0 ? (

@@ -44,7 +44,7 @@ import { useCalculated } from "@/hooks/use-calculated";
 import { useSettings } from "@/hooks/use-settings";
 import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
 import { useToast } from "@/hooks/use-toast";
-import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
+import { CategoryFormModal } from "@/app/(app)/configuracion/categorias/category-form-modal";
 import { type Category, type CategoryScope } from "@/types/category";
 import { type TransactionType } from "@/types/transaction";
 import type { FormulaOperator, MovementItem } from "@/types/movement";
@@ -818,7 +818,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
                 <div className="text-[13px] leading-[1.45] text-expense-ink">
                   <b className="font-bold">Sin categorías para este tipo.</b>{" "}
                   <Link
-                    href="/categorias"
+                    href="/configuracion/categorias"
                     className="font-bold underline underline-offset-[2px] text-expense-ink hover:opacity-80"
                     onClick={onClose}
                   >

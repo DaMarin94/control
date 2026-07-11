@@ -6,8 +6,13 @@
  * es que la identidad visual es un ÍCONO (no un color) y el tipo va como chip neutro
  * (docs/design.md, §Métodos de pago — render en la lista).
  *
+ * Sección "Métodos de pago" del hub /configuracion (P6): cabecera degradada a
+ * nivel 2 (docs/design.md §"Panel de gestión de límites" → 1.b "Jerarquía de
+ * cabecera del hub") — SIN eyebrow, h2 18/700 + bajada 13/500 + botón
+ * primario con ícono `Plus` en la fila del h2.
+ *
  * Layout:
- *   - Header: eyebrow "Configuración" + h1 "Métodos de pago" + botón "+ Nuevo método de pago"
+ *   - Header: h2 "Métodos de pago" + botón "Nuevo método de pago" (Plus + label)
  *   - Bajada explicativa
  *   - Lista: filas [tile ícono] [nombre] [chip tipo] [contador] [predeterminado] [acciones]
  *
@@ -23,7 +28,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { KebabMenu } from "@/components/ui/kebab-menu";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { usePaymentMethods } from "@/hooks/use-payment-methods";
 import { usePreferences } from "@/hooks/use-preferences";
 import { PaymentMethodIcon } from "@/components/ui/payment-method-icon";
@@ -56,11 +61,10 @@ export function PaymentMethodsList() {
   if (isLoading) {
     return (
       <div role="status" aria-label="Cargando métodos de pago">
-        {/* Header skeleton */}
-        <div className="flex items-end justify-between gap-5 mb-6">
+        {/* Header skeleton — cabecera de sección (sin eyebrow, título ~18px) */}
+        <div className="flex items-center justify-between gap-5 flex-wrap mb-4">
           <div className="flex flex-col gap-2">
-            <SkeletonLine height={12} width={96} />
-            <SkeletonLine height={32} width={200} />
+            <SkeletonLine height={18} width={200} />
           </div>
           <SkeletonBlock height={40} width={188} radius="ctl" />
         </div>
@@ -102,28 +106,22 @@ export function PaymentMethodsList() {
 
   return (
     <>
-      {/* ── Header .phead ── */}
-      <div className="flex items-end justify-between gap-5 mb-2 flex-wrap">
+      {/* ── Cabecera de sección (nivel 2 del hub, docs/design.md §1.b) ── */}
+      <div className="flex items-center justify-between gap-5 flex-wrap mb-4">
         <div>
-          <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted mb-[6px]">
-            Configuración
+          <h2 className="text-[18px] font-bold tracking-[-0.01em] text-ink">Métodos de pago</h2>
+          <p className="text-[13px] font-medium text-muted mt-[3px]">
+            <span className="mono font-semibold text-ink">{count}</span>{" "}
+            {count === 1 ? "método de pago activo" : "métodos de pago activos"}. Asociá un
+            método a tus movimientos para saber <b className="font-semibold text-ink">con qué</b>{" "}
+            pagaste o cobraste.
           </p>
-          <h1 className="text-[32px] font-bold tracking-[-0.02em] leading-[1.05] text-ink m-0">
-            Métodos de pago
-          </h1>
         </div>
         <Button size="default" onClick={() => setEditingMethod("new")}>
-          + Nuevo método de pago
+          <Plus size={16} aria-hidden="true" />
+          Nuevo método de pago
         </Button>
       </div>
-
-      {/* ── Bajada ── */}
-      <p className="text-[14px] text-muted mb-6">
-        <span className="mono font-semibold text-ink">{count}</span>{" "}
-        {count === 1 ? "método de pago activo" : "métodos de pago activos"}. Asociá un
-        método a tus movimientos para saber <b className="font-semibold text-ink">con qué</b>{" "}
-        pagaste o cobraste.
-      </p>
 
       {/* ── Lista o estado vacío ── */}
       {!paymentMethods || paymentMethods.length === 0 ? (

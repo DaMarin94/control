@@ -60,7 +60,7 @@ vi.mock("@/lib/format", async (importOriginal) => {
 });
 
 // CategoryFormModal no lo testeamos aquí
-vi.mock("@/app/(app)/categorias/category-form-modal", () => ({
+vi.mock("@/app/(app)/configuracion/categorias/category-form-modal", () => ({
   CategoryFormModal: vi.fn(() => null),
 }));
 

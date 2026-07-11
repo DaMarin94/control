@@ -18,7 +18,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { PaymentMethodsList } from "@/app/(app)/metodos-pago/payment-methods-list";
+import { PaymentMethodsList } from "@/app/(app)/configuracion/metodos-pago/payment-methods-list";
 import { ToastProvider } from "@/components/ui/toast";
 import type { PaymentMethod } from "@/types/payment-method";
 import type { UserPreferences } from "@/types/auth";

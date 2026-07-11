@@ -8,7 +8,7 @@
 
 Orden acordado:
 
-**P0-a ✅ → P0-b ✅ → P6 → P1 + P4 → P2 + P3**
+**P0-a ✅ → P0-b ✅ → P6 ✅ → P1 + P4 → P2 + P3**
 
 P0-a: **cerrado** (política enganchada al workflow: `docs/design.md`, `docs/qa-visual.md` y los agentes).
 P0-b: **cerrado** (barrido de la deuda responsive de las superficies existentes).
@@ -92,6 +92,8 @@ Y **todos los modales** (invariante 2).
 ---
 
 ## P6 — `/configuracion`: sacar el segmented
+
+**Estado: cerrado ✅.** `/configuracion` es hoy un hub de administración con navegación vertical de secciones y 4 rutas anidadas deep-linkables (General, Categorías, Métodos de pago, Límites). Arquitectura en `docs/frontend.md` § Hub de Configuración; pantalla en `docs/screens.md` §9.
 
 **Alcance acotado: se reemplaza el control de navegación. NO es un rediseño de la pantalla ni del gestor de límites.**
 

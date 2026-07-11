@@ -32,7 +32,7 @@ import { useDefaultPaymentMethodPrefill } from "@/hooks/use-default-payment-meth
 import { useToast } from "@/hooks/use-toast";
 import { type Transaction, type TransactionType } from "@/types/transaction";
 import { type Category, type CategoryScope } from "@/types/category";
-import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
+import { CategoryFormModal } from "@/app/(app)/configuracion/categorias/category-form-modal";
 import { ActiveLimitDialog } from "@/components/limits/active-limit-dialog";
 import { toCanonicalAmountCents } from "@/lib/limits/project";
 import type { LimitConfig } from "@/types/limit";
@@ -558,7 +558,7 @@ export function TransactionForm({ transaction, onClose, editingSkipped }: Transa
                 <div className="text-[13px] leading-[1.45] text-expense-ink">
                   <b className="font-bold">Sin categorías para este tipo.</b>{" "}
                   <Link
-                    href="/categorias"
+                    href="/configuracion/categorias"
                     className="font-bold underline underline-offset-[2px] text-expense-ink hover:opacity-80"
                     onClick={onClose}
                   >

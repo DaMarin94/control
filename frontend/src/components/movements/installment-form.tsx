@@ -31,7 +31,7 @@ import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
 import { useDefaultPaymentMethodPrefill } from "@/hooks/use-default-payment-method-prefill";
 import { useToast } from "@/hooks/use-toast";
 import { type Category, type CategoryScope } from "@/types/category";
-import { CategoryFormModal } from "@/app/(app)/categorias/category-form-modal";
+import { CategoryFormModal } from "@/app/(app)/configuracion/categorias/category-form-modal";
 import { type InstallmentGroup } from "@/types/installment";
 import { ActiveLimitDialog } from "@/components/limits/active-limit-dialog";
 import { toCanonicalAmountCents } from "@/lib/limits/project";
@@ -524,7 +524,7 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
                 <div className="text-[13px] leading-[1.45] text-expense-ink">
                   <b className="font-bold">Sin categorías para Gasto.</b>{" "}
                   <Link
-                    href="/categorias"
+                    href="/configuracion/categorias"
                     className="font-bold underline underline-offset-[2px] text-expense-ink hover:opacity-80"
                     onClick={onClose}
                   >

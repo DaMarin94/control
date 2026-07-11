@@ -5,13 +5,13 @@
  * edición con colisión, campos condicionales por tipo, icon-picker, y la sección
  * "Predeterminado para" (RF-PM-007 — la edición del default vive acá, ver
  * docs/design.md §"Predeterminado por estructura — configuración en el modal…").
- * Espejo de tests/app/categorias/category-form-modal.test.tsx.
+ * Espejo de tests/app/configuracion/categorias/category-form-modal.test.tsx.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { PaymentMethodFormModal } from "@/app/(app)/metodos-pago/payment-method-form-modal";
+import { PaymentMethodFormModal } from "@/app/(app)/configuracion/metodos-pago/payment-method-form-modal";
 import { ToastProvider } from "@/components/ui/toast";
 import type { PaymentMethod } from "@/types/payment-method";
 import type { UserPreferences } from "@/types/auth";

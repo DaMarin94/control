@@ -43,11 +43,11 @@ export function LimitsTab() {
 
   return (
     <div>
-      {/* Sub-encabezado del panel */}
-      <div className="flex items-center justify-between gap-6 mb-4">
+      {/* Cabecera de sección (nivel 2 del hub, docs/design.md §1.b) */}
+      <div className="flex items-center justify-between gap-5 flex-wrap mb-4">
         <div>
-          <p className="text-[14.5px] font-semibold text-ink">Límites</p>
-          <p className="text-[12.5px] font-medium text-muted mt-[2px]">
+          <h2 className="text-[18px] font-bold tracking-[-0.01em] text-ink">Límites</h2>
+          <p className="text-[13px] font-medium text-muted mt-[3px]">
             Resaltá un dato cuando cruza un umbral que definís.
           </p>
         </div>

@@ -8,10 +8,12 @@
  *
  * Verifica:
  * - Renderiza el logo "Control" con link al dashboard.
- * - Renderiza los cuatro links de navegación (Dashboard, Vista del mes, Reportes, Categorías).
+ * - Renderiza los cuatro links de navegación (Dashboard, Vista del mes, Reportes, Configuración).
+ *   Categorías y Métodos de pago se mudaron a /configuracion/* (hub de administración,
+ *   P6) y ya NO son entradas del sidebar.
  * - El link activo tiene aria-current="page" (marca la sección activa).
- * - Dashboard activo solo en "/" exacto (no en /mes ni /categorias ni /reportes).
- * - El link "Reportes" se ubica entre "Vista del mes" y "Categorías" (RF-NAV-001).
+ * - Dashboard activo solo en "/" exacto (no en /mes ni /configuracion ni /reportes).
+ * - El link "Reportes" se ubica entre "Vista del mes" y "Configuración" (RF-NAV-001).
  * - En /reportes el link "Reportes" tiene aria-current="page".
  * - Renderiza el botón "Nuevo movimiento".
  * - Renderiza el UserMenu con el email recibido.
@@ -119,7 +121,15 @@ describe("AppSidebar", () => {
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Vista del mes" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Reportes" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Categorías" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Configuración" })).toBeInTheDocument();
+  });
+
+  it("NO renderiza 'Categorías' ni 'Métodos de pago' (mudados al hub /configuracion, P6)", () => {
+    mockUsePathname.mockReturnValue("/");
+    renderSidebar();
+
+    expect(screen.queryByRole("link", { name: "Categorías" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Métodos de pago" })).not.toBeInTheDocument();
   });
 
   it("el link 'Reportes' apunta a /reportes", () => {
@@ -147,7 +157,7 @@ describe("AppSidebar", () => {
 
     // Los otros no deben estar activos
     expect(screen.getByRole("link", { name: "Vista del mes" })).not.toHaveAttribute("aria-current");
-    expect(screen.getByRole("link", { name: "Categorías" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Configuración" })).not.toHaveAttribute("aria-current");
   });
 
   it("en /mes el link 'Vista del mes' tiene aria-current='page' y Dashboard NO", () => {
@@ -159,11 +169,11 @@ describe("AppSidebar", () => {
     expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
   });
 
-  it("en /categorias el link 'Categorías' tiene aria-current='page' y Dashboard NO", () => {
-    mockUsePathname.mockReturnValue("/categorias");
+  it("en /configuracion/categorias el link 'Configuración' tiene aria-current='page' y Dashboard NO", () => {
+    mockUsePathname.mockReturnValue("/configuracion/categorias");
     renderSidebar();
 
-    expect(screen.getByRole("link", { name: "Categorías" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Configuración" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
   });
 
@@ -174,7 +184,7 @@ describe("AppSidebar", () => {
     expect(screen.getByRole("link", { name: "Reportes" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
     expect(screen.getByRole("link", { name: "Vista del mes" })).not.toHaveAttribute("aria-current");
-    expect(screen.getByRole("link", { name: "Categorías" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Configuración" })).not.toHaveAttribute("aria-current");
   });
 
   it("renderiza el botón 'Nuevo movimiento'", () => {

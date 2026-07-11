@@ -1,13 +1,13 @@
 /**
  * Tests del diálogo de confirmación de eliminación de método de pago.
  * Verifica: renderizado, cancelar (no llama delete), confirmar (llama delete y cierra).
- * Espejo de tests/app/categorias/delete-category-dialog.test.tsx.
+ * Espejo de tests/app/configuracion/categorias/delete-category-dialog.test.tsx.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { DeletePaymentMethodDialog } from "@/app/(app)/metodos-pago/delete-payment-method-dialog";
+import { DeletePaymentMethodDialog } from "@/app/(app)/configuracion/metodos-pago/delete-payment-method-dialog";
 import { ToastProvider } from "@/components/ui/toast";
 import type { PaymentMethod } from "@/types/payment-method";
 

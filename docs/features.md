@@ -20,7 +20,7 @@
 | Movimiento en cuotas — crear, visualizar, editar, eliminar | RF-MC-001..003 | Implementado (solo Gasto en v1) |
 | Movimientos calculados — fijo/único/cuota de origen | RF-MCALC-001..010, RN-017..019 | Implementado |
 | Categorías — defaults + CRUD + soft delete | RF-CAT-001..006 | Implementado |
-| Métodos de pago — entidad + CRUD (`/metodos-pago`) + selector opcional en el form + asociación por movimiento | RF-PM-001..006, RN-021 | Implementado |
+| Métodos de pago — entidad + CRUD (sección `/configuracion/metodos-pago` del hub) + selector opcional en el form + asociación por movimiento | RF-PM-001..006, RN-021 | Implementado |
 | Métodos de pago — predeterminado por estructura (único/fijo/cuota): config en el modal de crear/editar método (sección "Predeterminado para", exclusividad al guardar) + indicador de lectura en la fila + prefill editable al crear (egreso e ingreso), blob `defaultPaymentMethods` | RF-PM-007 | Implementado |
 | Color de categoría editable — matriz de 70 colores | RF-CAT-005, RN-013 | Implementado |
 | Vista del mes — lista + totales + navegación | RF-VM-001..004 | Implementado |
@@ -30,7 +30,8 @@
 | Vista del mes — secciones colapsables + reordenables (persistidas) | RF-VM-005 | Implementado |
 | Vista del mes — filtros por listado (tipo + categoría por sección, filtrado en front) | RF-VM-006 | Implementado |
 | Reportes + listado — filtro vía leyenda interactiva en cards y orden configurable de Únicos | RF-REP-002/006, RF-VM-001 | Implementado |
-| Navegación global — sidebar persistente | RF-NAV-001 | Implementado |
+| Navegación global — sidebar persistente (4 entradas: Dashboard, Vista del mes, Reportes, Configuración) | RF-NAV-001 | Implementado |
+| Configuración — hub con 4 secciones deep-linkables (General, Categorías, Métodos de pago, Límites) bajo `/configuracion/*`; Categorías y Métodos de pago no son entradas del sidebar (ver `docs/frontend.md` § Hub de Configuración) | RF-NAV-001 | Implementado |
 | Navegación global — sidebar mostrable/ocultable por el usuario en todos los anchos, estado persistido (blob `sidebarOpen`, default abierto) | RF-NAV-002 | Definido (no implementado) |
 | Crear categoría desde el formulario de movimiento | RF-MU-004 | Implementado |
 | Reportes — pantalla configurable por cards + widget en dashboard | RF-REP-001..005 | Implementado |
@@ -48,7 +49,7 @@
 | Multi-moneda — set curado 4 (ARS/USD/EUR/BRL) + tabla de cotizaciones de referencia + pantalla `/configuracion` | RF-CUR-001..006, RN-009 | Implementado |
 | Modo de color — toggle Sistema/Claro/Oscuro en el chrome global (sidebar), persistido (blob `theme`) | RF-APP-001 | Implementado |
 | Gate por debajo del ancho mínimo soportado (640px) — bloqueo CSS puro a viewport completo, cubre toda la app incluido login | RF-APP-002 | Implementado |
-| Límites — marca visual pasiva (todas las superficies: `/mes`, dashboard y los 5 reportes de `/reportes`) + alerta activa (aviso no bloqueante al guardar en los 4 forms de movimiento, keys `mes.*`) + panel en la solapa Límites de `/configuracion` (blob `limits`, client-side) | RF-LIM-001..004, RN-022 | Implementado |
+| Límites — marca visual pasiva (todas las superficies: `/mes`, dashboard y los 5 reportes de `/reportes`) + alerta activa (aviso no bloqueante al guardar en los 4 forms de movimiento, keys `mes.*`) + panel en la sección Límites del hub (`/configuracion/limites`, blob `limits`, client-side) | RF-LIM-001..004, RN-022 | Implementado |
 | Sincronización de cotizaciones externas — FX (dolarapi/Frankfurter) + IPC (datos.gob.ar) vía trigger sin datos | RF-FX-001, RF-IPC-001, RF-SYNC-001 | Definido (no implementado) |
 | Preferencias de usuario — cimiento (blob JSON + sesión) | — | Implementado (sin UI de producto) |
 
