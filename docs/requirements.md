@@ -1885,8 +1885,18 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 - **Inflación del mes** — variación mensual del IPC nacional (RF-IPC-001) de ese mes; sin valor si no hay dato de IPC.
 - **% de diferencia ajustado por inflación** — el mismo % vs. mes anterior, pero descontando la inflación del mes en curso del promedio del mes anterior antes de comparar; sin valor si falta el IPC, si el promedio anterior es cero o si el mes en curso no tiene dato.
 
+**Techo de la escala de color (editable por card):**
+
+- El **techo** (ancla) de la escala de color de la grilla es **editable por card**, desde un editor dentro de la propia card (junto a año, moneda y filtro de categorías; **no** en `/configuracion`). Entrada = **monto + selector de moneda**. Un monto **≤ 0 no es guardable**. Default = **15 USD**.
+- El techo se **persiste en USD** (constante en términos reales) y se **reconvierte** según el año y la moneda de la card. La rampa de color y la fórmula `t = clamp(total / techo, 0, 1)` no cambian: solo cambia el ancla. La representación visual de la rampa es de `control-design`.
+- **Naturaleza del sistema** (consecuencias intencionales de anclar en dólares):
+  1. El monto tipeado **no reingresa exacto**: al guardarse en USD y reconvertirse, al reabrir el editor puede diferir en centavos (intrascendente para una escala de color).
+  2. El techo es **constante en términos reales**: al cambiar el año de la card se reconvierte con el TC de enero de ese año, y el número en pesos cambia.
+  3. El monto tipeado se interpreta con el TC del **año que la card muestra**: el mismo monto en ARS en una card de 2024 y otra de 2026 produce anclas en USD distintas.
+
 **Criterios de aceptación:**
 - [ ] La card `unique-grid` muestra una grilla de **31 filas (días 1–31) × 12 columnas (meses ene–dic)** con el total de gastos **Únicos** (`EXPENSE`) por día y mes, en la moneda de display de la card (RF-REP-007).
+- [ ] El techo de la escala de color es **editable por card** (monto + moneda), se persiste en USD, default 15 USD; un monto ≤ 0 no es guardable.
 - [ ] **Solo** gastos Únicos de tipo `EXPENSE` entran en la grilla y el footer: fijos, cuotas y calculados se excluyen.
 - [ ] Un día que **no existe** en un mes se muestra distinto de un día existente con **$0** de gasto.
 - [ ] El footer muestra, por mes: total, promedio diario, % vs. mes anterior, inflación del mes y % ajustado por inflación, con la semántica de divisor y de "sin valor" descrita arriba.

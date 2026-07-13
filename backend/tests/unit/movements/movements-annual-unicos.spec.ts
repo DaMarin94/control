@@ -952,6 +952,95 @@ describe('MovementsService — getAnnualUnicosReport', () => {
       expect(result.colorAnchorCents).toBe(1_500_000);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Ancla editable (P3) — anchorAmountCents / anchorCurrency
+  // -------------------------------------------------------------------------
+
+  describe('ancla editable (anchorAmountCents / anchorCurrency)', () => {
+    it('params ausentes → anchorUsdCents=1500 y colorAnchorCents = comportamiento actual (USD directo)', async () => {
+      mockSettingsService.getSettings.mockResolvedValue({ defaultCurrency: Currency.USD });
+      mockRepo.loadPivotRatesForYear.mockResolvedValue(new Map());
+
+      const result = await service.getAnnualUnicosReport(USER_A, 2026, null, undefined, '2026-12-31');
+
+      expect(result.anchorUsdCents).toBe(1500);
+      expect(result.colorAnchorCents).toBe(1500);
+    });
+
+    it('params ausentes con displayCurrency ARS → resultado idéntico al hardcode de hoy', async () => {
+      mockSettingsService.getSettings.mockResolvedValue({ defaultCurrency: Currency.ARS });
+      const pivotMap = new Map<string, { ARS?: number; BRL?: number; EUR?: number }>();
+      pivotMap.set('2026-01', { ARS: 1200, BRL: 5.5, EUR: 0.92 });
+      mockRepo.loadPivotRatesForYear.mockResolvedValue(pivotMap);
+
+      const result = await service.getAnnualUnicosReport(USER_A, 2026, null, undefined, '2026-12-31');
+
+      expect(result.anchorUsdCents).toBe(1500);
+      expect(result.colorAnchorCents).toBe(1_800_000); // 1500 * 1200, igual que antes
+    });
+
+    it('anchorCurrency=USD → passthrough directo: anchorUsdCents = anchorAmountCents', async () => {
+      mockSettingsService.getSettings.mockResolvedValue({ defaultCurrency: Currency.ARS });
+      const pivotMap = new Map<string, { ARS?: number; BRL?: number; EUR?: number }>();
+      pivotMap.set('2026-01', { ARS: 1200, BRL: 5.5, EUR: 0.92 });
+      mockRepo.loadPivotRatesForYear.mockResolvedValue(pivotMap);
+
+      const result = await service.getAnnualUnicosReport(
+        USER_A, 2026, null, undefined, '2026-12-31', 2000, Currency.USD,
+      );
+
+      expect(result.anchorUsdCents).toBe(2000);
+      // colorAnchorCents = round(2000 * 1200) = 2_400_000
+      expect(result.colorAnchorCents).toBe(2_400_000);
+    });
+
+    it('anchorCurrency=ARS → se convierte a USD con el TC de enero del año antes de anclar', async () => {
+      // 1 USD = 1200 ARS (enero). Input: 120000 centavos ARS (=1200 ARS) → 1 USD = 100 centavos USD.
+      mockSettingsService.getSettings.mockResolvedValue({ defaultCurrency: Currency.USD });
+      const pivotMap = new Map<string, { ARS?: number; BRL?: number; EUR?: number }>();
+      pivotMap.set('2026-01', { ARS: 1200, BRL: 5.5, EUR: 0.92 });
+      mockRepo.loadPivotRatesForYear.mockResolvedValue(pivotMap);
+
+      const result = await service.getAnnualUnicosReport(
+        USER_A, 2026, null, undefined, '2026-12-31', 120_000, Currency.ARS,
+      );
+
+      expect(result.anchorUsdCents).toBe(100);
+      // displayCurrency == USD → colorAnchorCents = anchorUsdCents directo
+      expect(result.colorAnchorCents).toBe(100);
+    });
+
+    it('anchorCurrency=EUR con displayCurrency=ARS → convierte a USD y luego a ARS (dos pasos por el pivote)', async () => {
+      // rate_EUR=0.92 (EUR por USD), rate_ARS=1200 (ARS por USD)
+      // Input: 92 centavos EUR → deriveExchangeRate(EUR, USD, rates) = rate_USD/rate_EUR = 1/0.92
+      // anchorUsdCents = round(92 * (1/0.92)) = round(100) = 100
+      // colorAnchorCents (ARS) = round(100 * 1200) = 120000
+      mockSettingsService.getSettings.mockResolvedValue({ defaultCurrency: Currency.ARS });
+      const pivotMap = new Map<string, { ARS?: number; BRL?: number; EUR?: number }>();
+      pivotMap.set('2026-01', { ARS: 1200, BRL: 5.5, EUR: 0.92 });
+      mockRepo.loadPivotRatesForYear.mockResolvedValue(pivotMap);
+
+      const result = await service.getAnnualUnicosReport(
+        USER_A, 2026, null, undefined, '2026-12-31', 92, Currency.EUR,
+      );
+
+      expect(result.anchorUsdCents).toBe(100);
+      expect(result.colorAnchorCents).toBe(120_000);
+    });
+
+    it('sin datos de referencia (tabla vacía) y ancla en moneda distinta de USD → fallback a 1500 (default)', async () => {
+      mockSettingsService.getSettings.mockResolvedValue({ defaultCurrency: Currency.ARS });
+      mockRepo.loadPivotRatesForYear.mockResolvedValue(new Map());
+
+      const result = await service.getAnnualUnicosReport(
+        USER_A, 2026, null, undefined, '2026-12-31', 120_000, Currency.ARS,
+      );
+
+      // Sin pivotRates no se puede derivar la conversión → fallback defensivo al default (1500 USD cents)
+      expect(result.anchorUsdCents).toBe(1500);
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

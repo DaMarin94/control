@@ -26,9 +26,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { useReports, REPORTS_QUERY_KEY } from "@/hooks/use-reports";
+import { useReports, REPORTS_QUERY_KEY, useUnicoGrid, UNICO_GRID_QUERY_KEY } from "@/hooks/use-reports";
 import { ApiError } from "@/types/api";
-import type { ReportsMovementsResponse } from "@/types/reports";
+import type { ReportsMovementsResponse, UnicoGridResponse } from "@/types/reports";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -754,5 +754,141 @@ describe("useReports", () => {
       );
       expect(sum).toBe(month.expenseCents);
     });
+  });
+});
+
+// ─── Tests UNICO_GRID_QUERY_KEY / useUnicoGrid — techo editable (Ola 3, P3) ───
+
+const mockUnicoGridResponse: UnicoGridResponse = {
+  year: 2026,
+  currency: "ARS",
+  colorAnchorCents: 150000,
+  anchorUsdCents: 1500,
+  grid: Array.from({ length: 31 }, () => Array.from({ length: 12 }, () => 0)),
+  breakdown: Array.from({ length: 31 }, () => Array.from({ length: 12 }, () => [])),
+  footer: Array.from({ length: 12 }, () => ({
+    total: 0,
+    dailyAvg: 0,
+    pctVsPrev: null,
+    inflationPct: null,
+    pctVsPrevAdj: null,
+  })),
+  availableCategories: [],
+};
+
+describe("UNICO_GRID_QUERY_KEY", () => {
+  it("el sexto elemento es null cuando anchorUsdCents no se pasa (techo estándar)", () => {
+    expect(UNICO_GRID_QUERY_KEY(2026, null)[5]).toBeNull();
+  });
+
+  it("el sexto elemento es el valor de anchorUsdCents cuando se pasa (techo custom)", () => {
+    expect(UNICO_GRID_QUERY_KEY(2026, null, undefined, undefined, 5000)[5]).toBe(5000);
+  });
+
+  it("query keys con distinto anchorUsdCents son distintas (refetch al cambiar el techo)", () => {
+    expect(UNICO_GRID_QUERY_KEY(2026, null, undefined, undefined, 1500)).not.toEqual(
+      UNICO_GRID_QUERY_KEY(2026, null, undefined, undefined, 5000),
+    );
+    expect(UNICO_GRID_QUERY_KEY(2026, null)).not.toEqual(
+      UNICO_GRID_QUERY_KEY(2026, null, undefined, undefined, 1500),
+    );
+  });
+});
+
+describe("useUnicoGrid — techo editable (Ola 3, P3)", () => {
+  const mockApiGet = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseApi.mockReturnValue({
+      api: {
+        get: mockApiGet,
+        post: vi.fn(),
+        patch: vi.fn(),
+        delete: vi.fn(),
+        put: vi.fn(),
+      },
+      token: "test-token",
+      isAuthenticated: true,
+    });
+  });
+
+  it("NO agrega anchorAmountCents/anchorCurrency cuando anchorUsdCents es undefined (techo estándar)", async () => {
+    mockApiGet.mockResolvedValue(mockUnicoGridResponse);
+
+    const { result } = renderHook(
+      () => useUnicoGrid(2026, null, undefined, "2026-03-15"),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
+    expect(callUrl).not.toContain("anchorAmountCents=");
+    expect(callUrl).not.toContain("anchorCurrency=");
+  });
+
+  it("agrega &anchorAmountCents=N&anchorCurrency=USD cuando anchorUsdCents está presente", async () => {
+    mockApiGet.mockResolvedValue(mockUnicoGridResponse);
+
+    const { result } = renderHook(
+      () => useUnicoGrid(2026, null, undefined, "2026-03-15", 5000),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
+    expect(callUrl).toContain("&anchorAmountCents=5000");
+    expect(callUrl).toContain("&anchorCurrency=USD");
+  });
+
+  it("el ancla es independiente de la moneda de display de la card", async () => {
+    mockApiGet.mockResolvedValue(mockUnicoGridResponse);
+
+    const { result } = renderHook(
+      () => useUnicoGrid(2026, null, "EUR", "2026-03-15", 5000),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
+    expect(callUrl).toContain("&currency=EUR");
+    expect(callUrl).toContain("&anchorAmountCents=5000&anchorCurrency=USD");
+  });
+
+  it("refetcha al cambiar anchorUsdCents (query keys distintas)", async () => {
+    mockApiGet.mockResolvedValue(mockUnicoGridResponse);
+
+    const { result, rerender } = renderHook(
+      ({ anchor }: { anchor: number | undefined }) =>
+        useUnicoGrid(2026, null, undefined, "2026-03-15", anchor),
+      { wrapper: createWrapper(), initialProps: { anchor: undefined as number | undefined } },
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(mockApiGet).toHaveBeenCalledTimes(1);
+    expect(mockApiGet.mock.calls[0]?.[0]).not.toContain("anchorAmountCents=");
+
+    mockApiGet.mockResolvedValue(mockUnicoGridResponse);
+    rerender({ anchor: 5000 });
+
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledTimes(2));
+    const secondUrl = mockApiGet.mock.calls[1]?.[0] as string;
+    expect(secondUrl).toContain("&anchorAmountCents=5000&anchorCurrency=USD");
+  });
+
+  it("expone anchorUsdCents del response", async () => {
+    mockApiGet.mockResolvedValue(mockUnicoGridResponse);
+
+    const { result } = renderHook(
+      () => useUnicoGrid(2026, null, undefined, "2026-03-15"),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+
+    expect(result.current.data!.anchorUsdCents).toBe(1500);
   });
 });

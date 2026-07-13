@@ -13,10 +13,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import type { UnicoGridResponse } from "@/types/reports";
+import { ToastProvider } from "@/components/ui/toast";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,11 @@ vi.mock("@/hooks/use-reports", () => ({
   UNICO_GRID_QUERY_KEY: (year: number, key: string | null) => ["reports-unico-grid", year, key],
 }));
 
+// Ola 3, P3 — techo editable: ColorAnchorPopover llama a api.get directamente
+// para convertir el input a USD vía el backend. Solo se invoca cuando el popover
+// se monta (describe "ColorAnchorTrigger — techo editable" configura el mock);
+// el resto de los tests de este archivo nunca abren el popover, así que el
+// default (vi.fn() sin implementación) no los afecta.
 vi.mock("@/hooks/use-api", () => ({
   useApi: vi.fn(() => ({
     api: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn(), put: vi.fn() },
@@ -65,9 +71,11 @@ vi.mock("@/hooks/use-categories", () => ({
 }));
 
 import { useUnicoGrid } from "@/hooks/use-reports";
+import { useApi } from "@/hooks/use-api";
 import { UniqueGridCard } from "@/components/charts/unique-grid-card";
 
 const mockUseUnicoGrid = vi.mocked(useUnicoGrid);
+const mockUseApi = vi.mocked(useApi);
 
 // ─── Datos de ejemplo ─────────────────────────────────────────────────────────
 
@@ -96,6 +104,7 @@ const mockData: UnicoGridResponse = {
   year: 2026,
   currency: "ARS",
   colorAnchorCents: 150000, // equivalente a 15 USD a TC de referencia en ARS
+  anchorUsdCents: 1500,
   grid: makeGrid(0), // todos en 0 para simplificar
   breakdown: makeBreakdownEmpty(),
   footer: makeFooter(),
@@ -109,6 +118,7 @@ const emptyData: UnicoGridResponse = {
   year: 2026,
   currency: "ARS",
   colorAnchorCents: 150000,
+  anchorUsdCents: 1500,
   grid: makeGrid(0),
   breakdown: makeBreakdownEmpty(),
   footer: Array.from({ length: 12 }, () => ({
@@ -126,7 +136,11 @@ const emptyData: UnicoGridResponse = {
 function createWrapper() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>{children}</ToastProvider>
+      </QueryClientProvider>
+    );
   }
   return Wrapper;
 }
@@ -372,6 +386,7 @@ describe("UniqueGridCard — hook y parámetros", () => {
       null,    // categoryIds default
       undefined, // currency default
       expect.any(String),
+      undefined, // anchorUsdCents default (techo estándar)
     );
   });
 
@@ -390,6 +405,18 @@ describe("UniqueGridCard — hook y parámetros", () => {
       null,   // categoryIds default
       "USD",
       expect.any(String),
+      undefined, // anchorUsdCents default (techo estándar)
+    );
+  });
+
+  it("pasa anchorUsdCents al hook cuando la card tiene techo propio", () => {
+    renderCard({ year: 2026, anchorUsdCents: 5000 });
+    expect(mockUseUnicoGrid).toHaveBeenCalledWith(
+      2026,
+      null,
+      undefined,
+      expect.any(String),
+      5000,
     );
   });
 
@@ -694,5 +721,152 @@ describe("UniqueGridCard — formato de inflación (ajuste #3)", () => {
       // "3,20pts" en el tooltip (no "320,00pts" ni "0,03pts")
       expect(tooltip.textContent).toContain("3,20pts");
     }
+  });
+});
+
+describe("UniqueGridCard — ColorAnchorTrigger / popover-editor (Ola 3, P3)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseUnicoGrid.mockReturnValue(makeSuccessReturn());
+    mockUseApi.mockReturnValue({
+      api: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn(), put: vi.fn() },
+      token: "test-token",
+      isAuthenticated: true,
+    });
+  });
+
+  function getAnchorTrigger() {
+    return screen.getByRole("button", { name: /techo de la escala de color/i });
+  }
+
+  it("NO se monta cuando falta onCurrencyChange (aunque haya onAnchorChange)", () => {
+    renderCard({ onAnchorChange: vi.fn() });
+    expect(screen.queryByRole("button", { name: /techo de la escala de color/i })).not.toBeInTheDocument();
+  });
+
+  it("NO se monta cuando falta onAnchorChange (aunque haya onCurrencyChange)", () => {
+    renderCard({ onCurrencyChange: vi.fn() });
+    expect(screen.queryByRole("button", { name: /techo de la escala de color/i })).not.toBeInTheDocument();
+  });
+
+  it("se monta cuando ambos callbacks están presentes", () => {
+    renderCard({ onCurrencyChange: vi.fn(), onAnchorChange: vi.fn() });
+    expect(getAnchorTrigger()).toBeInTheDocument();
+  });
+
+  it("estado default (sin techo propio): disparador ghost, sin clase de activo", () => {
+    renderCard({ onCurrencyChange: vi.fn(), onAnchorChange: vi.fn() });
+    expect(getAnchorTrigger()).not.toHaveClass("bg-panel-2");
+  });
+
+  it("estado customizado (con techo propio): disparador activo persistente", () => {
+    renderCard({ onCurrencyChange: vi.fn(), onAnchorChange: vi.fn(), anchorUsdCents: 5000 });
+    expect(getAnchorTrigger()).toHaveClass("bg-panel-2");
+  });
+
+  it("clic abre el popover con caption, input prellenado y microcopy", () => {
+    renderCard({ onCurrencyChange: vi.fn(), onAnchorChange: vi.fn() });
+    fireEvent.click(getAnchorTrigger());
+    expect(screen.getByText("Techo de la escala de color")).toBeInTheDocument();
+    // Prellenado: colorAnchorCents=150000 (mockData) → "1.500,00" en la moneda de la card
+    expect(screen.getByRole("textbox", { name: /monto del techo/i })).toHaveValue("1.500,00");
+    expect(
+      screen.getByText("Se guarda en USD y se reconvierte según el año y la moneda de la card."),
+    ).toBeInTheDocument();
+  });
+
+  it("el selector de moneda del popover arranca en la moneda de display de la card", () => {
+    renderCard({ onCurrencyChange: vi.fn(), onAnchorChange: vi.fn(), currency: "ARS" });
+    fireEvent.click(getAnchorTrigger());
+    // Hay 2 chips "Moneda del reporte: ARS" cuando el popover está abierto: el de la
+    // cabecera (CardCurrencyTrigger) y el del propio popover (reusa CardCurrencySelect).
+    const currencyChips = screen.getAllByRole("button", { name: /moneda del reporte: ars/i });
+    expect(currencyChips).toHaveLength(2);
+  });
+
+  it("monto vacío deshabilita Guardar y muestra la ayuda neutra", () => {
+    renderCard({ onCurrencyChange: vi.fn(), onAnchorChange: vi.fn() });
+    fireEvent.click(getAnchorTrigger());
+    const input = screen.getByRole("textbox", { name: /monto del techo/i });
+    fireEvent.change(input, { target: { value: "" } });
+    expect(screen.getByText("Ingresá un monto mayor a cero.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Guardar" })).toBeDisabled();
+  });
+
+  it("monto '0' deshabilita Guardar", () => {
+    renderCard({ onCurrencyChange: vi.fn(), onAnchorChange: vi.fn() });
+    fireEvent.click(getAnchorTrigger());
+    const input = screen.getByRole("textbox", { name: /monto del techo/i });
+    fireEvent.change(input, { target: { value: "0" } });
+    expect(screen.getByRole("button", { name: "Guardar" })).toBeDisabled();
+  });
+
+  it("el input no admite el signo '-' (filtrado por el sanitizador)", () => {
+    renderCard({ onCurrencyChange: vi.fn(), onAnchorChange: vi.fn() });
+    fireEvent.click(getAnchorTrigger());
+    const input = screen.getByRole("textbox", { name: /monto del techo/i });
+    fireEvent.change(input, { target: { value: "-500" } });
+    expect(input).toHaveValue("500");
+  });
+
+  it("Cancelar cierra el popover sin llamar a onAnchorChange", () => {
+    const onAnchorChange = vi.fn();
+    renderCard({ onCurrencyChange: vi.fn(), onAnchorChange });
+    fireEvent.click(getAnchorTrigger());
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByText("Techo de la escala de color")).not.toBeInTheDocument();
+    expect(onAnchorChange).not.toHaveBeenCalled();
+  });
+
+  it("Esc cierra el popover sin llamar a onAnchorChange", () => {
+    const onAnchorChange = vi.fn();
+    renderCard({ onCurrencyChange: vi.fn(), onAnchorChange });
+    fireEvent.click(getAnchorTrigger());
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByText("Techo de la escala de color")).not.toBeInTheDocument();
+    expect(onAnchorChange).not.toHaveBeenCalled();
+  });
+
+  it("Guardar pide al backend la conversión y persiste el anchorUsdCents del response", async () => {
+    const mockApiGet = vi.fn().mockResolvedValue({ anchorUsdCents: 1350 });
+    mockUseApi.mockReturnValue({
+      api: { get: mockApiGet, post: vi.fn(), patch: vi.fn(), delete: vi.fn(), put: vi.fn() },
+      token: "test-token",
+      isAuthenticated: true,
+    });
+    const onAnchorChange = vi.fn();
+    renderCard({ onCurrencyChange: vi.fn(), onAnchorChange, year: 2026 });
+    fireEvent.click(getAnchorTrigger());
+
+    const input = screen.getByRole("textbox", { name: /monto del techo/i });
+    fireEvent.change(input, { target: { value: "2000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(onAnchorChange).toHaveBeenCalledWith(1350));
+
+    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
+    expect(callUrl).toContain("year=2026");
+    expect(callUrl).toContain("anchorAmountCents=200000");
+    expect(callUrl).toContain("anchorCurrency=ARS");
+
+    // El popover se cierra tras guardar
+    expect(screen.queryByText("Techo de la escala de color")).not.toBeInTheDocument();
+  });
+
+  it("si el guardado falla, el popover permanece abierto y onAnchorChange no se llama", async () => {
+    const mockApiGet = vi.fn().mockRejectedValue(new Error("500"));
+    mockUseApi.mockReturnValue({
+      api: { get: mockApiGet, post: vi.fn(), patch: vi.fn(), delete: vi.fn(), put: vi.fn() },
+      token: "test-token",
+      isAuthenticated: true,
+    });
+    const onAnchorChange = vi.fn();
+    renderCard({ onCurrencyChange: vi.fn(), onAnchorChange });
+    fireEvent.click(getAnchorTrigger());
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalled());
+    expect(onAnchorChange).not.toHaveBeenCalled();
+    expect(screen.getByText("Techo de la escala de color")).toBeInTheDocument();
   });
 });

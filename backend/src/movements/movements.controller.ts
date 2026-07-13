@@ -183,7 +183,7 @@ export class MovementsController {
   }
 
   /**
-   * GET /movements/reports/annual-unicos?year=YYYY[&categories=<id1,id2,...>][&currency=<ARS|USD|EUR|BRL>][&today=YYYY-MM-DD]
+   * GET /movements/reports/annual-unicos?year=YYYY[&categories=<id1,id2,...>][&currency=<ARS|USD|EUR|BRL>][&today=YYYY-MM-DD][&anchorAmountCents=<int>&anchorCurrency=<ARS|USD|EUR|BRL>]
    *
    * Devuelve la grilla día×mes de gastos únicos EXPENSE del año y el footer por mes.
    * Solo movimientos Únicos de tipo EXPENSE. Fijos y cuotas NO entran.
@@ -197,10 +197,17 @@ export class MovementsController {
    * - today (opcional): fecha actual en formato YYYY-MM-DD, para determinar
    *   el divisor del promedio del mes en curso. Ausente → se usa la fecha UTC
    *   del sistema (new Date()).
+   * - anchorAmountCents / anchorCurrency (opcionales, van SIEMPRE juntos): ancla
+   *   editable de la escala de color de las celdas, como par (monto en centavos,
+   *   moneda). anchorCurrency es un parámetro INDEPENDIENTE de `currency` (la
+   *   moneda de display). Ausentes → default actual (15 USD = 1500 centavos).
+   *   Si viene uno sin el otro → 400.
    *
    * Respuesta: AnnualUnicosResponse dentro del sobre { success, statusCode, data }.
    * 200 con la grilla y el footer.
-   * 400 si year falta, formato inválido, fuera de rango, o currency inválido.
+   * 400 si year falta, formato inválido, fuera de rango, currency inválido,
+   * anchorAmountCents no es un entero positivo, anchorCurrency inválido, o si
+   * solo uno de los dos parámetros del ancla está presente.
    */
   @Get('reports/annual-unicos')
   getAnnualUnicosReport(
@@ -209,6 +216,8 @@ export class MovementsController {
     @Query('categories') categoriesParam: string | undefined,
     @Query('currency') currencyParam: string | undefined,
     @Query('today') todayParam: string | undefined,
+    @Query('anchorAmountCents') anchorAmountCentsParam: string | undefined,
+    @Query('anchorCurrency') anchorCurrencyParam: string | undefined,
   ) {
     // Validar presencia y formato exacto YYYY
     if (!yearParam || !/^\d{4}$/.test(yearParam)) {
@@ -259,12 +268,43 @@ export class MovementsController {
               .map((id) => id.trim())
               .filter((id) => id.length > 0);
 
+    // Validar ancla editable de la escala de color (anchorAmountCents + anchorCurrency).
+    // Los dos parámetros van siempre juntos: uno sin el otro es 400.
+    const anchorAmountPresent = anchorAmountCentsParam !== undefined;
+    const anchorCurrencyPresent = anchorCurrencyParam !== undefined;
+    if (anchorAmountPresent !== anchorCurrencyPresent) {
+      throw new BadRequestException(
+        'Los parámetros "anchorAmountCents" y "anchorCurrency" deben venir juntos',
+      );
+    }
+
+    let anchorAmountCents: number | undefined;
+    let anchorCurrency: Currency | undefined;
+    if (anchorAmountPresent && anchorCurrencyPresent) {
+      if (!/^\d+$/.test(anchorAmountCentsParam!) || parseInt(anchorAmountCentsParam!, 10) <= 0) {
+        throw new BadRequestException(
+          'El parámetro "anchorAmountCents" debe ser un entero positivo (centavos)',
+        );
+      }
+      anchorAmountCents = parseInt(anchorAmountCentsParam!, 10);
+
+      const validCurrencies: string[] = Object.values(Currency);
+      if (!validCurrencies.includes(anchorCurrencyParam!)) {
+        throw new BadRequestException(
+          `El parámetro "anchorCurrency" debe ser uno de: ${validCurrencies.join(', ')}`,
+        );
+      }
+      anchorCurrency = anchorCurrencyParam as Currency;
+    }
+
     return this.movementsService.getAnnualUnicosReport(
       req.user.userId,
       year,
       categoryIds,
       currencyOverride,
       todayStr,
+      anchorAmountCents,
+      anchorCurrency,
     );
   }
 

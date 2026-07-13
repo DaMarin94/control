@@ -221,44 +221,54 @@ export function useReports(
 
 /**
  * Query key para la grilla anual de Únicos.
- * Varía por año, filtro de categorías, moneda y fecha de hoy.
+ * Varía por año, filtro de categorías, moneda, fecha de hoy y ancla de color.
  */
 export const UNICO_GRID_QUERY_KEY = (
   year: number,
   categoriesKey: string | null,
   currency?: CurrencyCode,
   today?: string,
-) => ["reports-unico-grid", year, categoriesKey, currency ?? null, today ?? null] as const;
+  anchorUsdCents?: number,
+) => ["reports-unico-grid", year, categoriesKey, currency ?? null, today ?? null, anchorUsdCents ?? null] as const;
 
 /**
  * Hook para obtener la grilla día×mes de gastos Únicos.
  *
- * GET /movements/reports/annual-unicos?year=YYYY[&categories=...][&currency=XXX][&today=YYYY-MM-DD]
+ * GET /movements/reports/annual-unicos?year=YYYY[&categories=...][&currency=XXX][&today=YYYY-MM-DD][&anchorAmountCents=N&anchorCurrency=USD]
  *
- * @param year        El año a consultar.
- * @param categoryIds null=todas; []=ninguna; lista=subconjunto.
- * @param currency    undefined=default del usuario; presente=override de moneda.
- * @param today       Fecha local del usuario (YYYY-MM-DD). DEBE mandarse para que el
- *                    backend calcule el promedio diario del mes en curso con el divisor
- *                    correcto. Si se omite, el back usa new Date() UTC (subóptimo).
+ * @param year           El año a consultar.
+ * @param categoryIds    null=todas; []=ninguna; lista=subconjunto.
+ * @param currency       undefined=default del usuario; presente=override de moneda.
+ * @param today          Fecha local del usuario (YYYY-MM-DD). DEBE mandarse para que el
+ *                       backend calcule el promedio diario del mes en curso con el divisor
+ *                       correcto. Si se omite, el back usa new Date() UTC (subóptimo).
+ * @param anchorUsdCents Techo editable de la rampa de color (Ola 3, P3), en centavos de
+ *                       USD. undefined = techo estándar (backend usa 15 USD, sin mandar
+ *                       params — comportamiento actual). Presente = manda
+ *                       `anchorAmountCents=<anchorUsdCents>&anchorCurrency=USD` (el front
+ *                       siempre persiste el ancla en USD; la moneda de display del reporte
+ *                       es un param independiente — ver `currency`).
  */
 export function useUnicoGrid(
   year: number,
   categoryIds: string[] | null = null,
   currency?: CurrencyCode,
   today?: string,
+  anchorUsdCents?: number,
 ) {
   const { api, isAuthenticated } = useApi();
 
   const { categoriesKey, urlParam } = serializeCategoryFilter(categoryIds);
   const currencyParam = currency ? `&currency=${currency}` : "";
   const todayParam = today ? `&today=${today}` : "";
+  const anchorParam =
+    anchorUsdCents !== undefined ? `&anchorAmountCents=${anchorUsdCents}&anchorCurrency=USD` : "";
 
   const query = useQuery<UnicoGridResponse>({
-    queryKey: UNICO_GRID_QUERY_KEY(year, categoriesKey, currency, today),
+    queryKey: UNICO_GRID_QUERY_KEY(year, categoriesKey, currency, today, anchorUsdCents),
     queryFn: () => {
-      const url = `/movements/reports/annual-unicos?year=${year}${urlParam}${currencyParam}${todayParam}`;
-      logger.debug("Cargando grilla de Únicos", { year, categoriesKey, currency, today });
+      const url = `/movements/reports/annual-unicos?year=${year}${urlParam}${currencyParam}${todayParam}${anchorParam}`;
+      logger.debug("Cargando grilla de Únicos", { year, categoriesKey, currency, today, anchorUsdCents });
       return api.get<UnicoGridResponse>(url);
     },
     enabled: Boolean(year) && isAuthenticated,

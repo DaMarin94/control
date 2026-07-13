@@ -1300,6 +1300,87 @@ El front ya tiene `total` por celda. Para el desglose, cada celda (día con gast
 - El **título** de la card es Space Grotesk neutro (`--ink`/`--faint`), nunca mono ni semántico ni índigo (igual que las otras cards, P4).
 - **Identidad visual en ambos modos** (regla dura 4): la rampa tiene sus stops de luminosidad por modo; el texto de celda se calcula por contraste contra el tinte (independiente del modo); celdas nulas en `--panel-2` se adaptan solas. Verificar la grilla completa en claro y oscuro.
 
+#### 9. Techo editable de la escala de color (P3)
+
+El **techo** (ancla) de la rampa —el valor `max` de `t = clamp(total / max, 0, 1)`— pasa de fijo (15 USD reconvertidos) a **editable por card**. El editor cambia **solo el techo**: la **rampa de 4 stops oklch NO se toca** (§3), el piso queda en `0`, verde=poco / rojo=mucho se conserva idéntico. El editor es un control más del widget autónomo, junto a año / moneda / filtro de categorías; **no vive en `/configuracion`**. El valor se persiste en USD (`anchorUsdCents`, entero, default `1500`) y el backend lo reconvierte por año y moneda; el front recibe el ancla vigente en `colorAnchorCents` (centavos de la moneda de display) y **prellena** el editor con ese valor.
+
+> **Regla dura reafirmada:** el techo es una **cifra de dinero** → va en **mono tabular `tnum`** (regla dura 3) en el input y en cualquier eco del valor. El editor **no** introduce ningún tinte income/expense (regla 1) ni índigo de marca (regla 2): el índigo aparece **solo** como focus ring. La rampa de heatmap sigue siendo lenguaje de magnitud propio (no semántico), como fija *Restricciones duras reafirmadas*.
+
+##### 9.1 Ubicación y disgregación — en la barra de controles derecha
+
+El disparador del editor es un **icon-button ghost** que se suma a la barra de controles derecha de la cabecera, **entre el `CardCurrencyTrigger` y el clúster de utilidad** (refrescar + quitar). Orden vigente ampliado (≥941px de ancho de contenido):
+
+`[ YearStepper ] |hair| [ CardCurrencyTrigger ] [ ColorAnchorTrigger ] |hair| [ RefreshCw ] [ X ]`
+
+- **Va pegado a la moneda, sin divisor entre ambos.** Moneda y techo son los **dos ajustes de display por-card** (qué símbolo / qué intensidad); leen como un mini-grupo de configuración de la card, separado del stepper (por el `--hair` que ya está antes de la moneda) y del clúster de utilidad (por el `--hair` que ya precede a `RefreshCw`). No se agrega un tercer divisor: sumar hairlines fragmenta una barra ya densa (misma economía de cromo que *Moneda por reporte §4*).
+- **No toca lo que ya está a la izquierda:** `EditableTitle` (P4) + `LimitsInfoPopover` (P2) quedan intactos en la columna de identidad. El editor vive **solo** en la barra derecha.
+- **Cuando la card no tiene override de moneda** (Dashboard efímero — no debería alojar esta card, pero por robustez): si no se monta el `CardCurrencyTrigger`, el `ColorAnchorTrigger` **tampoco** se monta (el techo editable es gemelo del override de moneda: ambos son config persistida per-card, condicionados por la misma señal —callback presente—). En esa rama la barra queda como hoy.
+
+##### 9.2 El disparador (`ColorAnchorTrigger`) — anatomía y estados
+
+`<button type="button">` con `aria-haspopup="dialog"` / `aria-expanded`, **misma hit-area 32×32** (`h-8 w-8`) y mismo lenguaje ghost que `RefreshCw` / `X` / `LimitsInfoPopover` (no inventa cromo).
+
+- **Ícono:** **`Gauge`** (lucide) **16px**, `aria-hidden`. Metáfora: el "techo/intensidad de una escala", distinto de un ícono de paleta (que sugeriría —falsamente— recolorear la rampa) y del genérico de settings. La ambigüedad residual la cierran el `aria-label` y el `title` (tooltip nativo) = **"Techo de la escala de color"**. *(Alternativa evaluada: `SlidersHorizontal` —"ajustar parámetro"— más genérico pero se confunde con un menú de filtros/ajustes; se prefiere `Gauge` por ser específico de "intensidad/tope".)*
+- **Estado default (ancla estándar, sin customizar — `anchorUsdCents` ausente):** ghost, `text-muted`; hover → `bg-panel-2 text-ink`. Idéntico a `RefreshCw`. Lee como "utilidad disponible, no tocada".
+- **Estado customizado (techo distinto del estándar 1500):** el botón queda **activo persistente** — `bg-panel-2 text-ink` en reposo (mismo recurso neutro con que el `CardCurrencyTrigger` se diferencia en `panel-3`). Comunica "esta card tiene un techo propio" **sin** usar acento ni color semántico (regla 1/2). Es la única señal de "customizado" en la barra; el valor concreto se ve al abrir (no se muestra inline, por densidad — misma decisión que moneda: chip/ícono compacto, no cifra en la barra).
+- **Abierto (activo):** `bg-panel-2 text-ink` mantenido mientras el popover está abierto (igual que el disparador del popover de límites).
+- **Focus (teclado):** ring `--accent-soft` 3px, radio `--r-ctl` (`focus-visible`) — cromo de foco, no dato.
+
+##### 9.3 El popover-editor — forma
+
+Popover **form** portaleado a `body`, anclado al disparador (mismo mecanismo de posición/colisión que `LimitsInfoPanel`: crece hacia abajo, **flipea arriba** si no hay lugar, clampea horizontal a **12px** del borde del viewport). Caja: `--panel`, borde `--line`, radio `--r-ctl` 10px, `--shadow-lg`, `animate-modal-pop` (`prefers-reduced-motion` → instantáneo). Ancho `min-w-[260px] max-w-[300px]`. Alineado al **borde derecho del disparador** (crece hacia adentro, como el popover de moneda: la barra está pegada al borde derecho de la card). Padding interno `p-[12px]`, ritmo vertical `gap-[10px]`.
+
+Contenido, de arriba a abajo:
+
+1. **Caption:** "Techo de la escala de color" — **11px / 600 uppercase** `tracking-[0.08em]` `--faint` (mismo caption que el popover de límites). No lleva ✕ (es un popover liviano; cierra por Esc/click-fuera/Cancelar).
+2. **Input-group monto + moneda** — reusa el **patrón de monto+moneda del form de movimiento** (*Multi-moneda — cromo neutro de moneda y cotización*), no inventa uno nuevo:
+   - **Input de monto:** `<input inputmode="decimal">`, cifra en **mono tabular `tnum`** alineada como el resto de montos editables del producto, agrupación es-AR (miles con `.`), color `--ink`. Caja de input estándar del DS (borde `--line`, radio `--r-ctl`, focus ring `--accent-soft`). **Prellenado** con `colorAnchorCents` formateado en la moneda de display de la card (en default, ≈ el equivalente de 15 USD ese año). Ocupa el ancho, con la moneda como adorno a la derecha.
+   - **Selector de moneda:** **reusa el `CardCurrencySelect`** (chip-dropdown compacto de las 4 monedas, orden `ARS→USD→EUR→BRL`) como adorno derecho del input-group. Prellenado con la **moneda de display de la card**. Cambiarlo reconvierte el monto mostrado (mismo comportamiento que el selector de moneda del form). No se usa el `CurrencySegmented` (aquí también prima compacidad; el popover es angosto).
+3. **Microcopy obligatorio** — **12px `--muted`**, una línea, debajo del input-group:
+   > *Se guarda en USD y se reconvierte según el año y la moneda de la card.*
+
+   Cubre las tres consecuencias asumidas (roadmap §P3). **El wording exacto es copy funcional a afinar por `control-analyst`** — el spec fija posición, tamaño y color; el texto final lo cierra el analista (reportar al orquestador).
+4. **Fila de acciones** (`flex justify-end gap-2`, pineada al pie del popover):
+   - **Guardar** — botón primario del DS (acento como acción primaria, **no** como dato — permitido). Persiste el techo (convierte a USD cents) y cierra.
+   - **Cancelar** — botón ghost/secundario. Descarta ediciones sin guardar y cierra.
+   - **Restablecer al estándar** — *(**agregado no solicitado — confirmar**)*: link/botón terciario `--muted` 12px, **solo visible en estado customizado**, que borra `anchorUsdCents` (vuelve al comportamiento estándar). No está en el brief; se propone porque, existiendo un default y un estado customizado, negar la vuelta al default sería un callejón. Si el orquestador no lo confirma, se omite (el usuario puede reponer 15 USD a mano).
+
+**Cierre (clase popover, *Cierre de overlays*):** Esc / click-fuera / re-clic en el disparador / Cancelar / Guardar. **Esc, click-fuera y Cancelar descartan** las ediciones sin guardar (revierten al último valor persistido) — el cambio es no destructivo y trivialmente rehacible, así que no exige confirmación (a diferencia de un modal). Esc devuelve el foco al disparador.
+
+##### 9.4 Estados
+
+- **Default (ancla estándar):** disparador ghost `--muted`; al abrir, input prellenado con el equivalente de 15 USD en la moneda/año de la card; sin "Restablecer".
+- **Customizado:** disparador activo `bg-panel-2 text-ink`; input prellenado con el techo propio; "Restablecer al estándar" visible.
+- **Editando:** input con foco (ring `--accent-soft`); "Guardar" habilitado solo si el valor es válido y distinto del persistido (si es igual, "Guardar" puede quedar habilitado igualmente — guardar sin cambio es inocuo por el guardado en USD; ver roadmap §"Por qué se guarda en USD").
+- **Inválido (monto vacío / cero / negativo — el backend exige entero positivo):**
+  - **Prevención de entrada:** el input **no admite** signo negativo ni no-numéricos (`inputmode="decimal"`, filtrado a positivo) — lo inválido idealmente no se puede ni tipear (prevención de error).
+  - **Vacío o cero:** **"Guardar" queda deshabilitado** (`disabled`, `opacity-60`), y aparece una **micro-línea de ayuda 12px `--muted`** bajo el input: *"Ingresá un monto mayor a cero."* (neutra, **sin rojo** — el rojo es reservado a gasto, regla 1; no se comunica el error solo por color, hay texto). No se usa `--warning` ámbar (reservado a avisos, no a validación de form).
+- **Foco (teclado):** todos los controles del popover (input, selector, botones, "Restablecer") tienen ring `--accent-soft` 3px `focus-visible`. Orden de tabulación: input → moneda → Guardar → Cancelar → (Restablecer). Al abrir, el foco entra al **input de monto** (con el texto seleccionado, para reemplazo directo).
+
+##### 9.5 Comportamiento en pantalla chica (contención, `≥ 640px`, sidebar abierto o cerrado)
+
+El disparador es un chip de 32px que **fluye en el mismo `flex flex-wrap justify-end`** de la barra de controles (viaja junto a moneda / refrescar / quitar cuando la cabecera envuelve a segunda línea, `< --bp-wide` / con sidebar apretando el ancho). No cambia de forma ni se separa en su propia línea; el `flex-wrap` reacomoda. Los cuatro invariantes:
+
+1. **Sin scroll horizontal del `body`:** el popover está portaleado a `body`, `position: fixed`, y **clampea su `left`/`right` a 12px del borde del viewport** — nunca empuja ancho ni genera barra horizontal, ni siquiera en el piso 640px con sidebar abierto (contenido 392px).
+2. **Completo y no atrapante:** `max-height: min(60vh, 360px)` con `overflow-y-auto` interno; si el contenido (caption + input + microcopy + acciones) no entra, **scrollea dentro del popover**, con la fila de acciones siempre alcanzable (el popover es corto; casi nunca desborda). Esc / click-fuera siempre lo cierran.
+3. **Ninguna acción inalcanzable:** al no haber lugar abajo, el popover **flipea hacia arriba**; el clamp horizontal garantiza que "Guardar"/"Cancelar" queden siempre on-screen. El disparador, al fluir en el wrap, nunca queda tapado.
+4. **Superficie contenida:** el popover no ensancha la card ni la grilla; la grilla mantiene su propio scroll interno (§*Superficies con scroll interno*), independiente de este overlay.
+
+##### 9.6 Checklist de aceptación visual — techo editable
+
+- [ ] **Disparador presente y ubicado:** ícono `Gauge` 16px en la barra derecha, **entre** el chip de moneda y el botón refrescar, sin divisor extra entre moneda y él.
+- [ ] **Default vs customizado:** con techo estándar el botón es ghost `--muted`; con techo propio queda **activo** (`bg-panel-2`/`--ink`) en reposo, sin acento ni verde/rojo.
+- [ ] **Abre popover-form:** clic → popover con caption "Techo de la escala de color", input de monto (mono tabular), selector de moneda de 4 opciones, microcopy y acciones Guardar/Cancelar.
+- [ ] **Prellenado correcto:** el input muestra el ancla vigente en la moneda de la card (en default, ≈ 15 USD reconvertidos ese año); el selector arranca en la moneda de display de la card.
+- [ ] **Microcopy visible:** una línea `--muted` 12px "Se guarda en USD y se reconvierte según el año y la moneda de la card." bajo el input.
+- [ ] **Mono tabular:** la cifra del techo va en IBM Plex Mono con `tnum`, agrupación es-AR.
+- [ ] **Inválido:** con monto vacío o `0`, "Guardar" queda deshabilitado y aparece la ayuda neutra "Ingresá un monto mayor a cero." (sin rojo, sin ámbar); el signo `−` no se puede tipear.
+- [ ] **Sin recolorear la rampa:** al guardar un techo nuevo, las celdas re-mapean `t` pero la rampa de 4 stops (verde→rojo) es la misma; ninguna cifra ni celda se tiñe de índigo o de income/expense por este control.
+- [ ] **Restablecer** (si el orquestador lo confirma): visible solo en customizado; al usarlo, el botón vuelve a ghost y las celdas al ancla estándar.
+- [ ] **Focus ring:** input, selector y botones muestran ring `--accent-soft` 3px con Tab; Esc cierra y devuelve foco al disparador.
+- [ ] **Contención (640px, sidebar abierto/cerrado):** el popover no genera scroll horizontal del `body`, no queda cortado, flipea arriba si falta lugar abajo, y Guardar/Cancelar siempre alcanzables.
+- [ ] **Ambos modos:** popover, input, chip de moneda y estados del disparador se ven correctos en claro y oscuro.
+
 ### Reporte anual de Cuotas — gantt de barras horizontales (Ola 3, P2)
 
 Cuarto tipo de card de reporte (`installment-gantt`), hermano de `unique-grid`: misma caja (`bg-panel`, `border border-line`, `--r-card` 14px, `p-[var(--card-pad)]`, `--shadow-sm`), misma cabecera (título editable P4 + barra de controles derecha `[ YearStepper ] [ divisor --hair ] [ CardCurrencyTrigger ] [ divisor --hair ] [ X ]`), mismo modo orden P1, mismos estados de carga/vacío/error, mismo filtro de categorías como chips-toggle debajo del canvas. Lo que cambia es el **canvas**: un **gantt anual** donde el eje X = los 12 meses del año y cada **gasto en cuotas (EXPENSE)** es una **barra horizontal** que abarca los meses que ocupa (de `startMonth`, por `totalInstallments` meses), apilada en renglones por un algoritmo de packing. Encaja como una card más en la única columna de `/reportes` (1120px, `--gap` 18px) y en el `[+]`/`AddCardMenu`. **No inventa cromo nuevo**: reusa tokens, escala tipográfica, mono tabular, semánticos y el lenguaje de selectores de la cabecera.

@@ -153,6 +153,14 @@ export interface UnicoGridResponse {
    * color/nombre de las entradas del breakdown.
    */
   availableCategories: Array<{ categoryId: string; name: string; color: string }>;
+  /**
+   * Ancla canónica de la rampa en centavos de USD (Ola 3, P3 — techo editable).
+   * Entero. Ausente el techo custom → ronda 1500 (15 USD). Con techo custom →
+   * el valor que el backend derivó de `anchorAmountCents`/`anchorCurrency`.
+   * El front lo persiste tal cual (vía `onAnchorChange` → `ReportCardConfig.anchorUsdCents`)
+   * sin recalcular TC — la conversión a USD la hace el backend, nunca el front.
+   */
+  anchorUsdCents: number;
 }
 
 /**
@@ -240,6 +248,16 @@ export interface ReportCardConfig {
    * consumirá el endpoint fresco con este param.
    */
   projectFixed?: boolean;
+  /**
+   * Techo (ancla) editable de la rampa de color de la card `unique-grid` (Ola 3, P3).
+   * Entero, centavos de USD. Ausente / undefined = techo estándar (15 USD = 1500 cents
+   * USD, back-compat: cards existentes sin este campo mantienen el comportamiento actual).
+   * Presente = override local persistido en USD; el backend lo reconvierte por año y
+   * moneda de display de la card en cada fetch (`colorAnchorCents` de la respuesta).
+   * Se persiste el `anchorUsdCents` que devuelve el backend al guardar (el front nunca
+   * calcula la conversión a USD). Solo aplica a type === "unique-grid". Ignorado en otros tipos.
+   */
+  anchorUsdCents?: number;
 }
 
 // ─── Tipos del endpoint de reporte anual de Cuotas (Ola 3, P2) ───────────────

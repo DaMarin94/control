@@ -9,9 +9,10 @@
  * - Rampa de color oklch verde→ámbar→rojo (0 → ancla en centavos del backend).
  * - Filtro de categorías: fila de chips-toggle debajo del footer (ChartLegend).
  * - Misma cabecera que las otras cards (título editable P4 + YearStepper +
- *   CardCurrencySelect + X).
+ *   CardCurrencySelect + ColorAnchorTrigger + X).
  *
- * Spec visual: docs/design.md §"Reporte anual de Únicos — grilla día × mes (Ola 3, P2)".
+ * Spec visual: docs/design.md §"Reporte anual de Únicos — grilla día × mes (Ola 3, P2)"
+ * y §"Techo editable de la escala de color (P3)".
  *
  * Gotchas:
  * - La grilla del backend SIEMPRE viene 31×12; los días inexistentes (feb 30,
@@ -22,6 +23,10 @@
  *   compute correctamente el promedio diario del mes en curso.
  * - La rampa tiene dos conjuntos de stops (claro/oscuro) — el front interpola
  *   sobre la rampa correcta según el modo de color activo.
+ * - El techo editable (`anchorUsdCents`) SOLO cambia el techo (t = clamp(total/ancla, 0, 1));
+ *   la rampa de 4 stops no se toca. El front nunca calcula la conversión a USD: al
+ *   guardar, se re-consulta el mismo endpoint con `anchorAmountCents`/`anchorCurrency`
+ *   y se persiste el `anchorUsdCents` que devuelve la respuesta (docs/design.md §9).
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
@@ -34,10 +39,13 @@ import {
   ArrowUp,
   ArrowDown,
   RefreshCw,
+  Gauge,
 } from "lucide-react";
 import { useUnicoGrid } from "@/hooks/use-reports";
 import { useSettings } from "@/hooks/use-settings";
 import { useLimits } from "@/hooks/use-limits";
+import { useApi } from "@/hooks/use-api";
+import { useToast } from "@/hooks/use-toast";
 import {
   computeUniqueCellMark,
   computeUniqueFooterMarks,
@@ -373,6 +381,304 @@ function RemoveConfirmPopover({ onConfirm, onCancel, anchorRef }: RemoveConfirmP
   );
 
   return createPortal(content, document.body);
+}
+
+// ─── ColorAnchorTrigger / popover-editor — techo editable (Ola 3, P3) ─────────
+//
+// Spec visual: docs/design.md §"Techo editable de la escala de color (P3)".
+// El editor cambia SOLO el techo (t = clamp(total/ancla, 0, 1)); la rampa de 4
+// stops (§ arriba) no se toca. El valor se persiste en USD (`anchorUsdCents`);
+// el front NUNCA calcula la conversión a USD — al Guardar, se pide al backend
+// el mismo endpoint con `anchorAmountCents`/`anchorCurrency` y se persiste el
+// `anchorUsdCents` que devuelve la respuesta.
+
+const ANCHOR_VIEWPORT_MARGIN = 12;
+const ANCHOR_POPOVER_GAP = 6;
+
+/** Convierte centavos a string editable con agrupación es-AR (miles con '.', decimal con ','). */
+function formatAmountForEdit(cents: number): string {
+  return new Intl.NumberFormat("es-AR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(cents / 100);
+}
+
+/**
+ * Sanitiza el input de monto a medida que se tipea: solo dígitos, puntos (miles)
+ * y una única coma decimal. Sin signo negativo — el "−" no es tipeable (§9.4).
+ */
+function sanitizeAnchorAmountInput(raw: string): string {
+  let result = "";
+  let hasComma = false;
+  for (const char of raw) {
+    if (char >= "0" && char <= "9") {
+      result += char;
+    } else if (char === ".") {
+      result += char;
+    } else if (char === "," && !hasComma) {
+      result += char;
+      hasComma = true;
+    }
+  }
+  return result;
+}
+
+/**
+ * Parsea un string con agrupación es-AR (miles con '.', decimal con ',') a centavos.
+ * Retorna null si vacío, no numérico, o <= 0 (inválido — §9.4).
+ */
+function parseAnchorAmountInput(value: string): number | null {
+  const normalized = value.trim().replace(/\./g, "").replace(",", ".");
+  if (normalized === "") return null;
+  const parsed = parseFloat(normalized);
+  if (isNaN(parsed) || parsed <= 0) return null;
+  return Math.round(parsed * 100);
+}
+
+interface ColorAnchorPopoverProps {
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
+  year: number;
+  cardCurrency: CurrencyCode;
+  colorAnchorCents: number;
+  onSave: (usdCents: number) => void;
+  onClose: () => void;
+}
+
+function ColorAnchorPopover({ anchorRef, year, cardCurrency, colorAnchorCents, onSave, onClose }: ColorAnchorPopoverProps) {
+  const { api } = useApi();
+  const { toast } = useToast();
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [mounted, setMounted] = useState(false);
+  const [position, setPosition] = useState<{ top?: number; bottom?: number; right: number; flipUp: boolean }>({
+    right: 0,
+    flipUp: false,
+  });
+  const [amountInput, setAmountInput] = useState(() => formatAmountForEdit(colorAnchorCents));
+  // Moneda del selector del popover: arranca en la moneda de display de la card,
+  // pero es un estado LOCAL independiente — cambiarla solo relabela el mismo
+  // monto tipeado (mismo comportamiento que el selector de moneda del form:
+  // no reconvierte por TC del front, ver docs/design.md §9.3).
+  const [editCurrency, setEditCurrency] = useState<CurrencyCode>(cardCurrency);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Posición: alineado al borde derecho del disparador (crece hacia adentro),
+  // flipea arriba si no hay lugar abajo, clampea horizontal a 12px de AMBOS
+  // bordes del viewport (§9.5 — el popover es más ancho que el de moneda, así
+  // que puede desbordar por la izquierda si el disparador está cerca del borde).
+  const calcPosition = useCallback(() => {
+    if (!anchorRef.current) return;
+    const rect = anchorRef.current.getBoundingClientRect();
+    const panelEl = popoverRef.current;
+    const panelHeight = panelEl ? panelEl.getBoundingClientRect().height : 220;
+    const panelWidth = panelEl ? panelEl.getBoundingClientRect().width : 300;
+
+    const spaceBelow = window.innerHeight - rect.bottom - ANCHOR_VIEWPORT_MARGIN;
+    const flipUp = spaceBelow < panelHeight + ANCHOR_POPOVER_GAP;
+
+    let right = window.innerWidth - rect.right;
+    const maxRight = window.innerWidth - panelWidth - ANCHOR_VIEWPORT_MARGIN;
+    if (right > maxRight) right = maxRight;
+    if (right < ANCHOR_VIEWPORT_MARGIN) right = ANCHOR_VIEWPORT_MARGIN;
+
+    if (flipUp) {
+      setPosition({ bottom: window.innerHeight - rect.top + ANCHOR_POPOVER_GAP, right, flipUp: true });
+    } else {
+      setPosition({ top: rect.bottom + ANCHOR_POPOVER_GAP, right, flipUp: false });
+    }
+  }, [anchorRef]);
+
+  useEffect(() => {
+    calcPosition();
+  }, [calcPosition]);
+  useEffect(() => {
+    if (mounted) calcPosition();
+  }, [mounted, calcPosition]);
+
+  // Foco inicial: input de monto con el texto seleccionado, para reemplazo directo (§9.4).
+  useEffect(() => {
+    if (mounted) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [mounted]);
+
+  // Click fuera / Esc → cierran descartando ediciones (no destructivo — §9.3).
+  useEffect(() => {
+    function handleMouseDown(e: MouseEvent) {
+      if (
+        popoverRef.current && !popoverRef.current.contains(e.target as Node) &&
+        anchorRef.current && !anchorRef.current.contains(e.target as Node)
+      ) {
+        onClose();
+      }
+    }
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => document.removeEventListener("mousedown", handleMouseDown);
+  }, [anchorRef, onClose]);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        onClose();
+        anchorRef.current?.focus();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose, anchorRef]);
+
+  const amountCents = parseAnchorAmountInput(amountInput);
+  const isValid = amountCents !== null;
+
+  async function handleSave() {
+    if (!isValid || amountCents === null || saving) return;
+    setSaving(true);
+    try {
+      // Mismo endpoint que useUnicoGrid, con el ancla candidata — el backend
+      // devuelve `anchorUsdCents` ya convertido; el front no calcula TC (§9).
+      const url = `/movements/reports/annual-unicos?year=${year}&anchorAmountCents=${amountCents}&anchorCurrency=${editCurrency}`;
+      const response = await api.get<UnicoGridResponse>(url);
+      onSave(response.anchorUsdCents);
+      onClose();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo guardar el techo de la escala de color.";
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!mounted) return null;
+
+  const content = (
+    <div
+      ref={popoverRef}
+      role="dialog"
+      aria-label="Techo de la escala de color"
+      className="fixed z-50 min-w-[260px] max-w-[300px] overflow-y-auto rounded-ctl border border-line bg-panel p-[12px] shadow-[var(--shadow-lg)] animate-modal-pop"
+      style={{
+        right: position.right,
+        ...(position.flipUp ? { bottom: position.bottom } : { top: position.top }),
+        maxHeight: "min(60vh, 360px)",
+      }}
+    >
+      <div className="flex flex-col gap-[10px]">
+        {/* Caption */}
+        <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">
+          Techo de la escala de color
+        </div>
+
+        {/* Input-group monto + moneda — reusa el patrón de monto+moneda del form */}
+        <div
+          className={cn(
+            "flex items-center gap-2 rounded-ctl border-[1.5px] px-[13px] py-[11px] transition-colors duration-[140ms]",
+            "focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft)]",
+            "border-line-strong bg-panel",
+          )}
+        >
+          <input
+            ref={inputRef}
+            type="text"
+            inputMode="decimal"
+            value={amountInput}
+            onChange={(e) => setAmountInput(sanitizeAnchorAmountInput(e.target.value))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleSave();
+              }
+            }}
+            aria-label="Monto del techo"
+            aria-invalid={!isValid}
+            className="mono min-w-0 flex-1 border-none bg-transparent text-[15px] font-semibold tracking-[-0.01em] text-ink outline-none [font-feature-settings:'tnum'_1]"
+          />
+          <CardCurrencySelect value={editCurrency} onChange={setEditCurrency} />
+        </div>
+
+        {/* Ayuda de inválido — neutra, sin rojo/ámbar (§9.4) */}
+        {!isValid && (
+          <p className="-mt-[2px] text-[12px] text-muted">Ingresá un monto mayor a cero.</p>
+        )}
+
+        {/* Microcopy obligatorio */}
+        <p className="text-[12px] text-muted">
+          Se guarda en USD y se reconvierte según el año y la moneda de la card.
+        </p>
+
+        {/* Acciones */}
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-ctl border border-line bg-panel px-3 py-[6px] text-[13px] font-semibold text-ink-2 transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={!isValid || saving}
+            className="rounded-ctl bg-accent px-3 py-[6px] text-[13px] font-semibold text-white transition-colors duration-[140ms] hover:bg-accent-press focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] disabled:opacity-60 disabled:pointer-events-none"
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return createPortal(content, document.body);
+}
+
+interface ColorAnchorTriggerProps {
+  /** true cuando la card tiene techo propio (anchorUsdCents presente) — estado "activo persistente" del botón. */
+  isCustom: boolean;
+  year: number;
+  cardCurrency: CurrencyCode;
+  /** Ancla vigente en centavos de la moneda de display de la card — prellenado del editor. */
+  colorAnchorCents: number;
+  onSave: (usdCents: number) => void;
+}
+
+function ColorAnchorTrigger({ isCustom, year, cardCurrency, colorAnchorCents, onSave }: ColorAnchorTriggerProps) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label="Techo de la escala de color"
+        title="Techo de la escala de color"
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          "flex h-8 w-8 items-center justify-center rounded-ctl transition-colors duration-[140ms]",
+          "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+          open || isCustom ? "bg-panel-2 text-ink" : "text-muted hover:bg-panel-2 hover:text-ink",
+        )}
+      >
+        <Gauge size={16} aria-hidden="true" />
+      </button>
+      {open && (
+        <ColorAnchorPopover
+          anchorRef={triggerRef}
+          year={year}
+          cardCurrency={cardCurrency}
+          colorAnchorCents={colorAnchorCents}
+          onSave={onSave}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  );
 }
 
 // ─── LegendAllChip ────────────────────────────────────────────────────────────
@@ -1133,6 +1439,21 @@ export interface UniqueGridCardProps {
   onCurrencyChange?: (c: CurrencyCode) => void;
   onRemove?: () => void;
   onTitleChange?: (title: string) => void;
+  /**
+   * Techo (ancla) editable de la rampa de color de esta card (Ola 3, P3).
+   * undefined/ausente = techo estándar (15 USD, comportamiento actual).
+   * Presente = override persistido en USD (`ReportCardConfig.anchorUsdCents`); se
+   * suma al fetch de useUnicoGrid y determina el estado "customizado" del disparador.
+   */
+  anchorUsdCents?: number;
+  /**
+   * Callback al guardar un techo nuevo desde el popover-editor (Ola 3, P3).
+   * Recibe el `anchorUsdCents` que devolvió el backend en la respuesta del fetch
+   * de guardado (el front nunca calcula la conversión a USD).
+   * Cuando está presente (junto con onCurrencyChange) → se monta el ColorAnchorTrigger
+   * en la barra de controles derecha. Cuando está ausente → no se monta (ej. Dashboard).
+   */
+  onAnchorChange?: (usdCents: number) => void;
 }
 
 // ─── UniqueGridCard ───────────────────────────────────────────────────────────
@@ -1157,6 +1478,8 @@ export function UniqueGridCard({
   onCurrencyChange,
   onRemove,
   onTitleChange,
+  anchorUsdCents,
+  onAnchorChange,
 }: UniqueGridCardProps) {
   const { defaultCurrency } = useSettings();
   const effectiveCurrency = currency ?? defaultCurrency;
@@ -1174,7 +1497,7 @@ export function UniqueGridCard({
     return `${y}-${m}-${d}`;
   }, []);
 
-  const { data, isLoading, isError, isFetching, refetch } = useUnicoGrid(year, categoryIds, currency, today);
+  const { data, isLoading, isError, isFetching, refetch } = useUnicoGrid(year, categoryIds, currency, today, anchorUsdCents);
 
   const [removeOpen, setRemoveOpen] = useState(false);
   const removeButtonRef = useRef<HTMLButtonElement>(null);
@@ -1309,6 +1632,18 @@ export function UniqueGridCard({
             <>
               <span className="block h-[16px] w-px bg-hair shrink-0" aria-hidden="true" />
               <CardCurrencySelect value={effectiveCurrency} onChange={onCurrencyChange} />
+              {/* Techo editable de la escala de color (Ola 3, P3) — gemelo del override de
+                  moneda: misma señal de montaje (callback presente), pegado a la moneda,
+                  sin divisor entre ambos (docs/design.md §9.1). */}
+              {onAnchorChange && (
+                <ColorAnchorTrigger
+                  isCustom={anchorUsdCents !== undefined}
+                  year={year}
+                  cardCurrency={effectiveCurrency}
+                  colorAnchorCents={data?.colorAnchorCents ?? 1500}
+                  onSave={onAnchorChange}
+                />
+              )}
             </>
           )}
 

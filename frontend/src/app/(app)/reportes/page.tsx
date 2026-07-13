@@ -525,6 +525,18 @@ function ReportesPageContent() {
     });
   }
 
+  // Ola 3, P3: techo editable de la escala de color de la card `unique-grid`.
+  // `usdCents` ya viene resuelto por el backend (el front nunca calcula la
+  // conversión a USD) — acá solo se persiste tal cual en la clave `reports`.
+  function handleAnchorChange(id: string, usdCents: number) {
+    const newCards = cards.map((c) =>
+      c.id === id ? { ...c, anchorUsdCents: usdCents } : c
+    );
+    void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
+      logger.error("Error al persistir techo de color de card", { error: err, cardId: id });
+    });
+  }
+
   const hasCards = cards.length > 0;
 
   return (
@@ -629,6 +641,7 @@ function ReportesPageContent() {
                   onTitleChange={(t) => handleTitleChange(card.id, t)}
                   onMovementTypesChange={(types) => handleMovementTypesChange(card.id, types)}
                   onDirectionChange={(dir) => handleDirectionChange(card.id, dir)}
+                  onAnchorChange={(usdCents) => handleAnchorChange(card.id, usdCents)}
                 />
               ))}
 

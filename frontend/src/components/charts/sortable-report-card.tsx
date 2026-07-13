@@ -122,6 +122,8 @@ interface SortableReportCardProps {
   onMovementTypesChange: (types: Array<"fijo" | "cuota" | "unico">) => void;
   /** RF-REP-014: filtro de dirección para income-expense (solo en /reportes). */
   onDirectionChange: (dir: "expense" | "income" | "both") => void;
+  /** Ola 3, P3: techo editable de la escala de color de `unique-grid` (solo en /reportes). */
+  onAnchorChange: (usdCents: number) => void;
 }
 
 export function SortableReportCard({
@@ -137,6 +139,7 @@ export function SortableReportCard({
   onTitleChange,
   onMovementTypesChange,
   onDirectionChange,
+  onAnchorChange,
 }: SortableReportCardProps) {
   const {
     attributes,
@@ -191,6 +194,8 @@ export function SortableReportCard({
           onCurrencyChange={onCurrencyChange}
           onRemove={onRemove}
           onTitleChange={onTitleChange}
+          anchorUsdCents={config.anchorUsdCents}
+          onAnchorChange={onAnchorChange}
         />
       ) : config.type === "installment-gantt" ? (
         <CuotasGanttCard

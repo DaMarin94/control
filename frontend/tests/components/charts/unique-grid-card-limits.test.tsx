@@ -96,6 +96,7 @@ const mockData: UnicoGridResponse = {
   year: 2026,
   currency: "ARS",
   colorAnchorCents: 150000,
+  anchorUsdCents: 1500,
   grid: makeGrid(),
   breakdown: makeBreakdownEmpty(),
   footer: makeFooter(),

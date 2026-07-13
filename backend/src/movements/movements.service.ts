@@ -151,11 +151,17 @@ export interface CellCategoryBreakdown {
  * year: el año pedido.
  *
  * colorAnchorCents: ancla de escala de color de la grilla.
- *   Equivale a 15 USD (1500 centavos de USD) convertidos a `currency`
+ *   Equivale a `anchorUsdCents` (default 15 USD = 1500 centavos de USD, o el
+ *   valor pedido vía anchorAmountCents/anchorCurrency) convertidos a `currency`
  *   usando el TC del primer mes disponible del año pedido en ReferenceRate
  *   (con clamp al mes más cercano si el año no tiene datos).
- *   Cuando currency == USD, siempre es 1500 (sin conversión).
+ *   Cuando currency == USD, siempre es igual a anchorUsdCents (sin conversión).
  *   El front usa este valor para anclar su paleta de colores de celdas.
+ *
+ * anchorUsdCents: ancla canónica en centavos de USD efectivamente usada para
+ *   derivar colorAnchorCents (P3). Es 1500 (default) si el caller no mandó
+ *   anchorAmountCents/anchorCurrency, o el resultado de convertir ese par a
+ *   USD si sí los mandó. El front la persiste para prellenar el editor.
  */
 export interface AnnualUnicosResponse {
   year: number;
@@ -165,6 +171,7 @@ export interface AnnualUnicosResponse {
   footer: AnnualUnicosMonthFooter[];
   availableCategories: AvailableCategory[];
   colorAnchorCents: number;
+  anchorUsdCents: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -1414,6 +1421,12 @@ export class MovementsService {
    *   (d) inflationPct: monthlyVariation del mes (InflationRate). null si no hay dato.
    *   (e) pctVsPrevAdj: igual que (c) pero avgAnterior se multiplica por (1 + inflationPct/100).
    *       - null si falta inflationPct, o si avgAnterior = 0, o si avgActual = null.
+   *
+   * Ancla editable de la escala de color (P3):
+   *   anchorAmountCents/anchorCurrency — par opcional (monto en centavos, moneda) que
+   *   reemplaza el default de 15 USD como base de `colorAnchorCents`. Se convierte a
+   *   USD cents con el mismo TC de enero del año (pivotRatesForYear) que ya usa el
+   *   cálculo de colorAnchorCents. Ausentes → default 1500 (15 USD).
    */
   async getAnnualUnicosReport(
     userId: string,
@@ -1421,6 +1434,8 @@ export class MovementsService {
     categoryIds?: string[] | null,
     currencyOverride?: Currency | null,
     today?: string,
+    anchorAmountCents?: number,
+    anchorCurrency?: Currency,
   ): Promise<AnnualUnicosResponse> {
     // Normalizar filtro de categorías (misma semántica que getReportsMovements)
     const filterSet: Set<string> | null =
@@ -1659,29 +1674,51 @@ export class MovementsService {
       });
 
     // ---------------------------------------------------------------------------
-    // colorAnchorCents — ancla de escala de color para el frontend
+    // colorAnchorCents — ancla de escala de color para el frontend (P3: editable)
     //
-    // Equivalente a 15 USD (1500 centavos) en la moneda de display, usando el TC
-    // del primer mes del año pedido disponible en ReferenceRate (con clamp).
-    // Criterio: enero del año (`${year}-01`) resuelto vía pivotRatesForYear,
-    // que ya clampea al mes más cercano si enero no tiene datos en la tabla.
+    // Base: anchorUsdCents. Por default 1500 centavos (15 USD). Si el caller pasó
+    // anchorAmountCents/anchorCurrency, se convierte ese par a USD cents con el TC
+    // de enero del año pedido (mismo pivotRatesForYear/clamp que el resto del bloque)
+    // y ESE valor reemplaza al default como base.
     //
-    // Cuando displayCurrency == USD → 1500 directos (sin conversión).
+    // colorAnchorCents = anchorUsdCents reconvertido a la moneda de display, usando
+    // el mismo TC de enero del año pedido (`${year}-01` resuelto vía pivotRatesForYear,
+    // que ya clampea al mes más cercano si enero no tiene datos en la tabla).
+    //
+    // Cuando displayCurrency == USD → anchorUsdCents directos (sin conversión).
     // Para otras monedas → deriveExchangeRate(USD, displayCurrency, pivotRates)
-    // aplicado sobre 1500 centavos de USD, redondeado a centavos enteros.
+    // aplicado sobre anchorUsdCents, redondeado a centavos enteros.
     // ---------------------------------------------------------------------------
-    const COLOR_ANCHOR_USD_CENTS = 1500; // 15 USD en centavos
-    let colorAnchorCents: number;
+    const DEFAULT_ANCHOR_USD_CENTS = 1500; // 15 USD en centavos
 
-    if (displayCurrency === Currency.USD) {
-      colorAnchorCents = COLOR_ANCHOR_USD_CENTS;
+    // Usar el TC de enero del año pedido (ya clampeado por loadPivotRatesForYear)
+    const januaryKey = `${yearStr}-01`;
+    const pivotRatesJanuary = pivotRatesForYear.get(januaryKey) ?? null;
+
+    let anchorUsdCents: number;
+    if (anchorAmountCents !== undefined && anchorCurrency !== undefined) {
+      if (anchorCurrency === Currency.USD) {
+        anchorUsdCents = anchorAmountCents;
+      } else {
+        // deriveExchangeRate(currency, anchorCurrency, pivotRates) devuelve
+        // "unidades de anchorCurrency por 1 unidad de currency". Acá pedimos
+        // "unidades de USD por 1 unidad de anchorCurrency" invirtiendo los args:
+        // currency=anchorCurrency (el del input), anchorCurrency=USD (el destino).
+        const rate = deriveExchangeRate(anchorCurrency, Currency.USD, pivotRatesJanuary);
+        // Si no hay datos de referencia (tabla vacía), usar el default como fallback defensivo.
+        anchorUsdCents = rate !== null ? Math.round(anchorAmountCents * rate) : DEFAULT_ANCHOR_USD_CENTS;
+      }
     } else {
-      // Usar el TC de enero del año pedido (ya clampeado por loadPivotRatesForYear)
-      const januaryKey = `${yearStr}-01`;
-      const pivotRatesJanuary = pivotRatesForYear.get(januaryKey) ?? null;
+      anchorUsdCents = DEFAULT_ANCHOR_USD_CENTS;
+    }
+
+    let colorAnchorCents: number;
+    if (displayCurrency === Currency.USD) {
+      colorAnchorCents = anchorUsdCents;
+    } else {
       const rate = deriveExchangeRate(Currency.USD, displayCurrency, pivotRatesJanuary);
-      // Si no hay datos de referencia (tabla vacía), usar 1500 como fallback defensivo.
-      colorAnchorCents = rate !== null ? Math.round(COLOR_ANCHOR_USD_CENTS * rate) : COLOR_ANCHOR_USD_CENTS;
+      // Si no hay datos de referencia (tabla vacía), usar anchorUsdCents como fallback defensivo.
+      colorAnchorCents = rate !== null ? Math.round(anchorUsdCents * rate) : anchorUsdCents;
     }
 
     this.logger.debug(
@@ -1691,6 +1728,7 @@ export class MovementsService {
         displayCurrency,
         filterCount: filterSet?.size ?? null,
         availableCategoriesCount: availableCategories.length,
+        anchorUsdCents,
         colorAnchorCents,
       },
       'Reporte anual de únicos calculado',
@@ -1704,6 +1742,7 @@ export class MovementsService {
       footer,
       availableCategories,
       colorAnchorCents,
+      anchorUsdCents,
     };
   }
 

@@ -40,6 +40,7 @@
 | Reportes — título editable por card (placeholder "Reporte N" si vacío) | RF-REP-008 | Implementado |
 | Reportes — cards reordenables por drag & drop (modo orden, ≥2 cards) | RF-REP-009 | Implementado |
 | Reportes — card "Reporte anual de Únicos" (grilla día × mes + footer de métricas mensuales) | RF-REP-010 | Implementado |
+| Reportes — Únicos: techo editable de la escala de color de la card (monto + moneda, persistido en USD, default 15 USD) | RF-REP-010 | Implementado |
 | Reportes — card "Reporte anual de gastos en Cuotas" (gantt de barras horizontales por mes) | RF-REP-011 | Implementado |
 | Reportes — card "Inflación vs Ingresos" (líneas anuales: inflación, variación de ingresos y ajustada + tendencias OLS) | RF-REP-012 | Implementado |
 | Reportes — card "Evolución de gastos fijos" (línea total, selección por fijo, modos montos/variación/ajustada) | RF-REP-013 | Definido (no implementado) |
