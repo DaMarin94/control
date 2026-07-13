@@ -60,6 +60,12 @@ vi.mock("@/hooks/use-limits", () => ({
   })),
 }));
 
+// Mock de useCategories (P2 — popover informativo de límites): resuelve nombre/color
+// de categoría para el refinamiento de límites. [] no afecta los tests existentes.
+vi.mock("@/hooks/use-categories", () => ({
+  useCategories: vi.fn(() => ({ categories: [], isLoading: false, isError: false })),
+}));
+
 import { useCuotasGantt } from "@/hooks/use-reports";
 import { CuotasGanttCard } from "@/components/charts/cuotas-gantt-card";
 

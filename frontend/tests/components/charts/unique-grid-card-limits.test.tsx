@@ -52,6 +52,12 @@ vi.mock("@/hooks/use-limits", () => ({
   })),
 }));
 
+// Mock de useCategories (P2 — popover informativo de límites): resuelve nombre/color
+// de categoría para el refinamiento de límites. [] no afecta las marcas de estos tests.
+vi.mock("@/hooks/use-categories", () => ({
+  useCategories: vi.fn(() => ({ categories: [], isLoading: false, isError: false })),
+}));
+
 // El mes real "en curso" se fija a enero 2026 (monthIndex 0) para estos tests.
 vi.mock("@/lib/format", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/format")>();

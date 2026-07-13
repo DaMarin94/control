@@ -43,6 +43,7 @@ import { useLimits } from "@/hooks/use-limits";
 import { computeInstallmentBarMark } from "@/lib/limits/apply-reports";
 import { describeLimitMark, type EvaluatedLimitMark } from "@/lib/limits/evaluate";
 import { LimitGlyph, LimitBadge } from "@/components/limits/limit-mark";
+import { LimitsInfoPopover } from "@/components/limits/limits-info-popover";
 import { formatCurrency } from "@/lib/format";
 import { ChartLegend } from "@/components/ui/chart";
 import { CardCurrencySelect } from "@/components/ui/card-currency-select";
@@ -1131,20 +1132,24 @@ export function CuotasGanttCard({
     >
       {/* ── Cabecera ── */}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-[18px]">
-        <div className="min-w-0 flex-1">
-          <EditableTitle
-            titleProp={titleProp}
-            titlePlaceholder={titlePlaceholder}
-            displayTitle={displayTitle}
-            isEditing={isEditingTitle}
-            editingValue={editingValue}
-            inputRef={titleInputRef}
-            onEdit={startTitleEdit}
-            onCommit={commitTitleEdit}
-            onCancel={cancelTitleEdit}
-            onEditingValueChange={setEditingValue}
-            canEdit={!!onTitleChange}
-          />
+        <div className="flex min-w-0 flex-1 items-center gap-[6px]">
+          <div className="min-w-0">
+            <EditableTitle
+              titleProp={titleProp}
+              titlePlaceholder={titlePlaceholder}
+              displayTitle={displayTitle}
+              isEditing={isEditingTitle}
+              editingValue={editingValue}
+              inputRef={titleInputRef}
+              onEdit={startTitleEdit}
+              onCommit={commitTitleEdit}
+              onCancel={cancelTitleEdit}
+              onEditingValueChange={setEditingValue}
+              canEdit={!!onTitleChange}
+            />
+          </div>
+          {/* Popover informativo de límites (P2) — esta card nunca vive en Dashboard */}
+          <LimitsInfoPopover surface="reporte-installment-gantt" />
         </div>
 
         {/* Controles derecha: stepper + moneda + X */}

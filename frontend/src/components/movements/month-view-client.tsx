@@ -74,6 +74,7 @@ import { useSettings } from "@/hooks/use-settings";
 import { useLimits } from "@/hooks/use-limits";
 import { evaluateLimits } from "@/lib/limits/evaluate";
 import { computeCategoryExpenseTotalsCents, evaluateItemLimitMark } from "@/lib/limits/apply-month";
+import { LimitsInfoPopover } from "@/components/limits/limits-info-popover";
 import {
   LimitMarkAdorner,
   LimitGlyph,
@@ -825,13 +826,15 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
             {/* H1 envuelto en disparador — sin el link "Ir al mes en curso"
                 (spec §4: reversión de la iteración anterior, vuelve a su
                 estado pre-feature, solo el trigger). */}
-            <div className="mt-0.5 mb-1 flex items-center">
+            <div className="mt-0.5 mb-1 flex items-center gap-[8px]">
               <MonthJumpTriggerDesktop
                 periodLabel={periodLabel}
                 isOpen={monthJump.isOpen}
                 onClick={monthJump.toggle}
                 triggerRef={monthJump.triggerRefDesktop}
               />
+              {/* Popover informativo de límites (P2) — hermano posterior del disparador de período */}
+              <LimitsInfoPopover surface="mes" />
             </div>
             {/* Sub-label estado + link "Ir al mes en curso" (spec §4/§5).
                 Sin min-h: la fila mide lo mismo con y sin link (misma caja
@@ -891,6 +894,8 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
             </div>
             {/* Chip de moneda — accesible, a la derecha del pill */}
             <CurrencyChip currency={defaultCurrency} />
+            {/* Popover informativo de límites (P2) — después del CurrencyChip, antes del link */}
+            <LimitsInfoPopover surface="mes" />
             {/* Link "Ir al mes en curso" — fuera del pill aria-hidden, último
                 hijo de la fila (spec §4: estabilidad lateral del pill/chip). */}
             {goToCurrentMonthButton}

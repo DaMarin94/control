@@ -2980,6 +2980,94 @@ Footer (`flex items-center justify-end gap-3 px-[22px] py-4`, `border-t border-h
 
 ---
 
+## Popover informativo de límites por superficie (Límites y Alertas — P2)
+
+> Spec visual del **popover de solo lectura** que **lista qué límites observan una superficie** (roadmap §"P2 — Popover informativo de límites por superficie"). Es una pieza **nueva e independiente** de la marca pasiva (RF-LIM-003) y del aviso activo (RF-LIM-004): **no marca ni avisa — solo informa**. Se apoya en un ícono disparador que abre un popover con el listado, agrupado por naturaleza. Aparece en las **5 cards de `/reportes`** y en **`/mes`**; **nunca en el Dashboard** (asimetría deliberada: el widget del Dashboard es pantalla de vistazo, sin chrome de card). El shape del límite, las keys del catálogo (`lib/limits/catalog.ts`), la evaluación y la resolución del refinamiento son funcionales/técnicos — acá va solo el cromo.
+>
+> **Regla rectora — es información, no señal.** Todo el cromo del popover es **estrictamente neutro** (`--ink`/`--ink-2`/`--muted`/`--faint`). **No usa ámbar `--warning`** en ningún elemento: ámbar es el registro de *marca cruzada* / *aviso* (secciones anteriores), y teñir este popover de ámbar mentiría "algo cruzó un umbral" cuando el popover solo **enumera qué se está observando**, cruce o no. La distinción marca/aviso vs. información se preserva **por color**: ámbar = pasó algo; neutro = acá tenés el dato.
+
+### 1. El ícono disparador
+
+- **Glifo: `Info`** (lucide) — la "i" en círculo, lectura universal de "información sobre esto". Se descartan `AlertTriangle` (es el glifo reservado de la marca ámbar — lo confundiría con un cruce), `Bell` (lee como notificación/alerta) y `HelpCircle` (lee como "ayuda/cómo se usa", no como "datos sobre esto"). **16px**, `aria-hidden="true"` (el nombre accesible lo da el `aria-label` del botón).
+- **Botón icónico ghost — reusa el molde exacto del botón de refrescar / `X`** (*Botón de refrescar por reporte* §3): hit-area `h-8 w-8` (32×32px), `rounded-[var(--r-ctl)]` (10px), glifo centrado. Estados:
+  - **Reposo:** `text-muted`, **sin caja** (fondo transparente) → en reposo es solo el glifo `Info` tenue, no compite con la identidad.
+  - **Hover / abierto:** `hover:bg-panel-2 hover:text-ink`, transición `140ms` (`transition-colors duration-[140ms] motion-reduce:transition-none`). Con el popover **abierto**, el botón mantiene el fondo `--panel-2` y `text-ink` (feedback de "activo").
+  - **Focus (teclado):** `focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]` — mismo ring `--accent-soft` que todos los icon-buttons del DS (acento = cromo de foco, no dato; no viola reglas duras).
+- **Color: neutro en todo estado** (`--muted` → `--ink`). **Nunca** ámbar, income/expense ni índigo de marca. El índigo aparece **solo** como focus ring.
+- **Condición de aparición (regla dura del subsistema):** el ícono se monta **solo si hay ≥1 límite** (habilitado o no) cuya `surface` coincide con la de esta superficie. Con **cero** límites para la superficie, el botón **no se renderiza** (no reserva hueco ni deja un slot vacío) — coherente con el "cero impacto con config vacía" de la marca pasiva. Que el ícono exista es, entonces, señal en sí de "esta pantalla tiene al menos un límite mirándola".
+
+### 2. Ubicación del ícono por superficie
+
+**Principio único:** el ícono vive **junto a la identidad/título** de la superficie (no en el clúster de acciones ni de controles), como la pieza **más quiet** del chrome. Es metadato sobre *qué se observa en esta superficie*, no un control que se opera — por eso acompaña al título, no a los steppers/utilidades.
+
+- **Cards de `/reportes` (5 tipos):** en la **zona de identidad (izquierda)**, **inmediatamente después del título** de la card, separado por `gap-[6px]`. El `CardControls` derecho (año · moneda · refrescar · `X`, con sus dos hairlines) **no se toca** — el ícono no entra en ese clúster ni agrega hairlines. Aplica a las cuatro cabeceras: el `CardControls` compartido de `report-card.tsx` (income-expense + by-category) y las tres inline (`unique-grid-card`, `cuotas-gantt-card`, `inflation-income-card`). En **`by-category`** (que lleva las tabs Barra/Línea bajo el título) el ícono va en la **fila del título**, antes de las tabs — las tabs siguen debajo, sin cambio. El título es editable (click-to-edit + lápiz on-hover): el ícono `Info` es un **botón hermano posterior**, con su propio hit-area y su `gap`, **fuera** del target de edición del título (no lo estorba).
+- **Dashboard:** **no se monta.** El widget `income-expense` efímero del Dashboard nunca renderiza el ícono (misma señal condicional que ya lo distingue: sin moneda, sin `X`, default global efímera). El listado del Dashboard no existe.
+- **`/mes` — desktop (ancho de contenido ≥941px):** **en la fila del H1** (`MonthJumpTriggerDesktop`), como **hermano posterior** del disparador de período, separado por `gap-[8px]`. La fila del H1 mide 32px (alto del H1) → el botón de 32×32 **cabe sin crecerla** (cero layout-shift vertical). Es el análogo directo del "ícono junto al título de la card". El disparador del H1 (que abre la rueda mes/año, con su `ChevronsUpDown`) y el botón `Info` son dos targets distintos con su `gap`; no se confunden.
+- **`/mes` — compacto (ancho de contenido <941px):** en la **fila del stepper** (`@wide:hidden`, `flex items-center gap-[10px] flex-wrap`), **después del `CurrencyChip`** y **antes** del link "Ir al mes en curso". El pill stepper mide ~40px → el botón de 32×32 cabe. Si la línea no alcanza, `flex-wrap` lo reacomoda (no se corta ni empuja el pill). Se mantiene la adyacencia con el chrome de contexto de pantalla (período + moneda), igual que en desktop acompaña al período.
+
+> **Por qué no el clúster de acciones/controles.** En `/mes` el clúster derecho (`Ordenar secciones` · `+ Nuevo movimiento`) es de **acciones**, con una CTA primaria; en las cards el clúster derecho es de **controles** (año/moneda/refrescar/quitar). Meter ahí una pieza puramente informativa la haría competir con acciones y rompería el balance ya calibrado (y los hairlines de la card). La zona de identidad es su lugar natural: quiet, a la izquierda, leída como "metadato de esto".
+
+### 3. Anatomía del popover
+
+Reusa el **molde de popover del DS** (*Moneda por reporte* §3, *Cierre de overlays*): caja `--panel`, borde `--line`, radio `--r-ctl` (10px), `--shadow-lg`, animación `pop`; `prefers-reduced-motion` → aparición instantánea. Anclado al ícono; **sin scrim**.
+
+- **Caja y medidas:** `min-w-[240px] max-w-[300px]` (ancho por contenido dentro de esa banda), padding exterior `p-[6px]`. Se ancla al **borde del disparador** y crece hacia el lado con espacio (típicamente hacia abajo-derecha); clampeo y flip en §4.
+- **Caption (encabezado del popover):** una línea eyebrow que enmarca el contenido y evita que los headers de grupo queden huérfanos. Texto **12px / 600 uppercase `tracking-[0.1em]` `--muted`** (escala Eyebrow del DS), `px-[10px] pt-[6px] pb-[4px]`. Copy: **"Límites de este reporte"** (cards) / **"Límites de esta vista"** (`/mes`). *(Copy sujeto a confirmación del analista — ver cierre.)*
+- **Grupos por naturaleza — encabezado descriptivo.** Los dos grupos del roadmap (**Pasivos** / **Activos**) se rotulan en **lenguaje humano** (traducción de la jerga, criterio de diseño), preservando el significado:
+  - **Pasivos → "Marcan un dato"** — pintan una marca sobre un dato de la pantalla (RF-LIM-003).
+  - **Activos → "Avisan al guardar"** — avisan al guardar un movimiento (RF-LIM-004). **Este grupo aparece únicamente en `/mes`** (los activos solo existen sobre keys `mes.*`).
+  - **Header de grupo:** texto **11px / 600 uppercase `tracking-[0.08em]` `--faint`**, `px-[10px] pt-[8px] pb-[3px]`, precedido de un `--hair` de separación entre grupos (solo entre grupos, no antes del primero). Se muestra **siempre que el grupo tenga ≥1 ítem** (incluso si es el único grupo: nombra el comportamiento, es informativo aun solo). En las cards de `/reportes` solo puede existir el grupo "Marcan un dato".
+- **Ítem del listado** (un límite): `role="listitem"`, caja `px-[10px] py-[6px]`, `rounded-[var(--r-chip)]` (7px), **dos líneas**:
+  - **Línea 1 — nombre:** `label` del límite si existe; si no, el **rótulo del anclaje** (`getAnchorDef(anchorKey).label`, ej. "Gasto del mes"). Tipografía **UI 13px / 500 `--ink`** (es un nombre, no dinero → **no** mono). Truncado a una línea con ellipsis si excede el ancho; texto completo en `title`. Si el límite tiene **refinamiento de categoría**, el nombre lo antecede un **punto de color 6px** (`rounded-full`, color de la categoría — primitiva de categoría del DS) + el nombre de la categoría; si tiene **refinamiento de sección** (`Únicos`/`Fijos`/`Cuotas`), el nombre lo incorpora en texto. El front resuelve la etiqueta legible del refinamiento.
+  - **Línea 2 — condición:** el fragmento comparativo, **12px `--muted`**, `mt-[1px]`. Estructura: cuando la línea 1 es un `label` propio del usuario, la línea 2 antepone el **rótulo del anclaje** para dar contexto del dato ("Gasto del mes · > 300.000"); cuando la línea 1 ya es el rótulo del anclaje (sin `label` propio), la línea 2 es **solo la condición** ("> 300.000"). El **fragmento numérico** de la condición (`formatCondition` → símbolo del operador + umbral) va en **IBM Plex Mono `tnum`** (**regla dura 3**: toda cifra —el umbral es money/percent/count/signed-money— en mono tabular); el símbolo del operador (`>`, `≥`, `<`, `≤`, `=`) acompaña en la misma mono. El separador de contexto es un middot `·` `--faint`.
+- **Matiz de alcance temporal (`temporalScope`) — reflejar, no mentir:** un límite **pasivo** con `temporalScope: "current"` marca **solo el mes en curso**, y por eso se comporta distinto según la superficie (en una card anual de `/reportes` solo afecta el punto/barra del mes en curso dentro del año; en `/mes` solo marca cuando estás **viendo** el mes en curso). Para que el listado no mienta, esos ítems llevan un **qualifier neutro**: chip-texto **"Solo mes en curso"**, **11px / 500 `--faint`**, al final de la línea 2 (o debajo si no entra), separado por middot `·`. Los límites `temporalScope: "all"` (el default) **no** llevan qualifier (es la norma; anotarla sería ruido). El enunciado es una verdad sobre el **límite** (su alcance), consistente en toda superficie — el usuario infiere el efecto local. Los **activos** no usan `temporalScope` (no aplica) → nunca llevan este qualifier.
+- **Ítem deshabilitado (`enabled: false`) — incluido, atenuado:** se **lista igual** (el popover informa la config completa), con la fila entera a **`opacity-60`** (reusa el registro atenuado del ítem anulado del DS) + una etiqueta **"Desactivado"** al extremo derecho de la línea 1, **11px / 500 `--faint`**, neutra. La atenuación + la etiqueta de texto son **dos portadores** (no solo opacidad): el estado no depende de un único canal. Un límite deshabilitado no produce marca ni aviso, pero el usuario ve que existe y está apagado.
+- **Sin preview de efecto.** El popover **lista**, no previsualiza la marca ámbar de cada límite (eso vive en la superficie real cuando el dato cruza). Mostrar el glifo/badge ámbar acá reintroduciría el registro de "algo pasó" que esta pieza deliberadamente evita. *(Agregado no solicitado si alguien lo pide — mantener fuera salvo decisión explícita.)*
+
+### 4. Disparo, cierre y accesibilidad
+
+- **Disparo (híbrido click + hover-desktop, NO hover puro):**
+  - **Click / tap** → abre (y re-clic → cierra, toggle). Disponible en todo dispositivo — es el camino que **funciona en touch**.
+  - **Desktop (puntero fino / hover-capable):** **además** abre por **hover** con un pequeño delay (~150ms de intención) y cierra al `mouseleave` con una gracia corta. El hover es **aditivo**: nunca es el único camino (en touch no existe hover → nacería roto bajo la política P0-a). El estado abierto por hover es idéntico al abierto por click.
+  - **Teclado:** el botón es focalizable; `Enter`/`Espacio` abre; el foco puede entrar al popover a recorrer el listado; `Esc` cierra y **devuelve el foco al disparador**.
+- **Cierre (es informativo, no un form → cierra por click-fuera):** por **click/tap fuera**, **`Esc`**, **re-clic en el disparador**, y (desktop) **`mouseleave`**. **No** monta scrim ni bloquea el fondo; **no** hay focus-trap (es contenido de lectura, no un form — se distingue de la rueda mes/año y del aviso activo, que sí atrapan por ser form/alertdialog). Alineado con *Cierre de overlays*: los popovers no-form cierran por click-fuera.
+- **A11y del popover:** disparador `aria-haspopup="dialog"` + `aria-expanded`; `aria-label="Límites que observan este reporte"` (cards) / `"…esta vista del mes"` (`/mes`). El popover es una **región etiquetada** (`role="group"`/`dialog` no-modal) con `aria-label` espejo del disparador; el listado es una lista semántica (`role="list"` / `listitem`). Cada ítem porta señal **no-color**: el estado "Desactivado" y el qualifier "Solo mes en curso" son **texto**, no solo atenuación/color. Contraste neutro estándar del DS (par claro/oscuro, regla dura 4).
+
+### 5. Comportamiento en pantalla chica (contención, política P0-a) — los cuatro invariantes
+
+Rige en todo ancho **≥640px** (`--bp-floor`), con el sidebar abierto o cerrado.
+
+1. **Sin scroll horizontal del `body`.** El popover es **overlay por portal** (no participa del flujo de la card ni del header), anclado al disparador y **clampeado al viewport con margen mínimo 12px**: nunca empuja el layout ni asoma fuera del borde. Su ancho (`max-w-[300px]`) entra holgado incluso en el piso de 640px con el sidebar abierto (contenido ~392px). El disparador `Info` es un glifo de 16px en 32×32 → no ensancha ni el header de `/mes` ni la cabecera de card (en las cards vive en la identidad izquierda, lejos del clúster de controles que ya gestiona su propio wrap).
+2. **Popover completo y escapable — nunca cortado ni atrapante.** Si no hay lugar debajo del disparador, **flipea hacia arriba** (mismo mecanismo de colisión que la rueda mes/año §5 y los demás popovers; lo resuelve `control-frontend`); si el borde lateral lo cortaría, **clampea horizontal** a 12px del borde. Con **muchos límites**, el popover **capea su alto** (`max-h-[min(60vh,360px)]`) y **scrollea dentro de sí mismo** (invariante 4): el contenido se recorre en el popover, el `body` no. Siempre se puede ver entero y salir (`Esc` / click-fuera / re-clic siempre disponibles, sin trap).
+3. **Ninguna acción inalcanzable.** El disparador de 32×32 cumple hit-area del DS y queda on-screen en todo ancho (en `/mes` compacto viaja con el `flex-wrap` del stepper; en cards, en la identidad izquierda que nunca sale de pantalla). El popover no tiene controles operables (es lectura); sus únicas "acciones" son las vías de cierre, todas alcanzables por teclado y puntero.
+4. **Superficies anchas scrollean dentro de sí mismas.** El listado largo scrollea **dentro del popover** (punto 2), no en la página. El popover nunca fuerza scroll del `body`.
+
+### 6. Cumplimiento de reglas duras
+
+- **Regla 1 (verde=ingreso · rojo=gasto):** el popover es **neutro**; ningún elemento usa income/expense. Los umbrales de límites sobre montos tipados se muestran como **número puro** (sin recolorear), en `--muted`/mono.
+- **Regla 2 (índigo solo marca):** ningún elemento se tiñe de índigo; el índigo aparece **solo** como focus ring del disparador (cromo de interacción).
+- **Regla 3 (dinero en mono tabular):** el fragmento numérico de cada condición (umbral money/percent/count/signed-money) va en **IBM Plex Mono `tnum`**; los nombres/labels y los headers van en UI (no son cifras).
+- **Regla 4 (ambos modos):** solo tokens neutros theme-aware → se lee idéntico en claro y oscuro sin tratamiento extra.
+- **Distinción vs. ámbar (regla del subsistema de límites):** **no** usa `--warning` en ningún elemento — es información, no marca ni aviso. El ámbar queda exclusivo de *Marca visual pasiva* y *Aviso de alerta activa*.
+
+### 7. Checklist de aceptación visual
+
+- [ ] El ícono `Info` (16px, `--muted`, ghost 32×32) aparece **solo** cuando la superficie tiene ≥1 límite (habilitado o no); con cero límites **no está** (sin hueco reservado).
+- [ ] **Ubicación:** en cada card de `/reportes` va junto al **título** (izquierda), **fuera** del clúster de controles derecho; en `by-category` en la fila del título, con las tabs Barra/Línea debajo intactas. En `/mes` desktop va en la **fila del H1** (después del disparador de período); en compacto, en la fila del stepper, tras el `CurrencyChip`.
+- [ ] **No aparece en el Dashboard** (widget income-expense efímero).
+- [ ] Reposo = glifo tenue sin caja; hover/abierto = `--panel-2` + `--ink`; focus = ring `--accent-soft` 3px.
+- [ ] Abre por **click/tap** (toda plataforma) y —en desktop— **también por hover**; cierra por click-fuera, `Esc`, re-clic y (desktop) mouseleave. **No** hay scrim, **no** hay focus-trap.
+- [ ] Contenido agrupado: header **"Marcan un dato"** (pasivos) y —solo en `/mes`— **"Avisan al guardar"** (activos). El grupo Activos **no** aparece en ninguna card de `/reportes`.
+- [ ] Cada ítem: nombre (UI 13px `--ink`) + condición (numérico en **mono tabular**, `--muted`). Refinamiento de categoría lleva punto de color 6px + nombre de categoría.
+- [ ] Límites `enabled: false` **listados**, a `opacity-60` + etiqueta **"Desactivado"** (`--faint`) — atenuación **y** texto, no solo color.
+- [ ] Límites pasivos `temporalScope: "current"` llevan qualifier **"Solo mes en curso"** (`--faint`); los `all` no llevan nada; los activos nunca lo llevan.
+- [ ] **Cero ámbar** en todo el popover; **cero** income/expense; índigo solo en el focus ring.
+- [ ] ≥640px (sidebar abierto/cerrado): popover **no cortado**, clampeado a 12px del borde, flipea arriba si falta lugar; con muchos ítems scrollea **dentro del popover** sin scroll horizontal del `body`.
+
+> **Señal de documentación (para el analista, vía orquestador):** el copy visible de los **headers de grupo** ("Marcan un dato" / "Avisan al guardar"), el **caption** ("Límites de este reporte" / "…de esta vista"), la etiqueta **"Desactivado"** y el qualifier **"Solo mes en curso"** son **traducciones de diseño** de conceptos funcionales (naturaleza pasiva/activa, `enabled`, `temporalScope`). Su redacción final debería confirmarla el analista en `screens.md` / `requirements.md`. El comportamiento visual definido acá no depende de esa confirmación; solo la letra exacta.
+
+---
+
 ## Specs de fase
 
 El lenguaje visual vigente y reutilizable que salió de cada fase de implementación está consolidado en las secciones de arriba. Las decisiones puntuales de cada fase, una vez implementadas, dejan de tener documento propio: lo que sobrevive es la regla en presente; el "cuándo/por qué cambió" vive en el historial de git.

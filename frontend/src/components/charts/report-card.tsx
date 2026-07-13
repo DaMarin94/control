@@ -60,6 +60,7 @@ import {
 } from "@/lib/limits/apply-reports";
 import { describeLimitMark, mergeLimitMarks, type EvaluatedLimitMark } from "@/lib/limits/evaluate";
 import { renderSeriesPointMark } from "@/components/limits/limit-mark";
+import { LimitsInfoPopover } from "@/components/limits/limits-info-popover";
 import { formatCurrency, CURRENCY_SYMBOLS } from "@/lib/format";
 import { ChartTooltipContent } from "@/components/ui/chart";
 import { ChartLegend } from "@/components/ui/chart";
@@ -1697,21 +1698,25 @@ export function ReportCard({
         onDirectionChange ? (
           /* ── Con filtros: layout de 2 líneas (RF-REP-014) ── */
           <>
-            {/* Línea 1: título editable (ancho completo) */}
-            <div className="w-full mb-[8px]">
-              <EditableTitle
-                titleProp={titleProp}
-                titlePlaceholder={titlePlaceholder}
-                displayTitle={displayTitle}
-                isEditing={isEditingTitle}
-                editingValue={editingValue}
-                inputRef={titleInputRef}
-                onEdit={startTitleEdit}
-                onCommit={commitTitleEdit}
-                onCancel={cancelTitleEdit}
-                onEditingValueChange={setEditingValue}
-                canEdit={!!onTitleChange}
-              />
+            {/* Línea 1: título editable + ícono Info de límites (ancho completo) */}
+            <div className="mb-[8px] flex items-center gap-[6px]">
+              <div className="min-w-0">
+                <EditableTitle
+                  titleProp={titleProp}
+                  titlePlaceholder={titlePlaceholder}
+                  displayTitle={displayTitle}
+                  isEditing={isEditingTitle}
+                  editingValue={editingValue}
+                  inputRef={titleInputRef}
+                  onEdit={startTitleEdit}
+                  onCommit={commitTitleEdit}
+                  onCancel={cancelTitleEdit}
+                  onEditingValueChange={setEditingValue}
+                  canEdit={!!onTitleChange}
+                />
+              </div>
+              {/* Popover informativo de límites (P2) — solo en /reportes (con filtros = no Dashboard) */}
+              <LimitsInfoPopover surface="reporte-income-expense" />
             </div>
             {/* Línea 2: cluster de filtros (izq) + CardControls (der) */}
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-[18px]">
@@ -1789,21 +1794,25 @@ export function ReportCard({
       {/* ── BLOQUE by-category: línea 1 (título) + línea 2 (tabs + controles) ── */}
       {type === "by-category" && (
         <>
-          {/* Línea 1: solo el título editable (ancho completo) */}
-          <div className="w-full mb-[8px]">
-            <EditableTitle
-              titleProp={titleProp}
-              titlePlaceholder={titlePlaceholder}
-              displayTitle={displayTitle}
-              isEditing={isEditingTitle}
-              editingValue={editingValue}
-              inputRef={titleInputRef}
-              onEdit={startTitleEdit}
-              onCommit={commitTitleEdit}
-              onCancel={cancelTitleEdit}
-              onEditingValueChange={setEditingValue}
-              canEdit={!!onTitleChange}
-            />
+          {/* Línea 1: título editable + ícono Info de límites (ancho completo) */}
+          <div className="mb-[8px] flex items-center gap-[6px]">
+            <div className="min-w-0">
+              <EditableTitle
+                titleProp={titleProp}
+                titlePlaceholder={titlePlaceholder}
+                displayTitle={displayTitle}
+                isEditing={isEditingTitle}
+                editingValue={editingValue}
+                inputRef={titleInputRef}
+                onEdit={startTitleEdit}
+                onCommit={commitTitleEdit}
+                onCancel={cancelTitleEdit}
+                onEditingValueChange={setEditingValue}
+                canEdit={!!onTitleChange}
+              />
+            </div>
+            {/* Popover informativo de límites (P2) — by-category nunca vive en Dashboard */}
+            <LimitsInfoPopover surface="reporte-by-category" />
           </div>
           {/* Línea 2: [ViewTabs Barra/Línea izq] / [controles der], items-start */}
           <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-[18px]">
