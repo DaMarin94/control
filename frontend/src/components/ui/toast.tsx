@@ -30,6 +30,7 @@
 import {
   createContext,
   useCallback,
+  useEffect,
   useRef,
   useState,
   type ReactNode,
@@ -74,6 +75,24 @@ export interface ToastContextValue {
 // ─── Context ──────────────────────────────────────────────────────────────────
 
 export const ToastContext = createContext<ToastContextValue | null>(null);
+
+// ─── Emisor imperativo (fuera del árbol de React) ─────────────────────────────
+
+/**
+ * Permite emitir un toast desde código que corre fuera del árbol de React
+ * (ej: el `onError` de QueryCache/MutationCache en `lib/react-query.tsx`,
+ * que se crea en el initializer del provider — no puede llamar a `useToast()`).
+ *
+ * `<ToastProvider>` registra su función `show` al montar. Si todavía no
+ * montó (o ya se desmontó), `emitToast` es un no-op silencioso.
+ */
+type ToastEmitFn = (type: ToastType, message: string, options?: ShowToastOptions) => void;
+
+let toastEmitFn: ToastEmitFn | null = null;
+
+export function emitToast(type: ToastType, message: string, options?: ShowToastOptions): void {
+  toastEmitFn?.(type, message, options);
+}
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
@@ -123,6 +142,14 @@ export function ToastProvider({ children }: ToastProviderProps) {
     },
     [dismiss],
   );
+
+  // Registra `show` como emisor imperativo mientras el provider está montado.
+  useEffect(() => {
+    toastEmitFn = show;
+    return () => {
+      toastEmitFn = null;
+    };
+  }, [show]);
 
   const contextValue: ToastContextValue = {
     toast: {

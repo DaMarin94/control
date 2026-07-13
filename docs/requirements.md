@@ -215,6 +215,29 @@ La recuperación de contraseña ("olvidé mi contraseña"), la verificación de 
 
 ---
 
+#### RF-AUTH-007 — Cierre de sesión automático ante token inválido o expirado
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Cuando el backend responde `401` (token del backend inválido o expirado), la app cierra la sesión y lleva al usuario al login con un aviso: "Tu sesión expiró, volvé a entrar." |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Alta |
+| **Precondiciones** | El usuario tiene sesión activa y realiza una llamada al backend. |
+
+**Flujo principal:**
+1. La app hace una llamada al backend con el token de sesión.
+2. El backend responde `401` (token inválido o expirado).
+3. El sistema cierra la sesión y redirige a `/login`.
+4. El sistema muestra el aviso "Tu sesión expiró, volvé a entrar."
+
+**Criterios de aceptación:**
+- [ ] Un `401` del backend cierra la sesión y redirige a `/login` con el aviso "Tu sesión expiró, volvé a entrar."
+- [ ] Solo el `401` dispara el cierre de sesión automático. `403`, `400`, `500` y los errores de red (`503`) no cierran sesión: se manejan localmente como cualquier error.
+- [ ] Cuando varias llamadas fallan con `401` a la vez, el cierre de sesión y el aviso se disparan una sola vez (sin loop ni avisos duplicados).
+- [ ] Estando ya en `/login`, un `401` no vuelve a disparar el flujo.
+
+---
+
 ### 3.2 Módulo: Dashboard
 
 ---

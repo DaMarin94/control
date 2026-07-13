@@ -11,6 +11,7 @@
 |---------|---------|--------|
 | Auth — email/contraseña (login + registro) | RF-AUTH-005..006, 002..004 | Implementado |
 | Auth — Google OAuth | RF-AUTH-001 | Scaffolded (diferido) |
+| Auth — cierre de sesión automático ante token expirado/inválido (redirect a login) | RF-AUTH-007 | Implementado |
 | Dashboard — resumen del mes (en `/`) | RF-DASH-001..003, 005 | Implementado |
 | Formulario de carga (tabs único/fijo/cuotas) | RF-CM-001 | Implementado |
 | Movimiento único — crear, editar, eliminar | RF-MU-001..003 | Implementado |

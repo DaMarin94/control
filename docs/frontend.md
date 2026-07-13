@@ -159,6 +159,14 @@ El root layout (`frontend/src/app/layout.tsx`) es un Server Component `async` qu
 - **Protección de rutas** vía `src/middleware.ts`: una ruta privada sin sesión redirige a `/login`; un usuario autenticado que entra a `/login` o `/registro` es redirigido a `/`.
 - **Auto-login tras registro:** un registro exitoso deja al usuario logueado sin pasar por la pantalla de login (RF-AUTH-006).
 
+### Manejo centralizado del 401 del backend (RF-AUTH-007)
+
+El cierre de sesión automático ante un `401` del backend (token inválido/expirado) es **centralizado**, no por hook. Vive en `frontend/src/lib/react-query.tsx` en los `onError` de **`QueryCache`** y **`MutationCache`**: detectan un `ApiError` con `statusCode === 401`, emiten el toast "Tu sesión expiró, volvé a entrar." y llaman `signOut({ callbackUrl: "/login" })`. **No** reimplementar el 401 en cada hook.
+
+- **Solo el `401`** dispara este flujo; el resto de los códigos (`403`/`400`/`500`/red) se manejan localmente en cada consumidor.
+- **Guard anti-duplicados a nivel de módulo:** cuando muchas requests fallan con `401` a la vez, un solo `signOut` y un solo toast; no se dispara si ya se está en `/login`.
+- **Toast desde fuera del árbol de React:** el `onError` del cache corre fuera de un componente, así que no puede usar el hook de toast. Para eso hay un **emisor imperativo a nivel de módulo** — `emitToast` en `components/ui/toast.tsx` —, que `ToastProvider` **registra al montar**. Si se toca el `ToastProvider`, mantener ese registro o el toast del 401 deja de emitirse.
+
 ## Preferencias de usuario
 
 Mecanismo de persistencia de preferencias del usuario (estado de UI que sobrevive a la navegación y al cierre de sesión). Lo consumen las secciones colapsadas/orden de `/mes`, los reportes y el filtro por categoría. Contrato del backend en `docs/data-model.md` ("Contrato de preferencias de usuario").
