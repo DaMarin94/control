@@ -44,6 +44,19 @@
      porque dos cosas distintas necesitan medir dos anchos distintos. */
   --container-wide: 941px;
 
+  /* Contención responsive — umbral DERIVADO exclusivo de PeriodNav (docs/design.md
+     §Contención responsive → "Umbral de flechas"). Único breakpoint que NO es
+     --bp-wide/941: `1288 = 1120 (cap del bloque de contenido) + 2 × 84 (botón
+     64px + 20px de aire, por lado)`, el ancho de <main> a partir del cual la
+     flecha overlay de PeriodNav entra ENTERA en el margen exterior sin tocar
+     el listado. Habilita `@arrows:` (contenido ≥1288px: flechas + `.phead`
+     grande) y `@max-arrows:` (contenido <1288px: sin flechas, header stepper
+     compacto) sobre el mismo `@container` de <main> que usa `--container-wide`.
+     No reemplaza --container-wide: ese sigue gobernando el colapso de grillas
+     (941px) como eje independiente — la banda 941–1288 tiene grillas
+     multicolumna con header stepper (sin flechas) al mismo tiempo. */
+  --container-arrows: 1288px;
+
   /* Ancho mínimo soportado — gate por debajo del piso (RF-APP-002, docs/design.md
      §Contención responsive → "Ancho mínimo soportado"). Habilita las variantes
      `floor:` (min-width del piso) y `max-floor:` (por debajo del piso, el

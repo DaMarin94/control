@@ -25,11 +25,14 @@
  *       py-[34px] pb-20 (acá, este div) = mismo mecanismo canónico que las
  *       otras cinco pantallas, mismo ancho a igual viewport.
  *       Flechas ‹ / ›: overlay absolute respecto de PeriodNav, ocultas en
- *       compacto (ancho de contenido <941px), NO reservan ancho de columna.
- *       El régimen amplio/compacto se mide con CONTAINER QUERY sobre <main>
- *       (`@wide:`/`@max-wide:`), no con media query de viewport — ver
- *       docs/design.md §"Ancho de contenido de página" y la nota en period-nav.tsx.
- *   - Header dentro de la columna central (.phead en amplio / stepper en compacto, ambos por `@wide:`/`@max-wide:`):
+ *       compacto (ancho de contenido <1288px, `--bp-arrows`), NO reservan
+ *       ancho de columna. El régimen se mide con CONTAINER QUERY sobre
+ *       <main> (`@arrows:`/`@max-arrows:`), no con media query de viewport —
+ *       ver docs/design.md §"Ancho de contenido de página" → "Umbral de
+ *       flechas" y la nota en period-nav.tsx.
+ *   - Header dentro de la columna central (.phead en amplio / stepper en compacto, ambos
+ *     gateados por `@arrows:`/`@max-arrows:` (1288px, `--bp-arrows`) — NO por `@wide:`
+ *     (941px, que solo gobierna el colapso de grillas de las stat-cards abajo):
  *       Desktop: eyebrow "Tu mes" + H1 período "Junio 2026" + sub-línea estado.
  *       Mobile:  pill stepper compacto (‹ rótulo ›).
  *       Siempre: botón "Ordenar secciones" / "Listo" + botón "+ Nuevo movimiento" a la derecha.
@@ -813,8 +816,8 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
         {/* ── Header ──────────────────────────────────────────────── */}
         <div className="flex items-end justify-between gap-5 mb-6 flex-wrap">
 
-          {/* Bloque de título — amplio (ancho de contenido ≥941px, container query sobre <main>) */}
-          <div className="hidden @wide:flex flex-col gap-0">
+          {/* Bloque de título — amplio (ancho de contenido ≥1288px, `--bp-arrows`, container query sobre <main>) */}
+          <div className="hidden @arrows:flex flex-col gap-0">
             {/* Fila del eyebrow: label + chip de moneda default (a la derecha del eyebrow).
                 Quedan FUERA del disparador (per spec §1). */}
             <div className="flex items-center gap-[10px] mb-0.5">
@@ -854,14 +857,14 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
             </div>
           </div>
 
-          {/* Stepper compacto — compacto (ancho de contenido <941px, container query sobre <main>) */}
+          {/* Stepper compacto — compacto (ancho de contenido <1288px, `--bp-arrows`, container query sobre <main>) */}
           {/*
            * El contenedor flex envuelve el stepper pill (aria-hidden, evita
            * duplicados en jsdom) y el CurrencyChip accesible (fuera del aria-hidden).
            * El chip va a la derecha del stepper (gap-[10px]); si no entra, flex-wrap
            * lo baja a su propia línea alineado a la derecha (spec).
            */}
-          <div className="@wide:hidden flex items-center gap-[10px] flex-wrap">
+          <div className="@arrows:hidden flex items-center gap-[10px] flex-wrap">
             {/*
              * Pill stepper — aria-hidden para evitar duplicados de botones en jsdom.
              * El disparador accesible del selector mes/año es el botón desktop (que

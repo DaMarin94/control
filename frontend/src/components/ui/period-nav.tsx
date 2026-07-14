@@ -43,61 +43,79 @@
  *    JS ni container query — es CSS puro, relativo al 100% del wrapper raíz
  *    (que mide exactamente el ancho de `<main>`, sin padding propio):
  *      offset = max(0px, calc((100% - 1120px) / 2 - 84px))
- *    Verificación en los dos regímenes:
- *      - anchoDeContenido ≥ 1204px (M ≥ 84px, "margen holgado"): offset =
- *        M − 84 > 0 → la flecha cae ENTERA en el margen exterior, con 20px
- *        de aire hasta el borde del bloque (64 + 20 = 84, exacto).
- *      - anchoDeContenido < 1204px (M < 84px, incluido TODO el rango
- *        941–1120px donde el bloque llena `<main>` y M = 0 exacto): la
- *        fórmula clampea a 0 → la flecha se pega al borde izquierdo/derecho
- *        del wrapper raíz (que es el borde de `<main>`), flotando sobre la
- *        banda de padding `px-10` (40px) del bloque. En el piso (M = 0) el
- *        botón (64px) avanza 24px más allá del borde del padding (64 − 40 =
- *        24), el solape ~24px descrito en el spec — consecuencia directa del
- *        clamp, sin necesidad de un caso especial. Nunca sale de `<main>`
- *        (invariante 3: ningún control queda fuera de pantalla).
+ *    La fórmula no cambia con el gate de visibilidad (ver "Aparición" abajo);
+ *    solo importa su valor en el rango donde las flechas efectivamente se
+ *    muestran, `anchoDeContenido ≥ 1288px` (`--bp-arrows`):
+ *      - En 1288px exacto: M = 84px → offset = 0 → la flecha se pega al
+ *        borde del wrapper raíz con EXACTAMENTE 20px de aire hasta el bloque
+ *        de contenido (64 + 20 = 84, el umbral del que se deriva 1288).
+ *      - Por encima de 1288px: M > 84px → offset = M − 84 > 0 → la flecha
+ *        se despega más del borde, siempre con ≥20px de aire, sin invadir
+ *        jamás el bloque ni la banda de padding `px-10`. Nunca sale de
+ *        `<main>` (invariante 3: ningún control queda fuera de pantalla).
+ *    Por debajo de 1288px la fórmula seguiría clampeando a 0 (la flecha se
+ *    pegaría al borde de `<main>`, solapando la banda `px-10` del bloque) —
+ *    pero ese tramo ya no se ve: el gate de visibilidad (abajo) oculta las
+ *    flechas antes de llegar ahí.
  *
- *    Aparición — SIGUE gateada por el umbral `--bp-wide` (941px), medido con
- *    CONTAINER QUERY sobre `<main>` (`@wide:`/`@max-wide:`), no viewport (el
- *    <main> del shell autenticado es `@container`, ver app-shell.tsx). Con
- *    el sidebar abierto a viewport 1000px el contenido mide ~712px — si esto
- *    se midiera contra el viewport montaría las flechas en un hueco angosto
- *    y podría desbordar. Por debajo de 941px de contenido las flechas van
- *    `hidden`; el consumidor renderiza el stepper compacto en el header.
+ *    Aparición — gateada por el umbral DERIVADO `--bp-arrows` (1288px),
+ *    medido con CONTAINER QUERY sobre `<main>` (`@arrows:`/`@max-arrows:`),
+ *    no viewport (el <main> del shell autenticado es `@container`, ver
+ *    app-shell.tsx). 1288 = 1120 (cap del bloque de contenido) + 2×84 (botón
+ *    64px + 20px de aire, por lado): el ancho al que la flecha entra ENTERA
+ *    en el margen exterior sin solapar el listado. Convive con `--bp-wide`
+ *    (941px), que sigue gobernando exclusivamente el colapso de grillas
+ *    (stat-cards), no el régimen de `PeriodNav`. Con el sidebar abierto a
+ *    viewport 1000px el contenido mide ~712px — si esto se midiera contra el
+ *    viewport montaría las flechas en un hueco angosto y podría desbordar.
+ *    Por debajo de 1288px de contenido las flechas van `hidden`; el
+ *    consumidor renderiza el stepper compacto en el header (incluida la
+ *    banda 941–1288, donde las grillas ya son multicolumna pero la
+ *    navegación de período sigue siendo por stepper).
  *
- * Centrado vertical de las flechas al VIEWPORT (sin cambios de comportamiento
- * respecto de la versión anterior, solo de mecanismo de anidado):
- *  - Cada flecha vive en dos capas anidadas. La EXTERIOR es la que hace el
- *    overlay horizontal: `absolute inset-y-0` (estirada al alto del wrapper
- *    raíz, que a su vez mide el alto real del contenido, porque el wrapper
- *    raíz es `position:relative` con altura automática determinada por su
- *    único hijo en flujo normal — el bloque de contenido; las capas
- *    absolutas no aportan a esa altura). La INTERIOR es la que centra al
- *    viewport: `sticky top-0 h-screen flex items-center` — igual que en la
- *    versión de grid, el offset vertical lo resuelve `position:sticky` con
- *    una altura fija de 100vh, no `min-height`.
- *  - Por qué no hay scroll fantasma con listas cortas: la capa EXTERIOR es
- *    `position:absolute`, así que queda completamente fuera del cálculo de
- *    alto del documento (un elemento absolutamente posicionado nunca aporta
- *    al alto de su contenedor en flujo normal, sea cual sea el alto de sus
- *    propios hijos). El alto del documento lo define únicamente el bloque de
- *    contenido. Si la capa interior (100vh) es más alta que el contenido,
- *    simplemente desborda visualmente la capa exterior sin inflar el
- *    documento — a diferencia del modelo de grid anterior, acá no depende de
- *    cómo el motor de grid decide el alto de un track auto a partir de un
- *    ítem con `align-self` no-stretch (ambigüedad que el modelo de grid
- *    exigía razonar con cuidado); es una garantía estructural del modelo de
- *    caja: absolute nunca participa del alto en flujo normal del padre.
- *  - Caso de listas largas: el wrapper raíz mide el alto real del contenido
- *    (varios miles de px); la capa exterior (absolute, inset-y-0) se estira
- *    a esa altura; dentro, la capa sticky (100vh) tiene recorrido de sobra
- *    para permanecer anclada al centro del viewport mientras se scrollea.
- *  - Caso de listas cortas: el wrapper raíz mide poco alto (el del
- *    contenido corto); la capa exterior se estira a eso nomás; la capa
- *    sticky (100vh) la desborda visualmente pero no aporta alto al
- *    documento (ver arriba) → sin scroll fantasma, flecha centrada al
- *    viewport igual (no hay recorrido de scroll real para "destickear" antes
- *    de que se acabe la página, porque la página no llega a medir 100vh).
+ * Centrado vertical de las flechas al VIEWPORT — portal a `document.body`
+ * (reemplaza el mecanismo `sticky top-0 h-screen` de la versión anterior,
+ * roto por una regresión: `<main>` es `@container` — `container-type:
+ * inline-size` — y eso implica `contain: layout`, que convierte a `<main>`
+ * en el containing block de sus descendientes `position:fixed` (y, en la
+ * práctica de los motores, también `position:sticky`). Con eso, ambos
+ * mecanismos dejan de resolverse contra el viewport real y pasan a
+ * comportarse como si fueran contenido del contenedor — las flechas
+ * scrolleaban con la página en vez de quedar clavadas. No hay forma de
+ * "escapar" un containing block impuesto por un ancestro solo con CSS en el
+ * descendiente — la única salida es sacar el nodo del subárbol de `<main>`):
+ *
+ *  - Cada flecha sigue teniendo un ancla `absolute` dentro del wrapper raíz
+ *    (mismo rol que antes: resuelve el offset horizontal — `left`/`right:
+ *    ARROW_OFFSET` — vía CSS puro, gateada por `hidden @arrows:block` /
+ *    oculta en compacto). Esa ancla ya NO renderiza el botón — es solo una
+ *    sonda de medición invisible (`aria-hidden`, `pointer-events-none`, sin
+ *    contenido).
+ *  - Un hook (`useArrowGeometry`) mide, vía `getBoundingClientRect` +
+ *    `ResizeObserver` + resize de ventana, (a) el ancho del wrapper raíz
+ *    (mismo ancho de contenido que mide `@arrows:`/`@max-arrows:` — de ahí
+ *    `BP_ARROWS = 1288`, espejo numérico en JS del token `--bp-arrows` /
+ *    `--container-arrows`, porque un container query de CSS no es legible
+ *    desde JS) para decidir si el régimen es amplio, y (b) el `left`
+ *    resuelto del ancla (ya con `ARROW_OFFSET` aplicado por CSS) para
+ *    plantar el botón en el mismo punto horizontal de siempre.
+ *  - El botón real (`PeriodNavButton`) se monta vía `createPortal` a
+ *    `document.body` — fuera del subárbol de `<main>`, así que su
+ *    `position: fixed` sí resuelve contra el viewport real — con `top: 50%;
+ *    transform: translateY(-50%)` para el centrado vertical y `left:
+ *    <medido>px` para el horizontal. Gateado por un flag `mounted`
+ *    (SSR-safe, mismo patrón que `ModalShell`) además de la visibilidad
+ *    medida.
+ *  - Medición 0 = "no confiable, conservar el último estado conocido" (en vez
+ *    de forzar oculto): cubre tanto el frame inicial antes del primer layout
+ *    real como jsdom en tests (no implementa layout — `getBoundingClientRect`
+ *    devuelve siempre 0). El estado inicial es `visible: true`, así que las
+ *    flechas nunca "parpadean" ocultas antes de la primera medición real.
+ *  - Sin scroll fantasma con listas cortas (invariante preexistente): el
+ *    botón vive en `document.body` vía `position: fixed`, que por
+ *    definición nunca aporta alto al documento — más robusto que el
+ *    mecanismo sticky anterior (que dependía de que la capa exterior fuera
+ *    `absolute` para no inflar el alto del wrapper raíz).
  *
  * Props:
  *  - children: contenido de la columna central (el consumidor agrega su
@@ -115,6 +133,8 @@
  * canGoPrev/canGoNext atados a earliestYear / año en curso.
  */
 
+import { useEffect, useRef, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface PeriodNavProps {
@@ -133,6 +153,68 @@ interface PeriodNavProps {
 // propio) — por eso "100%" acá y no una container query unit.
 const ARROW_OFFSET = "max(0px, calc((100% - 1120px) / 2 - 84px))";
 
+// Espejo numérico del token `--bp-arrows` / `--container-arrows` (globals.css,
+// 1288px) — un container query de CSS no es legible desde JS, así que la
+// medición de régimen amplio/compacto del portal necesita su propia
+// constante (ver docstring "Centrado vertical…" arriba). NO confundir con
+// `--bp-wide` (941px), que gobierna solo el colapso de grillas y no el
+// régimen de PeriodNav.
+const BP_ARROWS = 1288;
+
+interface ArrowGeometry {
+  visible: boolean;
+  /** `left` en px, viewport-relative — listo para `position:fixed`. */
+  left: number;
+}
+
+/**
+ * Mide, contra el wrapper raíz y el ancla de una flecha, si el régimen es
+ * amplio y en qué `left` (viewport-relative) debe plantarse el botón
+ * portado — ver docstring "Centrado vertical de las flechas al VIEWPORT"
+ * arriba. Un ancho medido de 0 (frame inicial sin layout todavía, o jsdom en
+ * tests, que no implementa layout) NO se toma como "oculto": se conserva el
+ * último estado conocido (default `visible: true`).
+ */
+function useArrowGeometry(
+  wrapperRef: RefObject<HTMLDivElement | null>,
+  anchorRef: RefObject<HTMLDivElement | null>,
+): ArrowGeometry {
+  const [geometry, setGeometry] = useState<ArrowGeometry>({ visible: true, left: 0 });
+
+  useEffect(() => {
+    function update() {
+      const wrapperEl = wrapperRef.current;
+      const anchorEl = anchorRef.current;
+      if (!wrapperEl || !anchorEl) return;
+
+      const wrapperWidth = wrapperEl.getBoundingClientRect().width;
+      if (wrapperWidth === 0) return;
+
+      setGeometry(
+        wrapperWidth >= BP_ARROWS
+          ? { visible: true, left: anchorEl.getBoundingClientRect().left }
+          : { visible: false, left: 0 },
+      );
+    }
+
+    update();
+    window.addEventListener("resize", update);
+
+    let resizeObserver: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== "undefined" && wrapperRef.current) {
+      resizeObserver = new ResizeObserver(update);
+      resizeObserver.observe(wrapperRef.current);
+    }
+
+    return () => {
+      window.removeEventListener("resize", update);
+      resizeObserver?.disconnect();
+    };
+  }, [wrapperRef, anchorRef]);
+
+  return geometry;
+}
+
 export function PeriodNav({
   children,
   prevLabel,
@@ -142,27 +224,34 @@ export function PeriodNav({
   canGoPrev = true,
   canGoNext = true,
 }: PeriodNavProps) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const prevAnchorRef = useRef<HTMLDivElement>(null);
+  const nextAnchorRef = useRef<HTMLDivElement>(null);
+
+  const prevGeometry = useArrowGeometry(wrapperRef, prevAnchorRef);
+  const nextGeometry = useArrowGeometry(wrapperRef, nextAnchorRef);
+
+  // Gate SSR-safe para el portal — mismo patrón que ModalShell (`document`
+  // no existe en el pase de render del servidor).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return (
     // Wrapper raíz: 100% del ancho de <main>, sin padding propio — el
-    // sistema de referencia de las flechas overlay (ver ARROW_OFFSET).
-    // position:relative para que las flechas (absolute) se posicionen
+    // sistema de referencia de las flechas overlay (ver ARROW_OFFSET) y de
+    // la medición de régimen amplio/compacto (ver useArrowGeometry).
+    // position:relative para que las anclas (absolute) se posicionen
     // respecto de este ancho, no del bloque de contenido ya capeado.
-    <div className="relative">
-      {/* ── Flecha anterior ‹ — overlay, oculta en compacto ─────────────── */}
+    <div ref={wrapperRef} className="relative">
+      {/* ── Ancla anterior ‹ — sonda de medición, sin contenido visual ──── */}
       <div
-        className="hidden @wide:flex absolute inset-y-0 w-16 items-center justify-center z-10"
+        ref={prevAnchorRef}
+        aria-hidden="true"
+        className="hidden @arrows:block absolute inset-y-0 w-16 pointer-events-none"
         style={{ left: ARROW_OFFSET }}
-      >
-        {/* Capa de centrado vertical al viewport — ver docstring arriba */}
-        <div className="sticky top-0 h-screen w-full flex items-center justify-center">
-          <PeriodNavButton
-            label={prevLabel}
-            disabled={!canGoPrev}
-            onClick={onPrev}
-            side="prev"
-          />
-        </div>
-      </div>
+      />
 
       {/* ── Bloque de contenido — mecanismo canónico ─────────────────────── */}
       {/*
@@ -176,20 +265,47 @@ export function PeriodNav({
        */}
       <div className="max-w-[1120px] mx-auto min-w-0">{children}</div>
 
-      {/* ── Flecha siguiente › — overlay, oculta en compacto ────────────── */}
+      {/* ── Ancla siguiente › — sonda de medición, sin contenido visual ──── */}
       <div
-        className="hidden @wide:flex absolute inset-y-0 w-16 items-center justify-center z-10"
+        ref={nextAnchorRef}
+        aria-hidden="true"
+        className="hidden @arrows:block absolute inset-y-0 w-16 pointer-events-none"
         style={{ right: ARROW_OFFSET }}
-      >
-        <div className="sticky top-0 h-screen w-full flex items-center justify-center">
-          <PeriodNavButton
-            label={nextLabel}
-            disabled={!canGoNext}
-            onClick={onNext}
-            side="next"
-          />
-        </div>
-      </div>
+      />
+
+      {/* ── Flechas — portadas a document.body, ver docstring arriba ────── */}
+      {mounted &&
+        prevGeometry.visible &&
+        createPortal(
+          <div
+            className="fixed z-10"
+            style={{ left: prevGeometry.left, top: "50%", transform: "translateY(-50%)" }}
+          >
+            <PeriodNavButton
+              label={prevLabel}
+              disabled={!canGoPrev}
+              onClick={onPrev}
+              side="prev"
+            />
+          </div>,
+          document.body,
+        )}
+      {mounted &&
+        nextGeometry.visible &&
+        createPortal(
+          <div
+            className="fixed z-10"
+            style={{ left: nextGeometry.left, top: "50%", transform: "translateY(-50%)" }}
+          >
+            <PeriodNavButton
+              label={nextLabel}
+              disabled={!canGoNext}
+              onClick={onNext}
+              side="next"
+            />
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -214,8 +330,9 @@ function PeriodNavButton({ label, disabled, onClick, side }: PeriodNavButtonProp
        * Tamaño único: 64×64px circular (spec 1.1.3 revisada).
        * Glifo: 46px, stroke-width 1.75 (ver ChevronLeft/Right abajo).
        *
-       * El centrado al viewport lo maneja el div contenedor (sticky top-0
-       * h-screen + flex items-center). El botón en sí no necesita
+       * El centrado al viewport lo maneja el wrapper portado a
+       * document.body (position:fixed; top:50%; translateY(-50%) — ver
+       * docstring del componente arriba). El botón en sí no necesita
        * posicionamiento propio.
        *
        * Estados:
