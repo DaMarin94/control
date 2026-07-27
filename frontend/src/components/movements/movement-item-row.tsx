@@ -23,8 +23,13 @@
  *   y a cuotas ("Anular este mes"/"Des-anular este mes"). Calculados de único/cuota NO
  *   ofrecen el toggle (heredan el skip del origen desde el backend); calculados de fijo sí
  *   (comportamiento previo, sin cambios).
- * Fase 1.1.8: "Crear movimiento desde este" habilitado también en únicos y cuotas.
- *   Marca padre (GitBranch) ya no restringida a fijos — aplica a cualquier origen con hasCalculated.
+ * Fase 1.1.8: "Crear movimiento calculado" (ex "Crear movimiento desde este") habilitado
+ *   también en únicos y cuotas. Marca padre (GitBranch) ya no restringida a fijos —
+ *   aplica a cualquier origen con hasCalculated.
+ * Duplicar movimiento (docs/design.md §"Duplicar movimiento"): ítem "Duplicar" (ícono
+ *   Copy, neutro) — 3.ª posición, entre el toggle de anular y "Crear movimiento
+ *   calculado" (ex "Crear movimiento desde este", renombrado para desambiguar con
+ *   Duplicar). Mismo gate !isCalculated; no aplica a calculados.
  *
  * Card de detalle de movimiento (docs/design.md §"Card de detalle de movimiento"):
  *   - Fila adelgazada: se retiran de acá (migran a la card) el método de pago, el
@@ -70,6 +75,7 @@ import {
   CornerDownRight,
   GitBranch,
   Calculator,
+  Copy,
 } from "lucide-react";
 import { KebabMenu } from "@/components/ui/kebab-menu";
 import { useRecurring } from "@/hooks/use-recurring";
@@ -98,8 +104,10 @@ interface MovementItemRowProps {
   viewMonth: string;
   onEdit: (movement: MovementItem) => void;
   onDelete: (movement: MovementItem) => void;
-  /** Handler para "Crear movimiento desde este" — para cualquier ítem NO calculado (Fase 1.1.8) */
+  /** Handler para "Crear movimiento calculado" — para cualquier ítem NO calculado (Fase 1.1.8) */
   onCreateCalculated?: (movement: MovementItem) => void;
+  /** Handler para "Duplicar" (docs/design.md) — para cualquier ítem NO calculado */
+  onDuplicate?: (movement: MovementItem) => void;
   /**
    * Marca de límite ya evaluada para este ítem (P2 — Fase 1), combinando
    * `mes.item.monto` y `mes.categoria.gastoMes`. undefined/null = sin marca
@@ -108,7 +116,7 @@ interface MovementItemRowProps {
   limitMark?: EvaluatedLimitMark | null;
 }
 
-export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreateCalculated, limitMark }: MovementItemRowProps) {
+export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreateCalculated, onDuplicate, limitMark }: MovementItemRowProps) {
   const { skipRecurring } = useRecurring();
   const { skipTransaction } = useTransactions();
   const { skipInstallment } = useInstallments();
@@ -205,8 +213,11 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
       ? "Des-anular este mes"
       : "Anular este mes";
 
-  // Ítems del KebabMenu — el toggle skip va entre Editar y Eliminar (spec de posición).
-  // "Crear movimiento desde este" solo en ítems NO calculados (spec sección 2).
+  // Ítems del KebabMenu — orden: Editar → Anular/Des-anular → Duplicar →
+  // Crear movimiento calculado → Eliminar (docs/design.md §"Duplicar movimiento").
+  // Duplicar y "Crear movimiento calculado" comparten el gate !isCalculated —
+  // el grupo aparece o desaparece completo (un calculado no puede ser origen
+  // de otro calculado, RF-MCALC-001, ni duplicarse — no aplica a calculados).
   const menuItems = [
     {
       label: "Editar",
@@ -222,12 +233,24 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
           },
         ]
       : []),
-    // "Crear movimiento desde este" — en cualquier ítem NO calculado (Fase 1.1.8)
-    // Un calculado no puede ser origen de otro calculado (RF-MCALC-001)
+    // "Duplicar" — crea un movimiento nuevo e independiente precargado con los
+    // valores de este (POST, no vínculo). En cualquier ítem NO calculado.
+    ...(!isCalculated && onDuplicate
+      ? [
+          {
+            label: "Duplicar",
+            icon: Copy,
+            onSelect: () => onDuplicate(movement),
+          },
+        ]
+      : []),
+    // "Crear movimiento calculado" (ex "Crear movimiento desde este") — en
+    // cualquier ítem NO calculado (Fase 1.1.8). Un calculado no puede ser
+    // origen de otro calculado (RF-MCALC-001).
     ...(!isCalculated && onCreateCalculated
       ? [
           {
-            label: "Crear movimiento desde este",
+            label: "Crear movimiento calculado",
             icon: Calculator,
             onSelect: () => onCreateCalculated(movement),
           },

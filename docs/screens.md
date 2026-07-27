@@ -182,6 +182,8 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 - **Saltar a un mes/año** — el rótulo del mes abre el popover de dos ruedas y, al confirmar, navega al mes elegido (RF-VM-004).
 - **Ver detalle** de un ítem (RF-VM-007) — el clic en el **cuerpo** de una fila (o Enter/Espacio) abre la **card de detalle read-only** del movimiento, que muestra los datos que la fila no muestra (método de pago con días del crédito, moneda/cotización/valor original, débito automático, hora del único, vigencia del fijo, plan de la cuota, origen + fórmula del calculado y, cuando el ítem es **origen** de calculados, la lista de sus **derivados del mes** —nombre + monto, read-only—). La card es bidireccional origen ↔ derivados. Es **solo lectura pura**: no tiene footer de acción ni botón "Editar"; su única acción es cerrar (✕, Esc o clic en el scrim). El clic en el **kebab (⋮)** abre el menú de acciones rápidas y no abre la card.
 - **Editar** un ítem — desde el **kebab (⋮)** de la fila; abre el modal de carga en modo edición, en el tipo del movimiento (RF-VM-003 → RF-MU-002, RF-MF-003 o RF-MC-003 según el tipo). Al editar un **fijo**, el cambio se aplica desde el **mes activo (el mes que se está visualizando) inclusive en adelante**, preservando los meses anteriores (pivote = mes visualizado, RF-MF-003 / RN-005).
+- **Duplicar** un ítem (RF-VM-008) — desde el **kebab (⋮)**, en ítems **único, fijo y cuota no calculados**; abre el modal de carga en **modo creación**, sin tabs, precargado con los valores del original (editables). Guardar crea un movimiento **nuevo e independiente**; el original no se toca. La **card de detalle no ofrece esta acción** (es read-only pura).
+- **Crear movimiento calculado** desde un ítem (RF-MCALC-001) — desde el **kebab (⋮)**, en ítems no calculados; abre el form del calculado con el origen fijado.
 - **Eliminar** un ítem — dispara el flujo de eliminación correspondiente al tipo (RF-MU-003 único, RF-MF-004 fijo, RF-MC-002 grupo de cuotas), con su confirmación específica. Al eliminar un **fijo**, la confirmación **no ofrece opciones** y la eliminación aplica desde el **mes activo (el mes visualizado) inclusive en adelante**, mismo pivote que la edición (RF-MF-004 / RN-005).
 - **Anular / Des-anular este mes** (solo en ítems **fijos**, RF-MF-005) — en el menú de acciones del ítem fijo, además de Editar y Eliminar, una acción **toggle**: **"Anular este mes"** cancela esa aparición del fijo en el mes visualizado; sobre un fijo ya anulado se rotula **"Des-anular este mes"** y la revierte. El ítem anulado **se sigue mostrando** (no desaparece), deja de sumar a los totales del mes y tiene diferenciación visual. Los movimientos **únicos** y las **cuotas** no tienen esta acción. La anulación es por mes puntual y no afecta otros meses, a diferencia de Eliminar (RF-MF-005 / RN-016).
 - **Nuevo movimiento** — abre el modal de carga (pantalla 5). Al abrirlo desde `/mes`, el **mes activo** se propaga al modal como **mes contexto**: es el default del "mes de inicio" en los tabs Fijo y Cuotas. No afecta al tab Único (ver pantalla 5). **En modo orden este botón se deshabilita** (RF-VM-005).
@@ -195,7 +197,7 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 ### Navegación
 
 - **Llega desde:** link "Vista del mes" del sidebar (siempre abre en el mes actual); enlace "Ver todos" del dashboard; acción "Ir a ver" del toast post-guardado (abre en el mes del movimiento recién cargado).
-- **Lleva a:** modal de carga en modo edición; permanece en `/mes` tras editar/eliminar.
+- **Lleva a:** modal de carga en modo edición y en modo duplicar; permanece en `/mes` tras editar/duplicar/eliminar.
 - **Mes de apertura:** al entrar desde el sidebar o el dashboard, siempre abre en el mes actual. La navegación prev/next cambia el mes activo dentro de la pantalla.
 
 ### Estados
@@ -247,6 +249,11 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
   - Único (RF-MU-002): todos los campos editables.
   - Fijo (RF-MF-003): monto, categoría, descripción. La edición aplica desde el mes activo de la Vista del mes inclusive en adelante, sin tocar los meses anteriores (pivote = mes visualizado, RN-005). La **frecuencia** se muestra de **solo lectura**: no es editable tras crear el fijo (RF-MF-006).
   - Cuotas (RF-MC-003): monto por cuota, cantidad de cuotas, mes de inicio, categoría, descripción. La edición aplica al grupo completo.
+
+**Modo duplicar (RF-VM-008):**
+
+- Se invoca desde la acción **"Duplicar"** del kebab de `/mes`. **No muestra los tabs**: abre en el tipo del movimiento original con los campos de ese tipo, **precargados con sus valores** (incluidos fecha/hora o mes de inicio originales y la cotización del original) y **todos editables**.
+- Es un **alta**, no una edición: al confirmar se crea un movimiento nuevo, con las mismas validaciones y el mismo toast de creación de ese tipo. Detalle de qué se copia, en RF-VM-008.
 
 ### Acciones disponibles
 

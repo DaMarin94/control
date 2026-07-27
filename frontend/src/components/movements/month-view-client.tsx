@@ -93,6 +93,9 @@ import { SectionFilterButton } from "@/components/ui/section-filter-popover";
 import type { SectionFilterType } from "@/components/ui/section-filter-popover";
 import { MovementItemRow } from "@/components/movements/movement-item-row";
 import { TransactionModal } from "@/components/movements/transaction-modal";
+import type { TransactionPrefill } from "@/components/movements/transaction-form";
+import type { RecurringPrefill } from "@/components/movements/recurring-form";
+import type { InstallmentPrefill } from "@/components/movements/installment-form";
 import { DeleteTransactionDialog } from "@/components/movements/delete-transaction-dialog";
 import { DeleteRecurringDialog } from "@/components/movements/delete-recurring-dialog";
 import { DeleteInstallmentDialog } from "@/components/movements/delete-installment-dialog";
@@ -105,6 +108,7 @@ import {
   prevMonth,
   nextMonth,
   getCurrentMonth,
+  getBrowserTimezone,
 } from "@/lib/format";
 import { sumMovementTotals, groupSubtotalCents, sortUnicosBySort } from "@/lib/movements";
 import { cn } from "@/lib/utils";
@@ -302,6 +306,64 @@ function movementItemToInstallment(item: MovementItem): InstallmentGroup {
   };
 }
 
+// ─── Mapeo MovementItem → *Prefill de "Duplicar" (docs/design.md) ─────────────
+//
+// Distintos de los mapeos de ARRIBA (movementItemToTransaction/Recurring/Installment):
+// esos rellenan campos dummy pensados para PATCH de edición (startMonth:
+// getCurrentMonth(), createdAt: "") — reusarlos a ciegas para "Duplicar" clonaría
+// mal el fijo/cuota (mes de inicio incorrecto). Estos mapeos copian TAL CUAL,
+// incluida la fecha/hora u mes de inicio ORIGINAL (RF-DUP, cerrado con el usuario).
+
+function movementItemToTransactionPrefill(item: MovementItem): TransactionPrefill {
+  return {
+    type: item.type,
+    amountCents: item.amountCents,
+    currency: item.currency,
+    exchangeRate: item.exchangeRate,
+    categoryId: item.category.id,
+    paymentMethodId: item.paymentMethod?.id ?? null,
+    autoDebit: item.autoDebit,
+    description: item.description,
+    // "unico" siempre trae occurredAt/timezone (ver docstring de MovementItem);
+    // el fallback es defensivo, nunca debería activarse en la práctica.
+    occurredAt: item.occurredAt ?? "",
+    timezone: item.timezone ?? getBrowserTimezone(),
+  };
+}
+
+function movementItemToRecurringPrefill(item: MovementItem): RecurringPrefill {
+  return {
+    type: item.type,
+    amountCents: item.amountCents,
+    currency: item.currency,
+    exchangeRate: item.exchangeRate,
+    frequency: item.frequency ?? 1,
+    categoryId: item.category.id,
+    paymentMethodId: item.paymentMethod?.id ?? null,
+    autoDebit: item.autoDebit,
+    description: item.description,
+    // El mes de inicio ORIGINAL del fijo lógico (no el mes visualizado).
+    startMonth: item.startMonth ?? getCurrentMonth(),
+  };
+}
+
+function movementItemToInstallmentPrefill(item: MovementItem): InstallmentPrefill {
+  return {
+    // amountCents del MovementItem de una cuota es el monto POR CUOTA (misma
+    // magnitud que InstallmentGroup.amountCents) — se copia sin transformar.
+    amountCents: item.amountCents,
+    currency: item.currency,
+    exchangeRate: item.exchangeRate,
+    totalInstallments: item.installment?.total ?? 1,
+    categoryId: item.category.id,
+    paymentMethodId: item.paymentMethod?.id ?? null,
+    autoDebit: item.autoDebit,
+    description: item.description,
+    // El mes de inicio ORIGINAL del grupo de cuotas.
+    startMonth: item.installment?.startMonth ?? getCurrentMonth(),
+  };
+}
+
 // ─── Filtrado de ítems por tipo y categorías ──────────────────────────────────
 
 function applyFilter(items: MovementItem[], filter: MonthListFilterState): MovementItem[] {
@@ -358,6 +420,10 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   const [editingCalculated, setEditingCalculated] = useState<MovementItem | null>(null);
   // Calculado de origen único/cuota: confirmación directa sin opciones de mes
   const [deletingCalculatedSimple, setDeletingCalculatedSimple] = useState<MovementItem | null>(null);
+
+  // Estado de modal "Duplicar movimiento" (docs/design.md) — el ítem origen NO
+  // calculado; se enruta por su `origin` al abrir el modal en modo duplicate-*.
+  const [duplicating, setDuplicating] = useState<MovementItem | null>(null);
 
   // ── Estado de acordeón y orden (Fase 1.1.4) ───────────────────────────────
 
@@ -590,6 +656,11 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   /** Abre el form de "crear calculado" con el ítem fijo seleccionado como origen */
   function handleCreateCalculated(movement: MovementItem) {
     setCreatingCalculated(movement);
+  }
+
+  /** Abre el modal "Duplicar movimiento" (docs/design.md) con el ítem origen */
+  function handleDuplicate(movement: MovementItem) {
+    setDuplicating(movement);
   }
 
   function handleDelete(movement: MovementItem) {
@@ -1241,6 +1312,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                               onEdit={handleEdit}
                               onDelete={handleDelete}
                               onCreateCalculated={handleCreateCalculated}
+                              onDuplicate={handleDuplicate}
                               limits={limits}
                               categoryExpenseTotalsCents={categoryExpenseTotalsCents}
                               isCurrentMonth={isCurrentMonth}
@@ -1343,6 +1415,30 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
         />
       )}
 
+      {/* ── Modal "Duplicar movimiento" (docs/design.md) — enruta por origen ── */}
+      {duplicating && duplicating.origin === "unico" && (
+        <TransactionModal
+          mode="duplicate-single"
+          transactionPrefill={movementItemToTransactionPrefill(duplicating)}
+          onClose={() => setDuplicating(null)}
+        />
+      )}
+      {duplicating && duplicating.origin === "fijo" && (
+        <TransactionModal
+          mode="duplicate-fixed"
+          recurringPrefill={movementItemToRecurringPrefill(duplicating)}
+          onClose={() => setDuplicating(null)}
+          viewMonth={month}
+        />
+      )}
+      {duplicating && duplicating.origin === "cuota" && (
+        <TransactionModal
+          mode="duplicate-installment"
+          installmentPrefill={movementItemToInstallmentPrefill(duplicating)}
+          onClose={() => setDuplicating(null)}
+        />
+      )}
+
       {/* ── Selector de salto mes/año (Ola 1, P4) ── */}
       {monthJump.isOpen && (
         <MonthJumpPanel {...monthJump.panelProps} />
@@ -1370,8 +1466,10 @@ interface SectionListProps {
   viewMonth: string;
   onEdit: (m: MovementItem) => void;
   onDelete: (m: MovementItem) => void;
-  /** Handler para "Crear movimiento desde este" (solo para fijos NO calculados) */
+  /** Handler para "Crear movimiento calculado" (solo para ítems NO calculados) */
   onCreateCalculated?: (m: MovementItem) => void;
+  /** Handler para "Duplicar" (docs/design.md, solo para ítems NO calculados) */
+  onDuplicate?: (m: MovementItem) => void;
   /** P2 — Fase 1: límites del usuario, para evaluar la marca de cada ítem (mes.item.monto / mes.categoria.gastoMes). */
   limits: LimitConfig[];
   categoryExpenseTotalsCents: Map<string, number>;
@@ -1384,6 +1482,7 @@ function SectionList({
   onEdit,
   onDelete,
   onCreateCalculated,
+  onDuplicate,
   limits,
   categoryExpenseTotalsCents,
   isCurrentMonth,
@@ -1398,6 +1497,7 @@ function SectionList({
           onEdit={onEdit}
           onDelete={onDelete}
           onCreateCalculated={onCreateCalculated}
+          onDuplicate={onDuplicate}
           limitMark={evaluateItemLimitMark(item, limits, categoryExpenseTotalsCents, isCurrentMonth)}
         />
       ))}

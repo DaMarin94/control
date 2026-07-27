@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useState } from "react";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { RecurringForm } from "@/components/movements/recurring-form";
+import { RecurringForm, type RecurringPrefill } from "@/components/movements/recurring-form";
 import { ToastProvider } from "@/components/ui/toast";
 import type { Category } from "@/types/category";
 import type { Recurring } from "@/types/recurring";
@@ -216,6 +216,8 @@ function renderForm(props: {
   recurring?: Recurring | null;
   onClose?: () => void;
   editingSkipped?: boolean;
+  prefill?: RecurringPrefill | null;
+  viewMonth?: string;
 }) {
   const onClose = props.onClose ?? vi.fn();
   return render(
@@ -224,6 +226,8 @@ function renderForm(props: {
         recurring={props.recurring ?? null}
         onClose={onClose}
         editingSkipped={props.editingSkipped}
+        prefill={props.prefill}
+        viewMonth={props.viewMonth}
       />
     </ToastProvider>,
   );
@@ -453,6 +457,92 @@ describe("RecurringForm — prefill en edición", () => {
     renderForm({ recurring: mockRecurring });
     const descInput = screen.getByLabelText(/descripción/i) as HTMLInputElement;
     expect(descInput.value).toBe("Alquiler");
+  });
+});
+
+// ─── Tests: modo "Duplicar" (prefill — docs/design.md) ────────────────────────
+
+describe("RecurringForm — modo Duplicar (prefill)", () => {
+  const duplicatePrefill: RecurringPrefill = {
+    type: "EXPENSE",
+    amountCents: 150000,
+    currency: "ARS",
+    exchangeRate: 1,
+    frequency: 3, // trimestral — distinto del default (1) para detectar pisado
+    categoryId: "cat-expense",
+    paymentMethodId: null,
+    autoDebit: null,
+    description: "Alquiler",
+    // Mes de inicio ORIGINAL del fijo — DISTINTO del mes visualizado (viewMonth).
+    startMonth: "2025-11",
+  };
+
+  it("precarga monto, descripción, frecuencia y el mes de inicio ORIGINAL (no el visualizado)", () => {
+    renderForm({ prefill: duplicatePrefill, viewMonth: "2026-06" });
+
+    expect((screen.getByLabelText(/monto/i) as HTMLInputElement).value).toBe("1500");
+    expect((screen.getByLabelText(/descripción/i) as HTMLInputElement).value).toBe("Alquiler");
+    expect((screen.getByLabelText(/mes de inicio/i) as HTMLInputElement).value).toBe("2025-11");
+    expect((screen.getByLabelText(/frecuencia/i) as HTMLSelectElement).value).toBe("3");
+  });
+
+  it("el botón dice 'Guardar' (no 'Guardar cambios') — sigue siendo modo CREAR", () => {
+    renderForm({ prefill: duplicatePrefill });
+    expect(screen.getByRole("button", { name: /^guardar$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /guardar cambios/i })).not.toBeInTheDocument();
+  });
+
+  it("al guardar llama a createRecurring (POST) con el startMonth original, NUNCA a updateRecurring", async () => {
+    const user = userEvent.setup();
+    mockCreateRecurring.mockResolvedValue({ success: true, recurring: mockRecurring });
+    const onClose = vi.fn();
+
+    renderForm({ prefill: duplicatePrefill, viewMonth: "2026-06", onClose });
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(mockCreateRecurring).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "EXPENSE",
+          amountCents: 150000,
+          categoryId: "cat-expense",
+          startMonth: "2025-11",
+          frequency: 3,
+        }),
+      );
+      expect(onClose).toHaveBeenCalled();
+    });
+    expect(mockUpdateRecurring).not.toHaveBeenCalled();
+  });
+
+  it("la cotización copiada del original sobrevive intacta — el effect de referencia NO la pisa", () => {
+    mockUseReferenceRate.mockReturnValue({
+      referenceRate: 999999,
+      isLoading: false,
+      isError: false,
+    });
+
+    const usdPrefill: RecurringPrefill = {
+      ...duplicatePrefill,
+      currency: "USD",
+      exchangeRate: 1350,
+    };
+    renderForm({ prefill: usdPrefill });
+
+    const rateInput = screen.getByLabelText(/cotización/i) as HTMLInputElement;
+    expect(rateInput.value).toBe("1.350,00");
+  });
+
+  it("con moneda ≠ default, la nota de Cotización lee 'Cotización modificada' (no 'de referencia del mes')", () => {
+    const usdPrefill: RecurringPrefill = {
+      ...duplicatePrefill,
+      currency: "USD",
+      exchangeRate: 1350,
+    };
+    renderForm({ prefill: usdPrefill });
+
+    expect(screen.getByText(/cotización modificada/i)).toBeInTheDocument();
+    expect(screen.queryByText(/cotización de referencia del mes/i)).not.toBeInTheDocument();
   });
 });
 

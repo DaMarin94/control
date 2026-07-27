@@ -1403,6 +1403,85 @@ describe("MonthViewClient", () => {
     });
   });
 
+  // ── Cableado "Duplicar movimiento" (docs/design.md) ───────────────────────
+
+  describe("Cableado Duplicar movimiento", () => {
+    it("click en Duplicar de único abre el modal con título 'Duplicar movimiento', sin tabs, precargado", () => {
+      mockLoaded(mockWithData);
+      renderMonthView();
+
+      const trigger = screen.getByRole("button", { name: /acciones de almuerzo en el trabajo/i });
+      fireEvent.click(trigger);
+
+      const duplicateItem = screen.getByRole("menuitem", { name: /^duplicar$/i });
+      fireEvent.click(duplicateItem);
+
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByText(/^duplicar movimiento$/i)).toBeInTheDocument();
+      expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+      // Precargado: monto (15000 centavos = 150 pesos) y descripción del origen.
+      expect(screen.getByDisplayValue("150")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("Almuerzo en el trabajo")).toBeInTheDocument();
+      // Sigue siendo modo CREAR — botón "Guardar", no "Guardar cambios".
+      expect(screen.getByRole("button", { name: /^guardar$/i })).toBeInTheDocument();
+    });
+
+    it("click en Duplicar de fijo abre el modal con título 'Duplicar · Fijo', sin tabs, precargado", () => {
+      mockLoaded(mockWithFijos);
+      renderMonthView();
+
+      const trigger = screen.getByRole("button", { name: /acciones de alquiler/i });
+      fireEvent.click(trigger);
+
+      const duplicateItem = screen.getByRole("menuitem", { name: /^duplicar$/i });
+      fireEvent.click(duplicateItem);
+
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByText(/duplicar · fijo/i)).toBeInTheDocument();
+      expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+      // Precargado: monto (150000 centavos = 1500 pesos) y el startMonth ORIGINAL (2026-01,
+      // no el mes visualizado 2026-06).
+      expect(screen.getByDisplayValue("1500")).toBeInTheDocument();
+      expect((screen.getByLabelText(/mes de inicio/i) as HTMLInputElement).value).toBe("2026-01");
+    });
+
+    it("click en Duplicar de cuota abre el modal con título 'Duplicar · Cuotas', sin tabs, precargado", () => {
+      mockLoaded(mockWithCuotas);
+      renderMonthView();
+
+      const trigger = screen.getByRole("button", { name: /acciones de notebook/i });
+      fireEvent.click(trigger);
+
+      const duplicateItem = screen.getByRole("menuitem", { name: /^duplicar$/i });
+      fireEvent.click(duplicateItem);
+
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByText(/duplicar · cuotas/i)).toBeInTheDocument();
+      expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+      // amountCents de la cuota (50000) es el monto POR CUOTA — se copia sin transformar.
+      expect(screen.getByDisplayValue("500")).toBeInTheDocument();
+      expect((screen.getByLabelText(/cant\. de cuotas/i) as HTMLInputElement).value).toBe("12");
+      // startMonth ORIGINAL del grupo (2026-01).
+      expect((screen.getByLabelText(/mes de inicio/i) as HTMLInputElement).value).toBe("2026-01");
+    });
+
+    it("cerrar el modal 'Duplicar' lo quita del DOM", () => {
+      mockLoaded(mockWithData);
+      renderMonthView();
+
+      const trigger = screen.getByRole("button", { name: /acciones de almuerzo en el trabajo/i });
+      fireEvent.click(trigger);
+      fireEvent.click(screen.getByRole("menuitem", { name: /^duplicar$/i }));
+
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+      const closeButton = screen.getByRole("button", { name: /cerrar/i });
+      fireEvent.click(closeButton);
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
+
   // ── Estado de carga ───────────────────────────────────────────────────────
 
   describe("Estado de carga", () => {

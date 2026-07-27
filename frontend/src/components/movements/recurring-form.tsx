@@ -141,6 +141,26 @@ type RecurringFormData = z.infer<typeof recurringSchema>;
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
+/**
+ * Prefill de "Duplicar movimiento" (docs/design.md §"Duplicar movimiento") —
+ * valores del fijo ORIGEN copiados tal cual, incluido el `startMonth` original
+ * (no el mes visualizado). Distinto de `Recurring` (que trae campos de servidor
+ * pensados para PATCH) — ver gotcha en month-view-client.tsx.
+ */
+export interface RecurringPrefill {
+  type: TransactionType;
+  amountCents: number;
+  currency: CurrencyCode;
+  exchangeRate: number;
+  frequency: RecurringFrequency;
+  categoryId: string;
+  paymentMethodId: string | null;
+  autoDebit: boolean | null;
+  description: string | null;
+  /** Mes de inicio ORIGINAL del fijo — se copia tal cual, no el mes visualizado */
+  startMonth: string;
+}
+
 interface RecurringFormProps {
   recurring: Recurring | null;
   onClose: () => void;
@@ -152,6 +172,11 @@ interface RecurringFormProps {
    * alimenta la intercepción de límites activos (D16). Ausente = false.
    */
   editingSkipped?: boolean;
+  /**
+   * Prefill de "Duplicar movimiento" — llena `defaultValues` en modo CREAR
+   * (POST) sin activar `isEditing`. Ignorado si `recurring` está presente.
+   */
+  prefill?: RecurringPrefill | null;
 }
 
 /** Datos ya validados/parseados, pendientes de persistir tras "Guardar igual" (P2 — Fase 2). */
@@ -175,8 +200,11 @@ function filterCategoriesByType(
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
-export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, editingSkipped }: RecurringFormProps) {
+export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, editingSkipped, prefill }: RecurringFormProps) {
   const isEditing = recurring !== null;
+  // Modo "Duplicar" (docs/design.md): crea (POST) con defaultValues del prefill,
+  // sin activar isEditing. Mutuamente excluyente con isEditing.
+  const isPrefillActive = !isEditing && prefill != null;
   const router = useRouter();
   const { toast } = useToast();
   const { categories } = useCategories();
@@ -218,18 +246,32 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, edi
         autoDebit: recurring.autoDebit ?? false,
         description: recurring.description ?? "",
       }
-    : {
-        type: "EXPENSE",
-        amountInput: "",
-        currency: defaultCurrency,
-        exchangeRateInput: "",
-        startMonth: defaultMonth ?? getCurrentMonth(),
-        frequency: 1,
-        categoryId: "",
-        paymentMethodId: "",
-        autoDebit: false,
-        description: "",
-      };
+    : prefill
+      ? {
+          type: prefill.type,
+          amountInput: String(prefill.amountCents / 100).replace(".", ","),
+          currency: prefill.currency,
+          exchangeRateInput: formatExchangeRate(prefill.exchangeRate ?? 1),
+          // Duplicar: el mes de inicio ORIGINAL del fijo, no el mes visualizado.
+          startMonth: prefill.startMonth,
+          frequency: prefill.frequency,
+          categoryId: prefill.categoryId,
+          paymentMethodId: prefill.paymentMethodId ?? "",
+          autoDebit: prefill.autoDebit ?? false,
+          description: prefill.description ?? "",
+        }
+      : {
+          type: "EXPENSE",
+          amountInput: "",
+          currency: defaultCurrency,
+          exchangeRateInput: "",
+          startMonth: defaultMonth ?? getCurrentMonth(),
+          frequency: 1,
+          categoryId: "",
+          paymentMethodId: "",
+          autoDebit: false,
+          description: "",
+        };
 
   const [preloadedExchangeRateInput, setPreloadedExchangeRateInput] = useState(
     initialEditingExchangeRateInput,
@@ -238,7 +280,9 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, edi
   // En edición: moneda original al abrir el modal. Si el usuario la cambia, se
   // pre-carga la cotización de referencia para la nueva moneda (como en creación).
   const initialCurrencyRef = useRef<CurrencyCode>(
-    isEditing ? (recurring?.currency ?? defaultCurrency) : defaultCurrency,
+    isEditing
+      ? (recurring?.currency ?? defaultCurrency)
+      : (prefill?.currency ?? defaultCurrency),
   );
 
   const {
@@ -317,21 +361,23 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, edi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recurring?.id, isEditing, reset, defaultCurrency]);
 
-  // Pre-cargar defaultCurrency al crear cuando cambia
+  // Pre-cargar defaultCurrency al crear cuando cambia — NO en modo "Duplicar"
+  // (isPrefillActive): la moneda copiada del original debe sobrevivir intacta.
   useEffect(() => {
-    if (!isEditing) {
+    if (!isEditing && !isPrefillActive) {
       setValue("currency", defaultCurrency);
     }
-  }, [defaultCurrency, isEditing, setValue]);
+  }, [defaultCurrency, isEditing, isPrefillActive, setValue]);
 
   // Pre-cargar cotización: prioridad referenceRate → lastExchangeRate → vacío (Fase 1.2.4).
-  // En modo crear: siempre al cambiar referencia o moneda.
-  // En modo edición: solo si el usuario cambió la moneda (≠ moneda original al abrir) y
-  // no modificó la cotización manualmente.
+  // En modo crear (sin prefill): siempre al cambiar referencia o moneda.
+  // En modo edición Y en modo "Duplicar": solo si el usuario cambió la moneda
+  // (≠ moneda original/copiada al abrir) y no modificó la cotización manualmente.
   useEffect(() => {
+    const lockedInitial = isEditing || isPrefillActive;
     const currencyChanged = selectedCurrency !== initialCurrencyRef.current;
-    if (isEditing && !currencyChanged) return;
-    if (isEditing && isExchangeRateModified) return;
+    if (lockedInitial && !currencyChanged) return;
+    if (lockedInitial && isExchangeRateModified) return;
     const rate =
       referenceRate !== null
         ? referenceRate
@@ -339,11 +385,11 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, edi
     const formatted = rate !== null ? formatExchangeRate(rate) : "";
     setPreloadedExchangeRateInput(formatted);
     setValue("exchangeRateInput", formatted);
-    if (!isEditing) {
+    if (!lockedInitial) {
       setIsExchangeRateModified(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [referenceRate, lastExchangeRate, isEditing, selectedCurrency, setValue]);
+  }, [referenceRate, lastExchangeRate, isEditing, isPrefillActive, selectedCurrency, setValue]);
 
   // Detectar si el usuario modificó la cotización
   useEffect(() => {

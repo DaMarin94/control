@@ -41,8 +41,19 @@ interface MenuPosition {
   openUpward: boolean;
 }
 
-/** Altura estimada del panel (items * ~34px + padding) — se usa para decidir si abre arriba */
-const ESTIMATED_PANEL_HEIGHT = 120;
+/**
+ * Altura estimada de cada ítem del panel (fila ~33px, ver padding vertical
+ * py-[7px] + texto 13.5px) — se combina con la CANTIDAD REAL de ítems para
+ * decidir si el panel abre hacia arriba. Corrección (docs/design.md
+ * §"Duplicar movimiento" — 5.º ítem del menú): una constante fija (antes
+ * 120px) queda corta con 5 ítems (~173px reales) y el panel abierto en el
+ * pie del listado se corta contra el viewport. Deriva de `items.length` para
+ * que el contrato ("el menú siempre entra entero, con cualquier cantidad de
+ * ítems") se sostenga sin importar cuántas acciones tenga el menú.
+ */
+const PANEL_ITEM_HEIGHT = 33;
+/** Padding vertical del panel (4px arriba + 4px abajo, ver `padding: "4px"` del panel) */
+const PANEL_PADDING = 8;
 /** Gap entre el trigger y el panel */
 const GAP = 6;
 
@@ -104,8 +115,9 @@ export function KebabMenu({ ariaLabel, items, className }: KebabMenuProps) {
     const rect = triggerRef.current.getBoundingClientRect();
     const viewportHeight = window.innerHeight;
 
+    const estimatedPanelHeight = items.length * PANEL_ITEM_HEIGHT + PANEL_PADDING;
     const spaceBelow = viewportHeight - rect.bottom;
-    const openUpward = spaceBelow < ESTIMATED_PANEL_HEIGHT + GAP;
+    const openUpward = spaceBelow < estimatedPanelHeight + GAP;
 
     setPos({
       top: openUpward ? rect.top - GAP : rect.bottom + GAP,

@@ -15,7 +15,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { InstallmentForm } from "@/components/movements/installment-form";
+import { InstallmentForm, type InstallmentPrefill } from "@/components/movements/installment-form";
 import { ToastProvider } from "@/components/ui/toast";
 import type { Category } from "@/types/category";
 import type { InstallmentGroup } from "@/types/installment";
@@ -215,6 +215,7 @@ function renderForm(props: {
   installment?: InstallmentGroup | null;
   onClose?: () => void;
   editingSkipped?: boolean;
+  prefill?: InstallmentPrefill | null;
 }) {
   const onClose = props.onClose ?? vi.fn();
   return render(
@@ -223,6 +224,7 @@ function renderForm(props: {
         installment={props.installment ?? null}
         onClose={onClose}
         editingSkipped={props.editingSkipped}
+        prefill={props.prefill}
       />
     </ToastProvider>,
   );
@@ -529,6 +531,92 @@ describe("InstallmentForm — prefill en edición", () => {
     renderForm({ installment: mockInstallmentGroup });
     const descInput = screen.getByLabelText(/descripción/i) as HTMLInputElement;
     expect(descInput.value).toBe("Notebook");
+  });
+});
+
+// ─── Tests: modo "Duplicar" (prefill — docs/design.md) ────────────────────────
+
+describe("InstallmentForm — modo Duplicar (prefill)", () => {
+  const duplicatePrefill: InstallmentPrefill = {
+    // amountCents es el monto POR CUOTA (misma magnitud que InstallmentGroup.amountCents).
+    amountCents: 50000,
+    currency: "ARS",
+    exchangeRate: 1,
+    totalInstallments: 12,
+    categoryId: "cat-expense",
+    paymentMethodId: null,
+    autoDebit: null,
+    description: "Notebook",
+    // Mes de inicio ORIGINAL del grupo — se copia tal cual.
+    startMonth: "2025-08",
+  };
+
+  it("precarga monto por cuota, cantidad de cuotas, descripción y el mes de inicio ORIGINAL", () => {
+    renderForm({ prefill: duplicatePrefill });
+
+    expect((screen.getByLabelText(/monto por cuota/i) as HTMLInputElement).value).toBe("500");
+    expect((screen.getByLabelText(/cant\. de cuotas/i) as HTMLInputElement).value).toBe("12");
+    expect((screen.getByLabelText(/mes de inicio/i) as HTMLInputElement).value).toBe("2025-08");
+    expect((screen.getByLabelText(/descripción/i) as HTMLInputElement).value).toBe("Notebook");
+  });
+
+  it("el botón dice 'Guardar' (no 'Guardar cambios') — sigue siendo modo CREAR", () => {
+    renderForm({ prefill: duplicatePrefill });
+    expect(screen.getByRole("button", { name: /^guardar$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /guardar cambios/i })).not.toBeInTheDocument();
+  });
+
+  it("al guardar llama a createInstallment (POST) con el startMonth original, NUNCA a updateInstallment", async () => {
+    const user = userEvent.setup();
+    mockCreateInstallment.mockResolvedValue({ success: true, installment: mockInstallmentGroup });
+    const onClose = vi.fn();
+
+    renderForm({ prefill: duplicatePrefill, onClose });
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(mockCreateInstallment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "EXPENSE",
+          amountCents: 50000,
+          totalInstallments: 12,
+          categoryId: "cat-expense",
+          startMonth: "2025-08",
+        }),
+      );
+      expect(onClose).toHaveBeenCalled();
+    });
+    expect(mockUpdateInstallment).not.toHaveBeenCalled();
+  });
+
+  it("la cotización copiada del original sobrevive intacta — el effect de referencia NO la pisa", () => {
+    mockUseReferenceRate.mockReturnValue({
+      referenceRate: 999999,
+      isLoading: false,
+      isError: false,
+    });
+
+    const usdPrefill: InstallmentPrefill = {
+      ...duplicatePrefill,
+      currency: "USD",
+      exchangeRate: 1350,
+    };
+    renderForm({ prefill: usdPrefill });
+
+    const rateInput = screen.getByLabelText(/cotización/i) as HTMLInputElement;
+    expect(rateInput.value).toBe("1.350,00");
+  });
+
+  it("con moneda ≠ default, la nota de Cotización lee 'Cotización modificada' (no 'de referencia del mes')", () => {
+    const usdPrefill: InstallmentPrefill = {
+      ...duplicatePrefill,
+      currency: "USD",
+      exchangeRate: 1350,
+    };
+    renderForm({ prefill: usdPrefill });
+
+    expect(screen.getByText(/cotización modificada/i)).toBeInTheDocument();
+    expect(screen.queryByText(/cotización de referencia del mes/i)).not.toBeInTheDocument();
   });
 });
 

@@ -92,6 +92,26 @@ type TransactionFormData = z.infer<typeof transactionSchema>;
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
+/**
+ * Prefill de "Duplicar movimiento" (docs/design.md §"Duplicar movimiento") —
+ * valores del único ORIGEN copiados tal cual, incluida la fecha/hora original
+ * (no "ahora"). Distinto de `Transaction` (que trae campos de servidor como
+ * `id`/`createdAt` pensados para PATCH) — ver gotcha en month-view-client.tsx.
+ */
+export interface TransactionPrefill {
+  type: TransactionType;
+  amountCents: number;
+  currency: CurrencyCode;
+  exchangeRate: number;
+  categoryId: string;
+  paymentMethodId: string | null;
+  autoDebit: boolean | null;
+  description: string | null;
+  /** Instante original en UTC (ISO 8601) — se copia tal cual, no "ahora" */
+  occurredAt: string;
+  timezone: string;
+}
+
 interface TransactionFormProps {
   transaction: Transaction | null;
   onClose: () => void;
@@ -102,6 +122,11 @@ interface TransactionFormProps {
    * movimiento que se edita YA anulado no proyecta). Ausente = false.
    */
   editingSkipped?: boolean;
+  /**
+   * Prefill de "Duplicar movimiento" — llena `defaultValues` en modo CREAR
+   * (POST) sin activar `isEditing`. Ignorado si `transaction` está presente.
+   */
+  prefill?: TransactionPrefill | null;
 }
 
 /** Datos ya validados/parseados, pendientes de persistir tras "Guardar igual" (P2 — Fase 2). */
@@ -150,8 +175,12 @@ function getNowLocalDateAndTime() {
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
-export function TransactionForm({ transaction, onClose, editingSkipped }: TransactionFormProps) {
+export function TransactionForm({ transaction, onClose, editingSkipped, prefill }: TransactionFormProps) {
   const isEditing = transaction !== null;
+  // Modo "Duplicar" (docs/design.md): crea (POST) con defaultValues del prefill,
+  // sin activar isEditing. Mutuamente excluyente con isEditing (transaction===null
+  // cuando prefill está presente).
+  const isPrefillActive = !isEditing && prefill != null;
   const router = useRouter();
   const { toast } = useToast();
   const { categories } = useCategories();
@@ -169,12 +198,19 @@ export function TransactionForm({ transaction, onClose, editingSkipped }: Transa
   const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
 
   const isLoading = isEditing ? isUpdating : isCreating;
-  const timezone = isEditing ? transaction.timezone : getBrowserTimezone();
+  // Duplicar: el timezone del ORIGEN — para reconstruir el mismo instante si
+  // el usuario no toca fecha/hora (localToUtcIso usa este timezone en el submit).
+  const timezone = isEditing
+    ? transaction.timezone
+    : (prefill?.timezone ?? getBrowserTimezone());
   const { date: nowDate, time: nowTime } = getNowLocalDateAndTime();
 
   // Cotización pre-cargada inicial (para el defaultValues del form):
   // - Editando: la del movimiento (siempre presente, nunca null en el backend).
-  // - Creando: vacío para ahora; se actualiza al resolver la query de referencia.
+  // - Creando (blanco o duplicar): vacío — en duplicar esto es intencional: el
+  //   valor del campo viene del prefill, no de la referencia del mes, así que
+  //   arranca en desacuerdo con el value real y dispara la nota "Cotización
+  //   modificada" (docs/design.md) sin necesidad de un flag aparte.
   const initialEditingExchangeRateInput = isEditing
     ? formatExchangeRate(transaction.exchangeRate ?? 1)
     : "";
@@ -192,18 +228,31 @@ export function TransactionForm({ transaction, onClose, editingSkipped }: Transa
         time: utcToLocalTime(transaction.occurredAt, transaction.timezone),
         description: transaction.description ?? "",
       }
-    : {
-        type: "EXPENSE",
-        amountInput: "",
-        currency: defaultCurrency,
-        exchangeRateInput: "",
-        categoryId: "",
-        paymentMethodId: "",
-        autoDebit: false,
-        date: nowDate,
-        time: nowTime,
-        description: "",
-      };
+    : prefill
+      ? {
+          type: prefill.type,
+          amountInput: String(prefill.amountCents / 100).replace(".", ","),
+          currency: prefill.currency,
+          exchangeRateInput: formatExchangeRate(prefill.exchangeRate ?? 1),
+          categoryId: prefill.categoryId,
+          paymentMethodId: prefill.paymentMethodId ?? "",
+          autoDebit: prefill.autoDebit ?? false,
+          date: utcToLocalDate(prefill.occurredAt, timezone),
+          time: utcToLocalTime(prefill.occurredAt, timezone),
+          description: prefill.description ?? "",
+        }
+      : {
+          type: "EXPENSE",
+          amountInput: "",
+          currency: defaultCurrency,
+          exchangeRateInput: "",
+          categoryId: "",
+          paymentMethodId: "",
+          autoDebit: false,
+          date: nowDate,
+          time: nowTime,
+          description: "",
+        };
 
   // Rastrear el valor de pre-carga para detectar si el usuario lo modificó
   const [preloadedExchangeRateInput, setPreloadedExchangeRateInput] = useState(
@@ -213,7 +262,9 @@ export function TransactionForm({ transaction, onClose, editingSkipped }: Transa
   // En edición: moneda original al abrir el modal. Si el usuario la cambia, se
   // pre-carga la cotización de referencia para la nueva moneda (como en creación).
   const initialCurrencyRef = useRef<CurrencyCode>(
-    isEditing ? (transaction?.currency ?? defaultCurrency) : defaultCurrency,
+    isEditing
+      ? (transaction?.currency ?? defaultCurrency)
+      : (prefill?.currency ?? defaultCurrency),
   );
 
   const {
@@ -288,24 +339,29 @@ export function TransactionForm({ transaction, onClose, editingSkipped }: Transa
 
   // Pre-cargar cotización al crear: prioridad referenceRate → lastExchangeRate → vacío (Fase 1.2.4).
   // Se recalcula cuando cambia: defaultCurrency, selectedCurrency, referenceRate, lastExchangeRate.
+  // En modo "Duplicar" (isPrefillActive) NO se fuerza la moneda default — la
+  // moneda copiada del original debe sobrevivir intacta (docs/design.md).
   useEffect(() => {
-    if (!isEditing) {
+    if (!isEditing && !isPrefillActive) {
       setValue("currency", defaultCurrency);
       // Para el par que muestra el label cuando moneda===default, la cotización relevante
       // es siempre referenceRate/lastExchangeRate de la "otra" moneda. En ese caso
       // no cambiamos nada — el campo queda como estaba (o vacío al inicio).
       // Cuando la moneda cambia a algo distinto de la default, tomamos la referencia del mes.
     }
-  }, [defaultCurrency, isEditing, setValue]);
+  }, [defaultCurrency, isEditing, isPrefillActive, setValue]);
 
   // Pre-cargar cotización: prioridad referenceRate → lastExchangeRate → vacío (Fase 1.2.4).
-  // En modo crear: siempre al cambiar referencia o moneda.
-  // En modo edición: solo si el usuario cambió la moneda (≠ moneda original al abrir) y
-  // no modificó la cotización manualmente.
+  // En modo crear (sin prefill): siempre al cambiar referencia o moneda.
+  // En modo edición Y en modo "Duplicar": solo si el usuario cambió la moneda
+  // (≠ moneda original/copiada al abrir) y no modificó la cotización manualmente
+  // — así la cotización copiada del original sobrevive intacta hasta que el
+  // usuario cambie de moneda (mismo mecanismo que en edición).
   useEffect(() => {
+    const lockedInitial = isEditing || isPrefillActive;
     const currencyChanged = selectedCurrency !== initialCurrencyRef.current;
-    if (isEditing && !currencyChanged) return;
-    if (isEditing && isExchangeRateModified) return;
+    if (lockedInitial && !currencyChanged) return;
+    if (lockedInitial && isExchangeRateModified) return;
     const rate =
       referenceRate !== null
         ? referenceRate
@@ -313,11 +369,11 @@ export function TransactionForm({ transaction, onClose, editingSkipped }: Transa
     const formatted = rate !== null ? formatExchangeRate(rate) : "";
     setPreloadedExchangeRateInput(formatted);
     setValue("exchangeRateInput", formatted);
-    if (!isEditing) {
+    if (!lockedInitial) {
       setIsExchangeRateModified(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [referenceRate, lastExchangeRate, isEditing, selectedCurrency, setValue]);
+  }, [referenceRate, lastExchangeRate, isEditing, isPrefillActive, selectedCurrency, setValue]);
 
   // Detectar si el usuario modificó la cotización respecto al valor pre-cargado
   useEffect(() => {

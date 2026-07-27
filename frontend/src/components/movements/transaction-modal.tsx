@@ -15,9 +15,9 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { ModalShell, ModalShellHeader } from "@/components/ui/modal-shell";
-import { TransactionForm } from "@/components/movements/transaction-form";
-import { RecurringForm } from "@/components/movements/recurring-form";
-import { InstallmentForm } from "@/components/movements/installment-form";
+import { TransactionForm, type TransactionPrefill } from "@/components/movements/transaction-form";
+import { RecurringForm, type RecurringPrefill } from "@/components/movements/recurring-form";
+import { InstallmentForm, type InstallmentPrefill } from "@/components/movements/installment-form";
 import { CalculatedForm } from "@/components/movements/calculated-form";
 import { type Transaction } from "@/types/transaction";
 import { type Recurring } from "@/types/recurring";
@@ -107,6 +107,41 @@ export type TransactionModalProps =
       calculated: MovementItem;
       onClose: () => void;
       viewMonth?: string;
+    }
+  | {
+      /**
+       * "Duplicar movimiento" (docs/design.md) — crea (POST) un único NUEVO
+       * precargado con los valores de un único origen. Tabs ocultos, igual
+       * que en edición.
+       */
+      mode: "duplicate-single";
+      transaction?: null;
+      recurring?: null;
+      installment?: null;
+      calculated?: null;
+      transactionPrefill: TransactionPrefill;
+      onClose: () => void;
+    }
+  | {
+      /** "Duplicar movimiento" para un fijo origen — crea (POST) un fijo nuevo. */
+      mode: "duplicate-fixed";
+      transaction?: null;
+      recurring?: null;
+      installment?: null;
+      calculated?: null;
+      recurringPrefill: RecurringPrefill;
+      onClose: () => void;
+      viewMonth?: string;
+    }
+  | {
+      /** "Duplicar movimiento" para una cuota origen — crea (POST) un grupo de cuotas nuevo. */
+      mode: "duplicate-installment";
+      transaction?: null;
+      recurring?: null;
+      installment?: null;
+      calculated?: null;
+      installmentPrefill: InstallmentPrefill;
+      onClose: () => void;
     };
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -126,6 +161,10 @@ export function TransactionModal(props: TransactionModalProps) {
   else if (mode === "edit-installment") title = "Editar · Cuotas";
   else if (mode === "create-calculated") title = "Nuevo movimiento calculado";
   else if (mode === "edit-calculated") title = "Editar movimiento calculado";
+  // "Duplicar" — espeja la gramática de edición, no la de creación (docs/design.md).
+  else if (mode === "duplicate-single") title = "Duplicar movimiento";
+  else if (mode === "duplicate-fixed") title = "Duplicar · Fijo";
+  else if (mode === "duplicate-installment") title = "Duplicar · Cuotas";
 
   return (
     <ModalShell variant="form" onClose={onClose} labelledBy="transaction-modal-title">
@@ -186,6 +225,12 @@ export function TransactionModal(props: TransactionModalProps) {
               onClose={onClose}
               editingSkipped={props.editingSkipped}
             />
+          ) : mode === "duplicate-single" ? (
+            <TransactionForm
+              transaction={null}
+              prefill={props.transactionPrefill}
+              onClose={onClose}
+            />
           ) : mode === "edit-fixed" ? (
             <RecurringForm
               recurring={props.recurring}
@@ -193,11 +238,24 @@ export function TransactionModal(props: TransactionModalProps) {
               viewMonth={props.viewMonth}
               editingSkipped={props.editingSkipped}
             />
-          ) : (
+          ) : mode === "duplicate-fixed" ? (
+            <RecurringForm
+              recurring={null}
+              prefill={props.recurringPrefill}
+              onClose={onClose}
+              viewMonth={props.viewMonth}
+            />
+          ) : mode === "edit-installment" ? (
             <InstallmentForm
               installment={props.installment}
               onClose={onClose}
               editingSkipped={props.editingSkipped}
+            />
+          ) : (
+            <InstallmentForm
+              installment={null}
+              prefill={props.installmentPrefill}
+              onClose={onClose}
             />
           )}
         </div>

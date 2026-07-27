@@ -2095,13 +2095,97 @@ La relación **padre/hijo** de los movimientos calculados se señala como arriba
 
 **Hover del anulado:** la fila sigue interactiva (`hover:bg-panel-2` + KebabMenu visible); el contenido atenuado **no** vuelve a opacidad plena en hover.
 
-**Acciones del KebabMenu del ítem (orden):** Editar → Anular/Des-anular → Crear movimiento desde este → Eliminar (única `danger`/roja). Las dos intermedias son **neutras** (`text-ink hover:bg-panel-2`, ícono 15px); la anulación aparece en **fijo, único y cuota** (siempre en el mismo slot, justo después de Editar), y "Crear desde este" **solo en orígenes no-calculados**:
+**Acciones del KebabMenu del ítem (orden):** Editar → Anular/Des-anular → **Duplicar** → Crear movimiento calculado → Eliminar (única `danger`/roja). Las intermedias son **neutras** (`text-ink hover:bg-panel-2`, ícono 15px); la anulación aparece en **fijo, único y cuota** (siempre en el mismo slot, justo después de Editar), y las **dos acciones que engendran otro movimiento** (Duplicar y la de calculado) **solo en orígenes no-calculados** — ver *Duplicar movimiento* para el ítem "Duplicar", el agrupamiento y el racional del rótulo de la acción de calculado:
 
 - **Anular / Des-anular** — toggle según `skipped`, siempre en el slot posterior a Editar. Íconos reusados para los tres orígenes: activo → `CalendarOff`; anulado → `CalendarPlus`. Reversible, nunca `danger`. El **rótulo** distingue el alcance:
   - **Fijo** y **cuota** (anulación de la instancia de **ese mes**): **"Anular este mes"** / **"Des-anular este mes"**.
   - **Único** (la anulación es un **flag de la fila**, no un mes puntual): **"Anular"** / **"Des-anular"**, sin "este mes".
   - Los íconos `CalendarOff`/`CalendarPlus` se **reusan tal cual** también en el único: no se introduce ícono nuevo (sin "ojito" ni glifo alternativo). Aunque el calendario alude a "mes", se prioriza mantener el toggle **reconocible e idéntico** entre los tres orígenes; el matiz de alcance lo carga el rótulo.
-- **Crear movimiento desde este** — abre el form de calculado (abajo) con el origen fijado. Ícono `Calculator`. **No** aparece sobre un ítem que ya es calculado (sin encadenamiento). Todos los orígenes no-calculados pueden ser origen.
+- **Crear movimiento calculado** — abre el form de calculado (abajo) con el origen fijado. Ícono `Calculator`. **No** aparece sobre un ítem que ya es calculado (sin encadenamiento). Todos los orígenes no-calculados pueden ser origen. *(El racional del rótulo vive en* Duplicar movimiento *§2.)*
+- **Duplicar** — abre el modal en modo creación con los datos del ítem precargados. Ícono `Copy`. Mismo gate que la anterior (**solo** en no-calculados). Ver *Duplicar movimiento*.
+
+### Duplicar movimiento — acción del kebab y modo "duplicar" del modal
+
+**Qué es.** Crear un movimiento **nuevo e independiente** precargado con los valores de uno existente (POST, no vínculo). Vive **únicamente** en el kebab "⋮" de la fila de `/mes` — la *Card de detalle* sigue siendo **read-only pura** y no la incorpora. Aplica a **único, fijo y cuota no calculados**; **no** aparece sobre un calculado (mismo gate que la acción de calculado).
+
+**Por qué solo en el kebab.** El kebab ya es el domicilio único de las acciones sobre un ítem (Editar, Anular, Eliminar). Sumarla ahí no agrega superficie nueva ni obliga al usuario a aprender un lugar más; ponerla también en la card rompería la regla de que la card no acciona.
+
+#### 1. El ítem "Duplicar" en el KebabMenu
+
+- **Rótulo: "Duplicar"**, una sola palabra en imperativo — mismo registro que Editar / Anular / Eliminar. Sin objeto ("Duplicar movimiento" sería redundante: el menú ya pertenece a un movimiento) y **sin** la preposición "desde este", que es justamente el fragmento que colisiona con la acción de calculado.
+- **Ícono: `Copy` (lucide), 15px**, como el resto de los ítems del menú. Es el glifo canónico de duplicar y se lee entero a 15px (dos rectángulos superpuestos). Se descarta `CopyPlus` (a 15px el `+` ensucia la silueta y compite con la idea de "crear algo derivado", que es la otra acción) y `Files` (lee como "archivos/adjuntos", no como acción).
+- **Tono: neutro** (`text-ink hover:bg-panel-2`), **nunca `danger`**. No destruye nada y es reversible por la vía normal (eliminar el nuevo). **Sin diálogo de confirmación:** confirmar una acción no destructiva es fricción injustificada, y la confirmación real es el propio modal, que se puede cancelar.
+- **Sin estado de carga propio.** El ítem solo **abre el modal**; no dispara red. El POST, su estado de carga ("Guardando…"), su toast de éxito y su error son los del **form de creación**, sin cambios.
+- **Posición: tercera** — `Editar → Anular/Des-anular → Duplicar → Crear movimiento calculado → Eliminar`.
+  - **Racional (jerarquía + agrupamiento):** el menú se lee en tres grupos implícitos — *actuar sobre este ítem* (Editar, Anular) → *engendrar otro movimiento a partir de este* (Duplicar, calculado) → *destruir* (Eliminar). Duplicar entra en el segundo grupo, pegado a la acción con la que se confunde: la adyacencia es deliberada, porque es donde el contraste de rótulo (una palabra vs. frase) e ícono (`Copy` vs `Calculator`) se lee **de una** y desambigua, en vez de dejar dos acciones parecidas separadas por el toggle de anular.
+  - **Duplicar antes que calculado** dentro del grupo: es la acción más general y frecuente (repetir una carga) frente a la especializada (derivar por fórmula); lo más probable, primero.
+  - **Convivencia con el calculado:** las dos comparten el gate `!isCalculated`, así que el grupo aparece o desaparece **completo**. En un ítem calculado el menú queda `Editar → [Anular este mes, solo calculados de fijo] → Eliminar` — sin huecos ni ítems sueltos.
+- **Ítems en una sola línea** (`whitespace-nowrap`): el panel crece a su contenido desde su `min-width: 160px`. Ningún rótulo del menú envuelve a dos renglones.
+- **Alto del panel y flip:** la altura con la que el menú decide abrir hacia arriba o hacia abajo se **deriva del número real de ítems** (no es una constante fija). Con 5 ítems el panel mide ≈173px (5 × ~33 + 8 de padding), y en las filas del **pie del listado** el menú **abre hacia arriba** en vez de quedar cortado por el borde inferior del viewport. El contrato es: **el menú entra entero en el viewport con cualquier cantidad de ítems**, y por lo tanto ninguna acción queda inalcanzable (invariante 3). Toda incorporación futura de ítems al menú queda cubierta por esa derivación, sin ajuste manual.
+
+#### 2. Rótulo de la acción de calculado
+
+**El rótulo es "Crear movimiento calculado".** Racional, para sostener decisiones futuras sobre este menú:
+
+- **Consistencia de vocabulario:** un concepto, un nombre. Es el mismo término que rotula el modal destino ("Nuevo movimiento calculado"), la sublínea del hijo y la doc — el menú y el modal se confirman entre sí, y el rótulo enseña el concepto por coincidencia con lo que abre. No se introduce un segundo nombre ("derivado", "a partir de") para algo que la app ya llama *calculado*.
+- **Desambiguación contra "Duplicar":** las dos acciones son vecinas en el menú, así que el rótulo tiene que hacer el trabajo de contraste. Lo hace en **forma** (frase vs. palabra única), en **verbo** y en **ícono** (`Calculator` vs `Copy`). Y evita nombrar **la procedencia** ("desde este"), que es justamente lo que ambas acciones comparten en el lenguaje coloquial y por lo tanto no distingue nada.
+- **Nombra qué obtenés, no de dónde sale:** lo que separa esta acción de Duplicar es que el nuevo movimiento se **calcula** a partir del original y queda **vinculado** a él. El rótulo nombra el resultado (*un movimiento calculado*), que es la información con valor discriminante.
+
+**El resto de la acción:** ícono `Calculator` (diferenciador visual contra `Copy` y refuerzo de "calculado"), posición 4.ª — inmediatamente después de Duplicar —, tono neutro y gate `!isCalculated`.
+
+#### 3. Modo "duplicar" del modal
+
+Es el modal de movimiento existente (`ModalShell variant="form"`), en **modo creación** (POST), con el form del **tipo del original** y los **tabs Único/Fijo/Cuotas ocultos** (decisión funcional cerrada, igual que en los modos de edición).
+
+- **Título — espeja la gramática de edición, no la de creación:**
+  - original **único** → **"Duplicar movimiento"**
+  - original **fijo** → **"Duplicar · Fijo"**
+  - original **cuota** → **"Duplicar · Cuotas"**
+  - **Por qué "Duplicar" y no "Nuevo movimiento":** (a) *feedback* — el título repite el verbo que el usuario acaba de elegir y cierra el lazo acción → resultado; (b) explica sin cromo extra **por qué los campos vienen llenos** y **por qué faltan los tabs**; (c) "Nuevo movimiento" con los tabs ausentes lee como el modo creación **roto** (mismo título, distinto chrome) — inconsistencia gratuita.
+  - **Por qué el sufijo `· Fijo` / `· Cuotas`:** con los tabs ocultos, el tipo del movimiento **no está en ningún lado**; el sufijo lo recupera, y es exactamente el patrón que el modal ya usa en edición ("Editar · Fijo" / "Editar · Cuotas", y "Editar movimiento" sin sufijo para el único). No se inventa gramática nueva.
+- **NO lleva señal adicional de origen** (ni banner, ni nota "precargado desde {Nombre}", ni chip). Decisión explícita, por tres razones: (a) *causa inmediata* — el usuario acaba de pulsar "Duplicar" sobre una fila concreta y el título se lo confirma; un aviso explicaría algo que nadie se está preguntando; (b) **riesgo de vocabulario** — "desde {Origen}" (con `CornerDownRight` / `↳`) es lenguaje **reservado a los calculados**, donde sí hay vínculo permanente; usarlo acá afirmaría un vínculo que **no existe** (el duplicado es independiente) y arruinaría la distinción que este mismo trabajo busca; (c) *carga cognitiva* — un bloque informativo arriba de un form que se va a editar es ruido en el camino crítico.
+  - **Prohibido en este modo:** el glifo `CornerDownRight`, el glifo `GitBranch`, la palabra "desde" referida al original y cualquier chip de procedencia.
+- **Botón primario: "Guardar"** (con "Guardando…" en carga) — el de creación, **sin cambios**. No se rotula "Duplicar": el título ya nombra la operación, y el botón mantiene el mismo verbo que en toda alta.
+- **Disclosure "Más opciones": arranca colapsado, sin excepción** (regla vigente del DS, que no se excepciona acá). Los valores copiados que viven adentro **ya se ven** en el resumen colapsado: código de moneda (+ cotización si ≠ default) y glifo + nombre del método de pago. No hace falta auto-expandir.
+  - **Nota del campo Cotización:** cuando `moneda ≠ default`, el valor precargado viene **del original**, no de la referencia del mes; por eso la nota lee **"Cotización modificada"** (`--ink-2`, sin glifo `History`) y **no** "Cotización de referencia del mes" — que sería falso. Mismo tratamiento que en edición.
+- **Estados:** ninguno nuevo. Vacío/carga/error/éxito son los del form de creación (incluido el bloque `.warn` de "sin categorías" y la validación de cada campo). El modo duplicar no dispara fetch propio: precarga desde el `MovementItem` que la lista ya tiene.
+- **Cierre:** como todo modal de decisión — ✕ y `Esc`; el clic en el scrim **no** cierra.
+
+#### 4. Contención responsive (obligatoria)
+
+- **Invariante 1 (sin scroll horizontal del `body`):** no se agrega ancho a la fila ni al modal. El panel del kebab es un portal `fixed` anclado por su borde derecho al trigger; con el rótulo más largo del menú sigue holgado a 640px (y a ~392px de contenido con el sidebar abierto), y **nunca** se sale por el borde izquierdo — si el ancho disponible no alcanza, el panel se corre hacia adentro, no se desborda.
+- **Invariante 2 (modales completos y scrolleables):** lo resuelve `ModalShell variant="form"` sin cambios — `max-height: calc(100dvh − 48px)`, cuerpo scrolleable, footer Guardar/Cancelar pineado. Los títulos de este modo ("Duplicar · Cuotas" es el más largo) son **más cortos** que los ya soportados ("Editar movimiento calculado"), así que no hay riesgo nuevo de truncado; si truncara, trunca el **título**, nunca la ✕.
+- **Invariante 3 (ninguna acción inalcanzable):** es el punto sensible — con 5 ítems, el menú abierto en la **última fila del listado** debe seguir entero y visible (ver *flip* en §1). Verificar a ojo en el pie de la lista, en viewport bajo (≈700px de alto).
+- **Invariante 4 (superficies anchas scrollean dentro de sí):** no aplica — ni la fila ni el modal introducen superficie ancha nueva.
+
+#### 5. Reglas duras
+
+- **Verde/rojo = tipo:** el ítem "Duplicar" y su ícono son **neutros**; el único ítem rojo del menú sigue siendo Eliminar (`danger`, que es rol destructivo de UI, no monto).
+- **Índigo = solo marca/foco:** aparece únicamente como focus ring del ítem y del trigger. Ni relleno ni texto de acento.
+- **Mono tabular:** los montos precargados en el form conservan su input mono con prefijo `$`, y el ítem del kebab no muestra cifras.
+
+#### 6. Checklist de aceptación visual — Duplicar movimiento
+
+*Ítem del kebab:*
+- [ ] En un **único, fijo y cuota** (no calculados) el menú "⋮" muestra **5 ítems** en este orden: **Editar · Anular/Des-anular · Duplicar · Crear movimiento calculado · Eliminar**.
+- [ ] "Duplicar" lleva ícono **`Copy` 15px**, texto **neutro** (`--ink`), hover `--panel-2`; **no** es rojo ni tiene confirmación.
+- [ ] En un **movimiento calculado** **no** aparecen ni "Duplicar" ni la acción de calculado: el menú queda Editar · [Anular este mes, si es calculado de fijo] · Eliminar.
+- [ ] Ningún rótulo del menú envuelve a dos renglones.
+- [ ] Con el menú abierto en la **última fila** del listado y ventana baja, el panel **se ve entero** (abre hacia arriba si hace falta) y todos los ítems son clickeables.
+
+*Modal:*
+- [ ] Al elegir "Duplicar" abre el modal con título **"Duplicar movimiento"** (único) / **"Duplicar · Fijo"** / **"Duplicar · Cuotas"** según el original.
+- [ ] Los **tabs Único/Fijo/Cuotas NO se muestran**.
+- [ ] Los campos vienen **precargados** con los valores del original (monto, categoría, descripción **idéntica sin sufijo**, fecha/hora del único o mes de inicio del fijo/cuota).
+- [ ] **No** hay banner, nota ni chip de "precargado desde {Nombre}"; **no** aparece el glifo `↳`/`CornerDownRight` ni `GitBranch` en el modal.
+- [ ] El botón primario dice **"Guardar"** (y "Guardando…" mientras persiste); Cancelar es ghost. El modal cierra con ✕ y `Esc`; el clic en el scrim **no** cierra.
+- [ ] **"Más opciones" arranca colapsado**, y su resumen a la derecha muestra la moneda (y la cotización si ≠ default) y el método de pago **copiados del original**.
+- [ ] Con moneda ≠ default, la nota bajo Cotización lee **"Cotización modificada"** (sin el glifo `History`).
+- [ ] Al guardar, aparece un **movimiento nuevo e independiente** en la lista y el original queda **intacto** (sin marca de padre `GitBranch`, sin "↳ desde").
+
+*Contención y reglas duras:*
+- [ ] A **640px** (y ~392px de contenido con sidebar abierto): sin scroll horizontal del `body`, modal entero y scrolleable con footer pineado, panel del kebab dentro del viewport.
+- [ ] Ninguna pieza nueva usa verde/rojo fuera de "Eliminar", ni índigo fuera del focus ring; los montos precargados siguen en mono tabular.
 
 ### Frecuencia del fijo — entero 1..12 y sus etiquetas
 

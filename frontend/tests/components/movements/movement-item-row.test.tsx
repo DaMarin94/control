@@ -9,7 +9,9 @@
  * - Calculados de único/cuota NO tienen la acción de anular en su KebabMenu (heredan skip del origen).
  * - Calculados de fijo SÍ tienen la acción de anular (RF-MF-005: skip propio del calculado).
  * - Fase 1.1.7: chip "Calculado" para hijos, indicador GitBranch para padres,
- *   monto negativo/cero, acción "Crear movimiento desde este".
+ *   monto negativo/cero, acción "Crear movimiento calculado" (ex "Crear movimiento desde este").
+ * - Duplicar movimiento (docs/design.md): ítem "Duplicar" (Copy) en la 3.ª posición,
+ *   mismo gate !isCalculated que "Crear movimiento calculado"; ausente en calculados.
  * - Fase 1.1.8: chip/marca padre en único y cuota; acción kebab en único/cuota no calculados.
  * - P3: el toggle de skip se extiende a únicos NO calculados ("Anular"/"Des-anular", sin
  *   alcance temporal) y a cuotas NO calculadas ("Anular este mes"/"Des-anular este mes").
@@ -805,7 +807,7 @@ describe("MovementItemRow — Fase 1.1.7: indicadores calculado/padre", () => {
     expect(screen.queryByText("Calculado")).not.toBeInTheDocument();
   });
 
-  it("ítem calculado NO tiene la acción 'Crear movimiento desde este' en el KebabMenu", () => {
+  it("ítem calculado NO tiene la acción 'Crear movimiento calculado' en el KebabMenu", () => {
     const onCreateCalculated = vi.fn();
     render(
       <MovementItemRow
@@ -822,7 +824,7 @@ describe("MovementItemRow — Fase 1.1.7: indicadores calculado/padre", () => {
     fireEvent.click(trigger);
 
     expect(
-      screen.queryByRole("menuitem", { name: /crear movimiento desde este/i }),
+      screen.queryByRole("menuitem", { name: /crear movimiento calculado/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -843,11 +845,11 @@ describe("MovementItemRow — Fase 1.1.7: indicadores calculado/padre", () => {
     fireEvent.click(trigger);
 
     expect(
-      screen.getByRole("menuitem", { name: /crear movimiento desde este/i }),
+      screen.getByRole("menuitem", { name: /crear movimiento calculado/i }),
     ).toBeInTheDocument();
   });
 
-  it("click en 'Crear movimiento desde este' llama al handler con el movement", () => {
+  it("click en 'Crear movimiento calculado' llama al handler con el movement", () => {
     const onCreateCalculated = vi.fn();
     render(
       <MovementItemRow
@@ -863,10 +865,126 @@ describe("MovementItemRow — Fase 1.1.7: indicadores calculado/padre", () => {
     const trigger = screen.getByRole("button", { name: /acciones de alquiler/i });
     fireEvent.click(trigger);
 
-    const crearItem = screen.getByRole("menuitem", { name: /crear movimiento desde este/i });
+    const crearItem = screen.getByRole("menuitem", { name: /crear movimiento calculado/i });
     fireEvent.click(crearItem);
 
     expect(onCreateCalculated).toHaveBeenCalledWith(fijoActivo);
+  });
+});
+
+// ─── Tests: Duplicar movimiento (docs/design.md §"Duplicar movimiento") ──────
+
+describe("MovementItemRow — Duplicar movimiento", () => {
+  it("un fijo NO calculado con onDuplicate muestra 'Duplicar' en el KebabMenu", () => {
+    const onDuplicate = vi.fn();
+    render(
+      <MovementItemRow
+        movement={fijoActivo}
+        viewMonth="2026-06"
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onDuplicate={onDuplicate}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    const trigger = screen.getByRole("button", { name: /acciones de alquiler/i });
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole("menuitem", { name: /^duplicar$/i })).toBeInTheDocument();
+  });
+
+  it("click en 'Duplicar' llama al handler con el movement", () => {
+    const onDuplicate = vi.fn();
+    render(
+      <MovementItemRow
+        movement={fijoActivo}
+        viewMonth="2026-06"
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onDuplicate={onDuplicate}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    const trigger = screen.getByRole("button", { name: /acciones de alquiler/i });
+    fireEvent.click(trigger);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /^duplicar$/i }));
+
+    expect(onDuplicate).toHaveBeenCalledWith(fijoActivo);
+  });
+
+  it("un único NO calculado con onDuplicate muestra 'Duplicar'", () => {
+    const onDuplicate = vi.fn();
+    render(
+      <MovementItemRow movement={unico} viewMonth="2026-06" onEdit={vi.fn()} onDelete={vi.fn()} onDuplicate={onDuplicate} />,
+      { wrapper: createWrapper() },
+    );
+
+    const trigger = screen.getByRole("button", { name: /acciones de almuerzo/i });
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole("menuitem", { name: /^duplicar$/i })).toBeInTheDocument();
+  });
+
+  it("una cuota NO calculada con onDuplicate muestra 'Duplicar'", () => {
+    const onDuplicate = vi.fn();
+    render(
+      <MovementItemRow movement={cuota} viewMonth="2026-06" onEdit={vi.fn()} onDelete={vi.fn()} onDuplicate={onDuplicate} />,
+      { wrapper: createWrapper() },
+    );
+
+    const trigger = screen.getByRole("button", { name: /acciones de notebook/i });
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole("menuitem", { name: /^duplicar$/i })).toBeInTheDocument();
+  });
+
+  it("un ítem calculado NO muestra 'Duplicar' (mismo gate que 'Crear movimiento calculado')", () => {
+    const onDuplicate = vi.fn();
+    render(
+      <MovementItemRow
+        movement={fijoCalculado}
+        viewMonth="2026-06"
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onDuplicate={onDuplicate}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    const trigger = screen.getByRole("button", { name: /acciones de ahorro/i });
+    fireEvent.click(trigger);
+
+    expect(screen.queryByRole("menuitem", { name: /^duplicar$/i })).not.toBeInTheDocument();
+  });
+
+  it("orden del menú: Editar → Anular este mes → Duplicar → Crear movimiento calculado → Eliminar", () => {
+    const onCreateCalculated = vi.fn();
+    const onDuplicate = vi.fn();
+    render(
+      <MovementItemRow
+        movement={fijoActivo}
+        viewMonth="2026-06"
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onCreateCalculated={onCreateCalculated}
+        onDuplicate={onDuplicate}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    const trigger = screen.getByRole("button", { name: /acciones de alquiler/i });
+    fireEvent.click(trigger);
+
+    const items = screen.getAllByRole("menuitem");
+    expect(items).toHaveLength(5);
+    expect(items[0]).toHaveTextContent(/^editar$/i);
+    expect(items[1]).toHaveTextContent(/anular este mes/i);
+    expect(items[2]).toHaveTextContent(/^duplicar$/i);
+    expect(items[3]).toHaveTextContent(/crear movimiento calculado/i);
+    expect(items[4]).toHaveTextContent(/^eliminar$/i);
   });
 });
 
@@ -917,7 +1035,7 @@ describe("MovementItemRow — Fase 1.1.8: calculado de único", () => {
     expect(screen.queryByText(/mensual|bimestral|trimestral|semestral|anual/i)).not.toBeInTheDocument();
   });
 
-  it("único calculado NO tiene la acción 'Crear movimiento desde este'", () => {
+  it("único calculado NO tiene la acción 'Crear movimiento calculado'", () => {
     const onCreateCalculated = vi.fn();
     render(
       <MovementItemRow
@@ -934,11 +1052,11 @@ describe("MovementItemRow — Fase 1.1.8: calculado de único", () => {
     fireEvent.click(trigger);
 
     expect(
-      screen.queryByRole("menuitem", { name: /crear movimiento desde este/i }),
+      screen.queryByRole("menuitem", { name: /crear movimiento calculado/i }),
     ).not.toBeInTheDocument();
   });
 
-  it("único NO calculado tiene 'Crear movimiento desde este' en el KebabMenu", () => {
+  it("único NO calculado tiene 'Crear movimiento calculado' en el KebabMenu", () => {
     const onCreateCalculated = vi.fn();
     render(
       <MovementItemRow
@@ -955,7 +1073,7 @@ describe("MovementItemRow — Fase 1.1.8: calculado de único", () => {
     fireEvent.click(trigger);
 
     expect(
-      screen.getByRole("menuitem", { name: /crear movimiento desde este/i }),
+      screen.getByRole("menuitem", { name: /crear movimiento calculado/i }),
     ).toBeInTheDocument();
   });
 });
@@ -977,7 +1095,7 @@ describe("MovementItemRow — Fase 1.1.8: calculado de cuota", () => {
     expect(screen.queryByText(/cuota \d+\/\d+/i)).not.toBeInTheDocument();
   });
 
-  it("cuota NO calculada tiene 'Crear movimiento desde este' en el KebabMenu", () => {
+  it("cuota NO calculada tiene 'Crear movimiento calculado' en el KebabMenu", () => {
     const onCreateCalculated = vi.fn();
     render(
       <MovementItemRow
@@ -994,7 +1112,7 @@ describe("MovementItemRow — Fase 1.1.8: calculado de cuota", () => {
     fireEvent.click(trigger);
 
     expect(
-      screen.getByRole("menuitem", { name: /crear movimiento desde este/i }),
+      screen.getByRole("menuitem", { name: /crear movimiento calculado/i }),
     ).toBeInTheDocument();
   });
 });

@@ -721,7 +721,7 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 
 ### 3.4.b Submódulo: Movimientos calculados
 
-Un **movimiento calculado** es un movimiento **fijo** cuyo monto **no se ingresa**: se **deriva** del monto de un **movimiento de origen** mediante una **fórmula**, **en vivo**. Tiene categoría y descripción **propias**; su **tipo** (Gasto/Ingreso) **no se elige**: se **deriva** del signo del monto resultante (RF-MCALC-003). Lo único que toma del origen es el **monto**. El **origen puede ser un fijo, un único o un grupo de cuotas** (RF-MCALC-008); el calculado **espeja la cadencia** del origen. Es un fijo a todos los demás efectos (se edita y elimina con la misma mecánica de split del calculado de fijo, salvo el borrado total del calculado de único/cuota — RF-MCALC-006). No es un tipo nuevo en el formulario de carga: su **único** punto de creación es la acción "crear movimiento desde este" sobre un fijo, único o cuota en `/mes` (RF-MCALC-001).
+Un **movimiento calculado** es un movimiento **fijo** cuyo monto **no se ingresa**: se **deriva** del monto de un **movimiento de origen** mediante una **fórmula**, **en vivo**. Tiene categoría y descripción **propias**; su **tipo** (Gasto/Ingreso) **no se elige**: se **deriva** del signo del monto resultante (RF-MCALC-003). Lo único que toma del origen es el **monto**. El **origen puede ser un fijo, un único o un grupo de cuotas** (RF-MCALC-008); el calculado **espeja la cadencia** del origen. Es un fijo a todos los demás efectos (se edita y elimina con la misma mecánica de split del calculado de fijo, salvo el borrado total del calculado de único/cuota — RF-MCALC-006). No es un tipo nuevo en el formulario de carga: su **único** punto de creación es la acción **"Crear movimiento calculado"** sobre un fijo, único o cuota en `/mes` (RF-MCALC-001).
 
 ---
 
@@ -729,13 +729,13 @@ Un **movimiento calculado** es un movimiento **fijo** cuyo monto **no se ingresa
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | Desde la Vista del mes (`/mes`), un ítem **fijo, único o cuota** ofrece —además de editar y eliminar— la acción **"crear movimiento desde este"**. Es la **única** forma de crear un movimiento calculado: define el movimiento de origen, su categoría/descripción propias y la fórmula (con su signo) que deriva el monto; el **tipo** queda determinado por el signo del resultado (RF-MCALC-003). El **tipo de origen** (fijo / único / cuota) determina la cadencia del calculado (RF-MCALC-008). |
+| **Descripción** | Desde la Vista del mes (`/mes`), un ítem **fijo, único o cuota** ofrece —además de editar y eliminar— la acción **"Crear movimiento calculado"**. Es la **única** forma de crear un movimiento calculado: define el movimiento de origen, su categoría/descripción propias y la fórmula (con su signo) que deriva el monto; el **tipo** queda determinado por el signo del resultado (RF-MCALC-003). El **tipo de origen** (fijo / único / cuota) determina la cadencia del calculado (RF-MCALC-008). |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | Existe un movimiento **fijo, único o de cuotas** en el mes visualizado, propio del usuario. El origen **no** es a su vez un movimiento calculado (sin encadenamiento). |
 
 **Flujo principal:**
-1. El usuario, parado en un mes en `/mes`, abre el menú de acciones de un ítem **fijo, único o cuota** y elige **"crear movimiento desde este"**.
+1. El usuario, parado en un mes en `/mes`, abre el menú de acciones de un ítem **fijo, único o cuota** y elige **"Crear movimiento calculado"**.
 2. El sistema abre el formulario del calculado, con el movimiento de origen ya fijado (el ítem desde el que se disparó).
 3. El usuario elige **categoría** y **descripción** propias del calculado (independientes del origen). **No** elige tipo: se deriva del signo del resultado (RF-MCALC-003).
 4. El usuario define la **fórmula**: un **operador** (`+`, `−`, `×`, `÷`, `%`) y un **operando** numérico común (RN-017).
@@ -746,7 +746,7 @@ Un **movimiento calculado** es un movimiento **fijo** cuyo monto **no se ingresa
 - *A1 — El usuario cancela:* no se crea nada.
 
 **Criterios de aceptación:**
-- [ ] La acción **"crear movimiento desde este"** está disponible en los ítems **fijo, único y cuota** de `/mes`.
+- [ ] La acción **"Crear movimiento calculado"** está disponible en los ítems **fijo, único y cuota** de `/mes`.
 - [ ] El origen es un **fijo, un único o un grupo de cuotas**. Un movimiento **calculado no puede ser origen** de otro calculado (sin encadenamiento): la acción **no** se ofrece sobre un ítem que ya es calculado.
 - [ ] Un mismo origen puede tener **varios** movimientos calculados derivados.
 - [ ] El calculado se crea como un **fijo** (es a la vez fijo y calculado): aparece en `/mes` con la misma mecánica de listado de los fijos.
@@ -1569,10 +1569,10 @@ Existe además un **acceso directo al mes en curso** disponible desde cualquier 
 - **Origen de calculados:** cuando el movimiento es **origen** de uno o más calculados, la card lista sus **derivados del mes** (nombre + monto), read-only. Es el **espejo** del bloque que muestra el "Origen" desde un calculado: la card es bidireccional origen ↔ derivados (RF-MCALC-007).
 
 **Acciones disponibles:**
-- **Cerrar** — la card se cierra con **✕**, con **Esc** y con **clic en el scrim** (fondo). Es su única acción: la card no tiene footer de acción ni botón "Editar". Editar, anular, crear-desde y eliminar viven en el **kebab (⋮)** de la fila.
+- **Cerrar** — la card se cierra con **✕**, con **Esc** y con **clic en el scrim** (fondo). Es su única acción: la card no tiene footer de acción ni botón "Editar". Editar, anular, duplicar, crear movimiento calculado y eliminar viven en el **kebab (⋮)** de la fila.
 
 **Criterios de aceptación:**
-- [ ] El clic en el **cuerpo** de la fila (o Enter/Espacio) abre la card; el clic en el **kebab (⋮)** abre su menú de acciones rápidas y **no** abre la card. El kebab concentra todas las acciones del movimiento (Editar / Anular-Des-anular / Crear movimiento desde este / Eliminar).
+- [ ] El clic en el **cuerpo** de la fila (o Enter/Espacio) abre la card; el clic en el **kebab (⋮)** abre su menú de acciones rápidas y **no** abre la card. El kebab concentra todas las acciones del movimiento (Editar / Anular-Des-anular / Duplicar / Crear movimiento calculado / Eliminar).
 - [ ] La card es **solo lectura pura**: no tiene footer de acción ni botón "Editar"; su único control es cerrar. No modifica el movimiento in-situ.
 - [ ] La card muestra las filas de contenido definidas arriba, mostrando **solo las que aplican** al tipo y omitiendo las que no (ej.: método de pago solo si el movimiento tiene uno; cross-rate solo si la moneda del ítem difiere de la default).
 - [ ] Si el movimiento es **origen** de calculados, la card lista sus **derivados del mes** (nombre + monto, read-only, no clickeable); si no tiene derivados, esa sección se omite.
@@ -1582,6 +1582,46 @@ Existe además un **acceso directo al mes en curso** disponible desde cualquier 
 
 **Notas:**
 - La anatomía visual de la card, el reparto exacto fila/card y el comportamiento de apertura/cierre los define `control-design` (`docs/design.md`).
+
+---
+
+#### RF-VM-008 — Duplicar un movimiento
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Desde el menú de acciones (kebab ⋮) de una fila de la Vista del mes (`/mes`), la acción **"Duplicar"** crea un movimiento **nuevo e independiente** precargado con los valores del original, editables antes de guardar. El duplicado **no queda vinculado** al original: es un alta común del tipo correspondiente. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | Existe en el mes visualizado un movimiento **único, fijo o de cuotas** que **no** es calculado. |
+
+**Flujo principal:**
+1. El usuario abre el kebab (⋮) de un ítem y elige **"Duplicar"**.
+2. El sistema abre el formulario de carga en **modo creación**, con el form del **tipo del original** y **sin los tabs** Único / Fijo / Cuotas, con los campos precargados.
+3. El usuario ajusta lo que quiera: todos los campos precargados son editables y valen las mismas validaciones que cualquier alta de ese tipo.
+4. El usuario confirma. Se crea un movimiento **nuevo**; el original queda intacto.
+
+**Flujos alternativos:**
+- *A1 — El usuario cancela:* no se crea nada y el original queda intacto.
+
+**Valores precargados** — se copian **tal cual**, sin transformar:
+
+| Tipo | Se precarga |
+|---|---|
+| **Único** | Tipo, monto, categoría, descripción y la **fecha y hora originales** del movimiento (no la fecha/hora actual). |
+| **Fijo** | Tipo, monto, categoría, descripción, frecuencia y el **mes de inicio original** del fijo (no el mes visualizado ni el mes en curso). |
+| **Cuota** | Monto por cuota, cantidad de cuotas, categoría, descripción y el **mes de inicio original** del grupo (no el mes visualizado ni el mes en curso). |
+| **Comunes** | Moneda, **cotización del original**, método de pago y débito automático. |
+
+La **descripción se copia idéntica**: no se le agrega sufijo ni marca alguna ("(copia)" u otro).
+
+**Criterios de aceptación:**
+- [ ] La acción **"Duplicar"** vive **únicamente** en el kebab (⋮) de la fila de `/mes`. La **card de detalle** (RF-VM-007) es read-only pura y **no** la ofrece.
+- [ ] Está disponible en ítems **único, fijo y cuota** no calculados. Sobre un ítem **calculado** la acción **no aparece** — mismo gate que la acción de crear movimiento calculado (RF-MCALC-001): un calculado no puede ser origen de otro movimiento.
+- [ ] El modal abre en **modo creación** con el form del tipo del original y **sin los tabs** de selección de tipo: el duplicado es siempre del mismo tipo que el original.
+- [ ] Confirmar **crea un movimiento nuevo** y **no modifica el original**; no queda ningún vínculo entre ambos (a diferencia del calculado, RF-MCALC-004).
+- [ ] Los valores se copian **sin transformar**, según la tabla de arriba: fecha y hora originales del único, mes de inicio original del fijo y de la cuota, y **descripción idéntica**.
+- [ ] La cotización precargada es la **del original**, no la cotización de referencia del mes: la pre-carga automática de RF-CUR-003 **no pisa** el valor duplicado.
+- [ ] Si el original **no tiene método de pago**, el duplicado arranca con el **método por defecto del usuario** para esa estructura (RF-PM-007), igual que cualquier alta en blanco.
 
 ---
 

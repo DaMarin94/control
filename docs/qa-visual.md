@@ -6,9 +6,13 @@ Validación que ni los tests, ni el build, ni el e2e cubren: pixel, layout, moda
 
 **Sembrado de datos de prueba:** el orquestador **siembra la data que el caso requiera** (categorías, movimientos únicos/fijos/cuotas, calculados, límites, etc.) cuando la cuenta conectada no tiene los casos necesarios para ejercitar la feature. Es **parte esperada** de correr el QA, no un paso extraordinario: sin los datos adecuados el recorrido no prueba nada.
 
-**La base de datos local de desarrollo es descartable.** Sus datos no tienen valor. Al correr QA (o cualquier prueba), el orquestador **crea, modifica y elimina** libremente lo que necesite —categorías, movimientos, métodos de pago, calculados, etc.— **sin pedir permiso** y **sin obligación de revertir** la data de prueba. La data no se trata como preciosa. Esto aplica **solo a la base local de desarrollo**, no a datos de producción.
+**La base de datos local de desarrollo es descartable.** Sus datos no tienen valor. Al correr QA (o cualquier prueba), el orquestador **crea y modifica** libremente lo que necesite —categorías, movimientos, métodos de pago, calculados, etc.— **sin pedir permiso** y **sin obligación de revertir** la data de prueba. La data no se trata como preciosa. Esto aplica **solo a la base local de desarrollo**, no a datos de producción.
 
-**Único límite (regla de seguridad):** el orquestador **no crea cuentas de usuario, no ingresa credenciales/contraseñas ni realiza el login** (incluido Google OAuth). Si una prueba requiere una sesión autenticada, la autenticación la resuelve el usuario; el resto —los datos— lo maneja el orquestador sin fricción.
+**Interactuar es el guion, no una excepción:** en **localhost**, el orquestador **usa la app y envía formularios sin pedir confirmación por acción** — crear y guardar registros de prueba (movimientos, categorías, métodos, límites, duplicados) es exactamente lo que el QA pide. Pedir permiso antes de cada submit invalida el recorrido. El **borrado de datos** queda **fuera** del guion: lo hace el usuario.
+
+**Límites (reglas de seguridad):** el orquestador **no crea cuentas de usuario, no ingresa credenciales/contraseñas ni realiza el login** (incluido Google OAuth) y **no borra datos** —ni siquiera la data que él mismo creó durante el guion—. Si una prueba requiere una sesión autenticada, la autenticación la resuelve el usuario; el borrado, también. El alta y la edición de datos las maneja el orquestador sin fricción.
+
+El corte está en la reversibilidad: el borrado es irreversible, así que lo dispara el usuario. Todo el resto del guion —crear, editar, **anular/des-anular**, navegar— es reversible o no destructivo, y por eso lo ejecuta el orquestador sin confirmación. **Anular no es borrar:** es un caso reversible más y se ejercita con normalidad.
 
 Este doc es un **asset de trabajo vivo**: el prompt genérico de regresión y la plantilla per-feature se mantienen acá al día con las superficies del producto.
 
@@ -44,6 +48,8 @@ Sos un QA senior con mentalidad adversarial. Tu objetivo NO es confirmar que la 
 
 FUERA DE ALCANCE (ignoralo): adaptación/rediseño mobile —si la experiencia en pantalla chica es *cómoda* o *buena* no es tu problema— y accesibilidad (teclado, foco, contraste, legibilidad, info por color).
 
+BORRADOS, A CARGO DEL USUARIO: los casos que borran datos (borrar una categoría o un método de pago en uso, eliminar movimientos) están dentro del alcance y hay que verificarlos, pero **el borrado lo ejecuta el usuario, no vos**. Enunciá el caso, pedile al usuario que dispare el borrado y verificá el resultado. No borrás nada, ni siquiera la data que creaste durante el guion. Crear, editar y **anular/des-anular** sí los hacés vos, sin pedir confirmación: son reversibles. Anular no es borrar.
+
 DENTRO DE ALCANCE, SIEMPRE — contención responsive: además de probar en escritorio normal, achicá la ventana hasta 640px (el ancho mínimo soportado), pasando por la disposición compacta (640–940px), y verificá los cuatro invariantes. No bajes de 640px: por debajo de ese ancho la app muestra el gate y no promete contención. Ojo: el régimen compacto/amplio del área autenticada se mide contra el ancho de `<main>`, no del viewport — el sidebar abierto resta ~248px, así que probá con el sidebar abierto Y cerrado.
 1. El `body` no tiene scroll horizontal en ningún ancho ≥ 640px.
 2. Los modales se ven completos y scrollean: ni cortados ni atrapantes.
@@ -62,7 +68,7 @@ Mentalidad para romperla, por cada campo:
 
 Modales y overlays (foco especial): ¿se ve completo o CORTADO?, contenido largo (¿crece/scrollea/rompe?), cerrar con X/Esc/backdrop (¿alguno cierra perdiendo datos sin avisar?), fondo bloqueado (no scrollea atrás), modal sobre modal (apilado/z-index/orden de cierre).
 
-Flujos que rompen: doble/rápido submit (¿duplicados?), spam de clicks en acciones, guardar/navegar durante carga, borrar categoría/método EN USO (¿lo impide con mensaje?, ¿histórico consistente?), editar+cancelar (¿descarta y reabre con valores originales?), vaciar descripción al editar, anular/des-anular repetido (¿totales y reportes coherentes?), reporte con filtro que no matchea (¿empty prolijo?), reordenar drag y soltar raro, cambiar moneda por defecto (¿recalcula sin mezclar viejos?), cambiar tema claro/oscuro/sistema rápido (¿flashea?).
+Flujos que rompen: doble/rápido submit (¿duplicados?), spam de clicks en acciones, guardar/navegar durante carga, borrar categoría/método EN USO (borrado a cargo del usuario: ¿lo impide con mensaje?, ¿histórico consistente?), editar+cancelar (¿descarta y reabre con valores originales?), vaciar descripción al editar, anular/des-anular repetido (¿totales y reportes coherentes?), reporte con filtro que no matchea (¿empty prolijo?), reordenar drag y soltar raro, cambiar moneda por defecto (¿recalcula sin mezclar viejos?), cambiar tema claro/oscuro/sistema rápido (¿flashea?).
 
 Estados vacíos y carga pesada: mes/usuario sin movimientos (¿empty prolijo o NaN/undefined?), mes con 30+ movimientos (¿aguanta?, ¿números desbordan?).
 

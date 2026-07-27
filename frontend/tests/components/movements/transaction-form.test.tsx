@@ -9,7 +9,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { TransactionForm } from "@/components/movements/transaction-form";
+import { TransactionForm, type TransactionPrefill } from "@/components/movements/transaction-form";
 import { ToastProvider } from "@/components/ui/toast";
 import type { Transaction } from "@/types/transaction";
 import type { Category } from "@/types/category";
@@ -212,6 +212,7 @@ function renderForm(props: {
   transaction?: Transaction | null;
   onClose?: () => void;
   editingSkipped?: boolean;
+  prefill?: TransactionPrefill | null;
 }) {
   const onClose = props.onClose ?? vi.fn();
   return render(
@@ -220,6 +221,7 @@ function renderForm(props: {
         transaction={props.transaction ?? null}
         onClose={onClose}
         editingSkipped={props.editingSkipped}
+        prefill={props.prefill}
       />
     </ToastProvider>,
   );
@@ -649,6 +651,176 @@ describe("TransactionForm — modo edición", () => {
     renderForm({ transaction: mockTransaction });
 
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+  });
+});
+
+// ─── Tests: modo "Duplicar" (prefill — docs/design.md) ────────────────────────
+
+describe("TransactionForm — modo Duplicar (prefill)", () => {
+  const duplicatePrefill: TransactionPrefill = {
+    type: "EXPENSE",
+    amountCents: 1550,
+    currency: "ARS",
+    exchangeRate: 1,
+    categoryId: "cat-expense",
+    paymentMethodId: null,
+    autoDebit: null,
+    description: "Almuerzo",
+    // Instante original — DISTINTO de "ahora" (la fecha simulada en el entorno de test).
+    occurredAt: "2026-03-10T18:00:00.000Z",
+    timezone: "America/Argentina/Buenos_Aires",
+  };
+
+  it("precarga los campos con los valores del prefill, incluida la fecha/hora ORIGINAL (no 'ahora')", () => {
+    renderForm({ prefill: duplicatePrefill });
+
+    expect(screen.getByDisplayValue("15,5")).toBeInTheDocument(); // 1550 centavos = 15.5
+    expect(screen.getByDisplayValue("Almuerzo")).toBeInTheDocument();
+    // 18:00 UTC → 15:00 en America/Argentina/Buenos_Aires (UTC-3)
+    expect(screen.getByLabelText(/fecha/i)).toHaveValue("2026-03-10");
+    expect(screen.getByLabelText(/hora/i)).toHaveValue("15:00");
+  });
+
+  it("el botón dice 'Guardar' (no 'Guardar cambios') — sigue siendo modo CREAR", () => {
+    renderForm({ prefill: duplicatePrefill });
+
+    expect(screen.getByRole("button", { name: /^guardar$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /guardar cambios/i })).not.toBeInTheDocument();
+  });
+
+  it("no muestra tabs (mismo tratamiento que edición)", () => {
+    renderForm({ prefill: duplicatePrefill });
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+  });
+
+  it("al guardar llama a createTransaction (POST), NUNCA a updateTransaction", async () => {
+    const user = userEvent.setup();
+    mockCreateTransaction.mockResolvedValue({ success: true, transaction: mockTransaction });
+    const onClose = vi.fn();
+
+    renderForm({ prefill: duplicatePrefill, onClose });
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(mockCreateTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "EXPENSE",
+          amountCents: 1550,
+          categoryId: "cat-expense",
+          description: "Almuerzo",
+        }),
+      );
+      expect(onClose).toHaveBeenCalled();
+    });
+    expect(mockUpdateTransaction).not.toHaveBeenCalled();
+  });
+
+  it("la cotización copiada del original sobrevive intacta — el effect de referencia NO la pisa", () => {
+    // referenceRate deliberadamente DISTINTO del copiado, para detectar si el
+    // effect de pre-carga (pensado para modo crear en blanco) pisa el valor.
+    mockUseReferenceRate.mockReturnValue({
+      referenceRate: 999999,
+      isLoading: false,
+      isError: false,
+    });
+
+    const usdPrefill: TransactionPrefill = {
+      ...duplicatePrefill,
+      currency: "USD",
+      exchangeRate: 1350,
+    };
+    renderForm({ prefill: usdPrefill });
+
+    const rateInput = screen.getByLabelText(/cotización/i) as HTMLInputElement;
+    expect(rateInput.value).toBe("1.350,00");
+  });
+
+  it("con moneda ≠ default, la nota de Cotización lee 'Cotización modificada' (no 'de referencia del mes')", () => {
+    const usdPrefill: TransactionPrefill = {
+      ...duplicatePrefill,
+      currency: "USD",
+      exchangeRate: 1350,
+    };
+    renderForm({ prefill: usdPrefill });
+
+    expect(screen.getByText(/cotización modificada/i)).toBeInTheDocument();
+    expect(screen.queryByText(/cotización de referencia del mes/i)).not.toBeInTheDocument();
+  });
+
+  it("no precarga el método de pago por defecto sobre un prefill sin método (RF-PM-007 sigue aplicando en 'crear')", () => {
+    // Nota: cuando el prefill copiado SÍ trae un método, el hook nunca lo pisa
+    // (currentPaymentMethodId !== "" desde el mount). Este test cubre el caso
+    // sin método copiado, donde el default de estructura puede aplicar como en
+    // cualquier alta — comportamiento existente, sin regresión.
+    mockUsePreferences.mockReturnValue({
+      preferences: { defaultPaymentMethods: { unico: null, fijo: null, cuota: null } },
+      setPreferences: vi.fn(),
+      isSaving: false,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderForm({ prefill: duplicatePrefill });
+    expect(screen.getByLabelText(/monto/i)).toHaveValue("15,5");
+  });
+
+  it("el método de pago copiado del original NO es pisado por el default configurado", () => {
+    mockUsePaymentMethods.mockReturnValue({
+      paymentMethods: [
+        {
+          id: "pm-credit-1",
+          userId: "user-1",
+          name: "Visa Banco Nación",
+          type: "CREDIT",
+          icon: "visa",
+          closingDay: 15,
+          paymentDay: 10,
+          deletedAt: null,
+          createdAt: "2024-01-01T00:00:00Z",
+          updatedAt: "2024-01-01T00:00:00Z",
+          movementCount: 0,
+        },
+        {
+          id: "pm-debit-1",
+          userId: "user-1",
+          name: "Débito Banco Nación",
+          type: "DEBIT",
+          icon: "card",
+          closingDay: null,
+          paymentDay: null,
+          deletedAt: null,
+          createdAt: "2024-01-01T00:00:00Z",
+          updatedAt: "2024-01-01T00:00:00Z",
+          movementCount: 0,
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+      createPaymentMethod: vi.fn(),
+      updatePaymentMethod: vi.fn(),
+      deletePaymentMethod: vi.fn(),
+      reactivatePaymentMethod: vi.fn(),
+      isCreating: false,
+      isUpdating: false,
+      isDeleting: false,
+      isReactivating: false,
+    });
+    // El default configurado es el de CRÉDITO — distinto del copiado (débito).
+    mockUsePreferences.mockReturnValue({
+      preferences: { defaultPaymentMethods: { unico: "pm-credit-1", fijo: null, cuota: null } },
+      setPreferences: vi.fn(),
+      isSaving: false,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderForm({ prefill: { ...duplicatePrefill, paymentMethodId: "pm-debit-1" } });
+
+    expect(screen.getAllByText("Débito Banco Nación").length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("Visa Banco Nación")).toHaveLength(0);
   });
 });
 
