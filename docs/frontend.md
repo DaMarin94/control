@@ -97,6 +97,19 @@ Lo visual se define **una sola vez**. Stack: **shadcn/ui + cva** sobre Tailwind 
 
 Todo **popover / kebab / tooltip / confirmación** anclado dentro de una superficie con `overflow` se monta por **`createPortal` a `document.body`**, posicionado `fixed` a partir del `getBoundingClientRect()` de su anclaje. Sin el portal, el `overflow` de la superficie contenedora recortaría el overlay. Es lo que sostiene el **invariante 3** (ninguna acción inalcanzable) de `docs/design.md` § Contención responsive. Los `<select>` **nativos** no lo necesitan (el navegador ya los renderiza fuera del flujo). Casos aplicados: `KebabMenu`, el listbox de método de pago, `SectionFilterPopover`.
 
+### Posicionamiento + cierre de listbox/popover por portal — `use-listbox-popover` (hook canónico)
+
+`frontend/src/hooks/use-listbox-popover.ts` es el **hook compartido** para el posicionamiento y el cierre de todo listbox/popover montado por portal (el patrón de la sección anterior). Exporta dos hooks y dos constantes; la regla visual del overlay vive en `docs/design.md`.
+
+**Regla estructural:** todo popover/listbox por portal **consume este hook** en vez de duplicar el cálculo de posición y los listeners de cierre. Hoy lo usan `payment-method-select`, `limit-category-select` y `limit-anchor-picker`.
+
+- **`useListboxPosition(open, triggerRef, panelRef, intrinsicMaxHeight)`** — calcula la posición `fixed` del panel anclado al disparador:
+  - **Flip vertical:** abre **abajo** si el panel entra; si no, **flip arriba**; si no entra en ningún lado, elige el lado con **más espacio** y recorta `maxHeight` para que la lista **scrollee internamente**.
+  - **Clamp horizontal** al viewport; el panel toma el ancho del disparador.
+  - **Medición en dos pasadas:** primera pasada estimada con `intrinsicMaxHeight` antes de que el panel pinte, segunda con el alto real del panel una vez montado, para que el flip no salte.
+- **`useListboxDismiss(open, close, triggerRef, panelRef)`** — cierra por clic-fuera / `Esc` (con **retorno de foco al disparador**) / **scroll externo en captura** / resize. El listener de scroll lleva un **guard que ignora el scroll originado dentro del panel** (`panelRef.contains(e.target)`): por eso la lista se puede scrollear sin que el popover se cierre.
+- **Constantes canónicas:** `POPOVER_GAP = 6` (separación disparador↔panel), `VIEWPORT_MARGIN = 12` (respiro mínimo a cualquier borde).
+
 ### Breakpoint — variantes `wide:` / `max-wide:`
 
 La disposición responsive se decide con las variantes **`wide:`** (`width ≥ 941px`) y **`max-wide:`** (`width < 941px`), habilitadas por el token `--breakpoint-wide: 941px` declarado en `@theme` (Tailwind v4) en `frontend/src/app/globals.css`. **El número `941` no se repite en ningún `.tsx`** y no se escriben media queries a mano para la disposición general (ver `docs/design.md` § Contención responsive para la política del breakpoint y el ancho mínimo soportado).
@@ -590,6 +603,9 @@ Solo en `/reportes` (la income-expense del dashboard **no** los monta; ver gate 
 - **Dirección** — segmented (gastos / ingresos / ambos) → `direction`. Es el **único control de cuántas líneas dibuja el canvas**: `both` = 2 líneas (ingresos + gastos), `expense` / `income` = 1 línea. No hay leyenda de series ni toggle show/hide por serie.
 - **Tipo** — chips multi-selección (fijo / cuota / único) → `movementTypes`.
 - **Categoría** — **leyenda-filtro de categorías tildables en el footer** (la misma `ChartLegend` interactiva que `by-category`, con `scrollable` + `commandSlot`) → `categoryIds` (3 estados `null` / `[]` / lista). **No** usa `CategoryFilterPopover`. Recibe las **categorías con actividad en el año** (`availableCategories` del response), no el universo completo del usuario.
+  - **Las categorías no son de gasto ni de ingreso.** Una misma categoría puede participar en **ambas** líneas; cada ítem de `availableCategories` trae `hasExpense`/`hasIncome` (ver `docs/data-model.md`) que dicen en qué línea(s) tuvo actividad en el año.
+  - **Universo de la leyenda por tipo de card.** `income-expense` muestra **todas** las categorías con movimiento en el año (usa `hasExpense`/`hasIncome` completo — así la leyenda incluye categorías que solo aparecen como ingreso, coherente con que la card puede dibujar la línea de ingresos). `by-category` muestra **solo** las que tienen gasto (`hasExpense === true`).
+  - **El filtro restringe cada línea por sus propias categorías.** Ocultar una categoría resta **solo de la(s) línea(s) donde participa**: una categoría solo-gasto no afecta la línea de ingresos; una compartida baja en ambas.
 
 - **Gate `/reportes` vs. dashboard por `onDirectionChange`.** La presencia del callback `onDirectionChange` distingue la card configurable de `/reportes` (monta los filtros y la leyenda-filtro de categorías) de la card del dashboard (sin filtros; conserva solo la leyenda **decorativa** de 2 series, que no filtra).
 - **Sin `hiddenSeries`.** No existe el acoplamiento `hiddenSeries` ↔ `direction`: la dirección sola gobierna qué líneas se ven. El campo `hiddenSeries` está deprecado y la normalización del blob lo strip en runtime para `income-expense` (ver `docs/data-model.md`).

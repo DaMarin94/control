@@ -38,6 +38,7 @@ El detalle estructural (arquitectura, componentes, gotchas) vive en `docs/`. Le�
 |------|-----|
 | Estructura de carpetas, server vs client, env server-only | `docs/frontend.md` §Estructura / §Convenciones |
 | Sistema de componentes, primitivas, dnd-kit, portal a `body` | `docs/frontend.md` §Sistema de componentes |
+| Popovers/listbox por portal (posicionamiento con flip + cierre con guard de scroll interno): usan el hook `use-listbox-popover.ts` | `docs/frontend.md` §Posicionamiento + cierre de listbox/popover por portal + regla visual en `docs/design.md` |
 | Shell de modales (3 zonas, bloqueo de scroll del fondo, `useBodyScrollLock`, `closeOnScrimClick`) | `docs/frontend.md` §Shell de modales |
 | Modal portado con `closeOnScrimClick` dentro de un trigger clickeable (gotcha: el scrim burbujea por el árbol de React → `stopPropagation`) | `docs/frontend.md` §Shell de modales (gotcha del scrim) |
 | Estados de carga: skeletons (regla + primitivas `Skeleton*`) | `docs/frontend.md` §Estados de carga + spec visual en `docs/design.md` §Skeletons |

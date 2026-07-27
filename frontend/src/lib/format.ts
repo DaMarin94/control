@@ -172,6 +172,25 @@ export function formatTime(isoUtc: string, timezone: string): string {
 }
 
 /**
+ * Formatea un instante UTC en la timezone dada como fecha corta + hora,
+ * para pies de página discretos (ej. "última actualización").
+ * Ej: "2026-07-14T12:32:00Z", "America/Argentina/Buenos_Aires" → "14 jul 2026, 09:32"
+ */
+export function formatDateTimeShort(isoUtc: string, timezone: string): string {
+  const date = new Date(isoUtc);
+  const parts = new Intl.DateTimeFormat(DATE_LOCALE, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: timezone,
+  }).formatToParts(date);
+  const day = parts.find((p) => p.type === "day")?.value ?? "";
+  const month = parts.find((p) => p.type === "month")?.value ?? "";
+  const year = parts.find((p) => p.type === "year")?.value ?? "";
+  return `${day} ${month} ${year}, ${formatTime(isoUtc, timezone)}`;
+}
+
+/**
  * Formatea un instante UTC para el encabezado de mes: "Junio 2026".
  */
 export function formatMonthHeading(isoUtc: string, timezone: string): string {

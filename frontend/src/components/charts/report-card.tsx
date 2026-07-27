@@ -1528,19 +1528,35 @@ export function ReportCard({
     [data?.availableCategories],
   );
 
+  /**
+   * Universo de leyenda por tipo de card (fix E2).
+   * by-category: solo categorías con gasto (hasExpense === true) — no debe mostrar
+   * categorías income-only.
+   * income-expense: universo completo (con o sin gasto) — así las categorías de
+   * ingreso aparecen en la leyenda y quedan tildadas por default.
+   * Usado de forma CONSISTENTE en los ítems renderizados, el toggle y hiddenCategoryIds.
+   */
+  const legendUniverse = useMemo(
+    () =>
+      type === "by-category"
+        ? availableCategories.filter((c) => c.hasExpense)
+        : availableCategories,
+    [availableCategories, type],
+  );
+
   // ── Lógica de toggle de la leyenda-filtro ──────────────────────────────────
 
   /**
    * Toggle de categorías (Forma 1 Vista B + Forma 2).
-   * Universo = availableCategories. Escribe en categoryIds.
+   * Universo = legendUniverse (por tipo). Escribe en categoryIds.
    * Lógica de 3 estados: null=todas / lista=subconjunto / []=ninguna.
    *
    * Si el universo es vacío o el campo no llegó aún → no hace nada.
    */
   const handleCategoryLegendToggle = useCallback(
     (categoryId: string) => {
-      if (availableCategories.length === 0) return;
-      const allIds = availableCategories.map((c) => c.categoryId);
+      if (legendUniverse.length === 0) return;
+      const allIds = legendUniverse.map((c) => c.categoryId);
 
       // Estado actual: null = todas activas; lista = activas; [] = ninguna activa
       const currentActive: string[] =
@@ -1563,7 +1579,7 @@ export function ReportCard({
 
       onCategoryIdsChange?.(newIds);
     },
-    [availableCategories, categoryIds, onCategoryIdsChange],
+    [legendUniverse, categoryIds, onCategoryIdsChange],
   );
 
   // ── Derivar el estado "oculto" para la leyenda ─────────────────────────────
@@ -1576,7 +1592,7 @@ export function ReportCard({
   const hiddenCategoryIds: string[] = (() => {
     if (categoryIds === null) return [];
     const activeSet = new Set(categoryIds);
-    return availableCategories
+    return legendUniverse
       .filter((c) => !activeSet.has(c.categoryId))
       .map((c) => c.categoryId);
   })();
@@ -1629,10 +1645,10 @@ export function ReportCard({
 
   /**
    * Ítems de leyenda para by-category e income-expense en /reportes (modo interactivo).
-   * Generados desde availableCategories (universo estable que viene del API response).
+   * Generados desde legendUniverse (universo por tipo, ver fix E2 arriba).
    * La misma estructura sirve a ambos tipos de card; solo cambia el header que los llama.
    */
-  const legendItemsByCategory = availableCategories.map((cat) => ({
+  const legendItemsByCategory = legendUniverse.map((cat) => ({
     id: cat.categoryId,
     color: cat.color,
     label: cat.name,
@@ -1919,7 +1935,7 @@ export function ReportCard({
               Misma estructura que by-category: ChartLegend interactivo con LegendAllChip y scroll.
               La Dirección en cabecera controla cuántas líneas hay; la leyenda filtra por categoría.
               Solo se muestra cuando hay categorías disponibles en el año/filtros actuales. */}
-          {data && type === "income-expense" && onDirectionChange && availableCategories.length > 0 && (
+          {data && type === "income-expense" && onDirectionChange && legendUniverse.length > 0 && (
             <ChartLegend
               items={legendItemsByCategory}
               hiddenIds={hiddenCategoryIds}
@@ -1949,7 +1965,7 @@ export function ReportCard({
           )}
 
           {/* by-category (modos Barra y Línea): leyenda de categorías idéntica en ambos modos. */}
-          {data && type === "by-category" && availableCategories.length > 0 && (
+          {data && type === "by-category" && legendUniverse.length > 0 && (
             <ChartLegend
               items={legendItemsByCategory}
               hiddenIds={hiddenCategoryIds}

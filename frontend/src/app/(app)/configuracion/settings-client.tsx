@@ -20,6 +20,11 @@
  *
  * Nota: El control de modo de color (Apariencia) se mudó al sidebar como
  * toggle de iconos (ThemeIconToggle). Ya no vive en /configuracion.
+ *
+ * Sección "Datos externos" (IPC + cotizaciones): debajo de la tarjeta de
+ * Moneda, dentro de esta misma pantalla General (decisión cerrada — NO es
+ * una ruta/nav nueva). Ver external-rates-section.tsx y docs/design.md
+ * §"Sección 'Datos externos' de /configuracion".
  */
 
 import { CurrencySegmented } from "@/components/ui/currency-segmented";
@@ -27,6 +32,7 @@ import { useSettings } from "@/hooks/use-settings";
 import { useToast } from "@/hooks/use-toast";
 import type { CurrencyCode } from "@/types/settings";
 import { SkeletonPill } from "@/components/ui/skeleton";
+import { ExternalRatesSection } from "./external-rates-section";
 
 export function SettingsClient() {
   const { defaultCurrency, isLoading: isSettingsLoading, isError: isSettingsError, updateSettings, isSaving: isCurrencySaving } =
@@ -86,6 +92,9 @@ export function SettingsClient() {
           </p>
         )}
       </div>
+
+      {/* Sección: Datos externos (inflación IPC + cotizaciones) */}
+      <ExternalRatesSection />
     </div>
   );
 }

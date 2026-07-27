@@ -64,8 +64,8 @@ const mockReportsResponse: ReportsMovementsResponse = {
     },
   ],
   availableCategories: [
-    { categoryId: "cat-1", name: "Alimentación", color: "#4F86C6" },
-    { categoryId: "cat-2", name: "Transporte", color: "#E07B54" },
+    { categoryId: "cat-1", name: "Alimentación", color: "#4F86C6", hasExpense: true, hasIncome: false },
+    { categoryId: "cat-2", name: "Transporte", color: "#E07B54", hasExpense: true, hasIncome: false },
   ],
   earliestYear: 2025,
 };

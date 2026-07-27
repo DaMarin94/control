@@ -5,6 +5,10 @@
  * modal de creación (docs/design.md §"Panel de gestión de límites" → 3.2):
  * molde `PaymentMethodSelect` con swatch de color de categoría (6px
  * rounded-full) + nombre, reusando el picker de categoría del DS.
+ *
+ * Posicionamiento (flip vertical) y cierre ante scroll vía
+ * `useListboxPosition` / `useListboxDismiss` (docs/design.md,
+ * §Posicionamiento de popovers/listbox por portal).
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -12,6 +16,10 @@ import { createPortal } from "react-dom";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCategories } from "@/hooks/use-categories";
+import { useListboxPosition, useListboxDismiss } from "@/hooks/use-listbox-popover";
+
+/** Tope intrínseco de alto del panel cuando hay espacio de sobra. */
+const INTRINSIC_MAX_HEIGHT = 260;
 
 export interface LimitCategorySelectProps {
   id?: string;
@@ -28,7 +36,6 @@ export function LimitCategorySelect({ id, value, onChange }: LimitCategorySelect
 
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
 
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -39,43 +46,11 @@ export function LimitCategorySelect({ id, value, onChange }: LimitCategorySelect
 
   const close = useCallback(() => setOpen(false), []);
 
-  useEffect(() => {
-    if (!open) return;
-
-    function handleMouseDown(e: MouseEvent) {
-      if (triggerRef.current?.contains(e.target as Node)) return;
-      if (panelRef.current?.contains(e.target as Node)) return;
-      close();
-    }
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        close();
-        triggerRef.current?.focus();
-      }
-    }
-
-    document.addEventListener("mousedown", handleMouseDown);
-    document.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("scroll", close, { capture: true });
-    window.addEventListener("resize", close);
-
-    return () => {
-      document.removeEventListener("mousedown", handleMouseDown);
-      document.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("scroll", close, { capture: true });
-      window.removeEventListener("resize", close);
-    };
-  }, [open, close]);
+  useListboxDismiss(open, close, triggerRef, panelRef);
+  const pos = useListboxPosition(open, triggerRef, panelRef, INTRINSIC_MAX_HEIGHT);
 
   function handleTriggerClick() {
-    if (open) {
-      setOpen(false);
-      return;
-    }
-    if (!triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    setPos({ top: rect.bottom + 6, left: rect.left, width: rect.width });
-    setOpen(true);
+    setOpen((o) => !o);
   }
 
   function handleSelect(categoryId: string) {
@@ -134,7 +109,7 @@ export function LimitCategorySelect({ id, value, onChange }: LimitCategorySelect
               left: pos.left,
               width: pos.width,
               zIndex: 80,
-              maxHeight: 260,
+              maxHeight: pos.maxHeight,
               overflowY: "auto",
               background: "var(--panel)",
               border: "1px solid var(--line)",

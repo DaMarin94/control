@@ -52,7 +52,7 @@ pnpm dev
 
 ## TODO
 
-- Ante un fallo de carga de datos, la UI muestra un estado vacío indistinguible de una cuenta genuinamente vacía (enmascara errores de backend/sesión). A revisar.
+P1 - Ante un fallo de carga de datos, la UI muestra un estado vacío indistinguible de una cuenta genuinamente vacía (enmascara errores de backend/sesión). A revisar.
 
 ## Tests
 

@@ -14,6 +14,11 @@
  * Nota: El control de Apariencia (modo de color) se mudó al sidebar.
  * Sus tests viven en tests/components/layout/app-sidebar.test.tsx
  * y tests/components/ui/theme-segmented.test.tsx.
+ *
+ * Nota: La sección "Datos externos" (debajo de la tarjeta de Moneda) tiene sus
+ * propios tests en tests/app/configuracion/external-rates-section.test.tsx.
+ * Acá se mockea `useExternalRates` (usa useApi/useSession internamente) para
+ * que este archivo siga probando solo la tarjeta de Moneda de forma aislada.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -25,6 +30,19 @@ import { ToastProvider } from "@/components/ui/toast";
 
 vi.mock("@/hooks/use-settings", () => ({
   useSettings: vi.fn(),
+}));
+
+vi.mock("@/hooks/use-external-rates", () => ({
+  useExternalRates: vi.fn(() => ({
+    snapshot: undefined,
+    isLoading: true,
+    isError: false,
+    isLoadingMore: false,
+    hasMore: false,
+    loadOlderMonths: vi.fn(),
+    isSyncing: false,
+    syncExternalRates: vi.fn(),
+  })),
 }));
 
 vi.mock("@/hooks/use-toast", () => ({

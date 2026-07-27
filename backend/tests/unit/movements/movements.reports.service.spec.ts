@@ -1099,7 +1099,11 @@ describe('MovementsService — getReportsMovements', () => {
       expect(result.availableCategories).toEqual([]);
     });
 
-    it('categorías INCOME no aparecen en availableCategories (solo EXPENSE)', async () => {
+    // E2: una categoría NO es de gasto o de ingreso — puede tener movimientos de
+    // ambos tipos. availableCategories debe incluir categorías income-only (antes
+    // el universo se armaba SOLO desde filas EXPENSE, lo que hacía que la línea de
+    // Ingresos cayera a 0 al aplicar cualquier filtro de categorías del front).
+    it('categoría INCOME-only aparece en availableCategories con hasIncome:true, hasExpense:false', async () => {
       mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
         makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_A, type: 'INCOME', totalCents: BigInt(5000) }),
       ]);
@@ -1109,7 +1113,79 @@ describe('MovementsService — getReportsMovements', () => {
 
       const result = await service.getReportsMovements(USER_A, 2026, null);
 
-      expect(result.availableCategories).toHaveLength(0);
+      expect(result.availableCategories).toHaveLength(1);
+      expect(result.availableCategories[0]).toEqual(
+        expect.objectContaining({ categoryId: CAT_A, hasIncome: true, hasExpense: false }),
+      );
+    });
+
+    it('categoría con movimientos EXPENSE e INCOME → hasExpense:true, hasIncome:true', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_A, type: 'EXPENSE', totalCents: BigInt(1000) }),
+        makeUnicoRow({ monthKey: '2026-07', categoryId: CAT_A, type: 'INCOME', totalCents: BigInt(3000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null);
+
+      expect(result.availableCategories).toHaveLength(1);
+      expect(result.availableCategories[0]).toEqual(
+        expect.objectContaining({ categoryId: CAT_A, hasExpense: true, hasIncome: true }),
+      );
+    });
+
+    it('categoría solo EXPENSE → hasExpense:true, hasIncome:false', async () => {
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-06', categoryId: CAT_A, type: 'EXPENSE', totalCents: BigInt(1000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, null);
+
+      expect(result.availableCategories[0]).toEqual(
+        expect.objectContaining({ categoryId: CAT_A, hasExpense: true, hasIncome: false }),
+      );
+    });
+
+    it('con filtro de categorías activo, la línea de Ingresos se mantiene completa (bug E2)', async () => {
+      // CAT_A es income-only (nunca es de gasto); CAT_B es expense-only.
+      // El front, al destildar CAT_B (categoría de gasto), envía categoryIds=[CAT_A]
+      // (CAT_A ya venía tildada en la leyenda porque ahora está en availableCategories).
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', categoryId: CAT_A, type: 'INCOME', totalCents: BigInt(5000) }),
+        makeUnicoRow({ monthKey: '2026-01', categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6', type: 'EXPENSE', totalCents: BigInt(2000) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, [CAT_A]);
+
+      // Ingresos completos (CAT_A pasa el filtro); Gastos en 0 (CAT_B filtrada afuera)
+      expect(result.months[0].incomeCents).toBe(5000);
+      expect(result.months[0].expenseCents).toBe(0);
+    });
+
+    it('destildar una categoría compartida (ambos tipos) baja en ambas líneas', async () => {
+      // CAT_A tiene movimientos EXPENSE e INCOME. Se filtra dejando afuera a CAT_A.
+      mockRepo.getAnnualUnicosAggregated.mockResolvedValue([
+        makeUnicoRow({ monthKey: '2026-01', categoryId: CAT_A, type: 'EXPENSE', totalCents: BigInt(1000) }),
+        makeUnicoRow({ monthKey: '2026-01', categoryId: CAT_A, type: 'INCOME', totalCents: BigInt(4000) }),
+        makeUnicoRow({ monthKey: '2026-01', categoryId: CAT_B, categoryName: 'Tecnología', categoryColor: '#A98BD6', type: 'EXPENSE', totalCents: BigInt(700) }),
+      ]);
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2026);
+
+      const result = await service.getReportsMovements(USER_A, 2026, [CAT_B]);
+
+      // CAT_A queda afuera del filtro → baja tanto en Gastos (queda solo CAT_B=700) como en Ingresos (0)
+      expect(result.months[0].expenseCents).toBe(700);
+      expect(result.months[0].incomeCents).toBe(0);
     });
   });
 

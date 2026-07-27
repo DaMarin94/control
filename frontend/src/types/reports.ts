@@ -43,6 +43,23 @@ export interface ReportCategory {
   monthlyExpenseCents: number[];
 }
 
+/**
+ * Item de `availableCategories` específico de `ReportsMovementsResponse` (fix E2).
+ * A diferencia del shape base usado por los demás reportes (annual-unicos, annual-cuotas,
+ * annual-inflation-income), este trae los booleanos `hasExpense`/`hasIncome` para que el
+ * front pueda derivar universos de leyenda distintos por tipo de card (by-category vs
+ * income-expense) a partir de la MISMA respuesta.
+ */
+export interface ReportsAvailableCategory {
+  categoryId: string;
+  name: string;
+  color: string;
+  /** true si la categoría tuvo al menos un movimiento de gasto en el año (universo estable, sin filtro). */
+  hasExpense: boolean;
+  /** true si la categoría tuvo al menos un movimiento de ingreso en el año (universo estable, sin filtro). */
+  hasIncome: boolean;
+}
+
 /** Respuesta de GET /movements/reports?year=YYYY[&categories=...] (dentro del sobre { success, data }). */
 export interface ReportsMovementsResponse {
   /** El año pedido. */
@@ -52,12 +69,14 @@ export interface ReportsMovementsResponse {
   /** Solo categorías con gasto EXPENSE en el año, dentro del set pedido. Ordenadas por gasto anual total DESC. */
   categories: ReportCategory[];
   /**
-   * Universo ESTABLE de categorías con gasto en el año, SIN aplicar el filtro de categorías.
+   * Universo ESTABLE de categorías (gasto e ingreso) en el año, SIN aplicar el filtro de categorías.
    * Superconjunto de `categories`: siempre incluye todas las categorías con gasto del año,
    * independientemente del filtro activo. Siempre presente (puede ser []). Ordenado por gasto anual DESC.
    * El front lo usa como universo de la leyenda-filtro (P2_b) en lugar de useCategories.
+   * Cada item trae `hasExpense`/`hasIncome` para derivar el universo por tipo de card (fix E2):
+   * by-category filtra por `hasExpense === true`; income-expense usa el universo completo.
    */
-  availableCategories: Array<{ categoryId: string; name: string; color: string }>;
+  availableCategories: ReportsAvailableCategory[];
   /**
    * Año más antiguo con algún movimiento del usuario.
    * null si el usuario no tiene ningún movimiento.

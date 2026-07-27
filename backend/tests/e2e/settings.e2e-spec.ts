@@ -23,6 +23,7 @@ import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { ResponseInterceptor } from '../../src/common/interceptors/response.interceptor';
 import { AllExceptionsFilter } from '../../src/common/filters/all-exceptions.filter';
+import { RateSyncService } from '../../src/settings/rate-sync.service';
 import { Logger } from 'nestjs-pino';
 
 // ---------------------------------------------------------------------------
@@ -75,9 +76,24 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  inflationRate: {
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+  },
+  currencyQuote: {
+    findMany: jest.fn(),
+  },
   $connect: jest.fn(),
   $disconnect: jest.fn(),
   $queryRaw: jest.fn().mockResolvedValue([]),
+};
+
+// ---------------------------------------------------------------------------
+// Mock de RateSyncService (para POST /settings/external-rates/sync)
+// ---------------------------------------------------------------------------
+
+const mockRateSyncService = {
+  sync: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -112,6 +128,8 @@ describe('Settings (e2e)', () => {
     })
       .overrideProvider(PrismaService)
       .useValue(mockPrisma)
+      .overrideProvider(RateSyncService)
+      .useValue(mockRateSyncService)
       .compile();
 
     app = moduleFixture.createNestApplication({ bufferLogs: true });
@@ -145,6 +163,37 @@ describe('Settings (e2e)', () => {
     mockPrisma.category.createMany.mockResolvedValue({ count: 0 });
     mockPrisma.userPreferences.findUnique.mockResolvedValue(null);
   });
+
+  // -------------------------------------------------------------------------
+  // Fixtures — GET /settings/external-rates
+  // -------------------------------------------------------------------------
+
+  function makeIpcRow(yearMonth: string, variation: string, index: string) {
+    return {
+      yearMonth,
+      monthlyVariation: variation,
+      indexValue: index,
+      source: 'apis.datos.gob.ar',
+      fetchedAt: new Date('2026-07-01T12:00:00Z'),
+    };
+  }
+
+  function makeFxRow(
+    currency: Currency,
+    variant: string,
+    compra: string,
+    venta: string,
+  ) {
+    return {
+      currency,
+      variant,
+      yearMonth: '2026-07',
+      compra,
+      venta,
+      source: currency === Currency.ARS ? 'dolarapi.com' : 'api.frankfurter.dev',
+      fetchedAt: new Date('2026-07-10T09:00:00Z'),
+    };
+  }
 
   // -------------------------------------------------------------------------
   // GET /settings
@@ -280,6 +329,180 @@ describe('Settings (e2e)', () => {
       const res = await request(app.getHttpServer())
         .patch('/settings')
         .send({ defaultCurrency: 'USD' })
+        .expect(401);
+
+      expect(res.body.success).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /settings/external-rates
+  // -------------------------------------------------------------------------
+
+  describe('GET /settings/external-rates', () => {
+    it('200 + sobre con ipc y fx', async () => {
+      mockPrisma.inflationRate.findFirst
+        .mockResolvedValueOnce(makeIpcRow('2026-07', '1.58', '450.2')) // latest
+        .mockResolvedValueOnce({ id: 'older-1' }); // hasMore
+      mockPrisma.inflationRate.findMany.mockResolvedValue([
+        makeIpcRow('2026-07', '1.58', '450.2'),
+        makeIpcRow('2026-01', '3.10', '410.0'),
+      ]);
+      mockPrisma.currencyQuote.findMany.mockResolvedValue([
+        makeFxRow(Currency.ARS, 'oficial', '1200.00', '1250.00'),
+        makeFxRow(Currency.ARS, 'blue', '1300.00', '1320.00'),
+        makeFxRow(Currency.EUR, 'oficial', '0.86', '0.86'),
+        makeFxRow(Currency.BRL, 'oficial', '5.4', '5.4'),
+      ]);
+
+      const res = await request(app.getHttpServer())
+        .get('/settings/external-rates')
+        .query({ today: '2026-07-14' })
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.ipc.latest).toMatchObject({
+        yearMonth: '2026-07',
+        monthlyVariation: 1.58,
+        indexValue: 450.2,
+      });
+      expect(res.body.data.ipc.from).toBe('2026-01');
+      expect(res.body.data.ipc.hasMore).toBe(true);
+      expect(res.body.data.fx.month).toBe('2026-07');
+      expect(res.body.data.fx.arsOficial).toMatchObject({ compra: 1200, venta: 1250 });
+      expect(res.body.data.fx.arsBlue).toMatchObject({ compra: 1300, venta: 1320 });
+      expect(res.body.data.fx.eur).toMatchObject({ compra: 0.86, venta: 0.86 });
+      expect(res.body.data.fx.brl).toMatchObject({ compra: 5.4, venta: 5.4 });
+    });
+
+    it('cotización faltante para el mes → null, no rompe', async () => {
+      mockPrisma.inflationRate.findFirst.mockResolvedValue(null);
+      mockPrisma.inflationRate.findMany.mockResolvedValue([]);
+      mockPrisma.currencyQuote.findMany.mockResolvedValue([]);
+
+      const res = await request(app.getHttpServer())
+        .get('/settings/external-rates')
+        .query({ today: '2026-07-14' })
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.ipc.latest).toBeNull();
+      expect(res.body.data.fx.arsOficial).toBeNull();
+      expect(res.body.data.fx.arsBlue).toBeNull();
+      expect(res.body.data.fx.eur).toBeNull();
+      expect(res.body.data.fx.brl).toBeNull();
+    });
+
+    it('respeta ipcFrom explícito', async () => {
+      mockPrisma.inflationRate.findFirst.mockResolvedValue(null);
+      mockPrisma.inflationRate.findMany.mockResolvedValue([]);
+      mockPrisma.currencyQuote.findMany.mockResolvedValue([]);
+
+      const res = await request(app.getHttpServer())
+        .get('/settings/external-rates')
+        .query({ today: '2026-07-14', ipcFrom: '2020-01' })
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.ipc.from).toBe('2020-01');
+    });
+
+    it('400 si "today" tiene formato inválido', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/settings/external-rates')
+        .query({ today: '14-07-2026' })
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+    });
+
+    it('400 si "ipcFrom" tiene formato inválido', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/settings/external-rates')
+        .query({ ipcFrom: '2026' })
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+    });
+
+    it('401 sin JWT', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/settings/external-rates')
+        .expect(401);
+
+      expect(res.body.success).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /settings/external-rates/sync
+  // -------------------------------------------------------------------------
+
+  describe('POST /settings/external-rates/sync', () => {
+    it('200 + SyncResult cuando hay targets aceptados', async () => {
+      mockRateSyncService.sync.mockResolvedValue({
+        scope: 'all',
+        results: [
+          { target: 'CurrencyQuote:ARS:oficial:2026-07', accepted: true },
+          { target: 'InflationRate:2026-07', accepted: true },
+        ],
+        acceptedCount: 2,
+        rejectedCount: 0,
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/settings/external-rates/sync')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.acceptedCount).toBe(2);
+      expect(res.body.data.rejectedCount).toBe(0);
+      expect(mockRateSyncService.sync).toHaveBeenCalledWith('all');
+    });
+
+    it('422 cuando todos los targets son rechazados por validación', async () => {
+      mockRateSyncService.sync.mockResolvedValue({
+        scope: 'all',
+        results: [
+          { target: 'InflationRate:2026-07', accepted: false, reason: 'circuit-breaker' },
+        ],
+        acceptedCount: 0,
+        rejectedCount: 1,
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/settings/external-rates/sync')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(422);
+
+      expect(res.body.success).toBe(false);
+    });
+
+    it('502 cuando todos los targets son rechazados por fuente caída', async () => {
+      mockRateSyncService.sync.mockResolvedValue({
+        scope: 'all',
+        results: [
+          { target: 'CurrencyQuote:ARS:oficial:2026-07', accepted: false, reason: 'http-error' },
+        ],
+        acceptedCount: 0,
+        rejectedCount: 1,
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/settings/external-rates/sync')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(502);
+
+      expect(res.body.success).toBe(false);
+    });
+
+    it('401 sin JWT', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/settings/external-rates/sync')
         .expect(401);
 
       expect(res.body.success).toBe(false);

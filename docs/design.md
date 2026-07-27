@@ -673,6 +673,26 @@ Dos comportamientos de cierre, según el tipo de overlay:
 - **Modales / diálogos** (transaction-modal, category-form-modal y los diálogos de confirmación de borrado — transaction / recurring / installment / category): se cierran **únicamente con el botón ✕ y con `Esc`**. El click en el scrim/backdrop **no** cierra. Son superficies que demandan una decisión explícita; no se descartan por click accidental afuera.
 - **Popovers** (filtro de categorías, filtro de sección, menú de tipo de reporte): se cierran por **clic fuera / `Esc` / re-clic**. Son auxiliares y livianos; descartarlos al tocar fuera es lo esperado.
 
+#### Posicionamiento de popovers/listbox por portal — flip vertical y comportamiento ante scroll
+
+Todo overlay auxiliar que se monta **por portal a `document.body`** con `position: fixed` anclado a un disparador (los selectores custom tipo listbox — método de pago, categoría de límite, ancla de límite — y los popovers de filtro/menú) comparte **un único contrato de posicionamiento y scroll**. No se resuelve archivo por archivo: la referencia canónica ya cumplida es `reportes/page.tsx` (`calcPosition`) y `card-currency-select.tsx`; el resto se normaliza a ella. Constantes canónicas: **`POPOVER_GAP = 6px`** (separación disparador↔panel) y **`VIEWPORT_MARGIN = 12px`** (respiro mínimo a cualquier borde del viewport).
+
+**1 · Anclaje y flip vertical (nunca fuera del viewport).** El panel se ancla al disparador y **elige lado según el espacio disponible**, no siempre hacia abajo:
+
+- **Preferencia: abajo.** Si el panel entra por debajo (`alto + GAP ≤ espacioAbajo`), va abajo: `top = rect.bottom + GAP`.
+- **Flip: arriba.** Si no entra abajo pero sí arriba, se voltea: `top = rect.top − alto − GAP`.
+- **No entra en ningún lado:** se elige el lado con más espacio y se **clampea** al `VIEWPORT_MARGIN`; el **`maxHeight` del panel se recorta al espacio disponible** de ese lado (`espacioDisponible − GAP − VIEWPORT_MARGIN`), de modo que la lista **scrollea internamente** en vez de desbordar el viewport. El tope intrínseco (≈260–280px de lista) sigue vigente como cota superior; el clamp solo lo baja cuando el espacio obliga.
+- **Horizontal:** ancho = ancho del disparador (listbox) o su ancho intrínseco (popover); `left`/`right` anclado al disparador y **clampeado** a `[VIEWPORT_MARGIN, viewport − ancho − VIEWPORT_MARGIN]`.
+- **Medición en dos pasadas** (estimado antes del paint → alto real tras montar) para que el flip no produzca salto visible. Por qué importa: el caso que rompe hoy es el disparador cerca del borde inferior dentro de un modal alto centrado (`max-h-[calc(100dvh−48px)]`) — sin flip el panel abre por debajo del viewport y no se ve (jerarquía visual y flujo rotos: la opción existe pero es inalcanzable).
+
+**2 · Scroll EXTERNO al panel (incluye el cuerpo del modal `overflow-y-auto`) → cierra.** El listener de scroll va en **captura** sobre `window` para atrapar también el scroll de contenedores intermedios (el cuerpo del modal). Coherente con la naturaleza auxiliar del popover (§ arriba): si el usuario mueve la superficie de fondo, el overlay se descarta en vez de quedar "despegado" de su disparador. Cerrar —no reposicionar-siguiendo— es la regla: es más simple, evita el panel flotando lejos del ancla y respeta que estos overlays son livianos.
+
+**3 · Scroll INTERNO del panel → NUNCA cierra.** El handler de scroll **debe ignorar los eventos originados dentro del panel** (`if (panelRef.current?.contains(e.target)) return;`). Este guard es obligatorio: sin él, el listener en captura cierra el panel al rodar la rueda sobre la propia lista y la vuelve **imposible de scrollear** (el bug E1-a). La lista larga (o el panel con `maxHeight` clampeado por §1) debe poder scrollearse con el panel abierto.
+
+**4 · Resize → cierra** (mismo criterio que scroll externo; el anclaje quedaría stale).
+
+**5 · Foco e interacción (heredado de §Cierre de overlays y de los selectores vigentes).** Cierra además por **clic fuera / `Esc` / re-clic**. Al cerrar con `Esc`, **el foco vuelve al disparador**. Se conservan los roles y estados ARIA del listbox (`aria-haspopup="listbox"`, `aria-expanded`, `role="listbox"`/`option`, `aria-selected`) y el foco visible del disparador. Ni el color ni la tipografía del panel cambian por esta regla: es puro comportamiento de overlay + su criterio de ubicación.
+
 ### Overflow de modales y bloqueo del fondo (contrato de shell)
 
 Regla **transversal a TODOS los modales/diálogos** de la app: transaction-modal, category-form-modal, el modal de método de pago, crear/editar límite, active-limit-dialog y los diálogos de confirmación/borrado. Todos comparten el mismo **contrato de shell** para que se comporten igual cuando el contenido es alto y para que el fondo nunca se mueva. Los diálogos chicos (confirmaciones) casi nunca desbordan, pero **acatan el mismo contrato** para que el comportamiento sea uniforme.
@@ -3153,6 +3173,156 @@ Rige en todo ancho **≥640px** (`--bp-floor`), con el sidebar abierto o cerrado
 > **Señal de documentación (para el analista, vía orquestador):** el copy visible de los **headers de grupo** ("Marcan un dato" / "Avisan al guardar"), el **caption** ("Límites de este reporte" / "…de esta vista"), la etiqueta **"Desactivado"** y el qualifier **"Solo mes en curso"** son **traducciones de diseño** de conceptos funcionales (naturaleza pasiva/activa, `enabled`, `temporalScope`). Su redacción final debería confirmarla el analista en `screens.md` / `requirements.md`. El comportamiento visual definido acá no depende de esa confirmación; solo la letra exacta.
 
 ---
+
+## Sección "Datos externos" de `/configuracion` — ver y actualizar inflación (IPC) + cotizaciones
+
+> Spec visual de la sección donde el usuario **lee** los datos macro que Control usa para convertir y contextualizar montos (inflación INDEC + cotizaciones dólar/euro/real) y los **actualiza** con una sola acción. **Reutilización total, cero token nuevo:** todo se arma con moldes vigentes — la `.card` de `/configuracion`, la jerarquía de cabecera del hub (§ *Panel de gestión de límites* §1.b), el botón `RefreshCw` (mismo ícono y lógica de spinner que el *Botón de refrescar por reporte*), el sistema de toasts, `SkeletonPill`, el patrón de error inline de la card de Moneda, y las reglas duras de cifra (mono tabular, neutralidad de color). No se introduce cromo nuevo.
+
+### 0. Ubicación estructural — agregado no solicitado, confirmar con analista
+
+El brief pide "una **sección** Datos externos en `/configuracion`". `/configuracion` es un **hub de nav-rutas** (General · Categorías · Métodos de pago · Límites — § *Panel de gestión de límites* §1). Lo natural y consistente es que "Datos externos" sea una **quinta sección hermana** con su propia ruta (`/configuracion/datos-externos`), tomando el mismo track de nav vertical y la misma cabecera de sección (nivel 2, §1.b). **Pero la estructura del hub (qué secciones existen, su orden, sus rutas y su copy de nav) es funcional — la cierra el analista en `screens.md`.** Por eso:
+
+- **Marca "agregado no solicitado — confirmar":** que "Datos externos" sea una **nueva entrada de nav** (y su posición en el orden — recomiendo **último**, tras Límites, porque es lectura de referencia, no administración de la cuenta) es una decisión de ruteo que **debe confirmar el analista**.
+- **La spec visual de abajo es agnóstica a eso.** El contenido (cabecera de sección + dos cards + pie) se implementa **igual** ya sea como sección ruteada propia o —si el analista lo prefiere— como bloque dentro de General. Si es sección propia, hereda el track de nav, el ítem activo y la cabecera nivel 2 **sin cambios** respecto de las otras cuatro secciones; no re-especifico esos moldes acá.
+
+### 1. Cabecera de sección (nivel 2 del hub) + botón "Actualizar datos"
+
+Fila `flex items-center justify-between gap-5 flex-wrap`, `mb-4` (idéntica a las demás secciones del hub, §1.b):
+
+- **Izquierda (identidad):**
+  - **Título `h2`** "Datos externos": `text-[18px] font-bold tracking-[-0.01em] text-ink`. Mismo nivel 2 que "General" / "Límites".
+  - **Bajada** (13px/500 `--muted`, `mt-[3px]`): *"Inflación y cotizaciones que Control usa para convertir y ajustar tus montos."* (copy sugerido — el definitivo lo confirma el analista).
+- **Derecha (acción) — botón "Actualizar datos":**
+  - **Ubicación:** en par con el `h2`, a la derecha (`justify-between`), ocupando el mismo *slot de acción de sección* que "+ Nueva categoría" en las otras secciones. Es la **única** acción de la sección y refresca **ambos** bloques (inflación + cotizaciones) de una.
+  - **Jerarquía — secundario, no primario.** `Button` **`variant=outline`** `size=default` con **ícono `RefreshCw` 16px a la izquierda + label "Actualizar datos"**. *Por qué secundario y no el primario índigo que usan las secciones de creación:* el slot de acción del hub lleva primario cuando la acción **crea** algo (foco de la tarea). Acá el foco de la sección es **leer** los datos; actualizar es una acción de mantenimiento **repetible y ocasional**. Un primario índigo sólido gritaría en una sección de consulta y competiría con la lectura de las cifras. `outline` (borde `--line-strong`, fondo `--panel`, hover `--panel-2` + translateY) da afordancia clara de botón sin teñir de acento — el índigo queda **solo** como focus ring (regla dura 2). El ícono `RefreshCw` (doble arco = "actualizar", misma elección que el refrescar de reportes) hace inequívoca la acción.
+  - **Estado normal:** `RefreshCw` 16px `--ink` estático + "Actualizar datos". Siempre habilitado salvo durante su propio fetch.
+  - **Estado "Actualizando…" (loading):** el **mismo ícono `RefreshCw` rota** (`animate-spin`, giro horario; `motion-reduce:animate-none`), el **label cambia a "Actualizando…"**, el botón queda `disabled` + **atenuado `opacity-60`**, hover suprimido, `aria-busy="true"`. Reusa exactamente el patrón del refrescar de reportes: bajo reduced-motion el ícono no gira y el *cue* accesible de "trabajando" es la atenuación + `disabled` (nunca depende solo de la animación). Se ata al fetch de actualización en vuelo (no al skeleton de carga inicial, que es de la sección — §5).
+  - **Post-acción:** el botón vuelve al estado normal; **el resultado se comunica por TOAST** (§4), no por cambio persistente en el botón. Los bloques re-renderizan con el dato nuevo (o quedan igual si no hubo cambios) y el pie de "última actualización" (§6) refleja la corrida.
+  - **A11y:** `type="button"`, `aria-label="Actualizar datos externos"` (estático), ícono `aria-hidden`. `aria-busy` sigue el fetch.
+  - **Responsive:** por el `flex-wrap` de la fila, en angosto el botón **envuelve bajo la identidad**, alineado a la izquierda (igual que el resto de acciones de sección).
+
+Debajo de la cabecera, el contenido de la sección: **dos cards apiladas** (`space-y-4`, mismo ritmo que la sección General) — Inflación primero, Cotizaciones después — y el **pie discreto** (§6).
+
+### 2. Card "Inflación (IPC)"
+
+`.card` del DS: `rounded-[14px] border border-line bg-panel shadow-[var(--shadow-sm)]`, `padding var(--card-pad)` (22px). Estructura interna en tres bandas separadas por hairline (`--hair`): **destacado → historial → ver más**.
+
+**2.a Destacado (último dato) — la lectura protagonista.**
+Fila `flex items-center justify-between gap-6` (mismo molde de fila de ajuste):
+- **Izquierda (identidad):**
+  - **Eyebrow** "Último dato": `text-[10.5px] font-semibold uppercase tracking-[0.12em] text-faint` (mismo micro-label que "Tema"/"Menú").
+  - **Mes** ej. "Junio 2026": `text-[14.5px] font-semibold text-ink mt-[2px]` (rol nombre).
+  - **Sub-rótulo** "Variación mensual": `text-[12.5px] font-medium text-muted mt-[2px]`.
+- **Derecha (la cifra):** la variación ej. "1,6%" como **figura mono destacada** — `font-mono tnum text-[22px] font-semibold text-ink leading-none`, sufijo `%` inclusive (mismo cuerpo mono, no un span aparte). `shrink-0`.
+  - **Regla dura de color — neutral, jamás semántica.** La inflación **no** es ingreso ni gasto: la cifra va en **`--ink` neutro**, **nunca** verde ni rojo (regla dura 1), aunque "más inflación" tenga connotación negativa. Consistente con el token `--rate`/`--ink-2` que ya usa la inflación en reportes (nunca color semántico).
+  - Va en **mono tabular** (`tnum`) por ser cifra numérica: alinea con las variaciones del historial abajo, columna prolija.
+
+**2.b Historial del año en curso — lista mes × variación.**
+Debajo de un divisor `--hair` (`mt-4 pt-4` o equivalente), lista de los meses del **año en curso** con su variación, **más reciente arriba**:
+- **Fila:** `flex items-center justify-between`, ritmo de lista `py-[10px]`, separadas entre sí por `--hair`.
+  - **Izquierda — mes:** ej. "Mayo 2026" `text-[13px] font-medium text-ink-2`.
+  - **Derecha — variación:** `font-mono tnum text-[13px] font-medium text-ink-2`, sufijo `%`. **Neutral `--ink-2`**, nunca semántica.
+- **Sin duplicar el destacado:** el mes ya mostrado como destacado (§2.a) **no se repite** en la lista; el historial arranca en el mes inmediatamente anterior. Así el "último dato" tiene un solo lugar (arriba, protagónico) y la lista es el contexto hacia atrás.
+- **Jerarquía deliberada destacado vs. lista:** el destacado usa cifra 22px `--ink`; la lista usa 13px `--ink-2`. El salto de tamaño y de tono (ink vs ink-2) hace que el ojo lea **primero el último dato** y **después** el historial como material de referencia — jerarquía visual al servicio de "¿cuánto fue la inflación del último mes?".
+- **Estado sin más datos del año** (ej. estamos en enero y solo existe el destacado): en vez de la lista, una línea `text-[12.5px] font-medium text-muted` centrada: *"Todavía no hay más datos de {año}."*
+
+**2.c "Ver meses anteriores" — cargar hacia atrás.**
+Debajo de la lista, separado por `--hair`, un control **full-width discreto** para traer meses de años anteriores:
+- **Forma:** botón `w-full` `flex items-center justify-center gap-1.5`, `py-2.5`, `rounded-[var(--r-ctl)]`, texto `text-[13px] font-semibold text-ink-2`, ícono **`ChevronDown` 14px `--muted`** a la derecha del label. Reposo sin caja; **hover** `bg-panel-2 text-ink`, transición 140ms. Focus-visible: anillo `--accent-soft` 3px. **No** es primario ni lleva acento de relleno (afordancia de "ver más", no de acción destacada).
+- **Label:** "Ver meses anteriores".
+- **Estado cargando más:** label pasa a "Cargando…" + el `ChevronDown` se reemplaza por `RefreshCw` 16px `animate-spin` (`motion-reduce:animate-none`); botón `disabled` + `opacity-60`. Al resolver, los meses viejos se **anexan al final** de la lista y el botón vuelve a "Ver meses anteriores".
+- **Sin más historial disponible:** el botón **se desmonta** (no queda deshabilitado colgando) — cuando el backend indica que no hay meses más atrás, simplemente no se renderiza.
+
+### 3. Card "Cotizaciones"
+
+`.card` del DS (mismo molde). Muestra los **4 valores del mes actual**: dólar oficial, dólar blue, euro, real.
+
+- **Cabecera de card (opcional, ligera):** título "Cotizaciones" `text-[14.5px] font-semibold text-ink` + sub "Valores del mes en curso." `text-[12.5px] font-medium text-muted mt-[2px]`, `mb-4`. (Coherente con la identidad de card del DS; si el analista prefiere sin sub, se cae solo el sub.)
+- **Layout — grilla 2×2 de celdas-valor.** `grid grid-cols-2 gap-3`. Cada uno de los 4 valores es una **celda recesada** (tile de valor): `bg-panel-2 border border-line rounded-[var(--r-ctl)] px-3.5 py-3`, `flex flex-col gap-1`, `min-w-0`.
+  - **Rótulo (arriba):** `text-[12.5px] font-medium text-muted` — "Dólar oficial" · "Dólar blue" · "Euro" · "Real". **Orden fijo** izq→der, arriba→abajo: `Dólar oficial · Dólar blue` (fila 1), `Euro · Real` (fila 2). (El copy exacto de los rótulos lo confirma el analista; estos son los sugeridos.)
+  - **Valor (abajo):** el precio en pesos, **cifra de dinero → mono tabular** (regla dura 3): `font-mono tnum text-[16px] font-semibold text-ink`, con símbolo `$` (ARS) — ej. `$1.100,00`. **Neutral `--ink`**, **nunca** verde/rojo (regla dura 1: una cotización no es ingreso ni gasto). El `tnum` alinea los cuatro precios a lo alto de las columnas.
+- **Valor faltante — "—":** si una cotización no está disponible, la celda **conserva su caja y su rótulo** y el valor se reemplaza por un **em dash** `—` en `font-mono text-[16px] text-faint` (mismo cuerpo, tono apagado). Así la grilla no se descuadra y el hueco se lee como "sin dato" sin alarmar. Opcional: micro-caption `text-[11px] text-faint` "Sin dato" bajo el guion — si el analista lo pide; por defecto basta el `—`.
+- **Responsive:** la grilla `grid-cols-2` **se mantiene** hasta el piso: las celdas son cortas y `$1.100,00` entra holgado en una columna de ~180px (el contenido a 640px con sidebar abierto da ~392px → dos columnas de ~185px, sin desborde ni scroll horizontal). No se colapsa a una columna (no hace falta y evita una card muy alta).
+
+### 4. Feedback de resultado — por TOAST (copy sugerido)
+
+La acción "Actualizar datos" no anuncia nada en el botón (que solo muestra su spinner); el resultado va por **toast** (mismo sistema del DS). Tres desenlaces:
+
+- **Éxito con cambios** → `toast.success`: **"Datos actualizados."**
+- **Sin novedades (ya al día)** → `toast.info`: **"Ya estás al día. No había datos nuevos."** — usa la variante `info` (no `success`), porque no hubo cambio; comunica "todo bien, nada que traer" sin fingir una actualización.
+- **Error** → `toast.error`: **"No se pudieron actualizar los datos. Intentá de nuevo."**
+
+(Copy definitivo a confirmar por el analista; el mapeo de variante — success/info/error — es la recomendación de diseño y no debería cambiar: distingue "traje algo" de "no había nada" de "falló".)
+
+### 5. Estados de la sección entera
+
+- **Carga inicial (skeleton).** Mientras se cargan los datos por primera vez, cada card renderiza su **fantasma** con `SkeletonPill` (mismo recurso que la card de Moneda), bajo `role="status"` `aria-label="Cargando datos externos"`:
+  - **Inflación:** en el destacado, los textos de identidad reales pueden estar (eyebrow/rótulos son estáticos) y **la cifra** es una `SkeletonPill` ~80×24; el historial son **3–4 filas** cada una con dos pills (mes ~90×14 izq / variación ~44×14 der). Sin el botón "Ver más" hasta que hay lista.
+  - **Cotizaciones:** las 4 celdas presentes con su rótulo real y una `SkeletonPill` ~90×18 en lugar del valor.
+  - El botón "Actualizar datos" de la cabecera queda **deshabilitado** durante la carga inicial (no hay nada que refrescar todavía).
+- **Error de carga (inline, patrón existente).** Si falla la **carga** de los datos (no la actualización), se usa el **mismo patrón que la card de Moneda**: dentro de la card afectada, texto `mt-3 text-[13px] text-expense-ink`: *"No se pudieron cargar los datos externos. Recargá la página."* Es error de página (recargar), distinto del error de **actualización** (§4, que es toast + reintento). Si falla la carga, la card no muestra destacado/lista/grilla; muestra solo ese mensaje.
+
+### 6. Pie discreto — última actualización + fuentes
+
+Debajo de las dos cards (fuera de ellas, al pie de la sección), una **línea única discreta**: `text-[12px] font-medium text-muted mt-1`, alineada a la izquierda:
+
+- *"Última actualización: {14 jul 2026, 09:32} · Fuentes: INDEC (inflación) · dolarapi (dólar) · frankfurter (euro, real)."*
+- Es **cromo terciario** (`--muted`), sin caja, sin ícono: informa procedencia y frescura sin competir con las cifras. La atribución por fuente entre paréntesis deja claro qué dato viene de dónde (transparencia de origen). El formato de fecha/hora exacto lo define el front según el locale del proyecto; la estructura (fecha-hora · fuentes) es la de esta spec.
+
+### 7. Contención responsive (obligatoria)
+
+Umbral único `--bp-wide` (941px). La sección **no introduce ninguna superficie ancha**: todo es filas `justify-between` de contenido corto y una grilla de 2 columnas angostas.
+
+- **Cabecera de sección:** `flex-wrap` → el botón "Actualizar datos" envuelve bajo la identidad en angosto (igual que las demás secciones del hub).
+- **Card Inflación:** el destacado es `flex justify-between` con identidad corta + cifra corta (entra a cualquier ancho); las filas del historial son `justify-between` de mes + % (cortísimas); "Ver meses anteriores" es full-width. Nada desborda.
+- **Card Cotizaciones:** `grid-cols-2` se sostiene hasta el piso (celdas cortas, `$1.100,00` entra en ~185px); no colapsa a 1 columna.
+- **Los cuatro invariantes en este elemento:**
+  1. *Sin scroll horizontal ≥640px:* todas las filas son `justify-between` de texto corto y la grilla de cotizaciones es de 2 columnas angostas que caben a ~392px de contenido; nada fuerza scroll del `body`.
+  2. *Modales completos:* la sección no abre modales.
+  3. *Ninguna acción inalcanzable:* el único control de acción ("Actualizar datos") envuelve bajo la identidad pero queda siempre visible y alcanzable; "Ver meses anteriores" es full-width dentro de la card.
+  4. *Superficies anchas scrollean dentro de sí:* no hay superficie ancha (ni tabla ni grilla día×mes); las cards conservan su propia contención vertical.
+
+### 8. Reglas duras reafirmadas
+
+- **Regla dura 1 (verde=ingreso / rojo=gasto):** ni la variación de inflación ni las cotizaciones se tiñen de verde/rojo — son cifras **neutras** (`--ink` / `--ink-2`), pese a que "subió la inflación" o "subió el dólar" tenga connotación. El único rojo de la sección es el **error inline** (`--expense-ink`), que es estado de error, no monto.
+- **Regla dura 2 (acento = solo marca/foco):** el índigo aparece **únicamente** como focus ring (botón "Actualizar", "Ver más", tiles focusables). Ningún relleno ni texto de acento.
+- **Regla dura 3 (cifra de dinero en mono tabular):** las cotizaciones (`$…`) van en `font-mono tnum`; las variaciones de inflación (`%`), aun no siendo dinero, van en `font-mono tnum` para alinear columnas y por coherencia con la inflación en reportes.
+
+### Checklist de aceptación visual — Datos externos
+
+*Cabecera y botón:*
+- [ ] La sección abre con un `h2` "Datos externos" a **18px/700** (mismo nivel que "General"/"Límites") + bajada 13px/500 `--muted`.
+- [ ] El botón **"Actualizar datos"** vive a la **derecha** de esa fila, es **secundario** (`outline`: borde neutro, fondo panel, **sin relleno índigo**), con **ícono `RefreshCw` 16px + label**.
+- [ ] Al pulsar: el ícono **gira** (`animate-spin`), el label pasa a **"Actualizando…"**, el botón queda atenuado/`disabled`; bajo *reduce-motion* no gira pero **sí** se atenúa.
+- [ ] Un solo botón refresca **ambos** bloques; el resultado no se anuncia en el botón sino por **toast**.
+
+*Toasts:*
+- [ ] Con cambios → toast **éxito** "Datos actualizados."
+- [ ] Sin novedades → toast **info** (no éxito) "Ya estás al día. No había datos nuevos."
+- [ ] Falla → toast **error** "No se pudieron actualizar los datos. Intentá de nuevo."
+
+*Card Inflación:*
+- [ ] El **destacado** muestra eyebrow "Último dato" + mes (14.5/600 `--ink`) + "Variación mensual", y la variación como **cifra mono tabular ~22px `--ink`** con `%` — **neutra, ni verde ni roja**.
+- [ ] El **historial** del año en curso lista mes + variación (13px `--ink-2`, mono tabular en la cifra), más reciente arriba, **sin repetir** el mes del destacado; las filas se separan por hairline.
+- [ ] El destacado se lee claramente **por encima** del historial (tamaño 22 vs 13, tono ink vs ink-2).
+- [ ] Existe un control **"Ver meses anteriores"** full-width discreto (texto `--ink-2` + `ChevronDown`, hover `panel-2`); al cargar más, muestra spinner y **anexa** meses viejos; cuando no hay más, **desaparece**.
+- [ ] Si no hay más datos del año, en vez de lista aparece "Todavía no hay más datos de {año}.".
+
+*Card Cotizaciones:*
+- [ ] Grilla **2×2** de celdas recesadas (`panel-2` + borde + `--r-ctl`); rótulos Dólar oficial · Dólar blue · Euro · Real.
+- [ ] Cada valor es **mono tabular con `$`** (ej. `$1.100,00`), **neutro `--ink`**, nunca verde/rojo.
+- [ ] Un valor faltante muestra **"—"** (`--faint`, mismo cuerpo mono) conservando rótulo y caja; la grilla no se descuadra.
+- [ ] A 640px (y ~392px de contenido con sidebar abierto) la grilla **sigue en 2 columnas** sin scroll horizontal.
+
+*Estados de sección y pie:*
+- [ ] **Carga inicial:** cada card muestra `SkeletonPill` en lugar de cifras (bajo `role="status"`); el botón "Actualizar datos" queda deshabilitado durante esa carga.
+- [ ] **Error de carga:** dentro de la card, texto `--expense-ink` "No se pudieron cargar los datos externos. Recargá la página." (patrón de la card de Moneda) — distinto del toast de error de actualización.
+- [ ] **Pie discreto** debajo de las cards: una línea `--muted` 12px con "Última actualización: … · Fuentes: INDEC · dolarapi · frankfurter", con atribución por fuente.
+
+*Reglas duras:*
+- [ ] Ninguna cifra (inflación % ni cotizaciones $) usa verde/rojo; el único rojo es el error inline.
+- [ ] El índigo aparece **solo** como focus ring (botones y tiles), en ningún relleno ni texto.
+- [ ] Cotizaciones y variaciones de inflación van en **mono tabular** (`tnum`).
 
 ## Specs de fase
 

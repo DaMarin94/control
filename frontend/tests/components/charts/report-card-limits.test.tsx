@@ -96,7 +96,7 @@ describe("Form2Tooltip — marca visual pasiva (reporte.cat.*)", () => {
     categories: [
       { categoryId: "cat-1", name: "Comida", color: "#E23B3B", monthlyExpenseCents: Array(12).fill(10000) },
     ],
-    availableCategories: [{ categoryId: "cat-1", name: "Comida", color: "#E23B3B" }],
+    availableCategories: [{ categoryId: "cat-1", name: "Comida", color: "#E23B3B", hasExpense: true, hasIncome: false }],
     earliestYear: 2025,
   };
 

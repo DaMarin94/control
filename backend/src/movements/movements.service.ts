@@ -74,13 +74,32 @@ export interface AvailableCategory {
 }
 
 /**
+ * AvailableCategory específico de GET /movements/reports (getReportsMovements).
+ *
+ * hasExpense/hasIncome (E2): una categoría NO es de gasto o de ingreso — puede
+ * tener movimientos de ambos tipos en el año. Indican en qué línea(s) de
+ * income-expense participó esta categoría (sin aplicar el filtro de categorías),
+ * para que el front sepa a qué línea(s) restar al destildarla. `by-category`
+ * sigue mostrando solo categorías con hasExpense=true.
+ *
+ * Extiende (no reemplaza) AvailableCategory a propósito: los otros reportes
+ * anuales (únicos, cuotas, inflación-vs-ingresos) siguen usando el tipo base
+ * sin estos campos — tienen su propia semántica de línea (solo EXPENSE) y no
+ * forman parte de este cambio.
+ */
+export interface ReportsAvailableCategory extends AvailableCategory {
+  hasExpense: boolean;
+  hasIncome: boolean;
+}
+
+/**
  * Shape completo de la respuesta de GET /movements/reports.
  */
 export interface ReportsMovementsResponse {
   year: number;
   months: ReportMonth[];
   categories: ReportCategory[];
-  availableCategories: AvailableCategory[];
+  availableCategories: ReportsAvailableCategory[];
   earliestYear: number | null;
 }
 
@@ -510,6 +529,12 @@ export class MovementsService {
     const catMetaAll = new Map<string, AnnualCategoryMeta>();
     // Gasto anual por categoría SIN filtro (para ordenar availableCategories).
     const annualExpenseAll = new Map<string, number>();
+    // E2: una categoría NO es de gasto o de ingreso — puede tener movimientos de
+    // ambos tipos. catHasExpenseAll/catHasIncomeAll registran, por categoría, si
+    // tuvo al menos un movimiento de esa línea en el año (SIN aplicar filterSet),
+    // para que availableCategories exponga en qué línea(s) participa cada una.
+    const catHasExpenseAll = new Set<string>();
+    const catHasIncomeAll = new Set<string>();
 
     // ---------------------------------------------------------------------------
     // RF-REP-015: Proyección de fijos a futuro
@@ -552,21 +577,29 @@ export class MovementsService {
         pivotRates,
       );
 
-      // Acumular en el universo estable (sin filtro) para EXPENSE
+      // Acumular en el universo estable (sin filtro), en ambas líneas: una
+      // categoría puede tener movimientos de gasto e ingreso (E2).
+      if (!catMetaAll.has(row.categoryId)) {
+        catMetaAll.set(row.categoryId, {
+          categoryId: row.categoryId,
+          name: row.categoryName,
+          color: row.categoryColor,
+        });
+      }
       if (row.type === 'EXPENSE') {
-        if (!catMetaAll.has(row.categoryId)) {
-          catMetaAll.set(row.categoryId, {
-            categoryId: row.categoryId,
-            name: row.categoryName,
-            color: row.categoryColor,
-          });
-        }
         annualExpenseAll.set(
           row.categoryId,
           (annualExpenseAll.get(row.categoryId) ?? 0) + cents,
         );
+        catHasExpenseAll.add(row.categoryId);
+      } else {
+        catHasIncomeAll.add(row.categoryId);
       }
 
+      // El filtro de categorías es un filtro por fila: cada fila se filtra por
+      // su propia categoría, sin importar el tipo (E2 — una categoría puede
+      // participar en ambas líneas; destildarla baja SOLO la(s) línea(s) donde
+      // esa categoría tuvo movimientos).
       if (filterSet !== null && !filterSet.has(row.categoryId)) continue;
       if (!includeMovType('unico')) continue;
 
@@ -762,7 +795,8 @@ export class MovementsService {
         for (const data of activeByChain.values()) {
           if (data.skipped) continue;
           if (data.type !== lineType) continue;
-          if (filterSet !== null && !filterSet.has(data.categoryId)) continue;
+          // Filtro de categorías: solo aplica a la línea de gastos.
+          if (lineType === 'EXPENSE' && filterSet !== null && !filterSet.has(data.categoryId)) continue;
           total += convertToDisplayCurrencyByMonth(
             data.amountCents,
             data.currency,
@@ -965,19 +999,22 @@ export class MovementsService {
           fijo.anchorCurrency,
         );
 
-        // Acumular en el universo estable (sin filtro) para EXPENSE
+        // Acumular en el universo estable (sin filtro), en ambas líneas.
+        if (!catMetaAll.has(fijo.categoryId)) {
+          catMetaAll.set(fijo.categoryId, {
+            categoryId: fijo.categoryId,
+            name: fijo.categoryName,
+            color: fijo.categoryColor,
+          });
+        }
         if (fijo.type === 'EXPENSE') {
-          if (!catMetaAll.has(fijo.categoryId)) {
-            catMetaAll.set(fijo.categoryId, {
-              categoryId: fijo.categoryId,
-              name: fijo.categoryName,
-              color: fijo.categoryColor,
-            });
-          }
           annualExpenseAll.set(
             fijo.categoryId,
             (annualExpenseAll.get(fijo.categoryId) ?? 0) + convertedAmount,
           );
+          catHasExpenseAll.add(fijo.categoryId);
+        } else {
+          catHasIncomeAll.add(fijo.categoryId);
         }
 
         if (filterSet !== null && !filterSet.has(fijo.categoryId)) continue;
@@ -1061,19 +1098,22 @@ export class MovementsService {
           originData.anchorCurrency,
         );
 
-        // Acumular en el universo estable (sin filtro) para EXPENSE
+        // Acumular en el universo estable (sin filtro), en ambas líneas.
+        if (!catMetaAll.has(calc.categoryId)) {
+          catMetaAll.set(calc.categoryId, {
+            categoryId: calc.categoryId,
+            name: calc.categoryName,
+            color: calc.categoryColor,
+          });
+        }
         if (derivedType === MovementType.EXPENSE) {
-          if (!catMetaAll.has(calc.categoryId)) {
-            catMetaAll.set(calc.categoryId, {
-              categoryId: calc.categoryId,
-              name: calc.categoryName,
-              color: calc.categoryColor,
-            });
-          }
           annualExpenseAll.set(
             calc.categoryId,
             (annualExpenseAll.get(calc.categoryId) ?? 0) + magnitude,
           );
+          catHasExpenseAll.add(calc.categoryId);
+        } else {
+          catHasIncomeAll.add(calc.categoryId);
         }
 
         if (filterSet !== null && !filterSet.has(calc.categoryId)) continue;
@@ -1134,19 +1174,22 @@ export class MovementsService {
           pivotRates,
         );
 
-        // Acumular en el universo estable (sin filtro) para EXPENSE
+        // Acumular en el universo estable (sin filtro), en ambas líneas.
+        if (!catMetaAll.has(calc.categoryId)) {
+          catMetaAll.set(calc.categoryId, {
+            categoryId: calc.categoryId,
+            name: calc.categoryName,
+            color: calc.categoryColor,
+          });
+        }
         if (derivedType === MovementType.EXPENSE) {
-          if (!catMetaAll.has(calc.categoryId)) {
-            catMetaAll.set(calc.categoryId, {
-              categoryId: calc.categoryId,
-              name: calc.categoryName,
-              color: calc.categoryColor,
-            });
-          }
           annualExpenseAll.set(
             calc.categoryId,
             (annualExpenseAll.get(calc.categoryId) ?? 0) + magnitude,
           );
+          catHasExpenseAll.add(calc.categoryId);
+        } else {
+          catHasIncomeAll.add(calc.categoryId);
         }
 
         if (filterSet !== null && !filterSet.has(calc.categoryId)) continue;
@@ -1213,19 +1256,22 @@ export class MovementsService {
           groupData.anchorCurrency,
         );
 
-        // Acumular en el universo estable (sin filtro) para EXPENSE
+        // Acumular en el universo estable (sin filtro), en ambas líneas.
+        if (!catMetaAll.has(calc.categoryId)) {
+          catMetaAll.set(calc.categoryId, {
+            categoryId: calc.categoryId,
+            name: calc.categoryName,
+            color: calc.categoryColor,
+          });
+        }
         if (derivedType === MovementType.EXPENSE) {
-          if (!catMetaAll.has(calc.categoryId)) {
-            catMetaAll.set(calc.categoryId, {
-              categoryId: calc.categoryId,
-              name: calc.categoryName,
-              color: calc.categoryColor,
-            });
-          }
           annualExpenseAll.set(
             calc.categoryId,
             (annualExpenseAll.get(calc.categoryId) ?? 0) + magnitude,
           );
+          catHasExpenseAll.add(calc.categoryId);
+        } else {
+          catHasIncomeAll.add(calc.categoryId);
         }
 
         if (filterSet !== null && !filterSet.has(calc.categoryId)) continue;
@@ -1278,19 +1324,22 @@ export class MovementsService {
           grupo.anchorCurrency,
         );
 
-        // Acumular en el universo estable (sin filtro) para EXPENSE
+        // Acumular en el universo estable (sin filtro), en ambas líneas.
+        if (!catMetaAll.has(grupo.categoryId)) {
+          catMetaAll.set(grupo.categoryId, {
+            categoryId: grupo.categoryId,
+            name: grupo.categoryName,
+            color: grupo.categoryColor,
+          });
+        }
         if (grupo.type === 'EXPENSE') {
-          if (!catMetaAll.has(grupo.categoryId)) {
-            catMetaAll.set(grupo.categoryId, {
-              categoryId: grupo.categoryId,
-              name: grupo.categoryName,
-              color: grupo.categoryColor,
-            });
-          }
           annualExpenseAll.set(
             grupo.categoryId,
             (annualExpenseAll.get(grupo.categoryId) ?? 0) + convertedAmount,
           );
+          catHasExpenseAll.add(grupo.categoryId);
+        } else {
+          catHasIncomeAll.add(grupo.categoryId);
         }
 
         if (filterSet !== null && !filterSet.has(grupo.categoryId)) continue;
@@ -1359,13 +1408,23 @@ export class MovementsService {
     // 6. Año más antiguo (ignora el filtro)
     const earliestYear = await this.repo.getEarliestYear(userId);
 
-    // 7. Universo estable de categorías (sin filtro), ordenado por gasto anual DESC, desempate categoryId ASC
-    const availableCategories: AvailableCategory[] = Array.from(catMetaAll.values()).sort((a, b) => {
-      const totalA = annualExpenseAll.get(a.categoryId) ?? 0;
-      const totalB = annualExpenseAll.get(b.categoryId) ?? 0;
-      if (totalB !== totalA) return totalB - totalA;
-      return a.categoryId.localeCompare(b.categoryId);
-    });
+    // 7. Universo estable de categorías (sin filtro), en ambas líneas (E2).
+    // Orden: gasto anual DESC (annualExpenseAll), igual que antes; las categorías
+    // income-only tienen gasto 0 y por lo tanto NO alteran el orden de las que sí
+    // tienen gasto (0 siempre es <= cualquier total positivo) — quedan al final,
+    // desempatadas entre sí (y con cualquier otro empate) por categoryId ASC.
+    const availableCategories: ReportsAvailableCategory[] = Array.from(catMetaAll.values())
+      .map((meta) => ({
+        ...meta,
+        hasExpense: catHasExpenseAll.has(meta.categoryId),
+        hasIncome: catHasIncomeAll.has(meta.categoryId),
+      }))
+      .sort((a, b) => {
+        const totalA = annualExpenseAll.get(a.categoryId) ?? 0;
+        const totalB = annualExpenseAll.get(b.categoryId) ?? 0;
+        if (totalB !== totalA) return totalB - totalA;
+        return a.categoryId.localeCompare(b.categoryId);
+      });
 
     this.logger.debug(
       {

@@ -129,10 +129,21 @@ const mockData: ReportsMovementsResponse = {
     },
   ],
   availableCategories: [
-    { categoryId: "cat-1", name: "Alimentación", color: "#4F86C6" },
-    { categoryId: "cat-2", name: "Transporte", color: "#E07B54" },
+    { categoryId: "cat-1", name: "Alimentación", color: "#4F86C6", hasExpense: true, hasIncome: false },
+    { categoryId: "cat-2", name: "Transporte", color: "#E07B54", hasExpense: true, hasIncome: false },
   ],
   earliestYear: 2025,
+};
+
+// Universo con una categoría income-only (fix E2): by-category debe excluirla (hasExpense=false),
+// income-expense debe incluirla (universo completo).
+const mockDataWithIncomeCategory: ReportsMovementsResponse = {
+  ...mockData,
+  availableCategories: [
+    { categoryId: "cat-1", name: "Alimentación", color: "#4F86C6", hasExpense: true, hasIncome: false },
+    { categoryId: "cat-2", name: "Transporte", color: "#E07B54", hasExpense: true, hasIncome: false },
+    { categoryId: "cat-3", name: "Salario", color: "#5FB878", hasExpense: false, hasIncome: true },
+  ],
 };
 
 const emptyData: ReportsMovementsResponse = {
@@ -387,6 +398,44 @@ describe("ReportCard — leyenda", () => {
     renderCard({ type: "by-category" });
     expect(screen.getByText("Alimentación")).toBeInTheDocument();
     expect(screen.getByText("Transporte")).toBeInTheDocument();
+  });
+});
+
+// ─── Tests: universo de leyenda por tipo (fix E2 — hasExpense/hasIncome) ─────
+
+describe("ReportCard — universo de leyenda por tipo (fix E2)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseReports.mockReturnValue(makeSuccessReturn(mockDataWithIncomeCategory));
+  });
+
+  it("by-category NO muestra categorías income-only (hasExpense=false)", () => {
+    renderCard({ type: "by-category" });
+    expect(screen.getByText("Alimentación")).toBeInTheDocument();
+    expect(screen.getByText("Transporte")).toBeInTheDocument();
+    expect(screen.queryByText("Salario")).not.toBeInTheDocument();
+  });
+
+  it("income-expense SÍ muestra categorías income-only, tildadas por default", () => {
+    renderCard({ type: "income-expense", onDirectionChange: vi.fn() });
+    const salarioBtn = screen.getByRole("button", { name: "Salario" });
+    expect(salarioBtn).toBeInTheDocument();
+    expect(salarioBtn).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("income-expense: destildar una categoría de gasto NO vacía la leyenda de ingresos y computa el filtro sobre el universo completo", () => {
+    const onCategoryIdsChange = vi.fn();
+    renderCard({
+      type: "income-expense",
+      onDirectionChange: vi.fn(),
+      onCategoryIdsChange,
+    });
+    // Salario (income-only) sigue presente y tildada
+    expect(screen.getByRole("button", { name: "Salario" })).toHaveAttribute("aria-pressed", "true");
+    // Clic en "Alimentación" (categoryIds=null → todas activas) apaga cat-1;
+    // el subconjunto resultante debe conservar cat-2 Y cat-3 (universo completo, no solo expense).
+    fireEvent.click(screen.getByRole("button", { name: "Alimentación" }));
+    expect(onCategoryIdsChange).toHaveBeenCalledWith(["cat-2", "cat-3"]);
   });
 });
 
