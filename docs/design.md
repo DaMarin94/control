@@ -1410,7 +1410,7 @@ El disparador es un chip de 32px que **fluye en el mismo `flex flex-wrap justify
 
 Cuarto tipo de card de reporte (`installment-gantt`), hermano de `unique-grid`: misma caja (`bg-panel`, `border border-line`, `--r-card` 14px, `p-[var(--card-pad)]`, `--shadow-sm`), misma cabecera (título editable P4 + barra de controles derecha `[ YearStepper ] [ divisor --hair ] [ CardCurrencyTrigger ] [ divisor --hair ] [ X ]`), mismo modo orden P1, mismos estados de carga/vacío/error, mismo filtro de categorías como chips-toggle debajo del canvas. Lo que cambia es el **canvas**: un **gantt anual** donde el eje X = los 12 meses del año y cada **gasto en cuotas (EXPENSE)** es una **barra horizontal** que abarca los meses que ocupa (de `startMonth`, por `totalInstallments` meses), apilada en renglones por un algoritmo de packing. Encaja como una card más en la única columna de `/reportes` (1120px, `--gap` 18px) y en el `[+]`/`AddCardMenu`. **No inventa cromo nuevo**: reusa tokens, escala tipográfica, mono tabular, semánticos y el lenguaje de selectores de la cabecera.
 
-> **Reglas duras reafirmadas para este gantt.** (1) Acá **todo es gasto** (solo EXPENSE): las barras **no** se tiñen de `--expense` rojo ni se colorea el monto en rojo por el hecho de ser gasto — el **color de la barra es el color de su categoría** (identificador, regla dura 1/2 intacta), no el semántico. (2) Todo monto (etiqueta de barra, tooltip) es el **monto por cuota** y va en **mono tabular** `tnum` (regla dura 3). (3) El **índigo** aparece **solo** como cromo de interacción (focus ring, hover de chips-filtro/selectores), nunca tiñendo barras ni cifras (regla dura 2).
+> **Reglas duras reafirmadas para este gantt.** (1) Acá **todo es gasto** (solo EXPENSE): las barras **no** se tiñen de `--expense` rojo ni se colorea el monto en rojo por el hecho de ser gasto — el **color de la barra es el color de su categoría** (identificador, regla dura 1/2 intacta), no el semántico. (2) Todo monto va en **mono tabular** `tnum` (regla dura 3); el monto de la **etiqueta de barra** y la **cifra dominante del tooltip** son el **monto por cuota** — el **total del plan** aparece **solo** como fila rotulada dentro del tooltip (§6), nunca sobre la barra. (3) El **índigo** aparece **solo** como cromo de interacción (focus ring, hover de chips-filtro/selectores), nunca tiñendo barras ni cifras (regla dura 2).
 
 #### 1. Librería — decisión cerrada: NO Recharts. Layout nativo CSS (Grid/absolute) sobre tabla semántica.
 
@@ -1475,6 +1475,7 @@ Hover sobre una barra abre el **mismo tooltip custom portaled a `body`** del DS 
 - **Cuerpo — filas `label ⟷ valor`** (`flex flex-col gap-[5px]`, label izquierda UI 11.5px/500 `--ink-2` `flex-1`, valor derecha mono o UI según corresponda, `shrink-0`), divisor `1px --hair` opcional entre el monto dominante y el bloque:
   - **Rango de meses** — label `Período`; valor = `Mar 2026 – May 2026` (meses cortos es-AR + año, en **UI** 11px/500 `--ink-2` — es un rango de fechas, no una cifra de dinero, así que **no** va en mono). Si la compra cruza años, el rango muestra los **años reales** de inicio/fin de la compra (no recortados al año visible): ej. `Nov 2025 – Feb 2026`.
   - **Cuotas** — label `Cuotas`; valor = `N cuotas` (`totalInstallments`) en mono `tnum` 11px/500 `--ink-2`.
+  - **Total del plan** — label `Total del plan`; valor = `amountCents × totalInstallments` en mono `tnum` 11px/500 `--ink-2`, en la **moneda de display de la card** (el monto de la barra ya viene convertido; no hay ambigüedad de moneda acá). Va **inmediatamente después de `Cuotas`** (la cantidad explica el total) y **antes de `Progreso`**. Se **omite si `totalInstallments === 1`** (sería idéntico a la cifra dominante). Ver *Total del plan de cuotas — las tres superficies*.
   - **Progreso** (si aplica) — label `Progreso`; valor = `cuota X de N` indicando qué cuota cae en el mes en curso (si el año mostrado es el actual y el mes en curso está dentro del rango), o `cuotas X–Y visibles este año` cuando la compra cruza el borde del año. Mono `tnum` 11px/500 `--ink-2`. Si no aplica progreso (año pasado completo, o no hay solape con el mes actual), **se omite la fila** (no `—`): el progreso es contextual, no una métrica fija.
 
   **Sin micro-línea de continuación.** El tooltip **no** lleva una línea "Continúa antes de…/después de…": es redundante. La continuación se comunica con los **chevrons ‹/› en los bordes de la barra** (§5) y el **rango real** del campo `Período` (que muestra mes + año reales de inicio/fin aunque crucen el año visible). Lo textual del tooltip se queda con el rango; el indicador visual vive en la barra.
@@ -1494,7 +1495,7 @@ Idéntico a `unique-grid` (*Reporte anual de Únicos §5*): el filtro de categor
 #### Restricciones duras reafirmadas
 
 - El **color de barra** es el **color de su categoría** (identificador, regla dura 1/2), **nunca** `--expense` rojo ni semántico por tipo: acá todo es gasto y el rojo/verde no aparecen para "gasto/ingreso".
-- **Todo monto** (etiqueta de barra, tooltip) es el **monto por cuota** y va en **mono tabular** `tnum` (regla dura 3), separador coma es-AR, neutro (`--ink`/`--ink-2`, nunca `--expense-ink`).
+- **Todo monto** (etiqueta de barra, tooltip) va en **mono tabular** `tnum` (regla dura 3), separador coma es-AR, neutro (`--ink`/`--ink-2`, nunca `--expense-ink`). La **etiqueta de barra** y la **cifra dominante del tooltip** son siempre el **monto por cuota**; el **total del plan** vive solo en su fila rotulada del tooltip, subordinado (11px/500 `--ink-2`) — nunca compite con la cifra dominante ni sube a la barra.
 - El **índigo** aparece **solo** como cromo de interacción (focus ring de chips-filtro/selectores, hover); **nunca** tiñe barras ni cifras (regla dura 2).
 - El **título** de la card es Space Grotesk neutro (`--ink`/`--faint`), nunca mono ni semántico ni índigo (igual que las otras cards, P4).
 - **Identidad visual en ambos modos** (regla dura 4): el texto sobre barra se calcula por contraste contra el color de categoría (independiente del modo); el color de categoría usa su ajuste de oscuro ya definido; el plot/gridlines/overlay se adaptan con sus tokens. Verificar el gantt completo en claro y oscuro.
@@ -2292,6 +2293,7 @@ La card es **read-only pura**: se compone de **título + ✕ + hero + ficha**, y
      - `endMonth === null` (activo indefinido): **`Desde {formatMonthShort(startMonth)} · activo`** (ej. `Desde Mar 2024 · activo`; "activo" en `--muted`).
      - `endMonth` presente: **rango** `{formatMonthShort(startMonth)} – {formatMonthShort(último mes activo)}` con guion medio "–". **`endMonth` es exclusivo** → el último mes activo es `prevMonth(endMonth)` (ej. `endMonth = "2026-07"` ⇒ `Mar 2024 – Jun 2026`). Si arranque == último mes activo, colapsa a un solo mes (`Mar 2024`).
    - **Cuota → "Plan de cuotas"** — `Cuota {number} de {total}` + `·` + `desde {formatMonthShort(installment.startMonth)}` (números en mono).
+   - **Cuota → "Total del plan"** (fila propia, inmediatamente debajo de "Plan de cuotas"; se omite si `installment.total === 1`) — `|amountCents| × installment.total` en la **moneda original** del movimiento. Ver *Total del plan de cuotas — las tres superficies*.
 5. **Bloque del calculado** (solo si `calculated ≠ null`) — precedido por **divisor `--hair`**:
    - **"Origen"** — caja read-only estilo *form de calculado* (`rounded-ctl border-line bg-panel-2`, glifo por tipo de origen `Repeat`/`Receipt`/`CreditCard` 15px `--accent-ink` + `sourceDescription`; a la derecha su tipo/frecuencia si aplica).
    - **"Fórmula"** — la **expresión legible completa** del cálculo, **reusando el builder del preview del form de calculado**: expresión en `--muted` mono (ej. `10% de $5.000`) + `=` + **resultado** (cifra mono con color por tipo y signo, ej. `= $500`), más el **badge de tipo derivado** tintado (`Gasto` `--expense-ink/-soft` / `Ingreso` `--income-ink/-soft`) — acá el badge sí aplica porque el tipo del calculado es **derivado**. Si `sourceAmountCents === null`, se muestra la fórmula en forma abstracta (operador + operando + origen) sin la cifra del origen; el resultado siempre está disponible del propio monto.
@@ -2333,7 +2335,7 @@ La card es **read-only pura**: se compone de **título + ✕ + hero + ficha**, y
 - [ ] **Método — sublínea de crédito:** para un método **Crédito** con días cargados aparece una **segunda línea muted (11.5px, mono), alineada a la derecha bajo el nombre**, con `Cierre día {n} · Cobro día {n}` (orden cierre → cobro). Con un solo día cargado se muestra solo ese segmento; para **Débito/Efectivo** (o crédito sin días) la sublínea **no aparece**.
 - [ ] **Único:** fila "Fecha" muestra **fecha + hora** (`02/06/2026 · 14:30`).
 - [ ] **Fijo:** "Frecuencia" capitalizada + "Vigencia" (`Desde Mar 2024 · activo` cuando `endMonth` null; rango `Mar 2024 – Jun 2026` con fin = mes anterior a `endMonth` cuando presente).
-- [ ] **Cuota:** "Plan de cuotas" = `Cuota 3 de 12 · desde Mar 2024`.
+- [ ] **Cuota:** "Plan de cuotas" = `Cuota 3 de 12 · desde Mar 2024`, y debajo **"Total del plan"** = `$120.000,00` (mono `--ink-2`, sin signo). Con `total === 1` la fila **no** aparece. En cross-rate el total va en la **moneda original** con su símbolo + chip neutro del código (`USD`), y **no** se convierte.
 - [ ] **Calculado:** bloque Origen (caja read-only) + Fórmula legible con resultado y badge de tipo derivado.
 - [ ] **Origen de calculados:** si el movimiento es origen de ≥1 derivado **en el mes**, aparece el bloque **"Calculados"** (último bloque, tras la ficha, precedido por `--hair`) con **una caja por derivado**, espejo de "Origen": ícono de tipo tintado (↗ ingreso `--income-ink` / ↘ gasto `--expense-ink`) + nombre truncable + **monto por tipo**. Las cajas son **read-only, no clickeables** (sin hover ni cursor de interacción). Si el movimiento **no** tiene derivados, el bloque **no aparece**.
 - [ ] **Derivados — monto:** cada caja muestra `convertedAmountCents` en **mono tabular**, color por tipo (gasto `--ink` / ingreso `--income-ink`), con signo; en compacto el nombre trunca antes y el monto **nunca** se trunca.
@@ -2341,6 +2343,83 @@ La card es **read-only pura**: se compone de **título + ✕ + hero + ficha**, y
 - [ ] **Read-only pura:** la card **no** tiene footer, botón "Editar" ni ninguna acción — es solo consulta; se cierra con ✕/Esc/scrim. Editar se accede desde el kebab "⋮" de la fila, no desde la card.
 - [ ] **Reglas duras:** todas las cifras en mono tabular; ningún monto teñido de índigo; color de cifra = tipo.
 - [ ] **Compacto (≤940px, hasta 640/392px):** card completa y scrolleable, filas rótulo·valor que envuelven, ninguna cifra truncada, sin scroll horizontal del `body`.
+
+### Total del plan de cuotas — las tres superficies
+
+En Control una compra en cuotas se registra por su **monto por cuota** (`InstallmentGroup.amountCents` es por cuota; las N cuotas son iguales). El usuario, en cambio, piensa la compra también por **cuánto le sale en total**. El total es **derivado y exacto** (`monto por cuota × cantidad de cuotas`, aritmética entera de centavos — sin redondeo, sin contrato nuevo) y se muestra en **tres superficies**: card de detalle de `/mes`, tooltip del gantt de Cuotas en `/reportes` y preview en vivo del form de cuotas. **La fila compacta de `/mes` NO lo muestra** (sigue siendo vistazo: `Cuota X/N` + monto de esa cuota).
+
+**Reglas transversales (valen en las tres superficies):**
+
+1. **El total nunca es la cifra dominante.** En cada superficie ya hay una cifra protagonista que es el **monto por cuota** (hero 30px de la card, cifra 13px/600 del tooltip, input 20px del form). El total siempre entra **subordinado por tamaño y peso**, nunca al lado ni al mismo rango que ella. La pregunta primaria sigue siendo "¿cuánto me sale por mes?"; el total es contexto.
+2. **Rótulo único: "Total del plan"** — literal, mismas tres palabras en las tres superficies (consistencia: mismo concepto, mismas palabras). Descartados: "Total" a secas (ambiguo en el tooltip, donde "Progreso" habla de cuotas *visibles* del año → podría leerse "total visible"), "Total del plan de cuotas" (redundante con la fila "Plan de cuotas" que tiene arriba), "Total financiado" (registro contable; el modelo no tiene interés).
+3. **Se omite cuando `total === 1`** en las superficies de **lectura** (card y tooltip): el total sería idéntico a la cifra dominante y una fila que repite el dato de arriba es ruido puro. En el **form** el preview **no** se omite (es un elemento fijo del formulario: aparecer/desaparecer mientras se tipea sería salto de layout).
+4. **Sin línea de derivación en las superficies de lectura.** En card y tooltip el `N` ya está en la fila vecina ("Cuota 3 de 12", "12 cuotas") — repetir `12 × $10.000` es redundancia. En el **form sí** va la derivación, porque ahí el usuario está tipeando y necesita auditar la cuenta en vivo (y es el antídoto contra "creí que el monto era el total").
+5. **Moneda — el total NO se convierte.** Decisión de producto cerrada: en cross-rate el total se muestra en la **moneda original** del movimiento (`amountCents × total`), sin extrapolar la cotización del mes a todo el plan (esa cotización vale para *esa* cuota, no para las 12). Cuando la cifra del total **no está en la moneda default**, lleva el **chip neutro del código** (mismo molde del badge de moneda: `--panel-3` / `--muted` / `--r-chip` / 11px·600·`.04em` / `mono`) a la derecha de la cifra, con `aria-label="Total del plan en {código}"`. En el **tooltip del gantt no aplica**: el monto de la barra ya viene en la moneda de display de la card.
+6. **Reglas duras:** el total es dinero → **mono tabular** siempre (R3); **neutro** (`--ink` / `--ink-2`), **nunca** `--expense-ink` aunque la cuota sea gasto — el rojo semántico ya lo comunica la cifra dominante y el ícono de tipo; **nunca** índigo (R2). La moneda es cromo neutro.
+7. **Informativo, no validado.** El total no bloquea guardar ni dispara error propio aunque supere `MAX_AMOUNT_CENTS` (el tope vive sobre el monto por cuota). Si el producto quisiera validarlo, es decisión funcional, no visual.
+
+#### 1. Card de detalle de `/mes` — fila propia de la ficha
+
+- **Forma: `DetailRow` nuevo**, no un segmento agregado a la fila existente. Se evaluó (a) sumarlo a la línea de "Plan de cuotas" (`Cuota 3 de 12 · desde Mar 2024 · total $120.000`) — se descarta: amontona tres hechos distintos en una línea y rompe el escaneo rótulo·valor de la ficha; y (b) sublínea muted bajo el valor (molde de los días del crédito) — se descarta: esa sublínea es para **atributos del mismo dato** (los días *son del método*), y a 11.5px `--muted` sub-pondera una cifra de dinero. Una fila rotulada es el patrón vigente de la ficha y no inventa nada.
+- **Ubicación:** inmediatamente **debajo** de "Plan de cuotas", última fila de la ficha. En cross-rate queda a dos filas de "Monto original"/"Cotización", que ya instalan el registro de moneda original.
+- **Rótulo:** `Total del plan` — rol *Meta*, 12.5px/500 `--muted` (idéntico a todos los rótulos de la ficha).
+- **Valor:** `formatCurrency(Math.abs(amountCents) × installment.total, movement.currency)` — **mono tabular**, 13px, `--ink-2` (valor de ficha), **sin signo** (mismo criterio que "Monto original"; el signo/color del gasto ya los da el hero). Jerarquía contra el hero: 30px/600 vs 13px/400 → el total no compite jamás.
+- **Cross-rate:** la cifra sale con el símbolo de su moneda (`US$240,00`) + **chip neutro `USD`** a la derecha. Sin nota explicativa extra: el chip + las filas "Monto original"/"Cotización" ya dicen que la moneda original es otra.
+- **`skipped` (anulado):** el total **no** lleva `line-through` (anular afecta *esa* cuota del mes, no el plan). El `line-through` sigue siendo solo del hero.
+- **Sin estados de carga/vacío/error:** la card no fetchea; si `origin !== "cuota"` o `installment === null` la fila simplemente no existe.
+
+#### 2. Tooltip del gantt de Cuotas (`/reportes`)
+
+- **Fila nueva `label ⟷ valor`** en el bloque de detalle, **entre `Cuotas` y `Progreso`** (la cantidad explica el total; el progreso es otro eje de lectura y cierra el bloque). Se evaluó colgarlo de la cifra dominante como segunda línea `--faint` — se descarta: mete un segundo número en la zona dominante y le disputa el ojo al "por cuota", que es la lectura primaria del gantt. Se evaluó fusionarlo en la fila `Cuotas` (`12 cuotas · $120.000`) — se descarta: dos magnitudes en un valor de 11px, y estira la columna de valor forzando el ancho.
+- **Rótulo:** `Total del plan`, UI 11.5px/500 `--ink-2`, `flex-1 min-w-0` (trunca antes que la cifra si hiciera falta).
+- **Valor:** `formatCurrency(bar.amountCents × bar.totalInstallments, currency)`, **mono `tnum` 11px/500 `--ink-2`**, `shrink-0 whitespace-nowrap` — mismo registro exacto que las filas `Cuotas`/`Progreso`. **No** sube de peso ni de tamaño: la única cifra jerarquizada del tooltip sigue siendo la de "por cuota" (13px/600 `--ink`).
+- **Ancho:** el `min-width: 200px` del tooltip aguanta el caso normal (rótulo ~70px + gap 12 + cifra ~80px + padding 20 ≈ 182px). Con cifras muy largas el tooltip **crece** (es `min-width`, no ancho fijo) — la cifra **nunca** se trunca ni se abrevia (R3); el que cede es el rótulo. No se toca el anclaje ni el cromo del tooltip.
+- **Omisión:** si `totalInstallments === 1`, la fila no se renderiza.
+- **A11y (opcional, confirmar con el orquestador):** sumar `· total {monto}` al `aria-label` de la barra, para que el lector de pantalla tenga el mismo dato que el hover. Es el único punto que toca algo fuera del tooltip.
+
+#### 3. Form de cuotas — preview en vivo
+
+- **Forma: tira read-only** con el molde del preview del *form de calculado* (`rounded-ctl border border-line bg-panel-2`), **sin `<Label>` propio arriba** (un label externo la haría leer como campo editable; el rótulo va adentro). Padding `px-[13px] py-[10px]`, un poco más baja que las cajas de campo — es un resultado, no un input.
+- **Ubicación:** **después** del grid `Cant. de cuotas + Mes de inicio` y **después** de su bloque de mensajes de error, **antes** de "Categoría". Va después de sus dos operandos (monto arriba, cantidad en el grid): un preview que precede a su propio input rompería el flujo. Hereda el ritmo `space-y-[14px]` del form (sin margen propio).
+- **Layout:** `flex flex-wrap items-center justify-between gap-x-[16px] gap-y-[4px]`.
+  - **Izquierda — rótulo:** `Total del plan`, 12.5px/600 `--ink-2` `tracking-[0.01em]` (registro de los `Label` del form: es el rótulo de la tira).
+  - **Derecha — bloque apilado** (`flex flex-col items-end gap-[2px] shrink-0`):
+    - **Cifra:** `formatCurrency(montoCents × cantidad, currency)`, **mono tabular 16px/600 `--ink`**, `whitespace-nowrap`. Subordinada al input de "Monto por cuota" (20px/600) por tamaño; sin color semántico.
+    - **Derivación:** `{N} × {monto por cuota}` (ej. `12 × $10.000,00`), mono 11.5px `--muted`. Hace auditable la cuenta mientras se tipea y desactiva la confusión "el monto que puse es el total".
+  - **Cross-rate** (`currency ≠ default`, elegida en "Más opciones"): la cifra y la derivación usan el **símbolo de la moneda elegida** (`US$`, `€`, `R$`) y se agrega el **chip neutro del código** a la derecha de la cifra. **No** se muestra equivalente en la default ni se convierte.
+- **Estados:**
+  - **Completo y válido** (monto parseable > 0 **y** cantidad entera > 0): cifra + derivación.
+  - **Vacío / parcial / inválido** (cualquiera de los dos campos vacío, no parseable, 0, negativo o no entero — incluido el caso "monto cargado, cantidad no"): la tira **se mantiene visible en el mismo lugar** y muestra **`—`** en el slot de la cifra (mono 16px `--muted`), **sin** línea de derivación. Cero salto de layout. Se descarta ocultar la tira hasta tener ambos valores: aparecer/desaparecer mientras se tipea es salto vertical y esconde la existencia del dato.
+  - **Campo en error (zod):** mismo tratamiento que inválido (`—`). La tira **nunca** se tiñe: el borde queda `--line`, sin rojo ni ring. El error ya está señalado en su campo; duplicarlo en el preview es doble señal y gasta el rojo, que es semántico de gasto/error de campo.
+  - **`cantidad === 1`:** el preview **se muestra igual** (`1 × $10.000,00` / `$10.000,00`) — es un elemento fijo del form; ocultarlo sería salto de layout. Asimetría deliberada con card/tooltip (superficies de lectura, donde la fila redundante es ruido).
+  - **Editar / duplicar:** el preview refleja los valores precargados desde el montaje, sin interacción previa.
+  - Sin skeleton ni estado de carga: es cálculo local instantáneo.
+
+#### 4. Contención responsive (obligatoria)
+
+Umbral `--bp-wide`; piso 640px (contenido 392px con sidebar abierto).
+
+- **Card:** el `DetailRow` es `flex-wrap` → si la cifra + chip no entran al lado del rótulo, **envuelven a su propia línea** (inv. 4). El bloque de valor es `inline-flex items-center gap-[6px] justify-end flex-wrap`, chip `shrink-0`, cifra `whitespace-nowrap` **nunca truncada** (R3). Sin scroll horizontal del body (inv. 1); la card sigue completa y scrolleable por el `ModalShell` (inv. 2).
+- **Tooltip:** portal `fixed`, sin cambios de anclaje ni de flip. Rótulo `flex-1 min-w-0` (trunca primero), cifra `shrink-0 whitespace-nowrap`. El tooltip crece de ancho antes que romper la cifra; no genera overflow horizontal de la página (inv. 1).
+- **Form:** la tira vive en el cuerpo scrolleable del modal → **no empuja el footer** de acciones, que sigue pineado y accesible (inv. 3). `flex-wrap`: en ancho mínimo el rótulo queda arriba y el bloque de cifra baja a su propia línea alineado a la derecha; la cifra nunca trunca (inv. 4).
+
+#### Checklist de aceptación visual — Total del plan de cuotas
+
+- [ ] **Card — fila:** en un movimiento de origen cuota con `total > 1` aparece **"Total del plan"** justo debajo de "Plan de cuotas", valor mono tabular `--ink-2`, sin signo, y el número **coincide** con `monto por cuota × cantidad`.
+- [ ] **Card — jerarquía:** el hero (monto de *esa* cuota) sigue siendo la única cifra grande; el total no está en verde/rojo ni en índigo ni en negrita grande.
+- [ ] **Card — cross-rate:** el total sale en la **moneda original** (`US$240,00`) con **chip neutro `USD`**, y **no** es el resultado de multiplicar el monto convertido (comparar contra "Monto original" × cantidad).
+- [ ] **Card — anulado:** con el movimiento anulado, el hero tiene `line-through` y el total **no**.
+- [ ] **Card — `total === 1`:** la fila "Total del plan" **no** aparece.
+- [ ] **Tooltip — orden:** las filas quedan `Período` → `Cuotas` → `Total del plan` → `Progreso`.
+- [ ] **Tooltip — registro:** el total va en mono tabular 11px/500 `--ink-2`, igual que sus filas vecinas; la cifra "por cuota" sigue siendo la única dominante (13px/600).
+- [ ] **Tooltip — ancho:** con montos largos el tooltip crece sin cortar la cifra ni desbordar; con `totalInstallments === 1` la fila no aparece.
+- [ ] **Form — ubicación:** la tira "Total del plan" está entre el grid `Cant. de cuotas / Mes de inicio` y el bloque "Categoría".
+- [ ] **Form — en vivo:** al tipear monto y cantidad, la cifra y la derivación `N × monto` se actualizan en cada pulsación y coinciden con la cuenta.
+- [ ] **Form — parcial:** con solo el monto (o solo la cantidad) la tira muestra `—` en `--muted`, sin derivación, **sin** cambiar de alto ni desaparecer.
+- [ ] **Form — error:** con el campo de monto o de cuotas en error, la tira sigue **neutra** (borde `--line`, sin rojo) y muestra `—`.
+- [ ] **Form — cross-rate:** eligiendo USD en "Más opciones", la cifra pasa a `US$…` + chip `USD`, sin equivalente convertido.
+- [ ] **Compacto (hasta 640/392px):** en las tres superficies la cifra del total **nunca** se trunca ni se abrevia; envuelve a su propia línea si hace falta; sin scroll horizontal del body; el footer del form sigue pineado.
+- [ ] **Reglas duras:** total siempre en mono tabular, neutro (nunca `--expense-ink` ni índigo); moneda como cromo neutro.
 
 ### Form de movimiento calculado
 

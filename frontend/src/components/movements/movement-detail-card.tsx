@@ -357,12 +357,38 @@ export function MovementDetailCard({ movement, onClose }: MovementDetailCardProp
           )}
 
           {movement.origin === "cuota" && movement.installment && (
-            <DetailRow label="Plan de cuotas">
-              <span className="mono">
-                Cuota {movement.installment.number} de {movement.installment.total}
-              </span>
-              <span className="text-muted"> · desde {formatMonthShort(movement.installment.startMonth)}</span>
-            </DetailRow>
+            <>
+              <DetailRow label="Plan de cuotas">
+                <span className="mono">
+                  Cuota {movement.installment.number} de {movement.installment.total}
+                </span>
+                <span className="text-muted"> · desde {formatMonthShort(movement.installment.startMonth)}</span>
+              </DetailRow>
+
+              {/* Total del plan — derivado (monto por cuota × cantidad), moneda ORIGINAL
+                  en cross-rate (nunca se convierte ni se extrapola la cotización de la
+                  cuota al plan entero). Ver docs/design.md §"Total del plan de cuotas". */}
+              {movement.installment.total > 1 && (
+                <DetailRow label="Total del plan">
+                  <span className="inline-flex items-center gap-[6px] justify-end flex-wrap">
+                    <span className="mono whitespace-nowrap">
+                      {formatCurrency(
+                        Math.abs(movement.amountCents) * movement.installment.total,
+                        movement.currency,
+                      )}
+                    </span>
+                    {isCrossRate && (
+                      <span
+                        className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em] mono shrink-0"
+                        aria-label={`Total del plan en ${movement.currency}`}
+                      >
+                        {movement.currency}
+                      </span>
+                    )}
+                  </span>
+                </DetailRow>
+              )}
+            </>
           )}
         </div>
 

@@ -1065,6 +1065,35 @@ Una compra o cobro dividido en N pagos mensuales iguales. El usuario ingresa el 
 
 ---
 
+#### RF-MC-005 — Total del plan de cuotas
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Las superficies que exponen información de un grupo de cuotas muestran, además del monto por cuota, el **total del plan** = **monto por cuota × cantidad de cuotas**. Es un dato **derivado en el frontend**: no se persiste ni lo provee el backend. Como las cuotas son N pagos iguales y el monto del grupo es el **monto por cuota** (RF-MC-001), el producto es exacto. Es **informativo**. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Baja |
+| **Precondiciones** | Existe un grupo de cuotas propio del usuario, o el usuario está cargando/editando uno en el formulario. |
+
+**Superficies donde aparece:**
+- **Card de detalle del movimiento** de `/mes` (RF-VM-007), junto al plan de la cuota.
+- **Tooltip de barra** del reporte anual de Cuotas (RF-REP-011).
+- **Formulario de alta/edición de cuotas**, que además lo **previsualiza mientras el usuario tipea** monto por cuota y cantidad de cuotas.
+
+**Moneda:** cuando la moneda del movimiento difiere de la default, el total del plan se expresa en la **moneda original del movimiento** y **no se convierte**. La cotización guardada del grupo (RF-CUR-004) es la del momento de la carga; extrapolarla a todas las cuotas del plan produciría una cifra que no corresponde a plata real de ningún mes. En el reporte anual de Cuotas la ambigüedad no se presenta: el monto de la barra ya viene en la **moneda de display de la card** (RF-REP-007) y el total se expresa en esa misma moneda.
+
+**Criterios de aceptación:**
+- [ ] El total es `monto por cuota × cantidad de cuotas`, calculado en el frontend con datos que la superficie ya tiene; no hay campo persistido ni provisto por el backend.
+- [ ] Se muestra en la card de detalle de `/mes`, en el tooltip de barra del reporte anual de Cuotas y en el formulario de alta/edición de cuotas.
+- [ ] En la **card** y en el **tooltip** se **omite** cuando el plan tiene **una sola cuota** (sería idéntico a la cifra ya mostrada).
+- [ ] En el **formulario** se actualiza en vivo al editar monto por cuota o cantidad de cuotas, antes de guardar.
+- [ ] Con moneda distinta de la default, el total va en la **moneda original del movimiento**, sin convertir; en el reporte, en la moneda de display de la card.
+- [ ] El total es **informativo**: no valida, no bloquea el guardado y no tiene tope propio. El tope de monto (RN-023) sigue aplicando **solo** al monto por cuota.
+
+**Notas:**
+- La presentación visual del total en cada superficie la define `control-design` (`docs/design.md`).
+
+---
+
 ### 3.6 Módulo: Categorías
 
 Las categorías clasifican los movimientos. Son personalizables por usuario y tienen un scope que define a qué tipo de movimiento aplican, y un color que el usuario elige y edita desde una matriz de colores predefinidos.
@@ -1564,7 +1593,7 @@ Existe además un **acceso directo al mes en curso** disponible desde cualquier 
 **Contenido de la card (read-only):** muestra el detalle que la fila deja fuera. Común a todos los tipos: nombre, monto convertido, **método de pago** (nombre + tipo; si es **Crédito**, además su **día de cierre** y su **día de cobro** — RF-PM-001), **moneda + cotización + monto original** cuando la moneda del ítem difiere de la default (cross-rate), **débito automático** (si aplica, RN-021), categoría y estado de anulación. Y por tipo:
 - **Único:** la **fecha con hora** exacta del movimiento.
 - **Fijo:** su **frecuencia** (RF-MF-006) y su **vigencia** (arranque + fin, RF-MF-007).
-- **Cuota:** el **plan** (cuota N de M + mes de inicio del grupo).
+- **Cuota:** el **plan** (cuota N de M + mes de inicio del grupo) y el **total del plan** (RF-MC-005).
 - **Calculado:** su **origen** y la **fórmula** completa con el resultado derivado (RF-MCALC-002/007).
 - **Origen de calculados:** cuando el movimiento es **origen** de uno o más calculados, la card lista sus **derivados del mes** (nombre + monto), read-only. Es el **espejo** del bloque que muestra el "Origen" desde un calculado: la card es bidireccional origen ↔ derivados (RF-MCALC-007).
 
@@ -1991,7 +2020,7 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 - **Disposición en renglones (packing)** — las barras se ordenan por **mes de origen de la cuota** (las que arrancan antes en el tiempo, más cerca del eje). Una barra reusa un renglón existente si no entra en conflicto con ninguna de las barras ya colocadas ahí —**al menos 1 mes de descanso** a cada lado—, **aprovechando huecos intermedios**; si ningún renglón la admite, sube a uno nuevo por encima.
 - **Barras que cruzan el borde del año** — se recortan a los 12 meses visibles y muestran un **indicador de continuación**: `‹` si la cuota empezó antes del año, `›` si sigue después.
 - El **filtro de categorías** (RF-REP-002) restringe qué gastos en cuotas entran y, por lo tanto, también el packing; el universo ofrecido es **solo las categorías con gasto en cuotas del año** (estable, no se achica al destildar).
-- **Hover de barra** — revela descripción, categoría, monto por cuota, rango de meses que ocupa, cantidad de cuotas y progreso (qué cuotas caen en el año). El rango del tooltip es el **período real** de la cuota con mes + año (ej. "nov 2025 – feb 2027"), aunque empiece antes o termine después del año visible (`realStartMonth`/`realEndMonth`, ver `docs/data-model.md`). Spec visual del tooltip en `docs/design.md`.
+- **Hover de barra** — revela descripción, categoría, monto por cuota, **total del plan** (RF-MC-005), rango de meses que ocupa, cantidad de cuotas y progreso (qué cuotas caen en el año). El rango del tooltip es el **período real** de la cuota con mes + año (ej. "nov 2025 – feb 2027"), aunque empiece antes o termine después del año visible (`realStartMonth`/`realEndMonth`, ver `docs/data-model.md`). Spec visual del tooltip en `docs/design.md`.
 - **Etiqueta dentro de la barra** — prioriza el **monto por cuota** (pieza primaria); el nombre es secundario y se omite antes que el monto; en barras de 1 mes se muestra solo el monto. Degradación visual en `docs/design.md` §4.
 
 **Criterios de aceptación:**
@@ -1999,7 +2028,7 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 - [ ] **Solo** gastos en cuotas de tipo `EXPENSE` entran: Únicos, fijos, calculados e ingresos en cuotas se excluyen.
 - [ ] Las barras se disponen en renglones por **mes de origen de la cuota** (las que arrancan antes en el tiempo, pegadas al eje); una barra reusa un renglón solo si deja **al menos 1 mes de descanso** a cada lado respecto de todas las barras ya colocadas ahí (aprovechando huecos intermedios), y sube a un renglón nuevo si ninguno la admite.
 - [ ] Una barra que **cruza el borde del año** se recorta a los 12 meses visibles y muestra el indicador de continuación (`‹` antes del año, `›` después).
-- [ ] El **hover de barra** revela descripción, categoría, monto por cuota, rango de meses, cantidad de cuotas y progreso de cuotas del año; el rango mostrado es el **período real** con mes + año, aunque caiga fuera del año visible.
+- [ ] El **hover de barra** revela descripción, categoría, monto por cuota, total del plan (RF-MC-005), rango de meses, cantidad de cuotas y progreso de cuotas del año; el rango mostrado es el **período real** con mes + año, aunque caiga fuera del año visible.
 - [ ] La **etiqueta dentro de la barra** prioriza el monto por cuota: el nombre se omite antes que el monto y, en barras de 1 mes, se muestra solo el monto (degradación visual en `docs/design.md` §4).
 - [ ] La card es un widget autónomo (RF-REP-002): año, filtro de categorías y moneda propios, persistidos en la clave `reports` (RF-REP-004). El filtro afecta el set de barras y el packing; su universo son **solo las categorías con gasto en cuotas del año**.
 - [ ] La navegación de año (RF-REP-002) cambia el set de barras visibles; un año **sin gastos en cuotas** muestra el estado **empty** de la card.

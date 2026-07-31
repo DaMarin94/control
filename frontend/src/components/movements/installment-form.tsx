@@ -40,6 +40,7 @@ import {
   parseCurrencyInput,
   parseExchangeRateInput,
   formatExchangeRate,
+  formatCurrency,
   getCurrentMonth,
   sanitizeAmountInput,
   MAX_AMOUNT_CENTS,
@@ -254,6 +255,23 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
   const exchangeRateInput = watch("exchangeRateInput");
   const selectedPaymentMethodId = watch("paymentMethodId") ?? "";
   const selectedAutoDebit = watch("autoDebit") ?? false;
+  const watchedAmountInput = watch("amountInput");
+  const watchedTotalInstallments = watch("totalInstallments");
+
+  // ── Preview en vivo "Total del plan" (docs/design.md §"Total del plan de
+  // cuotas — las tres superficies"): informativo, no valida ni bloquea Guardar.
+  // Mismo criterio de validez que el schema (monto parseable > 0 y cantidad
+  // entera > 0), más el estado de error de zod de ambos campos.
+  const planAmountCents = parseCurrencyInput(watchedAmountInput);
+  const planTotalNum = parseInt(watchedTotalInstallments, 10);
+  const planPreviewValid =
+    planAmountCents !== null &&
+    planAmountCents > 0 &&
+    !errors.amountInput &&
+    !isNaN(planTotalNum) &&
+    planTotalNum > 0 &&
+    !errors.totalInstallments;
+  const isPlanCrossRate = selectedCurrency !== defaultCurrency;
 
   // Prefill del método de pago por defecto — solo al crear una cuota
   // (RF-PM-007). Valor inicial editable; no pisa una selección manual del usuario.
@@ -548,6 +566,47 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
               )}
             </div>
           )}
+
+          {/* ── Total del plan — preview en vivo, read-only, informativo (no valida) ── */}
+          <div className="flex flex-wrap items-center justify-between gap-x-[16px] gap-y-[4px] rounded-ctl border border-line bg-panel-2 px-[13px] py-[10px]">
+            <span className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+              Total del plan
+            </span>
+            <div className="flex flex-col items-end gap-[2px] shrink-0">
+              <span className="inline-flex items-center gap-[6px]">
+                <span
+                  className={cn(
+                    "mono text-[16px] font-semibold whitespace-nowrap",
+                    planPreviewValid ? "text-ink" : "text-muted",
+                  )}
+                >
+                  {planPreviewValid
+                    ? formatCurrency(planAmountCents! * planTotalNum, selectedCurrency)
+                    : "—"}
+                </span>
+                {planPreviewValid && isPlanCrossRate && (
+                  <span
+                    className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em] mono shrink-0"
+                    aria-label={`Total del plan en ${selectedCurrency}`}
+                  >
+                    {selectedCurrency}
+                  </span>
+                )}
+              </span>
+              {/* Derivación — siempre renderizada (invisible cuando inválido) para que
+                  la tira no cambie de alto al pasar de estado parcial a completo. */}
+              <span
+                className={cn(
+                  "mono text-[11.5px] text-muted whitespace-nowrap",
+                  !planPreviewValid && "invisible",
+                )}
+              >
+                {planPreviewValid
+                  ? `${planTotalNum} × ${formatCurrency(planAmountCents!, selectedCurrency)}`
+                  : " "}
+              </span>
+            </div>
+          </div>
 
           {/* ── Categoría ── */}
           <div className="flex flex-col gap-[7px]">

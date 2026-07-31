@@ -572,6 +572,84 @@ describe("CuotasGanttCard — tooltip de barra", () => {
     expect(tooltip).toHaveTextContent(/2027/);
   });
 
+  // ── Tests: "Total del plan" (docs/design.md §"Total del plan de cuotas") ──
+
+  it("el tooltip muestra 'Total del plan' con el total derivado (monto por cuota × cantidad)", () => {
+    renderCard({ year: 2026 });
+    const netflixBar = screen.getByRole("row", { name: /Netflix/i });
+    fireEvent.mouseEnter(netflixBar);
+    const tooltip = screen.getByRole("tooltip");
+    // Netflix: amountCents=150000, totalInstallments=12 → 150000*12=1800000 → "$18.000,00"
+    expect(tooltip).toHaveTextContent("Total del plan");
+    expect(tooltip).toHaveTextContent("$18.000,00");
+  });
+
+  it("el orden de las filas del tooltip es Período → Cuotas → Total del plan → Progreso", () => {
+    renderCard({ year: 2026 });
+    const netflixBar = screen.getByRole("row", { name: /Netflix/i });
+    fireEvent.mouseEnter(netflixBar);
+    const tooltip = screen.getByRole("tooltip");
+    const text = tooltip.textContent ?? "";
+    const iPeriodo = text.indexOf("Período");
+    const iCuotas = text.indexOf("Cuotas");
+    const iTotal = text.indexOf("Total del plan");
+    const iProgreso = text.indexOf("Progreso");
+    expect(iPeriodo).toBeGreaterThanOrEqual(0);
+    expect(iCuotas).toBeGreaterThan(iPeriodo);
+    expect(iTotal).toBeGreaterThan(iCuotas);
+    expect(iProgreso).toBeGreaterThan(iTotal);
+  });
+
+  it("con totalInstallments === 1, el tooltip NO muestra la fila 'Total del plan'", () => {
+    const singleMonthBar: CuotasGanttResponse = {
+      ...mockData,
+      bars: [{
+        ...mockData.bars[0]!,
+        startMonthIndex: 2,
+        endMonthIndex: 2,
+        installmentFrom: 1,
+        installmentTo: 1,
+        totalInstallments: 1,
+        realStartMonth: "2026-03",
+        realEndMonth: "2026-03",
+      }],
+      rowCount: 1,
+    };
+    mockUseCuotasGantt.mockReturnValue(makeSuccessReturn(singleMonthBar));
+    renderCard({ year: 2026 });
+    const bar = screen.getByRole("row", { name: /Netflix/i });
+    fireEvent.mouseEnter(bar);
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip).not.toHaveTextContent("Total del plan");
+  });
+
+  it("el aria-label de la barra incluye '· total {monto}' cuando totalInstallments > 1", () => {
+    renderCard({ year: 2026 });
+    const netflixBar = screen.getByRole("row", { name: /Netflix/i });
+    expect(netflixBar.getAttribute("aria-label")).toContain("· total $18.000,00");
+  });
+
+  it("el aria-label de la barra NO incluye '· total' cuando totalInstallments === 1", () => {
+    const singleMonthBar: CuotasGanttResponse = {
+      ...mockData,
+      bars: [{
+        ...mockData.bars[0]!,
+        startMonthIndex: 2,
+        endMonthIndex: 2,
+        installmentFrom: 1,
+        installmentTo: 1,
+        totalInstallments: 1,
+        realStartMonth: "2026-03",
+        realEndMonth: "2026-03",
+      }],
+      rowCount: 1,
+    };
+    mockUseCuotasGantt.mockReturnValue(makeSuccessReturn(singleMonthBar));
+    const { container } = renderCard({ year: 2026 });
+    const bar = container.querySelector("[role='row']");
+    expect(bar?.getAttribute("aria-label")).not.toContain("· total");
+  });
+
   it("el tooltip muestra 'Sin descripción' cuando description=null", () => {
     const nullDescData: CuotasGanttResponse = {
       ...mockData,

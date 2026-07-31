@@ -385,6 +385,43 @@ describe("MovementDetailCard — cuota: Plan de cuotas", () => {
   });
 });
 
+// ─── Tests: cuota — Total del plan (docs/design.md §"Total del plan de cuotas") ──
+
+describe("MovementDetailCard — cuota: Total del plan", () => {
+  it("muestra 'Total del plan' = monto por cuota × cantidad, sin signo", () => {
+    renderCard(cuota); // amountCents=50000, total=12 → 600000 → "$6.000,00"
+    expect(screen.getByText("Total del plan")).toBeInTheDocument();
+    expect(screen.getByText("$6.000,00")).toBeInTheDocument();
+  });
+
+  it("cross-rate: el total sale en la MONEDA ORIGINAL (no el convertido × cantidad) con chip neutro del código", () => {
+    const cuotaUSD: MovementItem = {
+      ...cuota,
+      currency: "USD",
+      exchangeRate: 1200,
+      amountCents: 2000, // US$20,00 por cuota
+      convertedAmountCents: 2400000, // $24.000,00 convertido (NO debe multiplicarse por 12)
+    };
+    renderCard(cuotaUSD);
+    // Total correcto: 2000 * 12 = 24000 centavos → "US$240,00"
+    expect(screen.getByText("US$240,00")).toBeInTheDocument();
+    // Prohibido: el convertido (24000,00) multiplicado por 12 sería "$288.000,00"
+    expect(screen.queryByText("$288.000,00")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Total del plan en USD")).toBeInTheDocument();
+  });
+
+  it("'total === 1': la fila 'Total del plan' NO aparece", () => {
+    renderCard({ ...cuota, installment: { number: 1, total: 1, startMonth: "2024-03" } });
+    expect(screen.queryByText("Total del plan")).not.toBeInTheDocument();
+  });
+
+  it("anulado: el total NO lleva line-through (solo el hero lo tiene)", () => {
+    renderCard({ ...cuota, skipped: true });
+    const total = screen.getByText("$6.000,00");
+    expect(total).not.toHaveClass("line-through");
+  });
+});
+
 // ─── Tests: calculado — Origen + Fórmula ─────────────────────────────────────
 
 describe("MovementDetailCard — calculado: bloque Origen + Fórmula", () => {

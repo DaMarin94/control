@@ -1067,6 +1067,87 @@ describe("InstallmentForm — Débito automático (P4, corrección de alcance)",
   });
 });
 
+// ─── Tests: preview en vivo "Total del plan" (docs/design.md §"Total del plan de cuotas") ──
+
+describe('InstallmentForm — preview "Total del plan"', () => {
+  it("estado vacío: muestra '—' sin derivación", () => {
+    renderForm({});
+    expect(screen.getByText("Total del plan")).toBeInTheDocument();
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("estado parcial (solo monto, sin cantidad): sigue mostrando '—'", async () => {
+    const user = userEvent.setup();
+    renderForm({});
+    await user.type(screen.getByLabelText(/monto por cuota/i), "1500");
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("estado parcial (solo cantidad, sin monto): sigue mostrando '—'", async () => {
+    const user = userEvent.setup();
+    renderForm({});
+    await user.type(screen.getByLabelText(/cant\. de cuotas/i), "12");
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("completo y válido: muestra la cifra del total y la derivación 'N × monto por cuota' en vivo", async () => {
+    const user = userEvent.setup();
+    renderForm({});
+    await user.type(screen.getByLabelText(/monto por cuota/i), "10000");
+    await user.type(screen.getByLabelText(/cant\. de cuotas/i), "12");
+
+    // 10000 * 12 = 120000 pesos → "$120.000,00"
+    expect(screen.getByText("$120.000,00")).toBeInTheDocument();
+    expect(screen.getByText("12 × $10.000,00")).toBeInTheDocument();
+  });
+
+  it("precarga en edición: refleja el total desde amountCents/totalInstallments del grupo", () => {
+    // mockInstallmentGroup: amountCents=50000 ($500,00 por cuota), totalInstallments=12
+    renderForm({ installment: mockInstallmentGroup });
+    expect(screen.getByText("$6.000,00")).toBeInTheDocument();
+    expect(screen.getByText("12 × $500,00")).toBeInTheDocument();
+  });
+
+  it("cantidad === 1: el preview se muestra igual (no se omite, a diferencia de card/tooltip)", async () => {
+    const user = userEvent.setup();
+    renderForm({});
+    await user.type(screen.getByLabelText(/monto por cuota/i), "10000");
+    await user.type(screen.getByLabelText(/cant\. de cuotas/i), "1");
+
+    expect(screen.getByText("$10.000,00")).toBeInTheDocument();
+    expect(screen.getByText("1 × $10.000,00")).toBeInTheDocument();
+  });
+
+  it("campo de monto en error (supera el tope): el preview vuelve a mostrar '—', sin teñirse de rojo", async () => {
+    const user = userEvent.setup();
+    renderForm({});
+    await user.type(screen.getByLabelText(/monto por cuota/i), "99999999999");
+    await user.type(screen.getByLabelText(/cant\. de cuotas/i), "12");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/el monto es demasiado grande/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("cross-rate: la cifra y la derivación usan el símbolo de la moneda elegida, con chip neutro del código", async () => {
+    const user = userEvent.setup();
+    renderForm({});
+    await user.type(screen.getByLabelText(/monto por cuota/i), "10000");
+    await user.type(screen.getByLabelText(/cant\. de cuotas/i), "12");
+
+    const usdBtn = screen.getByRole("radio", { name: /^usd$/i });
+    await user.click(usdBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("US$120.000,00")).toBeInTheDocument();
+    });
+    expect(screen.getByText("12 × US$10.000,00")).toBeInTheDocument();
+    expect(screen.getByLabelText("Total del plan en USD")).toBeInTheDocument();
+  });
+});
+
 // ─── Tests: prefill de método de pago por defecto (RF-PM-007) ─────────────────
 
 describe("InstallmentForm — prefill de método de pago por defecto", () => {

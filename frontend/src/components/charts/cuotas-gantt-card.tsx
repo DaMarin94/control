@@ -549,6 +549,18 @@ function BarTooltipPortal({
           </span>
         </div>
 
+        {/* Total del plan — derivado (monto por cuota × cantidad); moneda ya viene
+            de display (currency del gantt), sin cross-rate acá. Se omite si total === 1
+            (docs/design.md §"Total del plan de cuotas"). */}
+        {bar.totalInstallments > 1 && (
+          <div className="flex items-center gap-[12px]">
+            <span className="flex-1 min-w-0 text-[11.5px] font-medium text-ink-2">Total del plan</span>
+            <span className="mono text-[11px] font-medium text-ink-2 tabular-nums shrink-0 whitespace-nowrap">
+              {formatCurrency(bar.amountCents * bar.totalInstallments, currency)}
+            </span>
+          </div>
+        )}
+
         {/* Progreso — cuotas X a Y visibles */}
         {bar.installmentFrom !== bar.installmentTo ? (
           <div className="flex items-center gap-[12px]">
@@ -641,7 +653,11 @@ function GanttBar({
 
   const amountFmt = formatCurrency(bar.amountCents, currency);
   const descText = bar.description ?? "";
-  const ariaLabel = `${descText || "Sin descripción"}, ${categoryName}, ${amountFmt} por cuota, ${MONTH_LABELS_SHORT[bar.startMonthIndex] ?? ""} a ${MONTH_LABELS_SHORT[bar.endMonthIndex] ?? ""}${bar.continuesBefore ? ", continúa desde el año anterior" : ""}${bar.continuesAfter ? ", continúa en el año siguiente" : ""}${mark ? ` · ${describeLimitMark(mark)}` : ""}`;
+  const totalPlanFmt =
+    bar.totalInstallments > 1
+      ? ` · total ${formatCurrency(bar.amountCents * bar.totalInstallments, currency)}`
+      : "";
+  const ariaLabel = `${descText || "Sin descripción"}, ${categoryName}, ${amountFmt} por cuota, ${MONTH_LABELS_SHORT[bar.startMonthIndex] ?? ""} a ${MONTH_LABELS_SHORT[bar.endMonthIndex] ?? ""}${totalPlanFmt}${bar.continuesBefore ? ", continúa desde el año anterior" : ""}${bar.continuesAfter ? ", continúa en el año siguiente" : ""}${mark ? ` · ${describeLimitMark(mark)}` : ""}`;
 
   return (
     <div
