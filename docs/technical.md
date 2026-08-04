@@ -151,6 +151,13 @@ Las reglas de negocio son lo más valioso a testear, porque un bug ahí corrompe
 - **Integración / e2e** sobre los endpoints, con DB de test: verifican el sobre de respuesta, los códigos de error y el aislamiento por usuario.
 - Herramienta: **Jest** (default de NestJS).
 
+#### Único test contra PostgreSQL real
+
+`backend/tests/unit/history/movements-soft-delete.integration.spec.ts` es el **único test de la suite que corre contra una base PostgreSQL real** — el resto está mockeado. Valida que el filtro `deletedAt IS NULL` se aplique en el SQL crudo de `movements.repository.ts`, algo que un mock no puede probar.
+
+- Se conecta usando el `DATABASE_URL` vigente del backend. **Si esa variable apunta a una base que no es la de desarrollo, la suite corre contra esa base.**
+- Para CI: requiere un PostgreSQL migrado y alcanzable en esa URL, o el test queda condicionado.
+
 ### Frontend (Vitest + React Testing Library)
 
 - Tests de **componentes y hooks**, con foco en lógica: validaciones del formulario, comportamiento de los hooks de datos, estados (vacío / error).

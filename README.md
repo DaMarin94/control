@@ -59,6 +59,7 @@ P1 - Toast de éxito con botón "Deshacer" para revertir la acción de forma inm
 P1 - Analizar si hay una forma mejor de almacenar los movimientos fijos: la cadena de splits con `chainId` obliga a que el historial agrupe por cadena y no por fila.
 P1 - Historial: la expresión de `Fórmula` formatea el operando de sumas y restas con la moneda default del usuario como aproximación, porque la entrada no expone la moneda propia del calculado. Afecta solo el símbolo mostrado, no el dato guardado.
 P1 - `backend/src/recurring/recurring.repository.ts` expone tres métodos sin callers (`findActiveRowByChainId`, `findSkipsForRecurring`, `findAllSkipsForUser`): evaluar si se eliminan.
+P1 - El `DATABASE_URL` del backend usa el endpoint pooler de Neon, pero Neon recomienda el endpoint directo (sin `-pooler`) para migraciones porque el pooler puede fallar con los advisory locks de Prisma: evaluar separar la URL de migraciones de la de runtime.
 
 ## Tests
 
