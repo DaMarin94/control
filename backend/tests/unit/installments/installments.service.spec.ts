@@ -10,7 +10,7 @@
  * - Editar: revalida categoría si cambia categoryId
  * - Editar: valida mes si cambia startMonth
  * - Editar: 404 si no existe o es de otro usuario
- * - Eliminar: hard delete OK
+ * - Eliminar: borrado lógico OK
  * - Eliminar: 404 si no existe o es de otro usuario
  * - Aislamiento por userId (RN-003)
  */
@@ -26,6 +26,8 @@ import {
 import { CategoryValidatorService } from '../../../src/categories/category-validator.service';
 import { PaymentMethodValidatorService } from '../../../src/payment-methods/payment-method-validator.service';
 import { SettingsService } from '../../../src/settings/settings.service';
+import { HistoryService } from '../../../src/history/history.service';
+import { RecurringService } from '../../../src/recurring/recurring.service';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -35,10 +37,18 @@ const mockRepo = {
   create: jest.fn(),
   findById: jest.fn(),
   update: jest.fn(),
-  delete: jest.fn(),
+  softDelete: jest.fn(),
   findSkip: jest.fn(),
   createSkip: jest.fn(),
   deleteSkip: jest.fn(),
+};
+
+const mockHistoryService = {
+  record: jest.fn().mockResolvedValue(undefined),
+};
+
+const mockRecurringServiceForInst = {
+  cascadeSoftDeleteBySourceInstallmentGroup: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockCategoryValidator = {
@@ -123,6 +133,8 @@ describe('InstallmentsService', () => {
         { provide: PaymentMethodValidatorService, useValue: mockPaymentMethodValidator },
         { provide: Logger, useValue: mockLogger },
         { provide: SettingsService, useValue: mockSettingsServiceInst },
+        { provide: HistoryService, useValue: mockHistoryService },
+        { provide: RecurringService, useValue: mockRecurringServiceForInst },
       ],
     }).compile();
 
@@ -519,18 +531,28 @@ describe('InstallmentsService', () => {
   });
 
   // -------------------------------------------------------------------------
-  // remove (DELETE — hard delete)
+  // remove (DELETE — borrado lógico, RF-HIST-006)
   // -------------------------------------------------------------------------
 
   describe('remove', () => {
-    it('elimina permanentemente el grupo propio', async () => {
+    it('marca el grupo propio como eliminado (borrado lógico) y cascada a calculados', async () => {
       const group = makeGroup();
       mockRepo.findById.mockResolvedValue(group);
-      mockRepo.delete.mockResolvedValue(undefined);
+      mockRepo.softDelete.mockResolvedValue(undefined);
 
       await service.remove(USER_A, GROUP_ID);
 
-      expect(mockRepo.delete).toHaveBeenCalledWith(GROUP_ID);
+      expect(mockRepo.softDelete).toHaveBeenCalledWith(GROUP_ID);
+      expect(
+        mockRecurringServiceForInst.cascadeSoftDeleteBySourceInstallmentGroup,
+      ).toHaveBeenCalledWith(USER_A, GROUP_ID);
+      expect(mockHistoryService.record).toHaveBeenCalledWith(
+        USER_A,
+        'CUOTA',
+        GROUP_ID,
+        'DELETE',
+        expect.objectContaining({ amountCents: 5000 }),
+      );
     });
 
     it('404 si no existe', async () => {
@@ -538,7 +560,7 @@ describe('InstallmentsService', () => {
 
       await expect(service.remove(USER_A, 'no-existe')).rejects.toThrow(NotFoundException);
 
-      expect(mockRepo.delete).not.toHaveBeenCalled();
+      expect(mockRepo.softDelete).not.toHaveBeenCalled();
     });
 
     it('aislamiento: 404 si pertenece a otro usuario (RN-003)', async () => {
@@ -547,7 +569,7 @@ describe('InstallmentsService', () => {
 
       await expect(service.remove(USER_A, GROUP_ID)).rejects.toThrow(NotFoundException);
 
-      expect(mockRepo.delete).not.toHaveBeenCalled();
+      expect(mockRepo.softDelete).not.toHaveBeenCalled();
     });
   });
 

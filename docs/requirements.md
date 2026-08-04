@@ -410,7 +410,7 @@ Un movimiento único es un gasto o ingreso que ocurrió una sola vez en una fech
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El usuario puede eliminar un movimiento único. La eliminación es permanente. |
+| **Descripción** | El usuario puede eliminar un movimiento único. La eliminación es **lógica** (RF-HIST-006): el movimiento deja de aparecer en toda la app y queda **reversible desde el historial** (RF-HIST-003) mientras su entrada esté vigente. Al expirar la entrada, la eliminación es definitiva. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Alta |
 | **Precondiciones** | El movimiento existe y pertenece al usuario autenticado. |
@@ -419,7 +419,7 @@ Un movimiento único es un gasto o ingreso que ocurrió una sola vez en una fech
 1. El usuario selecciona la opción eliminar sobre un movimiento único.
 2. El sistema solicita confirmación.
 3. El usuario confirma.
-4. El sistema elimina el movimiento permanentemente.
+4. El sistema marca el movimiento como eliminado y registra la entrada correspondiente en el historial (RF-HIST-001).
 5. El movimiento desaparece de la lista inmediatamente.
 
 **Flujos alternativos:**
@@ -427,8 +427,10 @@ Un movimiento único es un gasto o ingreso que ocurrió una sola vez en una fech
 
 **Criterios de aceptación:**
 - [ ] El sistema solicita confirmación antes de eliminar.
-- [ ] Tras confirmar, el movimiento desaparece de la lista.
-- [ ] La eliminación es permanente (no hay opción de deshacer).
+- [ ] Tras confirmar, el movimiento desaparece de la lista del mes, de los totales y de los reportes (RF-HIST-006).
+- [ ] La eliminación queda registrada en el historial (RF-HIST-001) y se puede **deshacer** mientras su entrada esté vigente (RF-HIST-003); al deshacerla, el movimiento vuelve tal como estaba.
+- [ ] Al expirar la entrada del historial, el movimiento se borra físicamente y la eliminación es definitiva (RF-HIST-005).
+- [ ] La confirmación de borrado no expone controles ni advertencias sobre el historial: el registro es automático (RF-HIST-001).
 - [ ] Solo se pueden eliminar movimientos propios.
 
 ---
@@ -977,7 +979,7 @@ Una compra o cobro dividido en N pagos mensuales iguales. El usuario ingresa el 
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El usuario puede eliminar el grupo de cuotas completo. Se eliminan todas las instancias (pasadas y futuras). |
+| **Descripción** | El usuario puede eliminar el grupo de cuotas completo. Se eliminan todas las instancias (pasadas y futuras). La eliminación es **lógica** (RF-HIST-006): el grupo deja de aparecer en toda la app y queda **reversible desde el historial** (RF-HIST-003) mientras su entrada esté vigente. Al expirar la entrada, la eliminación es definitiva. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | El grupo de cuotas existe y pertenece al usuario autenticado. |
@@ -986,12 +988,14 @@ Una compra o cobro dividido en N pagos mensuales iguales. El usuario ingresa el 
 1. El usuario selecciona la opción eliminar sobre una cuota en la lista del mes.
 2. El sistema advierte que se eliminará el **grupo completo** (todas las cuotas).
 3. El usuario confirma.
-4. El sistema elimina el grupo de cuotas.
+4. El sistema marca el grupo como eliminado y registra la entrada correspondiente en el historial (RF-HIST-001).
 
 **Criterios de aceptación:**
 - [ ] Al eliminar desde cualquier cuota del grupo, se elimina el grupo completo.
 - [ ] La confirmación informa explícitamente que se eliminarán todas las cuotas (no solo la del mes visible).
-- [ ] La eliminación es permanente.
+- [ ] Tras confirmar, ninguna cuota del grupo aparece en listados, totales ni reportes (RF-HIST-006).
+- [ ] La eliminación queda registrada en el historial (RF-HIST-001) y se puede **deshacer** mientras su entrada esté vigente (RF-HIST-003); al deshacerla, el grupo completo vuelve tal como estaba.
+- [ ] Al expirar la entrada del historial, el grupo se borra físicamente y la eliminación es definitiva (RF-HIST-005).
 - [ ] Solo se pueden eliminar grupos propios.
 
 **Notas:**
@@ -1672,11 +1676,12 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 **Contenido:**
 
 - **Logo / nombre "Control"** (parte superior): actúa como enlace al dashboard.
-- **Links de navegación** (cuatro, en este orden):
+- **Links de navegación** (cinco, en este orden):
   - **Dashboard** — lleva al dashboard (RF-DASH-001).
   - **Vista del mes** — lleva a la vista del mes (RF-VM-001), abierta en el mes actual.
   - **Reportes** — lleva a la pantalla de reportes configurable (`/reportes`, RF-REP-003).
-  - **Configuración** — lleva al hub de administración de la cuenta (`/configuracion`, RF-CUR-002), debajo de "Reportes".
+  - **Historial** — lleva al historial de cambios (`/historial`, RF-HIST-002), debajo de "Reportes".
+  - **Configuración** — lleva al hub de administración de la cuenta (`/configuracion`, RF-CUR-002), debajo de "Historial".
 - **Categorías y Métodos de pago no son links del sidebar.** Se administran como **secciones del hub de Configuración**, cada una con su ruta anidada deep-linkable (`/configuracion/categorias`, `/configuracion/metodos-pago`). Ver `screens.md`, §9.
 - **Botón "Nuevo movimiento"** (acción primaria): abre el formulario de carga de movimiento (RF-CM-001).
 - **Control de modo de color** (parte inferior, en su propia fila encima del menú de usuario): toggle de iconos Sistema / Claro / Oscuro que aplica y persiste el modo de color de la app (RF-APP-001).
@@ -1686,9 +1691,10 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 - [ ] El sidebar está presente en todas las pantallas accesibles con sesión activa.
 - [ ] El sidebar no se muestra en la pantalla de login ni en otras pantallas no autenticadas.
 - [ ] El logo/nombre "Control" lleva al dashboard.
-- [ ] Los cuatro links Dashboard, Vista del mes, Reportes y Configuración navegan a sus respectivas pantallas, en ese orden.
+- [ ] Los cinco links Dashboard, Vista del mes, Reportes, Historial y Configuración navegan a sus respectivas pantallas, en ese orden.
 - [ ] El link "Vista del mes" abre la vista en el mes actual.
-- [ ] El link "Reportes" lleva a `/reportes` (RF-REP-003) y se ubica entre "Vista del mes" y "Configuración".
+- [ ] El link "Reportes" lleva a `/reportes` (RF-REP-003) y se ubica entre "Vista del mes" e "Historial".
+- [ ] El link "Historial" lleva a `/historial` (RF-HIST-002) y se ubica entre "Reportes" y "Configuración", que es el **quinto y último** de la lista.
 - [ ] El sidebar **no** tiene links "Categorías" ni "Métodos de pago": ambos se administran como secciones del hub de Configuración, por ruta anidada deep-linkable (`/configuracion/categorias`, `/configuracion/metodos-pago`).
 - [ ] El botón "Nuevo movimiento" abre el formulario de carga (RF-CM-001) desde cualquier pantalla, cumpliendo el límite de 2 interacciones (RNF-003).
 - [ ] El sidebar indica visualmente cuál es la sección activa.
@@ -1820,7 +1826,7 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 - [ ] Cada card monta un **widget de reporte autónomo** (RF-REP-002) en **modo persistido**: navega su año y filtra sus categorías de forma independiente, y persiste cada cambio.
 - [ ] El **orden de las cards** en pantalla es el orden del array `reports` (RF-REP-004).
 - [ ] **Estado vacío inicial:** la primera vez (clave ausente o array vacío), la pantalla muestra solo el "[+]".
-- [ ] La pantalla es accesible desde el sidebar (RF-NAV-001) con el link **"Reportes"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Reportes → Configuración).
+- [ ] La pantalla es accesible desde el sidebar (RF-NAV-001) con el link **"Reportes"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Reportes → Historial → Configuración).
 - [ ] La definición funcional completa (contenido, acciones, navegación y estados) vive en `docs/screens.md`. El detalle visual (layout, tamaños, colores, comportamiento de las flechas embebidas) lo define `control-design`.
 
 ---
@@ -2660,6 +2666,184 @@ Además, un **popover informativo de solo lectura** (RF-LIM-005) lista, por supe
 
 ---
 
+### 3.14 Módulo: Historial de cambios
+
+El historial registra las **ediciones** y **eliminaciones** de movimientos y permite **deshacerlas**. Es una **red de seguridad de corto plazo**, no un log de auditoría: las entradas tienen una vida acotada (RF-HIST-005), deshacer no deja rastro (RF-HIST-003) y ninguna otra operación de la app se registra (RF-HIST-001).
+
+---
+
+#### RF-HIST-001 — Registro automático de cambios de movimientos
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El sistema registra automáticamente una **entrada de historial** por cada **edición** y cada **eliminación** de un movimiento —único, fijo (incluidos los calculados) y grupo de cuotas—. La entrada guarda el estado previo del movimiento, lo suficiente para restaurarlo. El registro es silencioso: no pide confirmación ni agrega ningún control a los flujos de edición y borrado. |
+| **Actor** | Sistema |
+| **Prioridad** | Alta |
+| **Precondiciones** | El usuario edita o elimina un movimiento propio. |
+
+**Alcance — qué se registra:**
+
+| Operación | ¿Genera entrada? |
+|---|---|
+| Editar un movimiento único (RF-MU-002) | Sí |
+| Eliminar un movimiento único (RF-MU-003) | Sí |
+| Editar un movimiento fijo o un calculado (RF-MF-003, RF-MCALC-006) | Sí |
+| Eliminar un movimiento fijo o un calculado (RF-MF-004, RF-MCALC-006/009) | Sí |
+| Editar un grupo de cuotas (RF-MC-003) | Sí |
+| Eliminar un grupo de cuotas (RF-MC-002) | Sí |
+| Crear un movimiento de cualquier tipo (RF-MU-001, RF-MF-001, RF-MC-001, RF-MCALC-001, RF-VM-008) | No |
+| Anular / des-anular (RF-MU-005, RF-MF-005, RF-MC-004) | No |
+| ABM de categorías (RF-CAT-*) y de métodos de pago (RF-PM-*) | No |
+| Cambios de preferencias (moneda default, apariencia, reportes, límites, orden y filtros) | No |
+
+**Identidad de la entrada — clave de agrupación por movimiento:**
+
+| Tipo de movimiento | Clave |
+|---|---|
+| Único | `Transaction.id` |
+| Fijo, incluido el calculado | **Identidad de cadena** del fijo (`Recurring.chainId`), **no** el id de la fila: editar un fijo parte la cadena y el id de la fila cambia (RN-005; ver `docs/backend.md`, §Movimientos fijos) |
+| Cuotas | `InstallmentGroup.id` |
+
+**Criterios de aceptación:**
+- [ ] Cada edición y cada eliminación de un movimiento único, fijo (incluidos los calculados) o grupo de cuotas genera **exactamente una** entrada de historial.
+- [ ] Las operaciones marcadas "No" en la tabla de alcance **no** generan entrada de ningún tipo.
+- [ ] La entrada guarda el estado previo del movimiento, suficiente para restaurarlo por completo al deshacerla (RF-HIST-003), y el instante en que se registró (base del vencimiento, RF-HIST-005).
+- [ ] Las entradas se **agrupan por movimiento** con la clave estable de la tabla de identidad. Para un fijo, la clave es la identidad de cadena: las ediciones sucesivas —que parten la cadena— siguen perteneciendo al mismo movimiento.
+- [ ] El registro es **automático y silencioso**: el formulario de edición no expone checkbox, aviso ni opción alguna sobre el historial, y el flujo de guardado no suma pasos ni fricción.
+- [ ] La **cascada** de un borrado sobre los calculados derivados del movimiento (RF-MCALC-005) **no** genera entradas propias: queda contenida en la entrada del origen y se revierte junto con ella.
+- [ ] Un usuario solo registra y ve entradas de sus propios movimientos (RN-003).
+
+---
+
+#### RF-HIST-002 — Pantalla de historial de cambios
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | La pantalla `/historial` lista las entradas de historial de **todos** los movimientos del usuario. Por cada entrada muestra de qué movimiento se trata, qué operación fue (edición o eliminación), **qué cambió** —estado anterior → estado nuevo— y expone la acción de **deshacer** (RF-HIST-003). |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Alta |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Criterios de aceptación:**
+- [ ] La pantalla vive en la ruta `/historial` y es la **cuarta** entrada del sidebar, entre "Reportes" y "Configuración" (RF-NAV-001).
+- [ ] Lista las entradas de **todos** los movimientos en una única lista cronológica, la **más reciente primero**. No se navega por mes ni por período.
+- [ ] Cada entrada identifica el movimiento (nombre, tipo y categoría), la operación (**editado** / **eliminado**) y el momento del cambio.
+- [ ] En una **edición**, la entrada muestra los campos que cambiaron con su **valor anterior y su valor nuevo**. En una **eliminación**, muestra el movimiento tal como estaba antes de borrarse.
+- [ ] Cada entrada expone la acción **Deshacer** (RF-HIST-003); las entradas bloqueadas se listan igual, con la acción rotulada como **bloqueada** y el motivo visible (RF-HIST-004).
+- [ ] La pantalla solo muestra entradas **vigentes**: las purgadas por retención (RF-HIST-005) no aparecen.
+- [ ] Un movimiento **eliminado** aparece en el historial aunque no aparezca en ninguna otra superficie de la app (RF-HIST-006): el historial es la única superficie que lo expone.
+- [ ] La pantalla es de **consulta y deshacer**: no edita movimientos ni ofrece acceso a su edición.
+
+**Notas:**
+- Contenido, acciones, navegación y estados completos de la pantalla en `screens.md`, §11. El detalle visual lo define `control-design` (`docs/design.md`).
+
+---
+
+#### RF-HIST-003 — Deshacer un cambio
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Deshacer una entrada **restaura el movimiento al estado previo** que la entrada guarda y **borra la entrada del historial**. El deshacer **no genera entrada nueva** ni se registra de ninguna forma: no queda rastro de que el cambio existió. Es deliberado — Control es un diario personal, no un log de auditoría. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Alta |
+| **Precondiciones** | La entrada existe, está vigente y es la **más reciente** de su movimiento (RF-HIST-004). |
+
+**Flujo principal:**
+1. El usuario abre una entrada desde `/historial`.
+2. El sistema muestra el cambio (estado anterior → estado nuevo) y pide confirmación.
+3. El usuario confirma.
+4. El sistema restaura el movimiento al estado previo guardado en la entrada.
+5. El sistema **elimina la entrada** del historial. La lista se actualiza y el cambio deja de figurar.
+
+**Flujos alternativos:**
+- *A1 — El usuario cancela:* no se restaura nada y la entrada queda intacta.
+- *A2 — La entrada está bloqueada:* se aplica RF-HIST-004 (el modal explica el motivo y ofrece deshacer los posteriores).
+
+**Criterios de aceptación:**
+- [ ] Deshacer una **edición** devuelve el movimiento a los valores que tenía antes de esa edición. En un **fijo**, restaura también la estructura de la cadena que la edición había partido (RN-005).
+- [ ] Deshacer una **eliminación** devuelve el movimiento a la app: vuelve a aparecer en listados, totales y reportes exactamente como estaba.
+- [ ] Al deshacer la eliminación de un movimiento que era **origen de calculados**, los calculados que dependían de él **se restauran junto con el origen**, sin acción adicional del usuario (RF-HIST-006).
+- [ ] Deshacer **borra la entrada** del historial y **no crea ninguna entrada nueva**: la operación de deshacer no se registra en ningún lado.
+- [ ] Tras deshacer, el historial no conserva ninguna evidencia de que el cambio deshecho haya existido.
+- [ ] El deshacer se confirma antes de aplicarse.
+- [ ] Solo se pueden deshacer entradas de movimientos propios.
+
+---
+
+#### RF-HIST-004 — Orden de deshacer y entradas bloqueadas
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El deshacer es **secuencial LIFO por movimiento**: de cada movimiento solo se puede deshacer su entrada **más reciente**. Las anteriores quedan **bloqueadas** hasta que se deshagan las posteriores. Las entradas bloqueadas **se listan siempre**, con su acción rotulada como bloqueada y el motivo visible; la acción sigue siendo operable y abre la explicación del bloqueo con el camino de desbloqueo. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Alta |
+| **Precondiciones** | Un movimiento tiene más de una entrada vigente en el historial. |
+
+**Flujo principal:**
+1. El usuario abre una entrada bloqueada desde `/historial`.
+2. El sistema explica por qué no se puede deshacer y ofrece el camino de desbloqueo: *"para deshacer este cambio hay que deshacer antes los N posteriores, ¿deshacerlos?"*, indicando cuántos son.
+3. El usuario acepta.
+4. El sistema deshace las entradas posteriores de ese movimiento, de la más reciente a la más antigua, y luego la entrada abierta. Todas se borran del historial (RF-HIST-003).
+
+**Flujos alternativos:**
+- *A1 — El usuario cancela:* no se deshace nada y todas las entradas quedan intactas.
+
+**Criterios de aceptación:**
+- [ ] El bloqueo es **por movimiento**: las entradas de un movimiento no bloquean las de otro. Cada movimiento tiene su propia pila LIFO.
+- [ ] La entrada **más reciente** de un movimiento siempre está desbloqueada (si está vigente); las anteriores están bloqueadas mientras haya posteriores vigentes.
+- [ ] Las entradas bloqueadas **se listan igual** que las demás —no se ocultan ni se filtran—, con su acción **rotulada como bloqueada** y el **motivo visible** en la lista.
+- [ ] La acción de una entrada bloqueada **no está inerte**: sigue siendo operable y abre la explicación del bloqueo con la propuesta de desbloqueo en cadena. Lo que no se puede es deshacer esa entrada **por sí sola**.
+- [ ] Abrir una entrada bloqueada explica el motivo y ofrece deshacer **los N cambios posteriores** de ese movimiento junto con ella, en una sola confirmación que informa cuántos son.
+- [ ] Aceptar el desbloqueo en cadena deshace los posteriores y la entrada abierta, todos con la mecánica de RF-HIST-003 (restaurar + borrar la entrada, sin dejar rastro).
+- [ ] **No hay fricción en el momento de editar:** el formulario de edición no advierte sobre el bloqueo ni ofrece opción alguna. El bloqueo se explica recién en el historial, cuando el usuario intenta deshacer.
+
+---
+
+#### RF-HIST-005 — Retención y purga de entradas
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Las entradas de historial tienen **dos límites de retención** y se purgan por **el que ocurra primero**: un máximo de **5 entradas por movimiento** y un vencimiento a los **31 días** desde que la entrada se registró. Al purgarse la entrada de una eliminación, el movimiento se borra **físicamente**. |
+| **Actor** | Sistema |
+| **Prioridad** | Alta |
+| **Precondiciones** | Existen entradas de historial. |
+
+**Límites de retención:**
+
+| Límite | Regla |
+|---|---|
+| **Cantidad** | Máximo **5 entradas por movimiento** (no un tope global). Al registrarse el **sexto** cambio de ese movimiento, se descarta la entrada **más antigua de ese movimiento**. |
+| **Antigüedad** | Una entrada **vence a los 31 días** de haberse registrado y se descarta. |
+
+**Criterios de aceptación:**
+- [ ] El tope de 5 es **por movimiento**, no total: un usuario con muchos movimientos puede tener muchas más de 5 entradas vigentes en el historial.
+- [ ] Registrar el sexto cambio de un movimiento descarta la entrada **más antigua de ese movimiento**; las entradas de los demás movimientos no se tocan.
+- [ ] Una entrada de más de 31 días se descarta aunque el movimiento no haya llegado a 5 entradas.
+- [ ] Los dos límites conviven: se purga por **el que ocurra primero**.
+- [ ] Una entrada purgada desaparece de `/historial` y **ya no se puede deshacer**: el cambio queda consolidado.
+- [ ] Al purgarse la entrada de una **eliminación**, el movimiento —y los calculados que hayan caído en cascada con él— se **borran físicamente** (RF-HIST-006) y la eliminación pasa a ser definitiva.
+
+---
+
+#### RF-HIST-006 — Borrado lógico de movimientos
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Eliminar un movimiento es un **borrado lógico**: el registro queda **marcado como eliminado** y **deja de aparecer en toda la app** —listados, totales, reportes, selectores— sin excepción. Sigue existiendo solo para poder restaurarlo desde el historial. Se borra **físicamente** cuando su entrada de historial se purga (RF-HIST-005). |
+| **Actor** | Sistema |
+| **Prioridad** | Alta |
+| **Precondiciones** | El usuario elimina un movimiento propio. |
+
+**Criterios de aceptación:**
+- [ ] Eliminar un **movimiento único** (RF-MU-003) o un **grupo de cuotas** (RF-MC-002) marca el registro como eliminado en lugar de borrarlo.
+- [ ] La eliminación de un **movimiento fijo** por boundary (`deletedFrom`, RF-MF-004) ya es reversible sin borrado físico. En el **borde** en que esa eliminación borra el fijo por completo (mes visualizado anterior o igual al mes de inicio), el registro se marca como eliminado en lugar de borrarse, con el mismo tratamiento que el único y el grupo de cuotas.
+- [ ] Un movimiento marcado como eliminado **no aparece en ninguna superficie de la app**: ni en la lista del mes (RF-VM-001), ni en los totales del mes y del dashboard (RF-VM-002, RF-DASH-002), ni en ningún reporte (módulo 3.9), ni en los contadores de movimientos por categoría (RF-CAT-006) o por método de pago (RF-PM-005). La **única** superficie que lo expone es `/historial` (RF-HIST-002).
+- [ ] Los **movimientos calculados** que dependían del eliminado caen en cascada (RF-MCALC-005) también de forma lógica: nunca se borran físicamente mientras la entrada del origen esté vigente, por lo que **se restauran solos** al deshacerla (RF-HIST-003).
+- [ ] El borrado **físico** ocurre solo al purgarse la entrada de historial de la eliminación (RF-HIST-005).
+- [ ] Un movimiento marcado como eliminado **no se puede editar, anular, duplicar ni tomar como origen** de un calculado: no existe para el resto de la app.
+
+---
+
 ## 4. Reglas de negocio
 
 | ID | Regla |
@@ -2687,6 +2871,9 @@ Además, un **popover informativo de solo lectura** (RF-LIM-005) lista, por supe
 | RN-022 | **Límites — naturaleza pasiva/activa y cero-impacto (RF-LIM-001..005).** Un límite es una **condición única** (`dato {operador} umbral`) sobre una key hardcodeada (de `/mes`, dashboard o reportes) con umbral **número puro, sin moneda** (no hay conversión en la evaluación), de una de dos naturalezas: **pasiva** — aplica una marca visual al dato cuando cruza el umbral (read-path, sobre datos ya renderizados; superficie cableada = `/mes`, dashboard y los 5 reportes de `/reportes`); **activa** — al guardar un movimiento, si el estado proyectado cruzaría el umbral, un aviso **no bloqueante** que enumera los cruces (write-path; solo sobre las 7 keys `mes.*`; operador por polaridad techo/piso del anclaje; aplica a los 4 forms). Ninguna naturaleza modifica montos, totales, reportes ni lo que el usuario decide persistir. La evaluación es **100% client-side**; la clave `limits` del blob es opaca al backend (igual que `theme` / `reports`). **Cero-impacto (marcas y avisos):** toda **marca pasiva** (RF-LIM-003) y todo **aviso activo** (RF-LIM-004) son **condicionales** al cruce de un límite habilitado; con la config vacía (sin límites o todos deshabilitados) no se produce ninguna marca ni aviso y cada superficie se ve y se comporta **exactamente igual** que sin la feature. El **popover informativo** (RF-LIM-005) **no es marca ni aviso** —enumera qué límites observan la superficie, sin resaltar dato ni interrumpir el guardado— y queda fuera de esta regla: su ícono disparador se monta con **≥1 límite (habilitado o no)** para esa superficie. Un dato observado por varios límites pasivos que cruzan muestra **una** marca (la más fuerte); el texto accesible enumera todos. |
 | RN-023 | El monto de un movimiento no puede exceder **2.147.483.647 centavos** ($21.474.836,47), tope del entero de 32 bits con que se persiste `amountCents`. Aplica a únicos, fijos y cuotas (en cuotas, sobre el monto **por cuota**). Excederlo produce `400`. Ver `data-model.md`, §Tope de monto por movimiento. |
 | RN-020 | **Anulación (skip) de movimientos únicos y cuotas (RF-MU-005, RF-MC-004).** Un movimiento **único** se anula con un **flag booleano de la propia fila** (`Transaction.skipped`, sin alcance temporal: anula el movimiento entero). Una **cuota** se anula por **mes puntual** con un registro aparte `(grupo, mes)` que cancela **solo** esa instancia mensual, dejando vivo el resto del grupo. En ambos casos la acción es un **toggle reversible** y aplica a cualquier dirección (gasto/ingreso). A efectos de totales y reportes se comportan igual que la anulación de un fijo (RN-016): el ítem anulado **se sigue listando** con marca de anulado pero su monto **no suma** a los totales del mes ni a la serie anual de los reportes. Los **calculados** derivados de un único o cuota anulado **heredan** ese estado (no tienen skip propio; RF-MCALC-005). El cálculo sigue siendo on-the-fly (RN-006). |
+| RN-024 | **Alcance e identidad del historial de cambios (RF-HIST-001).** El historial registra **solo** ediciones y eliminaciones de **movimientos** —único, fijo (incluidos los calculados) y grupo de cuotas—, una entrada por operación. **No** registra creaciones, anulaciones (skip), ABM de categorías ni de métodos de pago, ni cambios de preferencias. Las entradas se **agrupan por movimiento** con una **clave estable**: `Transaction.id` para el único, la **identidad de cadena** (`Recurring.chainId`) para el fijo —**no** el id de la fila, porque editar un fijo parte la cadena y el id cambia (RN-005)— e `InstallmentGroup.id` para el grupo de cuotas. La cascada de un borrado sobre los calculados derivados (RF-MCALC-005) no genera entradas propias: viaja dentro de la entrada del origen. |
+| RN-025 | **Deshacer: LIFO por movimiento y sin rastro (RF-HIST-003, RF-HIST-004).** Deshacer restaura el estado previo guardado en la entrada y **borra la entrada**. El deshacer **no genera entrada nueva** ni se registra de ninguna forma: no queda rastro de que el cambio existió (Control es un diario personal, no un log de auditoría). El orden es **secuencial LIFO por movimiento**: solo se puede deshacer la entrada **más reciente** de cada movimiento; las anteriores quedan **bloqueadas** hasta que se deshagan las posteriores. El bloqueo no cruza movimientos. Las entradas bloqueadas se listan siempre, deshabilitadas y con el motivo visible; el desbloqueo se ofrece como deshacer en cadena de los N posteriores. |
+| RN-026 | **Borrado lógico de movimientos y retención (RF-HIST-005, RF-HIST-006).** Eliminar un movimiento lo **marca como eliminado** en lugar de borrarlo: deja de aparecer en **toda** la app (listados, totales, reportes, selectores y contadores) sin excepción, y su única superficie es `/historial`. Los calculados que caen en cascada con él tampoco se borran físicamente, por lo que se restauran junto con el origen al deshacer. Las entradas de historial se purgan por **dos límites, el que ocurra primero**: máximo **5 entradas por movimiento** (al sexto cambio se descarta la más antigua **de ese movimiento**) y vencimiento a los **31 días** de registrada. Al purgarse la entrada de una eliminación, el movimiento se borra **físicamente** y la eliminación es definitiva. |
 
 ---
 
@@ -2736,9 +2923,12 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 | Categoría | Clasificador asignado a cada movimiento. Personalizable por usuario. |
 | Cuota | Instancia mensual de un grupo de cuotas. Representa un pago parcial de una compra dividida. |
 | `deletedFrom` | Primer día del mes desde el cual un movimiento fijo deja de aparecer. Si es `null`, el fijo sigue activo. |
+| Borrado lógico (de un movimiento) | Eliminación que **marca** el movimiento como eliminado sin borrarlo: deja de aparecer en toda la app y solo se expone en `/historial`, desde donde se puede restaurar. El borrado físico ocurre al purgarse su entrada de historial. Ver RF-HIST-006, RN-026. |
+| Entrada de historial | Registro de **una** edición o eliminación de un movimiento. Guarda el estado previo, permite deshacerlo y se purga por cantidad (5 por movimiento) o antigüedad (31 días). Ver RF-HIST-001, RF-HIST-005. |
 | Frecuencia (de un fijo) | Periodicidad de aparición de un movimiento fijo, un **entero 1..12** = meses entre apariciones (1 Mensual … 12 Anual). Anclada al mes de inicio. Default 1 (mensual). Inmutable tras crearse. Ver RF-MF-006, RN-016. |
 | Gasto (`EXPENSE`) | Egreso de dinero. Reduce el balance del mes. |
 | Grupo de cuotas | Registro padre que define monto por cuota, cantidad total de cuotas y mes de inicio. |
+| Historial de cambios | Registro de corto plazo de las ediciones y eliminaciones de movimientos, con la acción de **deshacer** (LIFO por movimiento, sin dejar rastro). Vive en `/historial`. No es un log de auditoría. Ver módulo 3.14 (RF-HIST-001..006), RN-024/025/026. |
 | Ingreso (`INCOME`) | Entrada de dinero. Aumenta el balance del mes. |
 | Límite | Preferencia del usuario que observa un dato (de `/mes`, dashboard o reportes, vía una key hardcodeada), lo compara contra un umbral con una condición única y, si se cumple, dispara su efecto: una **marca visual pasiva** o una **alerta activa** (aviso no bloqueante al guardar un movimiento, solo sobre keys `mes.*`). No altera datos, totales ni lo que el usuario persiste. Se gestiona en la solapa Límites de `/configuracion`; persiste en el blob (`limits`), evaluado client-side. Ver módulo 3.13 (RF-LIM-001..004) y RN-022. |
 | Mes activo | Mes actualmente visualizado en la vista del mes. Por defecto, el mes corriente. |

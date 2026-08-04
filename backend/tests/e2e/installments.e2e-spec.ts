@@ -58,8 +58,9 @@ const mockPrisma = {
   recurring: {
     create: jest.fn(),
     findUnique: jest.fn(),
-    findMany: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
     update: jest.fn(),
+    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     delete: jest.fn(),
   },
   installmentGroup: {
@@ -80,6 +81,22 @@ const mockPrisma = {
   // (invocado desde GET /movements?month=...) llama a referenceRate.findMany
   referenceRate: {
     findMany: jest.fn().mockResolvedValue([]),
+  },
+  // historyEntry — necesario para HistoryModule (Módulo 3.14, RF-HIST-001):
+  // InstallmentsService.update/remove graban una entrada de historial en cada llamada.
+  historyEntry: {
+    create: jest.fn().mockResolvedValue({
+      id: 'hist-1',
+      userId: 'user-a-inst-e2e',
+      targetKind: 'CUOTA',
+      targetId: 'group-e2e-001',
+      action: 'EDIT',
+      snapshot: {},
+      createdAt: new Date(),
+    }),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
+    delete: jest.fn().mockResolvedValue(undefined),
   },
   $connect: jest.fn(),
   $disconnect: jest.fn(),
@@ -572,17 +589,23 @@ describe('Installments (e2e)', () => {
   // -------------------------------------------------------------------------
 
   describe('DELETE /installments/:id', () => {
-    it('204 sin cuerpo (hard delete)', async () => {
+    it('204 sin cuerpo (borrado lógico — RF-HIST-006)', async () => {
       const group = makeDbInstallmentGroup();
       mockPrisma.installmentGroup.findUnique.mockResolvedValue(group);
-      mockPrisma.installmentGroup.delete.mockResolvedValue(group);
+      mockPrisma.installmentGroup.update.mockResolvedValue({ ...group, deletedAt: new Date() });
 
       await request(app.getHttpServer())
         .delete(`/installments/${GROUP_ID}`)
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(204);
 
-      expect(mockPrisma.installmentGroup.delete).toHaveBeenCalled();
+      expect(mockPrisma.installmentGroup.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: GROUP_ID },
+          data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+        }),
+      );
+      expect(mockPrisma.installmentGroup.delete).not.toHaveBeenCalled();
     });
 
     it('404 si no existe', async () => {

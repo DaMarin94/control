@@ -52,7 +52,13 @@ pnpm dev
 
 ## TODO
 
-P1 - Ante un fallo de carga de datos, la UI muestra un estado vacío indistinguible de una cuenta genuinamente vacía (enmascara errores de backend/sesión). A revisar.
+P1 - Historial: extender el registro a las creaciones de movimientos.
+P1 - Historial: extender el registro a las anulaciones (skip).
+P1 - Historial: extender el registro al ABM de categorías y de métodos de pago.
+P1 - Toast de éxito con botón "Deshacer" para revertir la acción de forma inmediata, sin ir a `/historial`.
+P1 - Analizar si hay una forma mejor de almacenar los movimientos fijos: la cadena de splits con `chainId` obliga a que el historial agrupe por cadena y no por fila.
+P1 - Historial: la expresión de `Fórmula` formatea el operando de sumas y restas con la moneda default del usuario como aproximación, porque la entrada no expone la moneda propia del calculado. Afecta solo el símbolo mostrado, no el dato guardado.
+P1 - `backend/src/recurring/recurring.repository.ts` expone tres métodos sin callers (`findActiveRowByChainId`, `findSkipsForRecurring`, `findAllSkipsForUser`): evaluar si se eliminan.
 
 ## Tests
 

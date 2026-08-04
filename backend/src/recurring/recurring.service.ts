@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Currency, FormulaOperator, MovementType } from '@prisma/client';
+import { Currency, FormulaOperator, HistoryAction, HistoryTargetKind, MovementType } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { CategoryValidatorService } from '../categories/category-validator.service';
 import { PaymentMethodValidatorService } from '../payment-methods/payment-method-validator.service';
@@ -22,6 +22,13 @@ import { CreateCalculatedFromInstallmentDto } from './dto/create-calculated-from
 import { UpdateCalculatedFromInstallmentDto } from './dto/update-calculated-from-installment.dto';
 import { validateFormulaOperand } from './formula.helper';
 import { SettingsService } from '../settings/settings.service';
+import { HistoryService } from '../history/history.service';
+import {
+  FijoChainSnapshot,
+  FijoDeleteSnapshot,
+  FijoEditSnapshot,
+  RecurringRowSnapshot,
+} from '../history/history.types';
 
 @Injectable()
 export class RecurringService {
@@ -31,7 +38,96 @@ export class RecurringService {
     private readonly paymentMethodValidator: PaymentMethodValidatorService,
     private readonly logger: Logger,
     private readonly settingsService: SettingsService,
+    private readonly historyService: HistoryService,
   ) {}
+
+  // ---------------------------------------------------------------------------
+  // Historial (RF-HIST-001) — helpers de snapshot
+  // ---------------------------------------------------------------------------
+
+  /** Snapshot completo de UNA fila Recurring (fijo normal o calculado). */
+  private buildRowSnapshot(r: RecurringWithCategory): RecurringRowSnapshot {
+    return {
+      id: r.id,
+      chainId: r.chainId,
+      startMonth: r.startMonth,
+      deletedFrom: r.deletedFrom,
+      deletedAt: null, // r viene de un findById ya filtrado por NOT_DELETED
+      type: r.type,
+      amountCents: r.amountCents,
+      categoryId: r.categoryId,
+      description: r.description,
+      frequency: r.frequency,
+      currency: r.currency,
+      exchangeRate: r.exchangeRate,
+      anchorCurrency: r.anchorCurrency,
+      paymentMethodId: r.paymentMethodId,
+      autoDebit: r.autoDebit,
+      sourceChainId: r.sourceChainId,
+      sourceMovementId: r.sourceMovementId,
+      sourceInstallmentGroupId: r.sourceInstallmentGroupId,
+      formulaOperator: r.formulaOperator,
+      formulaOperand: r.formulaOperand,
+      formulaSign: r.formulaSign,
+    };
+  }
+
+  /** Snapshot completo de TODAS las filas de una cadena (para un DELETE — RF-HIST-001). */
+  private async buildChainSnapshot(chainId: string): Promise<FijoChainSnapshot> {
+    const rows = await this.repo.findChainRowsForSnapshot(chainId);
+    return {
+      chainId,
+      rows: rows.map((r) => ({
+        id: r.id,
+        chainId: r.chainId,
+        startMonth: r.startMonth,
+        deletedFrom: r.deletedFrom,
+        deletedAt: r.deletedAt ? r.deletedAt.toISOString() : null,
+        type: r.type,
+        amountCents: r.amountCents,
+        categoryId: r.categoryId,
+        description: r.description,
+        frequency: r.frequency,
+        currency: r.currency,
+        exchangeRate: Number(r.exchangeRate),
+        anchorCurrency: r.anchorCurrency,
+        paymentMethodId: r.paymentMethodId,
+        autoDebit: r.autoDebit,
+        sourceChainId: r.sourceChainId,
+        sourceMovementId: r.sourceMovementId,
+        sourceInstallmentGroupId: r.sourceInstallmentGroupId,
+        formulaOperator: r.formulaOperator,
+        formulaOperand: r.formulaOperand,
+        formulaSign: r.formulaSign,
+      })),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cascada lógica cross-módulo (RN-024/026) — llamada por TransactionsService
+  // e InstallmentsService al eliminar el origen de un calculado.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Soft-delete de los calculados de único derivados de `transactionId`. No genera
+   * entrada de historial propia (RN-024): viaja dentro de la entrada del origen.
+   */
+  async cascadeSoftDeleteBySourceMovement(userId: string, transactionId: string): Promise<void> {
+    void userId; // el origen ya fue validado por el caller; el filtro real es sourceMovementId
+    await this.repo.cascadeSoftDeleteBySourceMovement(transactionId);
+  }
+
+  /**
+   * Soft-delete de los calculados de cuota derivados de `installmentGroupId`.
+   * No genera entrada de historial propia (RN-024).
+   */
+  async cascadeSoftDeleteBySourceInstallmentGroup(
+    userId: string,
+    installmentGroupId: string,
+  ): Promise<void> {
+    void userId;
+    await this.repo.cascadeSoftDeleteBySourceInstallmentGroup(installmentGroupId);
+  }
 
   // ---------------------------------------------------------------------------
   // POST /recurring — crear fijo normal (RF-MF-001)
@@ -230,6 +326,9 @@ export class RecurringService {
       await this.paymentMethodValidator.validatePaymentMethod(userId, dto.paymentMethodId);
     }
 
+    // Snapshot del estado previo, ANTES de mutar (RF-HIST-001).
+    const rowSnapshot = this.buildRowSnapshot(existing);
+
     // Lógica de split (D1):
     // Si currentMonth > R.startMonth → hay pasado: split
     // Si currentMonth <= R.startMonth → sin pasado: update in-place
@@ -356,6 +455,20 @@ export class RecurringService {
       );
     }
 
+    const wasSplit = result.id !== id;
+    const editSnapshot: FijoEditSnapshot = {
+      kind: 'edit',
+      row: rowSnapshot,
+      newRowId: wasSplit ? result.id : null,
+    };
+    await this.historyService.record(
+      userId,
+      HistoryTargetKind.FIJO,
+      existing.chainId,
+      HistoryAction.EDIT,
+      editSnapshot,
+    );
+
     return result;
   }
 
@@ -408,6 +521,9 @@ export class RecurringService {
     if (dto.categoryId !== undefined) {
       await this.categoryValidator.validateCategory(userId, dto.categoryId, MovementType.EXPENSE, true);
     }
+
+    // Snapshot del estado previo, ANTES de mutar (RF-HIST-001).
+    const rowSnapshot = this.buildRowSnapshot(existing);
 
     let result: RecurringWithCategory;
 
@@ -470,6 +586,20 @@ export class RecurringService {
         'Movimiento calculado editado (in-place)',
       );
     }
+
+    const wasSplit = result.id !== id;
+    const editSnapshot: FijoEditSnapshot = {
+      kind: 'edit',
+      row: rowSnapshot,
+      newRowId: wasSplit ? result.id : null,
+    };
+    await this.historyService.record(
+      userId,
+      HistoryTargetKind.FIJO,
+      existing.chainId,
+      HistoryAction.EDIT,
+      editSnapshot,
+    );
 
     return result;
   }
@@ -588,6 +718,9 @@ export class RecurringService {
       await this.categoryValidator.validateCategory(userId, dto.categoryId, MovementType.EXPENSE, true);
     }
 
+    // Snapshot del estado previo, ANTES de mutar (RF-HIST-001 — RF-MCALC-006).
+    const rowSnapshot = this.buildRowSnapshot(existing);
+
     // Update in-place (sin split — calculado de único no tiene inmutabilidad del pasado)
     const result = await this.repo.update(existing.id, {
       ...(dto.categoryId !== undefined && {
@@ -598,6 +731,15 @@ export class RecurringService {
       ...(dto.formulaOperand !== undefined && { formulaOperand: dto.formulaOperand }),
       ...(dto.formulaSign !== undefined && { formulaSign: dto.formulaSign }),
     });
+
+    const editSnapshot: FijoEditSnapshot = { kind: 'edit', row: rowSnapshot, newRowId: null };
+    await this.historyService.record(
+      userId,
+      HistoryTargetKind.FIJO,
+      existing.chainId,
+      HistoryAction.EDIT,
+      editSnapshot,
+    );
 
     this.logger.log(
       {
@@ -719,6 +861,9 @@ export class RecurringService {
       await this.categoryValidator.validateCategory(userId, dto.categoryId, MovementType.EXPENSE, true);
     }
 
+    // Snapshot del estado previo, ANTES de mutar (RF-HIST-001 — RF-MCALC-006).
+    const rowSnapshot = this.buildRowSnapshot(existing);
+
     // Update in-place (sin split)
     const result = await this.repo.update(existing.id, {
       ...(dto.categoryId !== undefined && {
@@ -729,6 +874,15 @@ export class RecurringService {
       ...(dto.formulaOperand !== undefined && { formulaOperand: dto.formulaOperand }),
       ...(dto.formulaSign !== undefined && { formulaSign: dto.formulaSign }),
     });
+
+    const editSnapshot: FijoEditSnapshot = { kind: 'edit', row: rowSnapshot, newRowId: null };
+    await this.historyService.record(
+      userId,
+      HistoryTargetKind.FIJO,
+      existing.chainId,
+      HistoryAction.EDIT,
+      editSnapshot,
+    );
 
     this.logger.log(
       {
@@ -743,22 +897,24 @@ export class RecurringService {
   }
 
   // ---------------------------------------------------------------------------
-  // DELETE /recurring/:id — soft-set deletedFrom o hard-delete (RF-MF-004, D2)
+  // DELETE /recurring/:id — soft-set deletedFrom o borrado lógico (RF-MF-004, D2, RF-HIST-006)
   // ---------------------------------------------------------------------------
 
   /**
    * Elimina (o marca para eliminar) un fijo o calculado.
    *
    * --- Calculado de único o cuota (sourceMovementId != null || sourceInstallmentGroupId != null) ---
-   * Hard-delete total de la fila. El corte por boundary no aplica: un calculado de único
-   * existe solo 1 mes y un calculado de cuota se borra como grupo completo, igual que
-   * su origen. Los params currentMonth/fromCurrentMonth se aceptan pero se ignoran.
+   * Borrado lógico total de la fila (RF-HIST-006). El corte por boundary no aplica:
+   * un calculado de único existe solo 1 mes y un calculado de cuota se borra como
+   * grupo completo, igual que su origen. Los params currentMonth/fromCurrentMonth
+   * se aceptan pero se ignoran.
    *
    * --- Fijo normal y calculado de fijo (los demás casos) ---
    * Lógica (D2) — aplicada a TODA la cadena (chainId):
    * - boundary = fromCurrentMonth ? currentMonth : nextMonth(currentMonth)
    * - Para CADA fila de la cadena:
-   *   - Si boundary <= fila.startMonth → hard delete de esa fila
+   *   - Si boundary <= fila.startMonth → borrado lógico de esa fila (RF-HIST-006,
+   *     reversible desde /historial)
    *   - Si boundary > fila.startMonth y la fila extiende más allá del boundary
    *     (deletedFrom IS NULL o deletedFrom > boundary) → set deletedFrom = boundary
    *   - Si la fila ya terminó antes del boundary → no tocar (pasado inmutable)
@@ -791,11 +947,22 @@ export class RecurringService {
       throw new NotFoundException('Movimiento fijo no encontrado');
     }
 
-    // Calculado de único o de cuota: hard-delete total, sin lógica de boundary.
-    // La decisión de producto es que se borran igual que su origen:
-    // el único se borra de una, la cuota se borra como grupo entero.
+    // Calculado de único o de cuota: soft-delete total, sin lógica de boundary
+    // (RF-HIST-006). La decisión de producto es que se borran igual que su
+    // origen: el único se borra de una, la cuota se borra como grupo entero.
     if (existing.sourceMovementId !== null || existing.sourceInstallmentGroupId !== null) {
-      await this.repo.delete(existing.id);
+      const chainSnapshot = await this.buildChainSnapshot(existing.chainId);
+
+      await this.repo.softDeleteRow(existing.id);
+
+      const deleteSnapshot: FijoDeleteSnapshot = { kind: 'delete', chains: [chainSnapshot] };
+      await this.historyService.record(
+        userId,
+        HistoryTargetKind.FIJO,
+        existing.chainId,
+        HistoryAction.DELETE,
+        deleteSnapshot,
+      );
 
       this.logger.log(
         {
@@ -804,7 +971,7 @@ export class RecurringService {
           sourceMovementId: existing.sourceMovementId,
           sourceInstallmentGroupId: existing.sourceInstallmentGroupId,
         },
-        'Calculado de único/cuota eliminado (hard-delete total, sin boundary)',
+        'Calculado de único/cuota eliminado (borrado lógico total, sin boundary)',
       );
 
       return;
@@ -814,6 +981,23 @@ export class RecurringService {
       ? currentMonth
       : this.nextMonth(currentMonth);
 
+    // Snapshot del estado previo de TODAS las cadenas afectadas, ANTES de mutar
+    // (RF-HIST-001). chains[0] = la cadena eliminada directamente; el resto = las
+    // cadenas de calculados de fijo que caen en cascada (RN-024 — no generan
+    // entrada propia, viajan dentro de esta misma entrada).
+    const chainSnapshots: FijoChainSnapshot[] = [await this.buildChainSnapshot(existing.chainId)];
+
+    // Solo si es un fijo de origen (sourceChainId === null): eliminar un calculado no afecta al origen.
+    const isOrigin = existing.sourceChainId === null;
+    let calcChainIds: string[] = [];
+    if (isOrigin) {
+      const calcRows = await this.repo.findCalculadosBySourceChain(existing.chainId);
+      calcChainIds = Array.from(new Set(calcRows.map((r) => r.chainId)));
+      for (const calcChainId of calcChainIds) {
+        chainSnapshots.push(await this.buildChainSnapshot(calcChainId));
+      }
+    }
+
     // Aplicar la lógica de boundary a TODA la cadena (todas las filas con el mismo chainId)
     await this.applyBoundaryToChain(existing.chainId, boundary);
 
@@ -822,11 +1006,23 @@ export class RecurringService {
       'Cadena de fijo eliminada/truncada (boundary aplicado a toda la cadena)',
     );
 
-    // Cascada a calculados de fijo del origen (RF-MCALC-005).
-    // Solo si es un fijo de origen (sourceChainId === null): eliminar un calculado no afecta al origen.
-    if (existing.sourceChainId === null) {
-      await this.cascadeDeleteCalculados(existing.chainId, boundary, userId);
+    // Cascada a calculados de fijo del origen (RF-MCALC-005) — misma lógica de boundary.
+    for (const calcChainId of calcChainIds) {
+      await this.applyBoundaryToChain(calcChainId, boundary);
+      this.logger.log(
+        { originChainId: existing.chainId, calculadoChainId: calcChainId, boundary },
+        'Calculado truncado/eliminado por cascada del origen',
+      );
     }
+
+    const deleteSnapshot: FijoDeleteSnapshot = { kind: 'delete', chains: chainSnapshots };
+    await this.historyService.record(
+      userId,
+      HistoryTargetKind.FIJO,
+      existing.chainId,
+      HistoryAction.DELETE,
+      deleteSnapshot,
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -837,13 +1033,16 @@ export class RecurringService {
    * Aplica la lógica de boundary a TODAS las filas de una cadena (chainId).
    *
    * Por cada fila de la cadena:
-   * - Si boundary <= fila.startMonth → hard delete de esa fila (nunca habría aparecido)
+   * - Si boundary <= fila.startMonth → borrado LÓGICO de esa fila (RF-HIST-006:
+   *   nunca habría aparecido desde el boundary — reversible desde /historial).
    * - Si boundary > fila.startMonth y la fila extiende más allá del boundary
    *   (deletedFrom IS NULL o deletedFrom > boundary) → set deletedFrom = boundary
    * - Si la fila ya terminó en o antes del boundary → no tocar (pasado inmutable)
    *
-   * Esto garantiza que borrar "desde un mes temprano" elimine filas R2+ que
-   * nacieron de splits posteriores al boundary.
+   * Esto garantiza que borrar "desde un mes temprano" marque como eliminadas las
+   * filas R2+ que nacieron de splits posteriores al boundary, en vez de borrarlas
+   * físicamente — el caller (remove()) ya capturó el snapshot previo de estas
+   * filas para poder deshacer la eliminación completa (RF-HIST-003).
    */
   private async applyBoundaryToChain(
     chainId: string,
@@ -853,60 +1052,13 @@ export class RecurringService {
 
     for (const row of rows) {
       if (boundary <= row.startMonth) {
-        // La fila no debería existir desde el boundary → hard delete
-        await this.repo.delete(row.id);
+        // La fila no debería existir desde el boundary → borrado lógico (RF-HIST-006)
+        await this.repo.softDeleteRow(row.id);
       } else if (row.deletedFrom === null || row.deletedFrom > boundary) {
         // La fila está activa más allá del boundary → truncar
         await this.repo.update(row.id, { deletedFrom: boundary });
       }
       // Si row.deletedFrom <= boundary: la fila ya terminó en el pasado → no tocar
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Cascada de eliminación a calculados (RF-MCALC-005)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Propaga la eliminación del origen a todos los calculados de esa cadena.
-   *
-   * Para cada cadena de calculado vinculada (sourceChainId = originChainId):
-   * - Aplica la misma lógica de boundary fila por fila sobre la cadena del calculado.
-   *
-   * Esto garantiza que, si el origen fue eliminado desde un mes temprano (lo que
-   * borra filas R2+ del origen), los calculados también pierdan sus filas R2+
-   * correspondientes (o se truncan si el boundary cae en medio de una fila activa).
-   *
-   * RF-MCALC-005: eliminar el origen arrastra a sus calculados.
-   * Eliminar un calculado NO llama a esta función (no afecta al origen).
-   */
-  private async cascadeDeleteCalculados(
-    originChainId: string,
-    boundary: string,
-    userId: string,
-  ): Promise<void> {
-    // Encontrar todas las filas de calculados cuyo origen es esta cadena.
-    // findCalculadosBySourceChain devuelve todas las filas (sourceChainId = originChainId),
-    // incluyendo splits de calculados. Necesitamos los chainIds únicos de esas cadenas.
-    const calcRows = await this.repo.findCalculadosBySourceChain(originChainId);
-
-    if (calcRows.length === 0) return;
-
-    // Recolectar los chainIds únicos de los calculados (para operar por cadena)
-    const calcChainIds = new Set<string>();
-    for (const row of calcRows) {
-      // row ahora incluye chainId directamente (sin re-fetch)
-      calcChainIds.add(row.chainId);
-    }
-
-    // Para cada cadena de calculado, aplicar el mismo boundary fila por fila
-    for (const calcChainId of calcChainIds) {
-      await this.applyBoundaryToChain(calcChainId, boundary);
-
-      this.logger.log(
-        { originChainId, calculadoChainId: calcChainId, boundary },
-        'Calculado truncado/eliminado por cascada del origen',
-      );
     }
   }
 

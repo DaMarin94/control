@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Currency, FormulaOperator, MovementType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NOT_DELETED } from '../common/soft-delete.helper';
 
 /**
  * Shape de categoría embebida en un Recurring.
@@ -185,10 +186,13 @@ export class RecurringRepository {
 
   /**
    * Busca un fijo por id (sin filtrar por userId — el caller hace la validación).
+   *
+   * Excluye borrados lógicos (RF-HIST-006): un fijo/calculado eliminado no
+   * existe para el resto de la app.
    */
   async findById(id: string): Promise<RecurringWithCategory | null> {
     const r = await this.prisma.recurring.findUnique({
-      where: { id },
+      where: { id, ...NOT_DELETED },
       include: RECURRING_INCLUDE,
     });
     if (!r) return null;
@@ -208,13 +212,6 @@ export class RecurringRepository {
       include: RECURRING_INCLUDE,
     });
     return mapToRecurringWithCategory(r);
-  }
-
-  /**
-   * Elimina físicamente un fijo por id (hard delete — solo cuando boundary <= startMonth).
-   */
-  async delete(id: string): Promise<void> {
-    await this.prisma.recurring.delete({ where: { id } });
   }
 
   // ---------------------------------------------------------------------------
@@ -240,6 +237,7 @@ export class RecurringRepository {
     const r = await this.prisma.recurring.findFirst({
       where: {
         chainId,
+        ...NOT_DELETED,
         startMonth: { lte: month },
         OR: [
           { deletedFrom: null },
@@ -259,14 +257,15 @@ export class RecurringRepository {
   }
 
   /**
-   * Busca todas las filas de una cadena (chainId) con sus campos esenciales.
+   * Busca todas las filas VIVAS de una cadena (chainId) con sus campos esenciales.
    * Se usa en el borrado de cadena completa para iterar y aplicar boundary por fila.
+   * Excluye filas ya soft-deleted: no hay nada que tocar en una fila ya eliminada.
    */
   async findChainRows(
     chainId: string,
   ): Promise<Array<{ id: string; startMonth: string; deletedFrom: string | null }>> {
     return this.prisma.recurring.findMany({
-      where: { chainId },
+      where: { chainId, ...NOT_DELETED },
       select: { id: true, startMonth: true, deletedFrom: true },
     });
   }
@@ -274,15 +273,102 @@ export class RecurringRepository {
   /**
    * Busca todos los calculados (sourceChainId != null) de una cadena origen dada.
    * Se usa al eliminar el origen para cascadar la eliminación a los calculados.
-   * Devuelve todas las filas (incluidas las ya terminadas) para identificar las cadenas
-   * del calculado y operar sobre ellas.
+   * Devuelve todas las filas VIVAS (incluidas las ya terminadas, excluidas las ya
+   * soft-deleted) para identificar las cadenas del calculado y operar sobre ellas.
    */
   async findCalculadosBySourceChain(
     sourceChainId: string,
   ): Promise<Array<{ id: string; chainId: string; startMonth: string; deletedFrom: string | null }>> {
     return this.prisma.recurring.findMany({
-      where: { sourceChainId },
+      where: { sourceChainId, ...NOT_DELETED },
       select: { id: true, chainId: true, startMonth: true, deletedFrom: true },
+    });
+  }
+
+  /**
+   * Snapshot COMPLETO (todos los campos de negocio) de todas las filas de una
+   * cadena (chainId). Usado para capturar el estado previo a un DELETE (RF-HIST-001),
+   * tanto de la cadena eliminada directamente como de las cadenas de calculados
+   * de fijo que caen en cascada (RN-024).
+   */
+  async findChainRowsForSnapshot(chainId: string): Promise<
+    Array<{
+      id: string;
+      chainId: string;
+      startMonth: string;
+      deletedFrom: string | null;
+      deletedAt: Date | null;
+      type: MovementType;
+      amountCents: number;
+      categoryId: string;
+      description: string | null;
+      frequency: number;
+      currency: Currency;
+      exchangeRate: Prisma.Decimal;
+      anchorCurrency: Currency;
+      paymentMethodId: string | null;
+      autoDebit: boolean | null;
+      sourceChainId: string | null;
+      sourceMovementId: string | null;
+      sourceInstallmentGroupId: string | null;
+      formulaOperator: FormulaOperator | null;
+      formulaOperand: number | null;
+      formulaSign: number | null;
+    }>
+  > {
+    return this.prisma.recurring.findMany({
+      where: { chainId },
+      select: {
+        id: true,
+        chainId: true,
+        startMonth: true,
+        deletedFrom: true,
+        deletedAt: true,
+        type: true,
+        amountCents: true,
+        categoryId: true,
+        description: true,
+        frequency: true,
+        currency: true,
+        exchangeRate: true,
+        anchorCurrency: true,
+        paymentMethodId: true,
+        autoDebit: true,
+        sourceChainId: true,
+        sourceMovementId: true,
+        sourceInstallmentGroupId: true,
+        formulaOperator: true,
+        formulaOperand: true,
+        formulaSign: true,
+      },
+    });
+  }
+
+  /**
+   * Borrado lógico de una fila (RF-HIST-006): marca deletedAt = now().
+   * Usado por applyBoundaryToChain: la eliminación de un fijo es siempre
+   * reversible desde /historial.
+   */
+  async softDeleteRow(id: string): Promise<void> {
+    await this.prisma.recurring.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  /** Cascada lógica (RN-024/026): soft-delete de todos los calculados vivos de un único. */
+  async cascadeSoftDeleteBySourceMovement(sourceMovementId: string): Promise<void> {
+    await this.prisma.recurring.updateMany({
+      where: { sourceMovementId, ...NOT_DELETED },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  /** Cascada lógica (RN-024/026): soft-delete de todos los calculados vivos de una cuota. */
+  async cascadeSoftDeleteBySourceInstallmentGroup(sourceInstallmentGroupId: string): Promise<void> {
+    await this.prisma.recurring.updateMany({
+      where: { sourceInstallmentGroupId, ...NOT_DELETED },
+      data: { deletedAt: new Date() },
     });
   }
 
@@ -305,7 +391,7 @@ export class RecurringRepository {
     timezone: string;
   } | null> {
     return this.prisma.transaction.findUnique({
-      where: { id },
+      where: { id, ...NOT_DELETED },
       select: {
         id: true,
         userId: true,
@@ -333,7 +419,7 @@ export class RecurringRepository {
     description: string | null;
   } | null> {
     return this.prisma.installmentGroup.findUnique({
-      where: { id },
+      where: { id, ...NOT_DELETED },
       select: {
         id: true,
         userId: true,
@@ -355,7 +441,7 @@ export class RecurringRepository {
     sourceMovementId: string,
   ): Promise<RecurringWithCategory | null> {
     const r = await this.prisma.recurring.findFirst({
-      where: { sourceMovementId },
+      where: { sourceMovementId, ...NOT_DELETED },
       include: RECURRING_INCLUDE,
     });
     if (!r) return null;
@@ -371,43 +457,11 @@ export class RecurringRepository {
     sourceInstallmentGroupId: string,
   ): Promise<RecurringWithCategory | null> {
     const r = await this.prisma.recurring.findFirst({
-      where: { sourceInstallmentGroupId },
+      where: { sourceInstallmentGroupId, ...NOT_DELETED },
       include: RECURRING_INCLUDE,
     });
     if (!r) return null;
     return mapToRecurringWithCategory(r);
-  }
-
-  /**
-   * Elimina físicamente todas las filas de un chainId dado.
-   * Solo se llama cuando se hace hard-delete de todos los calculados de una cadena.
-   */
-  async deleteByChainId(chainId: string): Promise<void> {
-    await this.prisma.recurring.deleteMany({ where: { chainId } });
-  }
-
-  /**
-   * Establece deletedFrom en todas las filas activas de un chainId cuyo startMonth
-   * es posterior al boundary (es decir, las que vivirían "después" del boundary).
-   * Se usa al eliminar un origen para cascadar deletedFrom a los calculados.
-   */
-  async setDeletedFromByChainId(
-    chainId: string,
-    boundary: string,
-  ): Promise<void> {
-    // Solo aplica a las filas de la cadena que todavía no estaban terminadas antes del boundary.
-    // Si boundary <= startMonth: hard-delete (se llama deleteByChainId).
-    // Si no: actualizar deletedFrom a boundary (si no tenía deletedFrom o el que tenía era mayor).
-    await this.prisma.recurring.updateMany({
-      where: {
-        chainId,
-        OR: [
-          { deletedFrom: null },
-          { deletedFrom: { gt: boundary } },
-        ],
-      },
-      data: { deletedFrom: boundary },
-    });
   }
 
   // ---------------------------------------------------------------------------

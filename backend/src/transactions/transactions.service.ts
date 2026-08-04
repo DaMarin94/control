@@ -2,7 +2,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Currency, MovementType } from '@prisma/client';
+import { Currency, HistoryAction, HistoryTargetKind, MovementType } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { CategoryValidatorService } from '../categories/category-validator.service';
 import { PaymentMethodValidatorService } from '../payment-methods/payment-method-validator.service';
@@ -13,6 +13,9 @@ import {
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { SettingsService } from '../settings/settings.service';
+import { HistoryService } from '../history/history.service';
+import { UnicoSnapshot } from '../history/history.types';
+import { RecurringService } from '../recurring/recurring.service';
 
 @Injectable()
 export class TransactionsService {
@@ -22,7 +25,26 @@ export class TransactionsService {
     private readonly paymentMethodValidator: PaymentMethodValidatorService,
     private readonly logger: Logger,
     private readonly settingsService: SettingsService,
+    private readonly historyService: HistoryService,
+    private readonly recurringService: RecurringService,
   ) {}
+
+  /** Snapshot completo del único, para historial (RF-HIST-001). */
+  private buildSnapshot(tx: TransactionWithCategory): UnicoSnapshot {
+    return {
+      type: tx.type,
+      amountCents: tx.amountCents,
+      categoryId: tx.categoryId,
+      description: tx.description,
+      occurredAt: tx.occurredAt.toISOString(),
+      timezone: tx.timezone,
+      currency: tx.currency,
+      exchangeRate: tx.exchangeRate,
+      anchorCurrency: tx.anchorCurrency,
+      paymentMethodId: tx.paymentMethodId,
+      autoDebit: tx.autoDebit,
+    };
+  }
 
   // ---------------------------------------------------------------------------
   // POST /transactions — crear (RF-MU-001)
@@ -108,6 +130,9 @@ export class TransactionsService {
       throw new NotFoundException('Transacción no encontrada');
     }
 
+    // Snapshot del estado previo, ANTES de mutar (RF-HIST-001).
+    const snapshot = this.buildSnapshot(existing);
+
     // Determinar type y categoryId resultantes para revalidar RN-010
     const effectiveType = dto.type ?? existing.type;
     const effectiveCategoryId = dto.categoryId ?? existing.categoryId;
@@ -172,6 +197,14 @@ export class TransactionsService {
       await this.settingsService.updateLastExchangeRate(userId, dto.exchangeRate);
     }
 
+    await this.historyService.record(
+      userId,
+      HistoryTargetKind.UNICO,
+      id,
+      HistoryAction.EDIT,
+      snapshot,
+    );
+
     this.logger.log(
       { userId, transactionId: id },
       'Transacción actualizada',
@@ -181,7 +214,7 @@ export class TransactionsService {
   }
 
   // ---------------------------------------------------------------------------
-  // DELETE /transactions/:id — hard delete (RF-MU-003)
+  // DELETE /transactions/:id — borrado lógico (RF-MU-003, RF-HIST-006)
   // ---------------------------------------------------------------------------
 
   async remove(userId: string, id: string): Promise<void> {
@@ -191,11 +224,26 @@ export class TransactionsService {
       throw new NotFoundException('Transacción no encontrada');
     }
 
-    await this.repo.delete(id);
+    // Snapshot del estado previo, ANTES de marcar como eliminado (RF-HIST-001).
+    const snapshot = this.buildSnapshot(existing);
+
+    await this.repo.softDelete(id);
+
+    // Cascada lógica a los calculados de único (RN-024/026): nunca se borran
+    // físicamente mientras la entrada de historial del origen esté vigente.
+    await this.recurringService.cascadeSoftDeleteBySourceMovement(userId, id);
+
+    await this.historyService.record(
+      userId,
+      HistoryTargetKind.UNICO,
+      id,
+      HistoryAction.DELETE,
+      snapshot,
+    );
 
     this.logger.log(
       { userId, transactionId: id },
-      'Transacción eliminada (hard delete)',
+      'Transacción eliminada (borrado lógico)',
     );
   }
 

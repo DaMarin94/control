@@ -6,6 +6,7 @@ import { CategoriesModule } from '../categories/categories.module';
 import { PaymentMethodsModule } from '../payment-methods/payment-methods.module';
 import { RecurringModule } from '../recurring/recurring.module';
 import { SettingsModule } from '../settings/settings.module';
+import { HistoryModule } from '../history/history.module';
 
 /**
  * TransactionsModule — CRUD de movimientos únicos (RF-MU-001 a RF-MU-003).
@@ -23,7 +24,7 @@ import { SettingsModule } from '../settings/settings.module';
  * con cotización (Fase 1.2.3).
  */
 @Module({
-  imports: [CategoriesModule, PaymentMethodsModule, RecurringModule, SettingsModule],
+  imports: [CategoriesModule, PaymentMethodsModule, RecurringModule, SettingsModule, HistoryModule],
   controllers: [TransactionsController],
   providers: [TransactionsService, TransactionsRepository],
   exports: [TransactionsService],

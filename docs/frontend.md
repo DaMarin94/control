@@ -546,7 +546,7 @@ Feature 100% frontend. Resuelve la navegación entre secciones, la acción prima
 
 ### Punto único de montaje: route group `app/(app)/`
 
-Las pantallas autenticadas (`/` dashboard, `/mes`, `/reportes` y el hub `/configuracion` con sus secciones anidadas) viven dentro del **route group `app/(app)/`**, con un `layout.tsx` compartido que monta el sidebar **una sola vez**.
+Las pantallas autenticadas (`/` dashboard, `/mes`, `/reportes`, `/historial` y el hub `/configuracion` con sus secciones anidadas) viven dentro del **route group `app/(app)/`**, con un `layout.tsx` compartido que monta el sidebar **una sola vez**.
 
 - **Los route groups de Next.js no alteran las URLs:** `(app)` es solo organización de archivos; las rutas se mantienen idénticas.
 - **`login` y `registro` quedan FUERA del grupo** → no heredan el layout, por eso no muestran sidebar (cumple el criterio de RF-NAV-001 "no se muestra en pantallas no autenticadas").
@@ -563,7 +563,7 @@ Las pantallas autenticadas (`/` dashboard, `/mes`, `/reportes` y el hub `/config
 
 ### Contenido
 
-Logo/nombre "Control" → `/`; **cuatro links** en orden: **Dashboard** (`/`), **Vista del mes** (`/mes`, siempre abre en el mes actual porque la página defaultea a `getCurrentMonth`), **Reportes** (`/reportes`), **Configuración** (`/configuracion`); botón **"Nuevo movimiento"** que reusa `NewTransactionButton` y abre `TransactionModal` en modo `create` (1 clic, RNF-003); **menú de usuario** abajo con avatar = **inicial del email en mayúscula**. Categorías y Métodos de pago **no** son links del sidebar: se alcanzan como secciones del hub de Configuración.
+Logo/nombre "Control" → `/`; **cinco links** en orden: **Dashboard** (`/`), **Vista del mes** (`/mes`, siempre abre en el mes actual porque la página defaultea a `getCurrentMonth`), **Reportes** (`/reportes`), **Historial** (`/historial`), **Configuración** (`/configuracion`); botón **"Nuevo movimiento"** que reusa `NewTransactionButton` y abre `TransactionModal` en modo `create` (1 clic, RNF-003); **menú de usuario** abajo con avatar = **inicial del email en mayúscula**. Categorías y Métodos de pago **no** son links del sidebar: se alcanzan como secciones del hub de Configuración.
 
 ### Decisiones y gotchas
 
@@ -573,10 +573,12 @@ Logo/nombre "Control" → `/`; **cuatro links** en orden: **Dashboard** (`/`), *
   - La ubicación, ícono y animación del control los define `docs/design.md`; acá solo el comportamiento y la persistencia.
 - **El umbral compacto/amplio del área autenticada se mide contra el ancho de `<main>`, NO del viewport.** El `<main>` del shell es `@container`; todo lo que vive bajo él usa `@wide:`/`@max-wide:` (mismo 941px que `--bp-wide`) sobre el ancho **real disponible**, no el del viewport. Con el sidebar abierto a viewport 1000px el contenido mide ~712px → régimen **compacto**. Fuera del área autenticada (login/registro) no hay `@container`: el umbral vuelve a ser media query de viewport (`wide:`/`max-wide:`).
 - **El offset de `<main>` según el sidebar va por `margin-left` (248↔0), NO `padding-left`.** Es estructural, no cosmético: una container query `inline-size` mide el tamaño propio del contenedor **incluyendo su padding** — offsetear con padding haría que `<main>` se "creyera" más ancho de lo que el contenido puede usar y montaría régimen amplio cuando no corresponde. `margin-left` no participa del tamaño propio del elemento, así que el ancho medido por `@container` coincide con el ancho de contenido real (viewport − 248px si está abierto).
+- **Banda reservada del chip flotante (`app-shell.tsx`).** Con el sidebar **cerrado**, el `<main>` reserva **36px de `padding-top`** (`0` con el sidebar abierto); el chip flotante que reabre el sidebar vive en coordenadas de viewport y sin esa banda se superpone al arranque del contenido. Es **global**, no per-página: la regla que sostiene es **ningún contenido de página se pinta sobre los 70px superiores del viewport en el arranque** — toda pantalla nueva la hereda del shell y no debe compensarla por su cuenta.
+  - **La reserva es vertical y NUNCA horizontal.** Un `padding-left` equivalente desalinearía el header respecto del cuerpo de la página **e** inflaría el `inline-size` que miden las container queries (mismo motivo por el que el offset del sidebar va por `margin-left`, ver bullet anterior).
 - **El `@container` de `<main>` (`container-type`) es el containing block de sus descendientes `position:fixed`/`sticky`:** dejan de resolverse contra el viewport y quedan capturados por el contenedor. Un control que debe posicionarse respecto del viewport real desde dentro de `<main>` se **porta a `document.body` vía `createPortal`** (fuera del subárbol contenido) y calcula su posición por medición JS (`getBoundingClientRect` + `ResizeObserver`). Caso vivo: las flechas ‹ › de navegación de mes de `PeriodNav` (`components/ui/period-nav.tsx`).
 - **Avatar = inicial del email** (no hay imagen para usuarios de email).
 - **Email via prop drilling desde el Server layout, NO `useSession()` en el sidebar.** El layout (Server) lo resuelve con `auth()`. Si el email es `null`, fallback a string vacío (inofensivo: el middleware ya redirigió a usuarios sin sesión).
-- **Sección activa — match EXACTO para `/`:** el link Dashboard compara `pathname === "/"`. Con `startsWith("/")` quedaría activo en **todas** las rutas. Los links `/mes`, `/reportes` y `/configuracion` usan `startsWith` (el de Configuración queda activo en las cuatro secciones anidadas del hub; no hay subrutas que colisionen).
+- **Sección activa — match EXACTO para `/`:** el link Dashboard compara `pathname === "/"`. Con `startsWith("/")` quedaría activo en **todas** las rutas. Los links `/mes`, `/reportes`, `/historial` y `/configuracion` usan `startsWith` (el de Configuración queda activo en las cuatro secciones anidadas del hub; no hay subrutas que colisionen).
 - **`<Suspense>` en `(app)/mes/page.tsx`:** se mantiene envolviendo `MonthViewWrapper` (que usa `useSearchParams()`); sin él el build de Next 15 falla. El cambio de carpeta al route group no lo altera (ver gotcha de `<Suspense>` en la sección Vista del mes).
 
 ## Reportes (RF-REP-001..012)
@@ -675,6 +677,30 @@ Quinto tipo de card (`ReportCardType = "inflation-income"`). Componente **`compo
 - **Línea cortada en meses futuros.** Las series usan `connectNulls={false}`: la línea no conecta a través de meses `null`.
 - **Color de la línea de inflación = token `--rate`** (ver §Design system → token `--rate`).
 
+## Historial de cambios (`/historial` — RF-HIST-001..006)
+
+Pantalla de consulta y deshacer. El spec visual vive en `docs/design.md`; el contrato de la API, en `docs/data-model.md` §Historial de cambios. Acá solo arquitectura.
+
+### Componentes
+
+- **`app/(app)/historial/page.tsx`** → monta `components/history/history-client.tsx` (Client Component), dueño de la query, del estado del modal de confirmación y de la mutación de deshacer.
+- **`history-entry-row.tsx`** — una entrada: identidad del movimiento, operación, momento y su acción (deshacer / bloqueada).
+- **`history-changes-block.tsx`** + **`history-change-row.tsx`** — el bloque "Qué cambió" y cada fila de campo.
+- **`types/history.ts`** — espejo del contrato de la API (como el resto del frontend; no hay tipos compartidos con el backend).
+
+### `lib/history.ts` — único traductor de entrada a presentación
+
+**Toda** traducción de un `HistoryEntry`/`HistoryChange` de la API a texto en pantalla pasa por este módulo: rótulos de campo y de tipo de movimiento, formateo de monto / fórmula / fecha / momento, y `describeHistoryChange`, que convierte una fila del contrato en una forma **neutra sin JSX** (`HistoryChangeDisplay`) que los componentes solo pintan. También resuelve el resumen de una línea (`pickSummaryChange` + `summarizeHistoryChange`) que usa el modal de deshacer en cadena.
+
+- **Los componentes no formatean por su cuenta.** La misma fila se pinta en la lista y en el modal, con **direcciones de lectura opuestas** (`HistoryChangeDirection: "list" | "modal"`): el traductor decide qué valor va a cada lado. Formatear en el componente rompería esa simetría y duplicaría las reglas por campo.
+- **El discriminador de "modo de valor único" es `"next" in change`**, no `next == null` — ver el gotcha en `docs/data-model.md` §Historial de cambios. `sidesOf` lo respeta; cualquier lógica nueva sobre `changes` también debe hacerlo.
+
+### Datos (`use-history`)
+
+- **`useHistory()`** — `GET /history`, query key `["history"]`, gate-ada con `isAuthenticated` como el resto de las lecturas.
+- **`useUndoHistory()`** — `POST /history/:id/undo` (sin body; el backend resuelve el undo en cadena por sí solo).
+- **Invalidación tras deshacer: tres claves, no una.** El éxito invalida `["history"]`, **`["movements"]`** y **`["reports"]`** — deshacer no toca solo el historial: **restaura o revierte movimientos reales**, así que los listados del mes, los totales y los reportes quedan desactualizados si no se invalidan.
+
 ## Límites (RF-LIM-001..004)
 
 Límites configurables de dos naturalezas: **marca visual pasiva** sobre `/mes`, el dashboard y los 5 reportes de `/reportes`, y **alerta activa** (aviso no bloqueante al guardar un movimiento) sobre las keys `mes.*`. Evaluación 100% client-side sobre el blob `limits` de preferencias (`data-model.md`, §Claves del blob → `limits`). Reglas funcionales en `requirements.md`, módulo 3.13; catálogo de efectos visuales y diálogo activo en `docs/design.md`, §"Marca visual pasiva de límites".
@@ -760,6 +786,7 @@ El logo de marca que se ve **dentro de la app** (gem del sidebar, chip del login
 - Con `vi.useFakeTimers()` activo: `waitFor` no funciona (usa `setInterval` internamente). Disparar eventos con `fireEvent` y avanzar el tiempo con `act(() => vi.advanceTimersByTime(...))`, luego assertions síncronas. En `afterEach` usar `vi.clearAllTimers()` (no `runAllTimers()`) antes de `vi.useRealTimers()` para evitar warnings de act() de React 19.
 - **jsdom no ejecuta CSS:** los elementos ocultos por CSS (clases `hidden` de Tailwind, `grid-rows-[0fr]` colapsado) **siguen presentes en el árbol**. Consecuencias:
   - **Dos variantes responsive del mismo contenido** (desktop/mobile alternadas con `hidden`) quedan ambas → `getByText`/`getByLabelText` fallan por duplicado. Patrón: `aria-hidden="true"` en la variante que no debe estar en el árbol de accesibilidad, y `getAllByText` cuando el texto se comparte. Aplica a `/mes` (flechas ≥1288px vs stepper ≤1287px).
+  - **Lo mismo con container queries (`@wide:`/`@max-wide:`): jsdom no las evalúa**, así que los **dos regímenes conviven en el DOM** y ninguno "gana". Cuando el texto o el botón se comparte entre variantes, acotar el query con **`within(dialog)`** (o el contenedor que corresponda) o usar **`getAllByRole`** y elegir; `getByRole`/`getByText` a secas fallan por duplicado.
   - **Disclosure colapsable (técnica grid-rows):** afirmar contra render / no-render del nodo, no contra visibilidad. Ej. el bloque "Moneda y cotización": el selector de moneda siempre está en el DOM; el input de cotización solo se renderiza cuando `currency !== defaultCurrency` — testear ese montaje condicional.
   - **`role="region"` duplicado:** si el `<section>` padre del acordeón ya provee `role=region` vía `aria-labelledby`, no poner otro `role=region` con el mismo nombre en el `<div>` interno, o `getByRole("region", { name })` falla por duplicado.
   - **`getByRole("button", { name })` ambiguo** cuando más de un botón matchea (disclosure del acordeón + disparador de filtro `aria-label="Filtrar {sección}"`): diferenciarlos por presencia de `aria-expanded` + `aria-controls` (helper `getDisclosureButton`).

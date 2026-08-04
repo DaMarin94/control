@@ -21,6 +21,7 @@ Implementá EXACTAMENTE lo definido en la documentación; ante duda, ambigüedad
 - **Implementá el comportamiento en pantalla chica que el spec declara, respetando el token `--bp-wide`.** El umbral, las disposiciones (amplio / compacto) y los cuatro invariantes viven en `docs/design.md` §Contención responsive. No introduzcas breakpoints sueltos ni una escala nueva.
 - **Antes de implementar, leé `docs/technical.md`** (estándares transversales: sobre de respuesta y short-circuit del `204`, capa centralizada de llamadas, toasts, hooks + React Query, validación, testing, env). No re-inventes un patrón que ya vive ahí; si una decisión técnica nueva no está cubierta, reportala al orquestador antes de inventar.
 - Todo feature se entrega con sus tests en el mismo PR (Vitest + RTL).
+- **Nunca corras `pnpm build` con un dev server vivo.** `next build` y `next dev` comparten el directorio `.next` y el build de producción lo pisa: el dev server queda sirviendo HTML sin estilos hasta que se reinicia. Para chequear tipos alcanza `tsc --noEmit`.
 
 ## Stack
 
@@ -51,7 +52,8 @@ El detalle estructural (arquitectura, componentes, gotchas) vive en `docs/`. Le�
 | Métodos de pago (CRUD, selector en el form, default por estructura + prefill one-shot) | `docs/frontend.md` §Métodos de pago |
 | Movimientos únicos / fijos / cuotas / calculados | `docs/frontend.md` (sección de cada tipo) |
 | Vista del mes y Dashboard, `useMovements`, filtros por listado, `lib/movements.ts` | `docs/frontend.md` §Vista del mes y Dashboard |
-| Navegación global / sidebar | `docs/frontend.md` §Navegación global |
+| Navegación global / sidebar, banda reservada del chip flotante en `<main>` | `docs/frontend.md` §Navegación global |
+| Historial de cambios (`/historial`: `lib/history.ts` como único traductor, `useHistory`/`useUndoHistory`, invalidación tras deshacer) | `docs/frontend.md` §Historial de cambios; contrato en `docs/data-model.md` §Historial de cambios |
 | Hub de Configuración (`/configuracion`: layout compartido, nav vertical, 4 rutas anidadas, redirects) | `docs/frontend.md` §Hub de Configuración |
 | Reportes (charting, `useReports`, gotchas Recharts) | `docs/frontend.md` §Reportes |
 | Límites (registro de keys, evaluador, marcas en `/mes`, sección Límites) | `docs/frontend.md` §Límites |
@@ -62,5 +64,5 @@ El detalle estructural (arquitectura, componentes, gotchas) vive en `docs/`. Le�
 
 ## Al terminar
 
-1. **Build.** Correr el build del frontend y corregir cualquier error de TypeScript antes de reportar listo.
+1. **Chequeo de tipos.** Correr `tsc --noEmit` y corregir cualquier error de TypeScript antes de reportar listo. **Si no hay ningún dev server corriendo** podés correr el build completo; con un dev server vivo, no (ver Reglas).
 2. **Reportar señales de documentación.** No escribís documentación: detectás lo que vale documentar y se lo reportás al orquestador en bullets terse (contrato de API nuevo/modificado; regla de negocio nueva/modificada; decisión técnica no obvia / gotcha / workaround, con el porqué). No reportes setup estándar ni lo obvio. No edites archivos de `docs/` ni de `.claude/agents/`.

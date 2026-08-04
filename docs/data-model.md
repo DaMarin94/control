@@ -23,6 +23,7 @@
 | **Cotización externa por variante (`CurrencyQuote`)** | Tabla **global**, interna, no editable por UI. Histórico crudo de **variantes** de cotización FX capturadas de fuentes externas (oficial, blue, …) por `(moneda, variante, mes)`. `variant` es **string libre** (no enum), por mente abierta a variantes futuras. La conversión interna no la consume todavía. Ver §Cotizaciones externas y sincronización. |
 | **Inflación (`InflationRate`)** | Tabla **global**, interna, no editable por UI. IPC nacional (INDEC) por mes (variación mensual + nivel del índice). La consumen el **reporte anual de gastos Únicos** (RF-REP-010, métricas de inflación y % ajustado del footer) y el **reporte anual de Inflación vs Ingresos** (RF-REP-012, serie de inflación y ajuste del ingreso). Ver §Cotizaciones externas y sincronización. |
 | **Log de sincronización (`RateSyncLog`)** | Tabla **global** de auditoría: una fila por intento de ingesta externa (aceptado/rechazado + motivo + payload crudo). El secret nunca se loguea. Ver §Cotizaciones externas y sincronización. |
+| **Entrada de historial (`HistoryEntry`)** | Una fila por **edición** o **eliminación** de un movimiento (RF-HIST-001), con el **estado previo completo** del movimiento en un snapshot JSON. Registro de **corto plazo**, no un log de auditoría: se purga por cantidad o antigüedad (RF-HIST-005) y el deshacer la borra sin dejar rastro (RF-HIST-003). Ver §Historial de cambios. |
 
 ---
 
@@ -44,6 +45,8 @@
 - **Frecuencia del movimiento fijo (RF-MF-006).** Cada fijo tiene un campo `frequency` **entero 1..12** (`Int @default(1)`) = meses entre apariciones (1 = mensual … 12 = anual; sin frecuencias fuera del rango ni custom). El rango 1..12 es **lógico**, validado en el DTO; **no** hay CHECK en la DB. La frecuencia está **anclada al `startMonth`** y define en qué meses aparece el fijo según la regla de cálculo de RN-016. Es **inmutable** (como `type`): no se acepta en PATCH; en el split de edición la fila nueva la hereda del original. El cálculo es on-the-fly (RN-006).
 - **Anulación de un fijo en un mes puntual como registro aparte (`RecurringSkip`, RF-MF-005).** Anular la aparición de un fijo en un mes puntual se modela con una fila `RecurringSkip(recurringId, month)` —**no** con un flag en `Recurring`—, con `month` en formato `"YYYY-MM"` y **unicidad `(recurringId, month)`** (un solo skip por fijo y mes). `onDelete: Cascade` desde `Recurring`: al borrar el fijo se borran sus skips. Es **distinto de `deletedFrom`**: `deletedFrom` corta el fijo de ahí en adelante; el skip cancela **una** aparición puntual dejando el fijo vivo. La acción de anular/des-anular es un **toggle** (si existe el skip se borra, si no se crea). Un fijo anulado para un mes **se sigue listando** en `GET /movements` (marcado con `skipped: true`) pero su monto **no suma** a los totales del mes ni a la proyección anual. El backend **no valida** que el mes del skip sea una aparición real del fijo según su frecuencia (solo formato `YYYY-MM` y ownership); esa validación semántica es del frontend, que ya tiene el ítem del mes.
 - **Anulación de un único (flag) y de una cuota (`InstallmentSkip`) — RF-MU-005 / RF-MC-004.** El **único** se anula con un **flag booleano en la propia fila**: `Transaction.skipped Boolean @default(false)` (toggle; **sin alcance temporal**, anula la fila entera). La **cuota** se anula con un registro aparte **`InstallmentSkip(id, installmentGroupId, month, createdAt)`** —espejo de `RecurringSkip`—, con `month` en formato `"YYYY-MM"`, **unicidad `(installmentGroupId, month)`**, índice por `installmentGroupId` y `onDelete: Cascade` desde `InstallmentGroup` (al borrar el grupo se borran sus skips). Anula **solo** esa instancia mensual, dejando vivo el resto del grupo. En ambos casos la anulación es un **toggle** (si existe se quita, si no se crea) y el ítem anulado **se sigue listando** en `GET /movements` (marcado con `skipped: true`) pero su monto **no suma** a los totales del mes ni a los reportes anuales. Los calculados de único/cuota **heredan** el estado del origen (no tienen skip propio; RF-MCALC-005). Regla funcional en `requirements.md`, RN-020.
+- **Borrado lógico de movimientos (`deletedAt`) — RF-HIST-006.** Las tres tablas de movimiento (`Transaction`, `Recurring`, `InstallmentGroup`) llevan `deletedAt DateTime?`. Eliminar un movimiento **marca la fecha**, no borra la fila: el registro deja de aparecer en **toda** lectura de negocio (listados, totales, reportes, selectores, contadores) y **solo** sigue visible desde `/historial`, desde donde se puede restaurar (RF-HIST-003) mientras su entrada esté vigente. El **borrado físico** ocurre recién al purgarse esa entrada (RF-HIST-005). En un **fijo**, eliminar marca `deletedAt` en las filas de la cadena; el DELETE "desde el mes actual" sigue usando `deletedFrom` y solo escala a `deletedAt` cuando el boundary alcanza el `startMonth` de la fila (ver `docs/backend.md`, §Historial).
+  - **`deletedAt` es ortogonal a `deletedFrom`.** `deletedFrom` es el **boundary por mes** de un fijo **vivo** ("desde este mes no aparece más", RF-MF-004): la fila sigue existiendo y sus meses previos se siguen listando. `deletedAt` es "**esta fila entera no existe**" para toda la app, en todos los meses. No se derivan uno del otro ni se leen juntos: una fila puede tener `deletedFrom` sin `deletedAt` (fijo terminado), y `deletedAt` invalida la fila con independencia de su `deletedFrom`.
 - **Moneda explícita, set curado.** La moneda es **explícita** (enum `Currency`): un **set curado de 4 monedas — `ARS`, `USD`, `EUR`, `BRL`**, enum cerrado, **sin alta de monedas por UI**. Cada movimiento (único / fijo / cuota) guarda su **`currency`** (default `ARS`) y una **cotización `exchangeRate`** (ver granularidad abajo). El **`User`** guarda su **`defaultCurrency`** (default `ARS`, configurable en `/configuracion`, una de las 4) y el **`lastExchangeRate`** (último cambio real ingresado; ver "fallback" abajo). Reglas funcionales en `requirements.md`, módulo 3.10 (RF-CUR-001..006).
   - **`anchorCurrency` — ancla interna de la cotización.** Cada movimiento (único / fijo / cuota) guarda, además de `currency` y `exchangeRate`, una columna **`anchorCurrency`** (`Currency`, NOT NULL, default `ARS`) que fija **respecto de qué moneda está expresada su `exchangeRate`**. Es **interna a la capa de datos**: **no** está en los DTOs de create/edit ni en la respuesta de `GET /movements` (el front no la envía ni la recibe). Se persiste `anchorCurrency` = la `defaultCurrency` del usuario al momento de **crear** el movimiento; al **editar** `currency`/`exchangeRate` se **re-ancla** a la `defaultCurrency` vigente. Migración `20260620000001_add_anchor_currency`. Esta columna es la que permite que la conversión sea correcta cuando el usuario **cambia su `defaultCurrency`** (ver "Conversión = capa de display").
   - **Semántica de `exchangeRate` per-movimiento (Opción A).** `exchangeRate` = **unidades de `anchorCurrency` por 1 unidad de `currency`** (la moneda del movimiento) — **no** de la default *vigente*. No puede interpretarse sin su `anchorCurrency`. Tipo Prisma **`Decimal`** (con decimales, **no** centavos — excepción a "Montos en centavos"). Default `1`; `1` cuando `currency == anchorCurrency`. Como al crear/editar `anchorCurrency` toma la default de ese momento, **en el momento de la carga** la lectura coincide con "default por 1 unidad de `currency`" — pero la default puede cambiar después, y entonces solo `anchorCurrency` deja interpretable la cotización guardada. Los **cruces no triviales** (p. ej. EUR↔BRL, o cuando la default no es ni `anchorCurrency` ni `currency`) se **derivan vía el pivote `USD`** usando la tabla `ReferenceRate` (ver §Tabla de cotizaciones de referencia); **no se guardan pares**.
@@ -865,6 +868,104 @@ donde `AvailableCategory = { categoryId, name, color }` (mismo shape que en §Co
 - **`incomeTrend` / `incomeAdjTrend` — tendencias OLS.** Rectas de mínimos cuadrados ajustadas sobre los **puntos no nulos** de su serie madre (`incomePct` e `incomePctAdj` respectivamente). `points` es la recta evaluada en los 12 meses; **`null` si la serie madre tiene menos de 2 puntos no nulos** (no hay recta posible). No son ítems de la leyenda: en el front cada tendencia sigue la visibilidad de su serie de ingreso madre.
 - **`earliestYear`** — año más antiguo con **cualquier** movimiento del usuario, **ignorando el filtro `categories`** (mismo criterio que en §Contrato de serie de reportes); `null` si el usuario no tiene movimientos. **A diferencia de `annual-unicos`/`annual-cuotas`, este contrato SÍ lo expone:** la card `inflation-income` topea la navegación de año hacia atrás en el primer año con datos (RF-REP-012).
 - **`availableCategories`** — universo de categorías con **ingreso (`INCOME`)** del año, computado **sin** aplicar el filtro `categories` (superconjunto estable). Es el universo **de ingreso** (no de gasto, a diferencia de los otros reportes); alimenta la leyenda-filtro de categorías de la card.
+
+---
+
+## Historial de cambios (`HistoryEntry` + `GET /history` · `POST /history/:id/undo`)
+
+> Destino canónico del modelo y del contrato de API del historial. Reglas funcionales en `requirements.md`, RF-HIST-001..006 y RN-024/025/026; mecánica de captura, undo y purga en `docs/backend.md`, §Historial de cambios.
+
+### Modelo — `HistoryEntry`
+
+```
+HistoryEntry = {
+  id, userId,
+  targetKind: "UNICO" | "FIJO" | "CUOTA",   // enum HistoryTargetKind
+  targetId:   string,                        // clave estable del movimiento (ver abajo)
+  action:     "EDIT" | "DELETE",             // enum HistoryAction
+  snapshot:   Json,                          // estado PREVIO completo del movimiento
+  createdAt:  DateTime
+}
+```
+
+- **`targetId` es la clave estable de agrupación por movimiento (RN-024)**, no el id de la fila mutada: `UNICO` → `Transaction.id`; `FIJO` → **`Recurring.chainId`**; `CUOTA` → `InstallmentGroup.id`. En fijos y calculados **tiene que ser el `chainId`**: el split de edición (RN-005) crea una fila nueva y cambia el id de fila, así que agrupar por `Recurring.id` partiría la pila LIFO de un mismo fijo lógico en varias pilas inconexas. El `chainId` sobrevive al split.
+- **`snapshot` no está tipado en Prisma** (`Json`): cada combinación `targetKind × action` tiene una forma distinta. El contrato de aplicación —el shape de cada variante— vive en `backend/src/history/history.types.ts`, que es su destino canónico; lo escriben los services de dominio al capturar y lo lee `HistoryService` para armar el diff y para deshacer.
+- **`userId` con `onDelete: Cascade`:** borrar la cuenta borra su historial.
+- **Índices** (los tres sostienen operaciones distintas, ninguno es redundante):
+  - `(userId, createdAt)` — listar el historial del usuario en orden cronológico descendente (`GET /history`).
+  - `(userId, targetKind, targetId, createdAt)` — resolver el **stack LIFO de un movimiento**: el bloqueo de RF-HIST-004, el undo en cadena y la retención por cantidad (5 por movimiento).
+  - `(createdAt)` — **barrido por antigüedad** para la purga de los 31 días, transversal a todos los usuarios.
+
+### `GET /history`
+
+Sin params. Devuelve, dentro del sobre `{ success, statusCode, data }`, el array de entradas **vigentes** del usuario autenticado, la más reciente primero.
+
+```
+HistoryEntryDto = {
+  id: string,
+  targetKind: "UNICO" | "FIJO" | "CUOTA",
+  targetId: string,                          // clave estable del movimiento (RN-024)
+  action: "EDIT" | "DELETE",
+  createdAt: string,                         // ISO 8601 — momento del cambio
+  description: string | null,                // identidad del movimiento al momento de la entrada
+  category: { id, name, color, scope } | null,
+  type: "EXPENSE" | "INCOME",
+  amount: { amountCents, currency, type } | null,   // null en calculados
+  isCalculated: boolean,
+  changes: HistoryChange[],                  // bloque "Qué cambió", en orden fijo
+  canUndo: boolean,                          // false = entrada bloqueada (RF-HIST-004)
+  blockingCount: number                      // entradas posteriores del mismo movimiento que la bloquean
+}
+
+HistoryChange = {
+  field: HistoryFieldId,
+  previous: <valor según field>,
+  next?: <valor según field>                 // AUSENTE en entradas de eliminación
+}
+```
+
+- **`targetKind` mapea a la TABLA de almacenamiento, no al tipo conceptual del movimiento.** `UNICO` → `Transaction`, `FIJO` → `Recurring`, `CUOTA` → `InstallmentGroup`. Como un **calculado** se persiste siempre como fila `Recurring` —sea su origen un fijo, un único o una cuota—, su `targetKind` es **`FIJO` siempre**. Por eso existe **`isCalculated`** como flag aparte: es información adicional sobre la fila, **no reemplaza** al `targetKind`. `isCalculated: true` solo puede darse con `targetKind: "FIJO"`.
+- **`amount` es `null` en calculados.** El monto de un calculado **es su fórmula** (no persiste una cifra propia; se deriva al vuelo del origen): la identidad del movimiento en la entrada se lee del cambio con `field: "formula"`, no de `amount`.
+- **`canUndo` / `blockingCount` implementan RF-HIST-004.** `canUndo: false` con `blockingCount: N` = hay N entradas posteriores del **mismo `targetId`** que hay que deshacer antes. La entrada bloqueada **igual se lista** y su acción sigue siendo operable (dispara el undo en cadena, ver abajo).
+- **Solo entradas vigentes.** Las purgadas por retención (RF-HIST-005) no se devuelven; la lectura además dispara la purga (ver `docs/backend.md`, §Historial de cambios).
+
+### Campos del bloque "Qué cambió" — set cerrado de 12
+
+`HistoryFieldId` es un set **cerrado** de 12 identificadores, con **orden de presentación fijo** (el mismo para toda la pantalla). El backend emite las filas ya ordenadas; el frontend no reordena ni completa el set.
+
+| Orden | `field` | Shape del valor (`previous` / `next`) |
+|---|---|---|
+| 1 | `amount` | `{ amountCents: number, currency: Currency, type: MovementType }` |
+| 2 | `formula` | `{ operator: "ADD"\|"SUB"\|"MUL"\|"DIV"\|"PCT", operand: number, sign: 1 \| -1 }` — operando **escalado** (ver §Escalado del operando) |
+| 3 | `currency` | `"ARS" \| "USD" \| "EUR" \| "BRL"` |
+| 4 | `exchangeRate` | `number` |
+| 5 | `type` | `"EXPENSE" \| "INCOME"` |
+| 6 | `category` | `{ id: string, name: string, color: string }` |
+| 7 | `description` | `string \| null` |
+| 8 | `date` | `{ occurredAt: string (ISO 8601), timezone: string (IANA) }` — instante + zona, juntos |
+| 9 | `startMonth` | `string` `"YYYY-MM"` |
+| 10 | `installments` | `number` (cantidad total de cuotas del grupo) |
+| 11 | `paymentMethod` | `{ id: string, name: string } \| null` |
+| 12 | `autoDebit` | `boolean` |
+
+- **Qué campos aparecen depende del `targetKind`, de `isCalculated` y de la `action`.** En una **edición** solo viajan los campos realmente editables de ese tipo de movimiento y que efectivamente cambiaron; en una **eliminación** viaja el **estado** del movimiento tal como estaba, que es un set más amplio (incluye campos no editables que hacen a su identidad, como el `startMonth` de un fijo). El mapeo completo de aplicabilidad vive en `backend/src/history/history.service.ts`.
+- **`formula` reemplaza a `amount` en calculados**, por el mismo motivo por el que `amount` viene `null` a nivel entrada.
+
+### Gotcha — la ausencia de `next` es el discriminador, no `next === null`
+
+En una entrada de **eliminación** el bloque "Qué cambió" opera en **modo de valor único**: cada `HistoryChange` trae `previous` y **omite la propiedad `next`** (está **ausente**, no en `null`). En una entrada de **edición**, `next` siempre está presente.
+
+**El consumidor debe discriminar con `'next' in change`, nunca con `next === null` ni `next === undefined`:** `description` y `paymentMethod` tienen `null` como **valor legítimo** (movimiento sin descripción / sin método de pago), así que un chequeo por `null` leería "se borró la descripción" como "esto es una eliminación", y viceversa.
+
+### `POST /history/:id/undo`
+
+| Endpoint | Body | Éxito | Errores |
+|---|---|---|---|
+| `POST /history/:id/undo` | — | `200` · `data: { undone: true }` | `404` (no existe o es de otro usuario) |
+
+- **Un solo endpoint para el undo simple y el undo en cadena.** Deshacer una entrada bloqueada deshace **también** todas las entradas posteriores de ese mismo `targetId`, de la más reciente a la más antigua, en la misma operación (RF-HIST-004). No hay flag ni endpoint aparte: el backend resuelve la cadena a partir del `id` recibido.
+- **Todo o nada.** La cadena completa se aplica en una sola transacción de DB: o se deshace todo, o no se deshace nada.
+- **Deshacer borra las entradas y no crea ninguna** (RF-HIST-003): la operación no deja rastro. El consumidor debe invalidar el historial **y** los datos de movimientos (el undo muta movimientos reales).
 
 ---
 

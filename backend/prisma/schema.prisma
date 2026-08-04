@@ -51,6 +51,22 @@ enum FormulaOperator {
   PCT
 }
 
+// Historial de cambios (Módulo 3.14 — RF-HIST-001..006).
+// targetKind mapea 1:1 a la tabla de almacenamiento del movimiento (NO al tipo
+// "conceptual" del movimiento): Transaction -> UNICO, Recurring -> FIJO
+// (incluye fijos normales Y calculados de cualquier origen, porque estructuralmente
+// son filas Recurring), InstallmentGroup -> CUOTA.
+enum HistoryTargetKind {
+  UNICO
+  FIJO
+  CUOTA
+}
+
+enum HistoryAction {
+  EDIT
+  DELETE
+}
+
 // ---------------------------------------------------------------------------
 // ReferenceRate (tabla de cotizaciones de referencia por mes — Fase 1.2.4)
 // ---------------------------------------------------------------------------
@@ -121,6 +137,44 @@ model User {
   recurrings        Recurring[]
   installmentGroups InstallmentGroup[]
   preferences       UserPreferences?
+  historyEntries    HistoryEntry[]
+}
+
+// ---------------------------------------------------------------------------
+// HistoryEntry (Historial de cambios — Módulo 3.14, RF-HIST-001..006)
+// ---------------------------------------------------------------------------
+
+// Una fila por edición o eliminación de un movimiento (RF-HIST-001). Registro de
+// corto plazo, NO un log de auditoría: se purga por cantidad (5 por movimiento,
+// RF-HIST-005) o antigüedad (31 días) — lo que ocurra primero.
+//
+// targetId es la CLAVE ESTABLE de agrupación por movimiento (RN-024):
+//   UNICO -> Transaction.id
+//   FIJO  -> Recurring.chainId (fijo normal O calculado, de cualquier origen —
+//            sobrevive a los splits de edición, a diferencia del id de fila)
+//   CUOTA -> InstallmentGroup.id
+//
+// snapshot: estado previo completo (antes de la mutación), suficiente para
+// restaurar por completo al deshacer (RF-HIST-003). Shape por targetKind/action
+// documentado en backend/src/history/history.types.ts (no modelado en Prisma
+// porque cada combinación targetKind×action tiene una forma distinta).
+model HistoryEntry {
+  id         String            @id @default(cuid())
+  userId     String
+  targetKind HistoryTargetKind
+  targetId   String
+  action     HistoryAction
+  snapshot   Json
+  createdAt  DateTime          @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Listar por usuario, orden cronológico descendente (GET /history)
+  @@index([userId, createdAt])
+  // Resolver el stack LIFO de un movimiento (undo, retención por cantidad)
+  @@index([userId, targetKind, targetId, createdAt])
+  // Barrer por antigüedad (purga de los 31 días — RF-HIST-005)
+  @@index([createdAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -235,7 +289,8 @@ model PaymentMethod {
 // Transaction (movimiento único)
 // ---------------------------------------------------------------------------
 
-// Hard delete (RF-MU-003): borrado permanente — NO lleva deletedAt.
+// Borrado lógico (RF-HIST-006): ver deletedAt más abajo — reversible desde /historial
+// mientras la entrada esté vigente, y purgado físicamente recién al expirar (reaper).
 model Transaction {
   id          String       @id @default(cuid())
   userId      String
@@ -285,6 +340,14 @@ model Transaction {
   // PaymentMethodValidatorService.resolveAutoDebit). Nullable, default null.
   autoDebit Boolean?
 
+  // Borrado lógico (RF-HIST-006): != null → el único fue eliminado por el usuario.
+  // Deja de aparecer en TODA la app (listados, totales, reportes) salvo /historial,
+  // desde donde es reversible (RF-HIST-003) mientras su entrada de historial esté
+  // vigente. El borrado físico ocurre recién al purgarse esa entrada (RF-HIST-005).
+  // Ortogonal a cualquier otro campo de estado del movimiento (ninguno existe en
+  // Transaction, pero ver Recurring.deletedFrom para el caso análogo a evitar confundir).
+  deletedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -293,7 +356,9 @@ model Transaction {
   paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
 
   // Calculados derivados de este Transaction (Fase 1.1.7.ext).
-  // onDelete: Cascade en la FK del lado Recurring garantiza borrado automático.
+  // onDelete: Cascade en la FK del lado Recurring: solo se ejecuta en el borrado FÍSICO
+  // definitivo (reaper de RF-HIST-005). Mientras el único está soft-deleted, la cascada
+  // a sus calculados es lógica y se aplica en RecurringService (RN-024/026).
   calculados Recurring[]
 
   // Índice compuesto para la consulta de movimientos por mes (filtra por usuario + ordena por fecha)
@@ -391,6 +456,13 @@ model Recurring {
   // formulaSign: signo del resultado. 1 = positivo, -1 = negativo.
   formulaSign Int?
 
+  // Borrado lógico (RF-HIST-006): != null → esta fila fue eliminada (fijo normal o
+  // calculado, de cualquier origen). Ortogonal a deletedFrom: deletedFrom es el
+  // boundary "por mes" de un fijo vivo (RF-MF-004); deletedAt es "esta fila entera
+  // no existe más" (reversible desde /historial hasta que se purgue — RF-HIST-005).
+  // Una fila con deletedAt != null se excluye de TODA lectura de negocio.
+  deletedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -398,7 +470,8 @@ model Recurring {
   category      Category       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
 
-  // FK a Transaction de origen (calculado de único). onDelete: Cascade.
+  // FK a Transaction de origen (calculado de único). onDelete: Cascade (solo aplica
+  // en el borrado físico definitivo del reaper — RF-HIST-005).
   sourceMovement    Transaction?      @relation(fields: [sourceMovementId], references: [id], onDelete: Cascade)
   // FK a InstallmentGroup de origen (calculado de cuota). onDelete: Cascade.
   sourceInstallmentGroup InstallmentGroup? @relation(fields: [sourceInstallmentGroupId], references: [id], onDelete: Cascade)
@@ -541,6 +614,12 @@ model InstallmentGroup {
   // relevante si paymentMethodId apunta a un método de tipo DEBIT. Nullable, default null.
   autoDebit Boolean?
 
+  // Borrado lógico (RF-HIST-006): != null → el grupo de cuotas fue eliminado.
+  // Deja de aparecer en TODA la app (todas las instancias, pasadas y futuras) salvo
+  // /historial, desde donde es reversible (RF-HIST-003) mientras su entrada esté
+  // vigente. El borrado físico ocurre recién al purgarse esa entrada (RF-HIST-005).
+  deletedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -549,7 +628,9 @@ model InstallmentGroup {
   paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
 
   // Calculados derivados de este InstallmentGroup (Fase 1.1.7.ext).
-  // onDelete: Cascade en la FK del lado Recurring garantiza borrado automático.
+  // onDelete: Cascade en la FK del lado Recurring: solo aplica en el borrado FÍSICO
+  // definitivo (reaper de RF-HIST-005). Mientras el grupo está soft-deleted, la
+  // cascada a sus calculados es lógica (RN-024/026), aplicada en RecurringService.
   calculados Recurring[]
 
   // Meses salteados (P3 — Fase 1.1.1.ext): cada fila anula UNA instancia (mes) del grupo,

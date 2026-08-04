@@ -27,8 +27,10 @@ backend/src/
 ├── recurring/      (fijos)
 ├── installments/   (cuotas)
 ├── categories/
+├── history/        (historial de cambios + deshacer)
 ├── users/
 ├── auth/
+├── common/         (helpers transversales a varios módulos)
 └── prisma/
 ```
 
@@ -58,24 +60,36 @@ La fuente de verdad de tipos, campos y constraints es `backend/prisma/schema.pri
 |---------|-----------|
 | `User` | Cuenta. Tiene `passwordHash` nullable (cuentas solo-Google no lo tienen) y `timezone` IANA "de casa". |
 | `Category` | Clasificación de movimientos, por usuario. Soft delete. |
-| `Transaction` | Movimiento único (gasto o ingreso en un instante). Hard delete. |
+| `Transaction` | Movimiento único (gasto o ingreso en un instante). Borrado lógico (`deletedAt`). |
 | `Recurring` | Movimiento fijo mensual (plantilla activa desde un mes). |
 | `InstallmentGroup` | Grupo de cuotas. `amountCents` es el monto **por cuota**, no el total; `totalInstallments` es la cantidad. |
 | `UserPreferences` | Preferencias del usuario. **1:1 con `User`** (`userId` único, `onDelete: Cascade`); contenido en un campo `Json` `data` (default `{}`). Blob extensible para sumar prefs sin migraciones. |
+| `HistoryEntry` | Entrada del historial de cambios: una fila por edición o eliminación de un movimiento, con el estado previo en un `snapshot Json`. Modelo, índices y contrato en `docs/data-model.md` §Historial de cambios; shape del snapshot en `src/history/history.types.ts`. |
 
-**Enums:** `MovementType` (`EXPENSE` | `INCOME`) y `CategoryScope` (`BOTH` | `EXPENSE` | `INCOME`).
+**Enums:** `MovementType` (`EXPENSE` | `INCOME`), `CategoryScope` (`BOTH` | `EXPENSE` | `INCOME`), `HistoryTargetKind` (`UNICO` | `FIJO` | `CUOTA`) y `HistoryAction` (`EDIT` | `DELETE`).
 
 ### Decisiones de modelado (no obvias)
 
 - **`onDelete`:**
   - `Cascade` en las FK `userId` — borrar un usuario borra todos sus movimientos y categorías.
   - `Restrict` en las FK `categoryId` — impide borrar físicamente una categoría mientras la referencien movimientos. Como las categorías usan soft delete, el caso no debería ocurrir; el `Restrict` es el último firewall a nivel DB.
-- **Borrado por entidad:** `Transaction` es **hard delete** (sin `deletedAt`); `Category` es **soft delete** (`deletedAt`). `Recurring` no se borra físicamente: usa `deletedFrom` para dejar de aparecer desde un mes.
+- **Borrado por entidad:** las tres tablas de movimiento (`Transaction`, `Recurring`, `InstallmentGroup`) y las dos de metadato (`Category`, `PaymentMethod`) usan **borrado lógico** (`deletedAt`). En movimientos el borrado físico llega recién con la purga de la entrada de historial (ver §Historial de cambios); en `Category`/`PaymentMethod` no llega nunca (el registro queda para que los movimientos históricos lo sigan mostrando). `Recurring` tiene además `deletedFrom`, que es otra cosa: el boundary por mes de un fijo vivo (ortogonalidad en `docs/data-model.md` §Decisiones de negocio → borrado lógico).
 - **Fechas:** `Transaction.occurredAt` es `@db.Timestamptz` (UTC) + `timezone` IANA por registro (ver `docs/technical.md`, Fechas y zonas horarias). El resto de timestamps (`createdAt`, `updatedAt`) son de sistema.
 - **Mes como `String "YYYY-MM"`:** `Recurring.startMonth` / `Recurring.deletedFrom` / `InstallmentGroup.startMonth`. Fijos y cuotas operan a nivel mes, sin día ni hora.
 - **Montos en centavos (`Int`)** en todas las entidades de movimiento (RN-002). **IDs `cuid()`.**
 - **Sin `@@unique([userId, name])` en `Category`** — la unicidad de nombre se valida en lógica de aplicación (comparación normalizada + flujo crear-o-reactivar). Ver `docs/data-model.md` y RN-014.
 - **Índices:** `(userId, occurredAt)` en `Transaction` para la consulta de movimientos por mes; `userId` en `Category`, `Recurring` e `InstallmentGroup`.
+
+### Filtro de borrado lógico (`src/common/soft-delete.helper.ts`)
+
+Un registro de movimiento con `deletedAt != null` **no debe aparecer en ninguna lectura de negocio**: listados, totales, reportes, selectores y contadores (RF-HIST-006). El filtro **no se copia a mano** en cada query — vive centralizado en `src/common/soft-delete.helper.ts` y lo usan **todos** los repositorios que leen `Transaction` / `Recurring` / `InstallmentGroup` (`transactions`, `recurring`, `installments`, `movements`):
+
+- **`NOT_DELETED`** — constante con el fragmento de `where` de Prisma (`{ deletedAt: null }`), para las queries del ORM.
+- **`NOT_DELETED_TRANSACTION_SQL` / `NOT_DELETED_RECURRING_SQL` / `NOT_DELETED_INSTALLMENT_SQL`** — fragmentos `Prisma.sql` equivalentes, uno por alias de tabla ya usado en el codebase (`t` / `r` / `ig`), para los **7 `$queryRaw` de `movements.repository.ts`** (Prisma no acepta el objeto de filtro del ORM en SQL crudo; los fragmentos se componen anidados dentro del template).
+
+**Por qué está centralizado:** un `deletedAt` olvidado **no rompe nada visible** — no tira error, no falla un tipo. Simplemente vuelve a incluir movimientos eliminados e **infla totales y reportes en silencio**. Toda query nueva sobre esas tres tablas arranca con el filtro puesto.
+
+**No aplica al módulo `history`:** el undo y el reaper necesitan leer y mutar registros ya eliminados a propósito, y por eso acceden a Prisma sin el filtro (ver §Historial de cambios).
 
 ### Migraciones y seed
 
@@ -93,6 +107,7 @@ La fuente de verdad de tipos, campos y constraints es `backend/prisma/schema.pri
 | `categories` | `/categories` | Categorías (CRUD + soft delete) |
 | `payment-methods` | `/payment-methods` | Métodos de pago (CRUD + soft delete) |
 | `preferences` | `/preferences` | Preferencias de usuario (blob JSON, lectura/escritura) |
+| `history` | `/history` | Historial de cambios: listado de entradas + deshacer (simple y en cadena) |
 | `users` | — | Creación de cuenta + categorías por defecto |
 | `auth` | `/auth` | Registro, login y Google; emisión y validación del JWT (guard global) |
 | `prisma` | — | PrismaService |
@@ -130,7 +145,7 @@ CRUD de movimientos únicos. El monto siempre en centavos (entero > 0). El insta
 Gestión de movimientos fijos y calculados. El PATCH y el DELETE reciben el mes actual (`currentMonth`) para resolver la inmutabilidad del pasado; el DELETE además usa `fromCurrentMonth` (query) para controlar desde cuándo deja de aparecer el fijo. Los **calculados** usan endpoints propios `POST|PATCH /recurring/:id/calculated`. Contrato completo en la sección **Movimientos fijos (RecurringModule)** y **Movimientos calculados**. **No hay `GET /recurring/:id`.**
 
 ### `POST /installments` · `PATCH /installments/:id` · `DELETE /installments/:id`
-Gestión de grupos de cuotas. **Solo `EXPENSE` en v1** (rechaza `INCOME` con `400`). El PATCH edita el grupo completo in-place (RF-MC-003). El DELETE es **hard delete del grupo entero** (todas las cuotas, pasadas y futuras). **No hay `GET /installments/:id`**: el front prefilea desde el `MovementItem` de `/movements`. Contrato completo en la sección **Movimientos en cuotas (InstallmentsModule)**.
+Gestión de grupos de cuotas. **Solo `EXPENSE` en v1** (rechaza `INCOME` con `400`). El PATCH edita el grupo completo in-place (RF-MC-003). El DELETE es **borrado lógico del grupo entero** (todas las cuotas, pasadas y futuras). **No hay `GET /installments/:id`**: el front prefilea desde el `MovementItem` de `/movements`. Contrato completo en la sección **Movimientos en cuotas (InstallmentsModule)**.
 
 ### `GET /categories` · `POST /categories` · `PATCH /categories/:id` · `DELETE /categories/:id`
 CRUD de categorías. El DELETE es soft delete (`deletedAt`). Ver el contrato completo en la sección **Categorías (CategoriesModule)**.
@@ -140,6 +155,9 @@ CRUD de métodos de pago. El DELETE es soft delete (`deletedAt`). Ver el contrat
 
 ### `GET /preferences` · `PUT /preferences`
 Lectura y escritura del blob JSON de preferencias del usuario autenticado. El `PUT` **reemplaza el blob entero** (no mergea) y hace upsert. Ver el contrato completo en la sección **Preferencias de usuario (PreferencesModule)**.
+
+### `GET /history` · `POST /history/:id/undo`
+Listado de entradas vigentes del historial de cambios y deshacer. El `POST` **no lleva body** y resuelve por sí solo el undo en cadena cuando la entrada está bloqueada (RF-HIST-004); responde `200` con `{ undone: true }` (no es un DELETE, no aplica la convención del 204). Contrato completo en `docs/data-model.md`, §Historial de cambios; mecánica en la sección **Historial de cambios (HistoryModule)**.
 
 ## Movimientos únicos (TransactionsModule)
 
@@ -160,7 +178,7 @@ CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca mo
 - **`POST /transactions`** — `amountCents` entero **en centavos** (`> 0`); `occurredAt` ISO 8601 en **UTC**; `timezone` IANA. `400` por validación de DTO o por categoría inválida (ver Validación de categoría abajo).
 - **`GET /transactions/:id`** — `404` si no existe o no es del usuario.
 - **`PATCH /transactions/:id`** — body parcial (cualquier campo del POST). **Reaplica todas las validaciones** (RN-002 monto, RN-010 scope). `404` si no existe o no es del usuario.
-- **`DELETE /transactions/:id`** — **hard delete** (permanente, RF-MU-003; la entidad no tiene `deletedAt`). **`204` sin cuerpo.** `404` si no existe o no es del usuario. Si el único tiene calculados derivados (`sourceMovementId`), la FK `onDelete: Cascade` los borra enteros (ver §Movimientos calculados, Eliminación).
+- **`DELETE /transactions/:id`** — **borrado lógico** (`deletedAt`, RF-MU-003 / RF-HIST-006; reversible desde `/historial`). **`204` sin cuerpo.** `404` si no existe o no es del usuario. Si el único tiene calculados derivados (`sourceMovementId`), se les aplica **cascada lógica** vía `RecurringService.cascadeSoftDeleteBySourceMovement` (ver §Movimientos calculados, Eliminación).
 - **`POST /transactions/:id/skip` — toggle de anulación (RF-MU-005):** anula / des-anula el único, **sin body**. Es un **toggle** del flag `Transaction.skipped`: si estaba en `false` lo pone en `true` (`data: { skipped: true }`) y viceversa. Sin alcance temporal (anula la fila entera). `404` si el único no existe o no es del usuario. Un único anulado **se sigue listando** en `GET /movements` con `skipped: true` pero **no suma** a totales ni reportes.
 - **`POST|PATCH /transactions/:id/calculated`** — calculado de origen único; contrato en `docs/data-model.md`, §Contrato de movimientos calculados; mecánica en §Movimientos calculados (abajo).
 
@@ -365,7 +383,10 @@ Un fijo aparece en `month` si: `startMonth <= month` **y** (`deletedFrom IS NULL
 ### Eliminación (DELETE con `currentMonth` y `fromCurrentMonth`)
 
 - **`boundary = fromCurrentMonth ? currentMonth : nextMonth(currentMonth)`** — el mes desde el cual el fijo deja de aparecer. `fromCurrentMonth = false` (checkbox desmarcado, default) → deja de aparecer desde el mes **siguiente**; `true` (checkbox marcado) → desde el mes **actual inclusive** (RF-MF-004).
-- **Si `boundary <= startMonth`** (el fijo no aparecería en ningún mes) → **hard delete físico** de la fila. **Si no** → set `deletedFrom = boundary` (soft, sigue visible en los meses anteriores al `boundary`). El pasado nunca se toca.
+- **El boundary se aplica fila por fila con `applyBoundaryToChain(chainId, boundary)`** (helper privado de `RecurringService`, compartido por el DELETE de fijos y por la cascada a calculados). Por cada fila de la cadena:
+  - **`boundary <= startMonth`** (la fila no aparecería en ningún mes) → **borrado lógico** de la fila (`deletedAt`, RF-HIST-006), **no** borrado físico: el snapshot del historial necesita que la fila siga existiendo para poder restaurarla.
+  - **`deletedFrom` nulo o mayor que el boundary** → set `deletedFrom = boundary` (la fila sigue visible en los meses anteriores).
+  - **`deletedFrom <= boundary`** (la fila ya terminó antes) → no se toca. El pasado nunca se toca.
 
 ### Gotchas
 
@@ -413,11 +434,11 @@ Cada calculado suma `|final|` al bucket de su **type derivado** (totales del mes
 
 `DELETE /recurring/:id` (contrato uniforme: `currentMonth`/`fromCurrentMonth` siempre presentes):
 
-- **(a) Calculado de único o cuota** (`sourceMovementId` o `sourceInstallmentGroupId` no-null) → **hard-delete total** del calculado, **ignorando** el boundary (no hay split — espeja su origen, RF-MCALC-009).
+- **(a) Calculado de único o cuota** (`sourceMovementId` o `sourceInstallmentGroupId` no-null) → **borrado lógico total** del calculado, **ignorando** el boundary (no hay split — espeja su origen, RF-MCALC-009).
 - **(b) Calculado de fijo** (`sourceChainId` no-null) → `applyBoundaryToChain(chainId, boundary)` sobre su propia cadena, sin tocar el origen.
-- **(c) Fijo normal** (las tres FK null) → `applyBoundaryToChain(chainId, boundary)` (por fila: `boundary <= startMonth` → hard delete; si no → `deletedFrom = boundary`) y `cascadeDeleteCalculados(chainId, boundary)` que aplica el **mismo** boundary a cada cadena de calculado de **fijo** vinculada (`sourceChainId = chainId del origen`).
+- **(c) Fijo normal** (las tres FK null) → `applyBoundaryToChain(chainId, boundary)` (ver §Movimientos fijos → Eliminación) y `cascadeDeleteCalculados(chainId, boundary)`, que aplica el **mismo** boundary a cada cadena de calculado de **fijo** vinculada (`sourceChainId = chainId del origen`).
 
-**Cascada del origen único/cuota → la da la DB.** El calculado de único/cuota engancha por FK `onDelete: Cascade`; borrar el `Transaction` (`DELETE /transactions/:id`) o el `InstallmentGroup` (`DELETE /installments/:id`) **borra entero** el calculado sin pasar por `RecurringService` (no hay split — RF-MCALC-005/009).
+**Cascada del origen único/cuota → la aplica el service, no la DB.** La FK del calculado de único/cuota declara `onDelete: Cascade`, pero como el origen ahora se borra **lógicamente** la fila nunca desaparece y la cascada de la DB **no se dispara**. El borrado del origen llama explícitamente a `RecurringService.cascadeSoftDeleteBySourceMovement` / `cascadeSoftDeleteBySourceInstallmentGroup`, que marcan `deletedAt` en las filas del calculado (no hay split — RF-MCALC-005/009). Es lo que permite que deshacer la eliminación del origen restaure también sus calculados (RN-024).
 
 ### Gotchas
 
@@ -443,7 +464,7 @@ Gestión de grupos de cuotas, **scopeada por `userId` del JWT**. El módulo expo
 
 - **Solo `EXPENSE` en v1:** el endpoint **rechaza `INCOME` con `400`** (resuelve la contradicción RF-MC-001 vs "Fuera de alcance: Ingreso en cuotas"). `amountCents` es el monto **por cuota** (entero `> 0`, RN-002), no el total. `totalInstallments` es la cantidad (entero `> 0`). `startMonth` es `YYYY-MM`.
 - **`PATCH /installments/:id` — edita el grupo completo in-place (RF-MC-003).** Campos editables: monto por cuota, cantidad, mes de inicio, categoría, descripción. **El `type` no se edita.** **No hay split ni inmutabilidad del pasado** (a diferencia de los fijos): la edición aplica a todas las instancias del grupo. `404` si no existe o no es del usuario.
-- **`DELETE /installments/:id` — hard delete del grupo entero.** Borra **físicamente** todas las cuotas (pasadas y futuras): `InstallmentGroup` no tiene `deletedFrom` ni soft delete. **`204` sin cuerpo.** `404` si no existe o no es del usuario. Si el grupo tiene calculados derivados (`sourceInstallmentGroupId`), la FK `onDelete: Cascade` los borra enteros (ver §Movimientos calculados, Eliminación).
+- **`DELETE /installments/:id` — borrado lógico del grupo entero.** Marca `deletedAt` en el grupo: dejan de aparecer **todas** las cuotas (pasadas y futuras), en un solo paso — `InstallmentGroup` no tiene `deletedFrom`, no hay boundary por mes. Reversible desde `/historial` (RF-HIST-003). **`204` sin cuerpo.** `404` si no existe o no es del usuario. Si el grupo tiene calculados derivados (`sourceInstallmentGroupId`), se les aplica **cascada lógica** vía `RecurringService.cascadeSoftDeleteBySourceInstallmentGroup` (ver §Movimientos calculados, Eliminación).
 - **`POST /installments/:id/skip` — toggle de anulación de una instancia mensual (RF-MC-004):** anula / des-anula la cuota de un mes puntual, body `{ month: "YYYY-MM" }`. Es un **toggle** sobre `InstallmentSkip(installmentGroupId, month)`: si ya existe lo borra (`data: { skipped: false, month }`); si no, lo crea (`data: { skipped: true, month }`). Anula **solo** esa instancia mensual, sin tocar el resto del grupo. `404` si el grupo no existe o no es del usuario; `400` si el `month` no cumple `YYYY-MM`. Una cuota anulada **se sigue listando** en `GET /movements` con `skipped: true` pero **no suma** a totales ni reportes.
 - **`POST|PATCH /installments/:id/calculated`** — calculado de origen cuota (deriva del **monto por cuota**); contrato en `docs/data-model.md`, §Contrato de movimientos calculados; mecánica en §Movimientos calculados (abajo).
 - **Validación de categoría:** idéntica a únicos y fijos (propia, activa, scope compatible RN-010); inexistente / ajena / eliminada / scope incompatible son todas `400`, nunca `409`; categoría ajena no se distingue de inexistente. Se delega en `CategoryValidatorService` (ver abajo).
@@ -555,6 +576,53 @@ El helper que arma el `AuthResponse` de los tres flujos de auth es **`async`** p
 
 - **Prisma 7 + tipo `Json` (cast obligatorio).** El campo `Json` tiene tipado estricto en `create` / `update` / `upsert`: un `Record<string, unknown>` **no es asignable directo** al input de Prisma. Requiere un cast (`as any` con comentario explicativo). El comportamiento en runtime es correcto; el cast es solo para el type-checker.
 - **Tests e2e que levantan `AppModule` necesitan `userPreferences` en el mock de `PrismaService`.** Como `PreferencesModule` vive en `AppModule` y `AuthService` lo usa, el mock de `PrismaService` de cualquier e2e que arranque `AppModule` debe exponer `userPreferences` con `findUnique`, `upsert` y `create` — análogo al gotcha de `installmentGroup`. Sin esto, los flujos de auth (que leen preferencias) rompen en el setup del test.
+
+## Historial de cambios (HistoryModule)
+
+Registra ediciones y eliminaciones de movimientos y permite deshacerlas (RF-HIST-001..006). Contrato de API y modelo en `docs/data-model.md`, §Historial de cambios; shape del snapshot por `targetKind × action` en `src/history/history.types.ts`.
+
+### Endpoints
+
+| Endpoint | Body | Éxito | Errores |
+|----------|------|-------|---------|
+| `GET /history` | — | `200` · `data: HistoryEntryDto[]` | — |
+| `POST /history/:id/undo` | — | `200` · `data: { undone: true }` | `404` |
+
+### Captura
+
+La captura vive en los **services de dominio** (`transactions`, `recurring`, `installments`), no en el módulo de historial: cada uno arma el snapshot del estado previo **antes** de mutar y llama a `HistoryService.record(...)`. La entrada se graba después de que la mutación terminó bien.
+
+- **La cascada no genera entradas propias (RN-024).** Eliminar un origen con calculados derivados produce **una** entrada; los calculados que caen viajan **dentro** de ese mismo snapshot. Deshacerla los restaura junto con el origen.
+- **`targetId` agrupa por movimiento lógico, no por fila** (ver `docs/data-model.md`): en fijos y calculados es el `chainId`, así que el split de edición no parte la pila LIFO.
+
+### Retención y purga
+
+Una entrada se conserva hasta que ocurre **lo primero** de estas dos (RF-HIST-005): que el movimiento acumule más de **5 entradas** (se descarta la más vieja al grabar la sexta) o que la entrada cumpla **31 días**.
+
+- **Reaper.** Al purgarse una entrada de **eliminación**, el movimiento que estaba con borrado lógico se **borra físicamente**: la eliminación deja de ser reversible y el registro desaparece de la DB. Purgar una entrada de edición solo borra la entrada.
+- **La purga es lazy, no agendada.** `@nestjs/schedule` no es dependencia del proyecto, así que no hay cron: la purga corre **al leer el historial y al deshacer**. **Consecuencia:** un usuario que nunca abre `/historial` no purga sus entradas vencidas hasta su próxima visita — sus movimientos eliminados siguen ocupando espacio (invisibles para el resto de la app) más allá de los 31 días.
+
+### Deshacer
+
+- **LIFO por movimiento.** Solo se puede deshacer la entrada más reciente de un `targetId`; deshacer una anterior implica deshacer primero todas sus posteriores. Un mismo endpoint resuelve los dos casos: dado el `id`, arma la cadena de entradas a deshacer y la recorre **de la más reciente a la más antigua**.
+- **Atómico.** Toda la cadena —restaurar el estado y borrar cada entrada— corre dentro de **una sola `prisma.$transaction`**. Si algo falla, no queda nada restaurado a medias.
+- **No deja rastro** (RF-HIST-003): deshacer borra las entradas involucradas y no crea ninguna.
+
+### Excepción arquitectónica — el undo y el reaper mutan por Prisma directo
+
+`HistoryService.undo()` y el reaper escriben en `Transaction`, `Recurring` e `InstallmentGroup` **directamente por Prisma**, sin pasar por los services de esos módulos. Rompe deliberadamente la regla general de §Propiedad de dominio ("un módulo le habla a otro solo a través de su Service"). Dos razones:
+
+1. **El undo en cadena necesita una única transacción de DB.** Threadear un cliente transaccional (`Prisma.TransactionClient`) a través de `TransactionsService`, `RecurringService` e `InstallmentsService` —y de sus repositorios— sería una modificación invasiva de tres módulos para un solo consumidor.
+2. **Evita una dependencia circular de módulos:** los tres services de movimiento ya dependen de `HistoryService` para capturar.
+
+**La captura NO es excepción:** vive donde corresponde, en los services de dominio. La excepción se limita a la restauración y al borrado físico, y no debe extenderse a operaciones nuevas sin discutirlo.
+
+### Qué campos emite cada entrada
+
+El backend decide qué filas del bloque "Qué cambió" emite; **el frontend no filtra ni decide omisiones** — pinta lo que recibe. Además del set aplicable por tipo de movimiento (ver `history.service.ts`), dos campos tienen reglas propias:
+
+- **`exchangeRate` (`Cotización`) se emite solo si es informativa:** cuando hay **conversión real** (la moneda del movimiento difiere de su `anchorCurrency`) o cuando la **moneda cambió** en esa edición. Un movimiento en la misma moneda que su ancla tiene cotización `1` por definición: mostrarla es ruido.
+- **`currency` (`Moneda`) en una entrada de eliminación se omite** cuando la moneda del movimiento coincide **a la vez** con su `anchorCurrency` y con la **moneda default vigente** del usuario — es decir, cuando no aporta nada frente a lo que el usuario ya ve por defecto. Si el usuario cambió su default desde que se cargó el movimiento, la moneda **sí** se emite.
 
 ## Autenticación
 

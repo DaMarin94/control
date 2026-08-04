@@ -62,9 +62,26 @@ const mockPrisma = {
   recurring: {
     create: jest.fn(),
     findUnique: jest.fn(),
-    findMany: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
     update: jest.fn(),
+    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     delete: jest.fn(),
+  },
+  // historyEntry — necesario para HistoryModule (Módulo 3.14, RF-HIST-001):
+  // TransactionsService.update/remove graban una entrada de historial en cada llamada.
+  historyEntry: {
+    create: jest.fn().mockResolvedValue({
+      id: 'hist-1',
+      userId: 'user-a-tx-e2e',
+      targetKind: 'UNICO',
+      targetId: 'tx-e2e-001',
+      action: 'EDIT',
+      snapshot: {},
+      createdAt: new Date(),
+    }),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
+    delete: jest.fn().mockResolvedValue(undefined),
   },
   // recurringSkip — necesario para RecurringModule (Fase 1.1.1)
   recurringSkip: {
@@ -622,19 +639,23 @@ describe('Transactions (e2e)', () => {
   // -------------------------------------------------------------------------
 
   describe('DELETE /transactions/:id', () => {
-    it('204 No Content al eliminar (hard delete)', async () => {
+    it('204 No Content al eliminar (borrado lógico — RF-HIST-006)', async () => {
       const existing = makeDbTransaction();
       mockPrisma.transaction.findUnique.mockResolvedValue(existing);
-      mockPrisma.transaction.delete.mockResolvedValue(existing);
+      mockPrisma.transaction.update.mockResolvedValue({ ...existing, deletedAt: new Date() });
 
       await request(app.getHttpServer())
         .delete('/transactions/tx-e2e-001')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(204);
 
-      expect(mockPrisma.transaction.delete).toHaveBeenCalledWith({
-        where: { id: 'tx-e2e-001' },
-      });
+      expect(mockPrisma.transaction.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'tx-e2e-001' },
+          data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+        }),
+      );
+      expect(mockPrisma.transaction.delete).not.toHaveBeenCalled();
     });
 
     it('404 si no existe', async () => {

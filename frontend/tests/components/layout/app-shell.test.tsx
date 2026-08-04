@@ -91,6 +91,53 @@ describe("AppShell", () => {
     expect(main).toHaveStyle({ marginLeft: "0px" });
   });
 
+  it("<main> reserva paddingTop 36px cuando el sidebar está cerrado (banda del chip flotante)", () => {
+    render(
+      <AppShell email="test@example.com" initialSidebarOpen={false}>
+        <div>contenido</div>
+      </AppShell>,
+    );
+
+    const main = screen.getByText("contenido").closest("main");
+    expect(main).toHaveStyle({ paddingTop: "36px" });
+  });
+
+  it("<main> no reserva paddingTop cuando el sidebar está abierto", () => {
+    render(
+      <AppShell email="test@example.com" initialSidebarOpen={true}>
+        <div>contenido</div>
+      </AppShell>,
+    );
+
+    const main = screen.getByText("contenido").closest("main");
+    expect(main).toHaveStyle({ paddingTop: "0px" });
+  });
+
+  it("paddingTop entra/sale en la MISMA transición que marginLeft (chip flotante, docs/design.md)", () => {
+    render(
+      <AppShell email="test@example.com" initialSidebarOpen={true}>
+        <div>contenido</div>
+      </AppShell>,
+    );
+
+    const main = screen.getByText("contenido").closest("main");
+    expect(main?.className).toContain("transition-[margin-left,padding-top]");
+  });
+
+  it("clic en 'Ocultar menú' lleva <main> a paddingTop 36px", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppShell email="test@example.com" initialSidebarOpen={true}>
+        <div>contenido</div>
+      </AppShell>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Ocultar menú" }));
+
+    const main = screen.getByText("contenido").closest("main");
+    expect(main).toHaveStyle({ paddingTop: "36px" });
+  });
+
   it("<main> es @container (ancla de las container queries del área de contenido)", () => {
     render(
       <AppShell email="test@example.com" initialSidebarOpen={true}>

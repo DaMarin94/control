@@ -151,7 +151,8 @@ export class RecurringController {
    *
    * Lógica:
    * - boundary = fromCurrentMonth ? currentMonth : nextMonth(currentMonth)
-   * - Si boundary <= R.startMonth → hard delete
+   * - Si boundary <= R.startMonth → borrado lógico (RF-HIST-006): marca deletedAt,
+   *   reversible desde /historial (RF-HIST-003) hasta que la entrada se purgue.
    * - Si no → set R.deletedFrom = boundary
    *
    * Si es un fijo de ORIGEN (no calculado), la eliminación se propaga (RF-MCALC-005)

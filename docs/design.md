@@ -372,7 +372,17 @@ Implementa **RF-NAV-002**. El sidebar (`AppSidebar`, 248px) deja de auto-colapsa
   - **Ícono:** `PanelLeft` (lucide), 20px. `aria-label="Mostrar menú"`, `aria-expanded="false"`.
   - **Caja como chip de chrome:** a diferencia del botón de colapsar (que vive sobre el `bg-panel` del sidebar), este flota **sobre contenido arbitrario de la página**, así que necesita cuerpo propio para leerse: `bg-panel`, `border border-line`, `rounded-ctl`, `shadow-[var(--shadow-sm)]`, caja `~40px` (`p-2.5`) para target táctil holgado (~44px con el área de toque). Glifo `text-ink-2` en reposo.
   - **Estados:** hover `bg-panel-2` + glifo `text-ink`; active `bg-panel-3`; focus-visible anillo `--accent-soft`; misma transición 140ms.
-  - **No tapa la acción de la página:** al estar `top-4 left-4` y ser un chip de 40px, convive con el header de cada pantalla (que arranca con su `px-10`/`pt` propio). Si en alguna pantalla el chip se encimara con el título, el frontend reserva el aire correspondiente — pero el chip **manda** (es chrome persistente, no puede quedar tapado; invariante 3).
+  - **No tapa la acción de la página:** el chip **manda** (es chrome persistente, no puede quedar tapado; invariante 3), así que **lo que se corre es el contenido, y se corre a nivel app** — ver "Banda reservada" abajo.
+
+#### Banda reservada del chip flotante (sidebar cerrado)
+
+**Regla:** con el sidebar **cerrado**, `<main>` reserva una **banda superior de 36px** (`padding-top: 36px`; con el sidebar **abierto** es `0`). Sumada al `py-[34px]` que aportan todas las pantallas de la app autenticada, **el primer píxel de contenido de página queda a 70px del borde superior del viewport**: 12px de aire por debajo del chip, que ocupa 58px de alto (`top-4` = 16px + caja de 42px = glifo 20 + `p-2.5` ×2 + borde 1px ×2).
+
+- **Invariante:** *con el sidebar cerrado, ningún contenido de página se pinta por encima de los 70px superiores del viewport en el arranque de la pantalla.* Ese es el contrato; los 36px son su implementación dado el `py-[34px]` común. Si alguna pantalla cambiara su padding superior, se recalcula la banda para sostener el invariante — no se parchea la pantalla.
+- **Por qué a nivel app y no por pantalla.** El chip flota en coordenadas de **viewport**; la colisión no depende de la pantalla sino del **ancho**: cuando el viewport baja de ~1200px el bloque de contenido deja de estar centrado y queda pegado a su `px-10` (x = 40px), justo debajo del chip (x = 16..58). Resolverlo pantalla por pantalla ya falló una vez: `/historial`, al no llevar eyebrow, quedó con la **"H" del H1 tapada** ("listorial"). Y no era un problema exclusivo de esa pantalla: con eyebrow el chip igual se come el arranque de esa primera línea a anchos apretados — solo que un rótulo de 12px muted parcialmente tapado no se nota, y un H1 sí. **El eyebrow nunca fue la protección: era una coincidencia que la disimulaba.**
+- **Reserva vertical, nunca horizontal.** Correr el contenido a la derecha (más `padding-left`) desalinearía el header respecto del cuerpo de la página, rompería el centrado del cap de 1120px y —si se hiciera con `padding` sobre `<main>`— inflaría el `inline-size` que miden las container queries (ver la nota de `app-shell`: por eso el offset del sidebar es `margin-left` y no `padding-left`). La banda vertical no toca ninguno de los tres ejes.
+- **Anima con el resto:** la banda entra y sale dentro de la **misma transición coordinada** del offset del sidebar (0.24s `cubic-bezier(0.4,0,0.2,1)`; instantánea con `prefers-reduced-motion`). Cerrar el sidebar es un solo movimiento: el contenido se corre a la izquierda y baja lo que ocupa el chip.
+- **Alcance explícito:** la banda protege el **arranque** de la pantalla. Con scroll > 0 el chip sigue flotando sobre contenido arbitrario — es inherente a un chip fijo y **no** se resuelve acá.
 
 > **Un control lógico, dos encarnaciones.** No hay dos botones simultáneos: cuando el sidebar está **abierto**, se ve solo el botón de **colapsar** (dentro del sidebar); cuando está **cerrado**, se ve solo el botón **flotante de abrir**. El hamburguesa/drawer anterior (`Menu` + overlay `wide:hidden`) **se retira**: ya no hay lógica por breakpoint.
 
@@ -3486,6 +3496,392 @@ Umbral único `--bp-wide` (941px). La sección **no introduce ninguna superficie
 - [ ] Ninguna cifra (inflación % ni cotizaciones $) usa verde/rojo; el único rojo es el error inline.
 - [ ] El índigo aparece **solo** como focus ring (botones y tiles), en ningún relleno ni texto.
 - [ ] Cotizaciones y variaciones de inflación van en **mono tabular** (`tnum`).
+
+## Historial de cambios (`/historial`) — lista de entradas, deshacer y bloqueo LIFO
+
+Pantalla nueva (RF-HIST-002/003/004, `screens.md` §11). Es una **pantalla de consulta con una acción**: se lee "qué cambié" y, si hace falta, se deshace. No edita movimientos, no navega al mes, no muestra totales. La lista es **finita y corta por naturaleza** (máx. 5 entradas por movimiento, expiración a 31 días), así que **no se pagina, no se filtra y no se agrupa por día**: se apila cronológicamente, más reciente primero.
+
+> **Se reusa todo lo que ya existe:** el molde de tarjeta-lista de `/mes` (filas separadas por `--hair`), el grid de la fila (`40px 1fr auto`), el patrón de **fila rótulo·valor** de la *Card de detalle de movimiento*, la caja recesada `rounded-ctl border-line bg-panel-2` de la caja de "Origen", el chip neutro del DS, `ModalShell variant="dialog"`, el sistema de **skeletons**, el lenguaje **dashed = vacío** y el ítem de nav del sidebar. **No se introduce ningún token nuevo.**
+
+### 1. Encuadre de pantalla
+
+- **Ancho de contenido:** el mecanismo canónico de las demás pantallas — `px-10 max-w-[1120px] mx-auto`. Sin `PeriodNav`, **sin flechas ‹ ›**, sin stepper: el historial no se recorre por período.
+- **Sin `CurrencyChip`:** la pantalla no expone totales (Convenciones de `screens.md`).
+- **Cabecera `.phead`** (misma anatomía que Dashboard / `/reportes`), zona derecha **vacía** (no hay acción de pantalla):
+  - **Sin eyebrow.** Es la única `.phead` de la app que no lo lleva: acá el H1 ya es una sola palabra inequívoca y la bajada (regla de retención) es información real que el usuario necesita. Un eyebrow encima sería una tercera línea de texto que no agrega nada — ruido sobre el título, jerarquía diluida antes de llegar al dato. *(Decisión cerrada con el usuario; el resto de las pantallas conserva su eyebrow.)*
+    > **Colisión con el chip flotante del sidebar — resuelta a nivel app, no acá.** Sin eyebrow, el H1 sube a la primera banda y, con el sidebar cerrado a viewport ≲1200px, el chip "Mostrar menú" le tapaba la "H" ("listorial"). La causa **no** es la falta de eyebrow: es que el chip no tenía banda reservada y cada pantalla se defendía por accidente. Se corrige con la **banda reservada del chip flotante** (§"Sidebar — mostrar/ocultar"), que protege a **toda** pantalla presente y futura sin eyebrow. `/historial` **no** recupera el eyebrow y **no** lleva ningún padding especial propio: usa el mismo `px-10 py-[34px] pb-20` que las demás.
+  - **H1** "Historial" — 32px/700 `tracking-[-0.02em]` `--ink`.
+  - **Bajada** — 14px `--muted`, `mt-2`: *"Se guardan los últimos 5 cambios de cada movimiento, durante 31 días."* Es la única superficie donde la **regla de retención** se le explica al usuario, y tiene que estar visible **también con datos** (el momento en que aparece la pregunta "¿dónde fue a parar aquel cambio?"). *(Copy — ver §10.)*
+  - Bloque con `mb-6`.
+- **Cuerpo:** una **única tarjeta-lista** (`bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] overflow-hidden`) con las entradas como filas separadas por `--hair`. **No** una card por entrada: la card-por-entrada infla el scroll y le da a cada evento un peso que no tiene; la tarjeta-lista es el molde que la app ya usa para listas de ítems (`/mes`, categorías, métodos, límites).
+
+### 2. Anatomía de la entrada (régimen amplio)
+
+Grid **`40px 1fr auto`**, `gap-[14px]`, padding `var(--row-pad) 18px` (14/18) — el mismo ritmo que la fila de `/mes`. Divisor `--hair` entre filas.
+
+**Alineación vertical del grid: `items-start` en los DOS regímenes.** Las tres columnas se alinean al **tope de la entrada**, nunca al centro. La fila de `/mes` puede centrar porque tiene una sola banda de alto; acá la col 2 crece con el bloque de cambios (una edición de un campo mide ~70px, una eliminación con 5 campos ~180px), así que centrar **despega el ícono y el momento del nombre** y los deja flotando a la altura del diff — el ojo pierde el ancla de identidad, que es lo primero que se lee. *(Jerarquía visual.)*
+- **Col 1 (ícono):** `self-start`. La caja de 40px queda **enmarcando la banda de identidad** (línea de nombre 21px + sublínea ~18px ≈ 39px): sin offsets negativos ni números mágicos, el ícono cubre exactamente lo que titula.
+- **Col 3 (momento + acción):** `self-start`. El **momento** lleva la **misma caja de línea que la línea de identidad** (`leading-[21px]` en los dos) para que se lean **al mismo nivel** que el nombre: son las dos mitades de la misma frase ("qué movimiento" ⟷ "cuándo").
+- **Col 2:** `self-start` por consecuencia; su contenido ya fluye desde arriba.
+
+**Col 1 — ícono de operación, 40×40.** Misma caja que el ícono de tipo de la fila de `/mes` (mismo tamaño, radio y posición), pero **fill neutro**: `bg-panel-3`, glifo `--ink-2` **18px**, `aria-hidden`.
+- **Editado → `Pencil`** · **Eliminado → `Trash2`** (mismos glifos que las acciones "Editar"/"Eliminar" del kebab: un concepto, un glifo).
+- **Neutro, nunca rojo.** Rojo es gasto (regla dura 1) y, además, teñir de rojo toda la fila de una eliminación la haría leer como un movimiento de gasto. El eje de esta pantalla es *qué pasó*, no *ingreso/gasto*.
+- *Alternativa evaluada y descartada:* usar acá el **ícono de tipo tintado** de `/mes` (↓ gasto / ↑ ingreso). Haría que la fila de historial se leyera como una fila de movimiento —que no lo es— y dejaría la operación (lo más importante) sin ancla visual. El tipo del movimiento se sigue leyendo en el **color de la cifra** del bloque de cambios.
+
+**Col 2 — cuerpo (`min-w-0`), tres bandas:**
+
+1. **Línea de identidad** — `flex items-center gap-[8px] min-w-0 leading-[21px]` (caja de línea explícita: es la referencia de altura para el ícono de la col 1 y el momento de la col 3):
+   - **Nombre del movimiento** — rol *Nombre de movimiento* (14.5px/600 `-.01em`), `--ink`, `truncate`, `flex-1 min-w-0`. Es el ancla: el usuario busca *qué* movimiento tocó.
+   - **Chip de operación** — chip neutro del DS (`--panel-3` / `--muted` / `--r-chip` 7px / 11px·600·`.04em`), `shrink-0`: **"Editado"** / **"Eliminado"**. Doble codificación deliberada con el ícono (glifo para escanear, palabra para precisión y para no depender solo del ícono).
+2. **Sublínea de identidad del movimiento** — 12px, `--muted`, separadores `·` en `--faint`, `truncate`. Reusa exactamente el vocabulario de la sublínea de `/mes`:
+   `● {Categoría} · {Estructura} [· ↳ calculado]`
+   - **Punto de categoría** 6px (`background: category.color` inline, `aria-hidden`), `gap-[6px]` antes del nombre; **Categoría** en `--ink-2` (eje de identidad).
+   - **Estructura** — `Único` / `Fijo` / `Cuotas`, en `--muted`. (`screens.md` §11 lo pide explícito: acá el movimiento no está en su sección, así que la estructura no se infiere del contexto como en `/mes`.)
+   - **`↳ calculado`** (solo si el movimiento es calculado) — glifo `CornerDownRight` 12px `--muted` + palabra. **Sin** nombre de origen: el historial no lo tiene garantizado y el segmento largo apretaría la línea.
+3. **Bloque "Qué cambió"** — ver §3. `mt-[10px]`.
+
+**Col 3 — momento + acción (`shrink-0`, `text-right`, `flex flex-col items-end gap-[8px]`):**
+- **Momento** — `{DD Mmm} · {HH:MM}` (ej. `02 Jun · 14:30`), **mono tabular**, 12.5px `--muted`, `whitespace-nowrap`, `leading-[21px]` (misma caja de línea que la línea de identidad → se leen al mismo nivel). Formatos ya vigentes (el `DD Mmm` de la col 3 de `/mes` y el `HH:MM` de la card de detalle). **Sin año**: la retención es de 31 días, el año nunca discrimina.
+  - *Se descartó el tiempo relativo* ("hace 2 h"): obliga a refrescar en cliente, se vuelve ambiguo pasados unos días y pierde el eje de alineación que da el mono tabular.
+- **Acción** — botón "Deshacer" o su estado bloqueado (§5).
+
+**Lo que la fila NO tiene:** kebab, link a `/mes`, botón de editar, contador de entradas, indicador de vencimiento. La fila entera **es clickeable** y abre el modal de la entrada (§5) — mismo patrón que la fila de `/mes` abre su card de detalle: `role="button"`, `tabIndex=0`, `Enter`/`Espacio`, `aria-label="Ver cambio de {Nombre}, {DD Mmm HH:MM}"`, `cursor-pointer`, hover `bg-panel-2`. El botón "Deshacer" es un `<button>` hermano con `stopPropagation` (mismo mecanismo que el kebab de `/mes`).
+
+### 3. Bloque "Qué cambió" — el par antes → después
+
+Caja recesada: `rounded-ctl border border-line bg-panel-2 px-[13px] py-[10px]`, `space-y-[8px]` — el mismo molde que la caja read-only de "Origen" del calculado.
+
+**Una fila por campo**, con el patrón **rótulo·valor** de la card de detalle: `flex flex-wrap items-baseline justify-between gap-x-[16px] gap-y-[2px]`.
+- **Rótulo del campo** (izq) — rol *Meta*, 12.5px/500 `--muted`, `shrink-0`. Vocabulario **idéntico al de la card de detalle** (ver el set completo y su orden abajo).
+- **Par de valores** (der) — `flex flex-wrap items-baseline justify-end gap-x-[8px] gap-y-[2px] min-w-0`:
+  - **Valor anterior** — `--muted`.
+  - **`→ valor nuevo`** — **una sola unidad indivisible** (`whitespace-nowrap` sobre el conjunto flecha+valor). Flecha `→` en `--faint`; valor nuevo en `--ink`.
+  - **Sin `line-through` en el valor anterior.** En Control el tachado ya significa **"anulado / no computa"** (ítem `skipped`); reusarlo acá para "valor viejo" cruzaría dos significados. La distinción la hacen el **tono** (pasado `--muted` / vigente `--ink`) y la flecha.
+
+**Regla del par (transversal):** *izquierda = antes, derecha = después*, siempre en orden temporal. El mismo eje se aplica en el modal (§5), donde "antes" es el estado actual y "después" el estado restaurado.
+
+**Jerarquía — el monto manda:**
+- Si el **monto** cambió, su fila es **siempre la primera** del bloque y va en **escala promovida**: ambos valores en **mono tabular 15.5px/600** (rol *Monto en fila*); el resto de los campos en **13px**. Es el dato que el usuario más quiere leer de un vistazo y la escala lo refleja sin sacarlo de la estructura común.
+- **La promoción de escala es exclusiva del Monto.** Ningún otro campo numérico (cotización, cantidad de cuotas) sube de 13px: si tres filas gritan, ninguna grita.
+- **Se muestran TODOS los campos que cambiaron**, sin cortar ni esconder detrás de un "ver más". El caso realista es **1–3 filas**; el techo teórico (~10, una edición que reescribe el movimiento entero) es exactamente el caso donde esconder algo sería peor. Esconder qué cambió vacía de sentido la pantalla.
+
+#### 3.1 Set de campos y orden fijo *(cerrado con el usuario)*
+
+Se registran **todos los campos editables** del movimiento; el bloque muestra **solo los que cambiaron**. Los campos que no aplican al tipo de movimiento simplemente no existen para esa entrada.
+
+**Orden fijo, único para toda la pantalla** — `Monto → Fórmula → Moneda → Cotización → Tipo → Categoría → Descripción → Fecha → Mes de inicio → Cuotas → Método de pago → Débito automático`.
+
+| # | Rótulo | Aplica a | Presentación del par |
+|---|---|---|---|
+| 1 | `Monto` | los tres tipos | cifra mono tabular **15.5/600**, con signo y símbolo; nuevo con **color por tipo** |
+| 2 | `Fórmula` | calculados | expresión completa en **una sola fila** (§3.2 a) |
+| 3 | `Moneda` | los tres tipos | **código en mayúsculas**, texto plano (`ARS → USD`) |
+| 4 | `Cotización` | los tres tipos | numérico mono tabular (§3.2 b) |
+| 5 | `Tipo` | únicos | palabra `Gasto` / `Ingreso`, **sin tintar** (§3.2 e) |
+| 6 | `Categoría` | los tres tipos | punto de color 6px + nombre, texto (trunca) |
+| 7 | `Descripción` | los tres tipos | texto plano (trunca) |
+| 8 | `Fecha` | únicos | **fecha y hora juntas**, mono (§3.2 f) |
+| 9 | `Mes de inicio` | fijos y cuotas | `formatMonthShort` (`Mar 2024`), mono tabular |
+| 10 | `Cuotas` | cuotas | cantidad, mono, unidad una sola vez (§3.2 c) |
+| 11 | `Método de pago` | los tres tipos | nombre del método, texto (trunca) |
+| 12 | `Débito automático` | los tres tipos | **verbo de transición, sin par** (§3.2 d) |
+
+**Por qué este orden — cuatro bandas, no una lista arbitraria:**
+1. **Dinero (1–4):** *cuánto* y en qué marco monetario. La fórmula va inmediatamente después del monto porque en un calculado **es** su monto (la regla que produce la cifra); moneda y cotización son el marco de conversión de esa misma cifra y se leen como par contiguo — ver una moneda nueva sin la cotización al lado obliga a saltear filas.
+2. **Naturaleza e identidad (5–7):** `Tipo` encabeza la banda porque es el cambio más profundo (invierte el signo del movimiento); después categoría y descripción, que son *cómo lo llamo*.
+3. **Cuándo y estructura (8–10):** fecha, mes de inicio y cantidad de cuotas. Son mutuamente excluyentes casi siempre (un único no tiene mes de inicio; un fijo no tiene fecha), así que en la práctica ocupan **una sola fila** de esta banda.
+4. **Cromo de pago (11–12):** método y débito automático — lo último que se pregunta y lo que menos discrimina una entrada de otra.
+
+Un orden fijo (y no "el orden en que cambiaron") hace que dos entradas distintas se **escaneen igual**: el ojo aprende una vez dónde mira. *(Carga cognitiva + consistencia.)*
+
+**Significancia — `Moneda` y `Cotización` no se emiten cuando no informan nada** *(decisión cerrada con el usuario)*. Son los dos únicos campos del set que el sistema puede tocar **sin que el usuario los haya tocado** (el formulario normaliza la cotización al guardar) o que repiten un default silencioso. Mostrarlos igual produce ruido que el usuario lee como "yo no cambié eso" y le quita credibilidad a todo el bloque: si una fila miente, el historial entero se vuelve sospechoso. *(Carga cognitiva + confianza en el dato.)*
+
+> **La decisión es del backend, no del frontend.** El backend es quien **emite** los campos de la entrada; el frontend renderiza lo que llega y **no filtra nada**. Un filtro en el cliente duplicaría la regla y las dos copias se desincronizarían.
+
+**Vocabulario (contrato con el modelo).** Cada movimiento guarda `currency` (su moneda) y `anchorCurrency` (la moneda default del usuario **al momento de guardar**, que es la moneda de referencia de su `exchangeRate` — ver `data-model` / `schema.prisma`). Se define:
+
+> **conversión real de un estado** ⇔ `estado.currency !== estado.anchorCurrency`.
+
+Si los dos coinciden, `exchangeRate` es un artefacto interno (vale 1, o lo que haya quedado de la normalización del formulario) y **no es información para el usuario**.
+
+**Regla de emisión — `Cotización`:**
+- **Diff de edición:** se emite ⇔ `conversiónReal(antes) || conversiónReal(después)` **Y** (`exchangeRate` cambió **o** `currency` cambió).
+- **Estado de eliminación (§3.3):** se emite ⇔ `conversiónReal(estado eliminado)`.
+- Casos de borde, resueltos por la misma regla:
+  - Movimiento ARS con ancla ARS y el form normaliza `1.450,00 → 1,00`: ningún lado tiene conversión real ⇒ **se omite** (es el ruido reportado en QA).
+  - **La moneda cambió** (ej. `ARS → USD`, o `USD → ARS`): al menos un lado tiene conversión real ⇒ **se emite siempre**, aunque el número sea idéntico en los dos lados. Cuando cambia la moneda, la cotización es *la* información que explica en qué quedó convertido el monto; omitirla dejaría el cambio a medio contar.
+
+**Regla de emisión — `Moneda`:**
+- **Diff de edición:** se emite ⇔ `currency` cambió. **Sin excepción**, incluso si el destino es la moneda default: acá el cambio **es** la información.
+- **Estado de eliminación (§3.3):** se **omite** ⇔ `currency === anchorCurrency` **Y** `currency === defaultCurrency vigente del usuario`. En cualquier otro caso se emite.
+  - La primera condición es la del usuario ("coincide con su moneda default"), resuelta contra el campo estable del propio movimiento; la segunda evita el hueco de que el usuario haya cambiado su default después: un movimiento en USD borrado por alguien que hoy opera en ARS **sí** tiene que decir `Moneda USD`.
+  - Caso reportado en QA: movimiento ARS, ancla ARS, default ARS ⇒ **se omite**.
+
+#### 3.2 Presentación de los campos que no son texto plano
+
+**a) `Fórmula` — una sola fila, no tres.** Aunque la fórmula se compone de **operador, operando y signo**, se muestra como **una expresión única**: `−10% del origen → +15% del origen`.
+- **Por qué una y no tres filas:** el usuario no editó "un operador", editó *la regla de cálculo*. Tres filas (`Operador`, `Operando`, `Signo`) lo obligarían a recomponer mentalmente el cálculo a partir de partes sueltas, triplicarían el peso visual de un solo cambio conceptual y dejarían filas como `Signo: + → −` que fuera de contexto no significan nada. *(Carga cognitiva.)*
+- **Cómo se arma:** se reusa el **builder de expresión legible del form de calculado**, en su **forma abstracta** — la misma que la card de detalle usa cuando `sourceAmountCents === null` (operador + operando + signo, **sin** la cifra del origen). El historial no tiene garantizado el monto del origen, y meterlo haría que la expresión cambiara sola con el tiempo.
+- **Tipografía:** la expresión completa en **mono tabular** 13px (lleva número); el par entero (`anterior → nuevo`) sigue la regla de tono de §3, y `→ {expresión nueva}` es la unidad indivisible.
+- **El signo viaja dentro de la expresión, no en una fila `Tipo`.** En un calculado el tipo es **derivado** (lo determina el signo de la fórmula), así que no se abre una fila `Tipo`: sería el mismo cambio contado dos veces.
+
+**b) `Cotización` — numérico, mono, nunca coloreado.**
+- **Valor:** el mismo formateo de cotización vigente en la card de Moneda de Configuración, **mono tabular** 13px (regla dura 3: es cifra monetaria). Sin repetir el par de monedas en cada lado (el rótulo ya dice `Cotización`): `1.180,50 → 1.245,00`.
+- **Los dos lados se formatean con la misma cantidad de decimales** (la del formateador vigente). Un par con distinta cantidad de decimales de cada lado se compara mal a ojo, que es justamente para lo que sirve el mono tabular.
+- **Nunca verde ni rojo.** Una cotización no es ingreso ni gasto (regla dura 1); subir o bajar no es "bueno" ni "malo". Tono estándar del par: anterior `--muted`, nuevo `--ink`.
+- **La fila puede no existir.** `Cotización` solo se emite cuando hay **conversión real** en alguno de los dos lados (regla de emisión completa en §3.1). Un movimiento en su moneda ancla **no muestra esta fila aunque el número haya cambiado**; si la **moneda cambió**, la fila **siempre** aparece.
+
+**c) `Cuotas` — cantidad con la unidad una sola vez.** El par se lee `6 → 12 cuotas`: números en **mono tabular** 13px y la palabra **"cuotas" solo en el valor nuevo**, dentro de la unidad indivisible `→ 12 cuotas`.
+- **Por qué no `6 cuotas → 12 cuotas`:** repetir el sustantivo en una fila cortísima duplica texto sin agregar información y estira el par justo donde el ancho escasea. La unidad se lee una vez y gobierna los dos lados.
+- **Singular:** `1 → 3 cuotas`; si el valor nuevo es 1, `12 → 1 cuota`.
+- **No se agrega una fila derivada de "total del plan"** aunque cambiar la cantidad lo cambie: el historial muestra **lo que se editó**, no sus consecuencias calculadas. *(Sería alcance nuevo.)*
+
+**d) `Débito automático` — booleano: verbo de transición, sin par.** Es el único campo que **rompe el patrón del par**, deliberadamente. La fila muestra un **único valor en la columna del "nuevo"** (`--ink`), con el verbo: **"Se activó"** / **"Se desactivó"**.
+- **Por qué no `No → Sí`:** un booleano tiene un solo bit de información y el par lo dice dos veces —el lado izquierdo es siempre el complemento del derecho—, así que la mitad de la fila es ruido. Peor: `No → Sí` obliga a leer dos tokens ambiguos y traducirlos ("¿sí a qué?"), mientras que "Se activó" se entiende sin volver al rótulo. *(Carga cognitiva + claridad.)*
+- **La estructura no se rompe visualmente:** misma fila rótulo·valor, mismo grid, valor alineado a la derecha en `--ink` — ocupa la posición del "nuevo", que es exactamente lo que es. Lo único que falta es el segmento `anterior →`, y su ausencia no genera duda porque el verbo ya declara la dirección.
+- **En el modal** (dirección de deshacer) el verbo se invierte y va en **presente**: si la entrada dice "Se activó", el modal dice **"Se desactiva"** (y viceversa). Misma regla que el resto del bloque: *lo que se muestra es el estado que queda*.
+- **En modo de valor único** (eliminación, §3.3) no hubo transición: se muestra el estado, **"Activado"** / **"Desactivado"**, y la fila **se omite si estaba desactivado** (igual que en la card de detalle, donde `autoDebit === false` no se renderiza: su ausencia no es informativa).
+
+**e) `Tipo` — palabra, sin tintar. Solo en movimientos únicos.** La fila existe **exclusivamente** para entradas de un movimiento **único**: es el único tipo cuyo `tipo` es editable (RF-MU-002). Un **fijo** no puede cambiar de tipo (RF-MF-003 — solo monto, categoría y descripción), y en un **calculado** el tipo es derivado del signo de la fórmula, que ya viaja dentro de la expresión (§3.2 a). En esos dos casos la fila `Tipo` no existe para ninguna entrada.
+
+Valores `Gasto` / `Ingreso` como texto plano, con el tono estándar del par (anterior `--muted`, nuevo `--ink`). **No se tiñe la palabra** de verde ni de rojo: el color semántico en Control vive en la **cifra**, no en etiquetas de texto, y pintar dos palabras contiguas con los dos colores del sistema convertiría la fila en un semáforo ilegible. El impacto real del cambio ya se ve en la fila `Monto` (que en ese caso cambia de color y de signo aunque el número sea el mismo) — y por eso, **si cambió el tipo, la fila `Monto` se muestra siempre**, aunque la magnitud no haya cambiado: es la única forma de ver el efecto real de la edición.
+
+**f) `Fecha` — fecha y hora son un solo campo.** Una fila, formato de la card de detalle: `02/06/2026 · 14:30`, **mono tabular**. Si solo cambió la hora, igual se muestran los dos lados completos. Partirlo en `Fecha` + `Hora` obligaría a leer dos filas para reconstruir **un solo instante**, y produciría el caso absurdo de una fila `Fecha` con los dos lados idénticos.
+
+**Color del dinero:** el valor **nuevo** de una cifra de dinero lleva el color por tipo vigente en la app (**gasto `--ink` / ingreso `--income-ink`**, con su signo y símbolo); el valor **anterior** va `--muted` (es pasado, no manda). Toda cifra en **mono tabular** (regla dura 3). Las cifras **no monetarias** (cotización, cantidad de cuotas) van en mono tabular pero **sin color por tipo**.
+
+#### 3.3 Entrada de eliminación (sin "después")
+
+El mismo bloque, en **modo de valor único** — mismas filas rótulo·valor, **sin flecha y sin segundo valor**, con el valor en `--ink-2` (y las cifras de dinero con su color por tipo). Rótulo del bloque: una línea *Meta* 12.5/500 `--muted` arriba, **"Se eliminó:"**.
+- Campos mostrados = los del movimiento tal como estaba, **en el mismo orden fijo de §3.1**, omitiendo los que no aplican al tipo, los opcionales sin valor (`Método de pago` sin método, `Débito automático` desactivado) y los **no significativos** según la regla de emisión de §3.1:
+  - **`Cotización`** se omite si el movimiento **no tenía conversión real** (`currency === anchorCurrency`).
+  - **`Moneda`** se omite si `currency === anchorCurrency` **y** `currency === defaultCurrency vigente`. *(Una ficha de eliminación que dice `Moneda ARS` a un usuario que opera en ARS gasta una fila en decirle lo que ya sabe.)*
+  - Las dos omisiones las decide el **backend** al emitir la entrada; el frontend no filtra.
+- El booleano usa la palabra de estado (`Activado`), no el verbo de transición (§3.2 d).
+- **`Tipo` no se lista** *(decisión cerrada)*. En este bloque no hay transición: la ficha describe el movimiento tal como estaba, y ahí el tipo **ya se lee en la fila `Monto`** —siempre presente, siempre primera— por su **signo** (`−` / `+`) y su **color por tipo**. Una fila `Gasto` debajo de `− $12.500,00` repite el mismo bit con otras palabras y alarga la ficha justo donde queremos un vistazo. Es el mismo criterio con el que §3.3 omite `Método de pago` sin método o `Débito automático` desactivado: lo que no agrega información no ocupa una fila. *(Carga cognitiva.)*
+  - **No viola "no depender solo del color":** el tipo va doblemente codificado sin recurrir a él — el **signo** de la cifra lo declara por sí solo, y es el mismo par signo+color con el que el usuario lee montos en toda la app. *(Consistencia + accesibilidad.)*
+  - **Sí sigue existiendo como fila en las entradas de edición** (§3.2 e, solo únicos), donde hay un antes y un después reales y el par sí aporta.
+
+### 4. Estados de la entrada
+
+| Estado | Contenido | Acción (col 3) | Fila |
+|---|---|---|---|
+| **Deshacible** (la más reciente de su movimiento) | opacidad plena | botón **"Deshacer"** | hover `bg-panel-2`, clickeable |
+| **Bloqueada** (hay posteriores) | **opacidad plena** | botón **activo** `Lock` + **"Bloqueado"** + **motivo visible** | hover `bg-panel-2`, clickeable → modal de cadena |
+| **Deshaciendo** | `opacity-[0.55]`, `pointer-events-none` | botón en carga | no clickeable |
+
+- **La entrada bloqueada NO se atenúa.** Su contenido es exactamente igual de informativo que el de una deshacible —el usuario entró a *leer* qué cambió— y atenuar lo que hay que leer es un error de jerarquía. Lo que está condicionado es **la acción**, no el dato. (Se descartó el `opacity-[0.55]` del ítem anulado justamente por eso: ahí el atenuado significa "no computa"; acá el cambio sí ocurrió y sí importa.)
+- **El botón de la entrada bloqueada está ACTIVO** *(decisión cerrada con el usuario)*: mismo `Button variant="outline" size="sm"`, glifo **`Lock` 15px** + label **"Bloqueado"**, **sin `disabled`**, y **abre el modal de cadena** (§6). No es un control muerto: es la puerta a la única salida que existe.
+  - **Por qué no `disabled`:** un botón muerto **al lado de una fila que sí es clickeable** es una contradicción de affordance — el usuario ve dos superficies con la misma apariencia de acción, una responde y la otra no, y la que no responde es justo la que nombra lo que quiere hacer. Además un `disabled` sin explicación alcanzable es un callejón: el estado bloqueado **tiene** salida (deshacer la cadena), así que el control tiene que llevar ahí. *(Affordance + flujo, sin callejones.)*
+  - **El label cambia con el estado, no solo el ícono:** "Deshacer" ↔ "Bloqueado". Doble codificación (glifo `Undo2`/`Lock` + palabra), sin depender solo del ícono ni solo del color. Que el rótulo *no* diga "Deshacer" es lo que evita el disparo accidental: el usuario que lo toca ya sabe que va a pasar otra cosa.
+  - **Sigue siendo `outline`, no primario:** es la misma jerarquía de acción secundaria de la fila; lo que cambia es a dónde lleva.
+- **Motivo del bloqueo, visible en la lista** (RF-HIST-004): línea bajo el botón, `text-right`, **12px `--muted`**, `whitespace-nowrap`:
+  - `N ≥ 2` → **"Hay {N} cambios posteriores"**
+  - `N = 1` → **"Hay 1 cambio posterior"** — acá el numeral **se conserva** en singular: la línea es una **lectura de conteo**, se escanea en columna junto a otras entradas y el número es la información. (Regla general de conteo: §6.)
+  
+  Va asociada al botón por `aria-describedby` — el motivo se enuncia **en la lista**, sin obligar a abrir el modal para entender por qué no se puede.
+- **Dos caminos, un mismo destino.** Tanto el cuerpo de la fila como el botón "Bloqueado" abren **el mismo modal de cadena** (§6): una sola forma de "entrar" a una entrada, idéntica en los dos estados. La fila conserva `cursor-pointer` y hover también bloqueada. El botón es `<button>` hermano con `stopPropagation` para no disparar doble apertura.
+- **Deshaciendo:** el estado de carga **vive en el footer del modal** (botón primario "Deshaciendo…", `disabled`); la(s) fila(s) afectada(s) por debajo van a `opacity-[0.55]` + `pointer-events-none`. Al terminar: el modal cierra, **toast de éxito**, y la(s) fila(s) **desaparecen con fade + colapso de alto de 0.22s ease-out** (instantáneo con `prefers-reduced-motion`). Sin la salida animada, una fila que se evapora deja al usuario sin confirmación de *qué* se fue — sobre todo en el deshacer en cadena, donde se van varias.
+
+### 5. La acción Deshacer y su confirmación
+
+**Tono: restaurativa, no destructiva.** Deshacer **devuelve** datos; lo único que destruye es el propio registro del cambio. Por eso **no usa rojo en ningún lado** (`variant="destructive"` queda reservado a Eliminar). Mismo criterio ya cerrado para "Guardar igual" del aviso de límites: el primario índigo es cromo de interacción legítimo y comunica "esto no es destrucción".
+
+**Botón de la fila** — `Button variant="outline" size="sm"`, `min-h-[36px]`, `whitespace-nowrap`. **Dos rótulos, un solo molde:**
+- Entrada deshacible → glifo **`Undo2` 15px** + **"Deshacer"** → abre el modal de deshacer (§5).
+- Entrada bloqueada → glifo **`Lock` 15px** + **"Bloqueado"** → abre el modal de cadena (§6). **Activo, no `disabled`** (§4).
+- **Siempre visible**, nunca revelado por hover: es la razón de ser de la pantalla y un control hover-only sería inalcanzable por touch.
+- **Secundario, no primario:** la mayoría de las visitas son de consulta. El contenido (qué cambió) domina la fila; la acción es un blanco estable y discreto a la derecha.
+- **Nunca acciona directo:** siempre abre el modal (RF-HIST-003 exige confirmación). Eso también resuelve el riesgo de disparo accidental sin agregar fricción de doble clic.
+- Estados: hover/active/focus del `Button` del DS (anillo `--accent-soft` 3px).
+
+**Modal de deshacer** — `ModalShell variant="dialog"` (`max-w-[440px]`), cierre con **✕ y `Esc`** (es un modal de decisión: el clic en el scrim **no** cierra).
+
+- **Título:** "Deshacer cambio".
+- **Cuerpo** (`space-y-[14px]`):
+  1. **Frase de encuadre** — 14px `--ink`: *"Se va a restaurar **{Nombre}** al estado que tenía antes de este cambio."*
+  2. **Caja de identidad** — `rounded-ctl border border-line bg-panel-2 px-4 py-3` (molde exacto de la caja del diálogo de eliminar): nombre 13px/600 `--ink` + sublínea 12px `--muted` `● Categoría · {Estructura} · {DD Mmm · HH:MM}`.
+  3. **Bloque "Al deshacer"** — **el mismo bloque de §3, en dirección de deshacer**. Rótulo del bloque (*Meta* 12.5/500 `--muted`): **"Al deshacer queda así:"**. Cada fila: `{valor actual} → {valor restaurado}`, con el **restaurado en `--ink`** (es el que va a mandar) y el actual en `--muted`.
+     > **Ojo, es el espejo de la fila.** En la lista el par va `antes → después` (pasado → presente); en el modal va `actual → restaurado` (presente → futuro). **La flecha siempre apunta al estado que queda**, así que la regla es una sola y no hay que aprender dos. Implementar el bloque del modal reusando el de la fila **sin invertir el par sería un bug**: le diría al usuario que el cambio va a volver a aplicarse.
+     - En una **eliminación**, el bloque va en modo de valor único con el rótulo **"Vuelve a la app:"** y el resumen del movimiento.
+  4. **Nota de consecuencia** — 12.5px `--muted`: *"Esta entrada se borra del historial."* Muted, **no** callout ámbar: es la consecuencia esperada de la acción pedida, no una advertencia sobre un efecto colateral (ámbar está reservado a eso, ver *Aviso de alerta activa de límites*).
+- **Footer:** `Cancelar` (`variant="ghost" size="sm"`) + **`Deshacer`** (`variant="default" size="sm"`, primario índigo; en carga **"Deshaciendo…"** + `disabled`).
+
+### 6. Modal de entrada bloqueada — desbloqueo en cadena
+
+Mismo `ModalShell variant="dialog"`. Es el **único** camino para deshacer una entrada bloqueada, y se abre por **dos vías equivalentes**: el cuerpo de la fila o el botón **"Bloqueado"** (§4).
+
+- **Título:** "Hay cambios posteriores" — nombra la situación, no la niega. ("No se puede deshacer" sería un callejón; acá **sí** hay salida.)
+- **Cuerpo** (`space-y-[14px]`):
+  1. **Callout explicativo neutro** — `rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px]`, glifo **`Info` 16px `--ink-2`** + texto 13px `--ink-2`. **Dos frases escritas aparte, no una plantilla con `{N}`:**
+     - `N ≥ 2` → *"Este no es el cambio más reciente de **{Nombre}**. Para deshacerlo hay que deshacer antes los **{N}** cambios posteriores."*
+     - `N = 1` → *"Este no es el cambio más reciente de **{Nombre}**. Para deshacerlo hay que deshacer antes **el cambio posterior**."* — **sin numeral**: en prosa corrida el artículo ya dice que es uno, y "los **1** cambios posteriores" es un error de concordancia que el usuario lee como bug (lo fue: QA visual).
+     - **Regla de conteo (transversal a la pantalla):** *ningún plural se compone concatenando el numeral con el sustantivo en plural.* Cada superficie escribe su frase de singular aparte. **En prosa** el singular usa artículo y no numeral; **en una línea de conteo** (el motivo de bloqueo de §4) el numeral se conserva, porque ahí el número **es** el dato. Alcanza también al footer y al toast de esta sección.
+     - **Neutro, no ámbar y no rojo.** No es una advertencia sobre un efecto peligroso ni un error: es el orden de la pila. Ámbar quedaría desproporcionado y erosionaría su significado de "prestá atención" (ver *Tono y severidad — una sola familia ámbar*).
+  2. **Lista de los cambios que se van a deshacer** — rótulo *Meta* 12.5/500 `--muted`: **"Se van a deshacer, en este orden:"**. Filas compactas separadas por `--hair`, **de la más reciente a la más antigua** (el orden real de ejecución), y **la entrada abierta al final, marcada**:
+     - Cada fila — `flex flex-wrap items-center gap-x-[8px] gap-y-[2px]`, `px-[10px] py-[8px]`, 12px: `[glifo de operación 14px --muted] {DD Mmm · HH:MM, mono --muted} · {chip de operación} · {resumen de la entrada}`.
+     - **Resumen de la entrada — un solo valor, nunca el par.** Se lee `{Rótulo}: {valor resultante}` (`Monto: −$350.000,00`): el valor **que queda después** del cambio; en una eliminación, el valor que el movimiento tenía. **No** se muestra `anterior → nuevo`.
+       - **Por qué:** esta lista responde *cuáles se van a deshacer*, no *qué cambió en cada una* — para eso está la entrada en la lista, con su bloque completo. El par duplica el ancho del segmento más largo de la fila y fue la causa directa de que las cifras salieran cortadas en QA (`Monto: −$325.000,…`). *(Carga cognitiva + regla dura de cifras.)*
+       - **Campo elegido:** el de **`Monto`** si participa del cambio; si no, el **primero del orden fijo de §3.1** que participe.
+       - **El rótulo no se omite.** Sin `Monto:` / `Categoría:`, una cifra suelta al lado del momento se lee como parte de la fecha.
+     - **Prioridad de contención de la fila (ninguna cifra se corta jamás — regla dura 3 y §9):**
+       1. **Nunca ceden:** glifo, momento, chip de operación y el marcador `(esta)` — todos `shrink-0`.
+       2. **La cifra del resumen es indivisible:** `whitespace-nowrap`, no truncable. Alcanza a `Monto`, `Cotización`, `Cuotas`, `Fecha`, `Mes de inicio` y la expresión de `Fórmula`.
+       3. **Si el resumen no entra, baja entero a una segunda línea** de la misma fila (`flex-wrap`); momento y chip se quedan arriba. Es el mismo mecanismo de wrap del par de §9 — no hay modo compacto aparte, y la fila crece de alto antes que mentir un número.
+       4. **Solo truncan los valores de texto** (`Descripción`, `Categoría`, `Método de pago`, `Moneda`, `Tipo`, `Débito automático`) con `min-w-0` + elipsis: un texto cortado sigue identificando la entrada, un número cortado es un dato falso.
+     - La **entrada abierta** cierra la lista con fondo `--panel-3` y el rótulo `(esta)` en `--faint`, para que se vea que el total incluye la que se está mirando.
+     - Máximo real: **5 filas** (tope de retención por movimiento). No hace falta truncar ni scrollear.
+     - *(Agregado más allá de lo pedido por RF-HIST-004 — **confirmado por el usuario**, ver §10.)*
+  3. **Nota de consecuencia** — 12.5px `--muted`: *"Todas se borran del historial."*
+- **Footer:** `Cancelar` (ghost) + **`Deshacer los {N+1} cambios`** (primario índigo; carga: "Deshaciendo…"). El número es el **total real** (los posteriores + esta), no los N posteriores: el botón dice exactamente lo que va a pasar. Una entrada bloqueada tiene **al menos un posterior**, así que el total es siempre ≥ 2 y el plural es correcto por construcción; el singular defensivo, si alguna vez se diera, es **"Deshacer el cambio"** (nunca "los 1 cambios").
+- **Al confirmar:** las N+1 filas de la lista van a `opacity-[0.55]` y salen juntas con el fade+colapso de §4. **Toast de éxito** con el conteo: **"{N} cambios deshechos."** / singular **"Cambio deshecho."** (misma regla de conteo: el singular tiene su propia frase, sin numeral).
+
+### 7. Vacío, carga y error
+
+**Vacío (el caso más común).** Reusa el lenguaje **dashed = acá todavía no hay nada** (sección vacía del acordeón, recuadro `[+]` de reportes). En lugar de la tarjeta-lista: caja `rounded-card border border-dashed border-line bg-panel-2`, `px-6 py-10`, contenido centrado en columna, `gap-[10px]`:
+- **Círculo `--panel-3` de 48px** con glifo **`History` 22px `--muted`** — el mismo ancla visual del gate: declara "esto está bien así, no está roto".
+- **Título** 14.5px/600 `--ink`: *"Todavía no hay cambios registrados."*
+- **Línea de apoyo** 13px `--muted`, `max-w-[42ch]`, centrada: *"Cuando edites o elimines un movimiento, el cambio aparece acá y lo vas a poder deshacer."*
+- **Sin CTA.** Mandar al usuario a `/mes` "a editar algo" para llenar esta pantalla sería absurdo: el vacío es el estado sano.
+- La retención **no se repite acá** (ya vive en la bajada de la cabecera, siempre visible).
+
+**Carga.** Sistema de skeletons vigente, sin `animate-pulse` inline.
+- **Chrome estable presente e inerte:** la `.phead` completa (H1 + bajada, sin eyebrow) y la tarjeta-lista (`bg-panel border-line rounded-card shadow-sm overflow-hidden`) se renderizan reales.
+- **Contenedor** `role="status"` `aria-label="Cargando historial"`; placeholders `aria-hidden`.
+- **5 filas fantasma** replicando el grid real (`40px 1fr auto`, padding 14/18, divisor `--hair`):
+  - Col 1: **`SkeletonBlock` 40×40 radio `--r-ctl`** (no `SkeletonCircle`: el ícono real es una caja con radio, no un círculo).
+  - Col 2: `SkeletonLine` alto **14.5px** ancho ~45% (nombre) + `SkeletonPill` 60×16 (chip de operación) en la misma línea → `SkeletonLine` alto **12px** ancho ~32% (sublínea) → `SkeletonBlock` radio **`--r-ctl`**, alto **44px**, ancho 100% (el bloque de cambios; 44px ≈ dos filas de campo, el alto medio).
+  - Col 3: `SkeletonLine` alto 12.5px ancho **80px** + `SkeletonBlock` radio `--r-ctl` **104×36** (el botón).
+- **Solo en carga inicial**; un refetch con dato en pantalla no vuelve a skeleton.
+
+**Error.**
+- **Falla la carga de la lista** — patrón inline vigente (card de Moneda / Datos externos): dentro del área de lista, texto 13px `--expense-ink`: *"No se pudo cargar el historial. Recargá la página."* Sin skeleton ni lista vacía debajo.
+- **Falla el deshacer** — `toast.error`: *"No se pudo deshacer el cambio. Intentá de nuevo."* El **modal queda abierto** y el botón vuelve a su estado normal (a diferencia del diálogo de eliminar, que cierra): el usuario puede reintentar sin volver a buscar la entrada. Nada se restaura a medias, así que la lista no cambia.
+
+### 8. Ítem del sidebar
+
+- **Ícono: `History`** (lucide), **18px**, mismo molde que los demás links (`opacity-70` inactivo / `opacity-100` activo).
+  - *Descartados:* `Undo2` (nombra la acción, no el lugar — la pantalla es una lista, no un botón), `RotateCcw` (colisiona con el `RefreshCw` de "refrescar reporte": dos flechas circulares con significados distintos), `Clock` (genérico, dice "hora" y no "registro de cambios").
+- **Rótulo:** "Historial".
+- **Posición: cuarta**, entre Reportes y Configuración. Orden final: `Dashboard · Vista del mes · Reportes · Historial · Configuración`. **Configuración es chrome de administración y cierra la lista por convención**; Historial es una superficie operativa, hermana de Reportes.
+- **Activo:** `bg-accent-soft text-accent-ink font-semibold` + `aria-current="page"`, match por prefijo (`/historial`). Sin cambios al patrón.
+
+### 9. Contención responsive (obligatoria)
+
+**El punto de riesgo es el par `antes → después`**, que se angosta mal. La solución es la misma familia que ya usa la card de detalle: **wrap, nunca truncado de cifra**.
+
+**Régimen amplio (ancho de contenido `≥ --bp-wide`).** El grid `40px 1fr auto` descrito en §2.
+
+**Régimen compacto (`< --bp-wide`, medido por container query sobre `<main>`).** La entrada **colapsa a stack de una columna** (mismo criterio que las grillas de resumen): 
+1. Fila superior: `[ícono 40×40] [nombre + chip de operación]`.
+2. **Sublínea**, con el **momento como último segmento**: `● Categoría · {Estructura} · {DD Mmm · HH:MM}` (mono solo en el momento).
+3. **Bloque "Qué cambió"** a ancho completo — gana todo el ancho de la fila, que es exactamente lo que necesita.
+4. **Botón "Deshacer"** en su propia fila, **alineado a la derecha**, `mt-[10px]` (y, si está bloqueado, el motivo a su izquierda en la misma fila).
+Así la acción nunca queda apretada ni inalcanzable, y el par de valores no compite por ancho con la columna de acción.
+
+**Comportamiento del par al angostarse (los dos regímenes):**
+- La fila de campo es `flex-wrap`: si el par no entra al lado del rótulo, **el par baja a su propia línea** (patrón de la card de detalle).
+- Dentro del par, `→ {valor nuevo}` es **una unidad indivisible**: cuando no entra, envuelve entero y la segunda línea se lee `→ $12.500,00`. **El apilado vertical del par sale gratis del wrap** — no hace falta un modo compacto aparte.
+- **Ninguna cifra se trunca jamás** (regla dura). Alcanza a **monto, cotización, cantidad de cuotas, fecha/hora, mes de inicio y la expresión de `Fórmula`**: todas envuelven enteras, nunca con elipsis. Los valores de **texto** (Descripción, Categoría, Método de pago, Moneda, Tipo) sí truncan con `min-w-0` + elipsis: un "antes" truncado sigue siendo informativo, un número truncado es un dato falso.
+- **La fila `Débito automático`** (valor único, §3.2 d) es la más corta del bloque y nunca necesita envolver.
+- **La lista del modal de cadena** (§6.2) tiene su propia contención —resumen de **un solo valor**, cifra indivisible, wrap a segunda línea— porque ahí el ancho útil es fijo (`max-w-[440px]` menos padding) y no depende del viewport. Misma regla dura: **ninguna cifra trunca, nunca**.
+
+**Los cuatro invariantes en este elemento:**
+1. *Sin scroll horizontal del `body` (≥640px, sidebar abierto o cerrado):* la fila no tiene ancho mínimo rígido — col 2 es `min-w-0` con truncado y el bloque de cambios envuelve. En compacto la acción sale de la fila y deja de presionar el ancho. A 392px de contenido (piso con sidebar abierto) la entrada se lee apilada, sin barra horizontal.
+2. *Modales completos y scrolleables:* los dos modales son `ModalShell variant="dialog"` — `max-h: calc(100dvh − 48px)` en `dvh`, cuerpo scrolleable, footer pineado, body-lock, clipping al radio 18px. El **modal de cadena es el más alto** (callout + hasta 5 filas + nota): es el caso que hay que verificar en viewport bajo — el footer con "Deshacer los N cambios" debe quedar pineado y visible.
+3. *Ninguna acción inalcanzable:* el botón de la fila ("Deshacer" o "Bloqueado", **los dos activos**) está siempre visible (nunca hover-only); en compacto ocupa su propia fila. La fila entera es una superficie de activación grande (≥44px de alto real), lo que da un target holgado también en touch.
+4. *Superficies anchas scrollean dentro de sí:* **no aplica** — el historial no es una tabla ancha de columnas fijas (es una lista vertical, como `limits-tab`). Su contención es **truncado + wrap**; forzar un carril de scroll horizontal acá sería inventar un problema.
+
+### 10. Agregados más allá del brief — estado
+
+Elementos que esta spec introduce y que **no** estaban en `screens.md` §11 ni en los RF-HIST-*. Todos son de **copy o de transparencia**, ninguno agrega acción ni dato nuevo:
+
+1. **Bajada de la cabecera** con la regla de retención ("Se guardan los últimos 5 cambios de cada movimiento, durante 31 días."). Sin ella, la desaparición silenciosa de entradas es inexplicable para el usuario. **CONFIRMADO por el usuario — se mantiene.** El copy exacto sigue siendo del analista.
+2. **Lista de los cambios que se van a deshacer** en el modal de cadena (§6.2). RF-HIST-004 solo exige informar **cuántos** son. Mostrar cuáles es prevención de error pura: deshacer hasta 5 cambios a ciegas es la operación más riesgosa de la pantalla. **CONFIRMADO por el usuario — se mantiene.**
+3. **Copy sugerido** (títulos de modal, rótulos de bloque, notas de consecuencia, toasts de éxito/error). Propuesto acá para que el frontend no invente; el texto final lo fija el analista.
+4. **Botón "Bloqueado" activo** en vez de deshabilitado (§4). **CONFIRMADO por el usuario**; la CA de RF-HIST-004 ("deshabilitadas") se reformula del lado del analista. La restricción funcional no cambia: la entrada bloqueada **no se puede deshacer sola**, y el botón solo abre la explicación con la salida en cadena.
+5. ~~Eyebrow "Tus cambios"~~ — **descartado por el usuario** (ruido sobre el título). Ver §1. *(El QA visual mostró que sacarlo destapó una colisión con el chip flotante del sidebar; se corrigió a nivel app con la banda reservada, no reponiendo el eyebrow — §1.)*
+
+### 11. Reglas duras reafirmadas
+
+- **Regla dura 1 (verde = ingreso · rojo = gasto):** el ícono de operación, los chips "Editado"/"Eliminado" y el motivo de bloqueo son **neutros**; **nada en esta pantalla se pinta de rojo por ser una eliminación**. El único uso de color semántico es el **color por tipo de la cifra nueva** del bloque de cambios (gasto `--ink` / ingreso `--income-ink`), que es su uso legítimo. El punto de categoría usa la paleta de categorías sobre identidad, nunca sobre cifra.
+- **Regla dura 2 (índigo solo marca):** aparece en el **botón primario de los modales**, el **ítem activo del sidebar** y los **focus rings**. Ninguna cifra se tiñe de acento.
+- **Regla dura 3 (dinero en mono tabular):** todos los montos del bloque de cambios (anterior y nuevo, en fila y en modal) van en **mono tabular**; también los momentos (`DD Mmm · HH:MM`) y los números de cuota, por coherencia de alineación.
+- **Regla dura 4 (claro y oscuro):** todos los tokens usados son theme-aware (`--panel`, `--panel-2`, `--panel-3`, `--hair`, `--line`, `--ink`, `--ink-2`, `--muted`, `--faint`, `--income-ink`, `--accent-soft`, `--expense-ink` solo para el error inline). Ninguna superficie asume un modo.
+
+### Checklist de aceptación visual — Historial de cambios
+
+*Encuadre:*
+- [ ] `/historial` usa el ancho canónico (`px-10 max-w-[1120px]`, llena y capea en 1120), **sin flechas ‹ ›, sin stepper y sin chip de moneda**.
+- [ ] Cabecera: H1 "Historial" (32/700) + bajada con la regla de retención. **Sin eyebrow** (no hay línea de 12px uppercase arriba del título). Zona derecha del header vacía.
+- [ ] **Con el sidebar cerrado, el chip flotante "Mostrar menú" no toca ningún texto:** el H1 se lee **"Historial" entero** (la "H" no queda tapada). Verificar a **viewport 1120px y 640px**, que es donde el bloque de contenido queda pegado al borde. Al abrir/cerrar el sidebar la página **baja/sube junto con el deslizamiento**, en un solo movimiento. Comprobar también en `/reportes` que el **eyebrow** ("TU ACTIVIDAD") arranca libre del chip a esos mismos anchos.
+- [ ] Las entradas viven en **una sola tarjeta-lista** con filas separadas por hairline (no una card por entrada).
+
+*Anatomía de la entrada:*
+- [ ] Col 1: caja 40×40 **neutra** (`--panel-3`) con **`Pencil`** (editado) o **`Trash2`** (eliminado). **Ninguna fila usa rojo por ser una eliminación.**
+- [ ] **Alineación al tope:** en una entrada alta (una **eliminación con 5 filas de campos**) el ícono queda **enmarcando el nombre + la sublínea**, no flotando a la altura del bloque de cambios; y el **momento** de la col 3 se lee **al mismo nivel que el nombre**. Verificar en régimen amplio (es donde estaba centrado) y comparar una entrada corta con una larga: el ícono debe estar **a la misma altura en las dos**.
+- [ ] Línea 1: nombre del movimiento (14.5/600, trunca) + **chip neutro** "Editado"/"Eliminado".
+- [ ] Línea 2: `● Categoría · Único/Fijo/Cuotas` (+ `↳ calculado` si aplica), 12px `--muted`, con el punto de categoría de 6px.
+- [ ] Col 3: momento `02 Jun · 14:30` en **mono tabular**, `--muted`, sin año.
+- [ ] La fila **no** tiene kebab, ni link a `/mes`, ni botón de editar.
+
+*Bloque "Qué cambió":*
+- [ ] Caja recesada (`bg-panel-2` + borde + `--r-ctl`) con una fila por campo cambiado, rótulo a la izquierda y par a la derecha.
+- [ ] El par se lee **`anterior → nuevo`**: anterior en `--muted`, flecha `--faint`, nuevo en `--ink`. **Sin tachado** en el valor anterior.
+- [ ] Si cambió el **monto**, su fila va **primera** y sus dos valores en **mono 15.5px/600**; **todos** los demás campos a 13px (ningún otro numérico promovido).
+- [ ] Orden de campos fijo: **Monto → Fórmula → Moneda → Cotización → Tipo → Categoría → Descripción → Fecha → Mes de inicio → Cuotas → Método de pago → Débito automático**. Se muestran **todos** los campos cambiados (sin "ver más"), y **solo** los que cambiaron.
+- [ ] Cifra de dinero nueva con **color por tipo** (gasto `--ink` / ingreso `--income-ink`) y signo; todas las cifras en mono tabular.
+- [ ] **`Fórmula`: una sola fila** con la expresión completa (`−10% del origen → +15% del origen`), en mono. **No hay filas separadas de "Operador", "Operando" ni "Signo"**, y un calculado **no** muestra fila `Tipo`.
+- [ ] **`Cotización`:** par numérico en mono tabular, **misma cantidad de decimales de los dos lados**, **sin verde ni rojo**.
+- [ ] **`Cotización` no significativa — no aparece:** editar un movimiento **en su moneda ancla** (ej. ARS con ancla ARS) **sin tocar la cotización** y verificar que la entrada **no** muestra fila `Cotización`, aunque el formulario la haya normalizado (`1.450,00 → 1,00`). Contraprueba: si en la edición **cambió la moneda**, la fila `Cotización` **sí** aparece.
+- [ ] **`Moneda` no significativa — no aparece:** eliminar un movimiento en la **moneda default** y verificar que la ficha **no** muestra fila `Moneda`. Contraprueba: en un **diff donde la moneda cambió**, la fila `Moneda` aparece siempre (aunque el destino sea la default); y una eliminación de un movimiento **en otra moneda** sí la muestra.
+- [ ] **`Cuotas`:** el par se lee `6 → 12 cuotas` — la palabra "cuotas" aparece **una sola vez**, en el valor nuevo (singular si el nuevo es 1).
+- [ ] **`Débito automático`:** **un solo valor, sin flecha ni valor anterior** — "Se activó" / "Se desactivó" en `--ink`, alineado a la derecha como el resto de los valores nuevos.
+- [ ] **`Tipo`:** la fila aparece **solo en entradas de movimientos únicos** — un **fijo** y un **calculado** nunca muestran fila `Tipo`. Palabras `Gasto`/`Ingreso` **sin tintar** (ni verde ni rojo); si cambió el tipo, la fila **`Monto` aparece igual** aunque la magnitud no haya cambiado.
+- [ ] **`Fecha`:** una sola fila con fecha **y** hora (`02/06/2026 · 14:30`), mono; nunca dos filas separadas.
+- [ ] En una **eliminación**: bloque con rótulo "Se eliminó:", **un solo valor por campo, sin flecha**, mismo orden fijo, y el booleano como **"Activado"** (la fila se omite si estaba desactivado).
+- [ ] En una **eliminación** **no aparece la fila `Tipo`** (ni siquiera en un movimiento único): el tipo se lee en el **signo y el color** de la cifra de `Monto`.
+
+*Estados:*
+- [ ] Entrada **deshacible**: botón "Deshacer" (`outline`, `Undo2` 15px) **siempre visible**, nunca revelado por hover.
+- [ ] Entrada **bloqueada**: contenido a **opacidad plena** (no atenuado); botón `outline` con **`Lock` 15px + "Bloqueado"**, **ACTIVO (no `disabled`)**, con hover/focus normales y **abre el modal de cadena**; debajo, el motivo **"Hay {N} cambios posteriores"** (12px `--muted`). *Verificación clave: no hay ningún botón muerto en la pantalla.*
+- [ ] Clic (o `Enter`/`Espacio`) en **el cuerpo de la fila** abre el modal en los **dos** estados; el clic en el botón abre **el mismo** modal y **no** dispara doble apertura.
+- [ ] **Deshaciendo:** la(s) fila(s) a `opacity-0.55` sin interacción, botón del modal en "Deshaciendo…"; al terminar salen con **fade + colapso 0.22s** (instantáneo con reduce-motion) y aparece el toast.
+
+*Modal de deshacer:*
+- [ ] Título "Deshacer cambio"; cierra con **✕ y `Esc`**, el **clic en el scrim NO cierra**.
+- [ ] Caja de identidad (nombre + `● Categoría · Estructura · momento`) con el molde del diálogo de eliminar.
+- [ ] Bloque rotulado **"Al deshacer queda así:"** con el par **invertido** respecto de la lista (`actual → restaurado`), con el **restaurado en `--ink`**. *Verificación clave: el modal NO repite el mismo par que la fila.*
+- [ ] En el modal, el **débito automático** usa el verbo **invertido y en presente** ("Se desactiva" si la entrada decía "Se activó").
+- [ ] Nota muted "Esta entrada se borra del historial." — **sin callout ámbar ni rojo**.
+- [ ] Footer: `Cancelar` ghost + **`Deshacer` primario índigo** (nunca `destructive` rojo); en carga "Deshaciendo…" y deshabilitado.
+
+*Modal de entrada bloqueada:*
+- [ ] Se abre **por las dos vías**: clic en el cuerpo de la fila y clic en el botón "Bloqueado".
+- [ ] Título "Hay cambios posteriores"; callout **neutro** (`Info` + `bg-panel-2`), **no ámbar, no rojo**, con el nombre del movimiento y el **N**.
+- [ ] **Concordancia con N = 1:** el callout dice *"…hay que deshacer antes **el cambio posterior**"* — **nunca "los 1 cambios posteriores"**; y la línea de la fila bloqueada dice **"Hay 1 cambio posterior"**. Con `N ≥ 2`, plural en las dos superficies.
+- [ ] Lista "Se van a deshacer, en este orden:" de la más reciente a la más antigua, con **la entrada abierta al final marcada `(esta)`** sobre `--panel-3`.
+- [ ] **Resumen de cada fila de la lista: un solo valor** (`Monto: −$350.000,00`), **nunca el par `anterior → nuevo`**.
+- [ ] **Ninguna cifra de la lista termina en "…"** — probar con montos largos (ej. `−$325.000,00`): si el resumen no entra, **baja completo a una segunda línea** de la fila; solo los valores de **texto** (descripción, categoría, método) pueden truncar con elipsis.
+- [ ] Botón primario **"Deshacer los {N+1} cambios"** con el total real (posteriores + esta); toast de éxito **"{N} cambios deshechos."** (singular: "Cambio deshecho.").
+- [ ] Al confirmar, **todas** las filas involucradas salen juntas y el toast informa el conteo.
+
+*Vacío / carga / error:*
+- [ ] **Vacío:** caja **dashed** con círculo `--panel-3` + `History`, título "Todavía no hay cambios registrados." y una línea de apoyo. **Sin botón ni CTA.**
+- [ ] **Carga:** `.phead` y la tarjeta-lista reales presentes; **5 filas fantasma** con bloque 40×40, líneas de nombre/sublínea, **bloque de cambios de 44px** y placeholders de momento + botón. Contenedor `role="status" aria-label="Cargando historial"`. Sin `animate-pulse` inline.
+- [ ] **Error de carga:** texto `--expense-ink` "No se pudo cargar el historial. Recargá la página." dentro del área de lista.
+- [ ] **Error al deshacer:** toast de error y **el modal queda abierto** con el botón restaurado.
+
+*Sidebar:*
+- [ ] El sidebar muestra **5 links** en el orden `Dashboard · Vista del mes · Reportes · Historial · Configuración`.
+- [ ] "Historial" usa **`History` 18px** y, estando en `/historial`, va `bg-accent-soft` + `text-accent-ink` + `aria-current="page"`.
+
+*Contención:*
+- [ ] A **941px** de contenido y por debajo: la entrada **colapsa a stack** — momento al final de la sublínea y **botón "Deshacer" en su propia fila alineado a la derecha**.
+- [ ] A **640px** (y ~392px de contenido con el sidebar abierto): **sin scroll horizontal del `body`**; el par envuelve con `→ valor` entero en la segunda línea; **ninguna cifra truncada** (monto, cotización, cuotas, fecha, mes de inicio y la expresión de `Fórmula` envuelven enteras); los textos largos (descripción, método) truncan con elipsis.
+- [ ] En viewport bajo, el **modal de cadena** (el más alto) se ve entero, scrollea el cuerpo y mantiene el footer pineado.
+- [ ] Todo lo anterior se verifica igual en **modo claro y oscuro**.
 
 ## Specs de fase
 

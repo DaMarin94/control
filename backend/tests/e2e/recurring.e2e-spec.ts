@@ -62,6 +62,7 @@ const mockPrisma = {
     findUnique: jest.fn(),
     findMany: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     delete: jest.fn(),
   },
   // installmentGroup — necesario para InstallmentsModule (Fase 7 — registrado en AppModule)
@@ -71,6 +72,22 @@ const mockPrisma = {
     findMany: jest.fn().mockResolvedValue([]),
     update: jest.fn(),
     delete: jest.fn(),
+  },
+  // historyEntry — necesario para HistoryModule (Módulo 3.14, RF-HIST-001):
+  // RecurringService.update/remove/updateCalculated graban una entrada en cada llamada.
+  historyEntry: {
+    create: jest.fn().mockResolvedValue({
+      id: 'hist-1',
+      userId: 'user-a-rec-e2e',
+      targetKind: 'FIJO',
+      targetId: 'chain-e2e-001',
+      action: 'EDIT',
+      snapshot: {},
+      createdAt: new Date(),
+    }),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
+    delete: jest.fn().mockResolvedValue(undefined),
   },
   // referenceRate — necesario porque MovementsRepository.loadAllPivotRates
   // (invocado desde GET /movements?month=...) llama a referenceRate.findMany
@@ -574,11 +591,11 @@ describe('Recurring (e2e)', () => {
         .expect(204);
     });
 
-    it('204 No Content — hard delete cuando boundary <= startMonth', async () => {
-      // startMonth='2026-06', currentMonth='2026-06', fromCurrentMonth=true → boundary='2026-06' → hard delete
+    it('204 No Content — borrado lógico cuando boundary <= startMonth (RF-HIST-006)', async () => {
+      // startMonth='2026-06', currentMonth='2026-06', fromCurrentMonth=true → boundary='2026-06' → borrado lógico
       const existing = makeDbRecurring({ startMonth: '2026-06' });
       mockPrisma.recurring.findUnique.mockResolvedValue(existing);
-      mockPrisma.recurring.delete.mockResolvedValue(existing);
+      mockPrisma.recurring.update.mockResolvedValue({ ...existing, deletedAt: new Date() });
       mockPrisma.recurring.findMany.mockImplementation((args: any) => {
         if (args?.where?.sourceMovementId?.not !== undefined) return Promise.resolve([]);
         if (args?.where?.sourceInstallmentGroupId?.not !== undefined) return Promise.resolve([]);
@@ -592,9 +609,11 @@ describe('Recurring (e2e)', () => {
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(204);
 
-      expect(mockPrisma.recurring.delete).toHaveBeenCalledWith({
+      expect(mockPrisma.recurring.update).toHaveBeenCalledWith({
         where: { id: 'rec-e2e-001' },
+        data: expect.objectContaining({ deletedAt: expect.any(Date) }),
       });
+      expect(mockPrisma.recurring.delete).not.toHaveBeenCalled();
     });
 
     it('400 si falta currentMonth', async () => {

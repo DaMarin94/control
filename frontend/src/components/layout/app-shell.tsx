@@ -25,6 +25,17 @@
  * Transición 0.24s cubic-bezier(0.4,0,0.2,1) — coordinada con el deslizamiento
  * del propio AppSidebar (misma duración/easing, dos elementos independientes
  * animando en sincronía). `prefers-reduced-motion` → instantáneo.
+ *
+ * `paddingTop: 36px` con el sidebar CERRADO (`0` si está abierto) — banda
+ * reservada para el chip flotante "Mostrar menú" (docs/design.md §"Sidebar —
+ * mostrar/ocultar" → "Banda reservada del chip flotante"). El chip flota en
+ * coordenadas de viewport y, sin esta banda, se pinta encima del arranque del
+ * contenido a anchos ≲1200px (ej. "Historial" se leía "listorial"). Vertical
+ * ÚNICAMENTE — nunca `padding-left`: desalinearía el header respecto del
+ * cuerpo e inflaría el `inline-size` que miden las container queries (mismo
+ * motivo por el que el offset del sidebar usa `margin-left`, no `padding-left`,
+ * arriba). Anima dentro de la MISMA transición que `margin-left`: cerrar el
+ * sidebar es un solo movimiento coordinado.
  */
 
 import { AppSidebar } from "@/components/layout/app-sidebar";
@@ -45,8 +56,8 @@ export function AppShell({ email, initialSidebarOpen, children }: AppShellProps)
       <AppSidebar email={email} open={sidebarOpen} onToggle={toggleSidebar} />
 
       <main
-        className="@container min-h-screen transition-[margin-left] duration-[240ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none"
-        style={{ marginLeft: sidebarOpen ? 248 : 0 }}
+        className="@container min-h-screen transition-[margin-left,padding-top] duration-[240ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none"
+        style={{ marginLeft: sidebarOpen ? 248 : 0, paddingTop: sidebarOpen ? 0 : 36 }}
       >
         {children}
       </main>

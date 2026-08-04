@@ -37,6 +37,7 @@ import {
   LayoutDashboard,
   CalendarDays,
   BarChart2,
+  History,
   Settings,
   PanelLeftClose,
   PanelLeft,
@@ -54,6 +55,7 @@ const NAV_LINKS = [
   { href: "/", label: "Dashboard", exact: true, Icon: LayoutDashboard },
   { href: "/mes", label: "Vista del mes", exact: false, Icon: CalendarDays },
   { href: "/reportes", label: "Reportes", exact: false, Icon: BarChart2 },
+  { href: "/historial", label: "Historial", exact: false, Icon: History },
   { href: "/configuracion", label: "Configuración", exact: false, Icon: Settings },
 ] as const;
 

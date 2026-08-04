@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Currency, MovementType } from '@prisma/client';
+import { Currency, HistoryAction, HistoryTargetKind, MovementType } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { CategoryValidatorService } from '../categories/category-validator.service';
 import { PaymentMethodValidatorService } from '../payment-methods/payment-method-validator.service';
@@ -15,6 +15,9 @@ import {
 import { CreateInstallmentDto } from './dto/create-installment.dto';
 import { UpdateInstallmentDto } from './dto/update-installment.dto';
 import { SettingsService } from '../settings/settings.service';
+import { HistoryService } from '../history/history.service';
+import { CuotaSnapshot } from '../history/history.types';
+import { RecurringService } from '../recurring/recurring.service';
 
 @Injectable()
 export class InstallmentsService {
@@ -24,7 +27,26 @@ export class InstallmentsService {
     private readonly paymentMethodValidator: PaymentMethodValidatorService,
     private readonly logger: Logger,
     private readonly settingsService: SettingsService,
+    private readonly historyService: HistoryService,
+    private readonly recurringService: RecurringService,
   ) {}
+
+  /** Snapshot completo del grupo de cuotas, para historial (RF-HIST-001). */
+  private buildSnapshot(g: InstallmentGroupWithCategory): CuotaSnapshot {
+    return {
+      type: g.type,
+      amountCents: g.amountCents,
+      categoryId: g.categoryId,
+      description: g.description,
+      startMonth: g.startMonth,
+      totalInstallments: g.totalInstallments,
+      currency: g.currency,
+      exchangeRate: g.exchangeRate,
+      anchorCurrency: g.anchorCurrency,
+      paymentMethodId: g.paymentMethodId,
+      autoDebit: g.autoDebit,
+    };
+  }
 
   // ---------------------------------------------------------------------------
   // POST /installments — crear (RF-MC-001)
@@ -153,6 +175,9 @@ export class InstallmentsService {
       await this.paymentMethodValidator.validatePaymentMethod(userId, dto.paymentMethodId);
     }
 
+    // Snapshot del estado previo, ANTES de mutar (RF-HIST-001).
+    const snapshot = this.buildSnapshot(existing);
+
     // Si se actualiza la cotización o moneda, actualizar el anchor (Fase 1.2.4)
     let updateAnchor: Currency | undefined = undefined;
     if (dto.exchangeRate !== undefined || dto.currency !== undefined) {
@@ -200,6 +225,14 @@ export class InstallmentsService {
       await this.settingsService.updateLastExchangeRate(userId, dto.exchangeRate);
     }
 
+    await this.historyService.record(
+      userId,
+      HistoryTargetKind.CUOTA,
+      id,
+      HistoryAction.EDIT,
+      snapshot,
+    );
+
     this.logger.log(
       { userId, installmentGroupId: id },
       'Grupo de cuotas actualizado',
@@ -209,14 +242,15 @@ export class InstallmentsService {
   }
 
   // ---------------------------------------------------------------------------
-  // DELETE /installments/:id — hard delete del grupo completo (RF-MC-002)
+  // DELETE /installments/:id — borrado lógico del grupo completo (RF-MC-002, RF-HIST-006)
   // ---------------------------------------------------------------------------
 
   /**
-   * Elimina permanentemente el grupo de cuotas completo (RF-MC-002).
+   * Elimina (lógicamente) el grupo de cuotas completo (RF-MC-002).
    *
-   * Hard delete — no hay soft delete en cuotas. Elimina todas las instancias
-   * (pasadas y futuras) ya que no existen filas individuales por instancia.
+   * Marca deletedAt = now(): deja de aparecer en toda la app (todas las
+   * instancias, pasadas y futuras). Reversible desde /historial (RF-HIST-003)
+   * hasta que se purgue (RF-HIST-005), momento en el que se borra físicamente.
    *
    * @throws NotFoundException si no existe o no es del usuario.
    */
@@ -227,11 +261,26 @@ export class InstallmentsService {
       throw new NotFoundException('Grupo de cuotas no encontrado');
     }
 
-    await this.repo.delete(id);
+    // Snapshot del estado previo, ANTES de marcar como eliminado (RF-HIST-001).
+    const snapshot = this.buildSnapshot(existing);
+
+    await this.repo.softDelete(id);
+
+    // Cascada lógica a los calculados de cuota (RN-024/026): nunca se borran
+    // físicamente mientras la entrada de historial del origen esté vigente.
+    await this.recurringService.cascadeSoftDeleteBySourceInstallmentGroup(userId, id);
+
+    await this.historyService.record(
+      userId,
+      HistoryTargetKind.CUOTA,
+      id,
+      HistoryAction.DELETE,
+      snapshot,
+    );
 
     this.logger.log(
       { userId, installmentGroupId: id },
-      'Grupo de cuotas eliminado (hard delete)',
+      'Grupo de cuotas eliminado (borrado lógico)',
     );
   }
 

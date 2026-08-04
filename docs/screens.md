@@ -18,12 +18,13 @@
 8. [Widget de reporte autónomo (componente reutilizable)](#8-widget-de-reporte-autónomo-componente-reutilizable)
 9. [Configuración (`/configuracion`)](#9-configuración-configuracion)
 10. [Métodos de pago — sección de Configuración (`/configuracion/metodos-pago`)](#10-métodos-de-pago--sección-de-configuración-configuracionmetodos-pago)
+11. [Historial de cambios (`/historial`)](#11-historial-de-cambios-historial)
 
 ---
 
 ## Convenciones
 
-- El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Reportes, Configuración y sus secciones —Categorías, Métodos de pago, Límites—) y **no** se muestra en las pantallas no autenticadas (Login, Registro). Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo. **Tiene cuatro links**, en este orden: Dashboard → Vista del mes → Reportes → Configuración. **Categorías y Métodos de pago no son links del sidebar**: se administran como secciones del hub de Configuración (§9), cada una en su ruta anidada deep-linkable (`/configuracion/categorias`, `/configuracion/metodos-pago`); estando en ellas, el link activo del sidebar es "Configuración". Aloja, en su parte inferior, el **control de modo de color** (toggle Sistema / Claro / Oscuro) sobre el menú de usuario (RF-APP-001).
+- El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Reportes, Historial, y Configuración y sus secciones —Categorías, Métodos de pago, Límites—) y **no** se muestra en las pantallas no autenticadas (Login, Registro). Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo. **Tiene cinco links**, en este orden: Dashboard → Vista del mes → Reportes → Historial → Configuración. **Categorías y Métodos de pago no son links del sidebar**: se administran como secciones del hub de Configuración (§9), cada una en su ruta anidada deep-linkable (`/configuracion/categorias`, `/configuracion/metodos-pago`); estando en ellas, el link activo del sidebar es "Configuración". Aloja, en su parte inferior, el **control de modo de color** (toggle Sistema / Claro / Oscuro) sobre el menú de usuario (RF-APP-001).
   - **Estado de implementación: implementado.** El sidebar (RF-NAV-001) **ya está implementado** (ver `features.md`). Los accesos definidos en cada pantalla (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL directa) se conservan y conviven con el sidebar.
 - El **formulario de carga** (pantalla 5) es un modal sin ruta propia. Se invoca desde el sidebar y desde el dashboard, y se superpone a la pantalla actual.
 - **Chip de moneda default en el header.** Las pantallas con montos/totales —**Dashboard**, **Vista del mes** y **Reportes**— muestran en su header (fila del eyebrow) un **chip indicador de la moneda default vigente** del usuario (código de la moneda del set curado: ARS / USD / EUR / BRL, RF-CUR-002). Es **informativo**: comunica en qué moneda están expresados los montos y totales de la pantalla y **linkea a `/configuracion`** (no cambia la moneda in-situ). Se muestra **siempre**, también en mono-moneda. **`/configuracion` NO lo lleva** (es donde la moneda se edita). El patrón es común a las tres pantallas y no se repite su definición en cada una; el detalle visual lo define `control-design` (ver `docs/design.md`).
@@ -184,7 +185,7 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 - **Editar** un ítem — desde el **kebab (⋮)** de la fila; abre el modal de carga en modo edición, en el tipo del movimiento (RF-VM-003 → RF-MU-002, RF-MF-003 o RF-MC-003 según el tipo). Al editar un **fijo**, el cambio se aplica desde el **mes activo (el mes que se está visualizando) inclusive en adelante**, preservando los meses anteriores (pivote = mes visualizado, RF-MF-003 / RN-005).
 - **Duplicar** un ítem (RF-VM-008) — desde el **kebab (⋮)**, en ítems **único, fijo y cuota no calculados**; abre el modal de carga en **modo creación**, sin tabs, precargado con los valores del original (editables). Guardar crea un movimiento **nuevo e independiente**; el original no se toca. La **card de detalle no ofrece esta acción** (es read-only pura).
 - **Crear movimiento calculado** desde un ítem (RF-MCALC-001) — desde el **kebab (⋮)**, en ítems no calculados; abre el form del calculado con el origen fijado.
-- **Eliminar** un ítem — dispara el flujo de eliminación correspondiente al tipo (RF-MU-003 único, RF-MF-004 fijo, RF-MC-002 grupo de cuotas), con su confirmación específica. Al eliminar un **fijo**, la confirmación **no ofrece opciones** y la eliminación aplica desde el **mes activo (el mes visualizado) inclusive en adelante**, mismo pivote que la edición (RF-MF-004 / RN-005).
+- **Eliminar** un ítem — dispara el flujo de eliminación correspondiente al tipo (RF-MU-003 único, RF-MF-004 fijo, RF-MC-002 grupo de cuotas), con su confirmación específica. Al eliminar un **fijo**, la confirmación **no ofrece opciones** y la eliminación aplica desde el **mes activo (el mes visualizado) inclusive en adelante**, mismo pivote que la edición (RF-MF-004 / RN-005). Editar y eliminar quedan registrados en el historial y se pueden **deshacer** desde `/historial` (§11, RF-HIST-001/003); ni el formulario de edición ni la confirmación de borrado exponen control o aviso alguno al respecto.
 - **Anular / Des-anular este mes** (solo en ítems **fijos**, RF-MF-005) — en el menú de acciones del ítem fijo, además de Editar y Eliminar, una acción **toggle**: **"Anular este mes"** cancela esa aparición del fijo en el mes visualizado; sobre un fijo ya anulado se rotula **"Des-anular este mes"** y la revierte. El ítem anulado **se sigue mostrando** (no desaparece), deja de sumar a los totales del mes y tiene diferenciación visual. Los movimientos **únicos** y las **cuotas** no tienen esta acción. La anulación es por mes puntual y no afecta otros meses, a diferencia de Eliminar (RF-MF-005 / RN-016).
 - **Nuevo movimiento** — abre el modal de carga (pantalla 5). Al abrirlo desde `/mes`, el **mes activo** se propaga al modal como **mes contexto**: es el default del "mes de inicio" en los tabs Fijo y Cuotas. No afecta al tab Único (ver pantalla 5). **En modo orden este botón se deshabilita** (RF-VM-005).
 - **Colapsar / expandir una sección** (RF-VM-005) — clic en la cabecera de cualquiera de las tres secciones la expande o colapsa de forma individual. El estado se **persiste por usuario** (preferencias). Fuera del modo orden.
@@ -341,7 +342,7 @@ Sección del hub de Configuración dedicada a administrar las categorías del us
 
 **RF relacionados:** RF-REP-001, RF-REP-002, RF-REP-003, RF-REP-004, RF-REP-010, RF-REP-011, RF-REP-012, RF-LIM-005, RF-NAV-001
 
-> **Ruta:** `/reportes`. **Link en el sidebar:** rótulo **"Reportes"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Reportes → Categorías).
+> **Ruta:** `/reportes`. **Link en el sidebar:** rótulo **"Reportes"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Reportes → Historial → Configuración).
 
 ### Propósito
 
@@ -437,7 +438,7 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 
 **RF relacionados:** RF-CUR-002, RF-CUR-005, RF-CUR-006, RF-LIM-001, RF-LIM-002, RF-NAV-001. Las secciones **Categorías** (RF-CAT-*) y **Métodos de pago** (RF-PM-*) montan los gestores documentados en §6 y §10.
 
-> **Ruta:** `/configuracion`. **Link en el sidebar**, debajo de "Reportes" (orden: Dashboard → Vista del mes → Reportes → Configuración).
+> **Ruta:** `/configuracion`. **Link en el sidebar**, debajo de "Historial" (orden: Dashboard → Vista del mes → Reportes → Historial → Configuración).
 
 ### Propósito
 
@@ -552,3 +553,51 @@ Sección del hub de Configuración dedicada a administrar los métodos de pago d
 - **Prompt de reactivación:** ante colisión de nombre con un método eliminado, se ofrece reactivarlo con su configuración original (RF-PM-001 A4).
 - **Error del backend al guardar (RNF-008):** el modal permanece abierto, conserva los datos y permite reintentar.
 - **Confirmación de eliminación:** se pide confirmar antes del soft delete; cancelar deja el método sin cambios.
+
+---
+
+## 11. Historial de cambios (`/historial`)
+
+**RF relacionados:** RF-HIST-001, RF-HIST-002, RF-HIST-003, RF-HIST-004, RF-HIST-005, RF-HIST-006, RF-NAV-001
+
+> **Ruta:** `/historial`. **Link en el sidebar:** rótulo **"Historial"**, **cuarto** (orden: Dashboard → Vista del mes → Reportes → Historial → Configuración).
+
+### Propósito
+
+Ver los cambios recientes sobre los movimientos —qué se editó, qué se eliminó— y **deshacerlos**. Es la red de seguridad de la app: el único lugar donde un movimiento eliminado sigue siendo visible y recuperable. No es un log de auditoría ni una pantalla de edición.
+
+### Contenido
+
+- **Sidebar** con el link "Historial" marcado como activo.
+- **Header de la pantalla** con el rótulo de la sección. **Sin navegación de período** (el historial no se recorre por mes) y **sin chip de moneda default** (no expone totales; ver Convenciones).
+- **Lista de entradas de historial** (RF-HIST-002) de **todos** los movimientos del usuario, en una única lista cronológica con la **más reciente primero**. Cada entrada muestra:
+  - **Identidad del movimiento:** nombre, tipo de movimiento (único / fijo / cuotas, y si es calculado) y categoría.
+  - **Operación:** **editado** o **eliminado**.
+  - **Momento del cambio.**
+  - **Qué cambió:** en una **edición**, los campos modificados con su **valor anterior → valor nuevo**; en una **eliminación**, el movimiento tal como estaba antes de borrarse.
+  - **Acción Deshacer**, o —si la entrada está bloqueada (RF-HIST-004)— la misma acción **rotulada como bloqueada y con el motivo visible** ("hay N cambios posteriores de este movimiento"). La acción bloqueada **sigue siendo operable**: abre la explicación del bloqueo con la propuesta de desbloqueo en cadena.
+- Las entradas **purgadas** por retención (RF-HIST-005: 5 por movimiento o 31 días) ya no figuran.
+- Un movimiento **eliminado** figura acá aunque no aparezca en ninguna otra superficie de la app (RF-HIST-006).
+- El detalle visual de la lista, de la representación anterior → nuevo y del estado bloqueado lo define `control-design` (`docs/design.md`).
+
+### Acciones disponibles
+
+- **Deshacer una entrada** (RF-HIST-003) — abre la confirmación con el cambio a revertir; al confirmar, el movimiento vuelve al estado previo y la **entrada se borra** del historial. No se registra el deshacer: el cambio deja de figurar por completo.
+- **Deshacer en cadena desde una entrada bloqueada** (RF-HIST-004) — abrir una entrada bloqueada explica el motivo y ofrece deshacer **los N cambios posteriores** de ese movimiento junto con ella, en una sola confirmación. Cancelar no deshace nada.
+- Acciones globales del sidebar.
+
+La pantalla **no edita movimientos** ni ofrece acceso al formulario de carga desde una entrada.
+
+### Navegación
+
+- **Llega desde:** link "Historial" del sidebar (RF-NAV-001); acceso directo a `/historial`.
+- **Lleva a:** permanece en `/historial` tras deshacer. (No navega a `/mes` ni al movimiento afectado; el drill-down a la vista del mes queda fuera de alcance.)
+
+### Estados
+
+- **Cargando:** mientras se obtiene la lista de entradas.
+- **Con datos:** entradas listadas, la más reciente primero; la más reciente de cada movimiento con **Deshacer** directo y las anteriores de ese movimiento **bloqueadas** con su motivo (RF-HIST-004).
+- **Vacío (sin cambios registrados):** mensaje de estado vacío. Es el estado de una cuenta que nunca editó ni eliminó un movimiento, y también aquel al que se vuelve cuando todas las entradas se purgan o se deshacen.
+- **Confirmación de deshacer abierta:** muestra el cambio a revertir; en una entrada bloqueada, además el motivo y la propuesta de deshacer los N posteriores.
+- **Deshaciendo:** mientras se aplica la restauración; al terminar, la entrada (y las posteriores, si fue en cadena) desaparecen de la lista.
+- **Error:** si falla la carga del historial o el deshacer, se informa el error sin romper la pantalla y sin restaurar nada a medias.

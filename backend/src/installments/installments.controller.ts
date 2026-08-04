@@ -69,10 +69,12 @@ export class InstallmentsController {
 
   /**
    * DELETE /installments/:id
-   * Hard delete permanente del grupo completo (RF-MC-002).
-   * Elimina todas las instancias (pasadas y futuras).
+   * Borrado lógico del grupo completo (RF-MC-002, RF-HIST-006): marca deletedAt,
+   * reversible desde /historial (RF-HIST-003) hasta que la entrada se purgue
+   * (RF-HIST-005). Deja de aparecer todas las instancias (pasadas y futuras).
    * 204 No Content. 404 si no existe o no es del usuario.
-   * Nota: el calculado vinculado (si existe) se elimina automáticamente por onDelete:Cascade en DB.
+   * Nota: el calculado vinculado (si existe) también se marca como eliminado
+   * en cascada (RN-024/026), vía RecurringService.cascadeSoftDeleteBySourceInstallmentGroup.
    */
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)

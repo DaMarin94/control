@@ -26,6 +26,7 @@ import {
 import { CategoryValidatorService } from '../../../src/categories/category-validator.service';
 import { PaymentMethodValidatorService } from '../../../src/payment-methods/payment-method-validator.service';
 import { SettingsService } from '../../../src/settings/settings.service';
+import { HistoryService } from '../../../src/history/history.service';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -35,20 +36,26 @@ const mockRepo = {
   create: jest.fn(),
   findById: jest.fn(),
   update: jest.fn(),
-  delete: jest.fn(),
   findSkip: jest.fn(),
   createSkip: jest.fn(),
   deleteSkip: jest.fn(),
   findChainRows: jest.fn().mockResolvedValue([]),
   findCalculadosBySourceChain: jest.fn().mockResolvedValue([]),
   findActiveRowByChainId: jest.fn().mockResolvedValue(null),
-  deleteByChainId: jest.fn().mockResolvedValue(undefined),
-  setDeletedFromByChainId: jest.fn().mockResolvedValue(undefined),
   // Fase 1.1.7.ext
   findTransactionById: jest.fn(),
   findInstallmentGroupById: jest.fn(),
   findCalculatedBySourceMovement: jest.fn(),
   findCalculatedBySourceInstallment: jest.fn(),
+  // Módulo 3.14 — Historial de cambios (borrado lógico, RF-HIST-006)
+  softDeleteRow: jest.fn().mockResolvedValue(undefined),
+  findChainRowsForSnapshot: jest.fn().mockResolvedValue([]),
+  cascadeSoftDeleteBySourceMovement: jest.fn().mockResolvedValue(undefined),
+  cascadeSoftDeleteBySourceInstallmentGroup: jest.fn().mockResolvedValue(undefined),
+};
+
+const mockHistoryService = {
+  record: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockCategoryValidator = {
@@ -164,6 +171,7 @@ describe('RecurringService — calculados extendidos (Fase 1.1.7.ext)', () => {
         { provide: PaymentMethodValidatorService, useValue: mockPaymentMethodValidator },
         { provide: Logger, useValue: mockLogger },
         { provide: SettingsService, useValue: mockSettingsServiceExt },
+        { provide: HistoryService, useValue: mockHistoryService },
       ],
     }).compile();
 
@@ -446,11 +454,11 @@ describe('RecurringService — calculados extendidos (Fase 1.1.7.ext)', () => {
   });
 
   // =========================================================================
-  // remove (DELETE) — calculados de único y cuota: hard-delete total sin boundary
+  // remove (DELETE) — calculados de único y cuota: borrado lógico total sin boundary
   // =========================================================================
 
   describe('remove — calculado de único (sourceMovementId != null)', () => {
-    it('hace hard-delete de la fila entera sin aplicar boundary', async () => {
+    it('hace borrado lógico de la fila entera sin aplicar boundary (RF-HIST-006)', async () => {
       const calcRow = makeCalculadoWithCategory({
         id: CALC_ID,
         sourceMovementId: TX_ID,
@@ -459,30 +467,30 @@ describe('RecurringService — calculados extendidos (Fase 1.1.7.ext)', () => {
         deletedFrom: '2026-07',
       });
       mockRepo.findById.mockResolvedValue(calcRow);
-      mockRepo.delete.mockResolvedValue(undefined);
+      mockRepo.softDeleteRow.mockResolvedValue(undefined);
 
       await service.remove(USER_A, CALC_ID, '2026-06', false);
 
-      // Hard delete de la fila puntual
-      expect(mockRepo.delete).toHaveBeenCalledWith(CALC_ID);
-      expect(mockRepo.delete).toHaveBeenCalledTimes(1);
+      // Borrado lógico de la fila puntual
+      expect(mockRepo.softDeleteRow).toHaveBeenCalledWith(CALC_ID);
+      expect(mockRepo.softDeleteRow).toHaveBeenCalledTimes(1);
       // No se consulta la cadena ni se aplica boundary
       expect(mockRepo.findChainRows).not.toHaveBeenCalled();
       expect(mockRepo.update).not.toHaveBeenCalled();
     });
 
-    it('ignora fromCurrentMonth=true (hard-delete igual)', async () => {
+    it('ignora fromCurrentMonth=true (borrado lógico igual)', async () => {
       const calcRow = makeCalculadoWithCategory({
         id: CALC_ID,
         sourceMovementId: TX_ID,
         sourceInstallmentGroupId: null,
       });
       mockRepo.findById.mockResolvedValue(calcRow);
-      mockRepo.delete.mockResolvedValue(undefined);
+      mockRepo.softDeleteRow.mockResolvedValue(undefined);
 
       await service.remove(USER_A, CALC_ID, '2026-06', true);
 
-      expect(mockRepo.delete).toHaveBeenCalledWith(CALC_ID);
+      expect(mockRepo.softDeleteRow).toHaveBeenCalledWith(CALC_ID);
       expect(mockRepo.findChainRows).not.toHaveBeenCalled();
     });
 
@@ -493,7 +501,7 @@ describe('RecurringService — calculados extendidos (Fase 1.1.7.ext)', () => {
         service.remove(USER_A, 'no-existe', '2026-06', false),
       ).rejects.toThrow(NotFoundException);
 
-      expect(mockRepo.delete).not.toHaveBeenCalled();
+      expect(mockRepo.softDeleteRow).not.toHaveBeenCalled();
     });
 
     it('404 si el calculado de único pertenece a otro usuario (aislamiento RN-003)', async () => {
@@ -507,12 +515,12 @@ describe('RecurringService — calculados extendidos (Fase 1.1.7.ext)', () => {
         service.remove(USER_A, CALC_ID, '2026-06', false),
       ).rejects.toThrow(NotFoundException);
 
-      expect(mockRepo.delete).not.toHaveBeenCalled();
+      expect(mockRepo.softDeleteRow).not.toHaveBeenCalled();
     });
   });
 
   describe('remove — calculado de cuota (sourceInstallmentGroupId != null)', () => {
-    it('hace hard-delete de la fila entera sin aplicar boundary', async () => {
+    it('hace borrado lógico de la fila entera sin aplicar boundary (RF-HIST-006)', async () => {
       const calcRow = makeCalculadoWithCategory({
         id: CALC_ID,
         sourceMovementId: null,
@@ -521,17 +529,17 @@ describe('RecurringService — calculados extendidos (Fase 1.1.7.ext)', () => {
         deletedFrom: null,
       });
       mockRepo.findById.mockResolvedValue(calcRow);
-      mockRepo.delete.mockResolvedValue(undefined);
+      mockRepo.softDeleteRow.mockResolvedValue(undefined);
 
       await service.remove(USER_A, CALC_ID, '2026-03', false);
 
-      expect(mockRepo.delete).toHaveBeenCalledWith(CALC_ID);
-      expect(mockRepo.delete).toHaveBeenCalledTimes(1);
+      expect(mockRepo.softDeleteRow).toHaveBeenCalledWith(CALC_ID);
+      expect(mockRepo.softDeleteRow).toHaveBeenCalledTimes(1);
       expect(mockRepo.findChainRows).not.toHaveBeenCalled();
       expect(mockRepo.update).not.toHaveBeenCalled();
     });
 
-    it('ignora fromCurrentMonth=true (hard-delete igual)', async () => {
+    it('ignora fromCurrentMonth=true (borrado lógico igual)', async () => {
       const calcRow = makeCalculadoWithCategory({
         id: CALC_ID,
         sourceMovementId: null,
@@ -540,11 +548,11 @@ describe('RecurringService — calculados extendidos (Fase 1.1.7.ext)', () => {
         deletedFrom: null,
       });
       mockRepo.findById.mockResolvedValue(calcRow);
-      mockRepo.delete.mockResolvedValue(undefined);
+      mockRepo.softDeleteRow.mockResolvedValue(undefined);
 
       await service.remove(USER_A, CALC_ID, '2026-03', true);
 
-      expect(mockRepo.delete).toHaveBeenCalledWith(CALC_ID);
+      expect(mockRepo.softDeleteRow).toHaveBeenCalledWith(CALC_ID);
       expect(mockRepo.findChainRows).not.toHaveBeenCalled();
     });
 
@@ -560,12 +568,11 @@ describe('RecurringService — calculados extendidos (Fase 1.1.7.ext)', () => {
         service.remove(USER_A, CALC_ID, '2026-03', false),
       ).rejects.toThrow(NotFoundException);
 
-      expect(mockRepo.delete).not.toHaveBeenCalled();
     });
   });
 
   describe('remove — fijo normal y calculado de fijo: comportamiento de boundary sin cambios', () => {
-    it('fijo normal: aplica boundary a la cadena (no hard-delete total)', async () => {
+    it('fijo normal: aplica boundary a la cadena (no borrado lógico total)', async () => {
       // Fijo normal: sourceMovementId=null, sourceInstallmentGroupId=null, sourceChainId=null
       const fijoNormal = makeCalculadoWithCategory({
         id: 'fijo-001',
@@ -592,8 +599,7 @@ describe('RecurringService — calculados extendidos (Fase 1.1.7.ext)', () => {
       // Debe aplicar boundary (nextMonth de '2026-06' = '2026-07') → soft delete
       expect(mockRepo.findChainRows).toHaveBeenCalled();
       expect(mockRepo.update).toHaveBeenCalledWith('fijo-001', { deletedFrom: '2026-07' });
-      // No hard-delete
-      expect(mockRepo.delete).not.toHaveBeenCalled();
+      // No borrado lógico total (solo truncado por boundary)
     });
 
     it('calculado de fijo (sourceChainId != null): aplica boundary a su cadena (sin afectar al origen)', async () => {
@@ -625,7 +631,6 @@ describe('RecurringService — calculados extendidos (Fase 1.1.7.ext)', () => {
       expect(mockRepo.update).toHaveBeenCalledWith('calc-fijo-001', { deletedFrom: '2026-06' });
       // No cascada (es un calculado, no un fijo de origen)
       expect(mockRepo.findCalculadosBySourceChain).not.toHaveBeenCalled();
-      expect(mockRepo.delete).not.toHaveBeenCalled();
     });
   });
 

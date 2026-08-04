@@ -5,6 +5,7 @@ import { RecurringRepository } from './recurring.repository';
 import { CategoriesModule } from '../categories/categories.module';
 import { PaymentMethodsModule } from '../payment-methods/payment-methods.module';
 import { SettingsModule } from '../settings/settings.module';
+import { HistoryModule } from '../history/history.module';
 
 /**
  * RecurringModule — CRUD de movimientos fijos (RF-MF-001 a RF-MF-004).
@@ -22,7 +23,7 @@ import { SettingsModule } from '../settings/settings.module';
  * (el listado unificado GET /movements ya provee el prefill necesario).
  */
 @Module({
-  imports: [CategoriesModule, PaymentMethodsModule, SettingsModule],
+  imports: [CategoriesModule, PaymentMethodsModule, SettingsModule, HistoryModule],
   controllers: [RecurringController],
   providers: [RecurringService, RecurringRepository],
   exports: [RecurringService],

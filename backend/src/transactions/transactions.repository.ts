@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Currency, MovementType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NOT_DELETED } from '../common/soft-delete.helper';
 
 /**
  * Shape de categoría embebida en una transacción.
@@ -137,10 +138,13 @@ export class TransactionsRepository {
 
   /**
    * Busca una transacción por id (sin filtrar por userId — el caller hace la validación).
+   *
+   * Excluye borrados lógicos (RF-HIST-006): un único eliminado no existe para el
+   * resto de la app (no se puede editar, anular, duplicar ni tomar como origen).
    */
   async findById(id: string): Promise<TransactionWithCategory | null> {
     const tx = await this.prisma.transaction.findUnique({
-      where: { id },
+      where: { id, ...NOT_DELETED },
       include: TRANSACTION_INCLUDE,
     });
     if (!tx) return null;
@@ -163,9 +167,14 @@ export class TransactionsRepository {
   }
 
   /**
-   * Elimina permanentemente una transacción por id (hard delete, RF-MU-003).
+   * Borrado lógico (RF-HIST-006): marca deletedAt = now(). El único deja de
+   * aparecer en toda la app; sigue existiendo para poder restaurarlo desde el
+   * historial (RF-HIST-003) hasta que se purgue (RF-HIST-005).
    */
-  async delete(id: string): Promise<void> {
-    await this.prisma.transaction.delete({ where: { id } });
+  async softDelete(id: string): Promise<void> {
+    await this.prisma.transaction.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 }

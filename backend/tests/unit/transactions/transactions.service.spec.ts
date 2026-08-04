@@ -10,7 +10,7 @@
  * - Scope incompatible (RN-010): EXPENSE con categoría INCOME, etc.
  * - Persistencia de occurredAt UTC + timezone
  * - Edición que cambia type/categoría → revalidación RN-010
- * - Hard delete
+ * - Borrado lógico
  * - Aislamiento por userId (RN-003)
  */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
@@ -22,6 +22,8 @@ import { TransactionsRepository, TransactionWithCategory } from '../../../src/tr
 import { CategoryValidatorService } from '../../../src/categories/category-validator.service';
 import { PaymentMethodValidatorService } from '../../../src/payment-methods/payment-method-validator.service';
 import { SettingsService } from '../../../src/settings/settings.service';
+import { HistoryService } from '../../../src/history/history.service';
+import { RecurringService } from '../../../src/recurring/recurring.service';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -31,7 +33,15 @@ const mockRepo = {
   create: jest.fn(),
   findById: jest.fn(),
   update: jest.fn(),
-  delete: jest.fn(),
+  softDelete: jest.fn(),
+};
+
+const mockHistoryService = {
+  record: jest.fn().mockResolvedValue(undefined),
+};
+
+const mockRecurringServiceForTx = {
+  cascadeSoftDeleteBySourceMovement: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockCategoryValidator = {
@@ -114,6 +124,8 @@ describe('TransactionsService', () => {
         { provide: PaymentMethodValidatorService, useValue: mockPaymentMethodValidator },
         { provide: Logger, useValue: mockLogger },
         { provide: SettingsService, useValue: mockSettingsServiceTx },
+        { provide: HistoryService, useValue: mockHistoryService },
+        { provide: RecurringService, useValue: mockRecurringServiceForTx },
       ],
     }).compile();
 
@@ -525,18 +537,29 @@ describe('TransactionsService', () => {
   });
 
   // -------------------------------------------------------------------------
-  // remove (DELETE — hard delete)
+  // remove (DELETE — borrado lógico, RF-HIST-006)
   // -------------------------------------------------------------------------
 
   describe('remove', () => {
-    it('elimina permanentemente la transacción propia', async () => {
+    it('marca la transacción propia como eliminada (borrado lógico) y cascada a calculados', async () => {
       const tx = makeTransaction();
       mockRepo.findById.mockResolvedValue(tx);
-      mockRepo.delete.mockResolvedValue(undefined);
+      mockRepo.softDelete.mockResolvedValue(undefined);
 
       await service.remove(USER_A, 'tx-001');
 
-      expect(mockRepo.delete).toHaveBeenCalledWith('tx-001');
+      expect(mockRepo.softDelete).toHaveBeenCalledWith('tx-001');
+      expect(mockRecurringServiceForTx.cascadeSoftDeleteBySourceMovement).toHaveBeenCalledWith(
+        USER_A,
+        'tx-001',
+      );
+      expect(mockHistoryService.record).toHaveBeenCalledWith(
+        USER_A,
+        'UNICO',
+        'tx-001',
+        'DELETE',
+        expect.objectContaining({ amountCents: 1500 }),
+      );
     });
 
     it('404 si no existe', async () => {
@@ -544,7 +567,7 @@ describe('TransactionsService', () => {
 
       await expect(service.remove(USER_A, 'no-existe')).rejects.toThrow(NotFoundException);
 
-      expect(mockRepo.delete).not.toHaveBeenCalled();
+      expect(mockRepo.softDelete).not.toHaveBeenCalled();
     });
 
     it('aislamiento: 404 si pertenece a otro usuario (RN-003)', async () => {
@@ -553,7 +576,7 @@ describe('TransactionsService', () => {
 
       await expect(service.remove(USER_A, 'tx-001')).rejects.toThrow(NotFoundException);
 
-      expect(mockRepo.delete).not.toHaveBeenCalled();
+      expect(mockRepo.softDelete).not.toHaveBeenCalled();
     });
   });
 

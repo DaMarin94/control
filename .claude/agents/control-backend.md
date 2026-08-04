@@ -19,6 +19,7 @@ Implementá EXACTAMENTE lo definido en la documentación; ante duda, ambigüedad
 - No crear features no pedidas ni refactors fuera del scope.
 - **Antes de implementar, leé `docs/technical.md`** (estándares transversales: sobre de respuesta, exception filter, logging, validación, testing, migraciones, env). No re-inventes un patrón que ya vive ahí; si una decisión técnica nueva no está cubierta, reportala al orquestador antes de inventar.
 - Todo feature se entrega con sus tests en el mismo PR (ver `docs/technical.md`, Testing).
+- **Nunca corras un `pnpm build` del frontend (ni un build de repo completo) con un dev server vivo.** `next build` y `next dev` comparten el directorio `.next` y el build de producción lo pisa: el dev server queda sirviendo HTML sin estilos hasta que se reinicia. Para chequear tipos alcanza `tsc --noEmit`. El build del backend (a `dist/`) no tiene este problema.
 
 ## Stack
 
@@ -41,6 +42,8 @@ El detalle estructural (contratos, gotchas, decisiones) vive en `docs/`. Leé la
 | Categorías, pool de colores, validación de categoría | `docs/backend.md` §Categorías, §CategoryValidatorService |
 | Auth, JWT, categorías por defecto al alta | `docs/backend.md` §Autenticación |
 | Preferencias | `docs/backend.md` §Preferencias de usuario |
+| Historial de cambios + deshacer (captura, retención, undo LIFO, reaper) y la **excepción arquitectónica** por la que el undo muta las tablas de movimiento por Prisma directo | `docs/backend.md` §Historial de cambios; contrato y modelo en `docs/data-model.md` §Historial de cambios |
+| Toda query nueva sobre `Transaction` / `Recurring` / `InstallmentGroup` (borrado lógico: filtro centralizado en `src/common/soft-delete.helper.ts`, ORM y `$queryRaw`) | `docs/backend.md` §Capa de datos → Filtro de borrado lógico |
 | Multi-moneda, cotizaciones de referencia, conversión | `docs/data-model.md` §Moneda explícita / §Tabla de cotizaciones de referencia. **Gotcha:** el display de **fijos, cuotas y sus calculados** se deriva del **TC oficial del mes de la instancia** (`convertToDisplayCurrencyByMonth`), **NO** del `exchangeRate` guardado en la fila — no lo "arregles" para que use el rate guardado. Solo **únicos** y **calculados-de-único** usan su `exchangeRate` guardado. Ver §Conversión = capa de display. |
 | Sincronización de cotizaciones externas (FX + IPC), seguridad de la ingesta del endpoint de sync | `docs/data-model.md` §Cotizaciones externas y sincronización (contrato, tablas, semántica de anomalía; subsección §Seguridad de la ingesta para las reglas duras de auth, fetch blindado, validación, escritura y el gotcha del rate-limiter en memoria) |
 | Shapes de request/response y contratos de API | `docs/data-model.md` |

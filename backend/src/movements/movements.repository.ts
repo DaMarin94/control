@@ -3,6 +3,12 @@ import { CategoryScope, Currency, FormulaOperator, MovementType, Prisma } from '
 import { PrismaService } from '../prisma/prisma.service';
 import { applyFormula } from '../recurring/formula.helper';
 import { convertToDisplayCurrency, convertToDisplayCurrencyByMonth, PivotRates, buildPivotRates, resolveNearestYearMonth } from '../common/currency.helper';
+import {
+  NOT_DELETED,
+  NOT_DELETED_INSTALLMENT_SQL,
+  NOT_DELETED_RECURRING_SQL,
+  NOT_DELETED_TRANSACTION_SQL,
+} from '../common/soft-delete.helper';
 
 // ---------------------------------------------------------------------------
 // Interfaces para la agregación anual
@@ -537,7 +543,11 @@ export class MovementsRepository {
 
     const uniqueChainIds = Array.from(new Set(chainIds));
     const rows = await this.prisma.recurring.findMany({
-      where: { chainId: { in: uniqueChainIds } },
+      // NOT_DELETED es crítico acá: una fila soft-deleted por applyBoundaryToChain
+      // (RF-HIST-006) no debe contarse como "la fila vigente" al resolver el fin de
+      // la cadena — mostraría el fijo como activo indefinidamente cuando en realidad
+      // esa fila fue eliminada.
+      where: { chainId: { in: uniqueChainIds }, ...NOT_DELETED },
       select: { chainId: true, startMonth: true, deletedFrom: true },
     });
 
@@ -660,6 +670,7 @@ export class MovementsRepository {
         LEFT JOIN "PaymentMethod" pm ON pm.id = t."paymentMethodId"
         WHERE
           t."userId" = ${userId}
+          AND ${NOT_DELETED_TRANSACTION_SQL}
           AND date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
               = date_trunc('month', ${monthStart}::timestamp)
         ORDER BY t."amountCents" DESC, t."occurredAt" DESC
@@ -680,6 +691,7 @@ export class MovementsRepository {
     const calculadosDeUnico = await this.prisma.recurring.findMany({
       where: {
         userId,
+        ...NOT_DELETED,
         sourceMovementId: { not: null },
         sourceChainId: null,
         sourceInstallmentGroupId: null,
@@ -708,7 +720,7 @@ export class MovementsRepository {
     // Cargar Transactions de origen (con anchorCurrency + skipped + método de pago)
     const txIds = calculadosDeUnico.map((r) => r.sourceMovementId!);
     const txRows = await this.prisma.transaction.findMany({
-      where: { id: { in: txIds } },
+      where: { id: { in: txIds }, ...NOT_DELETED },
       select: {
         id: true, amountCents: true, description: true, occurredAt: true, timezone: true,
         currency: true, exchangeRate: true, anchorCurrency: true, skipped: true,
@@ -862,6 +874,7 @@ export class MovementsRepository {
       this.prisma.recurring.findMany({
         where: {
           userId,
+          ...NOT_DELETED,
           startMonth: { lte: month },
           OR: [
             { deletedFrom: null },
@@ -1108,6 +1121,7 @@ export class MovementsRepository {
       this.prisma.installmentGroup.findMany({
         where: {
           userId,
+          ...NOT_DELETED,
           startMonth: { lte: month },
         },
         include: {
@@ -1197,6 +1211,7 @@ export class MovementsRepository {
     const calculadosDeCuota = await this.prisma.recurring.findMany({
       where: {
         userId,
+        ...NOT_DELETED,
         sourceInstallmentGroupId: { not: null },
         sourceChainId: null,
         sourceMovementId: null,
@@ -1222,7 +1237,7 @@ export class MovementsRepository {
       // Cargar InstallmentGroups de origen (con anchorCurrency + skip de la instancia del mes)
       const groupIds = calculadosDeCuota.map((r) => r.sourceInstallmentGroupId!);
       const groupRows = await this.prisma.installmentGroup.findMany({
-        where: { id: { in: groupIds } },
+        where: { id: { in: groupIds }, ...NOT_DELETED },
         select: {
           id: true,
           amountCents: true,
@@ -1387,6 +1402,7 @@ export class MovementsRepository {
       FROM "Transaction" t
       WHERE
         t."userId" = ${userId}
+        AND ${NOT_DELETED_TRANSACTION_SQL}
         AND NOT t.skipped
         AND date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
             = date_trunc('month', ${monthStart}::timestamp)
@@ -1415,6 +1431,7 @@ export class MovementsRepository {
     const recurrings = await this.prisma.recurring.findMany({
       where: {
         userId,
+        ...NOT_DELETED,
         startMonth: { lte: month },
         OR: [
           { deletedFrom: null },
@@ -1459,7 +1476,7 @@ export class MovementsRepository {
     const txMap = new Map<string, number>();
     if (txIds.length > 0) {
       const txRows = await this.prisma.transaction.findMany({
-        where: { id: { in: txIds } },
+        where: { id: { in: txIds }, ...NOT_DELETED },
         select: { id: true, amountCents: true },
       });
       for (const tx of txRows) txMap.set(tx.id, tx.amountCents);
@@ -1471,7 +1488,7 @@ export class MovementsRepository {
     const groupMap = new Map<string, { amountCents: number; totalInstallments: number; startMonth: string }>();
     if (groupIds.length > 0) {
       const groupRows = await this.prisma.installmentGroup.findMany({
-        where: { id: { in: groupIds } },
+        where: { id: { in: groupIds }, ...NOT_DELETED },
         select: { id: true, amountCents: true, totalInstallments: true, startMonth: true },
       });
       for (const g of groupRows) groupMap.set(g.id, { amountCents: g.amountCents, totalInstallments: g.totalInstallments, startMonth: g.startMonth });
@@ -1552,6 +1569,7 @@ export class MovementsRepository {
     const groups = await this.prisma.installmentGroup.findMany({
       where: {
         userId,
+        ...NOT_DELETED,
         startMonth: { lte: month },
       },
       select: {
@@ -1622,6 +1640,7 @@ export class MovementsRepository {
       FROM "Transaction" t
       WHERE
         t."userId" = ${userId}
+        AND ${NOT_DELETED_TRANSACTION_SQL}
         AND t.type = 'EXPENSE'
         AND NOT t.skipped
         AND EXTRACT(year FROM
@@ -1673,6 +1692,7 @@ export class MovementsRepository {
       FROM "Transaction" t
       WHERE
         t."userId" = ${userId}
+        AND ${NOT_DELETED_TRANSACTION_SQL}
         AND t.type = 'EXPENSE'
         AND NOT t.skipped
         AND date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
@@ -1747,6 +1767,7 @@ export class MovementsRepository {
       JOIN "Category" c ON c.id = t."categoryId"
       WHERE
         t."userId" = ${userId}
+        AND ${NOT_DELETED_TRANSACTION_SQL}
         AND NOT t.skipped
         AND EXTRACT(year FROM
               date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
@@ -1775,7 +1796,7 @@ export class MovementsRepository {
   async getAllFijosForAnnual(userId: string): Promise<RecurringForAnnual[]> {
     const [rows, allSkips] = await Promise.all([
       this.prisma.recurring.findMany({
-        where: { userId },
+        where: { userId, ...NOT_DELETED },
         select: {
           id: true,
           type: true,
@@ -1851,7 +1872,7 @@ export class MovementsRepository {
   ): Promise<InstallmentGroupForAnnual[]> {
     const [rows, allSkips] = await Promise.all([
       this.prisma.installmentGroup.findMany({
-        where: { userId },
+        where: { userId, ...NOT_DELETED },
         select: {
           id: true,
           type: true,
@@ -1913,7 +1934,7 @@ export class MovementsRepository {
     userId: string,
   ): Promise<InstallmentGroupForGantt[]> {
     const rows = await this.prisma.installmentGroup.findMany({
-      where: { userId, type: 'EXPENSE' },
+      where: { userId, type: 'EXPENSE', ...NOT_DELETED },
       select: {
         id: true,
         type: true,
@@ -1968,7 +1989,7 @@ export class MovementsRepository {
     skipped: boolean;
   }>> {
     const rows = await this.prisma.transaction.findMany({
-      where: { id: { in: ids } },
+      where: { id: { in: ids }, ...NOT_DELETED },
       select: { id: true, amountCents: true, description: true, currency: true, exchangeRate: true, anchorCurrency: true, skipped: true },
     });
     return rows.map((r) => ({
@@ -1998,7 +2019,7 @@ export class MovementsRepository {
     skippedMonths: Set<string>;
   }>> {
     const rows = await this.prisma.installmentGroup.findMany({
-      where: { id: { in: ids } },
+      where: { id: { in: ids }, ...NOT_DELETED },
       select: {
         id: true,
         amountCents: true,
@@ -2067,6 +2088,7 @@ export class MovementsRepository {
       JOIN "Category" c ON c.id = t."categoryId"
       WHERE
         t."userId" = ${userId}
+        AND ${NOT_DELETED_TRANSACTION_SQL}
         AND t.type = 'INCOME'
         AND NOT t.skipped
         AND date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
@@ -2107,19 +2129,19 @@ export class MovementsRepository {
           date_trunc('month', t."occurredAt" AT TIME ZONE t.timezone)
         )::int AS y
         FROM "Transaction" t
-        WHERE t."userId" = ${userId}
+        WHERE t."userId" = ${userId} AND ${NOT_DELETED_TRANSACTION_SQL}
 
         UNION ALL
 
         SELECT SUBSTRING(r."startMonth" FROM 1 FOR 4)::int AS y
         FROM "Recurring" r
-        WHERE r."userId" = ${userId}
+        WHERE r."userId" = ${userId} AND ${NOT_DELETED_RECURRING_SQL}
 
         UNION ALL
 
         SELECT SUBSTRING(ig."startMonth" FROM 1 FOR 4)::int AS y
         FROM "InstallmentGroup" ig
-        WHERE ig."userId" = ${userId}
+        WHERE ig."userId" = ${userId} AND ${NOT_DELETED_INSTALLMENT_SQL}
       ) sub
     `;
 

@@ -74,9 +74,11 @@ export class TransactionsController {
 
   /**
    * DELETE /transactions/:id
-   * Hard delete permanente (RF-MU-003).
+   * Borrado lógico (RF-MU-003, RF-HIST-006): marca deletedAt, reversible desde
+   * /historial (RF-HIST-003) hasta que la entrada se purgue (RF-HIST-005).
    * 204 No Content. 404 si no existe o es de otro usuario.
-   * Nota: el calculado vinculado (si existe) se elimina automáticamente por onDelete:Cascade en DB.
+   * Nota: el calculado vinculado (si existe) también se marca como eliminado
+   * en cascada (RN-024/026), vía RecurringService.cascadeSoftDeleteBySourceMovement.
    */
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)

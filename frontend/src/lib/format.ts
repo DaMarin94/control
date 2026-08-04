@@ -201,6 +201,26 @@ export function formatMonthHeading(isoUtc: string, timezone: string): string {
   }).format(new Date(isoUtc));
 }
 
+/**
+ * Formatea un instante UTC en la timezone dada como día + mes abreviado, SIN año.
+ * Usado por el Historial de cambios (docs/design.md §"Historial de cambios" —
+ * "Momento": `{DD Mmm} · {HH:MM}`, sin año porque la retención es de 31 días y
+ * el año nunca discrimina).
+ * Ej: "2026-06-02T17:30:00Z", "America/Argentina/Buenos_Aires" → "02 jun" → "02 Jun"
+ */
+export function formatDayMonth(isoUtc: string, timezone: string): string {
+  const date = new Date(isoUtc);
+  const parts = new Intl.DateTimeFormat(DATE_LOCALE, {
+    day: "2-digit",
+    month: "short",
+    timeZone: timezone,
+  }).formatToParts(date);
+  const day = parts.find((p) => p.type === "day")?.value ?? "";
+  const monthRaw = parts.find((p) => p.type === "month")?.value ?? "";
+  const month = monthRaw.charAt(0).toUpperCase() + monthRaw.slice(1);
+  return `${day} ${month}`;
+}
+
 // ─── Conversión local → UTC ───────────────────────────────────────────────────
 
 /**

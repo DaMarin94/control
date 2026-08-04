@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Currency, MovementType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NOT_DELETED } from '../common/soft-delete.helper';
 
 /**
  * Shape de categoría embebida en un InstallmentGroup.
@@ -144,10 +145,13 @@ export class InstallmentsRepository {
 
   /**
    * Busca un grupo de cuotas por id (sin filtrar por userId — el caller hace la validación).
+   *
+   * Excluye borrados lógicos (RF-HIST-006): un grupo eliminado no existe para
+   * el resto de la app.
    */
   async findById(id: string): Promise<InstallmentGroupWithCategory | null> {
     const g = await this.prisma.installmentGroup.findUnique({
-      where: { id },
+      where: { id, ...NOT_DELETED },
       include: INSTALLMENT_INCLUDE,
     });
     if (!g) return null;
@@ -170,11 +174,15 @@ export class InstallmentsRepository {
   }
 
   /**
-   * Hard delete físico de un grupo de cuotas (RF-MC-002).
-   * Elimina el grupo completo permanentemente.
+   * Borrado lógico del grupo completo (RF-MC-002, RF-HIST-006): marca
+   * deletedAt = now(). Deja de aparecer en toda la app (todas las instancias,
+   * pasadas y futuras); reversible desde /historial hasta que se purgue.
    */
-  async delete(id: string): Promise<void> {
-    await this.prisma.installmentGroup.delete({ where: { id } });
+  async softDelete(id: string): Promise<void> {
+    await this.prisma.installmentGroup.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 
   // ---------------------------------------------------------------------------

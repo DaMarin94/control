@@ -29,6 +29,11 @@ import { CategoryValidatorService } from '../../../src/categories/category-valid
 import { PaymentMethodValidatorService } from '../../../src/payment-methods/payment-method-validator.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { SettingsService } from '../../../src/settings/settings.service';
+import { HistoryService } from '../../../src/history/history.service';
+
+const mockHistoryServiceIntegration = {
+  record: jest.fn().mockResolvedValue(undefined),
+};
 
 const mockSettingsServiceIntegration = {
   getSettings: jest.fn(),
@@ -87,6 +92,8 @@ class InMemoryRecurringDB {
       // Fase 1.2.3: moneda y cotización (default ARS/1 para tests de integración)
       currency: data.currency ?? Currency.ARS,
       exchangeRate: data.exchangeRate ?? 1,
+      // Módulo 3.14 — Historial de cambios: borrado lógico (RF-HIST-006)
+      deletedAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -98,9 +105,12 @@ class InMemoryRecurringDB {
   /**
    * Simula prisma.recurring.findUnique (usado por findById)
    */
-  findUnique(args: { where: { id: string }; include?: any }): any {
+  findUnique(args: { where: { id: string; deletedAt?: null }; include?: any }): any {
     const row = this.rows.get(args.where.id);
     if (!row) return null;
+    // NOT_DELETED (RF-HIST-006): findById pasa { id, deletedAt: null } — un
+    // registro con borrado lógico no debe resolverse como existente.
+    if (args.where.deletedAt === null && row.deletedAt !== null) return null;
     return this.withCategory(row);
   }
 
@@ -114,6 +124,9 @@ class InMemoryRecurringDB {
     // Aplicar los cambios del data
     if (args.data.deletedFrom !== undefined) {
       row.deletedFrom = args.data.deletedFrom;
+    }
+    if (args.data.deletedAt !== undefined) {
+      row.deletedAt = args.data.deletedAt;
     }
     if (args.data.amountCents !== undefined) {
       row.amountCents = args.data.amountCents;
@@ -136,7 +149,8 @@ class InMemoryRecurringDB {
   }
 
   /**
-   * Simula prisma.recurring.delete
+   * Simula prisma.recurring.delete (hard delete físico — reaper/tests únicamente,
+   * ya no lo usa el flujo normal de RecurringService, ver softDeleteRow más abajo).
    */
   delete(args: { where: { id: string } }): void {
     this.rows.delete(args.where.id);
@@ -156,6 +170,10 @@ class InMemoryRecurringDB {
     for (const row of this.rows.values()) {
       // Filtrar por userId
       if (where.userId && row.userId !== where.userId) continue;
+
+      // NOT_DELETED (RF-HIST-006): excluir filas con borrado lógico cuando el
+      // where lo pide explícitamente (findFijosByMonth, findChainRows, etc.).
+      if (where.deletedAt === null && row.deletedAt !== null) continue;
 
       // Filtrar por chainId exacto (usado por findChainRows)
       if (where.chainId !== undefined && row.chainId !== where.chainId) continue;
@@ -202,7 +220,7 @@ class InMemoryRecurringDB {
 
   /**
    * Simula prisma.recurring.deleteMany — elimina todas las filas que coincidan con el where.
-   * Solo soporta el caso where: { chainId } (usado por deleteByChainId).
+   * Solo soporta el caso where: { chainId }.
    */
   deleteMany(args: { where: any }): void {
     for (const [id, row] of this.rows.entries()) {
@@ -233,9 +251,15 @@ class InMemoryRecurringDB {
       sourceChainId: r.sourceChainId,
       startMonth: r.startMonth,
       deletedFrom: r.deletedFrom,
+      deletedAt: r.deletedAt,
       amountCents: r.amountCents,
       frequency: r.frequency,
     }));
+  }
+
+  /** Snapshot SIN filtrar borrados lógicos (para verificar RF-HIST-006: la fila sigue existiendo, solo marcada). */
+  allRows(): any[] {
+    return Array.from(this.rows.values());
   }
 
   private withCategory(row: any): any {
@@ -345,6 +369,7 @@ describe('Bug B — flujo real: crear fijo → split → crear calculado', () =>
           useValue: { log: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), verbose: jest.fn() },
         },
         { provide: SettingsService, useValue: mockSettingsServiceIntegration },
+        { provide: HistoryService, useValue: mockHistoryServiceIntegration },
       ],
     }).compile();
 
@@ -838,6 +863,7 @@ describe('BUG borrado de cadena — flujo real: crear fijo → split → crear c
           useValue: { log: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), verbose: jest.fn() },
         },
         { provide: SettingsService, useValue: mockSettingsServiceIntegration },
+        { provide: HistoryService, useValue: mockHistoryServiceIntegration },
       ],
     }).compile();
 
@@ -885,17 +911,20 @@ describe('BUG borrado de cadena — flujo real: crear fijo → split → crear c
     expect(pre_m4.find(f => f.id === calc.id)).toBeDefined();
 
     // PASO 4: DELETE desde m1 con fromCurrentMonth=true
-    // boundary = '2026-01' <= R1.startMonth='2026-01' → hard delete R1
-    // boundary = '2026-01' <= R2.startMonth='2026-03' → hard delete R2
-    // cascada: calculado también se hard-delete completo
+    // boundary = '2026-01' <= R1.startMonth='2026-01' → borrado lógico de R1 (RF-HIST-006)
+    // boundary = '2026-01' <= R2.startMonth='2026-03' → borrado lógico de R2
+    // cascada: calculado también se marca como eliminado (RN-024)
     await recurringService.remove(USER_ID, r1.id, '2026-01', true);
 
-    // Verificar que la DB no tiene filas huérfanas
+    // RF-HIST-006: borrado LÓGICO — las filas siguen existiendo en la tabla,
+    // marcadas con deletedAt (reversibles desde /historial), no se hard-deletean.
     const dbSnap = db.snapshot();
     const origenRows = dbSnap.filter(r => r.chainId === r1.chainId && r.sourceChainId === null);
     const calcRows = dbSnap.filter(r => r.sourceChainId === r1.chainId);
-    expect(origenRows).toHaveLength(0); // R1 y R2 eliminados
-    expect(calcRows).toHaveLength(0);   // calculado eliminado
+    expect(origenRows).toHaveLength(2); // R1 y R2 siguen existiendo, soft-deleted
+    expect(origenRows.every(r => r.deletedAt !== null)).toBe(true);
+    expect(calcRows).toHaveLength(1);   // calculado sigue existiendo, soft-deleted
+    expect(calcRows.every(r => r.deletedAt !== null)).toBe(true);
 
     // m1: ni el origen ni el calculado aparecen
     const post_m1 = await movementsRepo.findFijosByMonth(USER_ID, '2026-01');
@@ -944,7 +973,7 @@ describe('BUG borrado de cadena — flujo real: crear fijo → split → crear c
     // PASO 4: DELETE desde m2 con fromCurrentMonth=true
     // boundary = '2026-02'
     // R1 (startMonth='2026-01'): boundary='2026-02' > '2026-01', deletedFrom='2026-03' > '2026-02' → set deletedFrom='2026-02'
-    // R2 (startMonth='2026-03'): boundary='2026-02' <= '2026-03' → hard delete R2
+    // R2 (startMonth='2026-03'): boundary='2026-02' <= '2026-03' → borrado lógico de R2 (RF-HIST-006)
     // calculado: misma lógica por fila sobre su cadena
     await recurringService.remove(USER_ID, r1.id, '2026-02', true);
 
@@ -966,13 +995,15 @@ describe('BUG borrado de cadena — flujo real: crear fijo → split → crear c
     expect(post_m4.find(f => f.id === calc.id)).toBeUndefined();
     expect(post_m4).toHaveLength(0);
 
-    // DB: R2 no existe; R1 existe con deletedFrom='2026-02'
+    // DB: R2 sigue existiendo pero soft-deleted (RF-HIST-006); R1 existe con deletedFrom='2026-02'
     const dbSnap = db.snapshot();
     const r1InDB = dbSnap.find(r => r.id === r1.id);
     const r2InDB = dbSnap.find(r => r.id === r2.id);
     expect(r1InDB).toBeDefined();
     expect(r1InDB!.deletedFrom).toBe('2026-02');
-    expect(r2InDB).toBeUndefined(); // hard-deleted
+    expect(r1InDB!.deletedAt).toBeNull();
+    expect(r2InDB).toBeDefined();
+    expect(r2InDB!.deletedAt).not.toBeNull();
   });
 
   // Escenario: eliminar un calculado NO afecta al origen (RF-MCALC-005, sentido contrario)
@@ -1001,13 +1032,19 @@ describe('BUG borrado de cadena — flujo real: crear fijo → split → crear c
     // DELETE desde m1 sobre el calculado (fromCurrentMonth=true)
     await recurringService.remove(USER_ID, calc.id, '2026-01', true);
 
-    // El origen (R1, R2) debe seguir existiendo intacto
+    // El origen (R1, R2) debe seguir existiendo intacto (ni siquiera soft-deleted)
     const dbSnap = db.snapshot();
-    expect(dbSnap.find(r => r.id === r1.id)).toBeDefined();
-    expect(dbSnap.find(r => r.id === r2.id)).toBeDefined();
+    const r1InDB = dbSnap.find(r => r.id === r1.id);
+    const r2InDB = dbSnap.find(r => r.id === r2.id);
+    expect(r1InDB).toBeDefined();
+    expect(r1InDB!.deletedAt).toBeNull();
+    expect(r2InDB).toBeDefined();
+    expect(r2InDB!.deletedAt).toBeNull();
 
-    // El calculado no debe existir
-    expect(dbSnap.find(r => r.id === calc.id)).toBeUndefined();
+    // El calculado sigue existiendo pero soft-deleted (RF-HIST-006)
+    const calcInDB = dbSnap.find(r => r.id === calc.id);
+    expect(calcInDB).toBeDefined();
+    expect(calcInDB!.deletedAt).not.toBeNull();
 
     // m4: R2 (origen) aparece, calculado no
     const post_m4 = await movementsRepo.findFijosByMonth(USER_ID, '2026-04');
@@ -1041,15 +1078,15 @@ describe('BUG borrado de cadena — flujo real: crear fijo → split → crear c
     });
 
     // DELETE usando el id de R2, desde m1 con fromCurrentMonth=true
-    // boundary='2026-01' <= R1.startMonth='2026-01' → hard delete R1
-    // boundary='2026-01' <= R2.startMonth='2026-03' → hard delete R2
+    // boundary='2026-01' <= R1.startMonth='2026-01' → borrado lógico de R1 (RF-HIST-006)
+    // boundary='2026-01' <= R2.startMonth='2026-03' → borrado lógico de R2
     await recurringService.remove(USER_ID, r2.id, '2026-01', true);
 
     const dbSnap = db.snapshot();
-    // Toda la cadena del origen debe estar eliminada
-    expect(dbSnap.find(r => r.id === r1.id)).toBeUndefined();
-    expect(dbSnap.find(r => r.id === r2.id)).toBeUndefined();
-    // El calculado también debe estar eliminado (cascada)
-    expect(dbSnap.find(r => r.id === calc.id)).toBeUndefined();
+    // Toda la cadena del origen sigue existiendo, marcada como eliminada (RF-HIST-006)
+    expect(dbSnap.find(r => r.id === r1.id)?.deletedAt).not.toBeNull();
+    expect(dbSnap.find(r => r.id === r2.id)?.deletedAt).not.toBeNull();
+    // El calculado también debe estar marcado como eliminado (cascada, RN-024)
+    expect(dbSnap.find(r => r.id === calc.id)?.deletedAt).not.toBeNull();
   });
 });
