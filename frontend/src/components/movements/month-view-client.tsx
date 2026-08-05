@@ -45,7 +45,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, ArrowUpDown, Check, ArrowRight, ArrowLeft } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowUpDown, Check, ArrowRight, ArrowLeft, ChartSpline, Info } from "lucide-react";
 import { SectionSortButton } from "@/components/ui/section-sort-button";
 import {
   MonthJumpPanel,
@@ -75,6 +75,7 @@ import { useMovements } from "@/hooks/use-movements";
 import { usePreferences } from "@/hooks/use-preferences";
 import { useSettings } from "@/hooks/use-settings";
 import { useLimits } from "@/hooks/use-limits";
+import { useSimulations } from "@/hooks/use-simulations";
 import { evaluateLimits } from "@/lib/limits/evaluate";
 import { computeCategoryExpenseTotalsCents, evaluateItemLimitMark } from "@/lib/limits/apply-month";
 import { LimitsInfoPopover } from "@/components/limits/limits-info-popover";
@@ -92,6 +93,10 @@ import { SkeletonBlock, SkeletonLine, SkeletonCircle, SkeletonPill } from "@/com
 import { SectionFilterButton } from "@/components/ui/section-filter-popover";
 import type { SectionFilterType } from "@/components/ui/section-filter-popover";
 import { MovementItemRow } from "@/components/movements/movement-item-row";
+import { SimulatedMovementRow } from "@/components/movements/simulated-movement-row";
+import { SimulationBand } from "@/components/movements/simulation-band";
+import { SimulateCategoryModal } from "@/components/movements/simulate-category-modal";
+import { DeleteSimulationDialog } from "@/components/movements/delete-simulation-dialog";
 import { TransactionModal } from "@/components/movements/transaction-modal";
 import type { TransactionPrefill } from "@/components/movements/transaction-form";
 import type { RecurringPrefill } from "@/components/movements/recurring-form";
@@ -111,12 +116,19 @@ import {
   getBrowserTimezone,
 } from "@/lib/format";
 import { sumMovementTotals, groupSubtotalCents, sortUnicosBySort } from "@/lib/movements";
+import {
+  isFutureMonthWithinHorizon,
+  formatSubtotalSimulatedLabel,
+  formatTotalsSimulatedLine,
+  formatPausedListNote,
+} from "@/lib/simulations";
 import { cn } from "@/lib/utils";
 import type { MovementItem } from "@/types/movement";
 import type { LimitConfig } from "@/types/limit";
 import type { Transaction } from "@/types/transaction";
 import type { Recurring } from "@/types/recurring";
 import type { InstallmentGroup } from "@/types/installment";
+import type { SimulationDto } from "@/types/simulation";
 import type {
   MonthSectionKey,
   MonthSectionsPreferences,
@@ -402,6 +414,11 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   const { defaultCurrency } = useSettings();
   // P2 — Fase 1: límites del usuario (marca visual pasiva). [] = cero impacto (D9).
   const { limits } = useLimits();
+  // Simulación de categoría (RF-SIM-001..004) — banda del popover de Únicos,
+  // composición de subtotal/totales y nota de simulación pausada. Siempre en
+  // vuelo (igual que `useLimits`): el botón "Simular categoría" es el único
+  // elemento incondicional de la feature (docs/design.md §0).
+  const simulationsQuery = useSimulations();
 
   // Estado de modales para únicos
   const [editingUnico, setEditingUnico] = useState<MovementItem | null>(null);
@@ -424,6 +441,10 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   // Estado de modal "Duplicar movimiento" (docs/design.md) — el ítem origen NO
   // calculado; se enruta por su `origin` al abrir el modal en modo duplicate-*.
   const [duplicating, setDuplicating] = useState<MovementItem | null>(null);
+
+  // Estado de los dos overlays de Simulación de categoría (docs/design.md §3/§4).
+  const [isSimulateModalOpen, setIsSimulateModalOpen] = useState(false);
+  const [deletingSimulation, setDeletingSimulation] = useState<SimulationDto | null>(null);
 
   // ── Estado de acordeón y orden (Fase 1.1.4) ───────────────────────────────
 
@@ -586,7 +607,24 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
     : "";
   const yearName = labelParts[1] ?? "";
 
-  const isCurrentMonth = month === getCurrentMonth();
+  const currentMonth = getCurrentMonth();
+  const isCurrentMonth = month === currentMonth;
+
+  // ── Simulación de categoría — derivados (docs/design.md §5/§6) ────────────
+  // Composición de subtotal/totales: cuenta de filas simuladas VISIBLES tras
+  // los filtros de la sección (§5.1/§5.2) — si el filtro las excluye, ya no
+  // "incluyen" nada. Nota de pausa (§6.2): independiente de los filtros (es un
+  // estado de configuración, no un ítem filtrable) — cuenta sobre la lista
+  // CRUDA de simulaciones activas, no sobre lo que la sección Únicos filtró.
+  const visibleSimulatedCount = unicos.filter((m) => m.simulated).length;
+  const horizonEndMonth = simulationsQuery.data?.horizonEndMonth ?? null;
+  const pausedSimulationsCount = (simulationsQuery.data?.simulations ?? []).filter(
+    (s) => s.paused,
+  ).length;
+  const showPausedSimulationNote =
+    horizonEndMonth !== null &&
+    pausedSimulationsCount > 0 &&
+    isFutureMonthWithinHorizon(month, currentMonth, horizonEndMonth);
 
   // ── P2 — Fase 1: marca visual pasiva de límites ───────────────────────────
   // Anclajes de nivel-mes: mes.total.gasto / mes.total.ingreso / mes.balance.
@@ -841,7 +879,6 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   // Mes visualizado en el pasado (< mes en curso) → ArrowRight, mes visualizado
   // en el futuro (> mes en curso) → ArrowLeft. La flecha es SIEMPRE leading
   // (primer hijo): solo cambia el sentido del glifo, nunca su posición.
-  const currentMonth = getCurrentMonth();
   const isPastMonth = month < currentMonth;
   const goToCurrentMonthButton = !isCurrentMonth ? (
     <button
@@ -1127,7 +1164,12 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                 min-w-0 en los items desactiva el piso de min-content de las columnas fr
                 (si no, la cifra de dinero fuerza un ancho mínimo y el hero de Balance
                 se aplasta). Mismo template que el skeleton de arriba. */}
-            <div className="grid grid-cols-1 @wide:grid-cols-[1fr_1fr_1.1fr] gap-[var(--gap)] mb-6">
+            <div
+              className={cn(
+                "grid grid-cols-1 @wide:grid-cols-[1fr_1fr_1.1fr] gap-[var(--gap)]",
+                visibleSimulatedCount > 0 ? "mb-[10px]" : "mb-6",
+              )}
+            >
               {/* Gastos — mes.total.gasto (P2, Fase 1: marca visual pasiva) */}
               <div
                 className={cn(
@@ -1207,6 +1249,19 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
               </div>
             </div>
 
+            {/* Línea de composición (docs/design.md §5.2) — solo con ≥1 fila simulada
+                VISIBLE tras los filtros de Únicos. Cero-impacto: sin simulados, esta
+                línea no existe y la grilla de arriba conserva su mb-6 de siempre —
+                el layout es idéntico byte a byte al de un mes sin la feature. */}
+            {visibleSimulatedCount > 0 && (
+              <div className="inline-flex items-center gap-[6px] mb-6">
+                <ChartSpline size={13} className="text-muted shrink-0" aria-hidden="true" />
+                <span className="text-[12px] text-muted">
+                  {formatTotalsSimulatedLine(visibleSimulatedCount)}
+                </span>
+              </div>
+            )}
+
             {/* ── Lista agrupada por origen — con acordeón y reordenamiento ── */}
             {/*
              * modifiers: restrictToVerticalAxis + restrictToParentElement (Fase 1.2.0).
@@ -1264,7 +1319,22 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                         onToggle={() => handleToggleCollapse(key)}
                         isOrderMode={isOrderMode}
                         isActive={activeId === key}
-                        subtotalAdornment={<LimitMarkAdorner mark={subtotalMark} glyphSize={13} />}
+                        subtotalAdornment={
+                          <>
+                            <LimitMarkAdorner mark={subtotalMark} glyphSize={13} />
+                            {/* Glifo de composición (§5.1) — solo Únicos, solo con simulados VISIBLES.
+                                Orden del cluster: [marca de límite] [glifo simulado] [subtotal]. */}
+                            {key === "unicos" && visibleSimulatedCount > 0 && (
+                              <span
+                                className="inline-flex items-center text-muted shrink-0"
+                                aria-label={formatSubtotalSimulatedLabel(visibleSimulatedCount)}
+                                title={formatSubtotalSimulatedLabel(visibleSimulatedCount)}
+                              >
+                                <ChartSpline size={13} aria-hidden="true" />
+                              </span>
+                            )}
+                          </>
+                        }
                         subtotalClassName={cn(
                           limitBoldClass(subtotalMark?.effect),
                           limitTintClass(subtotalMark?.effect),
@@ -1296,13 +1366,39 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                               selectedCategories={filter.categories}
                               onTypeChange={(type) => handleSectionTypeChange(key, type)}
                               onCategoriesChange={(ids) => handleSectionCategoriesChange(key, ids)}
+                              // Banda "Simulación" (§2) — SOLO Únicos (RN-029: la simulación
+                              // alcanza solo movimientos únicos). Fijos/Cuotas: sin cambios.
+                              footerSlot={
+                                key === "unicos"
+                                  ? (closePopover) => (
+                                      <SimulationBand
+                                        horizonEndMonth={horizonEndMonth}
+                                        simulations={simulationsQuery.data?.simulations ?? []}
+                                        onOpenCreate={() => {
+                                          closePopover();
+                                          setIsSimulateModalOpen(true);
+                                        }}
+                                        onRequestDelete={(simulation) => {
+                                          closePopover();
+                                          setDeletingSimulation(simulation);
+                                        }}
+                                      />
+                                    )
+                                  : undefined
+                              }
                             />
                           </div>
                         }
                       >
                         {/* Contenido de la sección: lista o empty inline */}
                         {items.length === 0 ? (
-                          <SectionEmpty sectionKey={key} />
+                          <>
+                            <SectionEmpty sectionKey={key} />
+                            {/* Nota de simulación pausada (§6.2) — sección vacía: debajo del empty dashed */}
+                            {key === "unicos" && showPausedSimulationNote && (
+                              <SimulationPausedNote variant="standalone" count={pausedSimulationsCount} />
+                            )}
+                          </>
                         ) : (
                           // Atenuación opcional del contenido en modo orden
                           <div className={isOrderMode ? "opacity-70" : ""}>
@@ -1316,6 +1412,11 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                               limits={limits}
                               categoryExpenseTotalsCents={categoryExpenseTotalsCents}
                               isCurrentMonth={isCurrentMonth}
+                              footer={
+                                key === "unicos" && showPausedSimulationNote ? (
+                                  <SimulationPausedNote variant="listed" count={pausedSimulationsCount} />
+                                ) : undefined
+                              }
                             />
                           </div>
                         )}
@@ -1439,6 +1540,19 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
         />
       )}
 
+      {/* ── Modal "Simular categoría" (docs/design.md §3, RF-SIM-001) ── */}
+      {isSimulateModalOpen && (
+        <SimulateCategoryModal onClose={() => setIsSimulateModalOpen(false)} />
+      )}
+
+      {/* ── Confirmación "Eliminar simulación" (docs/design.md §4, RF-SIM-004) ── */}
+      {deletingSimulation && (
+        <DeleteSimulationDialog
+          simulation={deletingSimulation}
+          onClose={() => setDeletingSimulation(null)}
+        />
+      )}
+
       {/* ── Selector de salto mes/año (Ola 1, P4) ── */}
       {monthJump.isOpen && (
         <MonthJumpPanel {...monthJump.panelProps} />
@@ -1474,6 +1588,8 @@ interface SectionListProps {
   limits: LimitConfig[];
   categoryExpenseTotalsCents: Map<string, number>;
   isCurrentMonth: boolean;
+  /** Nota de simulación pausada (docs/design.md §6.2) — última fila, solo Únicos. */
+  footer?: React.ReactNode;
 }
 
 function SectionList({
@@ -1486,21 +1602,59 @@ function SectionList({
   limits,
   categoryExpenseTotalsCents,
   isCurrentMonth,
+  footer,
 }: SectionListProps) {
   return (
     <div className="bg-panel border border-line rounded-card overflow-hidden shadow-[var(--shadow-sm)]">
-      {items.map((item) => (
-        <MovementItemRow
-          key={item.id}
-          movement={item}
-          viewMonth={viewMonth}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          onCreateCalculated={onCreateCalculated}
-          onDuplicate={onDuplicate}
-          limitMark={evaluateItemLimitMark(item, limits, categoryExpenseTotalsCents, isCurrentMonth)}
-        />
-      ))}
+      {items.map((item) =>
+        item.simulated ? (
+          // Movimiento simulado (RF-SIM-003) — sin acciones, sin card de detalle.
+          <SimulatedMovementRow
+            key={item.id}
+            movement={item}
+            limitMark={evaluateItemLimitMark(item, limits, categoryExpenseTotalsCents, isCurrentMonth)}
+          />
+        ) : (
+          <MovementItemRow
+            key={item.id}
+            movement={item}
+            viewMonth={viewMonth}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onCreateCalculated={onCreateCalculated}
+            onDuplicate={onDuplicate}
+            limitMark={evaluateItemLimitMark(item, limits, categoryExpenseTotalsCents, isCurrentMonth)}
+          />
+        ),
+      )}
+      {footer}
+    </div>
+  );
+}
+
+/**
+ * Nota al pie por simulaciones pausadas (docs/design.md §6.2) — "listed": última
+ * fila de la tarjeta-lista de Únicos, separada por hairline. "standalone":
+ * debajo del empty inline dashed, cuando la sección (filtrada) queda vacía.
+ * No interactiva, sin acción ni link — el arreglo (eliminar la simulación)
+ * está en el disparador de filtro, justo encima.
+ */
+function SimulationPausedNote({
+  variant,
+  count,
+}: {
+  variant: "listed" | "standalone";
+  count: number;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-start gap-[6px]",
+        variant === "listed" ? "border-t border-hair px-[18px] py-[12px]" : "mt-[8px] px-1",
+      )}
+    >
+      <Info size={14} className="text-muted shrink-0 mt-[1px]" aria-hidden="true" />
+      <span className="text-[12px] text-muted">{formatPausedListNote(count)}</span>
     </div>
   );
 }

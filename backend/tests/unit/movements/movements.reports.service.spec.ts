@@ -32,6 +32,7 @@ import {
   InstallmentGroupForAnnual,
 } from '../../../src/movements/movements.repository';
 import { SettingsService } from '../../../src/settings/settings.service';
+import { SimulationsService } from '../../../src/simulations/simulations.service';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -67,6 +68,10 @@ const mockLogger = {
 const mockSettingsService = {
   getSettings: jest.fn(),
   updateLastExchangeRate: jest.fn(),
+};
+
+const mockSimulationsService = {
+  getSimulatedItemsForMonth: jest.fn().mockResolvedValue([]),
 };
 
 // ---------------------------------------------------------------------------
@@ -189,6 +194,7 @@ describe('MovementsService — getReportsMovements', () => {
         { provide: MovementsRepository, useValue: mockRepo },
         { provide: Logger, useValue: mockLogger },
         { provide: SettingsService, useValue: mockSettingsService },
+        { provide: SimulationsService, useValue: mockSimulationsService },
       ],
     }).compile();
 

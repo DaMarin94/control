@@ -16,7 +16,7 @@
 import { Button } from "@/components/ui/button";
 import { ModalShell, ModalShellHeader, ModalShellBody, ModalShellFooter } from "@/components/ui/modal-shell";
 import { HistoryChangesBlock } from "@/components/history/history-changes-block";
-import { HISTORY_TARGET_KIND_LABEL, formatHistoryMoment } from "@/lib/history";
+import { HISTORY_TARGET_KIND_LABEL, formatHistoryMoment, getHistoryEntryName } from "@/lib/history";
 import { getBrowserTimezone } from "@/lib/format";
 import type { HistoryEntryResponseDto } from "@/types/history";
 import type { CurrencyCode } from "@/types/settings";
@@ -38,7 +38,7 @@ export function UndoConfirmModal({
 }: UndoConfirmModalProps) {
   const titleId = "undo-confirm-title";
   const isEdit = entry.action === "EDIT";
-  const rowLabel = entry.description ?? entry.category?.name ?? "Movimiento";
+  const rowLabel = getHistoryEntryName(entry);
   const structureLabel = HISTORY_TARGET_KIND_LABEL[entry.targetKind];
   const momento = formatHistoryMoment(entry.createdAt, getBrowserTimezone());
 

@@ -224,6 +224,18 @@ export interface MovementItem {
    * o si el ítem mismo ES un calculado (un calculado nunca es origen de otro).
    */
   calculatedChildren: CalculatedChild[];
+  /**
+   * Simulación de categoría (RF-SIM-003, módulo 3.15). `true` únicamente para
+   * el movimiento sintético que una simulación activa deriva al vuelo para un
+   * mes futuro dentro de su horizonte (id sintético `simulated:{simulationId}:{month}`).
+   * `false` en todo ítem real (único/fijo/cuota, calculado o no).
+   *
+   * En un ítem simulado son `null`: occurredAt, timezone, paymentMethod,
+   * autoDebit, installment, frequency, startMonth, endMonth, calculated; y
+   * hasCalculated es siempre `false` con calculatedChildren siempre `[]` — un
+   * simulado no puede originar ni ser un calculado (RN-029).
+   */
+  simulated: boolean;
 }
 
 /** Totales del mes */

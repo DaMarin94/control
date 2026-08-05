@@ -17,6 +17,7 @@ import {
   RecurringForAnnual,
 } from '../../../src/movements/movements.repository';
 import { SettingsService } from '../../../src/settings/settings.service';
+import { SimulationsService } from '../../../src/simulations/simulations.service';
 
 const mockRepo = {
   findUnicosByMonth: jest.fn(),
@@ -42,6 +43,10 @@ const mockLogger = {
 const mockSettingsServiceCalc = {
   getSettings: jest.fn(),
   updateLastExchangeRate: jest.fn(),
+};
+
+const mockSimulationsService = {
+  getSimulatedItemsForMonth: jest.fn().mockResolvedValue([]),
 };
 
 const USER_A = 'user-calc-reports';
@@ -120,6 +125,7 @@ describe('MovementsService getReportsMovements — calculados (Fase 1.1.7)', () 
         { provide: MovementsRepository, useValue: mockRepo },
         { provide: Logger, useValue: mockLogger },
         { provide: SettingsService, useValue: mockSettingsServiceCalc },
+        { provide: SimulationsService, useValue: mockSimulationsService },
       ],
     }).compile();
 

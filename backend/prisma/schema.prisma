@@ -138,6 +138,7 @@ model User {
   installmentGroups InstallmentGroup[]
   preferences       UserPreferences?
   historyEntries    HistoryEntry[]
+  simulations       Simulation[]
 }
 
 // ---------------------------------------------------------------------------
@@ -234,6 +235,7 @@ model Category {
   transactions      Transaction[]
   recurrings        Recurring[]
   installmentGroups InstallmentGroup[]
+  simulations       Simulation[]
 
   @@index([userId])
 }
@@ -663,4 +665,37 @@ model InstallmentSkip {
   // Restricción: solo puede haber un skip por (grupo, mes)
   @@unique([installmentGroupId, month])
   @@index([installmentGroupId])
+}
+
+// ---------------------------------------------------------------------------
+// Simulation (simulación de categoría — Módulo 3.15, RF-SIM-001..004)
+// ---------------------------------------------------------------------------
+
+// Persiste SOLO la configuración (usuario + categoría) — RN-029: ni monto, ni
+// dirección, ni horizonte se guardan; todo se deriva on-the-fly en cada lectura
+// (RF-SIM-002, motor en common/projection.helper.ts). No hay filas de movimiento
+// asociadas: los "movimientos simulados" se sintetizan en GET /movements con un
+// id derivado (nunca persistido) — ver SimulationsService.
+//
+// A lo sumo una simulación por (userId, categoryId) — RF-SIM-001: "como máximo
+// una por categoría". Impuesto en la DB con un índice único común.
+//
+// Borrado FÍSICO (RF-SIM-004): esta especie NO participa del historial de
+// cambios ni es deshacible — DELETE /simulations/:id borra la fila directamente.
+model Simulation {
+  id         String @id @default(cuid())
+  userId     String
+  categoryId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // onDelete: Restrict — espejo de categoryId en Transaction/Recurring/InstallmentGroup:
+  // impide borrar físicamente una categoría con una simulación que la referencia.
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, categoryId])
+  @@index([userId])
+  @@index([categoryId])
 }

@@ -22,7 +22,7 @@ import type { KeyboardEvent } from "react";
 import { Pencil, Trash2, Undo2, Lock, CornerDownRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HistoryChangesBlock } from "@/components/history/history-changes-block";
-import { HISTORY_TARGET_KIND_LABEL, formatHistoryMoment } from "@/lib/history";
+import { HISTORY_TARGET_KIND_LABEL, formatHistoryMoment, getHistoryEntryName } from "@/lib/history";
 import { getBrowserTimezone } from "@/lib/format";
 import type { HistoryEntryResponseDto } from "@/types/history";
 import type { CurrencyCode } from "@/types/settings";
@@ -45,7 +45,7 @@ export function HistoryEntryRow({ entry, formulaCurrencyFallback, isBusy, onOpen
   const Icon = isEdit ? Pencil : Trash2;
   const chipLabel = isEdit ? "Editado" : "Eliminado";
 
-  const rowLabel = entry.description ?? entry.category?.name ?? "Movimiento";
+  const rowLabel = getHistoryEntryName(entry);
   const structureLabel = HISTORY_TARGET_KIND_LABEL[entry.targetKind];
   const momento = formatHistoryMoment(entry.createdAt, getBrowserTimezone());
 

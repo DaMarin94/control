@@ -34,6 +34,7 @@ import {
 import { MovementsService } from '../../../src/movements/movements.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { SettingsService } from '../../../src/settings/settings.service';
+import { SimulationsService } from '../../../src/simulations/simulations.service';
 
 // ---------------------------------------------------------------------------
 // Tipos auxiliares
@@ -187,6 +188,10 @@ const mockSettingsService = {
   updateLastExchangeRate: jest.fn(),
 };
 
+const mockSimulationsService = {
+  getSimulatedItemsForMonth: jest.fn().mockResolvedValue([]),
+};
+
 const mockLogger = {
   log: jest.fn(),
   warn: jest.fn(),
@@ -330,6 +335,7 @@ describe('MovementsService.getReportsMovements — skip propio del calculado de 
         { provide: MovementsRepository, useValue: mockRepo },
         { provide: Logger, useValue: mockLogger },
         { provide: SettingsService, useValue: mockSettingsService },
+        { provide: SimulationsService, useValue: mockSimulationsService },
       ],
     }).compile();
 

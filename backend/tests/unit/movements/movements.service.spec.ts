@@ -25,6 +25,7 @@ import {
   MovementItem,
 } from '../../../src/movements/movements.repository';
 import { SettingsService } from '../../../src/settings/settings.service';
+import { SimulationsService } from '../../../src/simulations/simulations.service';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -54,6 +55,12 @@ const mockLogger = {
   error: jest.fn(),
   debug: jest.fn(),
   verbose: jest.fn(),
+};
+
+// SimulationsService: mock mínimo, sin comportamiento simulado (RF-SIM-003 no es
+// el foco de esta suite) — getSimulatedItemsForMonth resuelve [] por defecto.
+const mockSimulationsService = {
+  getSimulatedItemsForMonth: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -92,6 +99,7 @@ function makeUnicoItem(overrides: Partial<MovementItem> = {}): MovementItem {
     skipped: false,
     calculated: null,
     hasCalculated: false,
+    simulated: false,
     calculatedChildren: [],
     ...overrides,
   };
@@ -129,6 +137,7 @@ function makeFijoItem(overrides: Partial<MovementItem> = {}): MovementItem {
     skipped: false,
     calculated: null,
     hasCalculated: false,
+    simulated: false,
     calculatedChildren: [],
     ...overrides,
   };
@@ -169,6 +178,7 @@ function makeCuotaItem(overrides: Partial<MovementItem> = {}): MovementItem {
     skipped: false,
     calculated: null,
     hasCalculated: false,
+    simulated: false,
     calculatedChildren: [],
     ...overrides,
   };
@@ -200,6 +210,8 @@ describe('MovementsService', () => {
     jest.clearAllMocks();
     // Restablecer el mock de settings (clearAllMocks limpia las implementaciones)
     mockSettingsService.getSettings.mockResolvedValue({ defaultCurrency: Currency.ARS, lastExchangeRate: null });
+    // Restablecer el mock de simulaciones (clearAllMocks limpia las implementaciones)
+    mockSimulationsService.getSimulatedItemsForMonth.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -207,6 +219,7 @@ describe('MovementsService', () => {
         { provide: MovementsRepository, useValue: mockRepo },
         { provide: Logger, useValue: mockLogger },
         { provide: SettingsService, useValue: mockSettingsService },
+        { provide: SimulationsService, useValue: mockSimulationsService },
       ],
     }).compile();
 

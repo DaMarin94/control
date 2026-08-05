@@ -20,6 +20,7 @@ import type {
   HistoryAmountValue,
   HistoryFormulaValue,
   HistoryDateValue,
+  HistoryEntryResponseDto,
 } from "@/types/history";
 import { descaleOperand, buildFormulaExpression } from "@/lib/formula";
 import {
@@ -55,6 +56,15 @@ export const HISTORY_TARGET_KIND_LABEL: Record<HistoryTargetKind, string> = {
   FIJO: "Fijo",
   CUOTA: "Cuotas",
 };
+
+/**
+ * Nombre único de la entrada (`rowLabel`) — fuente única para la línea de
+ * identidad de la fila, su `aria-label`, la caja de identidad del modal de
+ * deshacer y el callout del modal de cadena (docs/design.md §2).
+ */
+export function getHistoryEntryName(entry: HistoryEntryResponseDto): string {
+  return entry.description ?? entry.category?.name ?? "Movimiento";
+}
 
 // ─── Momento (col 3 / caja de identidad de los modales) ────────────────────────
 

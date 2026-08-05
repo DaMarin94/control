@@ -38,8 +38,8 @@ export interface HistoryEntryResponseDto {
   type: MovementType;
   /**
    * Monto identificador del movimiento en el momento de esta entrada (previo al
-   * cambio). `null` para calculados: su monto es la fórmula, no una cifra propia
-   * (docs/design.md §3.2.a) — ver `changes` con `field: 'formula'`.
+   * cambio). `null` para calculados (su monto es la fórmula, no una cifra propia
+   * — docs/design.md §3.2.a, ver `changes` con `field: 'formula'`).
    */
   amount: HistoryAmountValue | null;
   /**

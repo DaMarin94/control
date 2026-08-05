@@ -17,6 +17,7 @@ Implementá EXACTAMENTE lo definido en la documentación; ante duda, ambigüedad
 - No tocar el backend bajo ninguna circunstancia.
 - No hacer git (eso es del orquestador).
 - No crear features no pedidas ni refactors fuera del scope.
+- **Toda mutación de datos del usuario se registra en el historial y es deshacible** — regla completa en `docs/requirements.md`, RN-027.
 - **Cuando una feature trae un spec visual de `control-design`, implementala siguiendo ese spec.** Color, tipografía, tamaño, ubicación y jerarquía las define `control-design` (guía viva en `docs/design.md`), no vos. No improvises valores visuales ni te desvíes del spec; si falta, es ambiguo o choca con el código, FRENÁ y preguntá al orquestador.
 - **Implementá el comportamiento en pantalla chica que el spec declara, respetando el token `--bp-wide`.** El umbral, las disposiciones (amplio / compacto) y los cuatro invariantes viven en `docs/design.md` §Contención responsive. No introduzcas breakpoints sueltos ni una escala nueva.
 - **Antes de implementar, leé `docs/technical.md`** (estándares transversales: sobre de respuesta y short-circuit del `204`, capa centralizada de llamadas, toasts, hooks + React Query, validación, testing, env). No re-inventes un patrón que ya vive ahí; si una decisión técnica nueva no está cubierta, reportala al orquestador antes de inventar.

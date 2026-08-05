@@ -13,7 +13,9 @@ import {
 } from './movements.repository';
 import { applyFormula } from '../recurring/formula.helper';
 import { convertToDisplayCurrency, convertToDisplayCurrencyByMonth, PivotRates, buildPivotRates, deriveExchangeRate } from '../common/currency.helper';
+import { computeFixedBasketProjection } from '../common/projection.helper';
 import { SettingsService } from '../settings/settings.service';
+import { SimulationsService } from '../simulations/simulations.service';
 
 /**
  * Shape de los totales del mes.
@@ -317,6 +319,7 @@ export class MovementsService {
     private readonly repo: MovementsRepository,
     private readonly logger: Logger,
     private readonly settingsService: SettingsService,
+    private readonly simulationsService: SimulationsService,
   ) {}
 
   /**
@@ -335,6 +338,7 @@ export class MovementsService {
     userId: string,
     month: string,
     categoryIds: string[] | null = null,
+    today?: string,
   ): Promise<MonthMovementsResponse> {
     this.validateMonth(month);
 
@@ -355,10 +359,14 @@ export class MovementsService {
     const userSettings = await this.settingsService.getSettings(userId);
     const defaultCurrency = userSettings.defaultCurrency;
 
-    const [unicos, fijos, cuotas] = await Promise.all([
+    const [unicos, fijos, cuotas, simulados] = await Promise.all([
       this.repo.findUnicosByMonth(userId, month, defaultCurrency),
       this.repo.findFijosByMonth(userId, month, defaultCurrency),
       this.repo.findCuotasByMonth(userId, month, defaultCurrency),
+      // RF-SIM-003: movimientos simulados de las simulaciones activas del
+      // usuario, derivados al vuelo — [] si el mes no es futuro/está fuera
+      // del horizonte (RN-028, resuelto dentro de SimulationsService).
+      this.simulationsService.getSimulatedItemsForMonth(userId, month, today),
     ]);
 
     // Aplicar filtro de categorías
@@ -368,6 +376,13 @@ export class MovementsService {
       filterSet !== null
         ? unicos.filter((u) => filterSet.has(u.category.id))
         : unicos;
+
+    // RF-SIM-003: los simulados participan de los filtros de sección como
+    // cualquier único (tipo y categoría) — mismo filterSet.
+    const simuladosFiltrados =
+      filterSet !== null
+        ? simulados.filter((s) => filterSet.has(s.category.id))
+        : simulados;
 
     const fijosFiltrados =
       filterSet !== null
@@ -379,16 +394,30 @@ export class MovementsService {
         ? cuotas.filter((c) => filterSet.has(c.category.id))
         : cuotas;
 
+    // Mezclar reales + simulados en la sección Únicos (RF-SIM-003) y reordenar
+    // por magnitud DESC, mismo criterio que el orden por defecto de
+    // `findUnicosByMonth` (desempate por occurredAt DESC; un simulado no tiene
+    // instante — cede en un empate exacto de magnitud, RN-028/RF-SIM-003).
+    const unicosConSimulados =
+      simuladosFiltrados.length === 0
+        ? unicosFiltrados
+        : [...unicosFiltrados, ...simuladosFiltrados].sort(
+            (a, b) =>
+              Math.abs(b.convertedAmountCents) - Math.abs(a.convertedAmountCents) ||
+              (b.occurredAt?.getTime() ?? 0) - (a.occurredAt?.getTime() ?? 0),
+          );
+
     // Calcular totales desde las listas filtradas.
     // Fase 1.2.3: usar convertedAmountCents (ya convertido a la moneda default del usuario).
     // RN-019: sumar la MAGNITUD al bucket del type derivado.
     // Para calculados (Fase 1.1.7) amountCents puede ser negativo o cero (RN-018);
     // el type ya viene derivado del signo en el MovementItem.
     // Fijos skippeados (y calculados cuyo origen está skippeado) no suman.
-    const unicosExpense = unicosFiltrados
+    // Los simulados (RF-SIM-003) suman igual que cualquier único — nunca skipped.
+    const unicosExpense = unicosConSimulados
       .filter((u) => !u.skipped && u.type === 'EXPENSE')
       .reduce((sum, u) => sum + u.convertedAmountCents, 0);
-    const unicosIncome = unicosFiltrados
+    const unicosIncome = unicosConSimulados
       .filter((u) => !u.skipped && u.type === 'INCOME')
       .reduce((sum, u) => sum + u.convertedAmountCents, 0);
 
@@ -420,7 +449,7 @@ export class MovementsService {
         userId,
         month,
         filterCount: filterSet?.size ?? null,
-        unicosCount: unicosFiltrados.length,
+        unicosCount: unicosConSimulados.length,
         fijosCount: fijosFiltrados.length,
         cuotasCount: cuotasFiltradas.length,
         totals,
@@ -432,7 +461,7 @@ export class MovementsService {
       month,
       totals,
       movements: {
-        unicos: unicosFiltrados,
+        unicos: unicosConSimulados,
         fijos: fijosFiltrados,
         cuotas: cuotasFiltradas,
       },
@@ -677,43 +706,13 @@ export class MovementsService {
     // precio de canasta comparable (same-basket), POR LÍNEA (gasto/ingreso).
     // Solo se ejecuta cuando projectFixed=true — costeo mínimo cuando está off.
     //
-    //   valor_línea(m) = canasta_conocida(m) × (1 + tasa_precio)^m
-    //
-    // canasta_conocida(m): total de fijos (normales + calculados-de-fijo) EN
-    //   ALCANCE (RF-REP-014: dirección, tipos, categorías) activos en el mes
-    //   futuro `m`, cada uno a su último monto conocido — mismo criterio de
-    //   actividad que un mes real (startMonth/deletedFrom/frecuencia/skip).
-    //   Reusa computeFixedLineTotal(mes, lineType), la misma función que ya
-    //   calcula el total de un mes arbitrario. Las altas/bajas futuras ya
-    //   cargadas (startMonth futuro, deletedFrom futuro) y los fijos anuales se
-    //   resuelven acá, NO en la tasa: por eso un fijo nuevo no "explota" la
-    //   proyección y la composición futura es determinista.
-    //
-    // tasa_precio: UNA por línea, crecimiento real ponderado por tamaño,
-    //   por cadena (chainId de fijos normales) activa HOY, sobre SU PROPIA
-    //   historia disponible en la ventana [hoy-12 .. hoy-1]:
-    //     - Para cada cadena activa hoy, se busca su monto más viejo dentro
-    //       de la ventana (el mes más antiguo, hasta 12, donde esa MISMA
-    //       cadena estaba activa): old_i, a distancia n_i meses de hoy.
-    //     - Sin historia previa en la ventana (alta reciente) u old_i = 0 →
-    //       la cadena se EXCLUYE del cálculo de la tasa (no infla; su
-    //       composición ya la maneja canasta_conocida).
-    //     - growth_i = (today_i / old_i)^(1/n_i) − 1 (CAGR mensual propio).
-    //     - tasa_precio = promedio ponderado por tamaño (peso = today_i):
-    //         Σ(today_i · growth_i) / Σ(today_i), sobre cadenas con historia.
-    //   Esto evita que una única cadena "ancla" (la única con 12 meses de
-    //   historia) opaque el resto de las cadenas que solo tienen historia
-    //   parcial pero varían fuerte.
-    //   Piso en 0 (nunca proyecta bajas): Math.max(0, tasa). Sin ninguna
-    //   cadena con historia → tasa = 0. NO usa IPC en ningún caso.
-    //
-    // Los montos se calculan en displayCurrency (mismo criterio que
-    // incomeCents/expenseCents), convirtiendo cada mes con SU PROPIO TC oficial;
-    // la proyección hacia adelante ya no vuelve a convertir (no hay TC futuro real).
-    //
-    // Skips: no cuentan para la tasa (se usa el monto conocido del segmento
-    // activo, sea o no skippeado ese mes puntual) — sí afectan canasta_conocida
-    // (mes skippeado → ese fijo aporta 0 ese mes, vía computeFixedLineTotal).
+    // El motor de cálculo (esqueleto × tasa) está extraído a
+    // `computeFixedBasketProjection` (`common/projection.helper.ts`) — es
+    // infraestructura de proyección compartida con RF-SIM-002 (simulación de
+    // categoría), aunque la fórmula de cada uno es propia. Ver el helper para
+    // el detalle completo de la regla de negocio (canasta_conocida / tasa_precio).
+    // Este bloque solo resuelve lo que requiere acceso a DB (pivot rates
+    // extendidas) antes de invocar el motor puro.
     // ---------------------------------------------------------------------------
     if (projectFixed === true) {
       // Pivot rates extendidas: cubren el año pedido MÁS los años reales que toca
@@ -733,207 +732,19 @@ export class MovementsService {
         for (const [k, v] of m) extendedPivotRates.set(k, v);
       }
 
-      type ChainSegment = {
-        amountCents: number;
-        skipped: boolean;
-        startMonth: string;
-        currency: Currency;
-        exchangeRate: number;
-        anchorCurrency: Currency;
-        categoryId: string;
-        type: MovementType;
-      };
-
-      // Segmento activo por cadena en `mes` (mayor startMonth ≤ mes, cumple
-      // frecuencia y sigue vigente). Compartido por canasta_conocida y por la
-      // selección de cadenas comunes de la tasa.
-      const activeByChainAt = (
-        mes: string,
-      ): { activeByChain: Map<string, ChainSegment>; pivotRates: Partial<PivotRates> | null } => {
-        const pivotRates = extendedPivotRates.get(mes) ?? null;
-        const activeByChain = new Map<string, ChainSegment>();
-        for (const fijo of normalesForAnnual) {
-          const inRange =
-            fijo.startMonth <= mes &&
-            (fijo.deletedFrom === null || fijo.deletedFrom > mes);
-          if (!inRange) continue;
-          if (!isOnFrequency(fijo.startMonth, fijo.frequency, mes)) continue;
-          const existing = activeByChain.get(fijo.chainId);
-          if (!existing || fijo.startMonth > existing.startMonth) {
-            activeByChain.set(fijo.chainId, {
-              amountCents: fijo.amountCents,
-              skipped: fijo.skippedMonths.has(mes),
-              startMonth: fijo.startMonth,
-              currency: fijo.currency,
-              exchangeRate: fijo.exchangeRate,
-              anchorCurrency: fijo.anchorCurrency,
-              categoryId: fijo.categoryId,
-              type: fijo.type as MovementType,
-            });
-          }
-        }
-        return { activeByChain, pivotRates };
-      };
-
-      // canasta_conocida: total agregado (displayCurrency, cents) de fijos EN
-      // ALCANCE de una línea, en un mes arbitrario `mes` (puede caer fuera del
-      // año `year`) — cada cadena a su último monto conocido. Es la función que
-      // compone el futuro determinísticamente (altas/bajas/fijo anual incluidos).
-      const computeFixedLineTotal = (
-        mes: string,
-        lineType: 'EXPENSE' | 'INCOME',
-      ): number => {
-        if (!includeMovType('fijo')) return 0;
-        if (lineType === 'EXPENSE' && dir === 'income') return 0;
-        if (lineType === 'INCOME' && dir === 'expense') return 0;
-
-        const { activeByChain, pivotRates } = activeByChainAt(mes);
-
-        let total = 0;
-
-        // Fijos normales
-        for (const data of activeByChain.values()) {
-          if (data.skipped) continue;
-          if (data.type !== lineType) continue;
-          // Filtro de categorías: solo aplica a la línea de gastos.
-          if (lineType === 'EXPENSE' && filterSet !== null && !filterSet.has(data.categoryId)) continue;
-          total += convertToDisplayCurrencyByMonth(
-            data.amountCents,
-            data.currency,
-            displayCurrency,
-            pivotRates,
-            data.exchangeRate,
-            data.anchorCurrency,
-          );
-        }
-
-        // Calculados de fijo (heredan moneda/cotización del origen)
-        for (const calc of calculadosDeFijoAnual) {
-          const inRange =
-            calc.startMonth <= mes &&
-            (calc.deletedFrom === null || calc.deletedFrom > mes);
-          if (!inRange) continue;
-
-          const originData = calc.sourceChainId
-            ? activeByChain.get(calc.sourceChainId)
-            : undefined;
-          if (!originData) continue;
-          if (originData.skipped || calc.skippedMonths.has(mes)) continue;
-
-          const derivedAmount = applyFormula(
-            originData.amountCents,
-            calc.formulaOperator as FormulaOperator,
-            calc.formulaOperand!,
-            calc.formulaSign!,
-          );
-          const derivedType =
-            derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
-          if (derivedType !== lineType) continue;
-          if (filterSet !== null && !filterSet.has(calc.categoryId)) continue;
-
-          total += convertToDisplayCurrencyByMonth(
-            Math.abs(derivedAmount),
-            originData.currency,
-            displayCurrency,
-            pivotRates,
-            originData.exchangeRate,
-            originData.anchorCurrency,
-          );
-        }
-
-        return total;
-      };
-
-      // Montos activos por cadena (solo fijos normales) EN ALCANCE de una línea,
-      // en `mes`, para la comparación same-basket de la tasa. A diferencia de la
-      // canasta, IGNORA el skip del mes puntual: el monto conocido de la cadena
-      // sigue siendo una señal de precio válida aunque ese mes puntual no se
-      // haya cobrado (el skip no cuenta para la tasa).
-      const activeChainAmountsForLine = (
-        mes: string,
-        lineType: 'EXPENSE' | 'INCOME',
-      ): Map<string, number> => {
-        const result = new Map<string, number>();
-        if (!includeMovType('fijo')) return result;
-        if (lineType === 'EXPENSE' && dir === 'income') return result;
-        if (lineType === 'INCOME' && dir === 'expense') return result;
-
-        const { activeByChain, pivotRates } = activeByChainAt(mes);
-        for (const [chainId, data] of activeByChain) {
-          if (data.type !== lineType) continue;
-          if (filterSet !== null && !filterSet.has(data.categoryId)) continue;
-          result.set(
-            chainId,
-            convertToDisplayCurrencyByMonth(
-              data.amountCents,
-              data.currency,
-              displayCurrency,
-              pivotRates,
-              data.exchangeRate,
-              data.anchorCurrency,
-            ),
-          );
-        }
-        return result;
-      };
-
-      // 12 meses backward (hoy excluido), en orden cronológico ascendente
-      // (i=-12 → today-12, i=-1 → today-1). El más antiguo es el primero.
-      const windowMonths: string[] = [];
-      for (let i = -12; i <= -1; i++) {
-        windowMonths.push(addMonths(todayMonthKey, i));
-      }
-
-      for (const [lineKey, lineType] of [
-        ['expense', 'EXPENSE'],
-        ['income', 'INCOME'],
-      ] as const) {
-        const todayChains = activeChainAmountsForLine(todayMonthKey, lineType);
-
-        // Montos por cadena en cada mes de la ventana, precomputados una vez
-        // (orden ascendente = más antiguo primero) para la búsqueda por cadena.
-        const windowChainAmounts = windowMonths.map((wm) =>
-          activeChainAmountsForLine(wm, lineType),
-        );
-
-        let rate = 0;
-        if (todayChains.size > 0) {
-          let weightedSum = 0;
-          let weightTotal = 0;
-
-          for (const [chainId, todayAmount] of todayChains) {
-            // Monto más viejo de ESTA cadena dentro de la ventana (primer
-            // match en orden ascendente = mes más antiguo disponible).
-            let oldAmount: number | null = null;
-            let oldMonth: string | null = null;
-            for (let idx = 0; idx < windowMonths.length; idx++) {
-              const amt = windowChainAmounts[idx].get(chainId);
-              if (amt !== undefined) {
-                oldAmount = amt;
-                oldMonth = windowMonths[idx];
-                break;
-              }
-            }
-            if (oldAmount === null || oldMonth === null) continue; // alta reciente, sin historia
-            if (oldAmount <= 0) continue; // evitar div/0
-
-            const n = monthDiff(oldMonth, todayMonthKey);
-            if (n < 1) continue;
-
-            const growth = Math.pow(todayAmount / oldAmount, 1 / n) - 1;
-            weightedSum += todayAmount * growth;
-            weightTotal += todayAmount;
-          }
-
-          if (weightTotal > 0) {
-            rate = Math.max(0, weightedSum / weightTotal);
-          }
-        }
-
-        lineRate[lineKey] = rate;
-      }
-
-      computeFixedLineTotalForProjection = computeFixedLineTotal;
+      const projection = computeFixedBasketProjection({
+        todayMonthKey,
+        extendedPivotRates,
+        normalesForAnnual,
+        calculadosDeFijoAnual,
+        filterSet,
+        dir,
+        includeMovType,
+        displayCurrency,
+      });
+      lineRate.expense = projection.lineRate.expense;
+      lineRate.income = projection.lineRate.income;
+      computeFixedLineTotalForProjection = projection.computeFixedLineTotal;
     }
 
     for (let i = 0; i < 12; i++) {

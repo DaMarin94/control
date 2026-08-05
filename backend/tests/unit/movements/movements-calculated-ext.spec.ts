@@ -33,6 +33,7 @@ import {
 import { MovementsService } from '../../../src/movements/movements.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { SettingsService } from '../../../src/settings/settings.service';
+import { SimulationsService } from '../../../src/simulations/simulations.service';
 
 // ---------------------------------------------------------------------------
 // Tipos y fixtures compartidos
@@ -708,6 +709,10 @@ const mockSettingsServiceExt = {
   updateLastExchangeRate: jest.fn(),
 };
 
+const mockSimulationsServiceExt = {
+  getSimulatedItemsForMonth: jest.fn().mockResolvedValue([]),
+};
+
 function makeCalcDeUnicoAnual(overrides: Partial<RecurringForAnnual> = {}): RecurringForAnnual {
   return {
     id: CALC_TX_ID,
@@ -781,6 +786,7 @@ describe('MovementsService.getReportsMovements — calculados de único y cuota 
         { provide: MovementsRepository, useValue: mockRepo },
         { provide: Logger, useValue: mockLogger },
         { provide: SettingsService, useValue: mockSettingsServiceExt },
+        { provide: SimulationsService, useValue: mockSimulationsServiceExt },
       ],
     }).compile();
 

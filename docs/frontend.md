@@ -347,7 +347,7 @@ Aplica a los **tres** forms (`transaction-form`, `recurring-form`, `installment-
 
 - Hook **`useTransactions()`** expone las mutaciones: `createTransaction`, `updateTransaction(id, data)`, `deleteTransaction(id, month)`.
 - **La lista del mes no vive acá:** se lee con `useMovements(month)` (ver sección Vista del mes y Dashboard).
-- **Invalidación al mutar:** las mutaciones de `useTransactions` invalidan **`MOVEMENTS_QUERY_KEY(month) = ["movements", month]`** (la clave de `useMovements`).
+- **Invalidación al mutar:** las cuatro mutaciones de `useTransactions` invalidan **`MOVEMENTS_QUERY_KEY(month)`**, que es un **prefijo** de la clave que usa `useMovements` (ver el gotcha de la key en §Datos (`use-movements`) — no agregarle elementos).
 - **Gotcha — `deleteTransaction` recibe `month` explícito:** el `DELETE` devuelve `204` sin cuerpo, así que no se puede derivar del recurso qué mes invalidar. El llamador deriva el `month` del `occurredAt` del movimiento de la lista y lo pasa.
 
 ### Helpers (`lib/format.ts`)
@@ -520,8 +520,10 @@ El dashboard es `src/app/page.tsx` en **`/`** (no hay `/dashboard`). Redirects:
 
 ### Datos (`use-movements`)
 
-- Hook **`useMovements(month)`** sobre `GET /movements?month=`. **Query key como función:** **`MOVEMENTS_QUERY_KEY(month) = ["movements", month]`** — varía por mes.
-- Las mutaciones de `useTransactions` invalidan `["movements", month]` (ver sección Movimientos únicos). Reusar esta clave para invalidar — no inventar otra.
+- Hook **`useMovements(month, categoryIds?)`** sobre `GET /movements?month=`. **Query key como función:** **`MOVEMENTS_QUERY_KEY(month, categoriesKey?, today?)`** — varía por mes, por el filtro de categorías serializado y por `today`.
+- **Manda `today` con la fecha local del navegador** (`YYYY-MM-DD`, armado con getters locales de `Date` — **nunca `toISOString()`**, que devuelve UTC) para que el backend resuelva el **mes en curso** en la zona del usuario y no con su propio reloj (contrato en `docs/data-model.md`, §Contrato de movimientos del mes). Es lo que define qué meses son futuros y, por lo tanto, cuáles traen movimientos simulados (RN-028): con el default UTC del backend, una zona UTC−N ve el mes en curso corrido y simulados metidos en él. Mismo mecanismo que `use-reports.ts` / `unique-grid-card.tsx` / `inflation-income-card.tsx`.
+- **GOTCHA ESTRUCTURAL — `today` es el 4º elemento OPCIONAL de la query key, y tiene que seguir siéndolo.** `MOVEMENTS_QUERY_KEY(month)` devuelve `["movements", month, null]` (3 elementos) y `useMovements` usa `["movements", month, categoriesKey, today]` (4). Los 3 elementos son un **prefijo válido** de la key real de 4, y `invalidateQueries` matchea **por prefijo**: por eso las cuatro mutaciones de `use-transactions.ts` invalidan con `MOVEMENTS_QUERY_KEY(month)` y alcanzan igual la query del mes. Convertir `today` en un elemento **incondicional** (aunque sea con default `null`) rompe el prefijo y esas invalidaciones dejan de matchear **en silencio**: la lista del mes se queda con datos viejos tras crear / editar / eliminar, sin error visible.
+- Las mutaciones de `useTransactions` invalidan `MOVEMENTS_QUERY_KEY(month)` (ver sección Movimientos únicos). Reusar esta clave para invalidar — no inventar otra.
 
 ### Mapeo `MovementItem → Transaction` (para editar)
 
@@ -676,6 +678,34 @@ Quinto tipo de card (`ReportCardType = "inflation-income"`). Componente **`compo
 - **Cabecera estándar de card anual.** Título editable + stepper de año + filtro de categorías (mismo control que `unique-grid`/`installment-gantt`) + selector de moneda. El universo del filtro es de **ingreso** (`availableCategories` del response, no de gasto).
 - **Línea cortada en meses futuros.** Las series usan `connectNulls={false}`: la línea no conecta a través de meses `null`.
 - **Color de la línea de inflación = token `--rate`** (ver §Design system → token `--rate`).
+
+## Simulación de categoría (`/mes` — RF-SIM-001..004)
+
+Toda la feature vive en `/mes`: el punto de entrada es el **popover de filtro de la sección Únicos** y la salida son filas simuladas mezcladas en esa misma sección. El spec visual está en `docs/design.md`; el contrato de la API, en `docs/data-model.md` §Simulación de categoría.
+
+### Componentes
+
+- **`components/movements/simulation-band.tsx`** — bloque "Simulación" del popover de Únicos: botón de alta (siempre presente) + lista de las simulaciones del usuario (con su estado activa / pausada) con su acción de eliminar + nota de horizonte.
+- **`components/movements/simulate-category-modal.tsx`** — selector de una categoría del universo de candidatas.
+- **`components/movements/delete-simulation-dialog.tsx`** — confirmación de la eliminación.
+- **`components/movements/simulated-movement-row.tsx`** — la fila simulada dentro del listado de Únicos. Es una fila **no interactiva** (sin kebab, sin card de detalle) con la **misma geometría** que `movement-item-row.tsx`: lo que cambia es el tratamiento, nunca el grid (si no, la columna de montos se desalinea entre filas reales y simuladas).
+- **`lib/simulations.ts`** — helpers puros: chequeo de horizonte y el copy sensible al conteo (singular/plural con frase propia). El resto del copy vive inline en los componentes.
+
+### `SectionFilterPanel` — `footerSlot` y anclaje invertible
+
+Los dos hechos estructurales de `components/ui/section-filter-popover.tsx` que la banda impone:
+
+- **`footerSlot` es un render-prop `(closePopover) => ReactNode`, no un prop de dominio.** Es lo que mantiene al componente —que vive en `ui/` y lo usan las tres secciones— **agnóstico de simulaciones**: solo la sección Únicos lo pasa. Recibe `closePopover` para que sus acciones cierren el popover **antes** de abrir el modal o la confirmación (invariante "un solo overlay a la vez"). Cualquier bloque futuro del pie del popover entra por acá, no como prop nuevo.
+- **El panel tiene anclaje invertible**: abre hacia abajo por preferencia y **hacia arriba si no entra**, con `max-height` clampeado al espacio disponible cuando no entra en ningún lado (la lista de categorías scrollea dentro de sí). El mecanismo es el de `KebabMenu` / `use-listbox-popover.ts` —medir en dos pasadas (estimado antes de pintar, alto real ya montado) para invertir sin salto visible—, pero **no reusa `useListboxPosition`**: ese hook ancla por la izquierda con el ancho del trigger, y este panel ancla por la **derecha** con ancho fijo.
+- **Tener una simulación NO enciende el punto indicador del disparador**: ese punto sigue significando solo "sección filtrada".
+
+### Datos (`use-simulations`)
+
+- **`useSimulations()`** (`GET /simulations`) y **`useSimulationCandidates(enabled)`** (`GET /simulations/candidates`, pedida **solo mientras el modal está abierto**).
+- **Manda `today` con la fecha local del navegador** (`YYYY-MM-DD`, getters locales de `Date` — **nunca `toISOString()`**) en las **tres** llamadas: los dos `GET` y el `POST` de `useCreateSimulation`. Con el fallback UTC del backend, ventana histórica y horizonte quedan corridos un mes en UTC−N cerca de fin de mes, y esta superficie se contradice con las que sí lo mandan (contrato y gotcha en `docs/data-model.md`, §Simulación de categoría → Endpoints). Mismo mecanismo que `use-movements.ts` / `use-reports.ts` / `unique-grid-card.tsx` / `inflation-income-card.tsx`.
+- **`today` es un elemento extra de la query key, y las claves exportadas siguen siendo el prefijo.** `SIMULATIONS_QUERY_KEY` (`["simulations"]`) y `SIMULATION_CANDIDATES_QUERY_KEY` (`["simulations","candidates"]`) son las claves **base**, y las queries reales agregan `today` al final. Invalidar siempre con las base — se aplica tal cual el gotcha de prefijo de `MOVEMENTS_QUERY_KEY` (ver §Datos (`use-movements`)), incluido el modo de falla silencioso si se rompe el prefijo.
+- **Crear y eliminar invalidan la familia `["movements"]` por prefijo**, no un mes: una simulación afecta los movimientos simulados de **todos** los meses de su horizonte (mismo patrón que `useRecurring`).
+- **`400` y `409` traen mensaje legible del backend y se muestran tal cual**: el selector ya ofrece las categorías inelegibles deshabilitadas con su motivo, así que esos errores solo aparecen en una carrera con candidatas stale.
 
 ## Historial de cambios (`/historial` — RF-HIST-001..006)
 

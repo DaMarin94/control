@@ -69,6 +69,7 @@ const mockFijoMovement: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 150000,
+  simulated: false,
   calculatedChildren: [],
 };
 
@@ -108,6 +109,7 @@ const mockCalculatedUnicoMovement: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 5000,
+  simulated: false,
   calculatedChildren: [],
 };
 

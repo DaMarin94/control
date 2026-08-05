@@ -23,7 +23,8 @@
 | **Cotización externa por variante (`CurrencyQuote`)** | Tabla **global**, interna, no editable por UI. Histórico crudo de **variantes** de cotización FX capturadas de fuentes externas (oficial, blue, …) por `(moneda, variante, mes)`. `variant` es **string libre** (no enum), por mente abierta a variantes futuras. La conversión interna no la consume todavía. Ver §Cotizaciones externas y sincronización. |
 | **Inflación (`InflationRate`)** | Tabla **global**, interna, no editable por UI. IPC nacional (INDEC) por mes (variación mensual + nivel del índice). La consumen el **reporte anual de gastos Únicos** (RF-REP-010, métricas de inflación y % ajustado del footer) y el **reporte anual de Inflación vs Ingresos** (RF-REP-012, serie de inflación y ajuste del ingreso). Ver §Cotizaciones externas y sincronización. |
 | **Log de sincronización (`RateSyncLog`)** | Tabla **global** de auditoría: una fila por intento de ingesta externa (aceptado/rechazado + motivo + payload crudo). El secret nunca se loguea. Ver §Cotizaciones externas y sincronización. |
-| **Entrada de historial (`HistoryEntry`)** | Una fila por **edición** o **eliminación** de un movimiento (RF-HIST-001), con el **estado previo completo** del movimiento en un snapshot JSON. Registro de **corto plazo**, no un log de auditoría: se purga por cantidad o antigüedad (RF-HIST-005) y el deshacer la borra sin dejar rastro (RF-HIST-003). Ver §Historial de cambios. |
+| **Entrada de historial (`HistoryEntry`)** | Una fila por **edición** o **eliminación** de un movimiento (RF-HIST-001), con el **estado previo completo** del objetivo en un snapshot JSON. Registro de **corto plazo**, no un log de auditoría: se purga por cantidad o antigüedad (RF-HIST-005) y el deshacer la borra sin dejar rastro (RF-HIST-003). Ver §Historial de cambios. |
+| **Simulación de categoría (`Simulation`)** | Configuración que proyecta a los meses futuros el total de **movimientos únicos** de una categoría (RF-SIM-001..004). Persiste **solo** `userId` + `categoryId`: ni monto, ni dirección, ni horizonte — todo se deriva al vuelo (RN-028). **Borrado físico**: no participa del historial ni es deshacible (RF-SIM-004). Ver §Simulación de categoría. |
 
 ---
 
@@ -516,6 +517,7 @@ Transaction = {
 **Query params:**
 
 - **`month`** (requerido) — el mes a listar, `YYYY-MM`.
+- **`today`** (opcional) — fecha local del usuario, `YYYY-MM-DD`; formato inválido → `400`. Fija el **mes en curso** con el que se resuelven el horizonte y la ventana de las simulaciones (RN-028) y, por lo tanto, qué meses traen movimientos simulados. **El frontend lo manda siempre** con la fecha local del navegador (ver `docs/frontend.md`, §Datos (`use-movements`)); **ausente** el backend cae a la **fecha UTC del sistema** (mismo criterio que el resto de los endpoints con este param), que en zonas UTC−N adelanta el mes en curso y hace aparecer movimientos simulados sobre el mes en curso real. Irrelevante para el resto de la respuesta.
 - **`categories`** (opcional) — filtro por categoría. Lista de `categoryId`s **separados por comas, sin URL-encode** (ej. `categories=abc,def`). **Distingue "ausente" de "presente y vacío"** (ver tabla del filtro de categorías más abajo): ausente = todas; `categories=` (vacío) = ninguna (listas vacías + totales en cero); lista = solo esas categorías. Afecta **gastos e ingresos** y recalcula **listas y totales**. **`/mes` no usa este param:** el filtrado de la Vista del mes ocurre en el frontend (filtros por listado, RF-VM-006), así que `/mes` trae todo el mes sin `categories`. El param lo consume `GET /movements/reports` (filtro de reportes).
 
 ```
@@ -560,7 +562,8 @@ MovementItem = {
   autoDebit: boolean | null,                 // flag débito automático DEL movimiento (fuera de paymentMethod); null salvo método DEBIT (RN-021)
   calculated: CalculatedInfo | null,         // presente si el ítem ES un calculado (hijo); null si no
   hasCalculated: boolean,                    // == calculatedChildren.length > 0: true si el ítem es un ORIGEN (fijo/único/cuota) con ≥1 calculado en el mes (padre); false en el resto
-  calculatedChildren: CalculatedChild[]      // los calculados derivados de ESTE ítem en el mes consultado; [] si no tiene, o si el ítem ES un calculado (nunca es padre)
+  calculatedChildren: CalculatedChild[],     // los calculados derivados de ESTE ítem en el mes consultado; [] si no tiene, o si el ítem ES un calculado (nunca es padre)
+  simulated: boolean                         // true = movimiento SIMULADO (RF-SIM-003), sin fila en ninguna tabla; false en TODO ítem real
 }
 
 CalculatedChild = {                          // un calculado derivado del ítem padre, en el mes consultado
@@ -601,6 +604,10 @@ CalculatedInfo = {                           // solo en ítems que son calculado
 - **Método de pago embebido (opcional).** Cada `MovementItem` trae `paymentMethod: { id, name, icon, type, closingDay, paymentDay } | null` — `null` si el movimiento no tiene método (RF-PM-006). **`closingDay`/`paymentDay`** son el día del mes (1-31) de cierre y de cobro del resumen; vienen **poblados solo para `type === "CREDIT"`** y `null` en `DEBIT`/`CASH` (misma semántica que en `PaymentMethod`, §Métodos de pago). Los consume la card de detalle (RF-VM-007) para la sublínea del crédito. Como en la categoría, el método puede estar soft-deleted y aun así se muestra en el ítem histórico. Es **metadato**: no entra a `totals` ni a los reportes. Un **calculado hereda** el método **del origen** (no persiste uno propio; se deriva al vuelo junto con el resto de sus datos derivados, igual que la moneda/cotización — RF-PM-006 / RF-CUR-004). **Los endpoints de reportes (`GET /movements/reports`, anuales) NO exponen el método**: son series agregadas sin dimensión por método de pago en v1.
 - **`autoDebit` — flag del movimiento, fuera del método embebido.** Cada `MovementItem` expone `autoDebit: boolean | null` **a nivel del ítem** (no dentro de `paymentMethod`): `true`/`false` solo cuando el método efectivo es `DEBIT`, `null` en cualquier otro caso (sin método o método `CREDIT`/`CASH`; RN-021). Un **calculado hereda** el `autoDebit` del origen, derivado al vuelo (no persiste uno propio). Metadato: no entra a `totals` ni a los reportes.
 - **Listas de fijos y cuotas pobladas.** Las listas `fijos` y `cuotas` traen datos; los totales del mes suman únicos + fijos + cuotas. El **grupo de cuotas no genera filas por instancia**: se calcula on-the-fly (RN-006) — una cuota cae en `startMonth ≤ mes < startMonth + totalInstallments`. Detalle del cálculo en `docs/backend.md`, sección Movimientos en cuotas.
+- **`simulated` — el movimiento simulado viaja mezclado en `movements.unicos`** (RF-SIM-003). No es una lista aparte: viene **mezclado y reordenado** junto a los únicos reales por el mismo criterio de magnitud DESC (desempate por `occurredAt` DESC, que un simulado no tiene y por eso cede en un empate exacto), participa del filtro `categories` y **suma a `totals`** como cualquier único. Solo puede darse con `origin: "unico"` y `simulated: true`; **todo ítem real trae `simulated: false`**.
+  - **`id` sintético y estable: `simulated:{simulationId}:{month}`** — nunca el id de una fila (no existe fila). Sirve de key de render y es idéntico entre lecturas del mismo mes; **no** es dirigible por ningún endpoint.
+  - **Campos en `null` / vacíos por definición** (el simulado no tiene esos datos, RF-SIM-003): `occurredAt`, `timezone`, `paymentMethod`, `autoDebit`, `installment`, `frequency`, `startMonth`, `endMonth` y `calculated` en `null`; `hasCalculated: false` y `calculatedChildren: []` (no puede ser origen ni derivado de un calculado). `skipped` es siempre `false` (no se anula). `currency` es la **default vigente** del usuario con `exchangeRate: 1`, y `amountCents == convertedAmountCents` = **magnitud** (el signo lo lleva el `type`, derivado del cálculo).
+  - **El corte de horizonte se resuelve server-side.** Un mes pasado, el mes en curso o un mes fuera del horizonte (RN-028) simplemente no traen ítems simulados: el consumidor no filtra por mes ni recalcula el horizonte para decidir qué mostrar.
 
 ---
 
@@ -871,6 +878,78 @@ donde `AvailableCategory = { categoryId, name, color }` (mismo shape que en §Co
 
 ---
 
+## Simulación de categoría (`Simulation` + `/simulations`)
+
+> Destino canónico del modelo y del contrato de API de la simulación. Reglas funcionales en `requirements.md`, módulo 3.15 (RF-SIM-001..004) y RN-028/029; el movimiento simulado que la simulación aporta a `/mes` está en §Contrato de movimientos del mes (`simulated`); implementación en `docs/backend.md`, §Simulación de categoría.
+
+### Modelo — `Simulation`
+
+```
+Simulation = {
+  id, userId, categoryId,
+  createdAt: DateTime
+}
+```
+
+- **Persiste solo la configuración** (`userId` + `categoryId`, RN-029). No guarda monto, dirección, horizonte ni ventana: todo se deriva al vuelo en cada lectura (RN-028). **No genera filas de movimiento** — el movimiento simulado se sintetiza en la respuesta de `GET /movements`.
+- **A lo sumo una simulación por `(userId, categoryId)`**, impuesto en la **DB** con un **índice único** sobre `(userId, categoryId)`.
+- **Borrado físico** (RF-SIM-004): eliminar la simulación borra la fila. No tiene `deletedAt`, no genera entrada de historial y no es deshacible — es la excepción a RN-027.
+- **FK `categoryId` con `onDelete: Restrict`**, igual que en los movimientos.
+
+### Endpoints
+
+**JWT requerido** en los cuatro; scope por `userId` del token (`401` global si falta o es inválido).
+
+**`today`** (`YYYY-MM-DD`, opcional) es query param de los **tres** endpoints que calculan —`POST /simulations`, `GET /simulations` y `GET /simulations/candidates`— con la misma semántica que en `GET /movements`: fija el mes en curso con el que se resuelven la **ventana histórica de 12 meses** y el **horizonte** (RN-028). Formato inválido → **`400`**; **ausente = fecha UTC del backend**. `DELETE /simulations/:id` no lo acepta (no calcula nada).
+
+- **GOTCHA — `today` es opcional en el contrato pero obligatorio en la práctica: todo consumidor tiene que mandarlo, en los tres.** El fallback UTC no es equivalente a la fecha local: en UTC−N, cerca de fin de mes, el backend ya está en el mes siguiente mientras el usuario todavía no. Una superficie que lo omita resuelve ventana y horizonte con un mes distinto al de las que sí lo mandan, y las superficies **se contradicen entre sí** — el mismo `monthsWithData` / `horizonEndMonth` difiere según qué endpoint lo produjo, y una categoría elegible en el selector puede ser rechazada por el `POST`. Omitirlo no rompe nada de forma visible: la respuesta es válida, solo está corrida un mes.
+
+| Endpoint | Body | Éxito | Errores |
+|---|---|---|---|
+| `POST /simulations` | `{ categoryId }` | `201` · `data: SimulationDto` | `400` · `409` |
+| `GET /simulations` | — | `200` · `data: SimulationsListResponse` | — |
+| `GET /simulations/candidates` | — | `200` · `data: SimulationCandidatesResponse` | — |
+| `DELETE /simulations/:id` | — | `204` sin body | `404` |
+
+- **`POST /simulations` — `400` cubre las dos causas de rechazo por dato**: categoría inexistente, ajena o eliminada (mismo criterio **no revelador** que el resto de los movimientos: nunca `404`) **y** categoría con **menos de 3 meses con únicos** en la ventana (RF-SIM-002). **`409`** = esa categoría **ya tiene una simulación**; el conflicto es por existencia (índice único `(userId, categoryId)`) y no mira `paused`. El selector ya ofrece esas categorías deshabilitadas con su motivo, así que los dos errores solo se alcanzan en una carrera con datos stale.
+- **`DELETE /simulations/:id` es un borrado físico**: una simulación inexistente o ajena responde `404`. No genera entrada de historial y **no es deshacible** (RF-SIM-004).
+
+### Shapes
+
+```
+SimulationDto = {
+  id: string,
+  categoryId: string,
+  category: { id, name, color, scope },
+  monthsWithData: number,        // 0..12 — meses CON únicos de la categoría en la ventana vigente
+  paused: boolean,               // true ⇔ monthsWithData < 3
+  createdAt: string              // ISO 8601
+}
+
+SimulationsListResponse = {
+  horizonEndMonth: string,       // "YYYY-MM" — último mes del horizonte vigente (inclusive)
+  simulations: SimulationDto[]
+}
+
+SimulationCandidatesResponse = {
+  horizonEndMonth: string,
+  categories: Array<{
+    categoryId: string,
+    name: string,
+    color: string,
+    monthsWithData: number,
+    alreadySimulated: boolean
+  }>
+}
+```
+
+- **`monthsWithData` y `paused` son derivados vigentes, no estado guardado.** Se recomputan en cada lectura sobre la ventana `[A−12 .. A−1]` del momento (RN-028), así que la misma simulación puede pasar de `paused: false` a `true` sin que nadie la toque.
+- **`paused: true` = viva en DB pero sin derivar.** La simulación **no se elimina** al caer por debajo del mínimo de 3 meses: deja de aportar movimientos simulados y vuelve a aportarlos sola si la categoría recupera datos (RF-SIM-002).
+- **`horizonEndMonth` es uno solo, a nivel respuesta.** El horizonte depende únicamente del mes en curso, no de la simulación: es idéntico para todas y por eso viaja **fuera** del array.
+- **`candidates` — el universo es el catálogo de categorías ACTIVAS del usuario** (RF-SIM-001), en el orden del catálogo (nombre ASC), **sin reagrupar por elegibilidad**. No se filtra por elegibilidad ni por el mes navegado: la respuesta trae **todas** con los dos datos que permiten al consumidor decidir y explicar el motivo — `monthsWithData` (< 3 = sin datos suficientes) y `alreadySimulated`.
+
+---
+
 ## Historial de cambios (`HistoryEntry` + `GET /history` · `POST /history/:id/undo`)
 
 > Destino canónico del modelo y del contrato de API del historial. Reglas funcionales en `requirements.md`, RF-HIST-001..006 y RN-024/025/026; mecánica de captura, undo y purga en `docs/backend.md`, §Historial de cambios.
@@ -880,15 +959,15 @@ donde `AvailableCategory = { categoryId, name, color }` (mismo shape que en §Co
 ```
 HistoryEntry = {
   id, userId,
-  targetKind: "UNICO" | "FIJO" | "CUOTA",   // enum HistoryTargetKind
-  targetId:   string,                        // clave estable del movimiento (ver abajo)
+  targetKind: "UNICO" | "FIJO" | "CUOTA",    // enum HistoryTargetKind
+  targetId:   string,                        // clave estable del objetivo (ver abajo)
   action:     "EDIT" | "DELETE",             // enum HistoryAction
-  snapshot:   Json,                          // estado PREVIO completo del movimiento
+  snapshot:   Json,                          // estado PREVIO completo del objetivo
   createdAt:  DateTime
 }
 ```
 
-- **`targetId` es la clave estable de agrupación por movimiento (RN-024)**, no el id de la fila mutada: `UNICO` → `Transaction.id`; `FIJO` → **`Recurring.chainId`**; `CUOTA` → `InstallmentGroup.id`. En fijos y calculados **tiene que ser el `chainId`**: el split de edición (RN-005) crea una fila nueva y cambia el id de fila, así que agrupar por `Recurring.id` partiría la pila LIFO de un mismo fijo lógico en varias pilas inconexas. El `chainId` sobrevive al split.
+- **`targetId` es la clave estable de agrupación por objetivo (RN-024)**, no el id de la fila mutada: `UNICO` → `Transaction.id`; `FIJO` → **`Recurring.chainId`**; `CUOTA` → `InstallmentGroup.id`. En fijos y calculados **tiene que ser el `chainId`**: el split de edición (RN-005) crea una fila nueva y cambia el id de fila, así que agrupar por `Recurring.id` partiría la pila LIFO de un mismo fijo lógico en varias pilas inconexas. El `chainId` sobrevive al split.
 - **`snapshot` no está tipado en Prisma** (`Json`): cada combinación `targetKind × action` tiene una forma distinta. El contrato de aplicación —el shape de cada variante— vive en `backend/src/history/history.types.ts`, que es su destino canónico; lo escriben los services de dominio al capturar y lo lee `HistoryService` para armar el diff y para deshacer.
 - **`userId` con `onDelete: Cascade`:** borrar la cuenta borra su historial.
 - **Índices** (los tres sostienen operaciones distintas, ninguno es redundante):
@@ -904,7 +983,7 @@ Sin params. Devuelve, dentro del sobre `{ success, statusCode, data }`, el array
 HistoryEntryDto = {
   id: string,
   targetKind: "UNICO" | "FIJO" | "CUOTA",
-  targetId: string,                          // clave estable del movimiento (RN-024)
+  targetId: string,                          // clave estable del objetivo (RN-024)
   action: "EDIT" | "DELETE",
   createdAt: string,                         // ISO 8601 — momento del cambio
   description: string | null,                // identidad del movimiento al momento de la entrada

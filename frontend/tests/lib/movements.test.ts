@@ -54,6 +54,7 @@ function makeItem(
     currency: convertedAmountCents !== undefined ? "USD" : "ARS",
     exchangeRate: convertedAmountCents !== undefined ? 1200 : 1,
     convertedAmountCents: convertedAmountCents ?? amountCents,
+    simulated: false,
     calculatedChildren: [],
   };
 }
@@ -87,6 +88,7 @@ function makeUnico(
     currency: "ARS",
     exchangeRate: 1,
     convertedAmountCents: amountCents,
+    simulated: false,
     calculatedChildren: [],
   };
 }

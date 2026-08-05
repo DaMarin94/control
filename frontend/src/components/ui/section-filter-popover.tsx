@@ -21,7 +21,7 @@
  *   - SectionFilterType: tipo para "ALL" | "EXPENSE" | "INCOME".
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -174,9 +174,9 @@ function InlineCategoryBlock({
   }
 
   return (
-    <>
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-[10px] border-b border-hair">
+    <div className="flex flex-1 min-h-0 flex-col">
+      {/* Header — shrink-0: nunca scrollea con la lista (§8.2, "categorías" es la única región flexible) */}
+      <div className="shrink-0 flex items-center justify-between px-3 py-[10px] border-b border-hair">
         <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
           Mostrar categorías
         </span>
@@ -189,8 +189,8 @@ function InlineCategoryBlock({
         </button>
       </div>
 
-      {/* Lista scrollable */}
-      <div className="max-h-[280px] overflow-y-auto">
+      {/* Lista scrollable — única región flexible del panel (§8.2), min-height 120px */}
+      <div className="flex-1 min-h-0 overflow-y-auto" style={{ minHeight: 120 }}>
         {allCategories.length === 0 ? (
           <p className="px-3 py-4 text-center text-[12.5px] text-muted">
             No tenés categorías.
@@ -258,8 +258,90 @@ function InlineCategoryBlock({
           })
         )}
       </div>
-    </>
+    </div>
   );
+}
+
+// ─── Contención del panel (docs/design.md §8.2) ────────────────────────────────
+//
+// El popover pasa a ser una COLUMNA ACOTADA: `max-height: min(560px, 100dvh -
+// 24px)` y anclaje INVERTIBLE hacia arriba si no entra abajo — hoy solo abría
+// hacia abajo; con la banda "Simulación" (footerSlot, shrink-0) esto pasa a
+// ser requisito (antes solo corría riesgo la lista de categorías). Mismo
+// MECANISMO que `KebabMenu`/`use-listbox-popover.ts` (medir en dos pasadas:
+// estimado antes de pintar, alto real una vez montado, para flip sin salto
+// visible) — no se reusa el hook `useListboxPosition` porque ese ancla por la
+// IZQUIERDA con ancho = ancho del trigger; este panel ancla por la DERECHA con
+// ancho fijo (260px), semántica distinta.
+
+const PANEL_INTRINSIC_MAX_HEIGHT = 560;
+const PANEL_VIEWPORT_MARGIN = 12;
+const PANEL_GAP = 6;
+
+interface PanelPosition {
+  top: number;
+  right: number;
+  maxHeight: number;
+}
+
+function usePanelPosition(
+  anchorRef: React.RefObject<HTMLButtonElement | null>,
+  panelRef: React.RefObject<HTMLDivElement | null>,
+) {
+  const [position, setPosition] = useState<PanelPosition>({
+    top: 0,
+    right: 0,
+    maxHeight: PANEL_INTRINSIC_MAX_HEIGHT,
+  });
+
+  const calc = useCallback(
+    (panelHeight: number) => {
+      if (!anchorRef.current) return;
+      const rect = anchorRef.current.getBoundingClientRect();
+      const vh = window.innerHeight;
+      const cap = Math.min(PANEL_INTRINSIC_MAX_HEIGHT, vh - PANEL_VIEWPORT_MARGIN * 2);
+
+      const spaceBelow = vh - rect.bottom - PANEL_VIEWPORT_MARGIN;
+      const spaceAbove = rect.top - PANEL_VIEWPORT_MARGIN;
+
+      let top: number;
+      let maxHeight = cap;
+
+      if (panelHeight + PANEL_GAP <= spaceBelow) {
+        // Preferencia: abajo del disparador (comportamiento de hoy).
+        top = rect.bottom + PANEL_GAP;
+      } else if (panelHeight + PANEL_GAP <= spaceAbove) {
+        // Flip: abre hacia arriba.
+        top = rect.top - panelHeight - PANEL_GAP;
+      } else {
+        // No entra en ningún lado: lado con más espacio, maxHeight clampeado
+        // al disponible — la lista de categorías scrollea dentro de sí.
+        const available = Math.max(spaceAbove, spaceBelow);
+        maxHeight = Math.min(cap, available - PANEL_GAP);
+        top =
+          spaceAbove > spaceBelow
+            ? Math.max(PANEL_VIEWPORT_MARGIN, rect.top - maxHeight - PANEL_GAP)
+            : rect.bottom + PANEL_GAP;
+      }
+
+      setPosition({ top, right: window.innerWidth - rect.right, maxHeight });
+    },
+    [anchorRef],
+  );
+
+  // Primera pasada: estimado, antes de que el panel pinte (evita el salto).
+  useEffect(() => {
+    calc(PANEL_INTRINSIC_MAX_HEIGHT);
+  }, [calc]);
+
+  // Segunda pasada: alto real del panel, una vez montado.
+  useEffect(() => {
+    if (!panelRef.current) return;
+    const real = panelRef.current.getBoundingClientRect().height;
+    if (real > 0) calc(real);
+  }, [calc, panelRef]);
+
+  return position;
 }
 
 // ─── Panel del popover (portaleado) ──────────────────────────────────────────
@@ -267,6 +349,14 @@ function InlineCategoryBlock({
 interface SectionFilterPanelProps extends SectionFilterPopoverProps {
   anchorRef: React.RefObject<HTMLButtonElement | null>;
   onClose: () => void;
+  /**
+   * Banda "Simulación" (docs/design.md §2) — SOLO la sección Únicos la pasa.
+   * Render-prop: recibe `closePopover` para que sus acciones (abrir el modal
+   * de crear / la confirmación de eliminar) cierren este popover ANTES de
+   * abrir el otro overlay (invariante "un solo overlay a la vez"). Mantiene
+   * a este componente de `ui/` agnóstico del dominio de simulaciones.
+   */
+  footerSlot?: (closePopover: () => void) => ReactNode;
 }
 
 function SectionFilterPanel({
@@ -279,23 +369,15 @@ function SectionFilterPanel({
   onCategoriesChange,
   anchorRef,
   onClose,
+  footerSlot,
 }: SectionFilterPanelProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
-  const [position, setPosition] = useState({ top: 0, right: 0 });
+  const position = usePanelPosition(anchorRef, popoverRef);
 
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  useEffect(() => {
-    if (!anchorRef.current) return;
-    const rect = anchorRef.current.getBoundingClientRect();
-    setPosition({
-      top: rect.bottom + 6,
-      right: window.innerWidth - rect.right,
-    });
-  }, [anchorRef]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -312,8 +394,9 @@ function SectionFilterPanel({
       if (e.key === "Escape") onClose();
     }
     function handleScrollClose(e: Event) {
-      // Ignorar scrolls originados dentro del popover (ej. lista de categorías).
-      // El listener es capture=true, por lo que e.target es el elemento real que scrolleó.
+      // Ignorar scrolls originados dentro del popover (ej. lista de categorías,
+      // o la lista de simulaciones activas de la banda). El listener es
+      // capture=true, por lo que e.target es el elemento real que scrolleó.
       if (
         popoverRef.current &&
         e.target instanceof Node &&
@@ -343,29 +426,33 @@ function SectionFilterPanel({
   const content = (
     <div
       ref={popoverRef}
-      className="fixed z-50 w-[260px] rounded-ctl border border-line bg-panel shadow-[var(--shadow-lg)] animate-modal-pop overflow-hidden"
+      className="fixed z-50 flex w-[260px] flex-col rounded-ctl border border-line bg-panel shadow-[var(--shadow-lg)] animate-modal-pop overflow-hidden"
       style={{
         top: position.top,
         right: position.right,
+        maxHeight: position.maxHeight,
       }}
       role="dialog"
       aria-label={`Filtrar ${sectionLabel}`}
       data-testid={`section-filter-popover-${sectionKey}`}
     >
-      {/* Bloque 1: Triple switch de tipo */}
-      <div className="px-3 py-[10px] border-b border-hair">
+      {/* Bloque 1: Triple switch de tipo — shrink-0, nunca scrollea (§8.2) */}
+      <div className="shrink-0 px-3 py-[10px] border-b border-hair">
         <span className="block mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
           Mostrar
         </span>
         <TypeSwitch selected={selectedType} onChange={onTypeChange} />
       </div>
 
-      {/* Bloque 2: Categorías embebidas */}
+      {/* Bloque 2: Categorías embebidas — única región flexible del panel (§8.2) */}
       <InlineCategoryBlock
         allCategories={sectionCategories}
         selectedCategories={selectedCategories}
         onChange={onCategoriesChange}
       />
+
+      {/* Bloque 3: banda "Simulación" — shrink-0, solo Únicos (§2) */}
+      {footerSlot?.(onClose)}
     </div>
   );
 
@@ -380,11 +467,17 @@ function SectionFilterPanel({
  *
  * "Filtro activo" = tipo ≠ ALL OR categorías ≠ todas (null).
  * En ese caso: punto indicador --accent en la esquina sup-der del botón,
- * ícono sube a --ink en reposo.
+ * ícono sube a --ink en reposo. Una simulación activa NO enciende este punto
+ * (docs/design.md §2 — sigue significando solo "sección filtrada").
  *
  * El popover se portalea a body para evitar el containing-block del ancestor
  * transformado (animate-screen-fade) — mismo patrón que KebabMenu y los modales.
  */
+export interface SectionFilterButtonProps extends SectionFilterPopoverProps {
+  /** Banda "Simulación" (§2) — solo la sección Únicos la pasa. Ver `SectionFilterPanelProps.footerSlot`. */
+  footerSlot?: (closePopover: () => void) => ReactNode;
+}
+
 export function SectionFilterButton({
   sectionKey,
   sectionLabel,
@@ -393,7 +486,8 @@ export function SectionFilterButton({
   selectedCategories,
   onTypeChange,
   onCategoriesChange,
-}: SectionFilterPopoverProps) {
+  footerSlot,
+}: SectionFilterButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -449,6 +543,7 @@ export function SectionFilterButton({
           onCategoriesChange={onCategoriesChange}
           anchorRef={buttonRef}
           onClose={() => setIsOpen(false)}
+          footerSlot={footerSlot}
         />
       )}
     </div>

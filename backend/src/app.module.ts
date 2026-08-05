@@ -15,6 +15,7 @@ import { InstallmentsModule } from './installments/installments.module';
 import { PreferencesModule } from './preferences/preferences.module';
 import { SettingsModule } from './settings/settings.module';
 import { HistoryModule } from './history/history.module';
+import { SimulationsModule } from './simulations/simulations.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { IncomingMessage } from 'http';
 
@@ -90,6 +91,7 @@ import { IncomingMessage } from 'http';
     PreferencesModule,
     SettingsModule,
     HistoryModule,
+    SimulationsModule,
   ],
   providers: [
     // Guard global: toda request requiere JWT válido (RNF-001).

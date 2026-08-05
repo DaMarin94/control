@@ -56,6 +56,7 @@ const mockCuotaMovement: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 50000,
+  simulated: false,
   calculatedChildren: [],
 };
 

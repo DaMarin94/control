@@ -65,6 +65,7 @@ La fuente de verdad de tipos, campos y constraints es `backend/prisma/schema.pri
 | `InstallmentGroup` | Grupo de cuotas. `amountCents` es el monto **por cuota**, no el total; `totalInstallments` es la cantidad. |
 | `UserPreferences` | Preferencias del usuario. **1:1 con `User`** (`userId` único, `onDelete: Cascade`); contenido en un campo `Json` `data` (default `{}`). Blob extensible para sumar prefs sin migraciones. |
 | `HistoryEntry` | Entrada del historial de cambios: una fila por edición o eliminación de un movimiento, con el estado previo en un `snapshot Json`. Modelo, índices y contrato en `docs/data-model.md` §Historial de cambios; shape del snapshot en `src/history/history.types.ts`. |
+| `Simulation` | Simulación de categoría: `userId` + `categoryId` y nada más. **Borrado físico** e índice único `(userId, categoryId)`. Modelo y contrato en `docs/data-model.md` §Simulación de categoría. |
 
 **Enums:** `MovementType` (`EXPENSE` | `INCOME`), `CategoryScope` (`BOTH` | `EXPENSE` | `INCOME`), `HistoryTargetKind` (`UNICO` | `FIJO` | `CUOTA`) y `HistoryAction` (`EDIT` | `DELETE`).
 
@@ -73,7 +74,7 @@ La fuente de verdad de tipos, campos y constraints es `backend/prisma/schema.pri
 - **`onDelete`:**
   - `Cascade` en las FK `userId` — borrar un usuario borra todos sus movimientos y categorías.
   - `Restrict` en las FK `categoryId` — impide borrar físicamente una categoría mientras la referencien movimientos. Como las categorías usan soft delete, el caso no debería ocurrir; el `Restrict` es el último firewall a nivel DB.
-- **Borrado por entidad:** las tres tablas de movimiento (`Transaction`, `Recurring`, `InstallmentGroup`) y las dos de metadato (`Category`, `PaymentMethod`) usan **borrado lógico** (`deletedAt`). En movimientos el borrado físico llega recién con la purga de la entrada de historial (ver §Historial de cambios); en `Category`/`PaymentMethod` no llega nunca (el registro queda para que los movimientos históricos lo sigan mostrando). `Recurring` tiene además `deletedFrom`, que es otra cosa: el boundary por mes de un fijo vivo (ortogonalidad en `docs/data-model.md` §Decisiones de negocio → borrado lógico).
+- **Borrado por entidad:** las tres tablas de movimiento (`Transaction`, `Recurring`, `InstallmentGroup`) y las dos de metadato (`Category`, `PaymentMethod`) usan **borrado lógico** (`deletedAt`). En movimientos el borrado físico llega recién con la purga de la entrada de historial (ver §Historial de cambios); en `Category`/`PaymentMethod` no llega nunca (el registro queda para que los movimientos históricos lo sigan mostrando). `Simulation` es la única que se borra **físicamente** (RF-SIM-004). `Recurring` tiene además `deletedFrom`, que es otra cosa: el boundary por mes de un fijo vivo (ortogonalidad en `docs/data-model.md` §Decisiones de negocio → borrado lógico).
 - **Fechas:** `Transaction.occurredAt` es `@db.Timestamptz` (UTC) + `timezone` IANA por registro (ver `docs/technical.md`, Fechas y zonas horarias). El resto de timestamps (`createdAt`, `updatedAt`) son de sistema.
 - **Mes como `String "YYYY-MM"`:** `Recurring.startMonth` / `Recurring.deletedFrom` / `InstallmentGroup.startMonth`. Fijos y cuotas operan a nivel mes, sin día ni hora.
 - **Montos en centavos (`Int`)** en todas las entidades de movimiento (RN-002). **IDs `cuid()`.**
@@ -108,6 +109,7 @@ Un registro de movimiento con `deletedAt != null` **no debe aparecer en ninguna 
 | `payment-methods` | `/payment-methods` | Métodos de pago (CRUD + soft delete) |
 | `preferences` | `/preferences` | Preferencias de usuario (blob JSON, lectura/escritura) |
 | `history` | `/history` | Historial de cambios: listado de entradas + deshacer (simple y en cadena) |
+| `simulations` | `/simulations` | Simulaciones de categoría: crear, listar, candidatas y eliminar + derivación de los movimientos simulados del mes |
 | `users` | — | Creación de cuenta + categorías por defecto |
 | `auth` | `/auth` | Registro, login y Google; emisión y validación del JWT (guard global) |
 | `prisma` | — | PrismaService |
@@ -118,7 +120,7 @@ El formato de toda respuesta (sobre `{ success, statusCode, data | error }`) est
 
 ### DELETE → `204 No Content`, sin body (convención del backend)
 
-Los cuatro DELETE (`DELETE /categories/:id`, `/transactions/:id`, `/recurring/:id`, `/installments/:id`) responden **`204 No Content` sin cuerpo**, de forma deliberada y consistente — cada controller lo declara con `@HttpCode(HttpStatus.NO_CONTENT)`.
+Todos los DELETE (`DELETE /categories/:id`, `/payment-methods/:id`, `/transactions/:id`, `/recurring/:id`, `/installments/:id`, `/simulations/:id`) responden **`204 No Content` sin cuerpo**, de forma deliberada y consistente — cada controller lo declara con `@HttpCode(HttpStatus.NO_CONTENT)`.
 
 - **El `ResponseInterceptor` NO aplica al 204.** Aunque el interceptor envuelve las respuestas exitosas en el sobre `{ success, statusCode, data }`, en un `204` Express descarta el body: el cliente recibe un **204 vacío** (no el sobre). Por eso el front no debe intentar parsear JSON en un 204 (ver gotcha de `apiRequest` en `.claude/agents/control-frontend.md`).
 - Los errores **nunca** llegan como 204: el `AllExceptionsFilter` siempre responde 4xx/5xx con body JSON. Un 204 es siempre éxito.
@@ -155,6 +157,9 @@ CRUD de métodos de pago. El DELETE es soft delete (`deletedAt`). Ver el contrat
 
 ### `GET /preferences` · `PUT /preferences`
 Lectura y escritura del blob JSON de preferencias del usuario autenticado. El `PUT` **reemplaza el blob entero** (no mergea) y hace upsert. Ver el contrato completo en la sección **Preferencias de usuario (PreferencesModule)**.
+
+### `POST /simulations` · `GET /simulations` · `GET /simulations/candidates` · `DELETE /simulations/:id`
+Simulaciones de categoría (RF-SIM-001..004). El `DELETE` es **borrado físico**, no registra historial y no es deshacible. El `POST` y los dos `GET` aceptan `today` (`YYYY-MM-DD`, opcional) para fijar el mes en curso del cálculo, con el mismo parseo y el mismo `400` ante formato inválido; el `DELETE` no. Contrato completo (y el gotcha del fallback UTC) en `docs/data-model.md`, §Simulación de categoría; mecánica en la sección **Simulación de categoría (SimulationsModule)**.
 
 ### `GET /history` · `POST /history/:id/undo`
 Listado de entradas vigentes del historial de cambios y deshacer. El `POST` **no lleva body** y resuelve por sí solo el undo en cadena cuando la entrada está bloqueada (RF-HIST-004); responde `200` con `{ undone: true }` (no es un DELETE, no aplica la convención del 204). Contrato completo en `docs/data-model.md`, §Historial de cambios; mecánica en la sección **Historial de cambios (HistoryModule)**.
@@ -242,6 +247,10 @@ El join de movimientos y el cálculo de totales **no filtran por `Category.delet
 - **Los totales del mes suman únicos + fijos + cuotas.**
 - **Anulados excluidos de los totales del mes.** Igual que un fijo anulado, un **único anulado** (flag `Transaction.skipped`, RF-MU-005) y una **cuota anulada** (`InstallmentSkip` del mes, RF-MC-004) **se incluyen en la lista** con `skipped: true` pero **no suman** a `totals`; sus **calculados** heredan el estado del origen (RN-020).
 
+### Integración de movimientos simulados en `/movements`
+
+`MovementsService` pide los ítems simulados del mes a `SimulationsService` (regla de propiedad de dominio: nunca toca la tabla `simulations`) y los **mezcla dentro de la lista `unicos`**, reordenando el conjunto por magnitud DESC con el mismo criterio que `findUnicosByMonth`. Pasan por el **mismo** filtro de categorías y suman a los totales como cualquier único. Shape y campos nulos del ítem en `docs/data-model.md`, §Contrato de movimientos del mes → `simulated`; derivación en §Simulación de categoría (SimulationsModule).
+
 ### Serie de reportes (`GET /movements/reports?year=YYYY&categories=`)
 
 Endpoint **agregado** para los reportes (RF-REP-001/002/005), scopeado por `userId` del JWT (RN-003). Devuelve totales por mes y el gasto mensual desglosado por categoría para un año — **no** devuelve movimientos individuales. **No modifica `GET /movements` mensual**: es un endpoint aparte, que reutiliza el mismo criterio de bucketeo (RN-015) sin introducir reglas de zona nuevas.
@@ -284,7 +293,7 @@ Sobre los **totales mensuales** (`incomeCents`/`expenseCents`), `getReportsMovem
 
 #### Proyección de fijos a futuro (RF-REP-015) — capacidad retenida, no consumida por el frontend
 
-El endpoint conserva esta capacidad, pero **ninguna pantalla la pide hoy** (no hay control de proyección en el frontend). Con `projectFixed=true`, los meses **posteriores a `today`** del año pedido se marcan `projected: true` (ver `docs/data-model.md`, §Contrato de serie de reportes) y suman, sobre el dato real, la proyección de los fijos. Sin el param (caso actual) todos los meses vienen `projected: false` y los totales son los de siempre.
+El motor vive en `src/common/projection.helper.ts` (`computeFixedBasketProjection`), junto a la regresión de RF-SIM-002 — ver §Simulación de categoría → Infraestructura de proyección compartida. El endpoint conserva esta capacidad, pero **ninguna pantalla la pide hoy** (no hay control de proyección en el frontend). Con `projectFixed=true`, los meses **posteriores a `today`** del año pedido se marcan `projected: true` (ver `docs/data-model.md`, §Contrato de serie de reportes) y suman, sobre el dato real, la proyección de los fijos. Sin el param (caso actual) todos los meses vienen `projected: false` y los totales son los de siempre.
 
 - **Solo fijos.** En el tramo futuro solo se proyectan los **fijos** (cuotas y únicos **no** se extienden a futuro). Los fijos de gasto extienden `expenseCents`; los de ingreso, `incomeCents`. El mes futuro de cada línea vale **solo** el valor proyectado de fijos.
 - **Método — esqueleto determinista × tasa de crecimiento de fijos, por línea.** La proyección se calcula **por línea** (gasto e ingreso por separado). Para cada mes futuro `m` (meses hacia adelante desde hoy): `valor_línea(m) = canasta_conocida(m) × (1 + tasa_precio)^m`, compuesto, sin truncar decimales intermedios; el redondeo va solo al valor final.
@@ -577,6 +586,41 @@ El helper que arma el `AuthResponse` de los tres flujos de auth es **`async`** p
 - **Prisma 7 + tipo `Json` (cast obligatorio).** El campo `Json` tiene tipado estricto en `create` / `update` / `upsert`: un `Record<string, unknown>` **no es asignable directo** al input de Prisma. Requiere un cast (`as any` con comentario explicativo). El comportamiento en runtime es correcto; el cast es solo para el type-checker.
 - **Tests e2e que levantan `AppModule` necesitan `userPreferences` en el mock de `PrismaService`.** Como `PreferencesModule` vive en `AppModule` y `AuthService` lo usa, el mock de `PrismaService` de cualquier e2e que arranque `AppModule` debe exponer `userPreferences` con `findUnique`, `upsert` y `create` — análogo al gotcha de `installmentGroup`. Sin esto, los flujos de auth (que leen preferencias) rompen en el setup del test.
 
+## Simulación de categoría (SimulationsModule)
+
+Crea, lista y elimina simulaciones (RF-SIM-001..004) y **deriva los movimientos simulados** que `GET /movements` embebe en la sección Únicos. Contrato de API y modelo en `docs/data-model.md`, §Simulación de categoría; reglas de cálculo en `requirements.md`, RN-028/029.
+
+### Dependencia unidireccional `Movements → Simulations`
+
+`MovementsService` inyecta `SimulationsService` y le pide `getSimulatedItemsForMonth(userId, month, today)`; **nunca al revés**. `SimulationsService` no depende de `MovementsService` ni de `MovementsModule`, y el sentido de la flecha **no se puede invertir ni volver bidireccional**: sería un ciclo de módulos de Nest.
+
+**Consecuencia:** la serie de ajuste de la regresión necesita agregaciones de `Transaction` por mes y categoría, y `SimulationsService` las lee **directo por su propio repositorio** en vez de pedírselas a `TransactionsService`. Es el mismo precedente que `MovementsRepository`, que ya bypasea `TransactionsService` por el mismo motivo (§Movimientos del mes → "Por qué un módulo propio").
+
+### Los reportes nunca consultan simulaciones
+
+Ningún endpoint de `/movements/reports*` toca `SimulationsService`: los reportes analizan lo **real** (RN-029). La única superficie que ve movimientos simulados es `GET /movements`.
+
+### Infraestructura de proyección compartida (`src/common/projection.helper.ts`)
+
+Las dos proyecciones a futuro del backend viven en el **mismo módulo**, como **funciones puras exportadas** (no una clase `@Injectable`): así se importan desde `MovementsService` y desde `SimulationsService` sin tocar la lista de providers de los specs unitarios existentes.
+
+| Función | Consumidor | Método |
+|---|---|---|
+| `computeFixedBasketProjection` | RF-REP-015 (proyección de fijos en la serie de reportes) | esqueleto determinista × tasa de encarecimiento por cadena |
+| `fitCategoryRegression` + `evaluateRegressionAt` | RF-SIM-002 (simulación de categoría) | regresión lineal por mínimos cuadrados |
+
+**Lo que comparten es la infraestructura, no la matemática:** cada fórmula es propia y ninguna reusa la de la otra. Un cálculo nuevo se suma acá; no se lo mete adentro de la fórmula ajena.
+
+- **Gotcha — `fitCategoryRegression` NO saltea puntos.** Los 12 valores de la ventana entran siempre, incluidos los ceros (RN-028: la ausencia es dato). Es lo contrario de `computeLinearTrend` (reporte de Inflación vs Ingresos), que ignora los `null`. Quién decide si hay datos suficientes es el **caller** (mínimo de 3 meses **con únicos**); la función solo ajusta la recta.
+
+### Derivación del movimiento simulado
+
+- **`getSimulatedItemsForMonth` corta temprano y devuelve `[]`** si el mes pedido no es futuro respecto del mes en curso, si cae fuera del horizonte, si el usuario no tiene simulaciones o si la simulación está **pausada** (`monthsWithData < 3`). El consumidor no evalúa ninguna de esas condiciones.
+- **Ventana, horizonte y posición del eje viven en `simulation-window.helper.ts`** (`resolveTodayMonthKey` / `buildWindowMonths` / `computeHorizonEndMonth` / `axisPositionFor`), no dispersos en el service — reusarlos, no reimplementar la aritmética de RN-028.
+- **Serie de ajuste convertida por el mes de cada único** (no por el TC de hoy): mismo criterio que `getAnnualUnicosAggregated`. El signo lo pone el `type` del único (ingreso `+`, gasto `−`) al agregarse por mes.
+- **`400` no revelador al crear.** La validación de categoría reusa `CategoryValidatorService` con `skipScopeCheck`: una simulación **no tiene `type` fijo** (su dirección la decide el cálculo mes a mes), así que cualquier `scope` de categoría es válido.
+- **El `409` está en dos capas.** El chequeo previo cubre el caso normal; el catch del `P2002` del índice único solo blinda una carrera concurrente.
+
 ## Historial de cambios (HistoryModule)
 
 Registra ediciones y eliminaciones de movimientos y permite deshacerlas (RF-HIST-001..006). Contrato de API y modelo en `docs/data-model.md`, §Historial de cambios; shape del snapshot por `targetKind × action` en `src/history/history.types.ts`.
@@ -619,7 +663,7 @@ Una entrada se conserva hasta que ocurre **lo primero** de estas dos (RF-HIST-00
 
 ### Qué campos emite cada entrada
 
-El backend decide qué filas del bloque "Qué cambió" emite; **el frontend no filtra ni decide omisiones** — pinta lo que recibe. Además del set aplicable por tipo de movimiento (ver `history.service.ts`), dos campos tienen reglas propias:
+El backend decide qué filas del bloque "Qué cambió" emite; **el frontend no filtra ni decide omisiones** —pinta lo que recibe—. Además del set aplicable por tipo de objetivo (ver `history.service.ts`), dos campos tienen reglas propias:
 
 - **`exchangeRate` (`Cotización`) se emite solo si es informativa:** cuando hay **conversión real** (la moneda del movimiento difiere de su `anchorCurrency`) o cuando la **moneda cambió** en esa edición. Un movimiento en la misma moneda que su ancla tiene cotización `1` por definición: mostrarla es ruido.
 - **`currency` (`Moneda`) en una entrada de eliminación se omite** cuando la moneda del movimiento coincide **a la vez** con su `anchorCurrency` y con la **moneda default vigente** del usuario — es decir, cuando no aporta nada frente a lo que el usuario ya ve por defecto. Si el usuario cambió su default desde que se cargó el movimiento, la moneda **sí** se emite.
