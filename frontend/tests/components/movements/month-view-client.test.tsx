@@ -46,7 +46,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import type { MonthMovements } from "@/types/movement";
+import type { MonthMovements, MovementItem } from "@/types/movement";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -179,6 +179,16 @@ vi.mock("@/lib/format", async (importOriginal) => {
   };
 });
 
+// Simulación de categoría (RF-SIM-001..004) — default "sin simulaciones activas"
+// (cero-impacto): el resto de los tests de este archivo NO conocen la feature y
+// no deben verse afectados por ella.
+vi.mock("@/hooks/use-simulations", () => ({
+  useSimulations: vi.fn(() => ({ data: undefined, isLoading: false, isError: false })),
+  useSimulationCandidates: vi.fn(() => ({ data: undefined, isLoading: false, isError: false })),
+  useCreateSimulation: vi.fn(() => ({ createSimulation: vi.fn(), isCreating: false })),
+  useDeleteSimulation: vi.fn(() => ({ deleteSimulation: vi.fn(), isDeleting: false })),
+}));
+
 const mockPush = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(() => ({ push: mockPush })),
@@ -187,10 +197,12 @@ vi.mock("next/navigation", () => ({
 
 import { useMovements } from "@/hooks/use-movements";
 import { usePreferences } from "@/hooks/use-preferences";
+import { useSimulations } from "@/hooks/use-simulations";
 import { MonthViewClient } from "@/components/movements/month-view-client";
 
 const mockUseMovements = vi.mocked(useMovements);
 const mockUsePreferences = vi.mocked(usePreferences);
+const mockUseSimulations = vi.mocked(useSimulations);
 
 // ─── Wrapper ──────────────────────────────────────────────────────────────────
 
@@ -255,6 +267,7 @@ const mockMovementExpense = {
   currency: "ARS" as const,
   exchangeRate: 1,
   convertedAmountCents: 15000,
+  simulated: false,
   calculatedChildren: [],
 };
 
@@ -279,6 +292,7 @@ const mockMovementIncome = {
   currency: "ARS" as const,
   exchangeRate: 1,
   convertedAmountCents: 500000,
+  simulated: false,
   calculatedChildren: [],
 };
 
@@ -303,6 +317,7 @@ const mockMovementFijo = {
   currency: "ARS" as const,
   exchangeRate: 1,
   convertedAmountCents: 150000,
+  simulated: false,
   calculatedChildren: [],
 };
 
@@ -331,6 +346,7 @@ const mockMovementCuota = {
   currency: "ARS" as const,
   exchangeRate: 1,
   convertedAmountCents: 50000,
+  simulated: false,
   calculatedChildren: [],
 };
 
@@ -403,6 +419,7 @@ const mockMovementCalculadoExpense = {
   currency: "ARS" as const,
   exchangeRate: 1,
   convertedAmountCents: -5000,
+  simulated: false,
   calculatedChildren: [],
 };
 
@@ -2129,5 +2146,243 @@ describe("MonthViewClient — chip de moneda default", () => {
     renderMonthView();
     const chips = screen.getAllByRole("link", { name: /moneda por defecto: ARS/i });
     chips.forEach((chip) => expect(chip).toHaveTextContent("ARS"));
+  });
+});
+
+// ─── Simulación de categoría (docs/design.md, RF-SIM-001..004) ────────────────
+
+describe("MonthViewClient — Simulación de categoría", () => {
+  const simulatedItem: MovementItem = {
+    ...mockMovementExpense,
+    id: "simulated:sim-1:2026-08",
+    description: null,
+    occurredAt: null,
+    timezone: null,
+    convertedAmountCents: 12500,
+    amountCents: 12500,
+    simulated: true,
+  };
+
+  const activeSimulation = {
+    id: "sim-1",
+    categoryId: "cat-1",
+    category: { id: "cat-1", name: "Alimentación", color: "#FF5733", scope: "BOTH" as const },
+    monthsWithData: 6,
+    paused: false,
+    createdAt: "2026-06-01T12:00:00.000Z",
+  };
+
+  const pausedSimulation = {
+    id: "sim-2",
+    categoryId: "cat-2",
+    category: { id: "cat-2", name: "Sueldo", color: "#33FF57", scope: "INCOME" as const },
+    monthsWithData: 1,
+    paused: true,
+    createdAt: "2026-05-01T12:00:00.000Z",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUsePreferences.mockReturnValue({
+      preferences: {},
+      setPreferences: mockSetPreferences,
+      isSaving: false,
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as ReturnType<typeof usePreferences>);
+    mockSetPreferences.mockResolvedValue({ success: true });
+    // Default: sin simulaciones activas (cero-impacto).
+    mockUseSimulations.mockReturnValue({
+      data: { horizonEndMonth: "2026-12", simulations: [] },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useSimulations>);
+  });
+
+  it("cero-impacto: sin filas simuladas visibles, no aparece ni el glifo de composición ni la línea de totales", () => {
+    mockLoaded({
+      month: "2026-06",
+      totals: { expenseCents: 15000, incomeCents: 0, balanceCents: -15000 },
+      movements: { unicos: [mockMovementExpense], fijos: [], cuotas: [] },
+    });
+    renderMonthView();
+
+    expect(screen.queryByLabelText(/el subtotal incluye/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/los totales incluyen/i)).not.toBeInTheDocument();
+  });
+
+  it("con una fila simulada visible: aparece el glifo de composición en el subtotal de Únicos y la línea de totales", () => {
+    mockLoaded({
+      month: "2026-08",
+      totals: { expenseCents: 27500, incomeCents: 0, balanceCents: -27500 },
+      movements: { unicos: [mockMovementExpense, simulatedItem], fijos: [], cuotas: [] },
+    });
+    renderMonthView("2026-08");
+
+    expect(screen.getByLabelText("El subtotal incluye 1 movimiento simulado")).toBeInTheDocument();
+    expect(screen.getByText("Los totales incluyen 1 movimiento simulado.")).toBeInTheDocument();
+  });
+
+  it("la fila simulada se renderiza distinguible: chip 'Simulado' y monto con prefijo '≈'", () => {
+    mockLoaded({
+      month: "2026-08",
+      totals: { expenseCents: 27500, incomeCents: 0, balanceCents: -27500 },
+      movements: { unicos: [mockMovementExpense, simulatedItem], fijos: [], cuotas: [] },
+    });
+    renderMonthView("2026-08");
+
+    expect(screen.getByText("Simulado")).toBeInTheDocument();
+    expect(screen.getByText("≈")).toBeInTheDocument();
+  });
+
+  it("filtrar Únicos por categoría excluye la fila simulada: el glifo de composición desaparece", async () => {
+    mockLoaded({
+      month: "2026-08",
+      totals: { expenseCents: 27500, incomeCents: 0, balanceCents: -27500 },
+      movements: { unicos: [mockMovementExpense, simulatedItem], fijos: [], cuotas: [] },
+    });
+    renderMonthView("2026-08");
+
+    expect(screen.getByLabelText(/el subtotal incluye/i)).toBeInTheDocument();
+
+    // Deseleccionar todas las categorías del filtro de Únicos.
+    fireEvent.click(screen.getByRole("button", { name: /filtrar únicos/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /ninguna/i })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /ninguna/i }));
+
+    expect(screen.queryByLabelText(/el subtotal incluye/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/los totales incluyen/i)).not.toBeInTheDocument();
+  });
+
+  it("el botón 'Simular categoría' está SIEMPRE presente en el popover de Únicos, aunque no haya simulaciones", async () => {
+    mockLoaded({
+      month: "2026-06",
+      totals: { expenseCents: 0, incomeCents: 0, balanceCents: 0 },
+      movements: { unicos: [], fijos: [], cuotas: [] },
+    });
+    renderMonthView();
+
+    fireEvent.click(screen.getByRole("button", { name: /filtrar únicos/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /simular categoría/i })).toBeInTheDocument();
+    });
+    expect(screen.getByText("Proyecta una categoría a los meses futuros.")).toBeInTheDocument();
+  });
+
+  it("abrir el modal 'Simular categoría' cierra el popover (un solo overlay a la vez)", async () => {
+    mockLoaded({
+      month: "2026-06",
+      totals: { expenseCents: 0, incomeCents: 0, balanceCents: 0 },
+      movements: { unicos: [], fijos: [], cuotas: [] },
+    });
+    renderMonthView();
+
+    fireEvent.click(screen.getByRole("button", { name: /filtrar únicos/i }));
+    const openBtn = await screen.findByRole("button", { name: /simular categoría/i });
+    fireEvent.click(openBtn);
+
+    // El modal se abrió (título propio)...
+    expect(screen.getByRole("heading", { name: "Simular categoría" })).toBeInTheDocument();
+    // ...y el popover se cerró: su radiogroup de tipo ya no está en el documento.
+    expect(screen.queryByRole("radiogroup", { name: /tipo de movimiento/i })).not.toBeInTheDocument();
+  });
+
+  it("mes futuro MÁS ALLÁ del horizonte: sin filas simuladas, sin nota, sin glifo, sin línea (se ve igual que sin la feature)", () => {
+    mockUseSimulations.mockReturnValue({
+      data: { horizonEndMonth: "2026-12", simulations: [pausedSimulation] },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useSimulations>);
+    mockLoaded({
+      // 2027-03 está más allá del horizonte vigente (2026-12).
+      month: "2027-03",
+      totals: { expenseCents: 0, incomeCents: 0, balanceCents: 0 },
+      movements: { unicos: [], fijos: [], cuotas: [] },
+    });
+    renderMonthView("2027-03");
+
+    expect(screen.queryByText(/no está proyectando/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/el subtotal incluye/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/los totales incluyen/i)).not.toBeInTheDocument();
+  });
+
+  it("los popovers de Fijos y Cuotas NO tienen banda de simulación", async () => {
+    mockLoaded({
+      month: "2026-06",
+      totals: { expenseCents: 0, incomeCents: 0, balanceCents: 0 },
+      movements: { unicos: [], fijos: [mockMovementFijo], cuotas: [mockMovementCuota] },
+    });
+    renderMonthView();
+
+    // Fijos
+    fireEvent.click(screen.getByRole("button", { name: /filtrar fijos/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("radiogroup", { name: /tipo de movimiento/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: /simular categoría/i })).not.toBeInTheDocument();
+
+    // Cerrar y abrir Cuotas
+    fireEvent.click(screen.getByRole("button", { name: /filtrar fijos/i }));
+    fireEvent.click(screen.getByRole("button", { name: /filtrar cuotas/i }));
+    await waitFor(() => {
+      expect(screen.getAllByRole("radiogroup", { name: /tipo de movimiento/i }).length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByRole("button", { name: /simular categoría/i })).not.toBeInTheDocument();
+  });
+
+  it("con ≥1 simulación activa: la banda lista la simulación y la nota de horizonte", async () => {
+    mockUseSimulations.mockReturnValue({
+      data: { horizonEndMonth: "2026-12", simulations: [activeSimulation] },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useSimulations>);
+    mockLoaded({
+      month: "2026-06",
+      totals: { expenseCents: 0, incomeCents: 0, balanceCents: 0 },
+      movements: { unicos: [], fijos: [], cuotas: [] },
+    });
+    renderMonthView();
+
+    fireEvent.click(screen.getByRole("button", { name: /filtrar únicos/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Se proyecta hasta diciembre 2026.")).toBeInTheDocument();
+    });
+  });
+
+  it("mes futuro dentro del horizonte con una simulación pausada: nota 'Info' al pie del listado", () => {
+    mockUseSimulations.mockReturnValue({
+      data: { horizonEndMonth: "2026-12", simulations: [pausedSimulation] },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useSimulations>);
+    mockLoaded({
+      month: "2026-08",
+      totals: { expenseCents: 0, incomeCents: 0, balanceCents: 0 },
+      movements: { unicos: [], fijos: [], cuotas: [] },
+    });
+    renderMonthView("2026-08");
+
+    expect(
+      screen.getByText("Una simulación no está proyectando: le faltan meses con datos."),
+    ).toBeInTheDocument();
+  });
+
+  it("mes en curso con una simulación pausada: SIN nota (el mes en curso nunca lleva señales de simulación)", () => {
+    mockUseSimulations.mockReturnValue({
+      data: { horizonEndMonth: "2026-12", simulations: [pausedSimulation] },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useSimulations>);
+    mockLoaded({
+      month: "2026-06",
+      totals: { expenseCents: 0, incomeCents: 0, balanceCents: 0 },
+      movements: { unicos: [], fijos: [], cuotas: [] },
+    });
+    renderMonthView();
+
+    expect(screen.queryByText(/no está proyectando/i)).not.toBeInTheDocument();
   });
 });

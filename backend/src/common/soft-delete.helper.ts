@@ -10,8 +10,9 @@ import { Prisma } from '@prisma/client';
  *
  * Este es el ÚNICO punto de verdad del filtro: se usa en TODOS los repositorios que
  * leen Transaction/Recurring/InstallmentGroup (transactions, recurring, installments,
- * movements) para no repetir `deletedAt: null` copiado a mano en cada query, que es
- * fácil de olvidar y NO tira error si falta — solo infla totales/reportes en silencio.
+ * movements) para no repetir `deletedAt: null` copiado a mano en cada
+ * query, que es fácil de olvidar y NO tira error si falta — solo infla totales/reportes
+ * en silencio.
  *
  * NO usar en el módulo `history` (undo/reaper): esas rutas necesitan leer/mutar
  * registros YA eliminados a propósito, y acceden a Prisma directamente (bypass

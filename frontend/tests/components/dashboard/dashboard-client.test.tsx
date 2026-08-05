@@ -154,6 +154,7 @@ const mockWithMovements: MonthMovements = {
         currency: "ARS" as const,
         exchangeRate: 1,
         convertedAmountCents: 15000,
+        simulated: false,
         calculatedChildren: [],
       },
     ],

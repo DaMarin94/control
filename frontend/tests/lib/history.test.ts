@@ -17,10 +17,11 @@ import {
   formatHistoryMoment,
   summarizeHistoryChange,
   pickSummaryChange,
+  getHistoryEntryName,
   HISTORY_FIELD_LABELS,
   HISTORY_TARGET_KIND_LABEL,
 } from "@/lib/history";
-import type { HistoryChangeDto } from "@/types/history";
+import type { HistoryChangeDto, HistoryEntryResponseDto } from "@/types/history";
 
 describe("formatHistoryAmount", () => {
   it("gasto: signo − y color text-ink", () => {
@@ -263,5 +264,38 @@ describe("summarizeHistoryChange / pickSummaryChange (modal de cadena, §6.2)", 
     ).toBe(false);
     expect(summarizeHistoryChange({ field: "currency", previous: "ARS", next: "USD" }, "ARS").nowrap).toBe(false);
     expect(summarizeHistoryChange({ field: "type", previous: "EXPENSE", next: "INCOME" }, "ARS").nowrap).toBe(false);
+  });
+});
+
+describe("getHistoryEntryName", () => {
+  function makeEntry(overrides: Partial<HistoryEntryResponseDto> = {}): HistoryEntryResponseDto {
+    return {
+      id: "hist-1",
+      targetKind: "UNICO",
+      targetId: "tx-1",
+      action: "EDIT",
+      createdAt: "2026-06-02T17:30:00.000Z",
+      description: null,
+      category: { id: "cat-1", name: "Alquiler", color: "#FF5733", scope: "EXPENSE" },
+      type: "EXPENSE",
+      amount: null,
+      isCalculated: false,
+      changes: [],
+      canUndo: true,
+      blockingCount: 0,
+      ...overrides,
+    };
+  }
+
+  it("usa la descripción cuando está presente", () => {
+    expect(getHistoryEntryName(makeEntry({ description: "Supermercado" }))).toBe("Supermercado");
+  });
+
+  it("cae en el nombre de la categoría cuando no hay descripción", () => {
+    expect(getHistoryEntryName(makeEntry({ description: null }))).toBe("Alquiler");
+  });
+
+  it("cae en 'Movimiento' cuando no hay descripción ni categoría", () => {
+    expect(getHistoryEntryName(makeEntry({ description: null, category: null }))).toBe("Movimiento");
   });
 });

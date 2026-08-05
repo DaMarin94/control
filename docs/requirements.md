@@ -2676,7 +2676,7 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El sistema registra automáticamente una **entrada de historial** por cada **edición** y cada **eliminación** de un movimiento —único, fijo (incluidos los calculados) y grupo de cuotas—. La entrada guarda el estado previo del movimiento, lo suficiente para restaurarlo. El registro es silencioso: no pide confirmación ni agrega ningún control a los flujos de edición y borrado. |
+| **Descripción** | El sistema registra automáticamente una **entrada de historial** por cada **edición** y cada **eliminación** de un movimiento —único, fijo (incluidos los calculados) y grupo de cuotas—. La entrada guarda el estado previo del objetivo, lo suficiente para restaurarlo. El registro es silencioso: no pide confirmación ni agrega ningún control a los flujos de edición y borrado. |
 | **Actor** | Sistema |
 | **Prioridad** | Alta |
 | **Precondiciones** | El usuario edita o elimina un movimiento propio. |
@@ -2692,13 +2692,14 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 | Editar un grupo de cuotas (RF-MC-003) | Sí |
 | Eliminar un grupo de cuotas (RF-MC-002) | Sí |
 | Crear un movimiento de cualquier tipo (RF-MU-001, RF-MF-001, RF-MC-001, RF-MCALC-001, RF-VM-008) | No |
+| Crear o eliminar una simulación de categoría (RF-SIM-001, RF-SIM-004) | No |
 | Anular / des-anular (RF-MU-005, RF-MF-005, RF-MC-004) | No |
 | ABM de categorías (RF-CAT-*) y de métodos de pago (RF-PM-*) | No |
 | Cambios de preferencias (moneda default, apariencia, reportes, límites, orden y filtros) | No |
 
-**Identidad de la entrada — clave de agrupación por movimiento:**
+**Identidad de la entrada — clave de agrupación por objetivo:**
 
-| Tipo de movimiento | Clave |
+| Objetivo | Clave |
 |---|---|
 | Único | `Transaction.id` |
 | Fijo, incluido el calculado | **Identidad de cadena** del fijo (`Recurring.chainId`), **no** el id de la fila: editar un fijo parte la cadena y el id de la fila cambia (RN-005; ver `docs/backend.md`, §Movimientos fijos) |
@@ -2719,7 +2720,7 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | La pantalla `/historial` lista las entradas de historial de **todos** los movimientos del usuario. Por cada entrada muestra de qué movimiento se trata, qué operación fue (edición o eliminación), **qué cambió** —estado anterior → estado nuevo— y expone la acción de **deshacer** (RF-HIST-003). |
+| **Descripción** | La pantalla `/historial` lista las entradas de historial de **todos** los movimientos del usuario. Por cada entrada muestra de qué se trata, qué operación fue (edición o eliminación), **qué cambió** —estado anterior → estado nuevo— y expone la acción de **deshacer** (RF-HIST-003). |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Alta |
 | **Precondiciones** | El usuario tiene sesión activa. |
@@ -2844,6 +2845,144 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 
 ---
 
+### 3.15 Módulo: Simulación de categoría
+
+La simulación proyecta a los meses futuros el comportamiento de **una categoría** a partir de su historia reciente, y lo muestra como movimientos en la Vista del mes (`/mes`).
+
+Su alcance son **únicamente los movimientos únicos**. Los fijos y las cuotas ya se calculan on-the-fly en cualquier mes (RN-006): navegando a un mes futuro, los fijos activos y las cuotas en tramo **ya aparecen**. El único hueco de un mes futuro son los **Únicos** — simular fijos o cuotas duplicaría lo que el sistema ya sabe.
+
+La simulación **no genera filas**: lo que persiste es su configuración (usuario + categoría) y los movimientos simulados se **derivan al vuelo** en cada lectura, igual que los fijos y las cuotas.
+
+---
+
+#### RF-SIM-001 — Crear una simulación de categoría
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Desde el **disparador de filtro de la sección Únicos** de `/mes` (RF-VM-006), la acción **"Simular categoría"** crea una simulación sobre **una** categoría. Lo que persiste es la configuración (usuario + categoría): ni monto, ni dirección, ni horizonte se ingresan — todo se deriva del cálculo (RF-SIM-002). Un usuario puede tener **varias simulaciones a la vez**, como máximo **una por categoría**. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario está en `/mes`. |
+
+**Flujo principal:**
+1. El usuario abre el disparador de filtro de la sección **Únicos** y elige **"Simular categoría"**.
+2. El sistema ofrece las categorías del catálogo activo del usuario, indicando en cada una si está disponible para simular.
+3. El usuario elige **una** categoría y confirma.
+4. La simulación queda activa: los meses futuros del horizonte pasan a mostrar su movimiento simulado (RF-SIM-002, RF-SIM-003).
+
+**Flujos alternativos:**
+- *A1 — El usuario cancela:* no se crea nada.
+- *A2 — Categoría sin datos suficientes:* la opción se ofrece **deshabilitada con el motivo visible** y no se puede elegir.
+- *A3 — Categoría ya simulada:* la opción se ofrece **deshabilitada con el motivo visible** (ya tiene una simulación).
+
+**Criterios de aceptación:**
+- [ ] La acción vive **dentro del disparador de filtro de la sección Únicos** de `/mes` (RF-VM-006); no en el header de la pantalla ni en el kebab (⋮) de una fila.
+- [ ] Se elige **una categoría por vez**. Pueden coexistir **varias simulaciones**, a lo sumo **una por categoría**.
+- [ ] **Mínimo de datos:** una categoría se puede simular solo si tiene **3 o más meses con movimientos únicos** dentro de la ventana histórica (RF-SIM-002). La que no llega se ofrece **deshabilitada con el motivo visible** — nunca oculta.
+- [ ] El universo ofrecido es el **catálogo de categorías activas** del usuario (las eliminadas no se ofrecen, RN-007), **no** las categorías presentes en el mes visualizado: la simulación se apoya en la ventana histórica, que no depende del mes navegado.
+- [ ] Lo que persiste es la **simulación** (usuario + categoría). **No se crean movimientos ni filas** de ningún tipo.
+- [ ] La simulación **no es editable**: crear (este RF) y eliminar (RF-SIM-004) son sus dos únicas operaciones. El monto simulado no se ajusta a mano.
+- [ ] Crear una simulación **no** genera entrada de historial (excepción a RN-027 documentada en RF-SIM-004).
+
+**Notas:**
+- El shape de la entidad y el contrato del endpoint se fijan en implementación (`docs/data-model.md`); este RF no los prescribe.
+
+---
+
+#### RF-SIM-002 — Cálculo del movimiento simulado
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El monto y la dirección del movimiento simulado de cada mes futuro se derivan de una **regresión lineal por mínimos cuadrados** sobre el **total mensual con signo** de los movimientos únicos de la categoría en los **12 meses anteriores** al mes en curso. El cálculo es **on-the-fly en cada lectura** (RN-006): no se persiste ningún monto. |
+| **Actor** | Sistema |
+| **Prioridad** | Alta |
+| **Precondiciones** | Existe una simulación sobre la categoría. |
+
+**Regla de cálculo** (`A` = mes en curso):
+
+- **Ventana histórica — los 12 meses anteriores,** `[A−12 .. A−1]`. El mes en curso **no** entra: está incompleto y distorsionaría la tendencia.
+- **Serie — un punto por mes de la ventana:** el **total mensual con signo** de los únicos de esa categoría (**ingresos +, gastos −**), en la **moneda default** del usuario (cada único convertido con su propia cotización, RF-CUR-005). No aportan los únicos **anulados** (RN-020) ni los **eliminados** (RF-HIST-006).
+- **Los meses sin únicos de la categoría valen 0 y entran igual** a la serie: no se saltean. La ausencia **es dato** — si la categoría aparece 3 de cada 12 meses, la expectativa mensual **es** baja y eso es correcto.
+- **Eje:** los meses de la ventana ocupan las posiciones `1..12` (`A−12` = 1 … `A−1` = 12); el **mes en curso ocupa la 13** aunque no se calcule, y cada mes futuro la que le sigue (`A+1` = 14, `A+2` = 15, …). La recta se ajusta sobre los 12 puntos y se **extrapola** evaluándola en la posición del mes futuro.
+- **Mínimo de datos — 3 meses:** se necesitan **3 o más meses con únicos** de la categoría dentro de la ventana. Por debajo de ese piso **no hay simulación**: la categoría no se ofrece (RF-SIM-001) y una simulación existente cuya categoría queda por debajo **deja de derivar movimientos** sin eliminarse (queda **pausada**, y vuelve a proyectar sola si la categoría recupera datos).
+- **Dirección = resultado del cálculo.** El **signo del valor proyectado** define el tipo del movimiento simulado: **negativo → gasto**; **positivo → ingreso**. La magnitud es `|valor|`. El usuario elige **solo la categoría**, nunca la dirección; una misma simulación puede resultar gasto en un mes e ingreso en otro.
+- **Redondeo:** el valor se redondea a **centavos enteros** (RN-002). Si redondea a **0**, ese mes **no genera movimiento simulado** (no se muestra una fila de $0).
+- **Horizonte — desde `A+1` hasta diciembre del año en curso**; si ese tramo tiene **menos de 6 meses**, se extiende hasta `A+6` (el tramo simulado nunca es menor a 6 meses). El **mes en curso y los meses pasados nunca se simulan**: el mes en curso ya tiene sus únicos reales y simular encima los duplicaría.
+- **Recálculo permanente:** la simulación no congela ningún número. El cálculo se rehace en cada lectura con la ventana y el horizonte **vigentes en ese momento**; al avanzar el calendario, un mes simulado deja de ser futuro y **deja de derivarse solo**, sin dejar residuo.
+
+**Criterios de aceptación:**
+- [ ] La serie de ajuste son los **12 meses anteriores** al mes en curso, con el **total mensual con signo** de los únicos de la categoría (ingresos +, gastos −) en la moneda default del usuario.
+- [ ] Los meses **sin únicos** de la categoría entran a la serie **con valor 0**; no se omiten ni se interpolan.
+- [ ] El valor de un mes futuro es la **recta de mínimos cuadrados evaluada en la posición de ese mes**, con el mes en curso ocupando su posición en el eje aunque no se calcule.
+- [ ] Con **menos de 3 meses con únicos** en la ventana no se produce ningún movimiento simulado.
+- [ ] El **signo del valor** define el tipo: negativo → **gasto**, positivo → **ingreso**; la magnitud del movimiento es el valor absoluto.
+- [ ] Un valor que **redondea a 0 centavos** **no genera** movimiento simulado ese mes.
+- [ ] El horizonte va de `A+1` a **diciembre del año en curso**, extendido a `A+6` cuando ese tramo queda por debajo de 6 meses. El **mes en curso y los pasados nunca** llevan movimientos simulados.
+- [ ] El cálculo es **on-the-fly**: no se persiste ningún monto, y navegar dos veces al mismo mes futuro recalcula con los datos vigentes.
+
+**Notas:**
+- **Relación con RF-REP-015 (proyección de gastos fijos).** Ambas son proyecciones a futuro sobre datos del usuario, pero de **dominio y método distintos**: RF-REP-015 proyecta **fijos** con un esqueleto determinista × tasa de encarecimiento; la simulación proyecta el **total de únicos de una categoría** por regresión lineal. Lo que se comparte es la **infraestructura de proyección del backend**, abstraída para servir a ambos cálculos — la fórmula de cada uno es propia y no se reusa la del otro.
+- **Limitación de moneda.** El ajuste se calcula sobre la serie en la **moneda default** (montos ya convertidos con la cotización de cada único), no sobre la moneda propia de cada movimiento: parte de la variación de tipo de cambio queda mezclada en la tendencia. Es la misma limitación conocida de RF-REP-015.
+- La regresión lineal es deliberadamente simple: captura **nivel y tendencia**, no estacionalidad. Un gasto anual concentrado en un mes se reparte como tendencia, no se replica en su mes.
+
+---
+
+#### RF-SIM-003 — Movimientos simulados en la Vista del mes
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | En un mes futuro dentro del horizonte, cada simulación activa aporta a la sección **Únicos** de `/mes` **un** movimiento simulado, derivado al vuelo (RF-SIM-002) y **claramente distinguible** de los movimientos reales. Suma a los totales del mes y entra en la evaluación de límites; fuera de `/mes` no existe. |
+| **Actor** | Sistema |
+| **Prioridad** | Alta |
+| **Precondiciones** | El mes visualizado es futuro y está dentro del horizonte de al menos una simulación activa. |
+
+**Contenido del movimiento simulado:** la **categoría simulada** (su identidad visible), el **tipo** derivado del signo, la **magnitud** en la moneda default del usuario y una marca de **simulado**. **No tiene** instante (día ni hora), método de pago, descripción propia, cotización propia ni débito automático.
+
+**Criterios de aceptación:**
+- [ ] Cada simulación activa aporta **como máximo un** movimiento simulado por mes futuro del horizonte, en la sección **Únicos**; un mes cuyo valor redondea a 0 no lleva ninguno (RF-SIM-002).
+- [ ] El movimiento simulado es **claramente distinguible** de los reales en la lista; el detalle visual lo define `control-design` (`docs/design.md`).
+- [ ] **Totales del mes (RF-VM-002):** suma su **magnitud** al bucket de su tipo (RN-019) y al **subtotal** y al **contador** de la sección Únicos.
+- [ ] **Filtros de la sección (RF-VM-006):** participa como cualquier único — lo alcanzan tanto el filtro de tipo como el de categoría.
+- [ ] **Orden (RF-VM-001):** en el orden **por monto** entra por magnitud como cualquier ítem; en el orden **por fecha** —que no tiene— va **al final** de la sección.
+- [ ] **Límites (RF-LIM-003, RF-LIM-004):** los datos que `/mes` emite ya lo incluyen, así que las **marcas pasivas** lo evalúan como a cualquier dato del mes y la **alerta activa** proyecta sobre una base que lo contiene (aplica al guardar un **único** en un mes simulado; fijos, cuotas y calculados se chequean contra el mes en curso, que nunca tiene simulados).
+- [ ] **No entra en `/reportes`** —ni en las cards, ni en las series anuales (módulo 3.9)—: los reportes analizan lo **real**. Tampoco en el **dashboard**, que muestra el mes en curso (nunca simulado).
+- [ ] **Sin acciones de movimiento:** la fila simulada **no** expone kebab (⋮) —ni editar, ni duplicar, ni anular, ni eliminar, ni crear calculado— ni **card de detalle** (RF-VM-007), y **no puede ser origen** de un movimiento calculado.
+- [ ] No genera ni ocupa ninguna fila en la base: existe solo en la respuesta del mes que lo deriva.
+
+---
+
+#### RF-SIM-004 — Eliminar una simulación
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Eliminar la simulación es la única forma de darla de baja. Se elimina desde el **mismo disparador donde se crea** (el filtro de la sección Únicos de `/mes`), que lista las simulaciones del usuario. Sus movimientos simulados dejan de derivarse en el acto. La eliminación es **definitiva**: no genera entrada de historial y no se puede deshacer. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene al menos una simulación. |
+
+**Flujo principal:**
+1. El usuario abre el disparador de filtro de la sección **Únicos** de `/mes`.
+2. El sistema lista las **simulaciones** del usuario.
+3. El usuario elimina una y confirma.
+4. Los movimientos simulados de esa categoría desaparecen de todos los meses futuros y los totales se recalculan sin ellos.
+
+**Flujos alternativos:**
+- *A1 — El usuario cancela:* la simulación queda intacta.
+
+**Criterios de aceptación:**
+- [ ] La eliminación se ofrece en el **mismo punto de entrada** que la creación (RF-SIM-001), que lista las simulaciones del usuario.
+- [ ] Eliminar una simulación **deja de derivar** sus movimientos simulados en **todos** los meses futuros de inmediato; los totales, subtotales y contadores de esos meses se recalculan sin ellos.
+- [ ] La eliminación es **definitiva y física**: la simulación desaparece por completo y **no se puede restaurar**. Recuperarla es volver a crearla (RF-SIM-001).
+- [ ] La eliminación **se confirma** antes de ejecutarse (es irreversible).
+- [ ] La eliminación **no genera entrada de historial** y **no aparece en `/historial`** (RF-HIST-002); tampoco la creación.
+- [ ] La categoría de una simulación eliminada vuelve a estar **disponible para simular** de inmediato (RF-SIM-001).
+
+**Notas — excepción explícita a RN-027:**
+- **La simulación de categoría queda entera fuera del historial de cambios.** Ni su creación ni su eliminación se registran, y su eliminación no es deshacible. Es la excepción que RN-027 exige documentar en el propio RF; ninguna otra funcionalidad la hereda.
+- **Por qué es admisible:** una simulación **no contiene datos del usuario**. Lo único que persiste es la elección de una categoría (RN-029); el monto, la dirección y el horizonte se derivan al vuelo en cada lectura (RN-028) y no hay nada cargado a mano que perder. Rehacerla cuesta exactamente lo mismo que hacerla la primera vez, desde el mismo punto de entrada. La red de seguridad que RN-027 protege —no perder trabajo de carga— no tiene nada que proteger acá.
+
+---
+
 ## 4. Reglas de negocio
 
 | ID | Regla |
@@ -2871,10 +3010,12 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 | RN-022 | **Límites — naturaleza pasiva/activa y cero-impacto (RF-LIM-001..005).** Un límite es una **condición única** (`dato {operador} umbral`) sobre una key hardcodeada (de `/mes`, dashboard o reportes) con umbral **número puro, sin moneda** (no hay conversión en la evaluación), de una de dos naturalezas: **pasiva** — aplica una marca visual al dato cuando cruza el umbral (read-path, sobre datos ya renderizados; superficie cableada = `/mes`, dashboard y los 5 reportes de `/reportes`); **activa** — al guardar un movimiento, si el estado proyectado cruzaría el umbral, un aviso **no bloqueante** que enumera los cruces (write-path; solo sobre las 7 keys `mes.*`; operador por polaridad techo/piso del anclaje; aplica a los 4 forms). Ninguna naturaleza modifica montos, totales, reportes ni lo que el usuario decide persistir. La evaluación es **100% client-side**; la clave `limits` del blob es opaca al backend (igual que `theme` / `reports`). **Cero-impacto (marcas y avisos):** toda **marca pasiva** (RF-LIM-003) y todo **aviso activo** (RF-LIM-004) son **condicionales** al cruce de un límite habilitado; con la config vacía (sin límites o todos deshabilitados) no se produce ninguna marca ni aviso y cada superficie se ve y se comporta **exactamente igual** que sin la feature. El **popover informativo** (RF-LIM-005) **no es marca ni aviso** —enumera qué límites observan la superficie, sin resaltar dato ni interrumpir el guardado— y queda fuera de esta regla: su ícono disparador se monta con **≥1 límite (habilitado o no)** para esa superficie. Un dato observado por varios límites pasivos que cruzan muestra **una** marca (la más fuerte); el texto accesible enumera todos. |
 | RN-023 | El monto de un movimiento no puede exceder **2.147.483.647 centavos** ($21.474.836,47), tope del entero de 32 bits con que se persiste `amountCents`. Aplica a únicos, fijos y cuotas (en cuotas, sobre el monto **por cuota**). Excederlo produce `400`. Ver `data-model.md`, §Tope de monto por movimiento. |
 | RN-020 | **Anulación (skip) de movimientos únicos y cuotas (RF-MU-005, RF-MC-004).** Un movimiento **único** se anula con un **flag booleano de la propia fila** (`Transaction.skipped`, sin alcance temporal: anula el movimiento entero). Una **cuota** se anula por **mes puntual** con un registro aparte `(grupo, mes)` que cancela **solo** esa instancia mensual, dejando vivo el resto del grupo. En ambos casos la acción es un **toggle reversible** y aplica a cualquier dirección (gasto/ingreso). A efectos de totales y reportes se comportan igual que la anulación de un fijo (RN-016): el ítem anulado **se sigue listando** con marca de anulado pero su monto **no suma** a los totales del mes ni a la serie anual de los reportes. Los **calculados** derivados de un único o cuota anulado **heredan** ese estado (no tienen skip propio; RF-MCALC-005). El cálculo sigue siendo on-the-fly (RN-006). |
-| RN-024 | **Alcance e identidad del historial de cambios (RF-HIST-001).** El historial registra **solo** ediciones y eliminaciones de **movimientos** —único, fijo (incluidos los calculados) y grupo de cuotas—, una entrada por operación. **No** registra creaciones, anulaciones (skip), ABM de categorías ni de métodos de pago, ni cambios de preferencias. Las entradas se **agrupan por movimiento** con una **clave estable**: `Transaction.id` para el único, la **identidad de cadena** (`Recurring.chainId`) para el fijo —**no** el id de la fila, porque editar un fijo parte la cadena y el id cambia (RN-005)— e `InstallmentGroup.id` para el grupo de cuotas. La cascada de un borrado sobre los calculados derivados (RF-MCALC-005) no genera entradas propias: viaja dentro de la entrada del origen. |
+| RN-024 | **Alcance e identidad del historial de cambios (RF-HIST-001).** El historial registra **solo** ediciones y eliminaciones de **movimientos** —único, fijo (incluidos los calculados) y grupo de cuotas—, una entrada por operación. **No** registra creaciones, anulaciones (skip), ABM de categorías ni de métodos de pago, cambios de preferencias, ni el alta y la baja de simulaciones de categoría (excepción de RF-SIM-004). Las entradas se **agrupan por objetivo** con una **clave estable**: `Transaction.id` para el único, la **identidad de cadena** (`Recurring.chainId`) para el fijo —**no** el id de la fila, porque editar un fijo parte la cadena y el id cambia (RN-005)— e `InstallmentGroup.id` para el grupo de cuotas. La cascada de un borrado sobre los calculados derivados (RF-MCALC-005) no genera entradas propias: viaja dentro de la entrada del origen. |
 | RN-025 | **Deshacer: LIFO por movimiento y sin rastro (RF-HIST-003, RF-HIST-004).** Deshacer restaura el estado previo guardado en la entrada y **borra la entrada**. El deshacer **no genera entrada nueva** ni se registra de ninguna forma: no queda rastro de que el cambio existió (Control es un diario personal, no un log de auditoría). El orden es **secuencial LIFO por movimiento**: solo se puede deshacer la entrada **más reciente** de cada movimiento; las anteriores quedan **bloqueadas** hasta que se deshagan las posteriores. El bloqueo no cruza movimientos. Las entradas bloqueadas se listan siempre, deshabilitadas y con el motivo visible; el desbloqueo se ofrece como deshacer en cadena de los N posteriores. |
 | RN-026 | **Borrado lógico de movimientos y retención (RF-HIST-005, RF-HIST-006).** Eliminar un movimiento lo **marca como eliminado** en lugar de borrarlo: deja de aparecer en **toda** la app (listados, totales, reportes, selectores y contadores) sin excepción, y su única superficie es `/historial`. Los calculados que caen en cascada con él tampoco se borran físicamente, por lo que se restauran junto con el origen al deshacer. Las entradas de historial se purgan por **dos límites, el que ocurra primero**: máximo **5 entradas por movimiento** (al sexto cambio se descarta la más antigua **de ese movimiento**) y vencimiento a los **31 días** de registrada. Al purgarse la entrada de una eliminación, el movimiento se borra **físicamente** y la eliminación es definitiva. |
-
+| RN-027 | **Historial por defecto en toda mutación de datos del usuario (RF-HIST-001..006).** Toda operación que **modifica o elimina** datos del usuario se **registra en el historial** y es **deshacible**: nace con su captura del estado previo, su entrada agrupada por una clave estable, su undo LIFO y su purga por retención. Es el default del sistema, no un agregado opcional: una funcionalidad que mute datos **no se considera completa** sin su registro de historial. La **única** forma de quedar fuera es una excepción **documentada de forma explícita en el propio RF** de esa funcionalidad. El alcance registrado hoy y sus excepciones vigentes están en RN-024 y en la tabla de alcance de RF-HIST-001. |
+| RN-028 | **Cálculo del movimiento simulado de una categoría (RF-SIM-002).** Con `A` = mes en curso: la serie de ajuste son los **12 meses anteriores** `[A−12 .. A−1]`, un punto por mes con el **total mensual con signo** de los movimientos **únicos** de la categoría (ingresos +, gastos −) en la **moneda default** del usuario, sin los anulados (RN-020) ni los eliminados (RN-026). Los meses **sin únicos de la categoría valen 0 y entran igual**: la ausencia es dato. Sobre esos 12 puntos se ajusta una **regresión lineal por mínimos cuadrados** y se **extrapola** evaluándola en la posición del mes futuro (eje: `A−12` = 1 … `A−1` = 12, mes en curso = 13, `A+1` = 14, …). Se exige un **mínimo de 3 meses con únicos** en la ventana; por debajo no hay simulación. El **signo del valor proyectado define la dirección** (negativo → gasto, positivo → ingreso) y su valor absoluto, la magnitud: el usuario elige solo la categoría, nunca la dirección. El valor se **redondea a centavos enteros** (RN-002) y, si redondea a **0**, ese mes **no genera movimiento**. El **horizonte** va de `A+1` a **diciembre del año en curso**, extendido a `A+6` cuando ese tramo queda por debajo de 6 meses; el **mes en curso y los pasados nunca se simulan**. El cálculo es **on-the-fly en cada lectura** (RN-006): no se persiste ningún monto y la ventana y el horizonte son siempre los vigentes al momento de leer. |
+| RN-029 | **Alcance y ciclo de vida de la simulación de categoría (RF-SIM-001, RF-SIM-003, RF-SIM-004).** La simulación alcanza **solo movimientos únicos**: fijos y cuotas ya se derivan on-the-fly en cualquier mes (RN-006), así que el único hueco de un mes futuro son los Únicos. Persiste **solo la configuración** (usuario + categoría), con **a lo sumo una simulación por categoría** y varias a la vez; **no es editable** —se crea y se elimina, nada más—. Cada simulación aporta **como máximo un** movimiento simulado por mes futuro del horizonte a la sección **Únicos** de `/mes`, distinguible de los reales, que **suma a los totales del mes** (RF-VM-002, con la imputación por tipo de RN-019), participa de los **filtros de sección** (RF-VM-006) y entra en la **evaluación de límites** pasiva y activa (RN-022). **No entra en `/reportes`** ni en las series anuales —los reportes analizan lo real— ni en el dashboard (que muestra el mes en curso, nunca simulado). La fila simulada **no expone acciones de movimiento ni card de detalle** y no puede ser origen de un calculado. Ni crear ni eliminar una simulación se registran en el historial, y su eliminación **no es deshacible**: es la excepción a RN-027, documentada en RF-SIM-004. |
 ---
 
 ## 5. Requerimientos no funcionales
@@ -2938,7 +3079,9 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 | Identidad de cadena de un fijo | Identificador estable, compartido por todas las filas `Recurring` de un mismo fijo lógico, que sobrevive a los splits del pasado. Es a lo que se vincula un movimiento calculado (no a una fila puntual). Ver `docs/data-model.md`, §Identidad de cadena estable. |
 | Modo de color | Modo claro u oscuro de la app, elegible desde el chrome global (sidebar) entre **Sistema** (default, sigue al dispositivo), **Claro** y **Oscuro**. Persiste por usuario en el blob de preferencias (`theme`). Ver RF-APP-001. |
 | Movimiento fijo | Plantilla recurrente mensual activa hasta que el usuario la elimina. Sin día específico dentro del mes. |
+| Movimiento simulado | Movimiento **derivado al vuelo** que una simulación de categoría aporta a la sección Únicos de un mes futuro. No existe como fila, no es editable ni accionable y solo vive en `/mes`. Su dirección y magnitud salen del cálculo (RN-028). Ver RF-SIM-003. |
 | Movimiento único | Movimiento que ocurrió en un instante específico (fecha y hora), una sola vez. Se almacena en UTC junto con su zona horaria original; ver RN-011. |
 | Scope de categoría | Indica a qué tipo de movimiento aplica la categoría: `BOTH`, `EXPENSE`, o `INCOME`. |
+| Simulación de categoría | Configuración del usuario (usuario + categoría) que proyecta a los meses futuros el total de **movimientos únicos** de esa categoría, por regresión lineal sobre los 12 meses anteriores. Se crea y se elimina desde el filtro de la sección Únicos de `/mes`; no se edita y eliminarla es definitivo. Ver módulo 3.15 (RF-SIM-001..004), RN-028/029. |
 | Soft delete | Eliminación lógica: el registro se marca con `deletedAt` pero no se borra físicamente. |
 | `startMonth` | Primer día del mes a partir del cual un movimiento fijo o grupo de cuotas comienza a aparecer. |

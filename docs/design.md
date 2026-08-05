@@ -3883,6 +3883,304 @@ Elementos que esta spec introduce y que **no** estaban en `screens.md` §11 ni e
 - [ ] En viewport bajo, el **modal de cadena** (el más alto) se ve entero, scrollea el cuerpo y mantiene el footer pineado.
 - [ ] Todo lo anterior se verifica igual en **modo claro y oscuro**.
 
+## Simulación de categoría (`/mes`) — fila simulada, disparador y ciclo de vida
+
+Implementa **RF-SIM-001..004** (RN-028, RN-029). Toda la feature vive en **una sola pantalla** (`/mes`) y en **un solo punto de entrada** (el disparador de filtro de la sección **Únicos**). Nada de esto aparece en `/reportes`, en el dashboard ni en el mes en curso.
+
+### 0. Encuadre y cero-impacto
+
+**Restricción rectora — sin simulaciones activas, `/mes` se ve y se comporta exactamente igual que hoy.** Es la misma restricción que rige las marcas de límites: ningún elemento de esta spec se monta de forma incondicional salvo **uno**: el botón **"Simular categoría"** dentro del popover de filtro de Únicos, que es el punto de entrada y por lo tanto siempre está. Todo lo demás —fila simulada, glifo de subtotal, línea de composición bajo los totales, lista de activas, nota de simulación pausada— es **condicional** al estado real.
+
+**Las tres naturalezas y dónde vive cada una:**
+
+| Naturaleza | Superficie | Condición de montaje |
+|---|---|---|
+| **Configurar** (crear / eliminar / ver activas) | banda "Simulación" del popover de Únicos | el botón, siempre; la lista, con ≥1 activa |
+| **Ver el resultado** | fila simulada en la sección Únicos | mes **futuro** dentro del horizonte, valor ≠ 0 |
+| **Entender la composición** | glifo en el subtotal + línea bajo los totales | ≥1 fila simulada **visible tras los filtros** |
+
+**Los popovers de Fijos y Cuotas no cambian en nada.** La banda de simulación se monta **solo** en el popover de Únicos (RN-029: la simulación alcanza solo movimientos únicos).
+
+**Glifo canónico de la feature: `ChartSpline`** (lucide). Un mismo glifo en las tres superficies (botón de la banda, adorno del subtotal, línea de composición) para que el usuario ate las tres sin leer. *Descartados:* `Sparkles` (sugiere "magia/IA", y esto es una regresión lineal explicable), `TrendingUp` (colisiona con la semántica de dirección — leería "ingreso/sube" sobre un ítem que puede ser gasto), `Waypoints` (genérico).
+
+### 1. Fila del movimiento simulado
+
+Vive en la sección **Únicos** de un mes futuro dentro del horizonte, mezclada con las filas reales. **Debe ser inequívocamente distinguible de un único real de un vistazo, sin leer texto** (RF-SIM-003).
+
+**Anatomía — mismo grid que la fila real** (`40px 1fr auto auto auto`, `padding var(--row-pad) 18px`, hairline entre hermanas). Se conserva el grid **exacto** por una razón dura: la columna de montos tiene que seguir alineada entre filas reales y simuladas (regla dura 3 — cifras tabulares). Lo que cambia es el **tratamiento**, nunca la geometría.
+
+**1.1 Col 1 — caja de ícono hueca y punteada (la señal principal).** Misma caja 40×40 `rounded-[11px]` y mismo glifo de dirección (`ArrowDown` gasto / `ArrowUp` ingreso, 19px, `stroke-width 2.2`), pero:
+
+- **Real:** relleno `--expense-soft` / `--income-soft`, glifo `--expense-ink` / `--income-ink`, sin borde.
+- **Simulada:** **sin relleno** (`transparent`), **borde `1.5px dashed`** en `--expense` / `--income`, glifo en `--expense-ink` / `--income-ink`.
+
+**Por qué el glifo no cambia y el tratamiento sí:** la flecha comunica **dirección** (gasto/ingreso) y eso es idéntico en las dos filas — cambiarla por un glifo de "tendencia" rompería la lectura de tipo que el usuario ya tiene automatizada y obligaría a aprender dos vocabularios para el mismo dato. Lo que cambia es la **naturaleza** del ítem (todavía no ocurrió), y para eso el DS ya tiene un idioma: **`dashed` = acá todavía no hay nada** (empty de sección, recuadro `[+]` de reportes, empty de `/historial`). Hueco + punteado se lee "contorno de algo que aún no está" a distancia de vistazo, sin leer una palabra. *(Consistencia + affordance.)*
+
+**1.2 Col 2 — nombre y sublínea.** El simulado **no tiene descripción propia**: su identidad es la categoría.
+
+- **Nombre** (14.5/600 `--ink`): **el nombre de la categoría**.
+- **Sublínea, zona de identidad** (12px, molde de *Sublínea del ítem de `/mes`*): `[chip "Simulado"] ● {Categoría} · tendencia de 12 meses`.
+  - **Chip "Simulado"** — mismo molde exacto que el chip "Anulado": `rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em] shrink-0`, **primer segmento**. Es el respaldo textual de la señal visual (doble codificación: nunca se depende solo de la forma ni solo del color). Un simulado **nunca** puede estar anulado, así que los dos chips jamás compiten por el slot.
+  - **Punto de categoría 6px + nombre** en `--ink-2`, igual que cualquier fila: mantiene la columna de anclas de color pareja en toda la lista.
+  - **`· tendencia de 12 meses`** — último segmento, `--muted`, minúscula (mismo registro que la etiqueta de frecuencia del fijo). Ocupa el espacio que en un único real ocupa la nada y responde de antemano la única pregunta que el número dispara ("¿de dónde sale esto?"). Trunca primero al angostarse, por ser el último. *(Copy sugerido; el texto final es del analista.)*
+- **Marca de límite con efecto `badge` — va inmediatamente después del chip "Simulado":** `[Simulado] [badge de límite] ● {Categoría} · tendencia de 12 meses`. *(Confirmado — el frontend lo resolvió así replicando el patrón vigente y es correcto.)*
+  - Es el **mismo slot y el mismo orden** que ya rige en la fila real: el catálogo de marcas manda el `badge` al *"primer segmento de identidad (mismo slot que «Anulado»)"*, y la sublínea del ítem lo ordena `[Anulado] [badge de límite] ● Categoría …`. El chip "Simulado" ocupa exactamente la posición de "Anulado" (§1.2), así que la marca cae detrás sin decisión nueva. *(Consistencia — un problema ya resuelto no se resuelve dos veces.)*
+  - **El orden entre los dos chips no es arbitrario:** "Simulado" declara **qué es** la fila (su naturaleza, siempre presente) y el badge declara **qué le pasó** al dato (condicional). Lo estable primero deja el borde izquierdo de la sublínea alineado en todas las filas de la sección; invertirlos correría el chip de naturaleza a una posición distinta según haya o no límite cruzado. *(Jerarquía visual.)*
+  - **Nunca hay tres chips:** un simulado no puede estar anulado (§1.2), así que el par máximo es `[Simulado] [badge]`.
+  - Los otros efectos del catálogo no cambian: **`glyph`** va al cluster de la zona de estados (primero, como siempre), **`fill`** pinta el fondo de la fila —única excepción admitida al "sin hover tint" de §1.6— y **`tint` sigue prohibido** (el monto es tipado). Con efecto **`bold`**, el peso sube **solo en la cifra**: el prefijo `≈` conserva `--muted` y su peso normal, porque califica al número y no es parte de él (§1.4).
+- **Zona de estados:** solo la **marca de límite** si aplica (un simulado entra a la evaluación de límites, RN-022). El glifo `GitBranch` nunca aplica: un simulado no puede ser origen de un calculado.
+
+**1.3 Col 3 — vacía.** El simulado no tiene instante (RF-SIM-003). La columna queda vacía, exactamente como en un fijo — precedente ya vigente, no se inventa nada.
+
+**1.4 Col 4 — monto con prefijo `≈`.** Mono tabular, 15.5px/600, **color por tipo** (gasto `--ink`, ingreso `--income-ink`) y signo, idéntico a una fila real, precedido de **`≈` (U+2248)** en `--muted` con `mr-[3px]`, **dentro del mismo span mono**:
+
+```
+≈ −$12.500,00
+```
+
+- El `≈` es la segunda señal sin-texto y la única que aparece **en el dato mismo**: dice "esta cifra es una estimación" en el lugar exacto donde el usuario podría tomarla por un hecho. *(Prevención de error.)*
+- **No rompe la alineación tabular:** la columna es `text-right` y la fuente es monoespaciada, así que los dígitos siguen alineados al borde derecho con las filas reales.
+- **No se recolorea ni se atenúa el monto.** El tipo manda el color (regla dura 1) y el simulado **sí computa** (§5).
+
+**1.5 Col 5 — el hueco del kebab se reserva, no se colapsa.** La fila simulada **no tiene kebab** (RF-SIM-003: sin acciones). En su lugar va un **placeholder inerte de 32×32** (`h-8 w-8`, exactamente la caja del `KebabMenu`), `aria-hidden`, `pointer-events-none`, sin borde ni fondo.
+
+**Por qué se reserva y no se elimina:** si la columna desaparece, el monto de las filas simuladas se corre 32px a la derecha respecto de las reales y la **columna de dinero deja de alinearse** — el defecto más caro posible en una lista de cifras (regla dura 3, jerarquía). *Alternativa evaluada y descartada:* usar ese hueco para el chip "Simulado". Rechazada: pondría un elemento con aspecto de control en la **columna de acciones**, que es exactamente la que esta fila no tiene — falsa affordance.
+
+**1.6 La fila no es interactiva.** No abre card de detalle (RF-SIM-003), así que:
+
+- **Sin** `role="button"`, **sin** `tabIndex`, **sin** handler de click ni de teclado, **sin** focus ring.
+- **Sin hover tint** (`hover:bg-panel-2` no se aplica). `cursor-default`.
+- La ausencia de respuesta al hover es una señal más —la descubre quien interactúa, no quien mira— y sobre todo es **obligatoria**: pintar hover sobre una fila que no responde es prometer una acción que no existe. *(Affordance.)*
+- **Excepción:** el fondo ámbar del efecto `fill` de una marca de límite **sí** se aplica (es una marca sobre el dato, no un estado de interacción).
+
+**1.7 La fila NO se atenúa.** Nada de `opacity-[0.55]`. Ese atenuado significa, en toda la app, **"no computa"** (ítem anulado) — y el simulado computa: suma al subtotal, al contador y a los totales. Atenuarlo diría exactamente lo contrario de lo que hace. Mismo criterio ya cerrado para la entrada bloqueada de `/historial`. *(Jerarquía + consistencia.)*
+
+**1.8 Orden.** Por **monto**, entra por magnitud mezclado con las reales; por **fecha**, va **al final** de la sección (no tiene instante). **Sin separador, sin subgrupo, sin encabezado propio**: es un ítem más de la lista y su naturaleza ya está codificada en la fila. Meterlo en un bloque aparte lo convertiría en una sección fantasma que el usuario tendría que aprender.
+
+**Resumen de señales de la fila:** 3 sin texto (caja punteada hueca · prefijo `≈` · sin hover) + 1 textual (chip "Simulado"). Ninguna depende solo del color.
+
+### 2. Banda "Simulación" en el popover de filtro de Únicos
+
+El popover de sección tiene hoy dos bloques (**tipo** y **categorías**). La simulación entra como **tercer bloque, en registro distinto**, no como una tercera fila del mismo cajón.
+
+**El problema y la decisión.** Filtrar es *"qué de esto veo"*; simular es *"qué contiene el mes"*. Son dos naturalezas y apilarlas sin demarcación convierte al popover en un menú misceláneo donde el usuario deja de saber qué está tocando. *Alternativas evaluadas:*
+
+- **(A) Tercer bloque al final, con el mismo tratamiento que los otros dos.** Descartada: queda **después** de una lista con scroll interno de 280px — el usuario que no scrollea nunca la ve, y no hay nada que le diga que las dos mitades del popover hacen cosas distintas.
+- **(B) Dos solapas (Filtros / Simulación).** Descartada: en 260px, dos solapas para dos ítems es más cromo que contenido, y esconde el punto de entrada único de la feature detrás de un click extra.
+- **(C, elegida) Banda fija al pie, recesada y rotulada.** Queda **fuera** del scroll de las categorías (siempre visible al abrir), se demarca por **superficie** (`--panel-2`) y por **divisor fuerte** (`--line`, no `--hair`), y conserva el orden de lectura natural: primero lo que recorta lo que ves, al final lo que agrega contenido al mes.
+
+**Anatomía de la banda** (solo en la sección **Únicos**):
+
+- **Divisor superior:** `border-t border-line` (1px, más fuerte que el `--hair` que separa tipo de categorías — el salto de línea señala el cambio de naturaleza).
+- **Superficie:** `bg-panel-2`, `px-3 py-[10px]`, `flex flex-col gap-[8px]`. `shrink-0` (nunca scrollea fuera de alcance).
+- **Eyebrow:** 11px/600 uppercase `.08em` `--muted` — **"Simulación"**.
+- **Botón "Simular categoría"** — **siempre presente**, ancho completo: molde outline del DS (`bg-panel border border-line rounded-[var(--r-ctl)]`), `min-h-[34px]`, `justify-center gap-[6px]`, texto 12.5/600 `--ink-2`, glifo **`ChartSpline` 15px**. Hover: `bg-panel-3` + texto `--ink`. Focus: ring `--accent-soft` 3px. Abre el **modal** de §3 y **cierra el popover** (un solo overlay a la vez — regla del DS ya vigente en la fila de movimiento).
+- **Sin simulaciones activas:** debajo del botón, una línea 11.5px `--muted`: *"Proyecta una categoría a los meses futuros."* Nada más — sin caja dashed, sin ilustración: es un bloque de 3 líneas dentro de un popover, no una pantalla vacía.
+- **Con ≥1 activa:** la **lista** (§4) debajo del botón, y al pie una nota 11.5px `--muted`: *"Se proyecta hasta {mes} {año}."*
+
+**El botón va arriba y la lista abajo** para que su posición sea **estable** sea cual sea la cantidad de simulaciones: es el control que se busca, y un target que se mueve según cuántos ítems haya es un target peor.
+
+**El punto indicador `--accent` del disparador NO cambia de significado.** Sigue queriendo decir **"esta sección está filtrada"** (tipo ≠ Ambos u orden/categoría ≠ default). Una simulación activa **no** lo enciende: no recorta lo que ves. Sobrecargarlo destruiría la única lectura que hoy es inequívoca en la cabecera. Que haya simulaciones activas se ve donde importa —en el mes— vía §1 y §5.
+
+### 3. Modal "Simular categoría" — selector con motivo visible
+
+**Por qué modal y no un sub-panel dentro del popover.** Un popover dentro de un popover es frágil (los dos cierran por click-fuera y por scroll) y, sobre todo, los **motivos de deshabilitado necesitan ancho de texto** que 260px no dan sin truncar — y el motivo **nunca se oculta ni se trunca** (RF-SIM-001 A2/A3). Además es una operación de decisión con confirmar/cancelar, que en el DS es `ModalShell variant="dialog"`.
+
+- **Contenedor:** `ModalShell variant="dialog"` (`max-w-[440px]`). Cierra con **✕ y `Esc`**; el clic en el scrim **no** cierra (modal de decisión).
+- **Título** (18/700): **"Simular categoría"**.
+- **Bajada** 13px `--muted`, `max-w-[46ch]`: *"Se proyecta una categoría a los meses futuros a partir de sus últimos 12 meses. Alcanza hasta {Mes AAAA}."* Es donde el horizonte se explica: en el momento en que el usuario opta por la feature (ver §7).
+- **Lista de categorías** — `role="radiogroup"` `aria-label="Categoría a simular"`, universo = **catálogo de categorías activas** del usuario (no las presentes en el mes). Fila: `flex items-center gap-[10px] px-[10px] py-[8px] rounded-[var(--r-ctl)]`, `min-h-[38px]`.
+  - `[radio 16px] [● color 10px radio 3px] [nombre 13px] ····· [motivo, derecha]`
+  - **Radio:** círculo 16px `border --line-strong`; seleccionado `border-accent bg-accent` con punto blanco 6px (mismo molde que el checkbox del filtro de categorías).
+  - **Habilitada:** nombre `--ink`; hover `bg-panel-2`; seleccionada `bg-panel-2`; focus ring `--accent-soft` 3px.
+  - **Orden: el del catálogo, sin reagrupar.** Las deshabilitadas **no** se mandan al fondo: el usuario busca *su* categoría por nombre y una lista que se reordena según un estado que él no ve es impredecible. Lo que evita el "cementerio" no es esconderlas, es que cada una diga por qué. *(Consistencia + prevención de error.)*
+- **Estados deshabilitados — el motivo siempre visible, nunca un tooltip:**
+
+| Caso | Fila | Motivo (12px `--muted`, a la derecha) |
+|---|---|---|
+| Menos de 3 meses con datos | `aria-disabled="true"`, `tabIndex={-1}`, `cursor-not-allowed`, radio `--faint` sin relleno, nombre `--muted` | **"Necesita 3 meses con datos (tiene {N})"** — sin `{N}` disponible: *"Necesita 3 meses con datos"* |
+| Ya simulada | ídem | **"Ya la estás simulando"** |
+
+  - **El punto de color NO se atenúa** aunque la fila esté deshabilitada: es la identidad, y el usuario la usa para encontrar la categoría. Lo que está condicionado es la **selección**, no la lectura. *(Mismo criterio que la entrada bloqueada de `/historial`.)*
+  - El motivo va asociado por **`aria-describedby`**: se enuncia en la lista, sin obligar a nada.
+  - **Contención del motivo:** la fila es `flex-wrap`; si el motivo no entra al lado del nombre, **baja entero a una segunda línea** de la misma fila. **Nunca** trunca ni se esconde.
+- **Footer:** `Cancelar` (`variant="ghost" size="sm"`) + **`Simular`** (`variant="default" size="sm"`, primario índigo; **`disabled` hasta que haya una categoría elegida**; en carga **"Simulando…"** + `disabled`).
+- **Estados de la lista:** *carga* → 4 filas fantasma del sistema de skeletons (`SkeletonCircle` 16 + `SkeletonBlock` 10 + `SkeletonLine` 13px ~40%), contenedor `role="status" aria-label="Cargando categorías"`. *Error* → texto inline 13px `--expense-ink`: *"No se pudieron cargar las categorías. Cerrá y volvé a intentar."* *Todas deshabilitadas* → la lista se muestra **igual, completa, con sus motivos** (no hay empty especial: el motivo por categoría **es** la explicación). *Sin categorías activas* (borde teórico) → caja dashed con la línea *"No tenés categorías activas."*
+- **Al confirmar:** cierra el modal, **toast de éxito** *"Simulación creada."*, y el mes visualizado se recarga. Si el mes visualizado es **futuro y dentro del horizonte**, su fila simulada aparece y los totales cambian en el acto; si es el mes en curso o un pasado, **no se ve nada cambiar** — por eso el toast es obligatorio: es la única confirmación posible en ese caso. *(Feedback.)*
+- **Error al guardar:** `toast.error` y **el modal queda abierto** con la selección intacta (RNF-008), botón restaurado.
+
+### 4. Lista de simulaciones activas y eliminar
+
+Dentro de la banda (§2), debajo del botón. **Es la única superficie donde se ve el conjunto de simulaciones del usuario.**
+
+- **Fila:** `flex items-center gap-[8px] py-[6px]`, `min-h-[30px]`.
+  `[● color 8px] [nombre categoría 12.5px --ink, truncate] ····· [chip de estado, si aplica] [botón eliminar]`
+- **Botón eliminar:** icon-only 28×28 `rounded-[8px]`, glifo **`Trash2` 14px** `--muted`. Hover: `bg-expense-soft` + `--expense-ink` (mismo molde que el ítem `danger` del `KebabMenu`; el rojo acá es **cromo de una acción destructiva**, no un monto teñido). Focus: ring `--accent-soft`. `aria-label="Eliminar la simulación de {Categoría}"`.
+- **Tope de alto:** con más de 4 activas la lista scrollea dentro de sí (`max-h-[132px] overflow-y-auto`), sin que el botón ni la nota de horizonte salgan de vista.
+- **Confirmación (RF-SIM-004)** — `ModalShell variant="dialog"` (`max-w-[440px]`), **cierra el popover al abrirse**:
+  - **Título:** "Eliminar simulación".
+  - **Cuerpo** (`space-y-[14px]`): frase 14px `--ink` *"Se va a eliminar la simulación de **{Categoría}**."* → **caja de identidad** (`rounded-ctl border border-line bg-panel-2 px-4 py-3`, molde exacto del diálogo de eliminar movimiento) con `● {Categoría}` → **nota de consecuencia** 12.5px `--muted`: *"Sus movimientos simulados dejan de aparecer en los meses futuros y los totales se recalculan sin ellos."*
+  - **Footer:** `Cancelar` (ghost sm) + **`Eliminar`** (`variant="destructive" size="sm"`; en carga "Eliminando…").
+  - **Éxito:** cierra, `toast` *"Simulación eliminada."*, el mes se recarga sin sus filas simuladas. **Error:** `toast.error` y el modal queda abierto.
+
+### 5. Composición del subtotal y de los totales — se señala, sin tocar las cifras
+
+Un total que mezcla real y simulado sin avisar es engañoso. Pero la cifra **no está mal**: lo que necesita revelarse es su **composición**. Por eso la señal va **al lado** del número, nunca **sobre** el número.
+
+**Lo que NO se hace, y por qué:** no se recolorea ni se atenúa ninguna cifra (los semánticos son del tipo, regla dura 1; el ámbar es de límites y diluirlo le saca fuerza a la única familia de "prestá atención" que tiene la app; el índigo no toca montos, regla dura 2). Marcar el número diría "este número está mal" cuando lo correcto es "este número incluye una estimación".
+
+**5.1 Cabecera de la sección Únicos — glifo junto al subtotal.** Reusa el slot `subtotalAdornment` ya existente en `AccordionSection`:
+
+- Glifo **`ChartSpline` 13px `--muted`**, inmediatamente **a la izquierda del número** y **a la derecha** de cualquier adorno de límite (orden en el cluster: `[marca de límite] [glifo de simulado] [subtotal]`).
+- `aria-label` + `title`: **"El subtotal incluye {N} movimientos simulados"** (singular: *"…incluye 1 movimiento simulado"*).
+- Se monta **solo** si hay ≥1 fila simulada **visible tras los filtros** de la sección. Si el filtro las deja fuera, el glifo desaparece — el subtotal ya no las incluye.
+- **El pill contador no lleva glifo.** Un adorno por cabecera alcanza; duplicarlo satura una fila que ya tiene handle, chevron, rótulo, pill, divisor, dos disparadores y el subtotal.
+
+**5.2 Totales del mes — una línea de composición bajo la grilla.**
+
+- **Ubicación:** inmediatamente **debajo** de la grilla de las tres stat-cards, antes del listado, alineada a la izquierda.
+- **Forma:** `inline-flex items-center gap-[6px]`, glifo **`ChartSpline` 13px `--muted`** + texto **12px `--muted`**.
+- **Copy:** *"Los totales incluyen {N} movimientos simulados."* — singular con frase propia: *"Los totales incluyen 1 movimiento simulado."* (regla de conteo transversal: ningún plural se arma concatenando numeral + sustantivo plural).
+- **Cero-impacto de espaciado:** cuando la línea **no** está, la grilla conserva su `mb-6` actual y el layout es **idéntico byte a byte** al de hoy; cuando está, la grilla pasa a `mb-[10px]` y la línea lleva el `mb-6`. El bloque total no cambia de alto.
+- **Una sola línea para las tres cards**, no un qualifier por card: la composición es del **mes**, no de cada bucket, y repetirla tres veces es ruido.
+- **Condición de montaje:** ≥1 fila simulada visible tras los filtros (misma condición que 5.1).
+
+**Por qué acá y no un banner arriba:** un banner en cada mes futuro sería un cartel permanente para un estado que es normal y buscado. Una línea de pie bajo el dato que califica es proporcional a lo que informa. *(Carga cognitiva.)*
+
+### 6. Simulación pausada por falta de datos — el silencio se rompe en dos lugares
+
+Una simulación activa cuya categoría cayó por debajo de los 3 meses **deja de derivar movimientos sin eliminarse** (RF-SIM-002). Sin tratamiento, el usuario ve **nada** donde esperaba algo y no tiene forma de averiguar por qué. Se resuelve en las **dos** superficies donde puede preguntárselo:
+
+**6.1 En la lista de activas (§4) — el estado de la simulación.**
+
+- **Chip de estado** después del nombre: **"Sin datos"**, `rounded-[var(--r-chip)] bg-panel-3 text-muted px-[6px] py-[1px] text-[10.5px] font-semibold` — mismo molde que la etiqueta **"Desactivado"** del popover informativo de límites. Un solo idioma para "está configurado pero no está actuando".
+- **Nombre de la categoría en `--muted`** (baja de `--ink`).
+- **Segunda línea del ítem**, 11.5px `--muted`, siempre visible: *"Necesita 3 meses con datos (tiene {N}). No proyecta."*
+- **Neutro, no ámbar.** No es una advertencia de riesgo ni un error: es un estado de configuración. El ámbar está reservado a límites cruzados y erosionarlo acá le saca significado. *(Mismo criterio que el callout neutro del modal de cadena de `/historial`.)*
+- **El botón de eliminar sigue disponible** — la simulación existe, solo no proyecta; y eliminarla es lo que el usuario probablemente quiera hacer.
+
+**6.2 En el mes — una nota al pie del listado de Únicos.** El popover hay que abrirlo; la ausencia se ve sin abrir nada. Por eso la explicación también vive **donde está la ausencia**:
+
+- **Ubicación:** última fila de la tarjeta-lista de Únicos, después de todos los ítems, separada por el mismo hairline. Si la sección está **vacía**, va debajo del empty inline dashed, `mt-[8px]`.
+- **Forma:** no interactiva, `px-[18px] py-[12px]`, `inline-flex items-start gap-[6px]`, glifo **`Info` 14px `--muted`** + texto **12px `--muted`**.
+- **Copy:** *"{N} simulaciones no están proyectando: les faltan meses con datos."* — singular: *"Una simulación no está proyectando: le faltan meses con datos."*
+- **Condición:** mes **futuro dentro del horizonte** + ≥1 simulación pausada. **Independiente de los filtros de la sección** (es un estado de configuración, no un ítem filtrable).
+- **Sin acción ni link.** El arreglo (eliminarla) está a un clic, en el disparador que está justo encima, en la misma cabecera. Un link acá duplicaría un punto de entrada que la feature define como **único**.
+- *(Elemento no previsto en `screens.md` §4 — ver §9.)*
+
+### 7. Meses fuera del horizonte — sin señal (decisión)
+
+Un mes futuro más allá del horizonte **no lleva ninguna señal**: se ve exactamente igual que sin la feature.
+
+- **Es lo que ya está cerrado funcionalmente** (`screens.md` §4: *"Un mes futuro fuera del horizonte, o sin simulaciones activas, se ve exactamente igual que sin la feature"*). Una señal ahí rompería la restricción de cero-impacto.
+- **Sería cromo permanente para explicar una nada.** El horizonte llega como mínimo hasta `A+6`: los meses afectados son los que el usuario visita de forma excepcional. Poner en cada uno una línea que diga "acá no se simula" es ruido en el 99% de las visitas para el 1% que se lo pregunta. *(Carga cognitiva.)*
+- **La regla se explica donde el usuario opta:** la bajada del modal de §3 (*"Alcanza hasta {Mes AAAA}"*) y la nota al pie de la banda (*"Se proyecta hasta {mes} {año}"*). Ahí el dato es accionable; en un mes lejano es una excusa.
+
+*Alternativa evaluada:* nota al pie del listado como en §6.2, con copy *"La simulación no alcanza este mes."* **Descartada** por lo anterior — y porque compite con §6.2, que sí informa una anomalía real y perdería fuerza si comparte forma con un estado normal.
+
+### 8. Contención responsive (obligatoria)
+
+**8.1 La fila simulada.** Mismo grid que la real en todo ancho; la col 2 es `min-w-0` y trunca (primero `tendencia de 12 meses`, después el nombre de categoría). El **monto nunca trunca ni envuelve** (`whitespace-nowrap`): el prefijo `≈` viaja pegado a la cifra y, si el ancho aprieta, cede la identidad, jamás el número (regla dura 3). El placeholder de 32px de la col 5 se mantiene en **todos** los anchos: es lo que sostiene la alineación de la columna de dinero.
+
+**8.2 El popover.** Es hoy el punto de mayor riesgo: con tres bloques puede superar el alto del viewport y dejar la banda —que contiene el punto de entrada de la feature— **fuera de pantalla** (rompe el invariante 3). Se resuelve con el popover como **columna acotada**:
+
+- `max-height: min(560px, calc(100dvh - 24px))`, `display:flex; flex-direction:column`.
+- **Bloque tipo** y **banda Simulación**: `shrink-0` — nunca se comprimen ni scrollean fuera de alcance.
+- **Bloque categorías**: única región flexible — `flex-1 min-h-0 overflow-y-auto`, `min-height: 120px` (nunca colapsa a nada).
+- **Anclaje:** si bajo el disparador no hay alto suficiente, el popover **abre hacia arriba** (mismo mecanismo `openUpward` del `KebabMenu`). Hoy `SectionFilterPanel` solo abre hacia abajo; con la banda esto pasa a ser requisito.
+- Ancho **260px** sin cambios; anclado a la derecha del disparador, que está pegado al borde derecho del contenido — no se sale por ningún costado a 640px.
+
+**8.3 Los dos modales.** `ModalShell variant="dialog"`: `max-h calc(100dvh − 48px)`, cuerpo scrolleable, footer pineado. El de **§3 es el alto** (bajada + lista de N categorías): es el que hay que verificar en viewport bajo — la lista scrollea, el footer con `Simular` queda pineado y visible.
+
+**8.4 Línea de composición (§5.2) y nota (§6.2).** Texto normal que **envuelve** a dos líneas; ninguna trunca, ninguna tiene ancho mínimo rígido.
+
+**Los cuatro invariantes en estos elementos:**
+
+1. *Sin scroll horizontal del `body` (≥640px, sidebar abierto o cerrado):* la fila simulada no agrega ancho mínimo (misma geometría que la real, col 2 truncable); el popover es de ancho fijo portaleado; las líneas de texto envuelven. A 392px de contenido (piso con sidebar abierto) la fila se lee con la identidad truncada y el monto entero.
+2. *Modales completos y scrolleables:* los dos son `ModalShell variant="dialog"`; el selector de categorías scrollea su lista con el footer pineado.
+3. *Ninguna acción inalcanzable:* la banda del popover es `shrink-0` y el popover se acota al viewport y se invierte de anclaje — el botón "Simular categoría" y los de eliminar están siempre a la vista. La fila simulada no tiene acciones, así que no aporta riesgo.
+4. *Superficies anchas scrollean dentro de sí:* aplica a las dos listas del popover (categorías y activas), cada una con su propio carril; la lista de `/mes` no es una tabla ancha.
+
+### 9. Agregados más allá del brief — estado
+
+1. **Línea de composición bajo los totales (§5.2)** y **glifo en el subtotal (§5.1)** — respuesta al pedido explícito del brief ("un total que mezcla real y simulado sin avisar es engañoso"). No están en `screens.md` §4. **Requieren reflejo del analista.**
+2. **Nota de simulación pausada en el listado (§6.2)** — respuesta al pedido explícito ("hoy eso sería silencioso; resolvelo visualmente"). Elemento nuevo de `/mes`. **Requiere reflejo del analista.**
+3. **Nota de horizonte en la banda y en la bajada del modal (§2, §3)** — **agregado no solicitado, confirmar.** Es copy de transparencia (no agrega acción ni dato persistido) y es el sustituto de no señalar los meses fuera del horizonte (§7). Si se descarta, el horizonte queda sin explicar en ningún lado.
+4. **Copy sugerido** (títulos, rótulos, motivos de deshabilitado, notas, toasts). Propuesto para que el frontend no invente; el texto final lo fija el analista.
+5. **Segmento `· tendencia de 12 meses` en la sublínea (§1.2)** — **agregado no solicitado, confirmar.** RF-SIM-003 lista el contenido de la fila y no lo incluye. Se propone porque ocupa espacio que de otro modo queda vacío y responde de antemano la pregunta que el número dispara. Si se descarta, la fila queda `[Simulado] ● Categoría` y **nada más cambia**.
+
+### 10. Reglas duras reafirmadas
+
+- **Regla dura 1 (verde = ingreso · rojo = gasto):** el simulado usa los semánticos **exactamente** para lo mismo que un real — dirección del ícono y color del monto según su **tipo derivado** (RN-028). El borde punteado de la caja usa el token semántico pleno (`--expense`/`--income`) porque comunica **ese mismo tipo**, no decoración. El chip "Simulado", el chip "Sin datos" y las notas son **neutros**. El rojo del botón de eliminar es cromo de acción destructiva (molde `danger` ya vigente), no una cifra teñida.
+- **Regla dura 2 (índigo solo marca):** aparece en el radio seleccionado del selector, en el botón primario `Simular`, en los focus rings y en el punto indicador del disparador de filtro (que **no** cambia de significado). Ninguna cifra se tiñe de acento.
+- **Regla dura 3 (dinero en mono tabular):** el monto simulado va en mono tabular con `tnum`, mismo tamaño y peso que el real, con el `≈` **dentro** del mismo span mono para no romper la alineación de la columna. Ninguna cifra trunca nunca.
+- **Regla dura 4 (claro y oscuro):** todos los tokens usados son theme-aware (`--panel`, `--panel-2`, `--panel-3`, `--hair`, `--line`, `--ink`, `--ink-2`, `--muted`, `--faint`, `--expense`/`-soft`/`-ink`, `--income`/`-soft`/`-ink`, `--accent`/`-soft`). El **borde punteado** es el punto a verificar en oscuro: `--expense`/`--income` están recalibrados y el contorno debe leerse claramente sobre `--panel` en los dos modos.
+
+### Checklist de aceptación visual — Simulación de categoría
+
+*Fila simulada (mes futuro dentro del horizonte, sección Únicos):*
+- [ ] La caja de la col 1 es **hueca con borde punteado** del color del tipo (rojo gasto / verde ingreso), con la **misma flecha** ↓/↑ que una fila real. Comparada con la fila real de arriba o abajo, se distingue **sin leer nada**.
+- [ ] La sublínea arranca con el chip neutro **"Simulado"** (mismo molde que "Anulado"), seguido del punto de color y el nombre de la categoría.
+- [ ] Con un **límite cruzado** cuya marca es `badge`: el chip ámbar aparece **inmediatamente a la derecha del chip "Simulado"** y antes del punto de categoría (`[Simulado] [badge] ● Categoría · tendencia…`), nunca antes de "Simulado" ni al final de la sublínea. Con efecto `glyph`, el `AlertTriangle` va al **cluster derecho**; con `fill`, la fila toma el fondo ámbar; con `bold`, **solo la cifra** engorda y el `≈` queda igual.
+- [ ] El **nombre de la fila** es el nombre de la categoría.
+- [ ] La **col 3 está vacía** (sin fecha, sin "Cuota X/N") — igual que un fijo.
+- [ ] El monto lleva prefijo **`≈`** en `--muted`, en mono tabular, con su signo y su color por tipo. **Los dígitos quedan alineados** con los de las filas reales de la sección (verificar a ojo la columna derecha).
+- [ ] **No hay kebab (⋮)**, ni siquiera al pasar el mouse — y el monto **no se corre** respecto de las filas reales (el hueco está reservado).
+- [ ] **Pasar el mouse por la fila no la tiñe**, el cursor **no** es de mano, y **clic / Enter / Espacio no abren nada** (ni card de detalle, ni menú). La fila **no** recibe foco con `Tab`.
+- [ ] La fila está a **opacidad plena** (no atenuada como un ítem anulado).
+- [ ] En orden **por monto** la fila aparece intercalada por magnitud; en orden **por fecha** aparece **al final** de la sección. En ningún caso hay un separador, encabezado o bloque aparte.
+- [ ] Los **filtros de la sección** la alcanzan: filtrar por Gasto/Ingreso o destildar su categoría la saca de la lista, y el subtotal y el contador bajan en consecuencia.
+- [ ] **Mes en curso y meses pasados: ninguna fila simulada, nunca.**
+
+*Popover de Únicos:*
+- [ ] La banda **"Simulación"** está al pie, con **fondo recesado** (`--panel-2`) y separada del bloque de categorías por un divisor **más fuerte** que el interno.
+- [ ] La banda es visible **al abrir el popover, sin scrollear**; scrollear la lista de categorías **no** la mueve.
+- [ ] El botón **"Simular categoría"** (glifo `ChartSpline`) ocupa el ancho de la banda y está presente **aunque no haya ninguna simulación** (con la línea "Proyecta una categoría a los meses futuros." debajo).
+- [ ] Con simulaciones activas: lista debajo del botón con `● color + nombre` y botón de basura por fila, y al pie **"Se proyecta hasta {mes} {año}."**
+- [ ] Los popovers de **Fijos** y **Cuotas** **no tienen banda de simulación** ni ningún cambio respecto de hoy.
+- [ ] Tener una simulación activa **no** enciende el punto `--accent` del disparador (ese punto sigue significando solo "sección filtrada").
+- [ ] Abrir el modal (crear o eliminar) **cierra el popover**; nunca quedan los dos overlays a la vez.
+
+*Modal "Simular categoría":*
+- [ ] Título "Simular categoría" + bajada con el horizonte; cierra con **✕ y `Esc`**, el clic en el scrim **no** cierra.
+- [ ] Lista en **orden de catálogo**, con las deshabilitadas **en su lugar** (no agrupadas al final) y **nunca ocultas**.
+- [ ] Categoría con **menos de 3 meses**: fila no seleccionable, con el motivo **visible en la propia fila** ("Necesita 3 meses con datos (tiene {N})"). El **punto de color no se atenúa**.
+- [ ] Categoría **ya simulada**: fila no seleccionable con el motivo **"Ya la estás simulando"** visible.
+- [ ] **Ningún motivo depende de un tooltip** ni se corta con elipsis: si no entra al lado del nombre, **baja entero a una segunda línea**.
+- [ ] Clic en una fila deshabilitada **no selecciona nada** y `Tab` la saltea.
+- [ ] El botón **`Simular` arranca deshabilitado** y se habilita solo al elegir una categoría; en carga dice "Simulando…".
+- [ ] Al confirmar aparece **toast de éxito** aunque el mes visualizado no cambie visualmente (probarlo parado en el **mes en curso**).
+- [ ] Si el guardado falla: **toast de error y el modal sigue abierto** con la selección intacta.
+
+*Eliminar simulación:*
+- [ ] El botón de basura de la fila pasa a **rojo sobre fondo rojo suave** en hover, y tiene `aria-label` con el nombre de la categoría.
+- [ ] La confirmación es un diálogo con **caja de identidad** y nota de consecuencia, footer `Cancelar` + **`Eliminar` rojo**.
+- [ ] Al confirmar: toast, la fila desaparece de la banda y **las filas simuladas de esa categoría desaparecen de los meses futuros**, con totales recalculados.
+
+*Composición de totales:*
+- [ ] Con ≥1 fila simulada visible, la cabecera de **Únicos** muestra el glifo `ChartSpline` `--muted` **pegado a la izquierda del subtotal** (y a la derecha de una marca de límite, si la hubiera), con `title` explicando el conteo.
+- [ ] Bajo la grilla de totales aparece la línea **"Los totales incluyen {N} movimientos simulados."** (singular con su propia frase, **nunca "1 movimientos"**).
+- [ ] **Ninguna cifra —de sección, de card o de fila— cambia de color, de peso o de opacidad** por incluir simulados.
+- [ ] **Cero-impacto:** en un mes **sin** simulados (o con el filtro que los excluye), **no hay glifo ni línea**, y el espaciado entre la grilla de totales y el listado es **idéntico** al de un mes sin la feature (comparar contra el mes en curso).
+
+*Simulación pausada:*
+- [ ] En la banda, la simulación sin datos suficientes muestra el chip neutro **"Sin datos"**, el nombre en `--muted` y la línea **"Necesita 3 meses con datos (tiene {N}). No proyecta."** — **sin ámbar y sin rojo**.
+- [ ] Su **botón de eliminar sigue disponible**.
+- [ ] En un mes futuro dentro del horizonte, al pie del listado de Únicos aparece la nota `Info` **"Una simulación no está proyectando: le faltan meses con datos."** (plural con `{N}` si son varias), también cuando la sección está **vacía** (debajo del empty dashed).
+- [ ] La nota **no es clickeable** y no ofrece link.
+
+*Fuera del horizonte:*
+- [ ] Un mes futuro más allá del horizonte se ve **exactamente igual que sin la feature**: sin filas simuladas, **sin nota, sin glifo, sin línea de composición**.
+
+*Contención:*
+- [ ] A **640px** (y ~392px de contenido con el sidebar abierto): sin scroll horizontal del `body`; en la fila simulada trunca la identidad y **el monto se lee entero, con su `≈`**.
+- [ ] En viewport **bajo** (ej. 700px de alto), el popover de Únicos **no se corta**: se acota al viewport, la lista de categorías scrollea y la **banda de simulación sigue visible y accionable**; si no entra hacia abajo, **abre hacia arriba**.
+- [ ] Con **más de 4 simulaciones activas**, la lista de la banda scrollea dentro de sí y el botón "Simular categoría" y la nota de horizonte siguen a la vista.
+- [ ] El modal del selector, con **muchas categorías**, muestra el footer **pineado** y scrollea solo la lista.
+- [ ] Todo lo anterior se verifica igual en **modo claro y oscuro** — con atención al **borde punteado** de la caja del ícono, que debe leerse con claridad en los dos.
+
+---
+
 ## Specs de fase
 
 El lenguaje visual vigente y reutilizable que salió de cada fase de implementación está consolidado en las secciones de arriba. Las decisiones puntuales de cada fase, una vez implementadas, dejan de tener documento propio: lo que sobrevive es la regla en presente; el "cuándo/por qué cambió" vive en el historial de git.

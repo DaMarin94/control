@@ -52,15 +52,16 @@ pnpm dev
 
 ## TODO
 
-0 (full prioridad) - Tener la posibilidad de simular a futuro una categoria, tomando los totales que tenga en los meses previos, identificar tendencias y proyectar a futuro. Seria una opcion que se desprenderia de una categoria en los filtros por ahi de los meese o una opcion similar. Dato tecnico: ya tenemos alguna logica de simulacion o proyeccion desarrollada, fijarse de usar esa misma y si no está hecho, abstraerla para asi en el futuro poder reusar esos calculos pero por ejemplo desde el modulo de reportes
-1 - Historial: extender el registro a las creaciones de movimientos.
-2 - Historial: extender el registro a las anulaciones (skip).
-3 - Historial: extender el registro al ABM de categorías y de métodos de pago.
-4 - Toast de éxito con botón "Deshacer" para revertir la acción de forma inmediata, sin ir a `/historial`.
-5 - Analizar si hay una forma mejor de almacenar los movimientos fijos: la cadena de splits con `chainId` obliga a que el historial agrupe por cadena y no por fila.
-6 - Historial: la expresión de `Fórmula` formatea el operando de sumas y restas con la moneda default del usuario como aproximación, porque la entrada no expone la moneda propia del calculado. Afecta solo el símbolo mostrado, no el dato guardado.
-7 - `backend/src/recurring/recurring.repository.ts` expone tres métodos sin callers (`findActiveRowByChainId`, `findSkipsForRecurring`, `findAllSkipsForUser`): evaluar si se eliminan.
-8 - El `DATABASE_URL` del backend usa el endpoint pooler de Neon, pero Neon recomienda el endpoint directo (sin `-pooler`) para migraciones porque el pooler puede fallar con los advisory locks de Prisma: evaluar separar la URL de migraciones de la de runtime.
+0 - Historial: extender el registro a las creaciones de movimientos.
+1 - Historial: extender el registro a las anulaciones (skip).
+2 - Historial: extender el registro al ABM de categorías y de métodos de pago.
+3 - Toast de éxito con botón "Deshacer" para revertir la acción de forma inmediata, sin ir a `/historial`.
+4 - Analizar si hay una forma mejor de almacenar los movimientos fijos: la cadena de splits con `chainId` obliga a que el historial agrupe por cadena y no por fila.
+5 - Historial: la expresión de `Fórmula` formatea el operando de sumas y restas con la moneda default del usuario como aproximación, porque la entrada no expone la moneda propia del calculado. Afecta solo el símbolo mostrado, no el dato guardado.
+6 - `backend/src/recurring/recurring.repository.ts` expone tres métodos sin callers (`findActiveRowByChainId`, `findSkipsForRecurring`, `findAllSkipsForUser`): evaluar si se eliminan.
+7 - El `DATABASE_URL` del backend usa el endpoint pooler de Neon, pero Neon recomienda el endpoint directo (sin `-pooler`) para migraciones porque el pooler puede fallar con los advisory locks de Prisma: evaluar separar la URL de migraciones de la de runtime.
+8 - La función que deriva la fecha local en `YYYY-MM-DD` (getters locales de `Date`, nunca `toISOString()`) está duplicada en cinco archivos del frontend (`use-movements.ts`, `use-simulations.ts`, `use-reports.ts`, `unique-grid-card.tsx`, `inflation-income-card.tsx`), cada copia con un comentario cruzado al resto. El riesgo: alcanza con que un consumidor nuevo se olvide de mandar `today` para reabrir un borde de fin de mes en UTC−N, y ningún test lo detecta. Evaluar extraerla a un helper compartido en `lib/`.
+9 - Cinco archivos de test del frontend tienen errores de `tsc` propios del archivo de test (`inflation-income-card.test.tsx`, `month-jump-popover.test.tsx`, `use-default-payment-method-prefill.test.tsx`, `use-preferences.test.tsx`, `use-reports.test.tsx`). No rompen la suite ni el build —los tests corren verdes—: evaluar si se corrigen los tipos o se acepta la deuda.
 
 ## Tests
 

@@ -63,6 +63,7 @@ const mockMonthMovements: MonthMovements = {
         currency: "ARS" as const,
         exchangeRate: 1,
         convertedAmountCents: 15000,
+        simulated: false,
         calculatedChildren: [],
       },
     ],
@@ -129,6 +130,20 @@ describe("MOVEMENTS_QUERY_KEY", () => {
     expect(MOVEMENTS_QUERY_KEY("2026-06", null)[2]).toBeNull();
     expect(MOVEMENTS_QUERY_KEY("2026-06", "")[2]).toBe("");
   });
+
+  it("sin `today` devuelve una key de 3 elementos (prefijo válido para invalidateQueries)", () => {
+    expect(MOVEMENTS_QUERY_KEY("2026-06")).toHaveLength(3);
+    expect(MOVEMENTS_QUERY_KEY("2026-06", "cat-1")).toHaveLength(3);
+  });
+
+  it("con `today` agrega un 4to elemento con la fecha", () => {
+    expect(MOVEMENTS_QUERY_KEY("2026-06", null, "2026-07-31")).toEqual([
+      "movements",
+      "2026-06",
+      null,
+      "2026-07-31",
+    ]);
+  });
 });
 
 // ─── Tests useMovements ───────────────────────────────────────────────────────
@@ -151,7 +166,7 @@ describe("useMovements", () => {
     });
   });
 
-  it("llama a GET /movements?month=YYYY-MM con el mes correcto (sin filtro)", async () => {
+  it("llama a GET /movements?month=YYYY-MM con el mes correcto (sin filtro) y today=YYYY-MM-DD", async () => {
     mockApiGet.mockResolvedValue(mockMonthMovements);
 
     const { result } = renderHook(() => useMovements("2026-06"), {
@@ -162,7 +177,9 @@ describe("useMovements", () => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    expect(mockApiGet).toHaveBeenCalledWith("/movements?month=2026-06");
+    expect(mockApiGet).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/movements\?month=2026-06&today=\d{4}-\d{2}-\d{2}$/)
+    );
   });
 
   it("NO incluye categories= cuando categoryIds es null (= todas)", async () => {
@@ -192,7 +209,7 @@ describe("useMovements", () => {
     });
 
     const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
-    expect(callUrl).toBe("/movements?month=2026-06&categories=");
+    expect(callUrl).toMatch(/^\/movements\?month=2026-06&categories=&today=\d{4}-\d{2}-\d{2}$/);
   });
 
   it("incluye &categories=id1,id2 cuando categoryIds es una lista", async () => {
@@ -308,5 +325,35 @@ describe("useMovements", () => {
 
     expect(result.current.data?.movements.fijos).toHaveLength(0);
     expect(result.current.data?.movements.cuotas).toHaveLength(0);
+  });
+
+  it("manda el today con la fecha LOCAL (no la UTC) cerca de medianoche en UTC-3 (RN-028)", async () => {
+    mockApiGet.mockResolvedValue(mockMonthMovements);
+
+    const originalTZ = process.env.TZ;
+    process.env.TZ = "America/Argentina/Buenos_Aires"; // UTC-3, sin horario de verano
+
+    // Solo se fakea Date (no setTimeout/setInterval), así waitFor sigue funcionando.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // 2026-07-31T23:00:00 en Buenos Aires (UTC-3) = 2026-08-01T02:00:00Z.
+    // El día UTC ya rodó a agosto; el día LOCAL del usuario todavía es 31 de julio.
+    vi.setSystemTime(new Date("2026-08-01T02:00:00.000Z"));
+
+    try {
+      const { result } = renderHook(() => useMovements("2026-07"), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
+      expect(callUrl).toContain("today=2026-07-31");
+      expect(callUrl).not.toContain("today=2026-08-01");
+    } finally {
+      vi.useRealTimers();
+      process.env.TZ = originalTZ;
+    }
   });
 });

@@ -339,6 +339,7 @@ export class MovementsController {
     @Request() req: AuthRequest,
     @Query('month') month: string | undefined,
     @Query('categories') categoriesParam: string | undefined,
+    @Query('today') todayParam: string | undefined,
   ) {
     if (!month) {
       throw new BadRequestException(
@@ -360,10 +361,25 @@ export class MovementsController {
               .map((id) => id.trim())
               .filter((id) => id.length > 0);
 
+    // RF-SIM-002 (contrato nuevo, opcional): fecha local del usuario YYYY-MM-DD,
+    // para resolver "el mes en curso" del que dependen los movimientos simulados
+    // de una simulación de categoría activa. Ausente → fecha UTC del sistema
+    // (mismo criterio que el resto de los endpoints con este param).
+    let todayStr: string | undefined;
+    if (todayParam !== undefined) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(todayParam)) {
+        throw new BadRequestException(
+          'El parámetro "today" debe tener formato YYYY-MM-DD (ej: 2026-06-25)',
+        );
+      }
+      todayStr = todayParam;
+    }
+
     return this.movementsService.getMonthMovements(
       req.user.userId,
       month,
       categoryIds,
+      todayStr,
     );
   }
 

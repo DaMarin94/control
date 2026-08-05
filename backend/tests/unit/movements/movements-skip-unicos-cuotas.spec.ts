@@ -39,6 +39,7 @@ import {
 import { MovementsService } from '../../../src/movements/movements.service';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 import { SettingsService } from '../../../src/settings/settings.service';
+import { SimulationsService } from '../../../src/simulations/simulations.service';
 
 // ---------------------------------------------------------------------------
 // Constantes
@@ -392,10 +393,15 @@ describe('MovementsService.getMonthMovements — exclusión de skip para únicos
     log: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), verbose: jest.fn(),
   };
 
+  const mockSimulationsServiceSvc = {
+    getSimulatedItemsForMonth: jest.fn().mockResolvedValue([]),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
     mockSettingsServiceSvc.getSettings.mockResolvedValue({ defaultCurrency: Currency.ARS, lastExchangeRate: null });
     mockRepoSvc.findFijosByMonth.mockResolvedValue([]);
+    mockSimulationsServiceSvc.getSimulatedItemsForMonth.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -403,6 +409,7 @@ describe('MovementsService.getMonthMovements — exclusión de skip para únicos
         { provide: MovementsRepository, useValue: mockRepoSvc },
         { provide: Logger, useValue: mockLoggerSvc },
         { provide: SettingsService, useValue: mockSettingsServiceSvc },
+        { provide: SimulationsService, useValue: mockSimulationsServiceSvc },
       ],
     }).compile();
 
@@ -504,6 +511,10 @@ describe('MovementsService.getReportsMovements — skip de únicos/cuotas en el 
     log: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), verbose: jest.fn(),
   };
 
+  const mockSimulationsAnnual = {
+    getSimulatedItemsForMonth: jest.fn().mockResolvedValue([]),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
     mockSettingsAnnual.getSettings.mockResolvedValue({ defaultCurrency: Currency.ARS, lastExchangeRate: null });
@@ -514,6 +525,7 @@ describe('MovementsService.getReportsMovements — skip de únicos/cuotas en el 
     mockRepoAnnual.findTransactionsByIds.mockResolvedValue([]);
     mockRepoAnnual.findInstallmentGroupsByIds.mockResolvedValue([]);
     mockRepoAnnual.loadPivotRatesForYear.mockResolvedValue(new Map());
+    mockSimulationsAnnual.getSimulatedItemsForMonth.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -521,6 +533,7 @@ describe('MovementsService.getReportsMovements — skip de únicos/cuotas en el 
         { provide: MovementsRepository, useValue: mockRepoAnnual },
         { provide: Logger, useValue: mockLoggerAnnual },
         { provide: SettingsService, useValue: mockSettingsAnnual },
+        { provide: SimulationsService, useValue: mockSimulationsAnnual },
       ],
     }).compile();
 

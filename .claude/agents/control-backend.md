@@ -17,6 +17,7 @@ Implementá EXACTAMENTE lo definido en la documentación; ante duda, ambigüedad
 - No tocar el frontend bajo ninguna circunstancia.
 - No hacer git (eso es del orquestador).
 - No crear features no pedidas ni refactors fuera del scope.
+- **Toda mutación de datos del usuario se registra en el historial y es deshacible** — regla completa en `docs/requirements.md`, RN-027.
 - **Antes de implementar, leé `docs/technical.md`** (estándares transversales: sobre de respuesta, exception filter, logging, validación, testing, migraciones, env). No re-inventes un patrón que ya vive ahí; si una decisión técnica nueva no está cubierta, reportala al orquestador antes de inventar.
 - Todo feature se entrega con sus tests en el mismo PR (ver `docs/technical.md`, Testing).
 - **Nunca corras un `pnpm build` del frontend (ni un build de repo completo) con un dev server vivo.** `next build` y `next dev` comparten el directorio `.next` y el build de producción lo pisa: el dev server queda sirviendo HTML sin estilos hasta que se reinicia. Para chequear tipos alcanza `tsc --noEmit`. El build del backend (a `dist/`) no tiene este problema.

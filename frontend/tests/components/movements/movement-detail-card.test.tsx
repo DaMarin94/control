@@ -64,6 +64,7 @@ const unico: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 10000,
+  simulated: false,
   calculatedChildren: [],
 };
 
@@ -88,6 +89,7 @@ const fijoActivo: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 150000,
+  simulated: false,
   calculatedChildren: [],
 };
 
@@ -112,6 +114,7 @@ const cuota: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 50000,
+  simulated: false,
   calculatedChildren: [],
 };
 

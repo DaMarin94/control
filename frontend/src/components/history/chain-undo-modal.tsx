@@ -15,7 +15,7 @@
 import { Info, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ModalShell, ModalShellHeader, ModalShellBody, ModalShellFooter } from "@/components/ui/modal-shell";
-import { formatHistoryMoment, pickSummaryChange, summarizeHistoryChange } from "@/lib/history";
+import { formatHistoryMoment, getHistoryEntryName, pickSummaryChange, summarizeHistoryChange } from "@/lib/history";
 import { getBrowserTimezone } from "@/lib/format";
 import type { HistoryEntryResponseDto } from "@/types/history";
 import type { CurrencyCode } from "@/types/settings";
@@ -39,7 +39,7 @@ export function ChainUndoModal({
   onClose,
 }: ChainUndoModalProps) {
   const titleId = "chain-undo-title";
-  const rowLabel = entry.description ?? entry.category?.name ?? "Movimiento";
+  const rowLabel = getHistoryEntryName(entry);
   const timezone = getBrowserTimezone();
 
   return (

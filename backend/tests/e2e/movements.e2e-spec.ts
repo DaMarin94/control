@@ -97,6 +97,19 @@ const mockPrisma = {
     delete: jest.fn(),
     findUnique: jest.fn(),
   },
+  // simulation.findMany se usa en SimulationsService.getSimulatedItemsForMonth
+  // (RF-SIM-003 — embebido on-the-fly en GET /movements para meses futuros).
+  // Necesario aunque los tests de este archivo usen meses pasados/en curso
+  // (short-circuit antes de llegar acá): sin este mock, un mes futuro real
+  // rompería con "Cannot read properties of undefined" (mismo gotcha que
+  // userPreferences/installmentGroup — ver docs/backend.md).
+  simulation: {
+    findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn().mockResolvedValue(null),
+    findUnique: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+  },
   // referenceRate.findMany se usa en loadAllPivotRates → loadPivotRatesForYear
   referenceRate: {
     findMany: jest.fn().mockResolvedValue([]),

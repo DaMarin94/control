@@ -132,6 +132,7 @@ const origenFijo: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 100000,
+  simulated: false,
   calculatedChildren: [],
 };
 
@@ -157,6 +158,7 @@ const origenUnico: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 50000,
+  simulated: false,
   calculatedChildren: [],
 };
 
@@ -182,6 +184,7 @@ const origenCuota: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 30000,
+  simulated: false,
   calculatedChildren: [],
 };
 
@@ -216,6 +219,7 @@ const calculadoExistente: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: -10000,
+  simulated: false,
   calculatedChildren: [],
 };
 
@@ -250,6 +254,7 @@ const calculadoUnicoExistente: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 5000,
+  simulated: false,
   calculatedChildren: [],
 };
 

@@ -9,6 +9,7 @@ import {
   NOT_DELETED_RECURRING_SQL,
   NOT_DELETED_TRANSACTION_SQL,
 } from '../common/soft-delete.helper';
+import { isOnFrequency, addMonths, monthDiff } from '../common/month.helper';
 
 // ---------------------------------------------------------------------------
 // Interfaces para la agregación anual
@@ -424,6 +425,15 @@ export interface MovementItem {
   hasCalculated: boolean;
   /** Fase 1.1.9: derivados del ítem padre en este mes (ver doc de la interface). */
   calculatedChildren: CalculatedChild[];
+  /**
+   * true si el ítem es un movimiento SIMULADO (RF-SIM-003), derivado al vuelo
+   * por una simulación de categoría activa (RF-SIM-002) — no existe como fila
+   * en ninguna tabla. false en TODOS los ítems reales (únicos, fijos, cuotas y
+   * sus calculados). Solo puede darse con origin === 'unico' (RN-029). El `id`
+   * es sintético y estable (`simulated:{simulationId}:{month}`), nunca un id
+   * de fila real.
+   */
+  simulated: boolean;
 }
 
 /**
@@ -836,6 +846,7 @@ export class MovementsRepository {
         },
         hasCalculated: false,
         calculatedChildren: [],
+        simulated: false,
       });
     }
 
@@ -1002,6 +1013,7 @@ export class MovementsRepository {
         calculated: null,
         hasCalculated: false,
         calculatedChildren: [],
+        simulated: false,
       };
       result.push(item);
       fijoItemByChainId.set(r.chainId, item);
@@ -1090,6 +1102,7 @@ export class MovementsRepository {
         },
         hasCalculated: false,
         calculatedChildren: [],
+        simulated: false,
       });
     }
 
@@ -1202,6 +1215,7 @@ export class MovementsRepository {
         calculated: null,
         hasCalculated: false,
         calculatedChildren: [],
+        simulated: false,
       };
       result.push(item);
       cuotaItemByGroupId.set(g.id, item);
@@ -1373,6 +1387,7 @@ export class MovementsRepository {
           },
           hasCalculated: false,
           calculatedChildren: [],
+          simulated: false,
         });
       }
     }
@@ -2207,56 +2222,16 @@ export class MovementsRepository {
       calculated: null,
       hasCalculated: false,
       calculatedChildren: [],
+      simulated: false,
     };
   }
 }
 
 // ---------------------------------------------------------------------------
-// Helpers de cálculo de mes (YYYY-MM) — exportados para uso en tests
+// Helpers de cálculo de mes (YYYY-MM) — movidos a common/month.helper.ts
+// (Fase Simulación de categoría) para que otros módulos (ej. `simulations`)
+// los reusen sin importar directamente este repositorio. Re-exportados acá
+// (re-export de los símbolos importados arriba) para no romper los
+// consumidores existentes de este archivo (`from './movements.repository'`).
 // ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Helper de frecuencia (P1 — entero 1..12)
-// ---------------------------------------------------------------------------
-
-/**
- * Devuelve true si el fijo aparece en el mes dado según su frecuencia.
- * frequency es un entero 1..12 (meses de paso), anclado al startMonth:
- * monthDiff(startMonth, month) % frequency === 0.
- */
-export function isOnFrequency(
-  startMonth: string,
-  frequency: number,
-  month: string,
-): boolean {
-  const diff = monthDiff(startMonth, month);
-  return diff % frequency === 0;
-}
-
-/**
- * Suma N meses a un string YYYY-MM con rollover de año correcto.
- */
-export function addMonths(yyyyMM: string, n: number): string {
-  const [yearStr, monthStr] = yyyyMM.split('-');
-  let year = parseInt(yearStr, 10);
-  let month = parseInt(monthStr, 10) - 1; // 0-based
-
-  month += n;
-
-  // Math.floor handles negative n correctly for year rollover.
-  // Use true modulo ((x%12)+12)%12 to avoid the double-year-subtraction
-  // bug that occurs when month%12 is negative and we subsequently do year-=1.
-  year += Math.floor(month / 12);
-  month = ((month % 12) + 12) % 12;
-
-  return `${year}-${String(month + 1).padStart(2, '0')}`;
-}
-
-/**
- * Calcula la diferencia en meses entre dos strings YYYY-MM (b - a).
- */
-export function monthDiff(a: string, b: string): number {
-  const [yearA, monthA] = a.split('-').map(Number);
-  const [yearB, monthB] = b.split('-').map(Number);
-  return (yearB - yearA) * 12 + (monthB - monthA);
-}
+export { isOnFrequency, addMonths, monthDiff };

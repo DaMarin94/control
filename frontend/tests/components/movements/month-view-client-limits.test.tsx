@@ -141,6 +141,7 @@ const mockMovementExpense = {
   currency: "ARS" as const,
   exchangeRate: 1,
   convertedAmountCents: 500000, // $5000
+  simulated: false,
   calculatedChildren: [],
 };
 
