@@ -26,7 +26,6 @@
 import { useMemo, useState } from "react";
 import { History } from "lucide-react";
 import { useHistory, useUndoHistory } from "@/hooks/use-history";
-import { useSettings } from "@/hooks/use-settings";
 import { useToast } from "@/hooks/use-toast";
 import { HistoryEntryRow } from "@/components/history/history-entry-row";
 import { UndoConfirmModal } from "@/components/history/undo-confirm-modal";
@@ -84,7 +83,6 @@ function HistorySkeletonRow({ isFirst }: { isFirst: boolean }) {
 export function HistoryClient() {
   const { data: entries = [], isLoading, isError } = useHistory();
   const { undo, isUndoing } = useUndoHistory();
-  const { defaultCurrency } = useSettings();
   const { toast } = useToast();
 
   const [openTarget, setOpenTarget] = useState<HistoryEntryResponseDto | null>(null);
@@ -200,12 +198,7 @@ export function HistoryClient() {
                 style={{ gridTemplateRows: isExiting ? "0fr" : "1fr", opacity: isExiting ? 0 : 1 }}
               >
                 <div className="overflow-hidden min-h-0">
-                  <HistoryEntryRow
-                    entry={entry}
-                    formulaCurrencyFallback={defaultCurrency}
-                    isBusy={busyIds.has(entry.id)}
-                    onOpen={handleOpen}
-                  />
+                  <HistoryEntryRow entry={entry} isBusy={busyIds.has(entry.id)} onOpen={handleOpen} />
                 </div>
               </div>
             );
@@ -217,7 +210,6 @@ export function HistoryClient() {
         (openTarget.canUndo ? (
           <UndoConfirmModal
             entry={openTarget}
-            formulaCurrencyFallback={defaultCurrency}
             isSubmitting={isUndoing}
             onConfirm={handleConfirm}
             onClose={handleClose}
@@ -226,7 +218,6 @@ export function HistoryClient() {
           <ChainUndoModal
             entry={openTarget}
             chainEntries={chainEntries}
-            formulaCurrencyFallback={defaultCurrency}
             isSubmitting={isUndoing}
             onConfirm={handleConfirm}
             onClose={handleClose}

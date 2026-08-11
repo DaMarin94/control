@@ -12,13 +12,12 @@
  * (RF-SIM-001/004) — la simulación de categoría queda entera fuera de
  * `/historial`, así que no hay `["history"]` que invalidar acá.
  *
- * Se manda `today=YYYY-MM-DD` (fecha local del navegador, NO UTC) en GET
- * /simulations, GET /simulations/candidates y POST /simulations: los tres
- * calculan/validan contra `horizonEndMonth`/la ventana histórica (RN-028), y
- * sin `today` el backend cae a su propia fecha UTC — mismo desfase de mes que
- * corrige `today` en `use-movements.ts` (ver ahí para el detalle del
- * escenario UTC−3 cerca de medianoche). Mismo mecanismo: getters locales de
- * Date (nunca `toISOString()`, que devuelve UTC).
+ * Se manda `today=YYYY-MM-DD` (fecha local del navegador, NO UTC — ver
+ * `getLocalTodayString` en `@/lib/format`) en GET /simulations, GET
+ * /simulations/candidates y POST /simulations: los tres calculan/validan
+ * contra `horizonEndMonth`/la ventana histórica (RN-028), y sin `today` el
+ * backend cae a su propia fecha UTC — mismo desfase de mes que corrige
+ * `today` en `use-movements.ts`.
  */
 
 import { useMemo } from "react";
@@ -31,24 +30,9 @@ import type {
   SimulationCandidatesResponse,
 } from "@/types/simulation";
 import { createLogger } from "@/lib/logger";
+import { getLocalTodayString } from "@/lib/format";
 
 const logger = createLogger("useSimulations");
-
-/**
- * Fecha local del navegador en formato YYYY-MM-DD, para el parámetro `today`
- * de los endpoints de /simulations. Usa getters locales de Date (NUNCA
- * toISOString(), que devuelve UTC). Duplicado deliberado de
- * `use-movements.ts` (mismo patrón que `use-reports.ts` / `unique-grid-card.tsx`
- * / `inflation-income-card.tsx` — no hay un helper compartido en `lib/` para
- * esta línea, es el mecanismo establecido en el proyecto).
- */
-function getLocalTodayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 /**
  * Claves BASE (sin `today`) — son las que se usan para invalidar. `today` se

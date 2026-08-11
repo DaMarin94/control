@@ -19,23 +19,15 @@ import { HistoryChangesBlock } from "@/components/history/history-changes-block"
 import { HISTORY_TARGET_KIND_LABEL, formatHistoryMoment, getHistoryEntryName } from "@/lib/history";
 import { getBrowserTimezone } from "@/lib/format";
 import type { HistoryEntryResponseDto } from "@/types/history";
-import type { CurrencyCode } from "@/types/settings";
 
 interface UndoConfirmModalProps {
   entry: HistoryEntryResponseDto;
-  formulaCurrencyFallback: CurrencyCode;
   isSubmitting: boolean;
   onConfirm: () => void;
   onClose: () => void;
 }
 
-export function UndoConfirmModal({
-  entry,
-  formulaCurrencyFallback,
-  isSubmitting,
-  onConfirm,
-  onClose,
-}: UndoConfirmModalProps) {
+export function UndoConfirmModal({ entry, isSubmitting, onConfirm, onClose }: UndoConfirmModalProps) {
   const titleId = "undo-confirm-title";
   const isEdit = entry.action === "EDIT";
   const rowLabel = getHistoryEntryName(entry);
@@ -70,7 +62,6 @@ export function UndoConfirmModal({
         <HistoryChangesBlock
           changes={entry.changes}
           direction="modal"
-          formulaCurrencyFallback={formulaCurrencyFallback}
           heading={isEdit ? "Al deshacer queda así:" : "Vuelve a la app:"}
         />
 

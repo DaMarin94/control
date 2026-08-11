@@ -147,6 +147,15 @@ export interface ComparableFields {
   formulaOperator?: FormulaOperator | null;
   formulaOperand?: number | null;
   formulaSign?: number | null;
+  /**
+   * Origen del calculado (solo presentes/relevantes en filas Recurring calculadas —
+   * ver invariante en el schema, Recurring). Usados EXCLUSIVAMENTE para resolver la
+   * moneda real del campo `formula` (la del origen, no la de esta fila — ver
+   * HistoryFormulaValue.currency). No participan de ningún otro campo.
+   */
+  sourceChainId?: string | null;
+  sourceMovementId?: string | null;
+  sourceInstallmentGroupId?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,11 +225,21 @@ export interface HistoryAmountValue {
  * frontend arma la expresión legible reusando su builder (misma forma
  * abstracta que la card de detalle cuando `sourceAmountCents === null`),
  * SIN el monto del origen (docs/design.md §3.2.a).
+ *
+ * `currency`: moneda del ORIGEN del calculado (fijo/único/cuota vigente
+ * apuntado por sourceChainId/sourceMovementId/sourceInstallmentGroupId), NO
+ * la `currency` guardada en la fila Recurring del calculado — esa es un
+ * PLACEHOLDER sin significado (igual que `amountCents`/`exchangeRate`/
+ * `anchorCurrency` en esa fila: el monto y la moneda reales de un calculado
+ * siempre se derivan del origen, en runtime, nunca de la fila propia — ver
+ * docs/backend.md §Movimientos calculados). Es con la que el frontend debe
+ * formatear `operand` cuando `operator` lo vuelve un monto (suma/resta).
  */
 export interface HistoryFormulaValue {
   operator: FormulaOperator;
   operand: number;
   sign: number;
+  currency: Currency;
 }
 
 /** Valor del campo `Categoría` — id, nombre y color (punto de 6px). */

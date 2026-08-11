@@ -44,14 +44,18 @@ export interface HistoryAmountValue {
 
 /**
  * Valor del campo `Fórmula` — operador, operando (escalado, mismo formato que
- * `CalculatedInfo.formulaOperand`) y signo por separado. El frontend arma la
+ * `CalculatedInfo.formulaOperand`), signo por separado, y la moneda PROPIA del
+ * calculado (`currency`, no la default del usuario). El frontend arma la
  * expresión legible reusando `lib/formula.ts` en su forma abstracta (sin el
- * monto del origen, docs/design.md §3.2.a).
+ * monto del origen, docs/design.md §3.2.a); `currency` se usa solo cuando el
+ * operador vuelve el operando un monto (ADD/SUB) — el resto de los
+ * operadores no formatean moneda.
  */
 export interface HistoryFormulaValue {
   operator: FormulaOperator;
   operand: number;
   sign: number;
+  currency: CurrencyCode;
 }
 
 /** Valor del campo `Categoría` — id, nombre y color (punto de 6px). */

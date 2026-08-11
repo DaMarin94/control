@@ -51,7 +51,7 @@ const deletedEntry: HistoryEntryResponseDto = {
 };
 
 function renderRow(entry: HistoryEntryResponseDto, onOpen = vi.fn()) {
-  return { onOpen, ...render(<HistoryEntryRow entry={entry} formulaCurrencyFallback="ARS" isBusy={false} onOpen={onOpen} />) };
+  return { onOpen, ...render(<HistoryEntryRow entry={entry} isBusy={false} onOpen={onOpen} />) };
 }
 
 describe("HistoryEntryRow", () => {
@@ -128,7 +128,7 @@ describe("HistoryEntryRow", () => {
 
   it("isBusy: la fila no dispara onOpen (pointer-events-none + guard en el handler)", () => {
     const onOpen = vi.fn();
-    render(<HistoryEntryRow entry={editableEntry} formulaCurrencyFallback="ARS" isBusy onOpen={onOpen} />);
+    render(<HistoryEntryRow entry={editableEntry} isBusy onOpen={onOpen} />);
 
     fireEvent.click(screen.getByRole("button", { name: /ver cambio de supermercado/i }));
 

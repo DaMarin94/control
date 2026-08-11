@@ -42,7 +42,6 @@ const mockRepo = {
   // Fase 1.1.7 — métodos de calculados y cadena
   findChainRows: jest.fn().mockResolvedValue([]),
   findCalculadosBySourceChain: jest.fn().mockResolvedValue([]),
-  findActiveRowByChainId: jest.fn().mockResolvedValue(null),
   // Módulo 3.14 — Historial de cambios (borrado lógico, RF-HIST-006)
   softDeleteRow: jest.fn().mockResolvedValue(undefined),
   findChainRowsForSnapshot: jest.fn().mockResolvedValue([]),

@@ -18,26 +18,17 @@ import { ModalShell, ModalShellHeader, ModalShellBody, ModalShellFooter } from "
 import { formatHistoryMoment, getHistoryEntryName, pickSummaryChange, summarizeHistoryChange } from "@/lib/history";
 import { getBrowserTimezone } from "@/lib/format";
 import type { HistoryEntryResponseDto } from "@/types/history";
-import type { CurrencyCode } from "@/types/settings";
 import { cn } from "@/lib/utils";
 
 interface ChainUndoModalProps {
   entry: HistoryEntryResponseDto;
   chainEntries: HistoryEntryResponseDto[];
-  formulaCurrencyFallback: CurrencyCode;
   isSubmitting: boolean;
   onConfirm: () => void;
   onClose: () => void;
 }
 
-export function ChainUndoModal({
-  entry,
-  chainEntries,
-  formulaCurrencyFallback,
-  isSubmitting,
-  onConfirm,
-  onClose,
-}: ChainUndoModalProps) {
+export function ChainUndoModal({ entry, chainEntries, isSubmitting, onConfirm, onClose }: ChainUndoModalProps) {
   const titleId = "chain-undo-title";
   const rowLabel = getHistoryEntryName(entry);
   const timezone = getBrowserTimezone();
@@ -70,9 +61,7 @@ export function ChainUndoModal({
               const isThisEntry = chainEntry.id === entry.id;
               const Icon = chainEntry.action === "EDIT" ? Pencil : Trash2;
               const summaryChange = pickSummaryChange(chainEntry.changes);
-              const summary = summaryChange
-                ? summarizeHistoryChange(summaryChange, formulaCurrencyFallback)
-                : undefined;
+              const summary = summaryChange ? summarizeHistoryChange(summaryChange) : undefined;
               return (
                 <div
                   key={chainEntry.id}

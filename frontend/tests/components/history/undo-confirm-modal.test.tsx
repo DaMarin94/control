@@ -47,7 +47,6 @@ describe("UndoConfirmModal", () => {
     render(
       <UndoConfirmModal
         entry={editEntry}
-        formulaCurrencyFallback="ARS"
         isSubmitting={false}
         onConfirm={vi.fn()}
         onClose={vi.fn()}
@@ -63,7 +62,6 @@ describe("UndoConfirmModal", () => {
     render(
       <UndoConfirmModal
         entry={editEntry}
-        formulaCurrencyFallback="ARS"
         isSubmitting={false}
         onConfirm={vi.fn()}
         onClose={vi.fn()}
@@ -76,7 +74,6 @@ describe("UndoConfirmModal", () => {
     render(
       <UndoConfirmModal
         entry={deleteEntry}
-        formulaCurrencyFallback="ARS"
         isSubmitting={false}
         onConfirm={vi.fn()}
         onClose={vi.fn()}
@@ -91,7 +88,6 @@ describe("UndoConfirmModal", () => {
     render(
       <UndoConfirmModal
         entry={editEntry}
-        formulaCurrencyFallback="ARS"
         isSubmitting={false}
         onConfirm={onConfirm}
         onClose={onClose}
@@ -109,7 +105,6 @@ describe("UndoConfirmModal", () => {
     render(
       <UndoConfirmModal
         entry={editEntry}
-        formulaCurrencyFallback="ARS"
         isSubmitting
         onConfirm={vi.fn()}
         onClose={vi.fn()}

@@ -242,7 +242,10 @@ describe("usePreferences", () => {
   // initialData como stale → dispara GET /preferences en cuanto enabled=true.
 
   it("dispara GET /preferences cuando la sesión resuelve tras un refresh (initialDataUpdatedAt=0)", async () => {
-    const blobFromBackend: UserPreferences = { theme: "dark", reports: [{ id: "r1", type: "unicos-grid" }] };
+    const blobFromBackend: UserPreferences = {
+      theme: "dark",
+      reports: [{ id: "r1", type: "unique-grid", year: 2026, categoryIds: null }],
+    };
     mockApiGet.mockResolvedValue(blobFromBackend);
     mockUpdateSession.mockResolvedValue(null);
 
@@ -297,7 +300,7 @@ describe("usePreferences", () => {
   it("tras refresh, las claves de reportes y tema reflejan el blob del backend", async () => {
     const blobFromBackend: UserPreferences = {
       theme: "dark",
-      reports: [{ id: "r1", type: "unicos-grid", title: "Gastos" }],
+      reports: [{ id: "r1", type: "unique-grid", year: 2026, categoryIds: null, title: "Gastos" }],
     };
     mockApiGet.mockResolvedValue(blobFromBackend);
     mockUpdateSession.mockResolvedValue(null);
@@ -338,7 +341,9 @@ describe("usePreferences", () => {
 
     await waitFor(() => {
       expect(result.current.preferences.theme).toBe("dark");
-      expect(result.current.preferences.reports).toEqual([{ id: "r1", type: "unicos-grid", title: "Gastos" }]);
+      expect(result.current.preferences.reports).toEqual([
+        { id: "r1", type: "unique-grid", year: 2026, categoryIds: null, title: "Gastos" },
+      ]);
     });
   });
 });

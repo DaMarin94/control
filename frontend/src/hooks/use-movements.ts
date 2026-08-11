@@ -23,12 +23,11 @@
  *   - ""   → param vacío (= ninguna). Distinto de null en la key.
  *   - string no vacío → subconjunto serializado "id1,id2,...".
  *
- * Se manda `today=YYYY-MM-DD` (fecha local del navegador, NO UTC) para que el
- * backend resuelva "mes en curso" con la fecha del usuario y no con su propio
- * reloj UTC — evita que, cerca de medianoche en zonas UTC-N, el backend crea
- * que ya es el mes siguiente y filtre simulaciones sobre el mes en curso real
- * (RN-028). Mismo mecanismo que use-reports.ts / unique-grid-card.tsx /
- * inflation-income-card.tsx: getters locales de Date (nunca toISOString()).
+ * Se manda `today=YYYY-MM-DD` (fecha local del navegador, NO UTC — ver
+ * `getLocalTodayString` en `@/lib/format`) para que el backend resuelva "mes
+ * en curso" con la fecha del usuario y no con su propio reloj UTC — evita
+ * que, cerca de medianoche en zonas UTC-N, el backend crea que ya es el mes
+ * siguiente y filtre simulaciones sobre el mes en curso real (RN-028).
  *
  * Todas las mutaciones que afectan movimientos deben invalidar
  * la familia ["movements"] por prefijo (no solo un mes concreto).
@@ -39,23 +38,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useApi } from "@/hooks/use-api";
 import type { MonthMovements } from "@/types/movement";
 import { createLogger } from "@/lib/logger";
+import { getLocalTodayString } from "@/lib/format";
 
 const logger = createLogger("useMovements");
-
-/**
- * Fecha local del navegador en formato YYYY-MM-DD, para el parámetro `today`
- * de GET /movements. Usa getters locales de Date (NUNCA toISOString(), que
- * devuelve UTC y reintroduce el corrimiento de mes cerca de medianoche en
- * zonas UTC-N). Mismo mecanismo que use-reports.ts (annual-unicos /
- * annual-inflation-income).
- */
-function getLocalTodayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 // ─── Query key ─────────────────────────────────────────────────────────────────
 

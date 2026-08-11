@@ -27,7 +27,7 @@
  * - Al navegar y re-abrir, las ruedas reinician al mes de la vista.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import {
   MonthJumpTriggerDesktop,
@@ -47,11 +47,6 @@ vi.mock("react-dom", async (importOriginal) => {
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const MONTH_NAMES = [
-  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-];
 
 function makeRef(el?: HTMLButtonElement | null) {
   return { current: el ?? null } as React.RefObject<HTMLButtonElement | null>;

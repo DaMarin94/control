@@ -14,33 +14,22 @@
 import type { HistoryChangeDto } from "@/types/history";
 import type { HistoryChangeDirection } from "@/lib/history";
 import { describeHistoryChange } from "@/lib/history";
-import type { CurrencyCode } from "@/types/settings";
 import { HistoryChangeRow } from "@/components/history/history-change-row";
 import { cn } from "@/lib/utils";
 
 interface HistoryChangesBlockProps {
   changes: HistoryChangeDto[];
   direction: HistoryChangeDirection;
-  formulaCurrencyFallback: CurrencyCode;
   heading?: string;
   className?: string;
 }
 
-export function HistoryChangesBlock({
-  changes,
-  direction,
-  formulaCurrencyFallback,
-  heading,
-  className,
-}: HistoryChangesBlockProps) {
+export function HistoryChangesBlock({ changes, direction, heading, className }: HistoryChangesBlockProps) {
   return (
     <div className={cn("rounded-ctl border border-line bg-panel-2 px-[13px] py-[10px] space-y-[8px]", className)}>
       {heading && <p className="text-[12.5px] font-medium text-muted">{heading}</p>}
       {changes.map((change) => (
-        <HistoryChangeRow
-          key={change.field}
-          display={describeHistoryChange(change, direction, formulaCurrencyFallback)}
-        />
+        <HistoryChangeRow key={change.field} display={describeHistoryChange(change, direction)} />
       ))}
     </div>
   );

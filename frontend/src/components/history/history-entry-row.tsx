@@ -25,7 +25,6 @@ import { HistoryChangesBlock } from "@/components/history/history-changes-block"
 import { HISTORY_TARGET_KIND_LABEL, formatHistoryMoment, getHistoryEntryName } from "@/lib/history";
 import { getBrowserTimezone } from "@/lib/format";
 import type { HistoryEntryResponseDto } from "@/types/history";
-import type { CurrencyCode } from "@/types/settings";
 import { cn } from "@/lib/utils";
 
 function IdentitySeparator() {
@@ -34,13 +33,12 @@ function IdentitySeparator() {
 
 interface HistoryEntryRowProps {
   entry: HistoryEntryResponseDto;
-  formulaCurrencyFallback: CurrencyCode;
   /** true mientras esta entrada (o su cadena) se está deshaciendo — opacidad + sin interacción (§4). */
   isBusy: boolean;
   onOpen: (entry: HistoryEntryResponseDto) => void;
 }
 
-export function HistoryEntryRow({ entry, formulaCurrencyFallback, isBusy, onOpen }: HistoryEntryRowProps) {
+export function HistoryEntryRow({ entry, isBusy, onOpen }: HistoryEntryRowProps) {
   const isEdit = entry.action === "EDIT";
   const Icon = isEdit ? Pencil : Trash2;
   const chipLabel = isEdit ? "Editado" : "Eliminado";
@@ -176,7 +174,6 @@ export function HistoryEntryRow({ entry, formulaCurrencyFallback, isBusy, onOpen
           <HistoryChangesBlock
             changes={entry.changes}
             direction="list"
-            formulaCurrencyFallback={formulaCurrencyFallback}
             heading={isEdit ? undefined : "Se eliminó:"}
           />
         </div>

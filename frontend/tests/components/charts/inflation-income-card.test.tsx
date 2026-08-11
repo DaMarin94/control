@@ -94,6 +94,7 @@ vi.mock("recharts", () => {
 
 import { useInflationIncome } from "@/hooks/use-reports";
 import { InflationIncomeCard } from "@/components/charts/inflation-income-card";
+import { mockQuerySuccess, mockQueryLoading, mockQueryError } from "../../utils/query-result";
 
 const mockUseInflationIncome = vi.mocked(useInflationIncome);
 
@@ -160,45 +161,15 @@ function createWrapper() {
 }
 
 function mockHookWithData(data: AnnualInflationIncomeResponse) {
-  mockUseInflationIncome.mockReturnValue({
-    data,
-    isLoading: false,
-    isError: false,
-    isPending: false,
-    isSuccess: true,
-    error: null,
-    status: "success",
-    fetchStatus: "idle",
-    refetch: vi.fn(),
-  } as ReturnType<typeof useInflationIncome>);
+  mockUseInflationIncome.mockReturnValue(mockQuerySuccess(data));
 }
 
 function mockHookLoading() {
-  mockUseInflationIncome.mockReturnValue({
-    data: undefined,
-    isLoading: true,
-    isError: false,
-    isPending: true,
-    isSuccess: false,
-    error: null,
-    status: "pending",
-    fetchStatus: "fetching",
-    refetch: vi.fn(),
-  } as ReturnType<typeof useInflationIncome>);
+  mockUseInflationIncome.mockReturnValue(mockQueryLoading());
 }
 
 function mockHookError(refetch = vi.fn()) {
-  mockUseInflationIncome.mockReturnValue({
-    data: undefined,
-    isLoading: false,
-    isError: true,
-    isPending: false,
-    isSuccess: false,
-    error: new Error("Network error"),
-    status: "error",
-    fetchStatus: "idle",
-    refetch,
-  } as ReturnType<typeof useInflationIncome>);
+  mockUseInflationIncome.mockReturnValue(mockQueryError(new Error("Network error"), { refetch }));
 }
 
 function renderCard(props: Partial<React.ComponentProps<typeof InflationIncomeCard>> = {}) {
@@ -275,35 +246,14 @@ describe("InflationIncomeCard — botón de refrescar per-card (P5)", () => {
 
   it("al hacer clic, llama a refetch", () => {
     const refetch = vi.fn();
-    mockUseInflationIncome.mockReturnValue({
-      data: mockData,
-      isLoading: false,
-      isError: false,
-      isPending: false,
-      isSuccess: true,
-      error: null,
-      status: "success",
-      fetchStatus: "idle",
-      refetch,
-    } as ReturnType<typeof useInflationIncome>);
+    mockUseInflationIncome.mockReturnValue(mockQuerySuccess(mockData, { refetch }));
     renderCard();
     fireEvent.click(screen.getByRole("button", { name: /actualizar reporte/i }));
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
   it("se deshabilita y marca aria-busy mientras isFetching=true", () => {
-    mockUseInflationIncome.mockReturnValue({
-      data: mockData,
-      isLoading: false,
-      isError: false,
-      isPending: false,
-      isSuccess: true,
-      error: null,
-      status: "success",
-      fetchStatus: "fetching",
-      isFetching: true,
-      refetch: vi.fn(),
-    } as unknown as ReturnType<typeof useInflationIncome>);
+    mockUseInflationIncome.mockReturnValue(mockQuerySuccess(mockData, { fetchStatus: "fetching", isFetching: true }));
     renderCard();
     const btn = screen.getByRole("button", { name: /actualizar reporte/i });
     expect(btn).toBeDisabled();

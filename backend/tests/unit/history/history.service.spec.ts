@@ -68,16 +68,26 @@ function makePrismaMock() {
     },
     transaction: {
       findUnique: jest.fn().mockResolvedValue(null),
+      // Usado por loadOriginCurrencyMaps (resolución de moneda de origen de un
+      // calculado-de-único) — default vacío: un id no encontrado en el mock
+      // simula un origen irresoluble (chain/movimiento purgado físicamente).
+      findMany: jest.fn().mockResolvedValue([]),
       delete: jest.fn().mockResolvedValue(undefined),
       update: jest.fn().mockResolvedValue(undefined),
     },
     recurring: {
       findUnique: jest.fn().mockResolvedValue(null),
+      // Usado por loadOriginCurrencyMaps (resolución de moneda de origen de un
+      // calculado-de-fijo, vía sourceChainId).
+      findMany: jest.fn().mockResolvedValue([]),
       delete: jest.fn().mockResolvedValue(undefined),
       update: jest.fn().mockResolvedValue(undefined),
     },
     installmentGroup: {
       findUnique: jest.fn().mockResolvedValue(null),
+      // Usado por loadOriginCurrencyMaps (resolución de moneda de origen de un
+      // calculado-de-cuota, vía sourceInstallmentGroupId).
+      findMany: jest.fn().mockResolvedValue([]),
       delete: jest.fn().mockResolvedValue(undefined),
       update: jest.fn().mockResolvedValue(undefined),
     },
@@ -587,7 +597,20 @@ describe('HistoryService', () => {
       );
     });
 
-    it('FIJO calculado: `isCalculated` true, `amount` top-level null, y el diff usa `formula` (no `amount`)', async () => {
+    // -----------------------------------------------------------------------
+    // `formula.currency` (corrección post-QA visual): la fila Recurring de un
+    // calculado NUNCA tiene su propia currency real — `currency`/`amountCents`/
+    // `exchangeRate`/`anchorCurrency` ahí son PLACEHOLDERS (el default del
+    // usuario al crear, 0, 1) sin significado; el monto y la moneda reales
+    // siempre se derivan del ORIGEN (sourceChainId/sourceMovementId/
+    // sourceInstallmentGroupId) en tiempo de lectura. Por eso TODOS los
+    // fixtures de calculado de acá abajo dejan `currency: 'ARS'` (el
+    // placeholder que la base realmente persiste) y el ORIGEN mockeado en una
+    // moneda DISTINTA — así el assert `formula.currency === <moneda del
+    // origen>` prueba que el campo no sale de la fila propia.
+    // -----------------------------------------------------------------------
+
+    it('FIJO calculado: `isCalculated` true, `amount` top-level null, y el diff usa `formula` con la moneda del ORIGEN (no `amount`)', async () => {
       const row = makeRecurringRow({
         id: 'calc-1',
         sourceMovementId: 'tx-origen',
@@ -608,6 +631,8 @@ describe('HistoryService', () => {
         ...row,
         formulaOperand: 1500, // cambió el operando
       });
+      // Origen (único) en USD — distinto del placeholder 'ARS' de la fila del calculado.
+      prisma.transaction.findMany.mockResolvedValue([{ id: 'tx-origen', currency: 'USD' }]);
 
       const [item] = await service.findAllForUser(USER_ID);
 
@@ -616,13 +641,55 @@ describe('HistoryService', () => {
       const formulaChange = item.changes.find((c) => c.field === 'formula');
       expect(formulaChange).toEqual({
         field: 'formula',
-        previous: { operator: 'PCT', operand: 1000, sign: 1 },
-        next: { operator: 'PCT', operand: 1500, sign: 1 },
+        previous: { operator: 'PCT', operand: 1000, sign: 1, currency: 'USD' },
+        next: { operator: 'PCT', operand: 1500, sign: 1, currency: 'USD' },
       });
       expect(item.changes.some((c) => c.field === 'amount')).toBe(false);
+      // Un solo round-trip: previous y next comparten origen, se resuelve UNA vez (no N+1).
+      expect(prisma.transaction.findMany).toHaveBeenCalledTimes(1);
+      // Sin filtro de deletedAt (RF-HIST-002: el historial muestra movimientos eliminados).
+      expect(prisma.transaction.findMany).toHaveBeenCalledWith({
+        where: { userId: USER_ID, id: { in: ['tx-origen'] } },
+        select: { id: true, currency: true },
+      });
     });
 
-    it('FIJO calculado eliminado: el estado usa `formula` + `startMonth`, sin `amount`/`currency`/`paymentMethod`', async () => {
+    it('FIJO calculado-de-ÚNICO eliminado: `formula` lleva la moneda del ORIGEN (Transaction), no el placeholder de la fila', async () => {
+      const row = makeRecurringRow({
+        id: 'calc-usd',
+        sourceMovementId: 'tx-origen',
+        // Placeholder real que persiste la base para un calculado: ARS (el
+        // default del usuario al crearlo), NUNCA la moneda verdadera.
+        currency: 'ARS' as never,
+        formulaOperator: 'ADD' as never,
+        formulaOperand: 20000,
+        formulaSign: 1,
+      });
+      const snapshot: FijoDeleteSnapshot = { kind: 'delete', chains: [{ chainId: row.chainId, rows: [row] }] };
+      const entry = makeEntry({
+        id: 'e1',
+        targetKind: HistoryTargetKind.FIJO,
+        targetId: row.chainId,
+        action: HistoryAction.DELETE,
+        snapshot: snapshot as never,
+      });
+      repo.findAllForUserAsc.mockResolvedValue([entry]);
+      prisma.category.findMany.mockResolvedValue([
+        { id: 'cat-fijo', name: 'Vivienda', color: '#123456', scope: 'EXPENSE' },
+      ]);
+      // El origen (único) SÍ está en USD.
+      prisma.transaction.findMany.mockResolvedValue([{ id: 'tx-origen', currency: 'USD' }]);
+
+      const [item] = await service.findAllForUser(USER_ID);
+
+      const formulaChange = item.changes.find((c) => c.field === 'formula');
+      expect(formulaChange).toEqual({
+        field: 'formula',
+        previous: { operator: 'ADD', operand: 20000, sign: 1, currency: 'USD' },
+      });
+    });
+
+    it('FIJO calculado-de-FIJO: `formula` lleva la moneda de la fila VIGENTE (mayor startMonth) de la cadena de origen', async () => {
       const row = makeRecurringRow({
         id: 'calc-2',
         sourceChainId: 'chain-origen',
@@ -642,6 +709,12 @@ describe('HistoryService', () => {
       prisma.category.findMany.mockResolvedValue([
         { id: 'cat-fijo', name: 'Vivienda', color: '#123456', scope: 'EXPENSE' },
       ]);
+      // Cadena de origen con 2 splits: la fila vigente (mayor startMonth) está en
+      // EUR; una fila vieja de la misma cadena, en ARS — debe ganar la vigente.
+      prisma.recurring.findMany.mockResolvedValue([
+        { chainId: 'chain-origen', startMonth: '2025-01', currency: 'ARS' },
+        { chainId: 'chain-origen', startMonth: '2026-01', currency: 'EUR' },
+      ]);
 
       const [item] = await service.findAllForUser(USER_ID);
 
@@ -649,6 +722,81 @@ describe('HistoryService', () => {
       expect(item.amount).toBeNull();
       const fields = item.changes.map((c) => c.field);
       expect(fields).toEqual(['formula', 'category', 'description', 'startMonth']);
+      const formulaChange = item.changes.find((c) => c.field === 'formula');
+      expect(formulaChange).toEqual({
+        field: 'formula',
+        previous: { operator: 'ADD', operand: 50000, sign: -1, currency: 'EUR' },
+      });
+      expect(prisma.recurring.findMany).toHaveBeenCalledWith({
+        where: { userId: USER_ID, chainId: { in: ['chain-origen'] } },
+        select: { chainId: true, startMonth: true, currency: true },
+      });
+    });
+
+    it('FIJO calculado-de-CUOTA: `formula` lleva la moneda del ORIGEN (InstallmentGroup)', async () => {
+      const row = makeRecurringRow({
+        id: 'calc-cuota',
+        sourceInstallmentGroupId: 'grupo-origen',
+        formulaOperator: 'MUL' as never,
+        formulaOperand: 1500000,
+        formulaSign: 1,
+      });
+      const snapshot: FijoDeleteSnapshot = { kind: 'delete', chains: [{ chainId: row.chainId, rows: [row] }] };
+      const entry = makeEntry({
+        id: 'e1',
+        targetKind: HistoryTargetKind.FIJO,
+        targetId: row.chainId,
+        action: HistoryAction.DELETE,
+        snapshot: snapshot as never,
+      });
+      repo.findAllForUserAsc.mockResolvedValue([entry]);
+      prisma.category.findMany.mockResolvedValue([
+        { id: 'cat-fijo', name: 'Vivienda', color: '#123456', scope: 'EXPENSE' },
+      ]);
+      prisma.installmentGroup.findMany.mockResolvedValue([{ id: 'grupo-origen', currency: 'BRL' }]);
+
+      const [item] = await service.findAllForUser(USER_ID);
+
+      const formulaChange = item.changes.find((c) => c.field === 'formula');
+      expect(formulaChange).toEqual({
+        field: 'formula',
+        previous: { operator: 'MUL', operand: 1500000, sign: 1, currency: 'BRL' },
+      });
+      expect(prisma.installmentGroup.findMany).toHaveBeenCalledWith({
+        where: { userId: USER_ID, id: { in: ['grupo-origen'] } },
+        select: { id: true, currency: true },
+      });
+    });
+
+    it('FIJO calculado cuyo origen NO se puede resolver (borrado físicamente): omite el campo `formula` entero, sin default de moneda', async () => {
+      const row = makeRecurringRow({
+        id: 'calc-huerfano',
+        sourceMovementId: 'tx-que-ya-no-existe',
+        formulaOperator: 'ADD' as never,
+        formulaOperand: 10000,
+        formulaSign: 1,
+      });
+      const snapshot: FijoDeleteSnapshot = { kind: 'delete', chains: [{ chainId: row.chainId, rows: [row] }] };
+      const entry = makeEntry({
+        id: 'e1',
+        targetKind: HistoryTargetKind.FIJO,
+        targetId: row.chainId,
+        action: HistoryAction.DELETE,
+        snapshot: snapshot as never,
+      });
+      repo.findAllForUserAsc.mockResolvedValue([entry]);
+      prisma.category.findMany.mockResolvedValue([
+        { id: 'cat-fijo', name: 'Vivienda', color: '#123456', scope: 'EXPENSE' },
+      ]);
+      // transaction.findMany por default devuelve [] (ver makePrismaMock): el
+      // origen no aparece — simula un Transaction purgado físicamente.
+
+      const [item] = await service.findAllForUser(USER_ID);
+
+      const fields = item.changes.map((c) => c.field);
+      expect(fields).not.toContain('formula');
+      // El resto de los campos del calculado (category/description/startMonth) sigue presente.
+      expect(fields).toEqual(expect.arrayContaining(['category', 'description', 'startMonth']));
     });
   });
 });

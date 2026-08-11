@@ -53,7 +53,6 @@ describe("ChainUndoModal", () => {
       <ChainUndoModal
         entry={olderEntry}
         chainEntries={chain2}
-        formulaCurrencyFallback="ARS"
         isSubmitting={false}
         onConfirm={vi.fn()}
         onClose={vi.fn()}
@@ -71,7 +70,6 @@ describe("ChainUndoModal", () => {
       <ChainUndoModal
         entry={openEntry}
         chainEntries={chainEntries}
-        formulaCurrencyFallback="ARS"
         isSubmitting={false}
         onConfirm={vi.fn()}
         onClose={vi.fn()}
@@ -89,7 +87,6 @@ describe("ChainUndoModal", () => {
       <ChainUndoModal
         entry={openEntry}
         chainEntries={chainEntries}
-        formulaCurrencyFallback="ARS"
         isSubmitting={false}
         onConfirm={vi.fn()}
         onClose={vi.fn()}
@@ -105,7 +102,6 @@ describe("ChainUndoModal", () => {
       <ChainUndoModal
         entry={openEntry}
         chainEntries={chainEntries}
-        formulaCurrencyFallback="ARS"
         isSubmitting={false}
         onConfirm={vi.fn()}
         onClose={vi.fn()}
@@ -123,7 +119,6 @@ describe("ChainUndoModal", () => {
       <ChainUndoModal
         entry={openEntry}
         chainEntries={chainEntries}
-        formulaCurrencyFallback="ARS"
         isSubmitting={false}
         onConfirm={onConfirm}
         onClose={onClose}
@@ -142,7 +137,6 @@ describe("ChainUndoModal", () => {
       <ChainUndoModal
         entry={openEntry}
         chainEntries={chainEntries}
-        formulaCurrencyFallback="ARS"
         isSubmitting
         onConfirm={vi.fn()}
         onClose={vi.fn()}
@@ -158,7 +152,6 @@ describe("ChainUndoModal", () => {
       <ChainUndoModal
         entry={openEntry}
         chainEntries={chainEntries}
-        formulaCurrencyFallback="ARS"
         isSubmitting={false}
         onConfirm={onConfirm}
         onClose={vi.fn()}
@@ -174,7 +167,6 @@ describe("ChainUndoModal", () => {
       <ChainUndoModal
         entry={openEntry}
         chainEntries={chainEntries}
-        formulaCurrencyFallback="ARS"
         isSubmitting={false}
         onConfirm={vi.fn()}
         onClose={vi.fn()}
@@ -190,7 +182,6 @@ describe("ChainUndoModal", () => {
       <ChainUndoModal
         entry={openEntry}
         chainEntries={chainEntries}
-        formulaCurrencyFallback="ARS"
         isSubmitting={false}
         onConfirm={vi.fn()}
         onClose={vi.fn()}
@@ -218,7 +209,6 @@ describe("ChainUndoModal", () => {
       <ChainUndoModal
         entry={bigAmountEntry}
         chainEntries={[bigAmountEntry]}
-        formulaCurrencyFallback="ARS"
         isSubmitting={false}
         onConfirm={vi.fn()}
         onClose={vi.fn()}
@@ -236,7 +226,6 @@ describe("ChainUndoModal", () => {
       <ChainUndoModal
         entry={openEntry}
         chainEntries={[openEntry]}
-        formulaCurrencyFallback="ARS"
         isSubmitting={false}
         onConfirm={vi.fn()}
         onClose={vi.fn()}

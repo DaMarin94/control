@@ -88,18 +88,6 @@ export interface SkipToggleResult {
   month: string;
 }
 
-/**
- * Fila mínima de Recurring para localizar el monto del origen de un calculado.
- * Usada en la derivación on-the-fly del monto del calculado.
- */
-export interface RecurringSourceRow {
-  id: string;
-  chainId: string;
-  amountCents: number;
-  startMonth: string;
-  deletedFrom: string | null;
-}
-
 // Include para todas las queries de Recurring
 const RECURRING_INCLUDE = {
   category: {
@@ -217,44 +205,6 @@ export class RecurringRepository {
   // ---------------------------------------------------------------------------
   // Calculados (Fase 1.1.7) — búsquedas por chainId
   // ---------------------------------------------------------------------------
-
-  /**
-   * Busca la fila activa (la más reciente en la cadena) de un fijo para un mes dado.
-   * Un fijo lógico es una cadena de filas con el mismo chainId: la fila activa en el mes M
-   * es la que tiene startMonth <= M AND (deletedFrom IS NULL OR deletedFrom > M).
-   *
-   * Se usa para derivar el monto del origen de un calculado on-the-fly.
-   *
-   * NOTA: puede devolver null si el origen no tiene fila activa en ese mes (el origen
-   * está eliminado o su rango de actividad no cubre el mes).
-   */
-  async findActiveRowByChainId(
-    chainId: string,
-    month: string,
-  ): Promise<RecurringSourceRow | null> {
-    // Busca la fila de la cadena activa en el mes pedido.
-    // Si hay varias (no debería por la invariante del split), toma la de startMonth más alto.
-    const r = await this.prisma.recurring.findFirst({
-      where: {
-        chainId,
-        ...NOT_DELETED,
-        startMonth: { lte: month },
-        OR: [
-          { deletedFrom: null },
-          { deletedFrom: { gt: month } },
-        ],
-      },
-      orderBy: { startMonth: 'desc' },
-      select: {
-        id: true,
-        chainId: true,
-        amountCents: true,
-        startMonth: true,
-        deletedFrom: true,
-      },
-    });
-    return r;
-  }
 
   /**
    * Busca todas las filas VIVAS de una cadena (chainId) con sus campos esenciales.
@@ -497,45 +447,5 @@ export class RecurringRepository {
     await this.prisma.recurringSkip.delete({
       where: { recurringId_month: { recurringId, month } },
     });
-  }
-
-  /**
-   * Devuelve el set de meses salteados de un fijo dado como Set<string>.
-   * Útil para las queries del mes y del año donde ya se tiene el recurringId.
-   */
-  async findSkipsForRecurring(recurringId: string): Promise<Set<string>> {
-    const skips = await this.prisma.recurringSkip.findMany({
-      where: { recurringId },
-      select: { month: true },
-    });
-    return new Set(skips.map((s) => s.month));
-  }
-
-  /**
-   * Devuelve el set de meses salteados de TODOS los fijos del usuario como Map<recurringId, Set<month>>.
-   * Usada en las queries de proyección mensual/anual para aplicar skips en memoria.
-   */
-  async findAllSkipsForUser(
-    userId: string,
-  ): Promise<Map<string, Set<string>>> {
-    // Traer todos los skips de fijos del usuario (join vía Recurring.userId)
-    const skips = await this.prisma.recurringSkip.findMany({
-      where: {
-        recurring: { userId },
-      },
-      select: {
-        recurringId: true,
-        month: true,
-      },
-    });
-
-    const result = new Map<string, Set<string>>();
-    for (const s of skips) {
-      if (!result.has(s.recurringId)) {
-        result.set(s.recurringId, new Set<string>());
-      }
-      result.get(s.recurringId)!.add(s.month);
-    }
-    return result;
   }
 }

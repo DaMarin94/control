@@ -11,7 +11,6 @@
  * cuotas, etc.).
  */
 
-import type { CurrencyCode } from "@/types/settings";
 import type { MovementType } from "@/types/movement";
 import type {
   HistoryChangeDto,
@@ -93,14 +92,13 @@ export function formatHistoryAmount(value: HistoryAmountValue): { text: string; 
  * con el signo del resultado como prefijo (`+`/`−`, §3.2.a "el signo viaja
  * dentro de la expresión").
  *
- * `currency` es un fallback (moneda default del usuario): el historial no
- * garantiza la moneda propia del calculado en el momento de la entrada —
- * solo se usa para formatear el operando de ADD/SUB (el resto de los
- * operadores no formatean moneda).
+ * `value.currency` es la moneda PROPIA del calculado (la del `Recurring`) —
+ * se usa para formatear el operando solo cuando el operador lo vuelve un
+ * monto (ADD/SUB); el resto de los operadores no formatean moneda.
  */
-export function formatHistoryFormula(value: HistoryFormulaValue, currency: CurrencyCode): string {
+export function formatHistoryFormula(value: HistoryFormulaValue): string {
   const userOperand = descaleOperand(value.operand, value.operator);
-  const expression = buildFormulaExpression(null, value.operator, userOperand, currency);
+  const expression = buildFormulaExpression(null, value.operator, userOperand, value.currency);
   return `${value.sign < 0 ? "−" : "+"}${expression}`;
 }
 
@@ -174,13 +172,10 @@ function movementTypeLabel(type: MovementType): string {
 
 /**
  * Traduce un `HistoryChangeDto` a su forma de presentación (docs/design.md §3).
- * `formulaCurrencyFallback` es la moneda default del usuario (ver
- * `formatHistoryFormula`).
  */
 export function describeHistoryChange(
   change: HistoryChangeDto,
   direction: HistoryChangeDirection,
-  formulaCurrencyFallback: CurrencyCode,
 ): HistoryChangeDisplay {
   const label = HISTORY_FIELD_LABELS[change.field];
   const isState = !("next" in change);
@@ -211,8 +206,8 @@ export function describeHistoryChange(
         mono: true,
         promoted: false,
         truncatable: false,
-        leftText: left ? formatHistoryFormula(left, formulaCurrencyFallback) : null,
-        rightText: formatHistoryFormula(right, formulaCurrencyFallback),
+        leftText: left ? formatHistoryFormula(left) : null,
+        rightText: formatHistoryFormula(right),
       };
     }
 
@@ -409,11 +404,8 @@ const HISTORY_SUMMARY_NOWRAP_FIELDS: ReadonlySet<HistoryFieldId> = new Set([
  * `nowrap` distingue cifra indivisible (nunca trunca, envuelve entera) de
  * texto (trunca con elipsis) — ver prioridad de contención de §6.2.
  */
-export function summarizeHistoryChange(
-  change: HistoryChangeDto,
-  formulaCurrencyFallback: CurrencyCode,
-): { text: string; nowrap: boolean } {
-  const display = describeHistoryChange(change, "list", formulaCurrencyFallback);
+export function summarizeHistoryChange(change: HistoryChangeDto): { text: string; nowrap: boolean } {
+  const display = describeHistoryChange(change, "list");
   return {
     text: `${display.label}: ${display.rightText}`,
     nowrap: HISTORY_SUMMARY_NOWRAP_FIELDS.has(change.field),

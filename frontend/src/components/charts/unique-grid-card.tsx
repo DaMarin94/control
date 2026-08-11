@@ -55,7 +55,7 @@ import {
 import { describeLimitMark, type EvaluatedLimitMark } from "@/lib/limits/evaluate";
 import { limitBoldClass, limitTintClass, LimitGlyph } from "@/components/limits/limit-mark";
 import { LimitsInfoPopover } from "@/components/limits/limits-info-popover";
-import { formatCurrency, CURRENCY_SYMBOLS } from "@/lib/format";
+import { formatCurrency, CURRENCY_SYMBOLS, getLocalTodayString } from "@/lib/format";
 import { ChartLegend } from "@/components/ui/chart";
 import { CardCurrencySelect } from "@/components/ui/card-currency-select";
 import { useScrollShadow, getScrollShadowStyle } from "@/hooks/use-scroll-shadow";
@@ -1488,14 +1488,8 @@ export function UniqueGridCard({
   // P2 — Fase 1 (Tramo 2): límites del usuario (marca visual pasiva). [] = cero impacto (D9).
   const { limits } = useLimits();
 
-  // Calcular `today` en formato YYYY-MM-DD en la zona del navegador
-  const today = useMemo(() => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-    const d = String(now.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }, []);
+  // `today` en formato YYYY-MM-DD en la zona del navegador (ver getLocalTodayString)
+  const today = useMemo(() => getLocalTodayString(), []);
 
   const { data, isLoading, isError, isFetching, refetch } = useUnicoGrid(year, categoryIds, currency, today, anchorUsdCents);
 

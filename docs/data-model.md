@@ -661,7 +661,19 @@ El `Recurring` que devuelven los endpoints (y que el front recibe) incluye, adem
 - **Invariante de origen:** en un **calculado**, exactamente **uno** de `{ sourceChainId, sourceMovementId, sourceInstallmentGroupId }` es no-null (el resto null). Los **tres null** = fijo normal. La exclusión mutua la valida el service. Borrar el `Transaction` / `InstallmentGroup` de origen **cascadea** (FK `onDelete: Cascade`) y borra entero el calculado.
 - **`formulaOperator` / `formulaOperand` / `formulaSign`** — `null` en fijos normales; la fórmula (con operando escalado) en calculados.
 
-> En los calculados, el `amountCents` y el `type` que persiste la fila son **placeholders** (`0` y `EXPENSE`) que **nunca** se usan para mostrar: el monto y el tipo reales se derivan al vuelo en `GET /movements` (ver `MovementItem.amountCents` / `type` y `docs/backend.md`, §Movimientos calculados).
+### Columnas placeholder de un calculado (trampa del modelo)
+
+En una fila `Recurring` que es un **calculado**, estas columnas **no tienen valor de negocio**: se persisten con un relleno fijo y leerlas como si fueran el dato real produce un bug silencioso (moneda o monto equivocados, sin error visible).
+
+| Columna | Qué se persiste (placeholder) | De dónde sale el dato real |
+|---|---|---|
+| `amountCents` | `0` | resultado de la fórmula aplicada al **monto del origen**, derivado al vuelo |
+| `type` | `EXPENSE` | signo del resultado de la fórmula (RN-018) |
+| `currency` | la `defaultCurrency` del usuario | la **moneda del origen** |
+| `exchangeRate` | `1` | la **cotización del origen** |
+| `anchorCurrency` | la `defaultCurrency` del usuario | el **`anchorCurrency` del origen** |
+
+**Regla:** todo consumidor que necesite monto, tipo, moneda o cotización de un calculado resuelve primero su **origen** por `sourceChainId` / `sourceMovementId` / `sourceInstallmentGroupId` (invariante arriba) y lee esos campos de ahí. La derivación al vuelo ya la hacen `GET /movements` (ver `MovementItem.amountCents` / `type`) y `GET /history` (ver `formula.currency` en §Historial de cambios); mecánica en `docs/backend.md`, §Movimientos calculados.
 
 ---
 
@@ -1015,7 +1027,7 @@ HistoryChange = {
 | Orden | `field` | Shape del valor (`previous` / `next`) |
 |---|---|---|
 | 1 | `amount` | `{ amountCents: number, currency: Currency, type: MovementType }` |
-| 2 | `formula` | `{ operator: "ADD"\|"SUB"\|"MUL"\|"DIV"\|"PCT", operand: number, sign: 1 \| -1 }` — operando **escalado** (ver §Escalado del operando) |
+| 2 | `formula` | `{ operator: "ADD"\|"SUB"\|"MUL"\|"DIV"\|"PCT", operand: number, sign: 1 \| -1, currency: Currency }` — operando **escalado** (ver §Escalado del operando) |
 | 3 | `currency` | `"ARS" \| "USD" \| "EUR" \| "BRL"` |
 | 4 | `exchangeRate` | `number` |
 | 5 | `type` | `"EXPENSE" \| "INCOME"` |
@@ -1029,6 +1041,8 @@ HistoryChange = {
 
 - **Qué campos aparecen depende del `targetKind`, de `isCalculated` y de la `action`.** En una **edición** solo viajan los campos realmente editables de ese tipo de movimiento y que efectivamente cambiaron; en una **eliminación** viaja el **estado** del movimiento tal como estaba, que es un set más amplio (incluye campos no editables que hacen a su identidad, como el `startMonth` de un fijo). El mapeo completo de aplicabilidad vive en `backend/src/history/history.service.ts`.
 - **`formula` reemplaza a `amount` en calculados**, por el mismo motivo por el que `amount` viene `null` a nivel entrada.
+- **`formula.currency` es la moneda del ORIGEN del calculado**, resuelta por `sourceChainId` (origen fijo), `sourceMovementId` (origen único) o `sourceInstallmentGroupId` (origen grupo de cuotas). **No** sale de la fila del calculado: sus columnas de moneda son placeholders (ver §Columnas placeholder de un calculado). Da el símbolo con el que se formatea el operando **solo en `ADD` y `SUB`**, los únicos operadores donde el operando es un monto; en `MUL`, `DIV` y `PCT` el operando es un factor/porcentaje y se formatea como número plano, sin símbolo. La `currency` viaja igual en los cinco operadores.
+- **Si el origen no se puede resolver, el backend omite el campo `formula` entero del diff** (no lo emite) en vez de mandar un default. Para el consumidor: **si llega `formula`, su `currency` es confiable** — no corresponde ningún fallback del lado del cliente.
 
 ### Gotcha — la ausencia de `next` es el discriminador, no `next === null`
 

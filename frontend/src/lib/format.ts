@@ -250,6 +250,23 @@ export function getCurrentMonth(): string {
 }
 
 /**
+ * Fecha local del navegador en formato YYYY-MM-DD, para el parámetro `today`
+ * que consumen varios endpoints (GET /movements, /simulations,
+ * /movements/reports/annual-unicos, /movements/reports/annual-inflation-income).
+ * Usa getters locales de Date (`getFullYear()`, `getMonth()+1`, `getDate()`)
+ * y NUNCA `toISOString()`, que devuelve UTC y reintroduce el corrimiento de
+ * mes cerca de medianoche en zonas UTC−N (RN-028): el backend necesita la
+ * fecha calendario del usuario, no la suya propia.
+ */
+export function getLocalTodayString(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/**
  * Formatea un mes en formato YYYY-MM como encabezado legible.
  * Ej: "2026-06" → "Junio 2026"
  */

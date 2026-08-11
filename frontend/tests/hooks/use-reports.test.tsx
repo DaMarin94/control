@@ -29,6 +29,7 @@ import type { ReactNode } from "react";
 import { useReports, REPORTS_QUERY_KEY, useUnicoGrid, UNICO_GRID_QUERY_KEY } from "@/hooks/use-reports";
 import { ApiError } from "@/types/api";
 import type { ReportsMovementsResponse, UnicoGridResponse } from "@/types/reports";
+import type { CurrencyCode } from "@/types/settings";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -381,9 +382,12 @@ describe("useReports", () => {
   it("refetcha al cambiar currency (query keys distintas)", async () => {
     mockApiGet.mockResolvedValue(mockReportsResponse);
 
+    // Anotado explícitamente: sin esto, TS infiere el tipo de `initialProps` a partir del
+    // literal ("ARS") y `rerender({ curr: "USD" })` deja de tipar (RN: no castear el valor).
+    const initialProps: { curr: CurrencyCode | undefined } = { curr: "ARS" };
     const { result, rerender } = renderHook(
-      ({ curr }: { curr: "ARS" | "USD" | undefined }) => useReports(2026, null, curr),
-      { wrapper: createWrapper(), initialProps: { curr: "ARS" as const } }
+      ({ curr }: { curr: CurrencyCode | undefined }) => useReports(2026, null, curr),
+      { wrapper: createWrapper(), initialProps }
     );
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -526,9 +530,12 @@ describe("useReports", () => {
     // al cambiar el parámetro (comportamiento garantizado por keepPreviousData en TQ v5).
     mockApiGet.mockResolvedValue(mockReportsResponse);
 
+    // Anotado explícitamente: sin esto, TS infiere `initialProps.catIds` como `null`
+    // (el único valor presente) y `rerender({ catIds: [...] })` deja de tipar.
+    const initialProps: { catIds: string[] | null } = { catIds: null };
     const { result, rerender } = renderHook(
       ({ catIds }: { catIds: string[] | null }) => useReports(2026, catIds),
-      { wrapper: createWrapper(), initialProps: { catIds: null } }
+      { wrapper: createWrapper(), initialProps }
     );
 
     // Primera carga exitosa
@@ -718,10 +725,13 @@ describe("useReports", () => {
   it("refetcha al cambiar direction (query keys distintas)", async () => {
     mockApiGet.mockResolvedValue(mockReportsResponse);
 
+    // Anotado explícitamente: sin esto, TS infiere `initialProps.dir` como `undefined`
+    // (el único valor presente) y `rerender({ dir: "expense" })` deja de tipar.
+    const initialProps: { dir: "expense" | "income" | "both" | undefined } = { dir: undefined };
     const { result, rerender } = renderHook(
       ({ dir }: { dir: "expense" | "income" | "both" | undefined }) =>
         useReports(2026, null, undefined, undefined, dir),
-      { wrapper: createWrapper(), initialProps: { dir: undefined } }
+      { wrapper: createWrapper(), initialProps }
     );
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));

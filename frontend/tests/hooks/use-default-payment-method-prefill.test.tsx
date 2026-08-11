@@ -171,15 +171,25 @@ describe("useDefaultPaymentMethodPrefill", () => {
     mockMethods(undefined);
     const setPaymentMethodId = vi.fn();
 
+    // Anotado explícitamente: sin esto, TS infiere `initialProps.methods` como
+    // `undefined` (el único valor presente) y `rerender({ methods: [...] })` deja de
+    // tipar. El hook no lee estos props directamente (se re-evalúa por los mocks de
+    // usePreferences/usePaymentMethods reconfigurados antes de cada rerender); solo
+    // sirven para tipar el rerender de forma explícita.
+    const initialProps: { isLoading: boolean; methods: PaymentMethod[] | undefined } = {
+      isLoading: true,
+      methods: undefined,
+    };
+
     const { rerender } = renderHook(
-      (props: { isLoading: boolean; methods: PaymentMethod[] | undefined }) =>
+      () =>
         useDefaultPaymentMethodPrefill({
           slot: "unico",
           isEditing: false,
           currentPaymentMethodId: "",
           setPaymentMethodId,
         }),
-      { initialProps: { isLoading: true, methods: undefined } },
+      { initialProps },
     );
 
     expect(setPaymentMethodId).not.toHaveBeenCalled();

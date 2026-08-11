@@ -26,6 +26,19 @@ import {
 
 type TxClient = Prisma.TransactionClient;
 
+/**
+ * Mapas batcheados de `currency` de origen de calculados, keyeados por cada una
+ * de las 3 claves posibles (mutuamente excluyentes por invariante — ver
+ * `loadOriginCurrencyMaps`). Usados exclusivamente para resolver
+ * `HistoryFormulaValue.currency` (el símbolo con el que el frontend formatea el
+ * `operand` de la fórmula).
+ */
+interface OriginCurrencyMaps {
+  byChainId: Map<string, Currency>;
+  byMovementId: Map<string, Currency>;
+  byInstallmentGroupId: Map<string, Currency>;
+}
+
 export interface HistoryEntryResponseDto {
   id: string;
   targetKind: HistoryTargetKind;
@@ -240,11 +253,17 @@ export class HistoryService {
     const pending: PendingItem[] = [];
     const categoryIds = new Set<string>();
     const paymentMethodIds = new Set<string>();
+    const sourceChainIds = new Set<string>();
+    const sourceMovementIds = new Set<string>();
+    const sourceInstallmentGroupIds = new Set<string>();
 
     const collectIds = (fields: ComparableFields | null) => {
       if (!fields) return;
       if (fields.categoryId) categoryIds.add(fields.categoryId);
       if (fields.paymentMethodId) paymentMethodIds.add(fields.paymentMethodId);
+      if (fields.sourceChainId) sourceChainIds.add(fields.sourceChainId);
+      if (fields.sourceMovementId) sourceMovementIds.add(fields.sourceMovementId);
+      if (fields.sourceInstallmentGroupId) sourceInstallmentGroupIds.add(fields.sourceInstallmentGroupId);
     };
 
     for (const group of groups.values()) {
@@ -278,8 +297,16 @@ export class HistoryService {
     // Resolver categorías (RF-CAT-004: se muestran aunque estén soft-deleted) y
     // métodos de pago (RF-PM-006: espejo — se muestran aunque estén soft-deleted)
     // embebidos, en una sola query cada uno.
-    const categoryMap = await this.loadCategoryMap(Array.from(categoryIds));
-    const paymentMethodMap = await this.loadPaymentMethodMap(Array.from(paymentMethodIds));
+    const [categoryMap, paymentMethodMap, originCurrencyMaps] = await Promise.all([
+      this.loadCategoryMap(Array.from(categoryIds)),
+      this.loadPaymentMethodMap(Array.from(paymentMethodIds)),
+      this.loadOriginCurrencyMaps(
+        userId,
+        Array.from(sourceChainIds),
+        Array.from(sourceMovementIds),
+        Array.from(sourceInstallmentGroupIds),
+      ),
+    ]);
 
     const result: HistoryEntryResponseDto[] = pending.map((p) => {
       const fieldIds = this.fieldIdsFor(p.entry.targetKind, p.isCalculated, p.entry.action);
@@ -287,9 +314,16 @@ export class HistoryService {
       const changes =
         p.entry.action === HistoryAction.EDIT
           ? p.next
-            ? this.diffFields(p.previous, p.next, fieldIds, categoryMap, paymentMethodMap)
+            ? this.diffFields(p.previous, p.next, fieldIds, categoryMap, paymentMethodMap, originCurrencyMaps)
             : []
-          : this.stateFields(p.previous, fieldIds, categoryMap, paymentMethodMap, userDefaultCurrency);
+          : this.stateFields(
+              p.previous,
+              fieldIds,
+              categoryMap,
+              paymentMethodMap,
+              userDefaultCurrency,
+              originCurrencyMaps,
+            );
 
       return {
         id: p.entry.id,
@@ -654,6 +688,9 @@ export class HistoryService {
       formulaOperator: row.formulaOperator,
       formulaOperand: row.formulaOperand,
       formulaSign: row.formulaSign,
+      sourceChainId: row.sourceChainId,
+      sourceMovementId: row.sourceMovementId,
+      sourceInstallmentGroupId: row.sourceInstallmentGroupId,
     };
   }
 
@@ -718,6 +755,9 @@ export class HistoryService {
       formulaOperator: r.formulaOperator,
       formulaOperand: r.formulaOperand,
       formulaSign: r.formulaSign,
+      sourceChainId: r.sourceChainId,
+      sourceMovementId: r.sourceMovementId,
+      sourceInstallmentGroupId: r.sourceInstallmentGroupId,
     };
   }
 
@@ -735,15 +775,28 @@ export class HistoryService {
     fields: ComparableFields,
     categoryMap: Map<string, HistoryCategoryValue>,
     paymentMethodMap: Map<string, HistoryPaymentMethodValue>,
+    originCurrencyMaps: OriginCurrencyMaps,
   ): HistoryFieldValueMap[HistoryFieldId] | undefined {
     switch (fieldId) {
       case 'amount':
         return this.buildAmountValue(fields) ?? undefined;
-      case 'formula':
+      case 'formula': {
         if (fields.formulaOperator == null || fields.formulaOperand == null || fields.formulaSign == null) {
           return undefined;
         }
-        return { operator: fields.formulaOperator, operand: fields.formulaOperand, sign: fields.formulaSign };
+        // `currency` es la del ORIGEN del calculado, no la de esta fila (placeholder —
+        // ver HistoryFormulaValue.currency). Si el origen no se puede resolver (borrado
+        // físicamente, o dato inconsistente), se omite el campo entero: un símbolo de
+        // moneda equivocado es peor que un campo ausente.
+        const originCurrency = this.resolveOriginCurrency(fields, originCurrencyMaps);
+        if (originCurrency == null) return undefined;
+        return {
+          operator: fields.formulaOperator,
+          operand: fields.formulaOperand,
+          sign: fields.formulaSign,
+          currency: originCurrency,
+        };
+      }
       case 'currency':
         return fields.currency;
       case 'exchangeRate':
@@ -850,11 +903,12 @@ export class HistoryService {
     fieldIds: HistoryFieldId[],
     categoryMap: Map<string, HistoryCategoryValue>,
     paymentMethodMap: Map<string, HistoryPaymentMethodValue>,
+    originCurrencyMaps: OriginCurrencyMaps,
   ): HistoryChangeDto[] {
     const changes: HistoryChangeDto[] = [];
     for (const field of fieldIds) {
-      const prevValue = this.buildFieldValue(field, previous, categoryMap, paymentMethodMap);
-      const nextValue = this.buildFieldValue(field, next, categoryMap, paymentMethodMap);
+      const prevValue = this.buildFieldValue(field, previous, categoryMap, paymentMethodMap, originCurrencyMaps);
+      const nextValue = this.buildFieldValue(field, next, categoryMap, paymentMethodMap, originCurrencyMaps);
       if (prevValue === undefined && nextValue === undefined) continue;
 
       if (field === 'exchangeRate') {
@@ -889,10 +943,11 @@ export class HistoryService {
     categoryMap: Map<string, HistoryCategoryValue>,
     paymentMethodMap: Map<string, HistoryPaymentMethodValue>,
     userDefaultCurrency: Currency | null,
+    originCurrencyMaps: OriginCurrencyMaps,
   ): HistoryChangeDto[] {
     const changes: HistoryChangeDto[] = [];
     for (const field of fieldIds) {
-      const value = this.buildFieldValue(field, fields, categoryMap, paymentMethodMap);
+      const value = this.buildFieldValue(field, fields, categoryMap, paymentMethodMap, originCurrencyMaps);
       if (value === undefined) continue;
       if (field === 'paymentMethod' && value === null) continue;
       if (field === 'exchangeRate' && !this.hasRealConversion(fields)) continue;
@@ -941,6 +996,86 @@ export class HistoryService {
     });
     for (const c of rows) map.set(c.id, { id: c.id, name: c.name, color: c.color, scope: c.scope });
     return map;
+  }
+
+  /**
+   * Resuelve la `currency` del origen de un calculado a partir de las 3 claves
+   * batcheadas por `loadOriginCurrencyMaps` (cargadas UNA vez para toda la
+   * respuesta, no por campo/entrada — evita N+1 con muchas entradas). `undefined`
+   * si `fields` no es un calculado, o si su origen no se pudo resolver (chain/
+   * movimiento/grupo purgado físicamente) — el caller debe omitir el campo.
+   */
+  private resolveOriginCurrency(fields: ComparableFields, maps: OriginCurrencyMaps): Currency | undefined {
+    if (fields.sourceChainId) return maps.byChainId.get(fields.sourceChainId);
+    if (fields.sourceMovementId) return maps.byMovementId.get(fields.sourceMovementId);
+    if (fields.sourceInstallmentGroupId) return maps.byInstallmentGroupId.get(fields.sourceInstallmentGroupId);
+    return undefined;
+  }
+
+  /**
+   * Batchea la resolución de moneda de origen para TODAS las entradas de la
+   * respuesta (evita N+1). Las 3 claves son mutuamente excluyentes por
+   * construcción (invariante de Recurring — ver schema.prisma), así que no hay
+   * colisión posible entre los 3 mapas.
+   *
+   * GOTCHA (RF-HIST-002, "el historial es la única superficie que muestra
+   * movimientos eliminados"): NO filtra por `deletedAt`/soft-delete del origen —
+   * a diferencia de toda otra lectura de negocio (ver soft-delete.helper.ts), acá
+   * el origen puede estar soft-deleted y debe seguir resolviendo su moneda.
+   *
+   * Para `sourceChainId` (origen = fijo), la moneda es la de la fila VIGENTE de
+   * esa cadena (mayor `startMonth`) — un fijo puede haber cambiado de moneda vía
+   * split (RF-MF-003), y lo que corresponde mostrar es la moneda ACTUAL del
+   * origen, mismo criterio que `vigenteRow` usa para el resto de los campos
+   * "vigentes" de una cadena. NO es lo mismo que "primera fila de la cadena"
+   * (ver gotcha de `startMonth`/arranque en docs/backend.md, que es una regla
+   * DISTINTA — esa es sobre la fecha de arranque mostrada, no sobre currency).
+   */
+  private async loadOriginCurrencyMaps(
+    userId: string,
+    chainIds: string[],
+    movementIds: string[],
+    installmentGroupIds: string[],
+  ): Promise<OriginCurrencyMaps> {
+    const byChainId = new Map<string, Currency>();
+    const byMovementId = new Map<string, Currency>();
+    const byInstallmentGroupId = new Map<string, Currency>();
+
+    const [chainRows, movementRows, groupRows] = await Promise.all([
+      chainIds.length === 0
+        ? Promise.resolve([])
+        : this.prisma.recurring.findMany({
+            where: { userId, chainId: { in: chainIds } },
+            select: { chainId: true, startMonth: true, currency: true },
+          }),
+      movementIds.length === 0
+        ? Promise.resolve([])
+        : this.prisma.transaction.findMany({
+            where: { userId, id: { in: movementIds } },
+            select: { id: true, currency: true },
+          }),
+      installmentGroupIds.length === 0
+        ? Promise.resolve([])
+        : this.prisma.installmentGroup.findMany({
+            where: { userId, id: { in: installmentGroupIds } },
+            select: { id: true, currency: true },
+          }),
+    ]);
+
+    // Por cadena: quedarse con la fila de mayor startMonth (la vigente).
+    const bestByChain = new Map<string, { startMonth: string; currency: Currency }>();
+    for (const r of chainRows) {
+      const existing = bestByChain.get(r.chainId);
+      if (!existing || r.startMonth > existing.startMonth) {
+        bestByChain.set(r.chainId, { startMonth: r.startMonth, currency: r.currency });
+      }
+    }
+    for (const [chainId, v] of bestByChain) byChainId.set(chainId, v.currency);
+
+    for (const tx of movementRows) byMovementId.set(tx.id, tx.currency);
+    for (const g of groupRows) byInstallmentGroupId.set(g.id, g.currency);
+
+    return { byChainId, byMovementId, byInstallmentGroupId };
   }
 
   private async loadPaymentMethodMap(ids: string[]): Promise<Map<string, HistoryPaymentMethodValue>> {

@@ -316,7 +316,7 @@ describe('Bug B — flujo real: crear fijo → split → crear calculado', () =>
         create: jest.fn().mockImplementation((args) => db.create(args.data)),
         findUnique: jest.fn().mockImplementation((args) => db.findUnique(args)),
         findFirst: jest.fn().mockImplementation((args) => {
-          // findFirst para findActiveRowByChainId
+          // findFirst genérico (usado por findCalculatedBySourceMovement/Installment)
           const results = db.findMany({ where: args.where });
           if (args.orderBy?.startMonth === 'desc') {
             results.sort((a, b) => b.startMonth.localeCompare(a.startMonth));

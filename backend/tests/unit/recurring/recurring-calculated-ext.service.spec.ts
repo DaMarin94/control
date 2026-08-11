@@ -41,7 +41,6 @@ const mockRepo = {
   deleteSkip: jest.fn(),
   findChainRows: jest.fn().mockResolvedValue([]),
   findCalculadosBySourceChain: jest.fn().mockResolvedValue([]),
-  findActiveRowByChainId: jest.fn().mockResolvedValue(null),
   // Fase 1.1.7.ext
   findTransactionById: jest.fn(),
   findInstallmentGroupById: jest.fn(),
