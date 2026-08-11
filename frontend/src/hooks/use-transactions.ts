@@ -7,11 +7,15 @@
  * Expone:
  * - createTransaction(data): crea un movimiento único
  * - updateTransaction(id, data): edita un movimiento existente
- * - deleteTransaction(id, month): elimina un movimiento (hard delete, permanente)
+ * - deleteTransaction(id, month): elimina un movimiento (borrado lógico, reversible
+ *   desde /historial — RF-HIST-006)
  * - skipTransaction(id, month): POST /transactions/:id/skip — toggle anular/des-anular (P3)
  *
  * Invalidación: tras crear/editar/eliminar/skip se invalida MOVEMENTS_QUERY_KEY(month)
  * (endpoint vigente desde Fase 5: GET /movements?month=YYYY-MM).
+ *
+ * update/delete devuelven `historyEntryId` (RF-HIST-003 — toast de éxito con
+ * "Deshacer", ver src/lib/toast-undo.ts). delete pasó de 204 a 200 + body.
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -39,11 +43,15 @@ export interface CreateTransactionResult {
 export interface UpdateTransactionResult {
   success: boolean;
   transaction?: Transaction;
+  /** Id de la entrada de historial creada — habilita el "Deshacer" del toast. */
+  historyEntryId?: string;
   error?: string;
 }
 
 export interface DeleteTransactionResult {
   success: boolean;
+  /** Id de la entrada de historial creada — habilita el "Deshacer" del toast. */
+  historyEntryId?: string;
   error?: string;
 }
 
@@ -106,11 +114,12 @@ export function useTransactions() {
   // ─── Mutation: editar transacción ──────────────────────────────────────────
 
   const updateMutation = useMutation<
-    Transaction,
+    Transaction & { historyEntryId: string },
     ApiError,
     { id: string; data: UpdateTransactionRequest }
   >({
-    mutationFn: ({ id, data }) => api.patch<Transaction>(`/transactions/${id}`, data),
+    mutationFn: ({ id, data }) =>
+      api.patch<Transaction & { historyEntryId: string }>(`/transactions/${id}`, data),
     onSuccess: (transaction) => {
       const month = transaction.occurredAt.substring(0, 7);
       void queryClient.invalidateQueries({ queryKey: MOVEMENTS_QUERY_KEY(month) });
@@ -129,7 +138,7 @@ export function useTransactions() {
   ): Promise<UpdateTransactionResult> {
     try {
       const transaction = await updateMutation.mutateAsync({ id, data });
-      return { success: true, transaction };
+      return { success: true, transaction, historyEntryId: transaction.historyEntryId };
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.statusCode === 404) {
@@ -153,8 +162,12 @@ export function useTransactions() {
 
   // ─── Mutation: eliminar transacción ───────────────────────────────────────
 
-  const deleteMutation = useMutation<void, ApiError, { id: string; month: string }>({
-    mutationFn: ({ id }) => api.delete<void>(`/transactions/${id}`),
+  const deleteMutation = useMutation<
+    { historyEntryId: string },
+    ApiError,
+    { id: string; month: string }
+  >({
+    mutationFn: ({ id }) => api.delete<{ historyEntryId: string }>(`/transactions/${id}`),
     onSuccess: (_, { month }) => {
       void queryClient.invalidateQueries({ queryKey: MOVEMENTS_QUERY_KEY(month) });
       logger.info("Transacción eliminada");
@@ -167,7 +180,7 @@ export function useTransactions() {
   });
 
   /**
-   * Elimina una transacción (hard delete, permanente).
+   * Elimina una transacción (borrado lógico, reversible desde /historial).
    * @param id - ID de la transacción
    * @param month - Mes en formato YYYY-MM para invalidar la query correspondiente
    */
@@ -176,8 +189,8 @@ export function useTransactions() {
     month: string,
   ): Promise<DeleteTransactionResult> {
     try {
-      await deleteMutation.mutateAsync({ id, month });
-      return { success: true };
+      const { historyEntryId } = await deleteMutation.mutateAsync({ id, month });
+      return { success: true, historyEntryId };
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.statusCode === 404) {

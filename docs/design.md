@@ -4181,6 +4181,173 @@ Un mes futuro más allá del horizonte **no lleva ninguna señal**: se ve exacta
 
 ---
 
+## Toast con acción — Deshacer inmediato tras editar o eliminar
+
+Atajo en pantalla a la operación de **RF-HIST-003**, sin ir a `/historial`. El toast de éxito que ya se emite al **editar** o **eliminar** un movimiento pasa a ofrecer **Deshacer**. Alcanza a las **cuatro formas** (único, fijo, calculado, cuotas) y **solo** a editar/eliminar: crear **no** lleva acción (no genera entrada de historial).
+
+Todo lo de esta sección que no sea específico del undo (**duración, pausa por hover, layout de la acción, apilado**) es **regla general del sistema de toasts**, no una excepción de esta feature.
+
+### 1. Anatomía — la acción va INLINE, no debajo del mensaje
+
+El molde del pill no cambia: `bg-ink text-paper`, radio `13px`, `py-3 pl-4 pr-[14px]`, `shadow-[var(--shadow-lg)]`, `font-ui 14px/500`, entrada `slide-up .3s`. Lo que cambia es dónde vive la acción.
+
+Fila única, `items-center`, `gap-[14px]`:
+
+`[tick 24px] [mensaje] │ [Deshacer] [✕]`
+
+- **Mensaje** — `min-w-0 flex-1`, `leading-snug`, **máximo 2 líneas** (`line-clamp-2`, elipsis al final). No contiene cifras (ver §8).
+- **Divisor** — `w-px h-5 bg-current opacity-[0.22] shrink-0`. Usa `currentColor` (= `--paper`), así contrasta igual en claro y oscuro. Es lo que hace que la acción se lea como **control** y no como parte de la frase. *(Affordance.)*
+- **Acción** — `shrink-0 whitespace-nowrap text-center min-w-[104px]`, 14px **700**, color `--paper` pleno, con el subrayado `tlink` vigente (`border-b border-b-current pb-px`). Hover `opacity-80`, focus visible `ring-2 ring-current` sobre `rounded-ctl`.
+  - **Hit area 48px sin engordar el pill:** el botón mide ~34px visibles; el blanco se extiende con `relative` + `after:absolute after:-inset-y-[7px] after:inset-x-0` (≥44px, regla de accesibilidad). Subir el alto real del botón crecería el pill a 68px y arruinaría el apilado.
+  - **`min-w-[104px]` es anti-layout-shift:** reserva el ancho del rótulo más largo (`Deshaciendo…`), para que el pill no se ensanche al pasar a en-vuelo. Mismo criterio que el botón *Mes en curso*.
+- **✕** — sin cambios, siempre habilitado (también en vuelo).
+- **Por qué inline y no debajo:** debajo el pill crece ~18px por toast (con 3 apilados son 54px más de pantalla tapada), y el blanco queda en una tira de texto de ~16px de alto. **Inline la acción no cuesta alto propio:** a igual cantidad de líneas del mensaje, un toast con acción mide exactamente lo mismo que uno sin acción. Lo que la acción cuesta es **ancho de mensaje** (119px: divisor 1 + gap 14 + botón 104), y ese costo se compensa en el ancho del pill (abajo), no dejando que se pague en líneas.
+
+**Ancho del pill — dos reglas, no una.**
+
+- **Toast sin acción:** `max-w-[min(460px,calc(100vw-32px))]`. Ancho natural, capeado.
+- **Toast con acción:** **ancho fijo** `w-[min(520px,calc(100vw-32px))]`. No es un rango `min-w`/`max-w`: es **una sola propiedad**.
+  - **Por qué fijo y no un rango.** El pill con acción es un blanco de clic que además **se reemplaza en su misma posición** (§5, identidad de grupo) mientras el puntero viaja hacia él. Con un rango, dos movimientos de nombres distintos producen dos pills de **anchos distintos en el mismo slot**: el blanco cambia de tamaño bajo el cursor. Es el mismo modo de falla que §5 previene en el eje vertical, en el eje horizontal. Ancho fijo = geometría estable entre toasts sucesivos. *(Prevención de error.)*
+  - **Por qué 520 y no 460.** El toast con acción carga 119px de cromo que uno normal no tiene. A 460px su columna de mensaje queda en **227px** contra los 360px de un toast sin acción: 37% menos de texto por la sola presencia del botón. Subir a 520 devuelve **287px** de mensaje. A 520 el pill entra con holgura en el piso soportado (520 + 32 = 552 ≤ 640).
+  - **Prohibido `min-width` sin clamp — regla general del DS.** En CSS `min-width` **gana sobre** `max-width`: un piso fijo (`min-w-[320px]`) convive con un clamp de viewport (`max-w-[…100vw-32px]`) hasta que se cruzan, y a partir de ahí **el elemento se sale de la pantalla**. Ningún elemento del DS declara un piso de ancho que su propio clamp de viewport no pueda vencer: o se usa una sola propiedad `width: min(deseado, clamp)` (lo que se hace acá), o el piso se escribe también clampeado (`min-width: min(piso, clamp)`). Aplica a todo el sistema, no solo al toast.
+- **El desenlace (c/d) no hereda el ancho.** El toast que reemplaza al de acción ya no tiene acción, así que toma la regla sin acción (natural, ≤460): se **angosta**. Es correcto y esperado, no un defecto — para ese momento el blanco de clic ya no existe y la pila no se reordena (los demás pills no se mueven al cambiar el ancho de uno). Lo que sí puede mover la pila es un cambio de **cantidad de líneas** en el swap; ocurre una sola vez, después del clic, sin ningún blanco en vuelo.
+
+**Presupuesto de ancho del mensaje (aritmética cerrada, no re-derivable).** Pill 520 − padding (16 + 14) = 430… es decir: contenido **490**; menos tick 24, divisor 1, acción 104, ✕ 18 y **4 gaps de 14 (=56)** ⇒ **columna de mensaje = 287px**. Con `leading-snug` (19,25px por línea): **1 línea ⇒ pill de 48px** (lo fija el tick de 24 + 24 de padding, no el texto), **2 líneas ⇒ 63px**. El pill **no** llega a 68px: ese número, que aparecía en §5 y §6, era una estimación vieja; el valor real de dos líneas es **63px**.
+
+**El tick no cambia.** Sigue el mapeo vigente por tipo (`success`→`--income`, `error`→`--expense`, `warning`→`--warning`, `info`→`--accent-ink`). No se re-abre acá.
+
+### 2. Copy
+
+| Acción | Mensaje | Tipo |
+|---|---|---|
+| Edición (las 4 formas) | **"Actualizado: ‘{Nombre}’."** | `success` |
+| Eliminación (las 4 formas) | **"Eliminado: ‘{Nombre}’."** | `success` |
+
+- **`{Nombre}`** = la descripción del movimiento; si no tiene, el **nombre de la categoría** (misma regla de identidad que el diálogo de eliminar y la fila de `/historial`). Comillas tipográficas simples ‘ ’, como el toast de método predeterminado.
+- **Nombrar el movimiento es obligatorio, no adorno.** Con dos o tres toasts con Deshacer conviviendo (§5), un copy genérico deja al usuario eligiendo a ciegas cuál revertir: el riesgo no es estético, es **deshacer el movimiento equivocado**. *(Prevención de error.)*
+- **Cae "correctamente" y cae "Movimiento"** — ninguno de los dos discrimina (el tick verde ya dice "salió bien"; el usuario acaba de tocar un movimiento y no otra cosa) y los dos le roban ancho al nombre, que es lo único que identifica. **El nombre va lo más cerca posible del comienzo de la frase:** es lo que lo protege del `line-clamp`, porque lo que se corta es siempre el final. Con 287px de columna, "Actualizado: ‘{Nombre}’." deja al nombre ~23 caracteres en **una** línea y ~63 antes de la elipsis en dos; con el molde viejo ("Movimiento actualizado: …") el nombre nunca entraba en una línea. *(Carga cognitiva + prevención de error.)*
+- **Un solo molde para las 4 formas.** El calculado deja de nombrar su estructura ("Movimiento calculado actualizado."): el **nombre** identifica mejor que la estructura, y un molde único evita cuatro frases distintas para el mismo evento. *(Consistencia.)*
+- **Rótulo de la acción: "Deshacer"** — el mismo verbo, la misma palabra que en `/historial`. Ni "Deshacer cambio" (más largo y falso en la eliminación) ni "Revertir".
+
+### 3. Duración y pausa
+
+- **Toast con acción: `8000 ms`.** Constante nombrada aparte del default. El default de los toasts sin acción **sigue en `5000 ms`** y no se toca.
+  - **Por qué 8 y no 5:** 5s alcanzan para *leer* una confirmación, no para **leer + decidir + llegar**. El presupuesto real es lectura del mensaje con nombre (~1,5–2s) + decisión "¿quise hacer esto?" (~2s) + viaje del puntero desde donde el usuario hizo clic (footer de un modal, kebab de una fila, centro de pantalla) hasta el pill de abajo-centro (~1s), más margen para el usuario cuya atención ya volvió al listado. 5s corta ese trayecto justo cuando la mano ya salió; el fracaso es total (el atajo no existe) y el costo del error también (hay que ir a `/historial`).
+  - **Por qué no 10 o 12:** con hasta 3 pills apilados y 8s cada uno, la banda inferior ya queda ocupada un rato largo; más tiempo aumenta la ventana en la que el toast **queda obsoleto** (el usuario deshizo desde `/historial`) y la chance de tapar chrome. 8s es el punto donde el atajo es realmente alcanzable sin volverse ruido persistente.
+- **Pausa por hover y por foco — regla general de todos los toasts.** El auto-dismiss se **pausa** con el puntero sobre el pill (`pointerenter`) o con el foco dentro (`focus-within`), y **reanuda** al salir con el **tiempo restante, nunca menos de 2000 ms** (para que no se evapore 200ms después de que el usuario retiró el puntero).
+  - Sin pausa, el caso más frecuente del undo es también el peor: el usuario acerca el cursor al botón y el toast desaparece **debajo del cursor**. Es la falla clásica de un blanco efímero.
+  - **No** se pausa por pestaña oculta (`visibilitychange`): decidido que no, para no acumular toasts viejos al volver.
+
+### 4. Ciclo de vida de la acción
+
+**a. Reposo.** El toast se comporta como cualquier otro: 8s con pausa por hover, ✕ disponible.
+
+**b. En vuelo (`isUndoing`).** El clic en Deshacer **no cierra el toast** (hoy el sistema lo cierra en el mismo tick: acá **no**).
+- El temporizador se **cancela definitivamente** — un toast comprometido con una operación en curso no puede evaporarse a mitad de camino.
+- El botón pasa a **"Deshaciendo…"**, `disabled`, `aria-busy="true"`, `opacity-70`, `cursor-default`, **sin el subrayado** (un control inactivo no debe seguir pareciendo clickeable) y sin hover. El ancho no se mueve (`min-w-[104px]`).
+- **Sin spinner.** Un spinner dentro de un botón de texto de 14px es ruido; el cambio de rótulo es el feedback, y es el patrón ya establecido en la app ("Eliminando…", "Deshaciendo…" del modal de `/historial`). *(Consistencia.)*
+- El **✕ sigue habilitado**: cerrar el toast **no cancela** la operación; el desenlace igual se anuncia (c/d/e). Nunca se atrapa al usuario en un pill.
+
+**c. Éxito.** El toast de origen **se descarta** y en **su misma posición** aparece `toast.success` **"Cambio deshecho."** — 5s, **sin acción**.
+- **Por qué toast y no silencio:** el efecto puede no ser visible (el usuario está parado en otro mes, o la fila restaurada queda fuera de vista). Y es **exactamente el copy de `/historial`**: misma operación, mismas palabras. *(Consistencia + feedback.)*
+- El intercambio es 1↔1: la pila **no crece**.
+
+**d. Obsoleto (404 — la entrada ya se deshizo desde `/historial` o venció).** El toast de origen **se descarta** (su acción ya no significa nada) y en su posición aparece **`toast.warning`**: *"Este cambio ya no está disponible para deshacer."* (el mensaje que ya resuelve `useUndoHistory`).
+- **Ámbar, no rojo y no info.** Regla general que se fija acá: **si algo que el usuario pidió explícitamente quedó sin hacer, el tono es al menos `warning`; `info` queda para desenlaces donde nada de lo pedido quedó pendiente** (precedente: "Ya estás al día." de Datos externos). Rojo sobra: no hubo falla, y no hay nada que reintentar.
+
+**e. Error reintentable (red / 5xx).** El toast de origen **NO se descarta**: vuelve a **reposo** con el botón "Deshacer" restaurado y un temporizador **nuevo de 8s**; encima aparece `toast.error` *"No se pudo deshacer el cambio. Intentá de nuevo."*
+- Espeja la regla ya cerrada de `/historial` (*"el modal queda abierto y el botón vuelve a su estado normal"*): el reintento no debe obligar a ir a buscar la entrada. *(Flujo, sin callejones.)*
+
+**f. Sin confirmación previa.** El toast **acciona directo**, no abre el modal de `/historial`. La confirmación de RF-HIST-003 protege un deshacer **frío** (una entrada elegida en una lista, minutos u horas después); acá el usuario está a 8 segundos de su propia acción, mirando el nombre del movimiento que acaba de tocar — el modal sería fricción sobre una decisión ya tomada, y anularía el sentido del atajo. El riesgo de disparo accidental se contiene con el divisor, el hit area acotado y el rótulo explícito. *(Ver §7: exige confirmación del analista sobre RF-HIST-003.)*
+
+### 5. Apilado e identidad
+
+- **Orden:** el más nuevo **abajo** (más cerca del borde de origen y del puntero); la pila crece hacia arriba. `gap-[10px]`, `bottom-[26px]`, centrado al **viewport** (es chrome global, no contenido de `<main>`).
+- **Tope de 3 pills visibles.** Al llegar el cuarto se descarta el **más viejo**, con una excepción dura: **nunca se descarta un toast con acción en vuelo**; en ese caso cae el más viejo que no esté en vuelo.
+  - Con 8s y pills de 48px, sin tope la banda inferior se convierte en una pared: 5 pills tapan 300px de pantalla y el usuario ya no distingue cuál es cuál. Tres es el techo donde todavía se lee y se elige bien.
+  - Geometría con 3: `26 + 3×48 + 2×10 = 190px` de banda ocupada. Con los tres mensajes en 2 líneas (63px cada uno) el peor caso es `26 + 3×63 + 2×10 = 235px`.
+- **Identidad de grupo — un toast de deshacer por movimiento.** El toast declara la identidad del **movimiento** al que pertenece. Emitir otro con la misma identidad **reemplaza al anterior conservando su posición y su índice en la pila** (no sale por abajo y vuelve a entrar): el blanco no salta bajo el cursor. Toasts de **movimientos distintos conviven**.
+- **El toast de desenlace (c/d) hereda la posición del que reemplaza**, por el mismo motivo.
+
+### 6. Contención responsive (obligatoria)
+
+**Alcance: el piso es 640px (`--bp-floor`) y el gate cubre lo de abajo.** Por debajo de 640px la app está **gateada** (§ Ancho mínimo soportado / El gate): no hay pantalla que contener. El toast es chrome global montado en `z-[90]`, por encima de casi todo — **el gate lo cubre igual**: el bloqueo es a viewport completo y **ningún pill queda visible por debajo del piso**. Medir el toast a 324px o 374px de viewport no mide un estado soportado: mide un gate que no está tapando lo que debe. Si en QA aparece un pill bajo el piso, el hallazgo es **del gate**, no del toast.
+
+- **Ancho:** el pill con acción es **ancho fijo** `w-[min(520px,calc(100vw-32px))]` y el pill sin acción `max-w-[min(460px,calc(100vw-32px))]` (§1). **Ningún `min-width` sin clamp** — el piso `min-w-[320px]` queda **retirado**: cruzaba el clamp a 352px de viewport y, como `min-width` gana sobre `max-width`, sacaba el pill de la pantalla por los dos bordes. Aunque ese ancho está bajo el piso soportado, el defecto se corrige igual: un elemento **jamás** debe poder desbordar el viewport, esté o no en un ancho que se promete. El clamp `calc(100vw-32px)` ahora es la última palabra en todo ancho. El pill es `fixed` sobre el viewport, así que **el estado del sidebar no lo afecta**: no se angosta ni se corre.
+- **El mensaje envuelve, la acción no.** Mensaje `min-w-0` + `line-clamp-2`; acción y ✕ `shrink-0`. El pill crece de alto (48→63px) antes que empujar la acción fuera.
+- **El ancho de mensaje es constante en todo ancho soportado.** Con el pill fijo en 520, la columna de mensaje mide **287px a 640px, a 941px, a 1120px y a 1920px** — el toast no tiene régimen compacto: se comporta idéntico en toda la franja. Eso hace que el criterio de no-truncado se verifique **una sola vez** y valga para todos los anchos.
+- **Truncado permitido solo en texto, y el nombre nunca desaparece entero.** El nombre puede terminar en elipsis, pero el copy lo pone al comienzo de la frase (§2): con 287px × 2 líneas, la elipsis recorta **el final de un nombre largo**, nunca llega a comerse la frase antes del nombre. **No hay cifras en este copy**; si alguna vez se agregara un monto, iría en **mono tabular** y **no truncaría jamás** (regla dura 3).
+- **Los cuatro invariantes:**
+  1. *Sin scroll horizontal del `body` (≥640px, sidebar abierto o cerrado):* `fixed` + ancho clampeado a `100vw-32px` en una sola propiedad + `translate-x-1/2`; el toast no participa del flujo ni del ancho de `<main>`.
+  2. *Modales completos y scrolleables:* el toast no es modal ni bloquea. **Colisión conocida:** el viewport de toasts es `z-[90]` y los modales `z-40/50`, así que un pill puede solaparse con el **footer de un modal alto en viewport bajo** (riesgo preexistente que los 8s agravan). Se mantiene el ancla abajo-centro —mover el toast según haya modal haría impredecible el blanco del undo—, y la contención real es que el pill **nunca atrapa**: ✕ siempre habilitado, `pointer-events` solo en el pill (el contenedor es `pointer-events-none`) y auto-dismiss. **Se verifica en QA** (700×640 con el form de movimiento abierto); si el solape tapa un botón del footer, la salida acordada es la **excepción de posición top-center mientras haya un modal abierto**, que requiere decisión explícita del usuario.
+  3. *Ninguna acción inalcanzable:* acción y ✕ **siempre visibles** (nunca hover-only), hit area ≥44px (48px real vía `after`), y con 3 pills apilados la banda ocupada (≤235px) deja libre el resto de la pantalla también a 640px de alto.
+  4. *Superficies anchas scrollean dentro de sí:* **no aplica** — el toast no es una superficie de datos; su contención es wrap + clamp de ancho.
+
+### 7. Agregados más allá del brief — estado
+
+1. **Cambio de copy de los toasts existentes** (cae "correctamente", **cae "Movimiento"**, entra el nombre del movimiento, el calculado pierde su frase propia): **decidido acá** por la necesidad de identidad con toasts apilados y por el presupuesto de ancho de §1. El texto final lo fija el analista. **Si el analista rechaza acortar a "Actualizado: ‘{Nombre}’.", el ancho fijo de 520px sostiene igual la restricción dura** (el nombre sigue legible: con el molde largo entran ~53 caracteres de nombre en dos líneas); lo que se pierde es el pill de 48px en el caso típico, que pasa a 63px siempre.
+2. **Reglas generales del sistema de toasts** que esta feature introduce y aplican a **todos**: pausa por hover/foco, tope de 3, ancho del pill (clamp de viewport, y **la prohibición de `min-width` sin clamp**, que es regla de todo el DS). **Agregado no solicitado — confirmar.**
+3. **Sin modal de confirmación en el atajo** (§4.f): choca con la lectura literal de RF-HIST-003 ("Deshacer siempre pide confirmación"). **Requiere que el analista acote la exigencia de confirmación a la superficie `/historial`.**
+4. **El copy de los diálogos de eliminar miente hoy** — *"Esta acción es permanente y no se puede deshacer."* (`delete-transaction-dialog`, `delete-recurring-dialog`) y *"Esta acción es permanente."* (`delete-installment-dialog`). Ya era falso desde `/historial`; con el botón en el toast es una contradicción a un segundo de distancia. **Reemplazo propuesto:** *"Vas a poder deshacerlo desde el historial."* **Agregado no solicitado — confirmar con el analista.**
+
+### 8. Reglas duras reafirmadas
+
+- **Sin verde/rojo fuera de su semántica en la acción:** el botón Deshacer es `--paper` sobre `--ink`, neutro. El tick conserva el mapeo por tipo ya vigente.
+- **Sin índigo en el pill.** El acento no participa del toast (ni en el botón, ni en el foco: el anillo es `currentColor`).
+- **Sin cifras en el copy** — y si alguna entrara, mono tabular sin truncado.
+- **Los dos modos de color:** el pill es `--ink`/`--paper` (se invierte solo), divisor y foco son `currentColor`, y el tick usa tokens semánticos. Nada asume claro.
+
+### Checklist de aceptación visual — Toast con Deshacer
+
+*Presencia y copy:*
+- [ ] Editar un movimiento (probar **las 4 formas**: único, fijo, calculado, cuotas) emite un toast `success` con el texto **"Actualizado: ‘{Nombre}’."** y un botón **Deshacer**.
+- [ ] Eliminar (las 4 formas) emite **"Eliminado: ‘{Nombre}’."** con **Deshacer**.
+- [ ] Un movimiento **sin descripción** muestra el **nombre de la categoría** entre comillas.
+- [ ] **Crear** un movimiento emite el toast de siempre, **sin** botón Deshacer.
+- [ ] En ningún toast aparece "correctamente" **ni la palabra "Movimiento"**; el calculado usa el **mismo** molde que los otros tres.
+
+*Anatomía:*
+- [ ] La acción está **a la derecha del mensaje**, en la misma línea, separada por un **divisor vertical** tenue, con el ✕ al final. **No** debajo del mensaje.
+- [ ] A igual cantidad de líneas del mensaje, un toast con acción tiene **el mismo alto** que uno sin acción. Alturas esperadas del pill: **48px con el mensaje en 1 línea, 63px en 2**. Ningún otro valor.
+- [ ] Con un nombre corto (ej. "Alquiler") y el copy vigente, el pill mide **48px** (mensaje en **una** línea).
+- [ ] `Tab` llega a Deshacer y a ✕ con **foco visible**; el blanco de clic de Deshacer es cómodo (~48px de alto, se activa un poco por arriba y por debajo del texto).
+
+*Ancho y no-truncado (medible en el DOM):*
+- [ ] El pill **con acción** mide **exactamente 520px** de ancho en **640, 941, 1120 y 1920** de viewport (y sigue midiendo 520 con el sidebar abierto y cerrado: el toast es `fixed`, el sidebar no lo toca). **No** hay ningún `min-width` en el pill.
+- [ ] El pill **sin acción** no supera **460px** y toma su ancho natural. El toast de desenlace ("Cambio deshecho.") **se angosta** respecto del pill de 520 que reemplaza: es lo esperado, no un defecto.
+- [ ] **Columna de mensaje = 287px** (`clientWidth` del `<p>`) en los cuatro anchos de arriba. Es constante: el toast no tiene régimen compacto.
+- [ ] **Criterio de no-truncado:** en el `<p>` del mensaje, con un nombre de **hasta 23 caracteres**, `scrollHeight === clientHeight` **y** `clientHeight ≈ 19px` (una línea). Con un nombre de **hasta 60 caracteres**, `scrollHeight === clientHeight` con `clientHeight ≈ 39px` (dos líneas, sin recorte). Verificar en **640 y 1920**.
+- [ ] **El nombre nunca se pierde:** con un nombre deliberadamente largo (>80 caracteres) el mensaje sí recorta (`scrollHeight > clientHeight`), pero en pantalla se lee **"Actualizado: ‘" + el comienzo del nombre**; la elipsis cae **dentro** del nombre, nunca antes de él.
+- [ ] **Ningún borde cortado:** el `x` del pill (`getBoundingClientRect`) es **≥ 16** y `x + width ≤ innerWidth − 16` en **640, 941 y 1920**. Verificar también a **660** y **700** (los anchos donde el pill ocupa mayor proporción de pantalla).
+
+*Duración y pausa:*
+- [ ] El toast con Deshacer dura **~8s**; uno sin acción sigue durando **~5s** (comparar con el toast de crear).
+- [ ] Con el **puntero encima**, el toast **no se cierra** (esperar >10s); al retirar el puntero se cierra recién después de un par de segundos.
+
+*En vuelo:*
+- [ ] Al hacer clic en Deshacer el toast **no se cierra**: el botón pasa a **"Deshaciendo…"**, deshabilitado, sin subrayado y **sin spinner**.
+- [ ] El pill **no cambia de ancho** al pasar de "Deshacer" a "Deshaciendo…".
+- [ ] Durante ese estado el **✕ sigue funcionando**, y si se cierra el toast igual aparece el toast de desenlace.
+
+*Desenlaces:*
+- [ ] Éxito → el toast se reemplaza **en su misma posición** por `success` **"Cambio deshecho."** (sin botón); la pila **no crece**; el cambio se ve reflejado en `/mes` y en `/historial` (la entrada desapareció).
+- [ ] Deshacer una **eliminación** desde el toast hace **reaparecer** el movimiento en la lista del mes.
+- [ ] **Obsoleto:** editar → ir a `/historial` en otra pestaña/paso y deshacer ahí → volver y usar el toast ⇒ toast **ámbar (`warning`)** *"Este cambio ya no está disponible para deshacer."*, **no rojo**.
+- [ ] **Error reintentable** (backend caído): aparece toast **rojo** *"No se pudo deshacer el cambio. Intentá de nuevo."* **y el toast original sigue en pantalla con su botón "Deshacer" restaurado**.
+
+*Apilado:*
+- [ ] Editar/eliminar **3 movimientos distintos** seguidos ⇒ **3 pills apilados**, el más nuevo **abajo**, `10px` entre ellos, todos legibles y cada uno con su nombre.
+- [ ] Un **4º** toast hace desaparecer el **más viejo** (nunca uno que esté en "Deshaciendo…").
+- [ ] Editar **dos veces el mismo movimiento** ⇒ queda **un solo** toast de ese movimiento, **en la misma posición** (no salta al final de la pila); los toasts de otros movimientos siguen ahí.
+
+*Contención y modos:*
+- [ ] A **640px** de viewport (sidebar abierto y cerrado): el pill entra completo, **sin scroll horizontal del `body`**, y no se corre ni se angosta al abrir/cerrar el sidebar.
+- [ ] **Por debajo de 640px no se evalúa el toast, se evalúa el gate:** a **375px** y a **324px** con un toast recién emitido, la pantalla muestra **solo el gate** y **ningún pill queda visible** (ni asomando, ni por encima del bloqueo). Si se ve un pill, el hallazgo es del **gate** (`z-index` del bloqueo vs. `z-[90]` del viewport de toasts), no del toast.
+- [ ] A **700×640** con el **form de movimiento abierto**: verificar que un toast no tape los botones del footer del modal; si los tapa, reportarlo (queda pendiente de decisión, §6 invariante 2).
+- [ ] Se ve correcto en **claro y oscuro**: pill invertido, divisor y foco visibles en ambos, tick con su color semántico.
+
+---
+
 ## Specs de fase
 
 El lenguaje visual vigente y reutilizable que salió de cada fase de implementación está consolidado en las secciones de arriba. Las decisiones puntuales de cada fase, una vez implementadas, dejan de tener documento propio: lo que sobrevive es la regla en presente; el "cuándo/por qué cambió" vive en el historial de git.

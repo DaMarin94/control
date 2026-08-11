@@ -57,6 +57,7 @@
 | Límites — popover informativo por superficie (ícono `Info` + listado read-only agrupado por naturaleza; en las 5 cards de `/reportes` y en `/mes`, nunca en el Dashboard; incluye deshabilitados atenuados y refleja el alcance temporal) | RF-LIM-005 | Implementado |
 | Sincronización de cotizaciones externas — FX (dolarapi/Frankfurter) + IPC (datos.gob.ar) vía trigger sin datos | RF-FX-001, RF-IPC-001, RF-SYNC-001 | Definido (no implementado) |
 | Historial de cambios (`/historial`) — registro de ediciones y eliminaciones de movimientos + deshacer LIFO por movimiento (simple y en cadena), borrado lógico reversible, retención 5 por movimiento / 31 días | RF-HIST-001..006, RN-024..026 | Implementado |
+| Historial — deshacer inmediato desde el toast de éxito de editar/eliminar (4 formas, sin confirmación) | RF-HIST-007 | Implementado |
 | Simulación de categoría — alta/baja desde el filtro de Únicos de `/mes` + movimiento simulado derivado por regresión lineal en los meses futuros del horizonte | RF-SIM-001..004, RN-028/029 | Implementado |
 | Preferencias de usuario — cimiento (blob JSON + sesión) | — | Implementado (sin UI de producto) |
 

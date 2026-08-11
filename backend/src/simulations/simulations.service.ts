@@ -315,6 +315,7 @@ export class SimulationsService {
         frequency: null,
         startMonth: null,
         endMonth: null,
+        chainId: null,
         skipped: false,
         calculated: null,
         hasCalculated: false,

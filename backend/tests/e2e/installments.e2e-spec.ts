@@ -454,6 +454,9 @@ describe('Installments (e2e)', () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data.amountCents).toBe(8000);
       expect(res.body.data.category).toBeDefined();
+      // El id de la entrada de historial creada viaja en la respuesta (para el
+      // "Deshacer" del toast — pega a POST /history/:id/undo).
+      expect(res.body.data.historyEntryId).toBe('hist-1');
     });
 
     it('400 si amountCents excede el máximo de int4 en PATCH (overflow de Postgres)', async () => {
@@ -589,16 +592,20 @@ describe('Installments (e2e)', () => {
   // -------------------------------------------------------------------------
 
   describe('DELETE /installments/:id', () => {
-    it('204 sin cuerpo (borrado lógico — RF-HIST-006)', async () => {
+    it('200 + { historyEntryId } (borrado lógico — RF-HIST-006)', async () => {
       const group = makeDbInstallmentGroup();
       mockPrisma.installmentGroup.findUnique.mockResolvedValue(group);
       mockPrisma.installmentGroup.update.mockResolvedValue({ ...group, deletedAt: new Date() });
 
-      await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .delete(`/installments/${GROUP_ID}`)
         .set('Authorization', `Bearer ${tokenA}`)
-        .expect(204);
+        .expect(200);
 
+      expect(res.body.success).toBe(true);
+      // DELETE ya no es 204 sin cuerpo: devuelve { historyEntryId } (para el
+      // "Deshacer" del toast — pega a POST /history/:id/undo).
+      expect(res.body.data).toEqual({ historyEntryId: 'hist-1' });
       expect(mockPrisma.installmentGroup.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: GROUP_ID },

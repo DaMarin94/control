@@ -50,7 +50,7 @@ const mockRepo = {
 };
 
 const mockHistoryService = {
-  record: jest.fn().mockResolvedValue(undefined),
+  record: jest.fn().mockResolvedValue('hist-entry-id'),
 };
 
 /**
@@ -450,6 +450,9 @@ describe('RecurringService', () => {
       );
       // Devuelve R2
       expect(result.id).toBe('rec-002');
+      // El id de la entrada de historial creada viaja en la respuesta (para el
+      // "Deshacer" del toast — pega a POST /history/:id/undo).
+      expect(result.historyEntryId).toBe('hist-entry-id');
     });
 
     it('split: el type NO cambia (RF-MF-003 — inmutabilidad del type)', async () => {
@@ -617,6 +620,7 @@ describe('RecurringService', () => {
         expect.objectContaining({ amountCents: 9000 }),
       );
       expect(result.amountCents).toBe(9000);
+      expect(result.historyEntryId).toBe('hist-entry-id');
     });
 
     it('in-place: currentMonth < startMonth → update directo', async () => {
@@ -757,12 +761,15 @@ describe('RecurringService', () => {
       ]);
       mockRepo.update.mockResolvedValue({ ...existing, deletedFrom: '2026-07' });
 
-      await service.remove(USER_A, 'rec-001', '2026-06', false);
+      const result = await service.remove(USER_A, 'rec-001', '2026-06', false);
 
       // applyBoundaryToChain: boundary='2026-07' > startMonth='2026-01', deletedFrom=null → update
       expect(mockRepo.update).toHaveBeenCalledWith('rec-001', {
         deletedFrom: '2026-07',
       });
+      // DELETE ya no devuelve void: devuelve { historyEntryId } (para el
+      // "Deshacer" del toast — pega a POST /history/:id/undo).
+      expect(result).toEqual({ historyEntryId: 'hist-entry-id' });
     });
 
     it('fromCurrentMonth=true → boundary = currentMonth → set deletedFrom en la cadena', async () => {

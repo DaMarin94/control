@@ -24,11 +24,16 @@ import { Maximize2 } from "lucide-react";
  * DOM (sin importar dónde se haya portado) y saca a esos elementos del orden
  * de foco de teclado. Este componente revierte esa herencia sobre sí mismo
  * (`max-floor:visible`) para ser lo único visible.
+ *
+ * `z-[100]`: por encima del viewport de toasts (`z-[90]`, chrome global que
+ * sobrevive a casi todo). Sin esto, un toast en pantalla al angostar la
+ * ventana bajo el piso queda visible sobre el bloqueo (docs/design.md
+ * §"Toast con acción", §6: "el gate lo cubre igual").
  */
 export function ViewportGate() {
   return (
     <div
-      className="fixed inset-0 hidden max-floor:visible max-floor:flex flex-col items-center justify-center overflow-y-auto bg-paper px-6 text-center"
+      className="fixed inset-0 z-[100] hidden max-floor:visible max-floor:flex flex-col items-center justify-center overflow-y-auto bg-paper px-6 text-center"
     >
       <Maximize2 size={40} strokeWidth={1.5} className="mb-4 text-faint" aria-hidden="true" />
       <h1 className="text-[28px] font-bold tracking-[-0.02em] text-ink">

@@ -126,6 +126,7 @@ Hay un **segundo breakpoint nombrado**: `--breakpoint-floor: 640px` en el mismo 
 - `<body>` lleva `max-floor:invisible max-floor:overflow-hidden`; `<html>` lleva `max-floor:overflow-hidden`.
 - **Se usa `visibility: hidden`, no `display: none`**, porque la visibilidad **se hereda por el árbol del DOM real**. `ModalShell` portalea a `document.body`, así que sus overlays viven **fuera** del wrapper de React de `{children}`: con `display:none` sobre ese wrapper, un modal abierto seguiría visible al cruzar el piso. Con `visibility:hidden` en `<body>`, el modal queda oculto y **fuera del tab order** — los elementos con `visibility:hidden` no son focusables ni entran al árbol de accesibilidad.
 - `ViewportGate` **revierte la herencia sobre sí mismo** (`max-floor:visible max-floor:flex`) para mostrarse mientras el resto del `<body>` queda invisible. Por defecto es `hidden`, así que a `≥640px` no aparece ni ocupa layout.
+- **El gate se pinta por encima del viewport de toasts** (`z-[100]` contra el `z-[90]` del `ToastViewport`): los dos son `fixed` a viewport completo y el gate se monta **antes** en el root layout, así que sin ese orden explícito un toast en pantalla al angostar la ventana bajo el piso queda flotando sobre el bloqueo.
 
 ## Autenticación (Auth.js / NextAuth v5)
 
@@ -348,7 +349,7 @@ Aplica a los **tres** forms (`transaction-form`, `recurring-form`, `installment-
 - Hook **`useTransactions()`** expone las mutaciones: `createTransaction`, `updateTransaction(id, data)`, `deleteTransaction(id, month)`.
 - **La lista del mes no vive acá:** se lee con `useMovements(month)` (ver sección Vista del mes y Dashboard).
 - **Invalidación al mutar:** las cuatro mutaciones de `useTransactions` invalidan **`MOVEMENTS_QUERY_KEY(month)`**, que es un **prefijo** de la clave que usa `useMovements` (ver el gotcha de la key en §Datos (`use-movements`) — no agregarle elementos).
-- **Gotcha — `deleteTransaction` recibe `month` explícito:** el `DELETE` devuelve `204` sin cuerpo, así que no se puede derivar del recurso qué mes invalidar. El llamador deriva el `month` del `occurredAt` del movimiento de la lista y lo pasa.
+- **Gotcha — `deleteTransaction` recibe `month` explícito:** el `DELETE` solo devuelve `{ historyEntryId }`, así que no se puede derivar del recurso qué mes invalidar. El llamador deriva el `month` del `occurredAt` del movimiento de la lista y lo pasa.
 
 ### Helpers (`lib/format.ts`)
 
@@ -731,6 +732,19 @@ Pantalla de consulta y deshacer. El spec visual vive en `docs/design.md`; el con
 - **`useHistory()`** — `GET /history`, query key `["history"]`, gate-ada con `isAuthenticated` como el resto de las lecturas.
 - **`useUndoHistory()`** — `POST /history/:id/undo` (sin body; el backend resuelve el undo en cadena por sí solo).
 - **Invalidación tras deshacer: tres claves, no una.** El éxito invalida `["history"]`, **`["movements"]`** y **`["reports"]`** — deshacer no toca solo el historial: **restaura o revierte movimientos reales**, así que los listados del mes, los totales y los reportes quedan desactualizados si no se invalidan.
+
+### Deshacer desde el toast (RF-HIST-007) — invariante del `groupId`
+
+El toast de éxito de editar / eliminar lleva la acción "Deshacer" sobre el `historyEntryId` que devuelve la mutación (contrato en `docs/data-model.md`, §Historial de cambios → `historyEntryId`). Lo emiten los 4 forms de movimiento y los 3 diálogos de borrado; el puente al contrato de acción del toast es **`lib/toast-undo.ts`** (traduce el resultado de `undo()` a `ToastActionOutcome`), y el copy y el comportamiento visual los define `docs/design.md`.
+
+**Para un mismo movimiento, el `groupId` que usa el toast de EDICIÓN y el de ELIMINACIÓN tiene que ser idéntico.** Es lo que hace que el segundo reemplace al primero (RF-HIST-007, un aviso por movimiento). Si divergen, quedan dos toasts apilados y el viejo ofrece deshacer una entrada que ya está **bloqueada** por RF-HIST-004.
+
+| Forma | `groupId` |
+|---|---|
+| Único | `Transaction.id` |
+| Cuotas | `InstallmentGroup.id` |
+| Fijo normal y **calculado de fijo** | **`chainId`** del ítem — el id de fila cambia en cada split del PATCH, el `chainId` no (ver `docs/data-model.md`, §Contrato de movimientos del mes → `chainId`) |
+| Calculado de **único** y de **cuota** | **id de fila** — su edición es siempre in-place (su rango es de un mes, no hay split), así que el id es estable |
 
 ## Límites (RF-LIM-001..004)
 

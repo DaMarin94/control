@@ -30,6 +30,8 @@ import { useReferenceRate } from "@/hooks/use-reference-rate";
 import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
 import { useDefaultPaymentMethodPrefill } from "@/hooks/use-default-payment-method-prefill";
 import { useToast } from "@/hooks/use-toast";
+import { useUndoHistory } from "@/hooks/use-history";
+import { buildUndoAction } from "@/lib/toast-undo";
 import { type Transaction, type TransactionType } from "@/types/transaction";
 import { type Category, type CategoryScope } from "@/types/category";
 import { CategoryFormModal } from "@/app/(app)/configuracion/categorias/category-form-modal";
@@ -183,6 +185,7 @@ export function TransactionForm({ transaction, onClose, editingSkipped, prefill 
   const isPrefillActive = !isEditing && prefill != null;
   const router = useRouter();
   const { toast } = useToast();
+  const { undo } = useUndoHistory();
   const { categories } = useCategories();
   const { createTransaction, updateTransaction, isCreating, isUpdating } = useTransactions();
   const { defaultCurrency, lastExchangeRate } = useSettings();
@@ -418,7 +421,20 @@ export function TransactionForm({ transaction, onClose, editingSkipped, prefill 
         return;
       }
 
-      toast.success("Movimiento actualizado correctamente.");
+      const updated = result.transaction;
+      const name = updated?.description || updated?.category.name || transaction.description || transaction.category.name;
+      if (result.historyEntryId) {
+        toast.success(`Actualizado: ‘${name}’.`, {
+          groupId: transaction.id,
+          action: {
+            label: "Deshacer",
+            pendingLabel: "Deshaciendo…",
+            onClick: buildUndoAction(undo, result.historyEntryId),
+          },
+        });
+      } else {
+        toast.success(`Actualizado: ‘${name}’.`);
+      }
       onClose();
     } else {
       const result = await createTransaction({

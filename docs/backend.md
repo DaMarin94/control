@@ -120,8 +120,9 @@ El formato de toda respuesta (sobre `{ success, statusCode, data | error }`) est
 
 ### DELETE → `204 No Content`, sin body (convención del backend)
 
-Todos los DELETE (`DELETE /categories/:id`, `/payment-methods/:id`, `/transactions/:id`, `/recurring/:id`, `/installments/:id`, `/simulations/:id`) responden **`204 No Content` sin cuerpo**, de forma deliberada y consistente — cada controller lo declara con `@HttpCode(HttpStatus.NO_CONTENT)`.
+Los DELETE responden **`204 No Content` sin cuerpo**, de forma deliberada y consistente — cada controller lo declara con `@HttpCode(HttpStatus.NO_CONTENT)`: `DELETE /categories/:id`, `/payment-methods/:id`, `/simulations/:id`.
 
+- **Excepción — los tres DELETE de movimientos** (`/transactions/:id`, `/recurring/:id`, `/installments/:id`) responden **`200` con `{ historyEntryId }`**: tienen que devolver el id de la entrada de historial y un `204` no puede llevar cuerpo. Contrato en `docs/data-model.md`, §Historial de cambios → `historyEntryId`.
 - **El `ResponseInterceptor` NO aplica al 204.** Aunque el interceptor envuelve las respuestas exitosas en el sobre `{ success, statusCode, data }`, en un `204` Express descarta el body: el cliente recibe un **204 vacío** (no el sobre). Por eso el front no debe intentar parsear JSON en un 204 (ver gotcha de `apiRequest` en `.claude/agents/control-frontend.md`).
 - Los errores **nunca** llegan como 204: el `AllExceptionsFilter` siempre responde 4xx/5xx con body JSON. Un 204 es siempre éxito.
 
@@ -174,8 +175,8 @@ CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca mo
 |----------|------|-------|---------|
 | `POST /transactions` | `{ type, amountCents, categoryId, occurredAt, timezone, description? }` | `201` · `data: Transaction` | `400` |
 | `GET /transactions/:id` | — | `200` · `data: Transaction` | `404` |
-| `PATCH /transactions/:id` | parcial (cualquier campo de POST) | `200` · `data: Transaction` | `400` · `404` |
-| `DELETE /transactions/:id` | — | `204 No Content` | `404` |
+| `PATCH /transactions/:id` | parcial (cualquier campo de POST) | `200` · `data: Transaction & { historyEntryId }` | `400` · `404` |
+| `DELETE /transactions/:id` | — | `200` · `data: { historyEntryId }` | `404` |
 | `POST /transactions/:id/skip` | — (sin body) | `200` · `data: { skipped }` | `404` |
 | `POST /transactions/:id/calculated` | calculado desde el único `:id` | `201` · `data: Recurring` | `400` · `404` |
 | `PATCH /transactions/:id/calculated` | edita el calculado de único `:id` | `200` · `data: Recurring` | `400` · `404` |
@@ -183,7 +184,7 @@ CRUD completo, **scopeado por `userId` del JWT** (un usuario nunca ve ni toca mo
 - **`POST /transactions`** — `amountCents` entero **en centavos** (`> 0`); `occurredAt` ISO 8601 en **UTC**; `timezone` IANA. `400` por validación de DTO o por categoría inválida (ver Validación de categoría abajo).
 - **`GET /transactions/:id`** — `404` si no existe o no es del usuario.
 - **`PATCH /transactions/:id`** — body parcial (cualquier campo del POST). **Reaplica todas las validaciones** (RN-002 monto, RN-010 scope). `404` si no existe o no es del usuario.
-- **`DELETE /transactions/:id`** — **borrado lógico** (`deletedAt`, RF-MU-003 / RF-HIST-006; reversible desde `/historial`). **`204` sin cuerpo.** `404` si no existe o no es del usuario. Si el único tiene calculados derivados (`sourceMovementId`), se les aplica **cascada lógica** vía `RecurringService.cascadeSoftDeleteBySourceMovement` (ver §Movimientos calculados, Eliminación).
+- **`DELETE /transactions/:id`** — **borrado lógico** (`deletedAt`, RF-MU-003 / RF-HIST-006; reversible desde `/historial`). **`200` con `{ historyEntryId }`** (excepción a la convención de DELETE; ver `docs/data-model.md`, §Historial de cambios → `historyEntryId`). `404` si no existe o no es del usuario. Si el único tiene calculados derivados (`sourceMovementId`), se les aplica **cascada lógica** vía `RecurringService.cascadeSoftDeleteBySourceMovement` (ver §Movimientos calculados, Eliminación).
 - **`POST /transactions/:id/skip` — toggle de anulación (RF-MU-005):** anula / des-anula el único, **sin body**. Es un **toggle** del flag `Transaction.skipped`: si estaba en `false` lo pone en `true` (`data: { skipped: true }`) y viceversa. Sin alcance temporal (anula la fila entera). `404` si el único no existe o no es del usuario. Un único anulado **se sigue listando** en `GET /movements` con `skipped: true` pero **no suma** a totales ni reportes.
 - **`POST|PATCH /transactions/:id/calculated`** — calculado de origen único; contrato en `docs/data-model.md`, §Contrato de movimientos calculados; mecánica en §Movimientos calculados (abajo).
 
@@ -357,11 +358,11 @@ Gestión de movimientos fijos, **scopeada por `userId` del JWT**. El módulo exp
 | Endpoint | Entrada | Éxito | Errores |
 |----------|---------|-------|---------|
 | `POST /recurring` | `{ type, amountCents, categoryId, startMonth, frequency?, description? }` | `201` · `data: Recurring` | `400` |
-| `PATCH /recurring/:id` | `{ amountCents?, categoryId?, description?, currentMonth }` | `200` · `data: Recurring` | `400` · `404` |
+| `PATCH /recurring/:id` | `{ amountCents?, categoryId?, description?, currentMonth }` | `200` · `data: Recurring & { historyEntryId }` | `400` · `404` |
 | `POST /recurring/:id/skip` | `{ month }` (`YYYY-MM`) | `200` · `data: { skipped, month }` | `400` · `404` |
 | `POST /recurring/:id/calculated` | calculado desde el fijo `:id` | `201` · `data: Recurring` | `400` · `404` |
 | `PATCH /recurring/:id/calculated` | edita el calculado `:id` | `200` · `data: Recurring` | `400` · `404` |
-| `DELETE /recurring/:id` | query: `currentMonth`, `fromCurrentMonth` | `204 No Content` | `404` |
+| `DELETE /recurring/:id` | query: `currentMonth`, `fromCurrentMonth` | `200` · `data: { historyEntryId }` | `404` |
 
 - **`type`, `startMonth` y `frequency` no son editables** por PATCH: solo `amountCents`, `categoryId` y `description` (RF-MF-003). El `startMonth` del POST es el mes actual que envía el front.
 - **`frequency`:** **entero 1..12** (meses entre apariciones), opcional en el `POST`, default **`1`** (mensual) si se omite. `400` si no es entero o cae fuera de 1..12 (validado en el DTO; no hay CHECK en la DB). Es **inmutable** (como `type`): no se acepta en PATCH; en el split (abajo) la fila nueva R2 la **hereda del original**. La respuesta del `POST` incluye `frequency`. Detalle del cálculo "¿este fijo aparece en este mes?" en **Cálculo de aparición de fijos por mes** (abajo).
@@ -465,15 +466,15 @@ Gestión de grupos de cuotas, **scopeada por `userId` del JWT**. El módulo expo
 | Endpoint | Body | Éxito | Errores |
 |----------|------|-------|---------|
 | `POST /installments` | `{ type, amountCents, totalInstallments, startMonth, categoryId, description? }` | `201` · `data: InstallmentGroup` | `400` |
-| `PATCH /installments/:id` | `{ type?, amountCents?, totalInstallments?, startMonth?, categoryId?, description? }` | `200` · `data: InstallmentGroup` | `400` · `404` |
-| `DELETE /installments/:id` | — | `204 No Content` | `404` |
+| `PATCH /installments/:id` | `{ type?, amountCents?, totalInstallments?, startMonth?, categoryId?, description? }` | `200` · `data: InstallmentGroup & { historyEntryId }` | `400` · `404` |
+| `DELETE /installments/:id` | — | `200` · `data: { historyEntryId }` | `404` |
 | `POST /installments/:id/skip` | `{ month }` (`YYYY-MM`) | `200` · `data: { skipped, month }` | `400` · `404` |
 | `POST /installments/:id/calculated` | calculado desde el grupo `:id` | `201` · `data: Recurring` | `400` · `404` |
 | `PATCH /installments/:id/calculated` | edita el calculado de cuota `:id` | `200` · `data: Recurring` | `400` · `404` |
 
 - **Solo `EXPENSE` en v1:** el endpoint **rechaza `INCOME` con `400`** (resuelve la contradicción RF-MC-001 vs "Fuera de alcance: Ingreso en cuotas"). `amountCents` es el monto **por cuota** (entero `> 0`, RN-002), no el total. `totalInstallments` es la cantidad (entero `> 0`). `startMonth` es `YYYY-MM`.
 - **`PATCH /installments/:id` — edita el grupo completo in-place (RF-MC-003).** Campos editables: monto por cuota, cantidad, mes de inicio, categoría, descripción. **El `type` no se edita.** **No hay split ni inmutabilidad del pasado** (a diferencia de los fijos): la edición aplica a todas las instancias del grupo. `404` si no existe o no es del usuario.
-- **`DELETE /installments/:id` — borrado lógico del grupo entero.** Marca `deletedAt` en el grupo: dejan de aparecer **todas** las cuotas (pasadas y futuras), en un solo paso — `InstallmentGroup` no tiene `deletedFrom`, no hay boundary por mes. Reversible desde `/historial` (RF-HIST-003). **`204` sin cuerpo.** `404` si no existe o no es del usuario. Si el grupo tiene calculados derivados (`sourceInstallmentGroupId`), se les aplica **cascada lógica** vía `RecurringService.cascadeSoftDeleteBySourceInstallmentGroup` (ver §Movimientos calculados, Eliminación).
+- **`DELETE /installments/:id` — borrado lógico del grupo entero.** Marca `deletedAt` en el grupo: dejan de aparecer **todas** las cuotas (pasadas y futuras), en un solo paso — `InstallmentGroup` no tiene `deletedFrom`, no hay boundary por mes. Reversible desde `/historial` (RF-HIST-003). **`200` con `{ historyEntryId }`** (excepción a la convención de DELETE; ver `docs/data-model.md`, §Historial de cambios → `historyEntryId`). `404` si no existe o no es del usuario. Si el grupo tiene calculados derivados (`sourceInstallmentGroupId`), se les aplica **cascada lógica** vía `RecurringService.cascadeSoftDeleteBySourceInstallmentGroup` (ver §Movimientos calculados, Eliminación).
 - **`POST /installments/:id/skip` — toggle de anulación de una instancia mensual (RF-MC-004):** anula / des-anula la cuota de un mes puntual, body `{ month: "YYYY-MM" }`. Es un **toggle** sobre `InstallmentSkip(installmentGroupId, month)`: si ya existe lo borra (`data: { skipped: false, month }`); si no, lo crea (`data: { skipped: true, month }`). Anula **solo** esa instancia mensual, sin tocar el resto del grupo. `404` si el grupo no existe o no es del usuario; `400` si el `month` no cumple `YYYY-MM`. Una cuota anulada **se sigue listando** en `GET /movements` con `skipped: true` pero **no suma** a totales ni reportes.
 - **`POST|PATCH /installments/:id/calculated`** — calculado de origen cuota (deriva del **monto por cuota**); contrato en `docs/data-model.md`, §Contrato de movimientos calculados; mecánica en §Movimientos calculados (abajo).
 - **Validación de categoría:** idéntica a únicos y fijos (propia, activa, scope compatible RN-010); inexistente / ajena / eliminada / scope incompatible son todas `400`, nunca `409`; categoría ajena no se distingue de inexistente. Se delega en `CategoryValidatorService` (ver abajo).

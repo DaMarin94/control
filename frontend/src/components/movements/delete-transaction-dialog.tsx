@@ -11,6 +11,8 @@
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useTransactions } from "@/hooks/use-transactions";
+import { useUndoHistory } from "@/hooks/use-history";
+import { buildUndoAction } from "@/lib/toast-undo";
 import { ModalShell, ModalShellHeader, ModalShellBody, ModalShellFooter } from "@/components/ui/modal-shell";
 import { type Transaction } from "@/types/transaction";
 import { formatCurrency } from "@/lib/format";
@@ -25,6 +27,7 @@ export function DeleteTransactionDialog({
   onClose,
 }: DeleteTransactionDialogProps) {
   const { toast } = useToast();
+  const { undo } = useUndoHistory();
   const { deleteTransaction, isDeleting } = useTransactions();
 
   async function handleConfirm() {
@@ -37,7 +40,18 @@ export function DeleteTransactionDialog({
       return;
     }
 
-    toast.success("Movimiento eliminado correctamente.");
+    if (result.historyEntryId) {
+      toast.success(`Eliminado: ‘${description}’.`, {
+        groupId: transaction.id,
+        action: {
+          label: "Deshacer",
+          pendingLabel: "Deshaciendo…",
+          onClick: buildUndoAction(undo, result.historyEntryId),
+        },
+      });
+    } else {
+      toast.success(`Eliminado: ‘${description}’.`);
+    }
     onClose();
   }
 
@@ -60,7 +74,7 @@ export function DeleteTransactionDialog({
           </p>
         </div>
         <p className="text-[12.5px] text-muted">
-          Esta acción es permanente y no se puede deshacer.
+          Vas a poder deshacerlo desde el historial.
         </p>
       </ModalShellBody>
 

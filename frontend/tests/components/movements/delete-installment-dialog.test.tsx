@@ -20,6 +20,12 @@ vi.mock("@/hooks/use-installments", () => ({
   useInstallments: vi.fn(),
 }));
 
+// El toast de "Deshacer" tras eliminar usa useUndoHistory — mockeado para no
+// depender de useApi/useSession real en este test de diálogo.
+vi.mock("@/hooks/use-history", () => ({
+  useUndoHistory: vi.fn(() => ({ undo: vi.fn(), isUndoing: false })),
+}));
+
 import { useInstallments } from "@/hooks/use-installments";
 
 const mockUseInstallments = vi.mocked(useInstallments);
@@ -42,6 +48,7 @@ const mockCuotaMovement: MovementItem = {
   frequency: null,
   startMonth: null,
   endMonth: null,
+  chainId: null,
   skipped: false,
   category: {
     id: "cat-1",
@@ -125,9 +132,9 @@ describe("DeleteInstallmentDialog", () => {
     expect(screen.getByText(/todas las cuotas/i)).toBeInTheDocument();
   });
 
-  it("indica que la acción es permanente", () => {
+  it("indica que se puede deshacer desde el historial", () => {
     renderDialog({});
-    expect(screen.getByText(/permanente/i)).toBeInTheDocument();
+    expect(screen.getByText(/deshacerlo desde el historial/i)).toBeInTheDocument();
   });
 
   // ── Sin checkbox ─────────────────────────────────────────────────────────────

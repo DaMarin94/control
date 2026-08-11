@@ -13,6 +13,8 @@ import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useInstallments } from "@/hooks/use-installments";
+import { useUndoHistory } from "@/hooks/use-history";
+import { buildUndoAction } from "@/lib/toast-undo";
 import { ModalShell, ModalShellHeader, ModalShellBody, ModalShellFooter } from "@/components/ui/modal-shell";
 import { formatCurrency } from "@/lib/format";
 import type { MovementItem } from "@/types/movement";
@@ -24,6 +26,7 @@ interface DeleteInstallmentDialogProps {
 
 export function DeleteInstallmentDialog({ movement, onClose }: DeleteInstallmentDialogProps) {
   const { toast } = useToast();
+  const { undo } = useUndoHistory();
   const { deleteInstallment, isDeleting } = useInstallments();
 
   async function handleConfirm() {
@@ -35,7 +38,18 @@ export function DeleteInstallmentDialog({ movement, onClose }: DeleteInstallment
       return;
     }
 
-    toast.success("Movimiento eliminado correctamente.");
+    if (result.historyEntryId) {
+      toast.success(`Eliminado: ‘${description}’.`, {
+        groupId: movement.id,
+        action: {
+          label: "Deshacer",
+          pendingLabel: "Deshaciendo…",
+          onClick: buildUndoAction(undo, result.historyEntryId),
+        },
+      });
+    } else {
+      toast.success(`Eliminado: ‘${description}’.`);
+    }
     onClose();
   }
 
@@ -79,7 +93,7 @@ export function DeleteInstallmentDialog({ movement, onClose }: DeleteInstallment
           </div>
         </div>
 
-        <p className="text-[12.5px] text-muted">Esta acción es permanente.</p>
+        <p className="text-[12.5px] text-muted">Vas a poder deshacerlo desde el historial.</p>
       </ModalShellBody>
 
       <ModalShellFooter>

@@ -31,6 +31,8 @@ import { useReferenceRate } from "@/hooks/use-reference-rate";
 import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
 import { useDefaultPaymentMethodPrefill } from "@/hooks/use-default-payment-method-prefill";
 import { useToast } from "@/hooks/use-toast";
+import { useUndoHistory } from "@/hooks/use-history";
+import { buildUndoAction } from "@/lib/toast-undo";
 import { type TransactionType } from "@/types/transaction";
 import { type Category, type CategoryScope } from "@/types/category";
 import { CategoryFormModal } from "@/app/(app)/configuracion/categorias/category-form-modal";
@@ -207,6 +209,7 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, edi
   const isPrefillActive = !isEditing && prefill != null;
   const router = useRouter();
   const { toast } = useToast();
+  const { undo } = useUndoHistory();
   const { categories } = useCategories();
   const { createRecurring, updateRecurring, isCreating, isUpdating } = useRecurring();
   const { defaultCurrency, lastExchangeRate } = useSettings();
@@ -433,7 +436,20 @@ export function RecurringForm({ recurring, onClose, defaultMonth, viewMonth, edi
         return;
       }
 
-      toast.success("Movimiento actualizado correctamente.");
+      const updated = result.recurring;
+      const name = updated?.description || updated?.category.name || recurring.description || recurring.category.name;
+      if (result.historyEntryId && updated) {
+        toast.success(`Actualizado: ‘${name}’.`, {
+          groupId: updated.chainId,
+          action: {
+            label: "Deshacer",
+            pendingLabel: "Deshaciendo…",
+            onClick: buildUndoAction(undo, result.historyEntryId),
+          },
+        });
+      } else {
+        toast.success(`Actualizado: ‘${name}’.`);
+      }
       onClose();
     } else {
       const result = await createRecurring({

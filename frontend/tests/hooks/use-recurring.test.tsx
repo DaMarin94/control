@@ -26,6 +26,7 @@ const mockUseApi = vi.mocked(useApi);
 // Fijo de ejemplo
 const mockRecurring: Recurring = {
   id: "rec-1",
+  chainId: "chain-1",
   userId: "user-1",
   categoryId: "cat-1",
   type: "EXPENSE",
@@ -232,7 +233,7 @@ describe("useRecurring", () => {
 
   describe("deleteRecurring", () => {
     it("éxito con fromCurrentMonth=false: llama DELETE con params correctos", async () => {
-      mockApiDelete.mockResolvedValue(undefined);
+      mockApiDelete.mockResolvedValue({ historyEntryId: "hist-1" });
 
       const { result } = renderHook(() => useRecurring(), { wrapper: createWrapper() });
 
@@ -246,6 +247,7 @@ describe("useRecurring", () => {
       });
 
       expect(deleteResult!.success).toBe(true);
+      expect(deleteResult!.historyEntryId).toBe("hist-1");
       // El path debe incluir ambos query params como strings
       expect(mockApiDelete).toHaveBeenCalledWith(
         expect.stringContaining("currentMonth=2026-06"),
@@ -256,7 +258,7 @@ describe("useRecurring", () => {
     });
 
     it("éxito con fromCurrentMonth=true: envía fromCurrentMonth=true como string", async () => {
-      mockApiDelete.mockResolvedValue(undefined);
+      mockApiDelete.mockResolvedValue({ historyEntryId: "hist-2" });
 
       const { result } = renderHook(() => useRecurring(), { wrapper: createWrapper() });
 

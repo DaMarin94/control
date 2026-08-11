@@ -37,7 +37,7 @@ const mockRepo = {
 };
 
 const mockHistoryService = {
-  record: jest.fn().mockResolvedValue(undefined),
+  record: jest.fn().mockResolvedValue('hist-entry-id'),
 };
 
 const mockRecurringServiceForTx = {
@@ -437,6 +437,9 @@ describe('TransactionsService', () => {
       const result = await service.update(USER_A, 'tx-001', { amountCents: 2000 });
 
       expect(result.amountCents).toBe(2000);
+      // El id de la entrada de historial creada viaja en la respuesta (para el
+      // "Deshacer" del toast — pega a POST /history/:id/undo).
+      expect(result.historyEntryId).toBe('hist-entry-id');
     });
 
     it('actualiza description exitosamente', async () => {
@@ -546,8 +549,11 @@ describe('TransactionsService', () => {
       mockRepo.findById.mockResolvedValue(tx);
       mockRepo.softDelete.mockResolvedValue(undefined);
 
-      await service.remove(USER_A, 'tx-001');
+      const result = await service.remove(USER_A, 'tx-001');
 
+      // DELETE ya no devuelve void: devuelve { historyEntryId } (para el
+      // "Deshacer" del toast — pega a POST /history/:id/undo).
+      expect(result).toEqual({ historyEntryId: 'hist-entry-id' });
       expect(mockRepo.softDelete).toHaveBeenCalledWith('tx-001');
       expect(mockRecurringServiceForTx.cascadeSoftDeleteBySourceMovement).toHaveBeenCalledWith(
         USER_A,

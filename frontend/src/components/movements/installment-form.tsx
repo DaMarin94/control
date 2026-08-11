@@ -30,6 +30,8 @@ import { useReferenceRate } from "@/hooks/use-reference-rate";
 import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
 import { useDefaultPaymentMethodPrefill } from "@/hooks/use-default-payment-method-prefill";
 import { useToast } from "@/hooks/use-toast";
+import { useUndoHistory } from "@/hooks/use-history";
+import { buildUndoAction } from "@/lib/toast-undo";
 import { type Category, type CategoryScope } from "@/types/category";
 import { CategoryFormModal } from "@/app/(app)/configuracion/categorias/category-form-modal";
 import { type InstallmentGroup } from "@/types/installment";
@@ -160,6 +162,7 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
   const isPrefillActive = !isEditing && prefill != null;
   const router = useRouter();
   const { toast } = useToast();
+  const { undo } = useUndoHistory();
   const { categories } = useCategories();
   const { createInstallment, updateInstallment, isCreating, isUpdating } = useInstallments();
   const { defaultCurrency, lastExchangeRate } = useSettings();
@@ -379,7 +382,20 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
         return;
       }
 
-      toast.success("Movimiento actualizado correctamente.");
+      const updated = result.installment;
+      const name = updated?.description || updated?.category.name || installment.description || installment.category.name;
+      if (result.historyEntryId) {
+        toast.success(`Actualizado: ‘${name}’.`, {
+          groupId: installment.id,
+          action: {
+            label: "Deshacer",
+            pendingLabel: "Deshaciendo…",
+            onClick: buildUndoAction(undo, result.historyEntryId),
+          },
+        });
+      } else {
+        toast.success(`Actualizado: ‘${name}’.`);
+      }
       onClose();
     } else {
       const result = await createInstallment({

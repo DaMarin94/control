@@ -49,6 +49,7 @@ const mockMonthMovements: MonthMovements = {
         frequency: null,
         startMonth: null,
         endMonth: null,
+        chainId: null,
         skipped: false,
         category: {
           id: "cat-1",

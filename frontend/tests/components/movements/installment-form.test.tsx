@@ -31,6 +31,12 @@ vi.mock("@/hooks/use-installments", () => ({
   useInstallments: vi.fn(),
 }));
 
+// El toast de "Deshacer" en edición usa useUndoHistory — mockeado para no
+// depender de useApi/useSession real en este test de formulario.
+vi.mock("@/hooks/use-history", () => ({
+  useUndoHistory: vi.fn(() => ({ undo: vi.fn(), isUndoing: false })),
+}));
+
 // Prefill del método de pago por defecto (RF-PM-007) usa usePreferences
 // internamente — mockeado para no depender de useSession real.
 vi.mock("@/hooks/use-preferences", () => ({

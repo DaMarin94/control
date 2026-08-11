@@ -45,6 +45,7 @@ function makeItem(
     frequency: null,
     startMonth: null,
     endMonth: null,
+    chainId: null,
     skipped: false,
     category: { id: "cat-1", name: "Test", color: "#000", scope: "BOTH" },
     paymentMethod: null,
@@ -79,6 +80,7 @@ function makeUnico(
     frequency: null,
     startMonth: null,
     endMonth: null,
+    chainId: null,
     skipped: false,
     category: { id: "cat-1", name: "Test", color: "#000", scope: "BOTH" },
     paymentMethod: null,
@@ -184,6 +186,7 @@ describe("sumMovementTotals", () => {
     const skippedFijo: MovementItem = {
       ...makeItem("EXPENSE", 150000, "fijo-skip"),
       origin: "fijo",
+      chainId: "chain-fijo-skip",
       skipped: true,
     };
     const result = sumMovementTotals([skippedFijo]);
@@ -194,6 +197,7 @@ describe("sumMovementTotals", () => {
     const skippedFijo: MovementItem = {
       ...makeItem("EXPENSE", 150000, "fijo-skip"),
       origin: "fijo",
+      chainId: "chain-fijo-skip",
       skipped: true,
     };
     const activoExpense = makeItem("EXPENSE", 50000, "exp-activo");
@@ -250,6 +254,7 @@ describe("groupSubtotalCents", () => {
     const skippedFijo: MovementItem = {
       ...makeItem("EXPENSE", 150000, "fijo-skip"),
       origin: "fijo",
+      chainId: "chain-fijo-skip",
       skipped: true,
     };
     const activoIncome = makeItem("INCOME", 200000, "inc-activo");

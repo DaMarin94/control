@@ -123,7 +123,7 @@ export class TransactionsService {
     userId: string,
     id: string,
     dto: UpdateTransactionDto,
-  ): Promise<TransactionWithCategory> {
+  ): Promise<TransactionWithCategory & { historyEntryId: string }> {
     const existing = await this.repo.findById(id);
 
     if (!existing || existing.userId !== userId) {
@@ -197,7 +197,7 @@ export class TransactionsService {
       await this.settingsService.updateLastExchangeRate(userId, dto.exchangeRate);
     }
 
-    await this.historyService.record(
+    const historyEntryId = await this.historyService.record(
       userId,
       HistoryTargetKind.UNICO,
       id,
@@ -210,14 +210,14 @@ export class TransactionsService {
       'Transacción actualizada',
     );
 
-    return updated;
+    return { ...updated, historyEntryId };
   }
 
   // ---------------------------------------------------------------------------
   // DELETE /transactions/:id — borrado lógico (RF-MU-003, RF-HIST-006)
   // ---------------------------------------------------------------------------
 
-  async remove(userId: string, id: string): Promise<void> {
+  async remove(userId: string, id: string): Promise<{ historyEntryId: string }> {
     const existing = await this.repo.findById(id);
 
     if (!existing || existing.userId !== userId) {
@@ -233,7 +233,7 @@ export class TransactionsService {
     // físicamente mientras la entrada de historial del origen esté vigente.
     await this.recurringService.cascadeSoftDeleteBySourceMovement(userId, id);
 
-    await this.historyService.record(
+    const historyEntryId = await this.historyService.record(
       userId,
       HistoryTargetKind.UNICO,
       id,
@@ -245,6 +245,8 @@ export class TransactionsService {
       { userId, transactionId: id },
       'Transacción eliminada (borrado lógico)',
     );
+
+    return { historyEntryId };
   }
 
   // ---------------------------------------------------------------------------

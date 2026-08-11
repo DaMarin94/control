@@ -258,6 +258,7 @@ const mockMovementExpense = {
   frequency: null as null,
   startMonth: null as null,
   endMonth: null,
+  chainId: null,
   skipped: false,
   category: { id: "cat-1", name: "Alimentación", color: "#FF5733", scope: "BOTH" as const },
   paymentMethod: null,
@@ -283,6 +284,7 @@ const mockMovementIncome = {
   frequency: null as null,
   startMonth: null as null,
   endMonth: null,
+  chainId: null,
   skipped: false,
   category: { id: "cat-2", name: "Sueldo", color: "#33FF57", scope: "INCOME" as const },
   paymentMethod: null,
@@ -308,6 +310,7 @@ const mockMovementFijo = {
   frequency: 1 as const,
   startMonth: "2026-01",
   endMonth: null,
+  chainId: "chain-fijo-1",
   skipped: false,
   category: { id: "cat-3", name: "Servicios", color: "#5733FF", scope: "EXPENSE" as const },
   paymentMethod: null,
@@ -337,6 +340,7 @@ const mockMovementCuota = {
   frequency: null as null,
   startMonth: null as null,
   endMonth: null,
+  chainId: null,
   skipped: false,
   category: { id: "cat-4", name: "Tecnología", color: "#FF33AA", scope: "EXPENSE" as const },
   paymentMethod: null,
@@ -401,6 +405,8 @@ const mockMovementCalculadoExpense = {
   frequency: 1 as const,
   startMonth: "2026-01",
   endMonth: null,
+  // Un calculado de fijo ES un fijo con cadena PROPIA (distinta de sourceChainId).
+  chainId: "chain-calc-exp-1",
   skipped: false,
   category: { id: "cat-3", name: "Servicios", color: "#5733FF", scope: "EXPENSE" as const },
   paymentMethod: null,
@@ -428,6 +434,9 @@ const mockCalculatedDeFijo = {
   ...mockMovementFijo,
   id: "calc-fijo-1",
   description: "Calculado de alquiler",
+  // Un calculado de fijo ES un fijo con cadena PROPIA (distinta de sourceChainId
+  // y de la cadena del mockMovementFijo del que se spreadea acá).
+  chainId: "chain-calc-fijo-1",
   calculated: {
     sourceType: "fijo" as const,
     sourceId: "rec-1",

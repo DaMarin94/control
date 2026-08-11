@@ -32,7 +32,10 @@ const mockLogger = {
 
 function makeRepoMock(): jest.Mocked<HistoryRepository> {
   return {
-    create: jest.fn(),
+    // Por defecto, `create` devuelve una fila con id (record() ahora resuelve
+    // con `created.id` — ver HistoryService.record). Los tests que necesitan un
+    // id puntual lo sobreescriben con mockResolvedValueOnce.
+    create: jest.fn().mockResolvedValue(makeEntry()),
     findAllForUserAsc: jest.fn().mockResolvedValue([]),
     findById: jest.fn(),
     findChainAsc: jest.fn().mockResolvedValue([]),
@@ -163,6 +166,41 @@ describe('HistoryService', () => {
         expect.any(Object),
       );
       expect(repo.findOverflowIds).toHaveBeenCalledWith(USER_ID, HistoryTargetKind.UNICO, TX_ID, MAX_ENTRIES_PER_MOVEMENT);
+    });
+
+    it('devuelve el id de la entrada recién creada (para el "Deshacer" del toast)', async () => {
+      repo.create.mockResolvedValueOnce(makeEntry({ id: 'hist-recien-creado' }));
+      repo.findOverflowIds.mockResolvedValue([]);
+
+      const id = await service.record(
+        USER_ID,
+        HistoryTargetKind.UNICO,
+        TX_ID,
+        HistoryAction.EDIT,
+        makeUnicoSnapshot(),
+      );
+
+      expect(id).toBe('hist-recien-creado');
+    });
+
+    it('la entrada recién creada nunca es purgada por el overflow (siempre es la más nueva)', async () => {
+      // La entrada recién creada ('hist-nueva') nunca puede aparecer en
+      // findOverflowIds (que devuelve las MÁS ANTIGUAS por encima del tope) —
+      // se simula igual el caso límite para dejar la invariante documentada.
+      repo.create.mockResolvedValueOnce(makeEntry({ id: 'hist-nueva' }));
+      repo.findOverflowIds.mockResolvedValue(['hist-vieja-1', 'hist-vieja-2']);
+      repo.findById.mockResolvedValue(makeEntry({ id: 'hist-vieja-1', action: HistoryAction.EDIT }));
+
+      const id = await service.record(
+        USER_ID,
+        HistoryTargetKind.UNICO,
+        TX_ID,
+        HistoryAction.EDIT,
+        makeUnicoSnapshot(),
+      );
+
+      expect(id).toBe('hist-nueva');
+      expect(repo.delete).not.toHaveBeenCalledWith('hist-nueva');
     });
 
     it('al superar el tope, descarta la entrada más antigua de ESE movimiento (EDIT: sin reap físico)', async () => {

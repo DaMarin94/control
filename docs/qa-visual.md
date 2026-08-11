@@ -39,6 +39,20 @@ El grueso del recorrido va en **escritorio normal**; los cuatro invariantes de c
 - **Adaptación / rediseño mobile:** evaluar si la experiencia en pantalla chica es *buena* o *cómoda*. Lo único que se verifica en pantalla chica es que **no se rompe** (los cuatro invariantes de contención, arriba); adaptar o rediseñar para mobile queda fuera.
 - **Accesibilidad**: uso por teclado, foco, contraste, legibilidad, información transmitida solo por color.
 
+## Método — cómo se verifica el responsive
+
+Redimensionar la ventana del navegador desde las herramientas **no es confiable**: la operación reporta éxito y el viewport no cambia. El responsive se verifica **montando la app en un `<iframe>` del ancho objetivo**, dentro de una pestaña ya autenticada:
+
+- Las media queries y `100vw` responden al ancho del **iframe**, no al de la ventana.
+- Al ser **mismo origen**, se le lee y maneja el DOM (`contentDocument`) y se reusa la sesión: no hay que loguear de nuevo.
+- Se barren **varios anchos en una sola pasada** sin tocar la ventana del usuario.
+
+**Trampas que invalidan el resultado:**
+
+- **Manejar la app con `.click()` por JavaScript atraviesa el gate de viewport.** El bloqueo por debajo de `640px` es visual: los nodos siguen en el DOM y siguen siendo clickeables por código. Medir por debajo del piso soportado produce hallazgos sobre estados que un usuario real no puede alcanzar. **Verificar siempre que el ancho medido esté por encima del piso.**
+- **El truncado se mide, no se mira:** `scrollHeight > clientHeight` sobre el elemento de texto. A ojo, un `line-clamp` truncado y uno que entra justo son indistinguibles.
+- **Los eventos sintéticos mienten.** Un `new MouseEvent('mouseenter')` **no** dispara el `onMouseEnter` de React — para hover, usar el cursor real. Y una `Response` armada a mano tiene que respetar el sobre real del cliente HTTP (`{ success, statusCode, error: { message } }`, ver `frontend/src/lib/api.ts`). Los dos producen falsos negativos.
+
 ## Prompt genérico de regresión adversarial
 
 Doc vivo: cuando una feature agrega una superficie nueva, se agrega a la lista de superficies de este prompt, **en el mismo commit que el código**. El bloque de abajo es el asset a mantener y se pega tal cual.

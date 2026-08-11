@@ -192,6 +192,12 @@ export class HistoryService {
    * Registra una entrada de historial y aplica el tope de retención por cantidad
    * (RF-HIST-005): si el movimiento (userId, targetKind, targetId) supera las
    * 5 entradas vigentes, descarta la(s) más antigua(s) por encima del tope.
+   *
+   * @returns el id de la entrada recién creada (para que el frontend pueda
+   * ofrecer "Deshacer" en el toast de éxito post-edición/eliminación, pegándole
+   * a POST /history/:id/undo). La entrada recién creada es siempre la más
+   * nueva del movimiento, así que `findOverflowIds` (que descarta las más
+   * ANTIGUAS por encima del tope) nunca la purga en la misma llamada.
    */
   async record(
     userId: string,
@@ -199,8 +205,8 @@ export class HistoryService {
     targetId: string,
     action: HistoryAction,
     snapshot: HistorySnapshot,
-  ): Promise<void> {
-    await this.repo.create(userId, targetKind, targetId, action, snapshot);
+  ): Promise<string> {
+    const created = await this.repo.create(userId, targetKind, targetId, action, snapshot);
 
     const overflowIds = await this.repo.findOverflowIds(
       userId,
@@ -212,6 +218,8 @@ export class HistoryService {
       const entry = await this.repo.findById(id);
       if (entry) await this.discardEntry(entry);
     }
+
+    return created.id;
   }
 
   // ---------------------------------------------------------------------------

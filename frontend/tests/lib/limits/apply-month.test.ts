@@ -21,6 +21,7 @@ function makeItem(overrides: Partial<MovementItem> = {}): MovementItem {
     frequency: null,
     startMonth: null,
     endMonth: null,
+    chainId: null,
     skipped: false,
     category: { id: "cat-1", name: "Comida", color: "#E23B3B", scope: "BOTH" },
     paymentMethod: null,

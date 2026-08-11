@@ -149,7 +149,7 @@ export class InstallmentsService {
     userId: string,
     id: string,
     dto: UpdateInstallmentDto,
-  ): Promise<InstallmentGroupWithCategory> {
+  ): Promise<InstallmentGroupWithCategory & { historyEntryId: string }> {
     const existing = await this.repo.findById(id);
 
     if (!existing || existing.userId !== userId) {
@@ -225,7 +225,7 @@ export class InstallmentsService {
       await this.settingsService.updateLastExchangeRate(userId, dto.exchangeRate);
     }
 
-    await this.historyService.record(
+    const historyEntryId = await this.historyService.record(
       userId,
       HistoryTargetKind.CUOTA,
       id,
@@ -238,7 +238,7 @@ export class InstallmentsService {
       'Grupo de cuotas actualizado',
     );
 
-    return updated;
+    return { ...updated, historyEntryId };
   }
 
   // ---------------------------------------------------------------------------
@@ -254,7 +254,7 @@ export class InstallmentsService {
    *
    * @throws NotFoundException si no existe o no es del usuario.
    */
-  async remove(userId: string, id: string): Promise<void> {
+  async remove(userId: string, id: string): Promise<{ historyEntryId: string }> {
     const existing = await this.repo.findById(id);
 
     if (!existing || existing.userId !== userId) {
@@ -270,7 +270,7 @@ export class InstallmentsService {
     // físicamente mientras la entrada de historial del origen esté vigente.
     await this.recurringService.cascadeSoftDeleteBySourceInstallmentGroup(userId, id);
 
-    await this.historyService.record(
+    const historyEntryId = await this.historyService.record(
       userId,
       HistoryTargetKind.CUOTA,
       id,
@@ -282,6 +282,8 @@ export class InstallmentsService {
       { userId, installmentGroupId: id },
       'Grupo de cuotas eliminado (borrado lógico)',
     );
+
+    return { historyEntryId };
   }
 
   // ---------------------------------------------------------------------------

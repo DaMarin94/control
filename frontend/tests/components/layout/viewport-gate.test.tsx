@@ -51,4 +51,13 @@ describe("ViewportGate", () => {
     expect(screen.queryAllByRole("button")).toHaveLength(0);
     expect(screen.queryAllByRole("link")).toHaveLength(0);
   });
+
+  it("va por encima del viewport de toasts (z-[100] > z-[90] del ToastProvider)", () => {
+    // Regresión: un toast en pantalla al angostar la ventana bajo el piso
+    // quedaba visible sobre el bloqueo (docs/design.md §"Toast con acción", §6).
+    const { container } = render(<ViewportGate />);
+    const root = container.firstElementChild;
+
+    expect(root).toHaveClass("z-[100]");
+  });
 });

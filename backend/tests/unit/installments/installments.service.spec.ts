@@ -44,7 +44,7 @@ const mockRepo = {
 };
 
 const mockHistoryService = {
-  record: jest.fn().mockResolvedValue(undefined),
+  record: jest.fn().mockResolvedValue('hist-entry-id'),
 };
 
 const mockRecurringServiceForInst = {
@@ -388,6 +388,9 @@ describe('InstallmentsService', () => {
       const result = await service.update(USER_A, GROUP_ID, { amountCents: 8000 });
 
       expect(result.amountCents).toBe(8000);
+      // El id de la entrada de historial creada viaja en la respuesta (para el
+      // "Deshacer" del toast — pega a POST /history/:id/undo).
+      expect(result.historyEntryId).toBe('hist-entry-id');
       expect(mockRepo.update).toHaveBeenCalledWith(
         GROUP_ID,
         expect.objectContaining({ amountCents: 8000 }),
@@ -540,8 +543,11 @@ describe('InstallmentsService', () => {
       mockRepo.findById.mockResolvedValue(group);
       mockRepo.softDelete.mockResolvedValue(undefined);
 
-      await service.remove(USER_A, GROUP_ID);
+      const result = await service.remove(USER_A, GROUP_ID);
 
+      // DELETE ya no devuelve void: devuelve { historyEntryId } (para el
+      // "Deshacer" del toast — pega a POST /history/:id/undo).
+      expect(result).toEqual({ historyEntryId: 'hist-entry-id' });
       expect(mockRepo.softDelete).toHaveBeenCalledWith(GROUP_ID);
       expect(
         mockRecurringServiceForInst.cascadeSoftDeleteBySourceInstallmentGroup,

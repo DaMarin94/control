@@ -19,6 +19,8 @@ import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useRecurring } from "@/hooks/use-recurring";
+import { useUndoHistory } from "@/hooks/use-history";
+import { buildUndoAction } from "@/lib/toast-undo";
 import { ModalShell, ModalShellHeader, ModalShellBody, ModalShellFooter } from "@/components/ui/modal-shell";
 import { formatCurrency, getCurrentMonth } from "@/lib/format";
 import type { MovementItem } from "@/types/movement";
@@ -38,6 +40,7 @@ interface DeleteRecurringDialogProps {
 
 export function DeleteRecurringDialog({ movement, onClose, viewMonth, variant = "fijo" }: DeleteRecurringDialogProps) {
   const { toast } = useToast();
+  const { undo } = useUndoHistory();
   const { deleteRecurring, isDeleting } = useRecurring();
 
   async function handleConfirm() {
@@ -52,7 +55,30 @@ export function DeleteRecurringDialog({ movement, onClose, viewMonth, variant = 
       return;
     }
 
-    toast.success("Movimiento eliminado correctamente.");
+    if (result.historyEntryId) {
+      // Identidad de grupo del toast — DEBE coincidir con la que usa el form
+      // de edición del mismo movimiento (invariante RN-024: el toast de
+      // edición y el de borrado tienen que compartir groupId, o el segundo
+      // no reemplaza al primero y quedan dos toasts apilados):
+      // - variant="fijo" (fijo normal Y calculado de fijo, ambos origin==="fijo"):
+      //   el id de fila puede cambiar por split de edición → usar el chainId
+      //   propio del ítem (siempre presente para origin==="fijo"), igual que
+      //   RecurringForm/CalculatedForm en edición.
+      // - variant="calculated-simple" (calculado de único/cuota): edita
+      //   SIEMPRE in-place (sin split) → su id de fila es estable y coincide
+      //   con el que usa CalculatedForm en edición para el mismo movimiento.
+      const groupId = variant === "fijo" ? movement.chainId! : movement.id;
+      toast.success(`Eliminado: ‘${description}’.`, {
+        groupId,
+        action: {
+          label: "Deshacer",
+          pendingLabel: "Deshaciendo…",
+          onClick: buildUndoAction(undo, result.historyEntryId),
+        },
+      });
+    } else {
+      toast.success(`Eliminado: ‘${description}’.`);
+    }
     onClose();
   }
 
@@ -88,7 +114,7 @@ export function DeleteRecurringDialog({ movement, onClose, viewMonth, variant = 
         </div>
         {isCalculatedSimple ? (
           <p className="text-[12.5px] text-muted">
-            Esta acción es permanente y no se puede deshacer.
+            Vas a poder deshacerlo desde el historial.
           </p>
         ) : (
           <>

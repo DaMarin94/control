@@ -269,7 +269,7 @@ describe("useInstallments", () => {
 
   describe("deleteInstallment", () => {
     it("éxito: llama DELETE /installments/:id sin query params", async () => {
-      mockApiDelete.mockResolvedValue(undefined);
+      mockApiDelete.mockResolvedValue({ historyEntryId: "hist-1" });
 
       const { result } = renderHook(() => useInstallments(), { wrapper: createWrapper() });
 
@@ -284,7 +284,7 @@ describe("useInstallments", () => {
     });
 
     it("DELETE no incluye query params (eliminación total sin condiciones)", async () => {
-      mockApiDelete.mockResolvedValue(undefined);
+      mockApiDelete.mockResolvedValue({ historyEntryId: "hist-1" });
 
       const { result } = renderHook(() => useInstallments(), { wrapper: createWrapper() });
 

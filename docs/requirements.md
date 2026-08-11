@@ -2744,12 +2744,12 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | Deshacer una entrada **restaura el movimiento al estado previo** que la entrada guarda y **borra la entrada del historial**. El deshacer **no genera entrada nueva** ni se registra de ninguna forma: no queda rastro de que el cambio existió. Es deliberado — Control es un diario personal, no un log de auditoría. |
+| **Descripción** | Deshacer una entrada **restaura el movimiento al estado previo** que la entrada guarda y **borra la entrada del historial**. El deshacer **no genera entrada nueva** ni se registra de ninguna forma: no queda rastro de que el cambio existió. Es deliberado — Control es un diario personal, no un log de auditoría. Se dispara desde **dos superficies**: `/historial` (RF-HIST-002) y el **atajo del aviso de éxito** de la propia edición/eliminación (RF-HIST-007). La operación es la misma en las dos. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Alta |
 | **Precondiciones** | La entrada existe, está vigente y es la **más reciente** de su movimiento (RF-HIST-004). |
 
-**Flujo principal:**
+**Flujo principal (desde `/historial`):**
 1. El usuario abre una entrada desde `/historial`.
 2. El sistema muestra el cambio (estado anterior → estado nuevo) y pide confirmación.
 3. El usuario confirma.
@@ -2766,7 +2766,7 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 - [ ] Al deshacer la eliminación de un movimiento que era **origen de calculados**, los calculados que dependían de él **se restauran junto con el origen**, sin acción adicional del usuario (RF-HIST-006).
 - [ ] Deshacer **borra la entrada** del historial y **no crea ninguna entrada nueva**: la operación de deshacer no se registra en ningún lado.
 - [ ] Tras deshacer, el historial no conserva ninguna evidencia de que el cambio deshecho haya existido.
-- [ ] El deshacer se confirma antes de aplicarse.
+- [ ] El deshacer **desde `/historial`** se confirma antes de aplicarse. El **atajo del aviso de éxito** (RF-HIST-007) **no** pide confirmación: la exigencia de confirmar es de la superficie `/historial`, no de la operación.
 - [ ] Solo se pueden deshacer entradas de movimientos propios.
 
 ---
@@ -2842,6 +2842,49 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 - [ ] Los **movimientos calculados** que dependían del eliminado caen en cascada (RF-MCALC-005) también de forma lógica: nunca se borran físicamente mientras la entrada del origen esté vigente, por lo que **se restauran solos** al deshacerla (RF-HIST-003).
 - [ ] El borrado **físico** ocurre solo al purgarse la entrada de historial de la eliminación (RF-HIST-005).
 - [ ] Un movimiento marcado como eliminado **no se puede editar, anular, duplicar ni tomar como origen** de un calculado: no existe para el resto de la app.
+
+---
+
+#### RF-HIST-007 — Deshacer desde el aviso de éxito
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Tras **editar** o **eliminar** un movimiento, el **aviso de éxito** de esa acción ofrece **deshacerla en el acto**, sin ir a `/historial`. Es un **atajo a la operación de RF-HIST-003** sobre la **misma entrada de historial** que la acción acaba de generar: misma restauración, misma eliminación de la entrada, sin rastro. No es un mecanismo aparte ni una segunda forma de deshacer. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Alta |
+| **Precondiciones** | El usuario acaba de editar o eliminar un movimiento propio y su aviso de éxito sigue en pantalla. |
+
+**Sin confirmación.** El atajo aplica el deshacer directo. El usuario está a segundos de su propia acción y viendo el nombre del movimiento en el aviso: un paso de confirmación anularía el sentido del atajo. La confirmación de RF-HIST-003 es una exigencia de la superficie `/historial`, donde el usuario puede estar operando sobre un cambio que no recuerda.
+
+**Alcance:**
+
+| Operación | ¿Ofrece el atajo? |
+|---|---|
+| **Editar** un único, un fijo, un calculado o un grupo de cuotas | Sí |
+| **Eliminar** un único, un fijo, un calculado o un grupo de cuotas | Sí |
+| **Crear** un movimiento de cualquier forma, incluido duplicar (RF-VM-008) | No — la creación no genera entrada de historial (RF-HIST-001) |
+| Crear o eliminar una **simulación** de categoría | No — la simulación queda entera afuera (RF-SIM-004) |
+| Anular / des-anular, ABM de categorías y métodos de pago, cambios de preferencias | No — no generan entrada (RF-HIST-001) |
+
+**Un aviso por movimiento.** Una acción nueva sobre el **mismo** movimiento **reemplaza** el aviso anterior; los avisos de movimientos **distintos** conviven en pantalla. Consecuencia: el atajo **nunca puede quedar apuntando a una entrada bloqueada** (RF-HIST-004), porque la entrada que ofrece es siempre la **más reciente** de ese movimiento. El bloqueo LIFO y el desbloqueo en cadena son exclusivos de `/historial`.
+
+**Desenlaces:**
+
+| Resultado | Qué pasa |
+|---|---|
+| **Éxito** | El aviso informa que el cambio se deshizo. |
+| **La entrada ya no existe** (se deshizo antes desde `/historial`) | El aviso informa que ese cambio **ya no está disponible** para deshacer. **No se trata como un error**: es un desenlace esperado. |
+| **Falla por otro motivo** (red, servidor) | Se informa el fallo y el atajo **sigue disponible para reintentar**. |
+
+**Criterios de aceptación:**
+- [ ] Editar y eliminar ofrecen el atajo en su aviso de éxito, en las **cuatro formas**: único, fijo, calculado y grupo de cuotas.
+- [ ] El atajo **deshace sin pedir confirmación** y su efecto es idéntico al de deshacer esa misma entrada desde `/historial` (RF-HIST-003): el movimiento vuelve al estado previo, la entrada se borra y no queda rastro.
+- [ ] Las **creaciones** —incluida la de duplicar— **no** ofrecen el atajo, y la **simulación** queda fuera por completo (RF-SIM-004).
+- [ ] Una acción nueva sobre el **mismo** movimiento reemplaza su aviso anterior; los avisos de movimientos **distintos** conviven.
+- [ ] El atajo **nunca ofrece deshacer una entrada bloqueada** (RF-HIST-004).
+- [ ] Si la entrada ya no existe, el aviso lo comunica como **no disponible**, no como error.
+- [ ] Ante cualquier otro fallo, el atajo **queda disponible para reintentar**.
+- [ ] Si el usuario no lo usa, el aviso desaparece solo y el cambio queda aplicado; el atajo sigue disponible desde `/historial` mientras la entrada esté vigente (RF-HIST-005).
 
 ---
 

@@ -78,8 +78,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   // Short-circuit para respuestas sin contenido (204 No Content).
-  // Los cuatro DELETEs del backend responden 204; los errores siempre traen body JSON,
-  // así que un 204 es siempre éxito — no hay nada que parsear.
+  // Los DELETE de movimientos (transactions/recurring/installments) ahora responden
+  // 200 + { historyEntryId } (toast de éxito con "Deshacer"), no 204 — este branch
+  // queda como resguardo genérico para cualquier endpoint sin body. Los errores
+  // siempre traen body JSON, así que un 204 es siempre éxito — no hay nada que parsear.
   if (response.status === 204) {
     logger.debug("Request completado sin contenido (204)", { path });
     return undefined as T;

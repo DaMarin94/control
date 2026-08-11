@@ -50,6 +50,12 @@ vi.mock("@/hooks/use-recurring", () => ({
   useRecurring: vi.fn(),
 }));
 
+// El toast de "Deshacer" en edición usa useUndoHistory — mockeado para no
+// depender de useApi/useSession real en este test de formulario.
+vi.mock("@/hooks/use-history", () => ({
+  useUndoHistory: vi.fn(() => ({ undo: vi.fn(), isUndoing: false })),
+}));
+
 // Prefill del método de pago por defecto (RF-PM-007) usa usePreferences
 // internamente — mockeado para no depender de useSession real.
 vi.mock("@/hooks/use-preferences", () => ({
@@ -159,6 +165,7 @@ const mockBothCategory: Category = {
 
 const mockRecurring: Recurring = {
   id: "rec-1",
+  chainId: "chain-1",
   userId: "user-1",
   categoryId: "cat-expense",
   type: "EXPENSE",

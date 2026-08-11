@@ -92,7 +92,7 @@ Sistema de toasts **centralizado**: cualquier parte de la app dispara un toast d
 - **Auto-dismiss:** todos los toasts desaparecen solos tras un tiempo, sin importar el tipo. Si el usuario no interactúa con la acción del toast, este se va igual.
 
 **Quién dispara toasts:**
-- Guardado exitoso de un movimiento → `success` con acción "Ir a ver".
+- Guardado exitoso de un movimiento → `success` con acción: "Ir a ver" al crear, "Deshacer" al editar o eliminar (RF-HIST-007).
 - La capa centralizada de errores del frontend → `error` (fallo de servidor o de red).
 - Otras confirmaciones (categoría creada, editada, eliminada, etc.) → `success`.
 

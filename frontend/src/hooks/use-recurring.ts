@@ -42,11 +42,15 @@ export interface CreateRecurringResult {
 export interface UpdateRecurringResult {
   success: boolean;
   recurring?: Recurring;
+  /** Id de la entrada de historial creada — habilita el "Deshacer" del toast. */
+  historyEntryId?: string;
   error?: string;
 }
 
 export interface DeleteRecurringResult {
   success: boolean;
+  /** Id de la entrada de historial creada — habilita el "Deshacer" del toast. */
+  historyEntryId?: string;
   error?: string;
 }
 
@@ -120,11 +124,12 @@ export function useRecurring() {
   // ─── Mutation: editar fijo ─────────────────────────────────────────────────
 
   const updateMutation = useMutation<
-    Recurring,
+    Recurring & { historyEntryId: string },
     ApiError,
     { id: string; data: UpdateRecurringRequest }
   >({
-    mutationFn: ({ id, data }) => api.patch<Recurring>(`/recurring/${id}`, data),
+    mutationFn: ({ id, data }) =>
+      api.patch<Recurring & { historyEntryId: string }>(`/recurring/${id}`, data),
     onSuccess: (recurring) => {
       void queryClient.invalidateQueries({ queryKey: MOVEMENTS_QUERY_PREFIX });
       logger.info("Fijo actualizado", { id: recurring.id });
@@ -142,7 +147,7 @@ export function useRecurring() {
   ): Promise<UpdateRecurringResult> {
     try {
       const recurring = await updateMutation.mutateAsync({ id, data });
-      return { success: true, recurring };
+      return { success: true, recurring, historyEntryId: recurring.historyEntryId };
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.statusCode === 404) {
@@ -166,14 +171,18 @@ export function useRecurring() {
 
   // ─── Mutation: eliminar fijo ───────────────────────────────────────────────
 
-  const deleteMutation = useMutation<void, ApiError, { id: string } & DeleteRecurringParams>({
+  const deleteMutation = useMutation<
+    { historyEntryId: string },
+    ApiError,
+    { id: string } & DeleteRecurringParams
+  >({
     mutationFn: ({ id, currentMonth, fromCurrentMonth }) => {
       // fromCurrentMonth se envía como string literal "true"/"false" (contrato del backend)
       const params = new URLSearchParams({
         currentMonth,
         fromCurrentMonth: fromCurrentMonth ? "true" : "false",
       });
-      return api.delete<void>(`/recurring/${id}?${params.toString()}`);
+      return api.delete<{ historyEntryId: string }>(`/recurring/${id}?${params.toString()}`);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: MOVEMENTS_QUERY_PREFIX });
@@ -191,8 +200,8 @@ export function useRecurring() {
     params: DeleteRecurringParams,
   ): Promise<DeleteRecurringResult> {
     try {
-      await deleteMutation.mutateAsync({ id, ...params });
-      return { success: true };
+      const { historyEntryId } = await deleteMutation.mutateAsync({ id, ...params });
+      return { success: true, historyEntryId };
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.statusCode === 404) {

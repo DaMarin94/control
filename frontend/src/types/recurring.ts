@@ -37,6 +37,14 @@ export interface Recurring {
   id: string;
   userId: string;
   categoryId: string;
+  /**
+   * Identidad estable de la cadena del fijo lógico — la comparten todas las
+   * filas a través de los splits de edición (docs/data-model.md §"Recurring —
+   * campos de cadena y calculado"). Presente en TODO Recurring (fijo normal o
+   * calculado). Es la clave de agrupación de toasts/historial por movimiento
+   * (RN-024) — NUNCA usar `id` para esto, cambia en cada split.
+   */
+  chainId: string;
   type: TransactionType;
   /** Monto en centavos enteros de la moneda original (sin decimales) */
   amountCents: number;

@@ -50,6 +50,7 @@ const baseSimulated: MovementItem = {
   frequency: null,
   startMonth: null,
   endMonth: null,
+  chainId: null,
   skipped: false,
   category: { id: "cat-1", name: "Suscripciones", color: "#3B7DE0", scope: "BOTH" },
   paymentMethod: null,

@@ -417,6 +417,13 @@ export interface MovementItem {
    * indefinidamente, o si origin no es 'fijo' (único/cuota).
    */
   endMonth: string | null;
+  /**
+   * Identidad estable de cadena (Fase 1.1.7). Presente solo para origin==='fijo'
+   * (normales y calculados de fijo, cada uno con SU PROPIO chainId — un calculado
+   * de fijo ES un fijo con cadena propia, NO el sourceChainId del origen). null
+   * para único y cuota.
+   */
+  chainId: string | null;
   /** true si el fijo está anulado para este mes. Siempre false para únicos y cuotas. */
   skipped: boolean;
   /** Fase 1.1.7: info del calculado si este ítem ES un calculado; null si no lo es. */
@@ -833,6 +840,7 @@ export class MovementsRepository {
         frequency: null,
         startMonth: null,
         endMonth: null,
+        chainId: null,
         skipped,
         calculated: {
           sourceType: 'unico',
@@ -1009,6 +1017,7 @@ export class MovementsRepository {
         // Fin del fijo lógico, resuelto por cadena (deletedFrom de la última fila; fallback
         // al deletedFrom de la propia fila si por algún motivo la cadena no resolvió).
         endMonth: chainBounds.get(r.chainId)?.endMonth ?? r.deletedFrom,
+        chainId: r.chainId,
         skipped,
         calculated: null,
         hasCalculated: false,
@@ -1089,6 +1098,9 @@ export class MovementsRepository {
         startMonth: chainBounds.get(calc.chainId)?.startMonth ?? calc.startMonth,
         // Fin del fijo lógico del calculado, resuelto por SU PROPIA cadena (no la del origen).
         endMonth: chainBounds.get(calc.chainId)?.endMonth ?? calc.deletedFrom,
+        // Un calculado de fijo ES un fijo con cadena PROPIA — expone SU PROPIO chainId
+        // (calc.chainId), NO el sourceChainId del origen (mismo criterio que startMonth/endMonth).
+        chainId: calc.chainId,
         skipped,
         calculated: {
           sourceType: 'fijo',
@@ -1211,6 +1223,7 @@ export class MovementsRepository {
         frequency: null,
         startMonth: null,
         endMonth: null,
+        chainId: null,
         skipped,
         calculated: null,
         hasCalculated: false,
@@ -1374,6 +1387,7 @@ export class MovementsRepository {
           frequency: null,
           startMonth: null,
           endMonth: null,
+          chainId: null,
           skipped,
           calculated: {
             sourceType: 'cuota',
@@ -2218,6 +2232,7 @@ export class MovementsRepository {
       frequency: null,
       startMonth: null,
       endMonth: null,
+      chainId: null,
       skipped: row.skipped,
       calculated: null,
       hasCalculated: false,

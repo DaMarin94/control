@@ -72,12 +72,13 @@ export class InstallmentsController {
    * Borrado lógico del grupo completo (RF-MC-002, RF-HIST-006): marca deletedAt,
    * reversible desde /historial (RF-HIST-003) hasta que la entrada se purgue
    * (RF-HIST-005). Deja de aparecer todas las instancias (pasadas y futuras).
-   * 204 No Content. 404 si no existe o no es del usuario.
+   * 200 + sobre con { historyEntryId } (id de la entrada de historial creada,
+   * para que el frontend pueda ofrecer "Deshacer" pegándole a POST /history/:id/undo).
+   * 404 si no existe o no es del usuario.
    * Nota: el calculado vinculado (si existe) también se marca como eliminado
    * en cascada (RN-024/026), vía RecurringService.cascadeSoftDeleteBySourceInstallmentGroup.
    */
   @Delete(':id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Request() req: AuthRequest, @Param('id') id: string) {
     return this.installmentsService.remove(req.user.userId, id);
   }

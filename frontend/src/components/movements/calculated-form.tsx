@@ -44,6 +44,8 @@ import { useCalculated } from "@/hooks/use-calculated";
 import { useSettings } from "@/hooks/use-settings";
 import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
 import { useToast } from "@/hooks/use-toast";
+import { useUndoHistory } from "@/hooks/use-history";
+import { buildUndoAction } from "@/lib/toast-undo";
 import { CategoryFormModal } from "@/app/(app)/configuracion/categorias/category-form-modal";
 import { type Category, type CategoryScope } from "@/types/category";
 import { type TransactionType } from "@/types/transaction";
@@ -241,6 +243,7 @@ interface CalculatedFormProps {
 export function CalculatedForm({ mode, movement, onClose, viewMonth }: CalculatedFormProps) {
   const isEditing = mode === "edit";
   const { toast } = useToast();
+  const { undo } = useUndoHistory();
   const { categories } = useCategories();
   const { createCalculated, updateCalculated, isCreating, isUpdating } = useCalculated();
   const { defaultCurrency } = useSettings();
@@ -441,7 +444,32 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
         return;
       }
 
-      toast.success("Movimiento calculado actualizado.");
+      const name = movement.description ?? movement.category.name;
+      // Identidad de grupo del toast — DEBE coincidir con la que usa
+      // DeleteRecurringDialog para el mismo movimiento (invariante RN-024:
+      // el toast de edición y el de borrado tienen que compartir groupId, o
+      // el segundo no reemplaza al primero y quedan dos toasts apilados):
+      // - sourceType "fijo": el calculado ES un fijo con cadena propia y PUEDE
+      //   splitear al editar (misma mecánica que un fijo normal) → el id de
+      //   fila no es estable, hay que usar el chainId (result.chainId, igual
+      //   al que ya trae el ítem en movement.chainId antes de este submit).
+      // - sourceType "unico"/"cuota": el calculado edita SIEMPRE in-place (sin
+      //   split — RF-MCALC-006 extendido), así que su id de fila (movement.id)
+      //   es estable y coincide con el que usa DeleteRecurringDialog
+      //   (variant="calculated-simple") para el mismo movimiento.
+      const groupId = sourceType === "fijo" ? result.chainId : movement.id;
+      if (result.historyEntryId && groupId) {
+        toast.success(`Actualizado: ‘${name}’.`, {
+          groupId,
+          action: {
+            label: "Deshacer",
+            pendingLabel: "Deshaciendo…",
+            onClick: buildUndoAction(undo, result.historyEntryId),
+          },
+        });
+      } else {
+        toast.success(`Actualizado: ‘${name}’.`);
+      }
       onClose();
     } else {
       // sourceId: en crear, movement ES el origen → su id

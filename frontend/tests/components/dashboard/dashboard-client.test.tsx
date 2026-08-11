@@ -145,6 +145,7 @@ const mockWithMovements: MonthMovements = {
         frequency: null,
         startMonth: null,
         endMonth: null,
+        chainId: null,
         skipped: false,
         category: { id: "cat-1", name: "Alimentación", color: "#FF5733", scope: "BOTH" },
         paymentMethod: null,

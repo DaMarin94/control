@@ -61,7 +61,8 @@ export class TransactionsController {
    * Edita una transacción propia (RF-MU-002).
    * Body parcial: cualquier campo de POST.
    * Reaplica RN-010 si cambia type o categoryId.
-   * 200 + sobre con Transaction. 404 si no existe o es de otro usuario.
+   * 200 + sobre con Transaction + historyEntryId (id de la entrada de historial
+   * creada, para el "Deshacer" del toast). 404 si no existe o es de otro usuario.
    */
   @Patch(':id')
   update(
@@ -76,12 +77,13 @@ export class TransactionsController {
    * DELETE /transactions/:id
    * Borrado lógico (RF-MU-003, RF-HIST-006): marca deletedAt, reversible desde
    * /historial (RF-HIST-003) hasta que la entrada se purgue (RF-HIST-005).
-   * 204 No Content. 404 si no existe o es de otro usuario.
+   * 200 + sobre con { historyEntryId } (id de la entrada de historial creada,
+   * para que el frontend pueda ofrecer "Deshacer" pegándole a POST /history/:id/undo).
+   * 404 si no existe o es de otro usuario.
    * Nota: el calculado vinculado (si existe) también se marca como eliminado
    * en cascada (RN-024/026), vía RecurringService.cascadeSoftDeleteBySourceMovement.
    */
   @Delete(':id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Request() req: AuthRequest, @Param('id') id: string) {
     return this.transactionsService.remove(req.user.userId, id);
   }

@@ -207,7 +207,7 @@ describe("useTransactions", () => {
 
   describe("deleteTransaction", () => {
     it("éxito: devuelve success=true y llama a DELETE /transactions/:id", async () => {
-      mockApiDelete.mockResolvedValue(undefined);
+      mockApiDelete.mockResolvedValue({ historyEntryId: "hist-1" });
 
       const { result } = renderHook(() => useTransactions(), { wrapper: createWrapper() });
 
@@ -218,6 +218,7 @@ describe("useTransactions", () => {
       });
 
       expect(deleteResult!.success).toBe(true);
+      expect(deleteResult!.historyEntryId).toBe("hist-1");
       expect(mockApiDelete).toHaveBeenCalledWith("/transactions/tx-1");
     });
 

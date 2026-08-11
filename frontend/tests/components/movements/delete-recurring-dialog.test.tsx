@@ -29,6 +29,12 @@ vi.mock("@/hooks/use-recurring", () => ({
   useRecurring: vi.fn(),
 }));
 
+// El toast de "Deshacer" tras eliminar usa useUndoHistory — mockeado para no
+// depender de useApi/useSession real en este test de diálogo.
+vi.mock("@/hooks/use-history", () => ({
+  useUndoHistory: vi.fn(() => ({ undo: vi.fn(), isUndoing: false })),
+}));
+
 vi.mock("@/lib/format", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/format")>();
   return {
@@ -55,6 +61,7 @@ const mockFijoMovement: MovementItem = {
   frequency: 1,
   startMonth: "2026-01",
   endMonth: null,
+  chainId: "chain-rec-1",
   skipped: false,
   category: {
     id: "cat-1",
@@ -86,6 +93,7 @@ const mockCalculatedUnicoMovement: MovementItem = {
   frequency: null,
   startMonth: null,
   endMonth: null,
+  chainId: null,
   skipped: false,
   category: {
     id: "cat-2",

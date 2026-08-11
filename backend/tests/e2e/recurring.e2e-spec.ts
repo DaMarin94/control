@@ -438,6 +438,9 @@ describe('Recurring (e2e)', () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data.amountCents).toBe(9000);
       expect(res.body.data.category).toBeDefined();
+      // El id de la entrada de historial creada viaja en la respuesta (para el
+      // "Deshacer" del toast — pega a POST /history/:id/undo).
+      expect(res.body.data.historyEntryId).toBe('hist-1');
     });
 
     it('200 + R2 devuelto en split (currentMonth > startMonth)', async () => {
@@ -463,6 +466,7 @@ describe('Recurring (e2e)', () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data.id).toBe('rec-e2e-002');
       expect(res.body.data.startMonth).toBe('2026-06');
+      expect(res.body.data.historyEntryId).toBe('hist-1');
     });
 
     it('400 si falta currentMonth', async () => {
@@ -541,7 +545,7 @@ describe('Recurring (e2e)', () => {
   // -------------------------------------------------------------------------
 
   describe('DELETE /recurring/:id', () => {
-    it('204 No Content — fromCurrentMonth=false (soft delete desde siguiente mes)', async () => {
+    it('200 + { historyEntryId } — fromCurrentMonth=false (soft delete desde siguiente mes)', async () => {
       const existing = makeDbRecurring({ startMonth: '2026-01' });
       mockPrisma.recurring.findUnique.mockResolvedValue(existing);
       mockPrisma.recurring.update.mockResolvedValue({
@@ -560,17 +564,21 @@ describe('Recurring (e2e)', () => {
         return Promise.resolve([]);
       });
 
-      await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .delete('/recurring/rec-e2e-001?currentMonth=2026-06&fromCurrentMonth=false')
         .set('Authorization', `Bearer ${tokenA}`)
-        .expect(204);
+        .expect(200);
 
+      expect(res.body.success).toBe(true);
+      // DELETE ya no es 204 sin cuerpo: devuelve { historyEntryId } (para el
+      // "Deshacer" del toast — pega a POST /history/:id/undo).
+      expect(res.body.data).toEqual({ historyEntryId: 'hist-1' });
       expect(mockPrisma.recurring.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'rec-e2e-001' } }),
       );
     });
 
-    it('204 No Content — fromCurrentMonth=true (soft delete desde mes actual)', async () => {
+    it('200 + { historyEntryId } — fromCurrentMonth=true (soft delete desde mes actual)', async () => {
       const existing = makeDbRecurring({ startMonth: '2026-01' });
       mockPrisma.recurring.findUnique.mockResolvedValue(existing);
       mockPrisma.recurring.update.mockResolvedValue({
@@ -585,13 +593,15 @@ describe('Recurring (e2e)', () => {
         return Promise.resolve([]);
       });
 
-      await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .delete('/recurring/rec-e2e-001?currentMonth=2026-06&fromCurrentMonth=true')
         .set('Authorization', `Bearer ${tokenA}`)
-        .expect(204);
+        .expect(200);
+
+      expect(res.body.data).toEqual({ historyEntryId: 'hist-1' });
     });
 
-    it('204 No Content — borrado lógico cuando boundary <= startMonth (RF-HIST-006)', async () => {
+    it('200 + { historyEntryId } — borrado lógico cuando boundary <= startMonth (RF-HIST-006)', async () => {
       // startMonth='2026-06', currentMonth='2026-06', fromCurrentMonth=true → boundary='2026-06' → borrado lógico
       const existing = makeDbRecurring({ startMonth: '2026-06' });
       mockPrisma.recurring.findUnique.mockResolvedValue(existing);
@@ -604,11 +614,12 @@ describe('Recurring (e2e)', () => {
         return Promise.resolve([]);
       });
 
-      await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .delete('/recurring/rec-e2e-001?currentMonth=2026-06&fromCurrentMonth=true')
         .set('Authorization', `Bearer ${tokenA}`)
-        .expect(204);
+        .expect(200);
 
+      expect(res.body.data).toEqual({ historyEntryId: 'hist-1' });
       expect(mockPrisma.recurring.update).toHaveBeenCalledWith({
         where: { id: 'rec-e2e-001' },
         data: expect.objectContaining({ deletedAt: expect.any(Date) }),

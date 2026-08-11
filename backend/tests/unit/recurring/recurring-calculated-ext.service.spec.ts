@@ -54,7 +54,7 @@ const mockRepo = {
 };
 
 const mockHistoryService = {
-  record: jest.fn().mockResolvedValue(undefined),
+  record: jest.fn().mockResolvedValue('hist-entry-id'),
 };
 
 const mockCategoryValidator = {
@@ -366,6 +366,9 @@ describe('RecurringService — calculados extendidos (Fase 1.1.7.ext)', () => {
       });
 
       expect(result).toBeDefined();
+      // El id de la entrada de historial creada viaja en la respuesta (para el
+      // "Deshacer" del toast — pega a POST /history/:id/undo).
+      expect(result.historyEntryId).toBe('hist-entry-id');
       expect(mockRepo.update).toHaveBeenCalledWith(
         CALC_ID,
         expect.objectContaining({ formulaOperand: 2000 }),
@@ -428,6 +431,9 @@ describe('RecurringService — calculados extendidos (Fase 1.1.7.ext)', () => {
       });
 
       expect(result).toBeDefined();
+      // El id de la entrada de historial creada viaja en la respuesta (para el
+      // "Deshacer" del toast — pega a POST /history/:id/undo).
+      expect(result.historyEntryId).toBe('hist-entry-id');
       expect(mockRepo.update).toHaveBeenCalledWith(
         CALC_ID,
         expect.objectContaining({ formulaOperand: 2000 }),
@@ -468,7 +474,7 @@ describe('RecurringService — calculados extendidos (Fase 1.1.7.ext)', () => {
       mockRepo.findById.mockResolvedValue(calcRow);
       mockRepo.softDeleteRow.mockResolvedValue(undefined);
 
-      await service.remove(USER_A, CALC_ID, '2026-06', false);
+      const result = await service.remove(USER_A, CALC_ID, '2026-06', false);
 
       // Borrado lógico de la fila puntual
       expect(mockRepo.softDeleteRow).toHaveBeenCalledWith(CALC_ID);
@@ -476,6 +482,9 @@ describe('RecurringService — calculados extendidos (Fase 1.1.7.ext)', () => {
       // No se consulta la cadena ni se aplica boundary
       expect(mockRepo.findChainRows).not.toHaveBeenCalled();
       expect(mockRepo.update).not.toHaveBeenCalled();
+      // DELETE ya no devuelve void: devuelve { historyEntryId } (para el
+      // "Deshacer" del toast — pega a POST /history/:id/undo).
+      expect(result).toEqual({ historyEntryId: 'hist-entry-id' });
     });
 
     it('ignora fromCurrentMonth=true (borrado lógico igual)', async () => {

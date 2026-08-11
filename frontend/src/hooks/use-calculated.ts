@@ -115,9 +115,21 @@ export interface UpdateCalculatedRequest {
   formulaSign?: 1 | -1;
 }
 
-/** Respuesta de POST y PATCH /calculated — forma simplificada (el front solo necesita el id) */
+/**
+ * Respuesta de POST y PATCH /calculated — forma simplificada (el front solo
+ * necesita id/chainId/historyEntryId; el resto de campos de Recurring quedan
+ * en el índice, no se leen).
+ *
+ * chainId: siempre presente — el calculado ES una fila Recurring, cualquiera
+ * sea el sourceType (fijo/único/cuota). Es la clave de agrupación de toasts
+ * (RN-024) para PATCH — NUNCA usar `id`, cambia en cada split de edición.
+ * historyEntryId: solo en PATCH (edición) — no en POST (crear no genera
+ * entrada de historial).
+ */
 export interface CalculatedResponse {
   id: string;
+  chainId: string;
+  historyEntryId?: string;
   [key: string]: unknown;
 }
 
@@ -132,6 +144,10 @@ export interface CreateCalculatedResult {
 export interface UpdateCalculatedResult {
   success: boolean;
   id?: string;
+  /** chainId del calculado — identidad de grupo estable para el toast de "Deshacer". */
+  chainId?: string;
+  /** Id de la entrada de historial creada — habilita el "Deshacer" del toast. */
+  historyEntryId?: string;
   error?: string;
 }
 
@@ -221,7 +237,7 @@ export function useCalculated() {
   ): Promise<UpdateCalculatedResult> {
     try {
       const res = await updateMutation.mutateAsync({ id, sourceType, data });
-      return { success: true, id: res.id };
+      return { success: true, id: res.id, chainId: res.chainId, historyEntryId: res.historyEntryId };
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.statusCode === 404) {

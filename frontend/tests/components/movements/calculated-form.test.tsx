@@ -31,6 +31,12 @@ vi.mock("@/hooks/use-calculated", () => ({
   useCalculated: vi.fn(),
 }));
 
+// El toast de "Deshacer" en edición usa useUndoHistory — mockeado para no
+// depender de useApi/useSession real en este test de formulario.
+vi.mock("@/hooks/use-history", () => ({
+  useUndoHistory: vi.fn(() => ({ undo: vi.fn(), isUndoing: false })),
+}));
+
 // Mock de use-settings — defaultCurrency ARS (usado por la conversión canónica
 // de la intercepción de límites, P2 — Fase 2 extendida a calculado).
 vi.mock("@/hooks/use-settings", () => ({
@@ -123,6 +129,7 @@ const origenFijo: MovementItem = {
   frequency: 1,
   startMonth: "2026-01",
   endMonth: null,
+  chainId: "chain-origen-fijo",
   skipped: false,
   category: { id: "cat-income", name: "Sueldo", color: "#00FF00", scope: "INCOME" },
   paymentMethod: null,
@@ -149,6 +156,7 @@ const origenUnico: MovementItem = {
   frequency: null,
   startMonth: null,
   endMonth: null,
+  chainId: null,
   skipped: false,
   category: { id: "cat-expense", name: "Servicios", color: "#FF5733", scope: "EXPENSE" },
   paymentMethod: null,
@@ -175,6 +183,7 @@ const origenCuota: MovementItem = {
   frequency: null,
   startMonth: null,
   endMonth: null,
+  chainId: null,
   skipped: false,
   category: { id: "cat-expense", name: "Tecnología", color: "#0000FF", scope: "EXPENSE" },
   paymentMethod: null,
@@ -201,6 +210,8 @@ const calculadoExistente: MovementItem = {
   frequency: 1,
   startMonth: "2026-01",
   endMonth: null,
+  // Un calculado de fijo ES un fijo con cadena PROPIA (distinta de sourceChainId).
+  chainId: "chain-calc-1",
   skipped: false,
   category: { id: "cat-expense", name: "Servicios", color: "#FF5733", scope: "EXPENSE" },
   paymentMethod: null,
@@ -236,6 +247,7 @@ const calculadoUnicoExistente: MovementItem = {
   frequency: null,
   startMonth: null,
   endMonth: null,
+  chainId: null,
   skipped: false,
   category: { id: "cat-expense", name: "Servicios", color: "#FF5733", scope: "EXPENSE" },
   paymentMethod: null,

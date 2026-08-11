@@ -44,11 +44,15 @@ export interface CreateInstallmentResult {
 export interface UpdateInstallmentResult {
   success: boolean;
   installment?: InstallmentGroup;
+  /** Id de la entrada de historial creada — habilita el "Deshacer" del toast. */
+  historyEntryId?: string;
   error?: string;
 }
 
 export interface DeleteInstallmentResult {
   success: boolean;
+  /** Id de la entrada de historial creada — habilita el "Deshacer" del toast. */
+  historyEntryId?: string;
   error?: string;
 }
 
@@ -116,11 +120,12 @@ export function useInstallments() {
   // ─── Mutation: editar grupo de cuotas ─────────────────────────────────────
 
   const updateMutation = useMutation<
-    InstallmentGroup,
+    InstallmentGroup & { historyEntryId: string },
     ApiError,
     { id: string; data: UpdateInstallmentRequest }
   >({
-    mutationFn: ({ id, data }) => api.patch<InstallmentGroup>(`/installments/${id}`, data),
+    mutationFn: ({ id, data }) =>
+      api.patch<InstallmentGroup & { historyEntryId: string }>(`/installments/${id}`, data),
     onSuccess: (installment) => {
       void queryClient.invalidateQueries({ queryKey: MOVEMENTS_QUERY_PREFIX });
       logger.info("Grupo de cuotas actualizado", { id: installment.id });
@@ -138,7 +143,7 @@ export function useInstallments() {
   ): Promise<UpdateInstallmentResult> {
     try {
       const installment = await updateMutation.mutateAsync({ id, data });
-      return { success: true, installment };
+      return { success: true, installment, historyEntryId: installment.historyEntryId };
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.statusCode === 404) {
@@ -162,8 +167,8 @@ export function useInstallments() {
 
   // ─── Mutation: eliminar grupo de cuotas ───────────────────────────────────
 
-  const deleteMutation = useMutation<void, ApiError, { id: string }>({
-    mutationFn: ({ id }) => api.delete<void>(`/installments/${id}`),
+  const deleteMutation = useMutation<{ historyEntryId: string }, ApiError, { id: string }>({
+    mutationFn: ({ id }) => api.delete<{ historyEntryId: string }>(`/installments/${id}`),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: MOVEMENTS_QUERY_PREFIX });
       logger.info("Grupo de cuotas eliminado");
@@ -177,8 +182,8 @@ export function useInstallments() {
 
   async function deleteInstallment(id: string): Promise<DeleteInstallmentResult> {
     try {
-      await deleteMutation.mutateAsync({ id });
-      return { success: true };
+      const { historyEntryId } = await deleteMutation.mutateAsync({ id });
+      return { success: true, historyEntryId };
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.statusCode === 404) {

@@ -298,7 +298,7 @@ export class RecurringService {
     userId: string,
     id: string,
     dto: UpdateRecurringDto,
-  ): Promise<RecurringWithCategory> {
+  ): Promise<RecurringWithCategory & { historyEntryId: string }> {
     // Validar mes semántico de currentMonth
     this.validateMonthValue(dto.currentMonth);
 
@@ -461,7 +461,7 @@ export class RecurringService {
       row: rowSnapshot,
       newRowId: wasSplit ? result.id : null,
     };
-    await this.historyService.record(
+    const historyEntryId = await this.historyService.record(
       userId,
       HistoryTargetKind.FIJO,
       existing.chainId,
@@ -469,7 +469,7 @@ export class RecurringService {
       editSnapshot,
     );
 
-    return result;
+    return { ...result, historyEntryId };
   }
 
   // ---------------------------------------------------------------------------
@@ -493,7 +493,7 @@ export class RecurringService {
     userId: string,
     id: string,
     dto: UpdateCalculatedRecurringDto,
-  ): Promise<RecurringWithCategory> {
+  ): Promise<RecurringWithCategory & { historyEntryId: string }> {
     // Validar mes semántico de currentMonth
     this.validateMonthValue(dto.currentMonth);
 
@@ -593,7 +593,7 @@ export class RecurringService {
       row: rowSnapshot,
       newRowId: wasSplit ? result.id : null,
     };
-    await this.historyService.record(
+    const historyEntryId = await this.historyService.record(
       userId,
       HistoryTargetKind.FIJO,
       existing.chainId,
@@ -601,7 +601,7 @@ export class RecurringService {
       editSnapshot,
     );
 
-    return result;
+    return { ...result, historyEntryId };
   }
 
   // ---------------------------------------------------------------------------
@@ -695,7 +695,7 @@ export class RecurringService {
     userId: string,
     transactionId: string,
     dto: UpdateCalculatedFromTransactionDto,
-  ): Promise<RecurringWithCategory> {
+  ): Promise<RecurringWithCategory & { historyEntryId: string }> {
     // Verificar que el Transaction de origen existe y es del usuario
     const tx = await this.repo.findTransactionById(transactionId);
     if (!tx || tx.userId !== userId) {
@@ -733,7 +733,7 @@ export class RecurringService {
     });
 
     const editSnapshot: FijoEditSnapshot = { kind: 'edit', row: rowSnapshot, newRowId: null };
-    await this.historyService.record(
+    const historyEntryId = await this.historyService.record(
       userId,
       HistoryTargetKind.FIJO,
       existing.chainId,
@@ -750,7 +750,7 @@ export class RecurringService {
       'Movimiento calculado de único actualizado',
     );
 
-    return result;
+    return { ...result, historyEntryId };
   }
 
   // ---------------------------------------------------------------------------
@@ -838,7 +838,7 @@ export class RecurringService {
     userId: string,
     installmentGroupId: string,
     dto: UpdateCalculatedFromInstallmentDto,
-  ): Promise<RecurringWithCategory> {
+  ): Promise<RecurringWithCategory & { historyEntryId: string }> {
     // Verificar que el InstallmentGroup de origen existe y es del usuario
     const group = await this.repo.findInstallmentGroupById(installmentGroupId);
     if (!group || group.userId !== userId) {
@@ -876,7 +876,7 @@ export class RecurringService {
     });
 
     const editSnapshot: FijoEditSnapshot = { kind: 'edit', row: rowSnapshot, newRowId: null };
-    await this.historyService.record(
+    const historyEntryId = await this.historyService.record(
       userId,
       HistoryTargetKind.FIJO,
       existing.chainId,
@@ -893,7 +893,7 @@ export class RecurringService {
       'Movimiento calculado de cuota actualizado',
     );
 
-    return result;
+    return { ...result, historyEntryId };
   }
 
   // ---------------------------------------------------------------------------
@@ -936,7 +936,7 @@ export class RecurringService {
     id: string,
     currentMonth: string,
     fromCurrentMonth: boolean,
-  ): Promise<void> {
+  ): Promise<{ historyEntryId: string }> {
     // Validar formato y semántica del mes (siempre, incluso para calculados de único/cuota)
     this.validateMonthFormat(currentMonth);
     this.validateMonthValue(currentMonth);
@@ -956,7 +956,7 @@ export class RecurringService {
       await this.repo.softDeleteRow(existing.id);
 
       const deleteSnapshot: FijoDeleteSnapshot = { kind: 'delete', chains: [chainSnapshot] };
-      await this.historyService.record(
+      const historyEntryId = await this.historyService.record(
         userId,
         HistoryTargetKind.FIJO,
         existing.chainId,
@@ -974,7 +974,7 @@ export class RecurringService {
         'Calculado de único/cuota eliminado (borrado lógico total, sin boundary)',
       );
 
-      return;
+      return { historyEntryId };
     }
 
     const boundary = fromCurrentMonth
@@ -1016,13 +1016,15 @@ export class RecurringService {
     }
 
     const deleteSnapshot: FijoDeleteSnapshot = { kind: 'delete', chains: chainSnapshots };
-    await this.historyService.record(
+    const historyEntryId = await this.historyService.record(
       userId,
       HistoryTargetKind.FIJO,
       existing.chainId,
       HistoryAction.DELETE,
       deleteSnapshot,
     );
+
+    return { historyEntryId };
   }
 
   // ---------------------------------------------------------------------------

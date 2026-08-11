@@ -276,6 +276,12 @@ function movementItemToTransaction(item: MovementItem): Transaction {
 function movementItemToRecurring(item: MovementItem): Recurring {
   return {
     id: item.id,
+    // item.chainId viene poblado por el backend para origin==="fijo" (Fase
+    // 1.2.5) — esta función solo se llama con fijos normales (editingFijo),
+    // así que nunca es null acá. RecurringForm igual re-lee el chainId real
+    // de la respuesta del PATCH (result.recurring.chainId) para el groupId
+    // del toast, nunca de este objeto de prefill.
+    chainId: item.chainId!,
     userId: "",
     categoryId: item.category.id,
     type: item.type,

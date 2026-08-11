@@ -171,6 +171,18 @@ export interface MovementItem {
    */
   endMonth: string | null;
   /**
+   * Identidad estable de cadena (Fase 1.1.7; groupId de toasts — Fase 1.2.5).
+   * Presente (no-null) SOLO para origin==="fijo" — fijos normales Y calculados
+   * de fijo, cada uno con SU PROPIO chainId (nunca el sourceChainId del
+   * origen). `null` para "unico" y "cuota" (incluidos sus calculados y los
+   * ítems simulados): esas formas no tienen concepto de cadena — su clave de
+   * agrupación estable es su propio `id` (Transaction.id / InstallmentGroup.id
+   * / el id de la fila Recurring del calculado, que nunca splitea).
+   * Clave de agrupación de toasts "Deshacer" (docs/design.md) para origin
+   * fijo — NUNCA usar `id` para esto, cambia en cada split de edición.
+   */
+  chainId: string | null;
+  /**
    * Indica si el ítem está anulado para el mes consultado.
    * "fijo": P1 — Fase 1.1.1. "unico"/"cuota": P3 (extiende el toggle de skip).
    * Los calculados heredan el skip de su origen (el frontend no maneja skip de calculados).

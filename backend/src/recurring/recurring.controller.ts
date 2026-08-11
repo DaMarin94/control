@@ -158,10 +158,11 @@ export class RecurringController {
    * Si es un fijo de ORIGEN (no calculado), la eliminación se propaga (RF-MCALC-005)
    * a todos los calculados de su cadena con el mismo boundary.
    *
-   * 204 No Content. 404 si no existe o no es del usuario.
+   * 200 + sobre con { historyEntryId } (id de la entrada de historial creada,
+   * para que el frontend pueda ofrecer "Deshacer" pegándole a POST /history/:id/undo).
+   * 404 si no existe o no es del usuario.
    */
   @Delete(':id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   remove(
     @Request() req: AuthRequest,
     @Param('id') id: string,

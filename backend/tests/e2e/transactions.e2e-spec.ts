@@ -104,6 +104,11 @@ const mockPrisma = {
   referenceRate: {
     findMany: jest.fn().mockResolvedValue([]),
   },
+  // $transaction — necesario para POST /history/:id/undo (HistoryService.undo
+  // ejecuta las restauraciones dentro de una transacción Prisma). El mock
+  // ejecuta el callback pasándole el mismo mockPrisma (los modelos usados
+  // dentro del undo — transaction/recurring/historyEntry — son los mismos).
+  $transaction: jest.fn().mockImplementation((cb: (tx: unknown) => Promise<unknown>) => cb(mockPrisma)),
   $connect: jest.fn(),
   $disconnect: jest.fn(),
   $queryRaw: jest.fn().mockResolvedValue([]),
@@ -537,6 +542,61 @@ describe('Transactions (e2e)', () => {
 
       expect(res.body.success).toBe(true);
       expect(res.body.data.amountCents).toBe(2000);
+      // El id de la entrada de historial creada viaja en la respuesta (para el
+      // "Deshacer" del toast — pega a POST /history/:id/undo).
+      expect(res.body.data.historyEntryId).toBe('hist-1');
+    });
+
+    it('el historyEntryId devuelto es el id real: POST /history/:id/undo funciona con él', async () => {
+      const existing = makeDbTransaction();
+      mockPrisma.transaction.findUnique.mockResolvedValue(existing);
+      const updated = makeDbTransaction({ amountCents: 2000 });
+      mockPrisma.transaction.update.mockResolvedValue(updated);
+
+      const patchRes = await request(app.getHttpServer())
+        .patch('/transactions/tx-e2e-001')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ amountCents: 2000 })
+        .expect(200);
+
+      const historyEntryId = patchRes.body.data.historyEntryId;
+      expect(historyEntryId).toBe('hist-1');
+
+      // El id devuelto es el de una entrada real: GET /history/:id/undo (vía
+      // historyEntry.findUnique) la encuentra y el undo se ejecuta sin 404.
+      const historyEntryRow = {
+        id: historyEntryId,
+        userId: USER_A_ID,
+        targetKind: 'UNICO',
+        targetId: 'tx-e2e-001',
+        action: 'EDIT',
+        snapshot: {
+          type: 'EXPENSE',
+          amountCents: 1500,
+          categoryId: CAT_ID,
+          description: null,
+          occurredAt: existing.occurredAt.toISOString(),
+          timezone: existing.timezone,
+          currency: 'ARS',
+          exchangeRate: 1,
+          anchorCurrency: 'ARS',
+          paymentMethodId: null,
+          autoDebit: null,
+        },
+        createdAt: new Date(),
+      };
+      mockPrisma.historyEntry.findUnique.mockResolvedValue(historyEntryRow);
+      mockPrisma.historyEntry.findMany.mockResolvedValue([historyEntryRow]);
+
+      await request(app.getHttpServer())
+        .post(`/history/${historyEntryId}/undo`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(201);
+
+      expect(mockPrisma.transaction.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'tx-e2e-001' } }),
+      );
+      expect(mockPrisma.historyEntry.delete).toHaveBeenCalledWith({ where: { id: historyEntryId } });
     });
 
     it('400 si amountCents es 0 en PATCH (RN-002)', async () => {
@@ -639,16 +699,20 @@ describe('Transactions (e2e)', () => {
   // -------------------------------------------------------------------------
 
   describe('DELETE /transactions/:id', () => {
-    it('204 No Content al eliminar (borrado lógico — RF-HIST-006)', async () => {
+    it('200 + { historyEntryId } al eliminar (borrado lógico — RF-HIST-006)', async () => {
       const existing = makeDbTransaction();
       mockPrisma.transaction.findUnique.mockResolvedValue(existing);
       mockPrisma.transaction.update.mockResolvedValue({ ...existing, deletedAt: new Date() });
 
-      await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .delete('/transactions/tx-e2e-001')
         .set('Authorization', `Bearer ${tokenA}`)
-        .expect(204);
+        .expect(200);
 
+      expect(res.body.success).toBe(true);
+      // DELETE ya no es 204 sin cuerpo: devuelve { historyEntryId } (para el
+      // "Deshacer" del toast — pega a POST /history/:id/undo).
+      expect(res.body.data).toEqual({ historyEntryId: 'hist-1' });
       expect(mockPrisma.transaction.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'tx-e2e-001' },
