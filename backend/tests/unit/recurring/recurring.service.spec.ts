@@ -39,6 +39,7 @@ const mockRepo = {
   findSkip: jest.fn(),
   createSkip: jest.fn(),
   deleteSkip: jest.fn(),
+  applySkipRange: jest.fn().mockResolvedValue(undefined),
   // Fase 1.1.7 — métodos de calculados y cadena
   findChainRows: jest.fn().mockResolvedValue([]),
   findCalculadosBySourceChain: jest.fn().mockResolvedValue([]),
@@ -1045,6 +1046,314 @@ describe('RecurringService', () => {
       ).rejects.toThrow(BadRequestException);
 
       expect(mockRepo.findById).not.toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // applySkipRange (RF-MF-005) — alcance de rango, explícito, sobre la cadena
+  // -------------------------------------------------------------------------
+
+  describe('applySkipRange', () => {
+    beforeEach(() => {
+      mockRepo.applySkipRange.mockResolvedValue(undefined);
+    });
+
+    it('frecuencia no mensual: anula solo las apariciones reales (marzo a diciembre, freq=3 → marzo/junio/septiembre/diciembre)', async () => {
+      const rec = makeRecurring({ startMonth: '2026-03', frequency: 3, chainId: 'chain-001' });
+      mockRepo.findById.mockResolvedValue(rec);
+      mockRepo.findChainRows.mockResolvedValue([
+        { id: 'rec-001', startMonth: '2026-03', deletedFrom: null },
+      ]);
+
+      const result = await service.applySkipRange(USER_A, 'rec-001', {
+        from: '2026-03',
+        to: '2026-12',
+        action: 'skip',
+      });
+
+      expect(result).toEqual({
+        action: 'skip',
+        from: '2026-03',
+        to: '2026-12',
+        affectedCount: 4,
+      });
+      expect(mockRepo.applySkipRange).toHaveBeenCalledWith(
+        'chain-001',
+        'skip',
+        [
+          { recurringId: 'rec-001', month: '2026-03' },
+          { recurringId: 'rec-001', month: '2026-06' },
+          { recurringId: 'rec-001', month: '2026-09' },
+          { recurringId: 'rec-001', month: '2026-12' },
+        ],
+        '2026-03',
+        '2026-12',
+      );
+    });
+
+    it('rango que cruza un split de la cadena: resuelve, mes por mes, qué fila lo cubre', async () => {
+      // R1 cubre ene-jun (deletedFrom=jul), R2 cubre jul en adelante. frequency=2
+      // (bimestral) ancla distinto en cada fila — R1 en enero, R2 en julio
+      // (mismo criterio que findFijosByMonth: isOnFrequency usa el startMonth
+      // PROPIO de la fila que cubre el mes, no el arranque del fijo lógico).
+      const rec = makeRecurring({
+        id: 'rec-002',
+        startMonth: '2026-07',
+        frequency: 2,
+        chainId: 'chain-002',
+      });
+      mockRepo.findById.mockResolvedValue(rec);
+      mockRepo.findChainRows.mockResolvedValue([
+        { id: 'rec-002', startMonth: '2026-07', deletedFrom: null },
+        { id: 'rec-001', startMonth: '2026-01', deletedFrom: '2026-07' },
+      ]);
+
+      const result = await service.applySkipRange(USER_A, 'rec-002', {
+        from: '2026-02',
+        to: '2026-10',
+        action: 'skip',
+      });
+
+      expect(result.affectedCount).toBe(4);
+      expect(mockRepo.applySkipRange).toHaveBeenCalledWith(
+        'chain-002',
+        'skip',
+        [
+          { recurringId: 'rec-001', month: '2026-03' },
+          { recurringId: 'rec-001', month: '2026-05' },
+          { recurringId: 'rec-002', month: '2026-07' },
+          { recurringId: 'rec-002', month: '2026-09' },
+        ],
+        '2026-02',
+        '2026-10',
+      );
+    });
+
+    it('des-anular un rango (unskip): mismo cálculo de apariciones, acción explícita', async () => {
+      const rec = makeRecurring({ startMonth: '2026-01', frequency: 1, chainId: 'chain-001' });
+      mockRepo.findById.mockResolvedValue(rec);
+      mockRepo.findChainRows.mockResolvedValue([
+        { id: 'rec-001', startMonth: '2026-01', deletedFrom: null },
+      ]);
+
+      const result = await service.applySkipRange(USER_A, 'rec-001', {
+        from: '2026-01',
+        to: '2026-03',
+        action: 'unskip',
+      });
+
+      expect(result).toEqual({
+        action: 'unskip',
+        from: '2026-01',
+        to: '2026-03',
+        affectedCount: 3,
+      });
+      expect(mockRepo.applySkipRange).toHaveBeenCalledWith(
+        'chain-001',
+        'unskip',
+        [
+          { recurringId: 'rec-001', month: '2026-01' },
+          { recurringId: 'rec-001', month: '2026-02' },
+          { recurringId: 'rec-001', month: '2026-03' },
+        ],
+        '2026-01',
+        '2026-03',
+      );
+    });
+
+    it('idempotencia (nivel service): repetir la misma operación produce el mismo resultado, sin acumular', async () => {
+      const rec = makeRecurring({ startMonth: '2026-01', frequency: 1, chainId: 'chain-001' });
+      mockRepo.findById.mockResolvedValue(rec);
+      mockRepo.findChainRows.mockResolvedValue([
+        { id: 'rec-001', startMonth: '2026-01', deletedFrom: null },
+      ]);
+
+      const r1 = await service.applySkipRange(USER_A, 'rec-001', {
+        from: '2026-01',
+        to: '2026-02',
+        action: 'skip',
+      });
+      const r2 = await service.applySkipRange(USER_A, 'rec-001', {
+        from: '2026-01',
+        to: '2026-02',
+        action: 'skip',
+      });
+
+      expect(r1).toEqual(r2);
+      expect(mockRepo.applySkipRange).toHaveBeenCalledTimes(2);
+
+      const r3 = await service.applySkipRange(USER_A, 'rec-001', {
+        from: '2026-01',
+        to: '2026-02',
+        action: 'unskip',
+      });
+      const r4 = await service.applySkipRange(USER_A, 'rec-001', {
+        from: '2026-01',
+        to: '2026-02',
+        action: 'unskip',
+      });
+
+      expect(r3).toEqual(r4);
+    });
+
+    it('404 si el fijo no existe', async () => {
+      mockRepo.findById.mockResolvedValue(null);
+
+      await expect(
+        service.applySkipRange(USER_A, 'no-existe', {
+          from: '2026-01',
+          to: '2026-02',
+          action: 'skip',
+        }),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockRepo.findChainRows).not.toHaveBeenCalled();
+    });
+
+    it('aislamiento: 404 si el fijo pertenece a otro usuario (RN-003)', async () => {
+      const rec = makeRecurring({ userId: USER_B });
+      mockRepo.findById.mockResolvedValue(rec);
+
+      await expect(
+        service.applySkipRange(USER_A, 'rec-001', {
+          from: '2026-01',
+          to: '2026-02',
+          action: 'skip',
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('400 si "desde" es posterior a "hasta"', async () => {
+      const rec = makeRecurring({ startMonth: '2026-01' });
+      mockRepo.findById.mockResolvedValue(rec);
+
+      await expect(
+        service.applySkipRange(USER_A, 'rec-001', {
+          from: '2026-05',
+          to: '2026-01',
+          action: 'skip',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockRepo.applySkipRange).not.toHaveBeenCalled();
+    });
+
+    it('400 si el rango supera el largo máximo de 24 meses', async () => {
+      const rec = makeRecurring({ startMonth: '2020-01' });
+      mockRepo.findById.mockResolvedValue(rec);
+      mockRepo.findChainRows.mockResolvedValue([
+        { id: 'rec-001', startMonth: '2020-01', deletedFrom: null },
+      ]);
+
+      await expect(
+        service.applySkipRange(USER_A, 'rec-001', {
+          from: '2026-01',
+          to: '2028-02', // 26 meses inclusive
+          action: 'skip',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockRepo.applySkipRange).not.toHaveBeenCalled();
+    });
+
+    it('400 si el rango empieza antes del arranque del fijo lógico (piso)', async () => {
+      const rec = makeRecurring({ startMonth: '2026-06' });
+      mockRepo.findById.mockResolvedValue(rec);
+      mockRepo.findChainRows.mockResolvedValue([
+        { id: 'rec-001', startMonth: '2026-06', deletedFrom: null },
+      ]);
+
+      await expect(
+        service.applySkipRange(USER_A, 'rec-001', {
+          from: '2026-01', // antes del arranque (2026-06)
+          to: '2026-08',
+          action: 'skip',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockRepo.applySkipRange).not.toHaveBeenCalled();
+    });
+
+    it('400 si el rango termina después del último mes de aparición (techo)', async () => {
+      // startMonth=2026-01, frequency=3, deletedFrom=2026-08 → última aparición real: 2026-07
+      const rec = makeRecurring({ startMonth: '2026-01', frequency: 3 });
+      mockRepo.findById.mockResolvedValue(rec);
+      mockRepo.findChainRows.mockResolvedValue([
+        { id: 'rec-001', startMonth: '2026-01', deletedFrom: '2026-08' },
+      ]);
+
+      await expect(
+        service.applySkipRange(USER_A, 'rec-001', {
+          from: '2026-01',
+          to: '2026-08', // excede el techo real (2026-07)
+          action: 'skip',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockRepo.applySkipRange).not.toHaveBeenCalled();
+    });
+
+    it('acepta el rango hasta exactamente el último mes de aparición (techo)', async () => {
+      const rec = makeRecurring({ startMonth: '2026-01', frequency: 3, chainId: 'chain-001' });
+      mockRepo.findById.mockResolvedValue(rec);
+      mockRepo.findChainRows.mockResolvedValue([
+        { id: 'rec-001', startMonth: '2026-01', deletedFrom: '2026-08' },
+      ]);
+
+      const result = await service.applySkipRange(USER_A, 'rec-001', {
+        from: '2026-01',
+        to: '2026-07', // techo real
+        action: 'skip',
+      });
+
+      expect(result.affectedCount).toBe(3); // enero, abril, julio
+    });
+
+    it('400 si "from" tiene formato inválido', async () => {
+      await expect(
+        service.applySkipRange(USER_A, 'rec-001', {
+          from: '202601',
+          to: '2026-02',
+          action: 'skip',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockRepo.findById).not.toHaveBeenCalled();
+    });
+
+    it('400 si "to" tiene valor de mes inválido (13)', async () => {
+      await expect(
+        service.applySkipRange(USER_A, 'rec-001', {
+          from: '2026-01',
+          to: '2026-13',
+          action: 'skip',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockRepo.findById).not.toHaveBeenCalled();
+    });
+
+    it('un rango de un solo mes equivale al alcance "este mes" (0 o 1 aparición según frecuencia)', async () => {
+      const rec = makeRecurring({ startMonth: '2026-01', frequency: 1, chainId: 'chain-001' });
+      mockRepo.findById.mockResolvedValue(rec);
+      mockRepo.findChainRows.mockResolvedValue([
+        { id: 'rec-001', startMonth: '2026-01', deletedFrom: null },
+      ]);
+
+      const result = await service.applySkipRange(USER_A, 'rec-001', {
+        from: '2026-05',
+        to: '2026-05',
+        action: 'skip',
+      });
+
+      expect(result.affectedCount).toBe(1);
+      expect(mockRepo.applySkipRange).toHaveBeenCalledWith(
+        'chain-001',
+        'skip',
+        [{ recurringId: 'rec-001', month: '2026-05' }],
+        '2026-05',
+        '2026-05',
+      );
     });
   });
 

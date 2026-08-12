@@ -359,15 +359,34 @@ Gestión de movimientos fijos, **scopeada por `userId` del JWT**. El módulo exp
 |----------|---------|-------|---------|
 | `POST /recurring` | `{ type, amountCents, categoryId, startMonth, frequency?, description? }` | `201` · `data: Recurring` | `400` |
 | `PATCH /recurring/:id` | `{ amountCents?, categoryId?, description?, currentMonth }` | `200` · `data: Recurring & { historyEntryId }` | `400` · `404` |
-| `POST /recurring/:id/skip` | `{ month }` (`YYYY-MM`) | `200` · `data: { skipped, month }` | `400` · `404` |
+| `POST /recurring/:id/skip` | `{ month }` (`YYYY-MM`) | `201` · `data: { skipped, month }` | `400` · `404` |
+| `POST /recurring/:id/skip` | `{ from, to, action }` | `201` · `data: { action, from, to, affectedCount }` | `400` · `404` |
 | `POST /recurring/:id/calculated` | calculado desde el fijo `:id` | `201` · `data: Recurring` | `400` · `404` |
 | `PATCH /recurring/:id/calculated` | edita el calculado `:id` | `200` · `data: Recurring` | `400` · `404` |
 | `DELETE /recurring/:id` | query: `currentMonth`, `fromCurrentMonth` | `200` · `data: { historyEntryId }` | `404` |
 
 - **`type`, `startMonth` y `frequency` no son editables** por PATCH: solo `amountCents`, `categoryId` y `description` (RF-MF-003). El `startMonth` del POST es el mes actual que envía el front.
 - **`frequency`:** **entero 1..12** (meses entre apariciones), opcional en el `POST`, default **`1`** (mensual) si se omite. `400` si no es entero o cae fuera de 1..12 (validado en el DTO; no hay CHECK en la DB). Es **inmutable** (como `type`): no se acepta en PATCH; en el split (abajo) la fila nueva R2 la **hereda del original**. La respuesta del `POST` incluye `frequency`. Detalle del cálculo "¿este fijo aparece en este mes?" en **Cálculo de aparición de fijos por mes** (abajo).
-- **`POST /recurring/:id/skip` — toggle de anulación:** anula / des-anula la aparición de un fijo en un mes puntual (RF-MF-005). Body `{ month: "YYYY-MM" }`. Es un **toggle**: si ya existe el skip `(fijo, mes)` lo borra (`data: { skipped: false, month }`); si no existe lo crea (`data: { skipped: true, month }`). `404` si el fijo no existe o no es del usuario; `400` si el `month` no cumple `YYYY-MM`. **No valida** que el mes sea una aparición real del fijo según su frecuencia (solo formato y ownership) — esa validación semántica es del frontend, que ya tiene el ítem del mes. Un mes anulado **se sigue listando** en `GET /movements` con `skipped: true` pero **no suma** a los totales ni a la serie anual.
+- **`POST /recurring/:id/skip` — anular / des-anular apariciones (RF-MF-005):** un endpoint con **dos alcances**; ver §Anulación de apariciones abajo.
 - **Validación de categoría:** idéntica a la de movimientos únicos — categoría propia, activa y con scope compatible (RN-010); inexistente / ajena / eliminada / scope incompatible son todas `400` (ver `validateCategory` abajo).
+
+### Anulación de apariciones — `POST /recurring/:id/skip` (RF-MF-005)
+
+**Dos shapes de body mutuamente excluyentes, discriminados por qué campos llegan — no hay campo `scope`.** El DTO valida solo el formato (`YYYY-MM`, `action` dentro del set); la **exclusividad y la completitud del combo se validan en el controller** (`class-validator` no expresa un XOR entre dos shapes) y los límites del rango, en el service.
+
+| Body | Semántica | `data` |
+|---|---|---|
+| `{ month: "YYYY-MM" }` | **Toggle** puntual: si existe el skip `(fila, mes)` lo borra, si no lo crea. | `{ skipped: boolean, month }` |
+| `{ from, to, action: "skip" \| "unskip" }` | Operación **explícita** (el sentido lo declara el cliente, no se togglea) e **idempotente en los dos sentidos** sobre `[from, to]` inclusive. | `{ action, from, to, affectedCount }` |
+
+- **Responde `201`, no `200`** (los dos alcances): es un `@Post` sin `@HttpCode`, así que devuelve el default de NestJS.
+- **`affectedCount` = apariciones reales** del fijo (según su frecuencia) dentro de `[from, to]`. Es **independiente de cuántas filas se escribieron o borraron realmente**: la idempotencia no cambia el número informado.
+- **El rango opera sobre la cadena completa (`chainId`), no sobre la fila `:id`.** Resuelve **mes por mes qué fila cubre ese mes**, así un rango que cruza un split de edición alcanza también los meses de las filas anteriores. El `unskip` **borra por `chainId` + rango** (todos los `RecurringSkip` de cualquier fila de la cadena con `month` en `[from, to]`), no por la lista de apariciones calculada: así limpia además anulaciones que quedaron en filas superadas por un split posterior.
+- **Todo el rango se aplica en una transacción.**
+- **Los límites del rango se validan en el servidor**, no se confía en que el selector del front ya los respete: `from <= to`, piso = arranque de la cadena, techo = último mes de aparición cuando la última fila tiene `deletedFrom`, largo máximo 24 meses inclusive. Las reglas son las de RF-MF-005 → Reglas del rango.
+- **Errores:** `400` si el body mezcla `month` con campos de rango, si falta alguno de `from` / `to` / `action`, si el formato o el valor de mes es inválido, o si el rango viola sus límites. `404` si el fijo no existe o no es del usuario.
+- **El alcance puntual no valida aparición:** verifica formato y ownership, no que el mes sea una aparición real según la frecuencia — esa validación semántica es del frontend, que ya tiene el ítem del mes. El alcance de rango **sí** filtra por aparición (es justamente lo que cuenta `affectedCount`), con el criterio de §Cálculo de aparición de fijos por mes, **anclaje post-split incluido**.
+- Un mes anulado **se sigue listando** en `GET /movements` con `skipped: true` pero **no suma** a los totales ni a la serie anual.
 
 ### Inmutabilidad del pasado vía "split al editar"
 
@@ -383,6 +402,7 @@ Esto materializa "el pasado es inmutable" (RF-MF-003) sin generar filas por inst
 La lógica "¿este fijo aparece en este mes?" está **centralizada en el helper `isOnFrequency` exportado desde `movements.repository.ts`** y reutilizada por `findFijosByMonth`, la proyección anual y los tests:
 
 - **`isOnFrequency(startMonth, frequency, month)`** → `monthDiff(startMonth, month) % frequency === 0`, con `frequency` el entero 1..12 directo (RN-016). La frecuencia está **anclada al `startMonth`**.
+- **Anclaje tras un split — el `startMonth` es el de la fila que cubre el mes, no el arranque de la cadena.** Un fijo lógico partido por un split de edición tiene filas con `startMonth` distintos, y cada mes lo decide **su propia fila**: con `frequency > 1` eso puede correr las apariciones respecto del arranque original del fijo (RF-MF-007). Es deliberado y es el criterio **único** de aparición: todo lo que decide en qué meses está un fijo —listado del mes, reportes, anulación por rango— lo evalúa igual, así el conjunto de meses siempre coincide con lo que `GET /movements` muestra.
 
 Un fijo aparece en `month` si: `startMonth <= month` **y** (`deletedFrom IS NULL OR deletedFrom > month`) **y** `isOnFrequency(startMonth, frequency, month)` (RN-016). El primer par de condiciones (rango de actividad) se filtra en Prisma por comparación léxica de `YYYY-MM`; la condición de frecuencia se aplica en JS sobre los candidatos. **Cualquier cambio al cálculo de fijos por mes debe pasar por estos helpers, no re-duplicarse.**
 

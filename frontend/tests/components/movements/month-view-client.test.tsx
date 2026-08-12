@@ -139,10 +139,12 @@ vi.mock("@/hooks/use-recurring", () => ({
     updateRecurring: vi.fn(),
     deleteRecurring: vi.fn(),
     skipRecurring: vi.fn(),
+    skipRecurringRange: vi.fn(),
     isCreating: false,
     isUpdating: false,
     isDeleting: false,
     isSkipping: false,
+    isSkippingRange: false,
   })),
 }));
 

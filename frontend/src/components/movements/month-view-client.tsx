@@ -104,6 +104,7 @@ import type { InstallmentPrefill } from "@/components/movements/installment-form
 import { DeleteTransactionDialog } from "@/components/movements/delete-transaction-dialog";
 import { DeleteRecurringDialog } from "@/components/movements/delete-recurring-dialog";
 import { DeleteInstallmentDialog } from "@/components/movements/delete-installment-dialog";
+import { RecurringSkipScopeModal } from "@/components/movements/recurring-skip-scope-modal";
 import { NewTransactionButton } from "@/components/movements/new-transaction-button";
 import { PeriodNav } from "@/components/ui/period-nav";
 import { CurrencyChip } from "@/components/ui/currency-chip";
@@ -433,6 +434,9 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   // Estado de modales para fijos
   const [editingFijo, setEditingFijo] = useState<MovementItem | null>(null);
   const [deletingFijo, setDeletingFijo] = useState<MovementItem | null>(null);
+  // Modal de alcance de anulación (RF-MF-005) — solo fijos NO calculados; único/cuota
+  // siguen togglando directo desde MovementItemRow, sin pasar por acá.
+  const [skippingScopeFor, setSkippingScopeFor] = useState<MovementItem | null>(null);
 
   // Estado de modales para cuotas
   const [editingCuota, setEditingCuota] = useState<MovementItem | null>(null);
@@ -705,6 +709,11 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   /** Abre el modal "Duplicar movimiento" (docs/design.md) con el ítem origen */
   function handleDuplicate(movement: MovementItem) {
     setDuplicating(movement);
+  }
+
+  /** Abre el modal de alcance de anulación (RF-MF-005) — solo fijos NO calculados */
+  function handleSkipScope(movement: MovementItem) {
+    setSkippingScopeFor(movement);
   }
 
   function handleDelete(movement: MovementItem) {
@@ -1413,6 +1422,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                               viewMonth={month}
                               onEdit={handleEdit}
                               onDelete={handleDelete}
+                              onSkipScope={handleSkipScope}
                               onCreateCalculated={handleCreateCalculated}
                               onDuplicate={handleDuplicate}
                               limits={limits}
@@ -1471,6 +1481,15 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
           movement={deletingFijo}
           onClose={() => setDeletingFijo(null)}
           viewMonth={month}
+        />
+      )}
+
+      {/* ── Modal de alcance de anulación de un fijo (RF-MF-005) ── */}
+      {skippingScopeFor && (
+        <RecurringSkipScopeModal
+          movement={skippingScopeFor}
+          viewMonth={month}
+          onClose={() => setSkippingScopeFor(null)}
         />
       )}
 
@@ -1586,6 +1605,8 @@ interface SectionListProps {
   viewMonth: string;
   onEdit: (m: MovementItem) => void;
   onDelete: (m: MovementItem) => void;
+  /** Abre el modal de alcance de anulación (RF-MF-005) — solo fijos NO calculados */
+  onSkipScope: (m: MovementItem) => void;
   /** Handler para "Crear movimiento calculado" (solo para ítems NO calculados) */
   onCreateCalculated?: (m: MovementItem) => void;
   /** Handler para "Duplicar" (docs/design.md, solo para ítems NO calculados) */
@@ -1603,6 +1624,7 @@ function SectionList({
   viewMonth,
   onEdit,
   onDelete,
+  onSkipScope,
   onCreateCalculated,
   onDuplicate,
   limits,
@@ -1627,6 +1649,7 @@ function SectionList({
             viewMonth={viewMonth}
             onEdit={onEdit}
             onDelete={onDelete}
+            onSkipScope={onSkipScope}
             onCreateCalculated={onCreateCalculated}
             onDuplicate={onDuplicate}
             limitMark={evaluateItemLimitMark(item, limits, categoryExpenseTotalsCents, isCurrentMonth)}

@@ -51,6 +51,7 @@ Redimensionar la ventana del navegador desde las herramientas **no es confiable*
 
 - **Manejar la app con `.click()` por JavaScript atraviesa el gate de viewport.** El bloqueo por debajo de `640px` es visual: los nodos siguen en el DOM y siguen siendo clickeables por código. Medir por debajo del piso soportado produce hallazgos sobre estados que un usuario real no puede alcanzar. **Verificar siempre que el ancho medido esté por encima del piso.**
 - **El truncado se mide, no se mira:** `scrollHeight > clientHeight` sobre el elemento de texto. A ojo, un `line-clamp` truncado y uno que entra justo son indistinguibles.
+- **Medir con `offsetWidth` / `offsetHeight`, no con `getBoundingClientRect()`.** Dentro del iframe la animación de entrada de un modal puede no completarse, y el `transform` residual (`scale(0.98)`) hace que el rect devuelva menos que el tamaño real: un panel de 440px mide 431 y se reporta como falso defecto de contención. `offsetWidth` es inmune al transform.
 - **Los eventos sintéticos mienten.** Un `new MouseEvent('mouseenter')` **no** dispara el `onMouseEnter` de React — para hover, usar el cursor real. Y una `Response` armada a mano tiene que respetar el sobre real del cliente HTTP (`{ success, statusCode, error: { message } }`, ver `frontend/src/lib/api.ts`). Los dos producen falsos negativos.
 
 ## Prompt genérico de regresión adversarial

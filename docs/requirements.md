@@ -629,36 +629,60 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 
 ---
 
-#### RF-MF-005 — Anular un movimiento fijo en un mes puntual (skip)
+#### RF-MF-005 — Anular apariciones de un movimiento fijo (skip)
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El usuario puede **anular** la aparición de un movimiento fijo en un **mes puntual**, sin eliminar el fijo. Es una acción **reversible** (toggle anular / des-anular). El mes anulado se sigue mostrando en la lista, pero **no suma a los totales** de ese mes ni a la proyección anual. |
+| **Descripción** | El usuario puede **anular** apariciones de un movimiento fijo sin eliminarlo, con dos **alcances**: un **mes puntual** o un **rango de meses**. Es una acción **reversible** en los dos alcances (anular / des-anular). Un mes anulado se sigue mostrando en la lista, pero **no suma a los totales** de ese mes ni a la proyección anual. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | El movimiento fijo existe, está activo, aparece en el mes visualizado según su frecuencia (RF-MF-006) y pertenece al usuario autenticado. |
 
 **Flujo principal:**
 1. El usuario, parado en un mes en la Vista del mes (`/mes`), abre el menú de acciones del ítem de un movimiento fijo.
-2. El usuario selecciona la acción **"Anular este mes"**.
-3. El sistema marca esa aparición del fijo como anulada para el mes visualizado.
-4. El ítem **se sigue mostrando** en la lista con su diferenciación visual de anulado, **deja de sumar** a los totales del mes y a la proyección anual.
+2. El usuario selecciona la acción **"Anular este mes"**. El sistema abre un **modal de alcance** con dos opciones: **este mes** (preseleccionada) y **un rango de meses**.
+3. El usuario confirma: con **este mes**, se anula la aparición del mes visualizado; con **rango**, elige mes desde y mes hasta y se anulan las apariciones del fijo dentro de ese rango.
+4. Cada mes anulado **se sigue mostrando** en la lista de su mes con la diferenciación visual de anulado, y **deja de sumar** a los totales de ese mes y a la proyección anual.
 
 **Flujos alternativos:**
-- *A1 — Des-anular (toggle):* sobre un fijo ya anulado en ese mes, la acción se rotula **"Des-anular este mes"**; al activarla, la aparición vuelve a contar y el ítem pierde la diferenciación visual de anulado.
+- *A1 — Des-anular:* sobre un fijo **anulado en el mes visualizado**, la acción del kebab se rotula **"Des-anular este mes"** y el modal ofrece los mismos dos alcances en sentido inverso ("Des-anular este mes" / "Des-anular un rango de meses"). El **sentido de la operación lo fija el estado del mes visualizado** y aplica a los dos alcances: no hay un modal que anule unos meses y des-anule otros.
+- *A2 — Des-anular un rango:* quita **todas** las anulaciones del fijo que caen dentro del rango, sin importar cómo se crearon (una por una o por rango).
+- *A3 — El usuario cancela:* nada cambia.
+
+**Reglas del rango:**
+
+| Regla | Detalle |
+|---|---|
+| **Extremos** | Mes desde y mes hasta, **ambos inclusive**. Un rango de un solo mes equivale al alcance "este mes". |
+| **Solo apariciones reales** | Se anulan **únicamente los meses en que el fijo aparece** según su frecuencia (RN-016). Un fijo con frecuencia 3 anulado "de marzo a diciembre" queda anulado en marzo, junio, septiembre y diciembre — no en los diez meses. |
+| **Sobre el fijo lógico** | El rango opera sobre el **fijo lógico** (la cadena, RF-MF-007), no sobre la fila vigente del mes visualizado: un rango que cruza un split de edición (RN-005) anula igual los meses que cubren las filas anteriores de la cadena. |
+| **Piso** | El **arranque del fijo lógico**. |
+| **Techo** | El **último mes de aparición** del fijo cuando tiene fin de vigencia (`endMonth`, exclusivo). Un fijo indefinido no tiene techo propio: lo acota el largo máximo. |
+| **Largo máximo** | **24 meses.** |
+| **Meses pasados** | **Admitidos**, igual que en el alcance de un mes. |
+| **Idempotencia** | Anular un rango que ya contiene meses anulados los deja anulados, sin duplicar; des-anular un rango sin anulaciones no hace nada. Rangos superpuestos no se pisan. |
+| **Selector acotado** | El selector **no ofrece** meses fuera del piso, del techo ni del largo máximo: no acepta un rango para después no hacer nada en esos meses. |
 
 **Criterios de aceptación:**
-- [ ] La acción de anular / des-anular vive en el **menú de acciones (kebab)** del ítem del **fijo**, sin ícono ni control adicional. Los **calculados** (de fijo, único o cuota) **no ofrecen la acción**: no tienen skip propio, **heredan** el estado de anulación de su origen para el mes (RF-MCALC-005). Los movimientos **únicos** (RF-MU-005) y las **cuotas** (RF-MC-004) tienen su propia acción de anulación, con la misma mecánica de exclusión de totales y reportes (RN-016, RN-020).
-- [ ] La acción es un **toggle reversible**: anular crea la anulación del mes; des-anular la quita. Sobre el mismo fijo y mes se puede ir y volver indefinidamente.
-- [ ] El mes anulado se distingue de los demás (`deletedFrom`, RF-MF-004): anular **no** elimina el fijo ni afecta otros meses — solo esa única aparición. El fijo sigue vivo y aparece en las demás apariciones que dicta su frecuencia.
+- [ ] La acción de anular / des-anular vive en el **menú de acciones (kebab)** del ítem del **fijo** y abre el **modal de alcance**, con la opción **"este mes" preseleccionada**. Los **calculados** (de fijo, único o cuota) **no ofrecen la acción**: no tienen skip propio, **heredan** el estado de anulación de su origen para el mes (RF-MCALC-005). Los movimientos **únicos** (RF-MU-005) y las **cuotas** (RF-MC-004) tienen su propia acción de anulación, **sin modal y sin alcance de rango** (anulan una sola cosa: la fila del único, la instancia del mes de la cuota), con la misma mecánica de exclusión de totales y reportes (RN-016, RN-020).
+- [ ] La acción es **reversible** en los dos alcances: anular crea las anulaciones, des-anular las quita, y se puede ir y volver indefinidamente.
+- [ ] Un rango anula **solo las apariciones reales** del fijo dentro de él (frecuencia, RN-016); los meses del rango sin aparición no generan nada.
+- [ ] El rango está acotado por la **vigencia del fijo lógico** (arranque … último mes de aparición) y por un **largo máximo de 24 meses**; el selector no ofrece meses fuera de esos límites.
+- [ ] El rango admite **meses pasados**.
+- [ ] Des-anular un rango **quita todas** las anulaciones del fijo que caen dentro de él.
+- [ ] Anular / des-anular **no genera entrada de historial** en ningún alcance (RF-HIST-001): revertir es volver a operar sobre el mismo mes o rango.
+- [ ] Anular se distingue de eliminar (`deletedFrom`, RF-MF-004): no elimina el fijo ni toca los meses de afuera del alcance elegido — el fijo sigue vivo y aparece en las demás apariciones que dicta su frecuencia, incluidas las posteriores al rango.
 - [ ] Un fijo anulado para un mes **se sigue mostrando** en la lista de ese mes, con diferenciación visual.
 - [ ] El monto de un fijo anulado **no suma** a los totales del mes (RF-VM-002, RF-DASH-002) **ni** a la serie anual de los reportes (RF-REP-001).
-- [ ] La anulación es por mes puntual: anular un mes no afecta los meses anteriores ni posteriores.
 - [ ] Solo se pueden anular movimientos fijos propios.
 
 **Notas:**
-- El detalle visual del ítem anulado y del control de la acción lo define `control-design` (`docs/design.md`).
-- La anulación se modela como un registro aparte `(fijo, mes)`, **distinto** de `deletedFrom`: `deletedFrom` significa "el fijo deja de existir de ahí en adelante"; la anulación significa "esta única aparición no cuenta, pero el fijo sigue vivo" (ver `docs/data-model.md`, entidad RecurringSkip, y RN-016).
+- El detalle visual del ítem anulado, del control de la acción y del modal de alcance lo define `control-design` (`docs/design.md`).
+- La anulación se modela como un registro aparte `(fijo, mes)`, **distinto** de `deletedFrom`: `deletedFrom` significa "el fijo deja de existir de ahí en adelante"; la anulación significa "esta aparición no cuenta, pero el fijo sigue vivo" (ver `docs/data-model.md`, entidad RecurringSkip, y RN-016).
+- **No hay entidad "rango".** El modelo guarda **una anulación por (fijo, mes)**: el rango es la herramienta de selección del momento y no queda registrado. De ahí se siguen dos cosas. (a) El conjunto de meses anulados **se fija al confirmar** y no se recalcula después: si los meses de aparición del fijo cambiaran, los que pasan a tener aparición **no** quedan anulados, porque nunca se creó su anulación. (b) **Encadenar dos rangos consecutivos da exactamente el mismo estado** que un único rango del largo equivalente, así que un tramo mayor al largo máximo se cubre en dos operaciones sin ninguna pérdida.
+- **Por qué el largo máximo.** El rango materializa una anulación por aparición, así que su largo es también el volumen que escribe. Los 24 meses son dos años calendario —la unidad con la que trabaja el resto de la app— y alcanzan para expresar "lo que queda de este año más todo el que viene" desde cualquier mes de partida. El caso "de acá en adelante para siempre" no es una anulación sino una **baja**, y lo cubre RF-MF-004.
+- **Por qué el selector acota en vez de aceptar y no hacer nada.** La vigencia del fijo lógico ya viaja en el ítem del mes (contrato de `GET /movements`), así que acotar no cuesta un dato extra, y aceptar un rango fuera de la vigencia lo convertiría en un no-op invisible. Mismo criterio que la navegación de año de los reportes, acotada a `earliestYear` y al año en curso (RF-REP-002). No contradice la navegación **ilimitada** de meses (RF-VM-004): ahí el dominio son los meses del calendario, que existen todos; acá son las apariciones del fijo, que tienen bordes.
+- **Contrato de datos.** Anular / des-anular un rango es **una** operación de usuario sobre el fijo lógico más mes desde / mes hasta; resolver qué meses son aparición y, mes por mes, qué fila de la cadena los cubre es del backend. El contrato HTTP exacto vive en `docs/backend.md`.
 
 ---
 
@@ -3102,7 +3126,7 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 
 | Término | Definición |
 |---|---|
-| Anulación (skip) de un fijo | Marca que cancela la aparición de un movimiento fijo en un **mes puntual**, sin eliminar el fijo. Reversible (toggle). El mes anulado se sigue mostrando pero no suma a los totales. Distinta de `deletedFrom`. Ver RF-MF-005, RN-016. |
+| Anulación (skip) de un fijo | Marca que cancela **una** aparición de un movimiento fijo en un **mes puntual**, sin eliminar el fijo. Reversible. El mes anulado se sigue mostrando pero no suma a los totales. Distinta de `deletedFrom`. Se crea de a una o por rango de meses, pero el rango no se persiste: siempre queda una marca por mes. Ver RF-MF-005, RN-016. |
 | Balance | Resultado de ingresos − gastos en un período. Puede ser positivo o negativo. |
 | Categoría | Clasificador asignado a cada movimiento. Personalizable por usuario. |
 | Cuota | Instancia mensual de un grupo de cuotas. Representa un pago parcial de una compra dividida. |

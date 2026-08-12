@@ -23,6 +23,8 @@ import {
   type UpdateRecurringRequest,
   type SkipRecurringRequest,
   type SkipRecurringResponse,
+  type SkipRecurringRangeRequest,
+  type SkipRecurringRangeResponse,
 } from "@/types/recurring";
 import { createLogger } from "@/lib/logger";
 
@@ -57,6 +59,13 @@ export interface DeleteRecurringResult {
 export interface SkipRecurringResult {
   success: boolean;
   skipped?: boolean;
+  error?: string;
+}
+
+export interface SkipRecurringRangeResult {
+  success: boolean;
+  /** Cantidad de apariciones reales afectadas (RF-MF-005) — el número que informa el modal/toast. */
+  affectedCount?: number;
   error?: string;
 }
 
@@ -270,14 +279,73 @@ export function useRecurring() {
     }
   }
 
+  // ─── Mutation: anular/des-anular un RANGO de meses (RF-MF-005, modal de alcance) ──
+
+  const skipRangeMutation = useMutation<
+    SkipRecurringRangeResponse,
+    ApiError,
+    { id: string; data: SkipRecurringRangeRequest }
+  >({
+    mutationFn: ({ id, data }) =>
+      api.post<SkipRecurringRangeResponse>(`/recurring/${id}/skip`, data),
+    onSuccess: (res) => {
+      // Mismo criterio que el toggle puntual: un rango puede afectar meses
+      // fuera del mes visualizado, así que se invalida toda la familia.
+      void queryClient.invalidateQueries({ queryKey: MOVEMENTS_QUERY_PREFIX });
+      logger.info("Rango de skip de fijo aplicado", {
+        action: res.action,
+        from: res.from,
+        to: res.to,
+        affectedCount: res.affectedCount,
+      });
+    },
+    onError: (err) => {
+      if (err.isServerError()) {
+        logger.error("Error de servidor al aplicar rango de skip de fijo", {
+          statusCode: err.statusCode,
+        });
+      }
+    },
+  });
+
+  async function skipRecurringRange(
+    id: string,
+    data: SkipRecurringRangeRequest,
+  ): Promise<SkipRecurringRangeResult> {
+    try {
+      const res = await skipRangeMutation.mutateAsync({ id, data });
+      return { success: true, affectedCount: res.affectedCount };
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.statusCode === 404) {
+          return { success: false, error: "El movimiento no existe o ya fue eliminado." };
+        }
+        if (err.statusCode === 400) {
+          return { success: false, error: err.message };
+        }
+        logger.error("Error al aplicar rango de skip de fijo", { statusCode: err.statusCode });
+        return {
+          success: false,
+          error: "Ocurrió un error al anular el movimiento. Intentalo de nuevo.",
+        };
+      }
+      logger.error("Error inesperado al aplicar rango de skip de fijo", {
+        error: err instanceof Error ? err.message : "desconocido",
+      });
+      return { success: false, error: "Ocurrió un error inesperado. Intentalo de nuevo." };
+    }
+  }
+
   return {
     createRecurring,
     updateRecurring,
     deleteRecurring,
     skipRecurring,
+    skipRecurringRange,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
     isSkipping: skipMutation.isPending,
+    isSkippingRange: skipRangeMutation.isPending,
   };
 }

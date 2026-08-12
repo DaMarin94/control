@@ -90,6 +90,10 @@ Lo visual se define **una sola vez**. Stack: **shadcn/ui + cva** sobre Tailwind 
 
 **Un modal portado a `document.body` con `closeOnScrimClick`, montado dentro de una fila/trigger clickeable, DEBE hacer `stopPropagation()` en el handler de clic del scrim.** Aunque el scrim vive en `document.body` (fuera del DOM del trigger por el portal), React propaga sus eventos sintéticos **por el árbol de React**, no por el árbol del DOM: el clic en el scrim **burbujea hasta el `onClick` del trigger** que renderiza el modal. Sin cortar la propagación, cerrar por clic afuera dispararía el `onClick` del trigger y **reabriría el modal** en el mismo gesto. Es el **mismo patrón que `KebabMenu`** (su botón y sus ítems cortan la propagación para no accionar la fila que los contiene). Caso vivo: `MovementDetailCard` montado desde el cuerpo clickeable de `MovementItemRow` (RF-VM-007) — el clic en el scrim que cierra la card no debe reabrirla vía el `onClick` de la fila.
 
+### Foco inicial dentro de un modal — ref callback, no `useEffect` (gotcha)
+
+**`ModalShell` monta sus hijos detrás de un `useEffect`** (portal SSR-safe): en el commit en que el modal se abre, su contenido todavía no está en el DOM. Por eso un `useEffect(() => ref.current?.focus(), [])` **escrito dentro del modal nunca enfoca nada** — corre una sola vez, un commit antes de que el nodo exista (`ref.current` es `null`), y no vuelve a correr. El foco inicial sale de un **ref callback** que enfoca la primera vez que React attachea el nodo (con un flag para no re-enfocar en cada re-render). Precedente: `ActiveLimitDialog` (`focusCancelOnMount`). Aplica a **cualquier** modal que necesite foco inicial.
+
 ### Sombra de corte en carriles con scroll interno — `useScrollShadow`
 
 `useScrollShadow` (`frontend/src/hooks/use-scroll-shadow.ts`) provee la affordance de corte en superficies con scroll interno (grillas, tablas, gantt): señala que hay más contenido fuera de vista con un **`box-shadow`** en el borde del carril. **No usa `mask` / fade:** un degradado sobre las celdas de la grilla taparía una cifra de dinero — el corte se marca con sombra, que no oculta contenido.

@@ -10,8 +10,11 @@ import { PaymentMethodValidatorService } from '../payment-methods/payment-method
 import {
   RecurringRepository,
   RecurringWithCategory,
+  SkipRangeAction,
+  SkipRangeResult,
   SkipToggleResult,
 } from './recurring.repository';
+import { addMonths, isOnFrequency, monthDiff } from '../common/month.helper';
 import { CreateRecurringDto } from './dto/create-recurring.dto';
 import { UpdateRecurringDto } from './dto/update-recurring.dto';
 import { CreateCalculatedRecurringDto } from './dto/create-calculated-recurring.dto';
@@ -1124,6 +1127,165 @@ export class RecurringService {
 
       return { skipped: true, month };
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // POST /recurring/:id/skip (rango) — anular/des-anular un rango de meses (RF-MF-005)
+  // ---------------------------------------------------------------------------
+
+  /** Largo máximo del rango de anulación, en meses inclusive (RF-MF-005). */
+  private static readonly MAX_SKIP_RANGE_MONTHS = 24;
+
+  /**
+   * Anula o des-anula, de forma EXPLÍCITA (no toggle) e idempotente en los dos
+   * sentidos, todas las apariciones reales del fijo lógico (la cadena,
+   * `chainId`) dentro de [from, to] (ambos inclusive).
+   *
+   * Opera sobre la CADENA completa, no sobre la fila `id` recibida: un rango
+   * que cruza un split de edición (RN-005) anula igual los meses que cubren
+   * las filas anteriores de la cadena. Por cada mes candidato del rango se
+   * resuelve qué fila de la cadena lo cubre y si ese mes es una aparición real,
+   * con el MISMO criterio que `findFijosByMonth` (`isOnFrequency` anclado al
+   * `startMonth` PROPIO de la fila que cubre el mes, no al arranque del fijo
+   * lógico — así el conjunto de meses que este endpoint anula/des-anula
+   * coincide exactamente con lo que `GET /movements` muestra como aparición
+   * en cada mes; ver docs/backend.md, gotcha de frecuencia post-split).
+   *
+   * Validación de límites (del lado del servidor, no confía en el cliente):
+   * - from <= to; formato YYYY-MM y valor de mes (01-12) ya validados acá.
+   * - from >= arranque del fijo lógico (mínimo `startMonth` de la cadena).
+   * - to <= último mes de aparición real, si el fijo tiene fin de vigencia
+   *   (`deletedFrom` de la última fila de la cadena, no nulo).
+   * - largo del rango, en meses inclusive, <= 24.
+   *
+   * No genera entrada de historial (RF-MF-005): revertir es volver a operar
+   * sobre el mismo rango con la acción opuesta.
+   *
+   * 404 si el fijo no existe o no pertenece al usuario.
+   * 400 si el rango viola alguno de sus límites.
+   */
+  async applySkipRange(
+    userId: string,
+    id: string,
+    input: { from: string; to: string; action: SkipRangeAction },
+  ): Promise<SkipRangeResult> {
+    // Validar formato y semántica de los dos extremos
+    this.validateMonthFormat(input.from);
+    this.validateMonthFormat(input.to);
+    this.validateMonthValue(input.from);
+    this.validateMonthValue(input.to);
+
+    const existing = await this.repo.findById(id);
+    if (!existing || existing.userId !== userId) {
+      throw new NotFoundException('Movimiento fijo no encontrado');
+    }
+
+    if (input.from > input.to) {
+      throw new BadRequestException(
+        'El mes "desde" no puede ser posterior al mes "hasta"',
+      );
+    }
+
+    const rangeLength = monthDiff(input.from, input.to) + 1;
+    if (rangeLength > RecurringService.MAX_SKIP_RANGE_MONTHS) {
+      throw new BadRequestException(
+        `El rango no puede superar los ${RecurringService.MAX_SKIP_RANGE_MONTHS} meses`,
+      );
+    }
+
+    // Resolver la cadena completa (todas las filas VIVAS de chainId) para
+    // calcular el piso (arranque del fijo lógico) y el techo (último mes de
+    // aparición, si el fijo tiene fin de vigencia) — RF-MF-005, Reglas del rango.
+    const chainRows = await this.repo.findChainRows(existing.chainId);
+    const sortedRows = [...chainRows].sort((a, b) =>
+      a.startMonth < b.startMonth ? -1 : a.startMonth > b.startMonth ? 1 : 0,
+    );
+
+    const chainFloor = sortedRows[0].startMonth;
+    if (input.from < chainFloor) {
+      throw new BadRequestException(
+        `El rango no puede empezar antes del arranque del fijo (${chainFloor})`,
+      );
+    }
+
+    const lastRow = sortedRows[sortedRows.length - 1];
+    if (lastRow.deletedFrom !== null) {
+      const techo = this.lastAppearanceBefore(
+        lastRow.startMonth,
+        existing.frequency,
+        lastRow.deletedFrom,
+      );
+      if (techo === null || input.to > techo) {
+        throw new BadRequestException(
+          techo === null
+            ? 'El fijo no tiene apariciones dentro de su vigencia'
+            : `El rango no puede terminar después del último mes de aparición del fijo (${techo})`,
+        );
+      }
+    }
+
+    // Mes por mes: qué fila de la cadena lo cubre y si es una aparición real
+    // (reusa isOnFrequency, helper compartido con movements.repository.ts —
+    // no se reimplementa el cálculo de apariciones).
+    const apparitions: Array<{ month: string; rowId: string }> = [];
+    for (const row of sortedRows) {
+      const windowStart = row.startMonth > input.from ? row.startMonth : input.from;
+      const rowLastMonth =
+        row.deletedFrom !== null ? addMonths(row.deletedFrom, -1) : input.to;
+      const windowEnd = rowLastMonth < input.to ? rowLastMonth : input.to;
+      if (windowStart > windowEnd) continue;
+
+      for (let month = windowStart; month <= windowEnd; month = addMonths(month, 1)) {
+        if (isOnFrequency(row.startMonth, existing.frequency, month)) {
+          apparitions.push({ month, rowId: row.id });
+        }
+      }
+    }
+
+    await this.repo.applySkipRange(
+      existing.chainId,
+      input.action,
+      apparitions.map((a) => ({ recurringId: a.rowId, month: a.month })),
+      input.from,
+      input.to,
+    );
+
+    this.logger.log(
+      {
+        userId,
+        recurringId: id,
+        chainId: existing.chainId,
+        from: input.from,
+        to: input.to,
+        action: input.action,
+        affectedCount: apparitions.length,
+      },
+      `Fijo: rango de ${input.action === 'skip' ? 'anulación' : 'des-anulación'} aplicado`,
+    );
+
+    return {
+      action: input.action,
+      from: input.from,
+      to: input.to,
+      affectedCount: apparitions.length,
+    };
+  }
+
+  /**
+   * Último mes < exclusiveEnd que satisface isOnFrequency(anchorMonth, frequency, mes).
+   * null si no hay ningún mes de aparición antes de exclusiveEnd (caso degenerado
+   * que no debería darse en una fila VIVA — deletedFrom siempre es > startMonth
+   * por construcción de applyBoundaryToChain).
+   */
+  private lastAppearanceBefore(
+    anchorMonth: string,
+    frequency: number,
+    exclusiveEnd: string,
+  ): string | null {
+    const diff = monthDiff(anchorMonth, exclusiveEnd) - 1;
+    if (diff < 0) return null;
+    const floorMultiple = diff - (diff % frequency);
+    return addMonths(anchorMonth, floorMultiple);
   }
 
   // ---------------------------------------------------------------------------

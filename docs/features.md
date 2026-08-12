@@ -16,7 +16,8 @@
 | Formulario de carga (tabs único/fijo/cuotas) | RF-CM-001 | Implementado |
 | Movimiento único — crear, editar, eliminar | RF-MU-001..003 | Implementado |
 | Movimiento fijo — crear, visualizar, editar, eliminar | RF-MF-001..004 | Implementado |
-| Fijos extendidos — anular por mes + periodicidad (entero 1..12) + arranque del fijo lógico visible en `/mes` | RF-MF-005..007, RN-016 | Implementado |
+| Fijos extendidos — periodicidad (entero 1..12) + arranque del fijo lógico visible en `/mes` | RF-MF-006..007, RN-016 | Implementado |
+| Fijos — anular / des-anular con alcance: modal en el kebab con "este mes" (preseleccionado) o un rango de meses (solo apariciones reales, hasta 24 meses) | RF-MF-005 | Implementado |
 | Anulación de movimientos — extendida a únicos y cuotas (P3) | RF-MU-005, RF-MC-004, RN-020 | Implementado |
 | Movimiento en cuotas — crear, visualizar, editar, eliminar | RF-MC-001..003 | Implementado (solo Gasto en v1) |
 | Cuotas — total del plan derivado (card de detalle, tooltip del reporte de Cuotas, preview en el form) | RF-MC-005 | Implementado |
@@ -72,7 +73,7 @@
 - **Movimientos del mes.** Endpoint unificado `GET /movements?month=YYYY-MM` (totales + únicos/fijos/cuotas). El mes de cada movimiento se bucketea con la zona propia del registro (`AT TIME ZONE` en raw SQL parametrizado). Fijos y cuotas se calculan on-the-fly (RN-006), sin filas por instancia. Contrato en `docs/data-model.md` §Contrato de movimientos del mes; implementación en `docs/backend.md` §Movimientos del mes.
 - **Dashboard** en `/` (resumen del mes en curso, "Nuevo movimiento", "Ver todos" → `/mes`, estado vacío con CTA). No lista movimientos.
 - **Vista del mes** `/mes`: tres secciones colapsables/reordenables siempre visibles (RF-VM-005), con filtros por listado (tipo + categoría) y totales recalculados en el frontend (RF-VM-006).
-- **Fijos.** Inmutabilidad del pasado vía split (cadena de filas `Recurring`). Anular por mes (toggle `RecurringSkip`) y periodicidad (`frequency`, entero 1..12, inmutable). El arranque del fijo lógico (`startMonth`) se resuelve por la primera fila de la cadena. Detalle en `docs/backend.md` §Movimientos fijos.
+- **Fijos.** Inmutabilidad del pasado vía split (cadena de filas `Recurring`). Anular por mes o por rango de meses (`RecurringSkip`, una marca por mes en los dos alcances) y periodicidad (`frequency`, entero 1..12, inmutable). El arranque del fijo lógico (`startMonth`) se resuelve por la primera fila de la cadena. Detalle en `docs/backend.md` §Movimientos fijos.
 - **Cuotas.** Solo Gasto en v1 (el tab no ofrece selector de tipo; el backend rechaza `INCOME` con `400`). Editar es in-place del grupo completo; eliminar es hard delete del grupo entero. Detalle en `docs/backend.md` §Movimientos en cuotas.
 - **Calculados.** Fijo cuyo monto/tipo se derivan al vuelo del monto de un origen (fijo, único o cuota) vía fórmula. Creación solo desde la acción "Crear movimiento calculado" del kebab. Vínculo al origen por `chainId` (fijo) o FK (`onDelete: Cascade`) para único/cuota. Reglas en `requirements.md` §3.4.b; contrato en `docs/data-model.md` §Contrato de movimientos calculados.
 - **Reportes** (`/reportes`): pantalla configurable por cards persistidas (clave `reports`); cada card es un widget autónomo con año y filtro de categorías embebidos. El dashboard monta solo la card Ingresos vs Gastos (Total-only) en modo efímero. Card `by-category` con toggle de representación Barra / Línea (RF-REP-006). Backend `GET /movements/reports`. Detalle en `docs/frontend.md` §Reportes, `docs/backend.md` §Serie de reportes.

@@ -4348,6 +4348,207 @@ Fila única, `items-center`, `gap-[14px]`:
 
 ---
 
+## Modal de alcance de la anulación de un fijo (`/mes`) — RF-MF-005
+
+Implementa el **modal de alcance** que abre la acción "Anular este mes" / "Des-anular este mes" del kebab de un ítem **fijo**. Lo funcional (dos alcances excluyentes, verbo fijado por el mes visualizado, reglas del rango) está cerrado en `requirements.md` RF-MF-005 y `screens.md` §Vista del mes; acá se define **cómo se ve y cómo se opera**.
+
+### 0. Encuadre — qué cambia y qué no
+
+- **Solo el fijo cambia.** El toggle directo de **único** y **cuota** queda **exactamente igual** (sin modal, sin alcance): el rótulo, el ícono y el slot del kebab no se tocan. Ver *Ítem anulado (`skipped`) y acciones del KebabMenu*, que sigue vigente sin cambios.
+- **La fila anulada no cambia.** Atenuación `0.55`, monto tachado y badge "Anulado" siguen igual, para el mes que sea y sin importar por qué alcance se creó la anulación. El rango es una **herramienta de selección**, no un estado nuevo: no existe señal visual de "anulado por rango".
+- **Costo asumido, costo acotado.** La acción del caso frecuente (anular el mes que estoy mirando) pasa de 1 clic a 2. Todo el diseño de abajo está ordenado a que ese segundo clic sea el más barato posible: preselección, foco, `Enter`, modal chico, y **cero espera** (§4).
+- **Sin fetch al abrir.** Todo lo que el modal necesita —nombre, categoría, frecuencia, arranque y fin del fijo lógico, mes visualizado— viaja en el `MovementItem` que la lista ya tiene. El conteo de apariciones es aritmética sobre `startMonth` + frecuencia (RN-016). **No hay skeleton, no hay spinner, no hay estado de carga de apertura.**
+
+### 1. Contenedor, título y verbo
+
+- **Contenedor:** `ModalShell variant="dialog"` (`max-w-[440px]`), con las tres zonas del contrato de shell. Cierra con **✕ y `Esc`**; el clic en el scrim **no** cierra (es un modal de decisión).
+- **Título** (Título de diálogo, 18px/700): **"Anular apariciones"** / **"Des-anular apariciones"**.
+  - **Por qué no repite el rótulo del kebab** ("Anular este mes"): el modal cubre **dos** alcances y un título que nombra uno solo miente sobre el otro. La reconexión con el kebab la hace la **primera opción**, que se rotula literalmente con el mes ("Solo este mes · Junio 2026").
+  - **Por qué "apariciones" y no "meses":** es la unidad real de la operación —un fijo trimestral en un rango de 10 meses toca 3— y el modal la enseña dos líneas más abajo, en la caja de resultado. Nombrarla en el título prepara esa lectura.
+- **Un solo verbo para todo el modal.** Lo fija el estado del mes visualizado y **no hay control que lo cambie**: título, opciones, caja de resultado y botón primario usan el mismo verbo. No existe un modal mixto.
+
+### 2. Cuerpo — orden y anatomía
+
+Cuerpo `space-y-[14px]` (ritmo estándar del `dialog`). De arriba abajo:
+
+**2.1 · Bajada** — 13px `--muted`, `max-w-[46ch]`:
+- Anular: *"El fijo sigue existiendo. Las apariciones anuladas se siguen mostrando en su mes, pero no suman a los totales."*
+- Des-anular: *"Las apariciones vuelven a sumar a los totales de su mes."*
+- **Por qué existe:** anular y **eliminar** son las dos acciones del kebab que el usuario confunde (RF-MF-005 lo señala explícitamente), y son vecinas en el menú. Una línea que dice "el fijo sigue existiendo" desarma la confusión en el único momento en que importa. *(Prevención de error.)*
+
+**2.2 · Caja de identidad — y domicilio de los límites** — molde exacto de la caja del diálogo de eliminar / deshacer: `rounded-ctl border border-line bg-panel-2 px-4 py-3`.
+- Línea 1: **nombre del fijo**, 13px/600 `--ink`, `truncate`.
+- Línea 2 (sublínea 12px `--muted`, separadores `·` en `--faint`): `● {Categoría} · {frecuencia} · {vigencia}`.
+  - `● {Categoría}`: punto 6px con `movement.category.color` + nombre — mismo molde que la sublínea de la fila.
+  - `{frecuencia}`: etiqueta en minúscula de la tabla *Frecuencia del fijo* (`mensual`, `trimestral`, `cada 5 meses`…).
+  - `{vigencia}`: formato de la card de detalle — `Desde Mar 2024 · activo` (sin fin) o `Mar 2024 – Jun 2028` (con fin). Rótulo de mes, **no** cifra → Space Grotesk, no mono.
+- **Decisión clave: los límites del rango se presentan como una propiedad del fijo, no como una restricción al usuario.** El piso y el techo del selector **son** la vigencia, y la vigencia ya se lee acá arriba, antes de tocar nada. Cuando después el selector no ofrezca un mes, el usuario ya sabe por qué —lo leyó como dato del fijo, no como un "no podés". La frecuencia cumple el mismo papel para el conteo: explica de antemano por qué 10 meses pueden ser 4 apariciones. *(Carga cognitiva + prevención de error: informar antes, en vez de corregir después.)*
+
+**2.3 · Radiogroup de alcance** — `role="radiogroup"` `aria-label="Alcance de la anulación"`, dos filas apiladas `gap-[6px]`. **Dos opciones, nunca una lista larga:** es una decisión binaria y debe leerse de un vistazo.
+
+- **Fila:** `flex items-start gap-[10px] px-[10px] py-[9px] rounded-[var(--r-ctl)] min-h-[44px]`, `border border-transparent` (reserva el filo sin mover layout al seleccionar).
+  `[radio 16px] [rótulo 13.5px/600 --ink] / [sub 12.5px --muted]`
+- **Radio:** molde exacto del de *Simular categoría* — círculo 16px `border --line-strong`; seleccionado `border-accent bg-accent` con punto blanco 6px.
+- **Estados:** hover `bg-panel-2`; **seleccionada `bg-panel-2` + `border --accent`**; focus ring `--accent-soft` 3px sobre la fila.
+  - **Por qué la seleccionada suma borde índigo** (y no solo fondo, como en *Simular categoría*): acá conviven **dos** filas y la selección **es** la decisión del modal. Con solo `bg-panel-2`, hovering la fila no elegida produce dos filas idénticas y el usuario pierde de vista cuál está activa. El borde `--accent` es cromo de interacción legítimo (regla dura 2: no tiñe cifras).
+- **Opción 1 — preseleccionada:** rótulo **"Solo este mes"** · sub **"{Mes AAAA}"** (ej. `Junio 2026`).
+  - El mes va **escrito**, no implícito: es lo que verifica el usuario antes de confirmar, y es lo que ata el modal al rótulo del kebab que acaba de tocar.
+- **Opción 2:** rótulo **"Un rango de meses"** · sub **"Desde y hasta, ambos inclusive."**
+
+**2.4 · Bloque de rango** — se monta **solo** con la opción 2 elegida; con la opción 1 **no existe en el DOM y no reserva alto** (regla de "cero impacto" del DS). Va **indentado `pl-[36px]`** (10 de padding + 16 del radio + 10 de gap), de modo que su borde izquierdo coincide con el rótulo de la opción 2: la indentación es lo que dice "esto pertenece a esa opción" sin cromo extra.
+
+- **Par de selectores:** molde `.row2` del form (`grid grid-cols-2 gap-[14px]`), cada celda `min-w-0`. Campo = molde `.f` (label 12.5px/600 `--ink-2`, gap 7px) + **`Select` nativo del DS** (`.input.select`).
+  - Labels: **"Desde"** · **"Hasta"**.
+  - **Opciones:** un mes por opción, rotuladas **`Mmm AAAA`** (`Sep 2026`) — mismo formato compacto de `formatMonthShort` ya vigente. Space Grotesk, **no mono** (es rótulo, no cifra).
+  - **Por qué `Select` nativo y no la "rueda" del popover de salto de mes:** (a) el dominio acá está **acotado y es enumerable** — un control cuyas opciones simplemente *no incluyen* lo prohibido cumple literalmente el "el selector no ofrece" del RF, sin inventar estados disabled; (b) la vigencia de un fijo puede tener 60+ meses y llegar con ▲▼ de a uno sería inaceptable; (c) es la misma primitiva que Categoría, Método y Frecuencia — cero componentes nuevos. La rueda del salto de mes queda donde está: dominio **ilimitado**, dos ruedas independientes, otro problema.
+- **Universo de opciones (regla dura del control — el rango inválido no se puede expresar):**
+  - **Desde:** todos los meses desde el **arranque del fijo lógico** hasta su **último mes de aparición** (o, sin fin, hasta el techo que imponga el largo máximo desde el arranque hacia adelante — sin techo propio, el catálogo se extiende con el horizonte que el contrato de datos provea).
+  - **Hasta:** se **recalcula a partir de Desde**. Primera opción = el valor de **Desde**; última = `min(techo del fijo, Desde + 23 meses)`. **Máximo 24 opciones.**
+  - **Consecuencia buscada:** `hasta < desde` **es irrepresentable** y un rango de más de 24 meses también. **No hay estado de error de rango inválido en este modal** — no porque se oculte, sino porque el control no lo puede producir. *(Prevención de error: hacer imposible lo inválido gana a mostrar un error rojo.)*
+  - **Defensa:** si por un bug de estado llegara un rango invertido, se trata como **cero apariciones** (§3.2) — primario deshabilitado y copy neutro. Nunca borde rojo, nunca `--expense`.
+- **Ajuste automático (nunca deja al usuario en un estado inválido):** al cambiar **Desde**, si el **Hasta** vigente queda fuera del nuevo universo, se reajusta **al valor válido más cercano** — a `Desde` si quedó antes, o a `Desde + 23` si quedó después. El ajuste es **silencioso en el control** y **explícito en la nota** (§3.1).
+- **Nota de límite** — molde `.field-note` del form (12.5px `--muted`, glifo 14px `--accent-ink`, `gap-7px`), **siempre presente** bajo el par (no aparece/desaparece: evita el salto de alto y le da un domicilio estable al mensaje de ajuste). Copy por estado en §3.1.
+
+**2.5 · Caja de resultado — la cuenta de apariciones.** Último elemento del bloque de rango. **Existe solo en el alcance rango**; en "Solo este mes" el resultado ya está escrito en el sub de la opción (`Junio 2026`) y repetirlo sería ruido en el camino frecuente.
+
+- **Caja:** `rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px]`, `flex items-start gap-[10px]`. Glifo 16px `--ink-2` (`CalendarOff` al anular, `CalendarPlus` al des-anular — los mismos del kebab: el modal muestra el ícono de la acción que va a ejecutar). Texto 13px `--ink`, fragmentos clave en **600**.
+- **`aria-live="polite"`** sobre la caja: es el dato que cambia con cada movimiento de los selectores y el que decide si confirmar o no; tiene que anunciarse.
+- **Copy (regla de conteo transversal — el singular tiene frase propia, sin numeral):**
+
+| Caso | Copy |
+|---|---|
+| `N ≥ 2` | *"Se anulan **{N} apariciones**, entre **{Mmm AAAA}** y **{Mmm AAAA}**."* |
+| `N = 1` | *"Se anula **una aparición**: **{Mmm AAAA}**."* |
+| `N = 0` | ver §3.2 |
+| Des-anular | espejo exacto: *"Se des-anulan **{N} apariciones**, entre …"* / *"Se des-anula **una aparición**: …"* |
+
+- **Los dos meses de la frase son la primera y la última aparición REAL dentro del rango, no los extremos elegidos.** Un fijo trimestral anclado en Enero, con rango `Mar 2026 – Dic 2026`, dice *"Se anulan **3 apariciones**, entre **Abr 2026** y **Oct 2026**."* — no "entre Mar y Dic". Es lo que efectivamente va a pasar, y de paso **enseña la frecuencia** en el único momento en que el usuario tiene contexto para entenderla. *(Feedback + affordance: el modal responde "qué va a pasar", no "qué elegiste".)*
+- **La cuenta dice el estado final, no el delta.** Si algunas apariciones del rango ya estaban anuladas, la frase sigue siendo verdadera (idempotencia, RF-MF-005) y **no** se desglosa "de las cuales 2 ya lo están": ese dato no está en el brief y desglosarlo obligaría a un ida y vuelta de datos para un matiz que no cambia ninguna decisión.
+- **Nunca en mono.** No hay cifras de dinero en este modal; `{N}` es un conteo dentro de una frase, no un monto. Va en Space Grotesk como el resto (regla dura 3 no aplica).
+
+### 3. Estados del rango
+
+**3.1 · Límite alcanzado — se informa, no se recrimina.** La nota `.field-note` es el único lugar donde se habla de límites, y **nunca** usa rojo, ámbar ni borde de error: un tope del sistema no es un error del usuario.
+
+| Estado | Copy de la nota |
+|---|---|
+| **Base** (siempre, mientras no haya ajuste) | *"Hasta 24 meses por operación. Para un tramo más largo, repetí la operación desde el mes siguiente."* |
+| **Tras clamp por largo máximo** | *"El ‘hasta’ se ajustó al máximo de 24 meses."* |
+| **Tras arrastre del ‘hasta’** | *"El ‘hasta’ se movió junto con el ‘desde’."* |
+
+- Los dos copys de ajuste **reemplazan** al base hasta la siguiente interacción con cualquiera de los dos selectores; ahí vuelve el base. Mismo tamaño, mismo color, mismo glifo — **solo cambia el texto**: nada parpadea ni cambia de altura.
+- **Por qué el base menciona la salida** ("repetí la operación desde el mes siguiente"): es literalmente cierto (encadenar dos rangos da el mismo estado, RF-MF-005) y convierte un tope en una instrucción. Un tope sin salida se lee como un muro. *(Flujo.)*
+- **El selector no muestra opciones deshabilitadas.** Los meses fuera de la vigencia o del largo máximo **no están en la lista**. Una lista con la mitad de sus filas apagadas invita a pelear con ellas; una lista corta y correcta no plantea la pregunta.
+
+**3.2 · Cero apariciones — estado neutro, confirmar bloqueado.** Ocurre cuando la frecuencia > 1 y el rango elegido no contiene ninguna aparición.
+
+- La **caja de resultado** cambia de contenido (no de molde ni de color): glifo **`Info` 16px `--ink-2`**, texto 13px `--ink-2`: *"El rango no incluye ninguna aparición: **{Nombre}** es **{frecuencia}** y no cae en esos meses."*
+- **El botón primario queda `disabled`** (`opacity-50`, `cursor-not-allowed`, sin hover). **Por qué se bloquea y no se deja confirmar:** confirmar sería un **no-op silencioso** — el modal se cerraría, nada cambiaría y el usuario creería que anuló algo. Es exactamente el callejón que el RF evita al acotar el selector. *(Prevención de error + feedback.)*
+- **Neutro, no error.** Sin `--expense`, sin ring rojo, sin ámbar: el usuario no se equivocó, el rango simplemente no toca nada. La salida está a un clic (mover un selector), y la frase nombra la causa (la frecuencia), no la culpa.
+- **Este estado es imposible en el alcance "Solo este mes"** — el fijo aparece en el mes visualizado por precondición del RF. El primario **nunca** está deshabilitado en la opción 1.
+
+**3.3 · Estado normal.** Con `N ≥ 1` el primario está habilitado y la caja de resultado muestra la frase de §2.5. No hay estado intermedio: los selectores siempre tienen valor (arrancan en `Desde = Hasta = mes visualizado`, un rango de un mes que equivale al alcance 1 — el punto de partida más predecible).
+
+### 4. El camino barato — cómo se paga el segundo clic
+
+Cinco decisiones, todas al servicio del caso frecuente:
+
+1. **Preselección + verificación en un renglón.** Al abrir, la opción 1 está marcada y dice el mes con nombre. El usuario confirma **leyendo una línea**, no reconstruyendo un estado.
+2. **Foco inicial en el radio seleccionado**, no en el botón. Así `Enter` confirma **y** las flechas ↑↓ llevan al rango sin `Tab`. Poner el foco en el primario ahorraría lo mismo en el caso frecuente pero dejaría al teclado con `Shift+Tab` para llegar a la decisión — un ahorro que se cobra en el otro camino.
+3. **`Enter` confirma desde cualquier control del modal** (excepto con un `<select>` nativo desplegado, donde `Enter` elige la opción). El camino frecuente completo es: kebab → `Enter`.
+4. **El modal arranca chico.** Sin el bloque de rango mide ≈330px de alto: el primario queda a pocos centímetros del punto donde el usuario acaba de clickear el kebab. El bloque de rango se **monta** al elegirlo (no está oculto ocupando lugar).
+5. **Cero espera.** Sin fetch de apertura (§0), sin skeleton: el modal está completo en el primer frame.
+
+**Lo que NO se hace:** no hay checkbox de "no volver a preguntar" (rompería el alcance rango, que es la razón de ser del modal), ni doble confirmación, ni `Enter` diferido.
+
+### 5. Footer, carga, éxito y error
+
+- **Footer** (zona 3 del shell, `flex justify-end gap-3`): **`Cancelar`** (`variant="ghost" size="sm"`) + **`Anular`** / **`Des-anular`** (`variant="default" size="sm"`, primario índigo).
+  - **Nunca `destructive`.** Anular es **reversible** y no borra nada: el rojo está reservado a Eliminar. Mismo criterio ya cerrado para "Deshacer" en `/historial` y "Guardar igual" del aviso de límites.
+  - **El rótulo del primario es fijo — no lleva el conteo.** Un botón que muta a "Anular 7 apariciones" cambia de ancho con cada toque del selector: el blanco de clic se mueve bajo el cursor (mismo modo de falla que el DS ya previene en el ancho del toast). El conteo vive en la caja de resultado, que está **arriba** del botón y se lee antes de apuntar. *(Prevención de error + jerarquía.)*
+- **Carga:** primario → **"Anulando…"** / **"Des-anulando…"** + `disabled`. `Cancelar` queda habilitado. El resto del cuerpo no se atenúa.
+- **Éxito:** cierra el modal y la lista se refresca.
+  - **Alcance "Solo este mes": sin toast.** La fila cambia a la vista (atenuación + tachado + badge) y los totales se recalculan en pantalla: el feedback ya ocurrió. Es además el comportamiento vigente hoy del toggle directo, que no se toca.
+  - **Alcance rango: toast `success` obligatorio** (sin acción, molde ≤460px), porque el efecto puede caer **entero fuera del mes visualizado** y la pantalla no mostraría nada:
+    - `N ≥ 2` → **"Anuladas {N} apariciones de ‘{Nombre}’."**
+    - `N = 1` → **"Anulada una aparición de ‘{Nombre}’: {Mmm AAAA}."**
+    - Des-anular: espejo (*"Des-anuladas {N} apariciones…"*).
+  - **Regla que gobierna esa asimetría:** *el toast aparece cuando el efecto no es visible en la pantalla actual.* Es predecible (depende del alcance elegido, no de dónde cayó el rango) y no agrega ruido al camino de un clic.
+- **Error:** `toast.error` — *"No se pudo cambiar el estado del movimiento."* (copy vigente del toggle) — y **el modal queda abierto** con la selección intacta y el botón restaurado (RNF-008).
+- **a11y:** el radiogroup se recorre con ↑↓; los dos `Select` tienen su `<label>` asociado; la caja de resultado es `aria-live="polite"`; el primario deshabilitado lleva `aria-describedby` a la caja de resultado, para que el motivo del bloqueo se enuncie.
+
+### 6. Contención responsive (obligatoria)
+
+Régimen **único**: el modal se comporta igual en todo ancho soportado (`≥640px`), con el sidebar abierto o cerrado. No tiene disposición compacta propia.
+
+- **Ancho:** lo da `ModalShell variant="dialog"` — `w-full max-w-[440px]` dentro de un scrim `p-6`, es decir **`min(440px, 100vw − 48px)`**. A 640px de viewport el diálogo mide **440px exactos**. El scrim es `fixed inset-0` sobre el **viewport**: el estado del sidebar **no** cambia el ancho ni la posición del modal.
+- **Prohibido el piso de ancho sin clamp (regla general del DS).** Ningún elemento de este modal —ni el par `.row2`, ni los `Select`, ni la caja de resultado, ni las filas de radio— declara `min-width` en px. Las dos celdas del par van `min-w-0`; si el rótulo `Mmm AAAA` no entrara, **trunca el `<select>` nativo**, no empuja el diálogo. Es el mismo modo de falla que ya se pagó una vez (un piso ganándole al clamp de viewport): acá no hay piso que pueda ganar.
+- **Aritmética a 640px:** diálogo 440 − `px-[22px]`×2 = **396** de cuerpo; bloque de rango indentado 36 ⇒ **360**; `.row2` con gap 14 ⇒ **173px por selector** — holgado para `Sep 2026` con su chevron. El par **nunca** envuelve a dos filas en ancho soportado.
+- **Invariante 1 (sin scroll horizontal del `body`):** el modal no aporta ancho; el fondo queda bloqueado por el body-lock del shell.
+- **Invariante 2 (modal completo y scrolleable):** con el rango abierto el diálogo mide ≈500px de alto. Por debajo de ≈560px de viewport alto, el **cuerpo scrollea** y header + footer quedan pineados por el shell (`max-h-[calc(100dvh−48px)]`) — sin ajuste propio.
+- **Invariante 3 (ninguna acción inalcanzable):** los dos botones del footer están pineados; los `<select>` son nativos y su panel lo posiciona el SO, sin riesgo de clipping por overflow.
+- **Invariante 4 (superficies anchas scrollean dentro de sí):** no aplica — el modal no introduce ninguna superficie ancha.
+
+### 7. Agregados más allá del brief — estado
+
+1. **Toast de éxito solo en el alcance rango** (§5). Hoy el toggle de anular **no emite toast de éxito** (solo de error). El alcance rango lo necesita porque el efecto puede ser invisible. **Agregado no solicitado — confirmar.**
+2. **Caja de identidad con vigencia + frecuencia** (§2.2). El brief pide "el nombre del fijo"; se suman dos datos que ya viajan en el ítem y que son exactamente los que explican los límites del selector y el conteo. **Agregado no solicitado — confirmar** (bajo riesgo: no agrega llamadas ni decisiones).
+3. **Sugerencia de la aparición más cercana en el estado de cero** (*"La aparición más cercana es Sep 2026."*, como segunda línea de la caja de §3.2). **No especificada arriba, propuesta**: convierte un callejón en un atajo, pero agrega copy a un estado de borde. **Agregado no solicitado — confirmar antes de implementar.**
+
+### 8. Reglas duras reafirmadas
+
+- **Verde = ingreso · rojo = gasto:** el modal **no muestra ninguna cifra de dinero** y no usa `--income`/`--expense` en ningún elemento — ni siquiera en el estado de cero apariciones o en el ajuste de límite, que son **neutros** a propósito. El rojo sigue reservado a Eliminar, que no vive acá.
+- **Índigo solo marca/interacción:** aparece en el radio seleccionado, el borde de la fila elegida, el focus ring, el glifo de la nota `.field-note` y el botón primario. **No tiñe ninguna cifra** (no hay ninguna).
+- **Mono tabular para dinero:** no aplica — el modal no contiene montos. El conteo `{N}` y los rótulos `Mmm AAAA` son texto de UI y van en Space Grotesk. **Ningún elemento del modal usa IBM Plex Mono.**
+- **Ámbar `--warning` no se usa:** ni el tope de 24 meses ni el rango sin apariciones son advertencias sobre un efecto colateral peligroso. Diluir el ámbar acá le sacaría fuerza a la única familia de "prestá atención" que tiene la app.
+
+### Checklist de aceptación visual — Modal de alcance de la anulación
+
+> Montar `/mes` en un iframe del ancho objetivo (método en `docs/qa-visual.md`). Fijo de prueba recomendado: **frecuencia trimestral**, arranque `Ene 2025`, sin fin, visualizando `Jun 2026`.
+
+*Apertura y camino frecuente:*
+- [ ] Kebab de un ítem **fijo** → "Anular este mes" **abre un modal** (no togglea). En un ítem **único** y en uno de **cuota**, la misma acción **sigue togglando directo, sin modal**.
+- [ ] Título del modal = **"Anular apariciones"**; sobre un fijo ya anulado en el mes = **"Des-anular apariciones"**.
+- [ ] `document.activeElement` al abrir tiene `role="radio"` y `aria-checked="true"`, y su fila dice **"Solo este mes"** con sub **"Junio 2026"**.
+- [ ] `Enter` inmediatamente después de abrir **confirma y cierra** el modal, y la fila queda anulada (opacidad `0.55` + monto tachado + badge "Anulado").
+- [ ] En alcance "Solo este mes" **no aparece ningún toast** de éxito.
+- [ ] Con la opción 1 elegida, `document.querySelectorAll('select')` **dentro del modal = 0** (el bloque de rango **no está en el DOM**, no está oculto).
+- [ ] Alto del diálogo con la opción 1 ≈ **330px** (`getBoundingClientRect().height` entre 300 y 360).
+
+*Rango — selectores y límites:*
+- [ ] Al elegir "Un rango de meses" aparecen **2 `<select>`**, con `Desde = Hasta = Jun 2026`.
+- [ ] La **primera opción de "Hasta"** es siempre igual al valor de "Desde" (`hastaSelect.options[0].text === desdeSelect.value.text`) → **no se puede armar un rango invertido**.
+- [ ] `hastaSelect.options.length ≤ 24` en cualquier valor de "Desde".
+- [ ] "Desde" **no ofrece meses anteriores a `Ene 2025`** (arranque del fijo): su `options[0].text === "Ene 2025"`.
+- [ ] Poner `Desde = Jun 2026` y `Hasta = May 2028` (24 meses) es posible; **May 2028 es la última opción** de "Hasta".
+- [ ] Mover "Desde" a un mes posterior al "Hasta" vigente ⇒ "Hasta" **se reajusta solo** y la nota pasa a *"El ‘hasta’ se movió junto con el ‘desde’."*, en `--muted` (color computado ≠ rojo, ≠ ámbar), **misma altura de línea** que la nota base.
+- [ ] La nota `.field-note` está **siempre presente** (no aparece/desaparece): el alto del bloque de rango no cambia entre el copy base y el de ajuste.
+
+*Conteo de apariciones:*
+- [ ] Con el fijo **trimestral** (arranque Ene 2025) y rango **`Mar 2026 – Dic 2026`** (10 meses), la caja de resultado dice **"Se anulan 3 apariciones, entre Abr 2026 y Oct 2026."** — tres (Abr/Jul/Oct), no diez; y los meses de la frase son **Abr/Oct**, no Mar/Dic.
+- [ ] Con rango de **un solo mes de aparición**, dice **"Se anula una aparición: {Mmm AAAA}."** — sin el numeral "1".
+- [ ] La caja de resultado tiene `aria-live="polite"` y su texto cambia al mover cualquiera de los dos selectores.
+
+*Cero apariciones:*
+- [ ] Con el trimestral, rango **`Feb 2026 – Mar 2026`** (ninguna aparición): la caja dice *"El rango no incluye ninguna aparición: **{Nombre}** es **trimestral** y no cae en esos meses."*
+- [ ] En ese estado el botón **"Anular" está `disabled`** (`opacity-50`, `cursor-not-allowed`, sin hover) y tiene `aria-describedby` apuntando a la caja de resultado.
+- [ ] En ese estado **ningún color de error**: el borde de la caja sigue siendo `--line` y ningún texto usa `--expense-ink` ni `--warning-ink`.
+- [ ] Volviendo a la opción **"Solo este mes"**, el botón vuelve a estar **habilitado** siempre.
+
+*Reglas duras y modos:*
+- [ ] **Cero mono:** ningún nodo dentro del modal tiene `font-family` con `Plex Mono` (`[...modal.querySelectorAll('*')].filter(n => getComputedStyle(n).fontFamily.includes('Plex Mono')).length === 0`).
+- [ ] **Cero semánticos:** ningún nodo del modal usa `--income`/`--expense` como color de texto, borde o fondo, en ninguno de los estados de arriba.
+- [ ] El botón primario es **índigo** (`variant="default"`), **nunca rojo**.
+- [ ] Se ve correcto en **claro y oscuro**: radio seleccionado, borde índigo de la fila elegida, caja de identidad, caja de resultado y focus ring visibles en ambos.
+
+*Contención:*
+- [ ] A **640px** de viewport (sidebar **abierto** y **cerrado**): el diálogo mide **440px exactos**, está centrado en el viewport, **no se corre ni se angosta** al abrir/cerrar el sidebar, y no hay **scroll horizontal del `body`**.
+- [ ] A 640px con el rango abierto: los dos `<select>` quedan **lado a lado** (misma `offsetTop`), ~**173px** cada uno, sin envolver a dos filas.
+- [ ] `min-width` computado de todos los descendientes del diálogo es `0px` o `auto` (ningún piso de ancho en px que pueda ganarle al clamp).
+- [ ] A **640×560** con el rango abierto: el **cuerpo scrollea**, el título + ✕ quedan arriba y **Cancelar/Anular quedan visibles al pie** sin scrollear; aparecen las hairlines de corte.
+
+---
+
 ## Specs de fase
 
 El lenguaje visual vigente y reutilizable que salió de cada fase de implementación está consolidado en las secciones de arriba. Las decisiones puntuales de cada fase, una vez implementadas, dejan de tener documento propio: lo que sobrevive es la regla en presente; el "cuándo/por qué cambió" vive en el historial de git.

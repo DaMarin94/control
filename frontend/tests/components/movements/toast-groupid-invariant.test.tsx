@@ -323,6 +323,8 @@ beforeEach(() => {
     isUpdating: false,
     isDeleting: false,
     isSkipping: false,
+    skipRecurringRange: vi.fn(),
+    isSkippingRange: false,
   });
 
   mockUseCalculated.mockReturnValue({

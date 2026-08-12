@@ -146,3 +146,29 @@ export interface SkipRecurringResponse {
   skipped: boolean;
   month: string;
 }
+
+/**
+ * Body de POST /recurring/:id/skip, alcance RANGO (RF-MF-005, modal de
+ * alcance de la anulación). Excluyente con `SkipRecurringRequest` (month) —
+ * el controller del backend rechaza mezclar los dos shapes. Operación
+ * EXPLÍCITA (no toggle): el sentido lo declara `action`, no el estado actual.
+ */
+export interface SkipRecurringRangeRequest {
+  /** Mes desde, formato YYYY-MM, inclusive */
+  from: string;
+  /** Mes hasta, formato YYYY-MM, inclusive */
+  to: string;
+  action: "skip" | "unskip";
+}
+
+/**
+ * Respuesta de POST /recurring/:id/skip, alcance RANGO.
+ * `affectedCount` = cantidad de apariciones REALES del fijo (según su
+ * frecuencia) dentro de [from, to] — el número que informa el modal.
+ */
+export interface SkipRecurringRangeResponse {
+  action: "skip" | "unskip";
+  from: string;
+  to: string;
+  affectedCount: number;
+}

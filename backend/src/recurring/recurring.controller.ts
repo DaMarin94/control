@@ -119,17 +119,24 @@ export class RecurringController {
 
   /**
    * POST /recurring/:id/skip
-   * Toglea el skip de un fijo para un mes puntual (P1 — Fase 1.1.1).
+   * Anula / des-anula apariciones de un fijo (RF-MF-005). Dos alcances
+   * mutuamente excluyentes, según qué campos trae el body:
    *
-   * Body: { month: "YYYY-MM" }
+   * - Puntual: { month: "YYYY-MM" } → TOGGLE (comportamiento sin cambios,
+   *   P1 — Fase 1.1.1). Respuesta: { skipped: boolean, month: string }.
+   * - Rango: { from: "YYYY-MM", to: "YYYY-MM", action: "skip" | "unskip" } →
+   *   operación EXPLÍCITA (no toggle, el sentido lo declara el cliente),
+   *   idempotente en los dos sentidos, sobre el **fijo lógico completo**
+   *   (la cadena — RF-MF-007), no sobre la fila `:id`. Respuesta:
+   *   { action, from, to, affectedCount } — affectedCount es la cantidad
+   *   de apariciones REALES del fijo (según su frecuencia) dentro del rango,
+   *   para que el modal informe esa cuenta.
    *
-   * Respuesta 200 + sobre:
-   * { skipped: boolean, month: string }
-   * - skipped=true: el mes quedó anulado (no sumará a totales, aparece con skipped=true en /movements)
-   * - skipped=false: el mes fue des-anulado (vuelve a contar)
-   *
+   * 400 si el body no trae ninguno de los dos shapes completos, si mezcla
+   * campos de los dos, o si el rango viola sus límites (piso = arranque del
+   * fijo lógico, techo = último mes de aparición cuando tiene fin de
+   * vigencia, largo máximo 24 meses, from > to).
    * 404 si el fijo no existe o no pertenece al usuario.
-   * 400 si month tiene formato inválido.
    */
   @Post(':id/skip')
   toggleSkip(
@@ -137,7 +144,31 @@ export class RecurringController {
     @Param('id') id: string,
     @Body() dto: ToggleSkipRecurringDto,
   ) {
-    return this.recurringService.toggleSkip(req.user.userId, id, dto.month);
+    const hasMonth = dto.month !== undefined;
+    const hasRangeField =
+      dto.from !== undefined || dto.to !== undefined || dto.action !== undefined;
+
+    if (hasMonth && hasRangeField) {
+      throw new BadRequestException(
+        'El body debe incluir "month" (alcance puntual) o "from" + "to" + "action" (alcance de rango), no ambos',
+      );
+    }
+
+    if (hasMonth) {
+      return this.recurringService.toggleSkip(req.user.userId, id, dto.month!);
+    }
+
+    if (dto.from !== undefined && dto.to !== undefined && dto.action !== undefined) {
+      return this.recurringService.applySkipRange(req.user.userId, id, {
+        from: dto.from,
+        to: dto.to,
+        action: dto.action,
+      });
+    }
+
+    throw new BadRequestException(
+      'El body debe incluir "month" (alcance puntual) o "from" + "to" + "action" (alcance de rango)',
+    );
   }
 
   /**

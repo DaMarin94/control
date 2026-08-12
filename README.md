@@ -54,8 +54,7 @@ pnpm dev
 
 0 - Analizar si hay una forma mejor de almacenar los movimientos fijos: la cadena de splits con `chainId` obliga a que el historial agrupe por cadena y no por fila.
 1 - El `DATABASE_URL` del backend usa el endpoint pooler de Neon, pero Neon recomienda el endpoint directo (sin `-pooler`) para migraciones porque el pooler puede fallar con los advisory locks de Prisma: evaluar separar la URL de migraciones de la de runtime.
-2 - Anular en rango: a la hora de "anular este mes" quisiera que se abra un modal con las opciones: Anular este mes (preseleccionada) y anular rango (o equivalente) donde se pueda seleccionar un rango de meses a anular. Obvio esto solo es para gasto fijo.
-3 - Me gustaria que se pueda habilitar ver en los reportes pertinentes, las simulaciones creadas en la pagina del mes
+2 - Me gustaria que se pueda habilitar ver en los reportes pertinentes, las simulaciones creadas en la pagina del mes
 
 ## Tests
 

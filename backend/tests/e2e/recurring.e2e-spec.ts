@@ -94,9 +94,23 @@ const mockPrisma = {
   referenceRate: {
     findMany: jest.fn().mockResolvedValue([]),
   },
+  // recurringSkip — necesario para POST /recurring/:id/skip, alcance puntual
+  // (RecurringRepository.findSkip/createSkip/deleteSkip) y alcance de rango
+  // (RecurringRepository.applySkipRange — RF-MF-005).
+  recurringSkip: {
+    findUnique: jest.fn().mockResolvedValue(null),
+    create: jest.fn(),
+    delete: jest.fn(),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
   $queryRaw: jest.fn(),
   $connect: jest.fn(),
   $disconnect: jest.fn(),
+  // $transaction interactivo: RecurringRepository.applySkipRange (RF-MF-005)
+  // corre createMany/deleteMany dentro de una transacción. En el mock, el
+  // callback recibe el mismo mockPrisma como "cliente transaccional".
+  $transaction: jest.fn().mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(mockPrisma)),
 };
 
 // ---------------------------------------------------------------------------
@@ -674,6 +688,234 @@ describe('Recurring (e2e)', () => {
     it('401 sin JWT', async () => {
       const res = await request(app.getHttpServer())
         .delete('/recurring/rec-e2e-001?currentMonth=2026-06&fromCurrentMonth=false')
+        .expect(401);
+      expect(res.body.success).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /recurring/:id/skip — alcance puntual (toggle) y de rango (RF-MF-005)
+  // -------------------------------------------------------------------------
+
+  describe('POST /recurring/:id/skip', () => {
+    it('alcance puntual (toggle, sin cambios): + { skipped: true, month } (201 — sin @HttpCode, default de POST)', async () => {
+      const existing = makeDbRecurring({ startMonth: '2026-01' });
+      mockPrisma.recurring.findUnique.mockResolvedValue(existing);
+      mockPrisma.recurringSkip.findUnique.mockResolvedValue(null);
+
+      const res = await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ month: '2026-06' })
+        .expect(201);
+
+      expect(res.body.data).toEqual({ skipped: true, month: '2026-06' });
+      expect(mockPrisma.recurringSkip.create).toHaveBeenCalledWith({
+        data: { recurringId: 'rec-e2e-001', month: '2026-06' },
+      });
+    });
+
+    it('alcance de rango: + { action, from, to, affectedCount } — crea skips con createMany + skipDuplicates', async () => {
+      // startMonth=2026-03, frequency=3 → apariciones marzo/junio/septiembre/diciembre
+      const existing = makeDbRecurring({ startMonth: '2026-03', frequency: 3 });
+      mockPrisma.recurring.findUnique.mockResolvedValue(existing);
+      mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+        if (args?.where?.chainId !== undefined) return Promise.resolve([existing]);
+        return Promise.resolve([]);
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ from: '2026-03', to: '2026-12', action: 'skip' })
+        .expect(201);
+
+      expect(res.body.data).toEqual({
+        action: 'skip',
+        from: '2026-03',
+        to: '2026-12',
+        affectedCount: 4,
+      });
+      expect(mockPrisma.recurringSkip.createMany).toHaveBeenCalledWith({
+        data: [
+          { recurringId: 'rec-e2e-001', month: '2026-03' },
+          { recurringId: 'rec-e2e-001', month: '2026-06' },
+          { recurringId: 'rec-e2e-001', month: '2026-09' },
+          { recurringId: 'rec-e2e-001', month: '2026-12' },
+        ],
+        skipDuplicates: true,
+      });
+    });
+
+    it('alcance de rango, des-anular: borra TODOS los skips de la cadena en [from, to] con deleteMany', async () => {
+      const existing = makeDbRecurring({ startMonth: '2026-01', frequency: 1 });
+      mockPrisma.recurring.findUnique.mockResolvedValue(existing);
+      mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+        if (args?.where?.chainId !== undefined) return Promise.resolve([existing]);
+        return Promise.resolve([]);
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ from: '2026-01', to: '2026-03', action: 'unskip' })
+        .expect(201);
+
+      expect(res.body.data).toEqual({
+        action: 'unskip',
+        from: '2026-01',
+        to: '2026-03',
+        affectedCount: 3,
+      });
+      expect(mockPrisma.recurringSkip.deleteMany).toHaveBeenCalledWith({
+        where: {
+          month: { gte: '2026-01', lte: '2026-03' },
+          recurring: { chainId: existing.chainId },
+        },
+      });
+    });
+
+    it('idempotencia (rango): repetir el mismo "skip" no falla ni cambia el resultado', async () => {
+      const existing = makeDbRecurring({ startMonth: '2026-01', frequency: 1 });
+      mockPrisma.recurring.findUnique.mockResolvedValue(existing);
+      mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+        if (args?.where?.chainId !== undefined) return Promise.resolve([existing]);
+        return Promise.resolve([]);
+      });
+
+      const body = { from: '2026-01', to: '2026-02', action: 'skip' };
+      const res1 = await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send(body)
+        .expect(201);
+      const res2 = await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send(body)
+        .expect(201);
+
+      expect(res1.body.data).toEqual(res2.body.data);
+      expect(mockPrisma.recurringSkip.createMany).toHaveBeenCalledTimes(2);
+    });
+
+    it('rango que cruza un split de la cadena: resuelve cada mes contra la fila que lo cubre', async () => {
+      const r1 = makeDbRecurring({ id: 'rec-e2e-001', startMonth: '2026-01', deletedFrom: '2026-07', frequency: 2 });
+      const r2 = makeDbRecurring({ id: 'rec-e2e-002', startMonth: '2026-07', deletedFrom: null, frequency: 2 });
+      mockPrisma.recurring.findUnique.mockResolvedValue(r2);
+      mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+        if (args?.where?.chainId !== undefined) return Promise.resolve([r2, r1]);
+        return Promise.resolve([]);
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-002/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ from: '2026-02', to: '2026-10', action: 'skip' })
+        .expect(201);
+
+      expect(res.body.data.affectedCount).toBe(4);
+      expect(mockPrisma.recurringSkip.createMany).toHaveBeenCalledWith({
+        data: [
+          { recurringId: 'rec-e2e-001', month: '2026-03' },
+          { recurringId: 'rec-e2e-001', month: '2026-05' },
+          { recurringId: 'rec-e2e-002', month: '2026-07' },
+          { recurringId: 'rec-e2e-002', month: '2026-09' },
+        ],
+        skipDuplicates: true,
+      });
+    });
+
+    it('400 si el rango supera los 24 meses', async () => {
+      const existing = makeDbRecurring({ startMonth: '2020-01' });
+      mockPrisma.recurring.findUnique.mockResolvedValue(existing);
+      mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+        if (args?.where?.chainId !== undefined) return Promise.resolve([existing]);
+        return Promise.resolve([]);
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ from: '2026-01', to: '2028-02', action: 'skip' })
+        .expect(400);
+      expect(res.body.success).toBe(false);
+      expect(mockPrisma.recurringSkip.createMany).not.toHaveBeenCalled();
+    });
+
+    it('400 si el rango empieza antes del arranque del fijo (piso)', async () => {
+      const existing = makeDbRecurring({ startMonth: '2026-06' });
+      mockPrisma.recurring.findUnique.mockResolvedValue(existing);
+      mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+        if (args?.where?.chainId !== undefined) return Promise.resolve([existing]);
+        return Promise.resolve([]);
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ from: '2026-01', to: '2026-08', action: 'skip' })
+        .expect(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('400 si el rango termina después del último mes de aparición (techo)', async () => {
+      const existing = makeDbRecurring({ startMonth: '2026-01', frequency: 3, deletedFrom: '2026-08' });
+      mockPrisma.recurring.findUnique.mockResolvedValue(existing);
+      mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+        if (args?.where?.chainId !== undefined) return Promise.resolve([existing]);
+        return Promise.resolve([]);
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ from: '2026-01', to: '2026-08', action: 'skip' })
+        .expect(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('400 si el body mezcla "month" con campos de rango', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ month: '2026-06', from: '2026-01', to: '2026-02', action: 'skip' })
+        .expect(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('400 si el body no trae ni "month" ni el combo completo de rango', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ from: '2026-01', to: '2026-02' }) // falta action
+        .expect(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('400 si "action" no es "skip" ni "unskip"', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ from: '2026-01', to: '2026-02', action: 'toggle' })
+        .expect(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('404 si el fijo no existe (alcance de rango)', async () => {
+      mockPrisma.recurring.findUnique.mockResolvedValue(null);
+      const res = await request(app.getHttpServer())
+        .post('/recurring/no-existe/skip')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ from: '2026-01', to: '2026-02', action: 'skip' })
+        .expect(404);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('401 sin JWT', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/skip')
+        .send({ from: '2026-01', to: '2026-02', action: 'skip' })
         .expect(401);
       expect(res.body.success).toBe(false);
     });

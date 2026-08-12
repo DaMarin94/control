@@ -4,10 +4,14 @@
  * - Render básico: nombre, monto, categoría, tipo.
  * - Frecuencia dinámica en la sublínea de fijos (P2 — Fase 1.1.1).
  * - Render del ítem fijo anulado (skipped=true): badge, tachado, opacity (P1 — Fase 1.1.1).
- * - Acción "Anular este mes" en el KebabMenu de fijos activos (P1 — Fase 1.1.1).
+ * - Acción "Anular este mes" en el KebabMenu de fijos activos (P1 — Fase 1.1.1); en un
+ *   fijo NO calculado, esa acción abre el modal de alcance (onSkipScope), NO togglea
+ *   directo (RF-MF-005).
  * - Acción "Des-anular este mes" en el KebabMenu de fijos anulados (P1 — Fase 1.1.1).
- * - Calculados de único/cuota NO tienen la acción de anular en su KebabMenu (heredan skip del origen).
- * - Calculados de fijo SÍ tienen la acción de anular (RF-MF-005: skip propio del calculado).
+ * - Ningún calculado (de fijo, único o cuota) tiene la acción de anular en su KebabMenu
+ *   — no tiene skip propio, hereda el estado de anulación de su origen (RF-MCALC-005).
+ *   Fix de regresión: antes, un calculado de origen FIJO ofrecía la acción por error
+ *   (`isFijo` no excluía calculados).
  * - Fase 1.1.7: chip "Calculado" para hijos, indicador GitBranch para padres,
  *   monto negativo/cero, acción "Crear movimiento calculado" (ex "Crear movimiento desde este").
  * - Duplicar movimiento (docs/design.md): ítem "Duplicar" (Copy) en la 3.ª posición,
@@ -344,6 +348,7 @@ function renderRow(movement: MovementItem, viewMonth = "2026-06") {
       viewMonth={viewMonth}
       onEdit={vi.fn()}
       onDelete={vi.fn()}
+      onSkipScope={vi.fn()}
     />,
     { wrapper: createWrapper() },
   );
@@ -362,6 +367,8 @@ beforeEach(() => {
     isUpdating: false,
     isDeleting: false,
     isSkipping: false,
+    skipRecurringRange: vi.fn(),
+    isSkippingRange: false,
   });
   mockUseTransactions.mockReturnValue({
     createTransaction: vi.fn(),
@@ -439,7 +446,7 @@ describe("MovementItemRow — Card de detalle: invocación cuerpo abre card, keb
   it("'Editar' del kebab llama a onEdit sin pasar por la card", () => {
     const onEdit = vi.fn();
     render(
-      <MovementItemRow movement={fijoActivo} viewMonth="2026-06" onEdit={onEdit} onDelete={vi.fn()} />,
+      <MovementItemRow movement={fijoActivo} viewMonth="2026-06" onEdit={onEdit} onDelete={vi.fn()} onSkipScope={vi.fn()} />,
       { wrapper: createWrapper() },
     );
     fireEvent.click(screen.getByRole("button", { name: /acciones de alquiler/i }));
@@ -600,10 +607,18 @@ describe("MovementItemRow — acción Anular/Des-anular en KebabMenu (P1)", () =
     expect(screen.queryByRole("menuitem", { name: /des-anular este mes/i })).not.toBeInTheDocument();
   });
 
-  it("click en 'Anular este mes' llama a skipRecurring con el id y viewMonth", async () => {
-    mockSkipRecurring.mockResolvedValue({ success: true, skipped: true });
-
-    renderRow(fijoActivo, "2026-06");
+  it("click en 'Anular este mes' de un fijo abre el modal de alcance (onSkipScope), NO togglea directo (RF-MF-005)", () => {
+    const onSkipScope = vi.fn();
+    render(
+      <MovementItemRow
+        movement={fijoActivo}
+        viewMonth="2026-06"
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onSkipScope={onSkipScope}
+      />,
+      { wrapper: createWrapper() },
+    );
 
     const trigger = screen.getByRole("button", { name: /acciones de alquiler/i });
     fireEvent.click(trigger);
@@ -611,15 +626,25 @@ describe("MovementItemRow — acción Anular/Des-anular en KebabMenu (P1)", () =
     const anularItem = screen.getByRole("menuitem", { name: /anular este mes/i });
     fireEvent.click(anularItem);
 
-    await waitFor(() => {
-      expect(mockSkipRecurring).toHaveBeenCalledWith("rec-1", "2026-06");
-    });
+    expect(onSkipScope).toHaveBeenCalledWith(fijoActivo);
+    // Nunca togglea directo — el hook de skip puntual vive en el modal, no acá.
+    expect(mockSkipRecurring).not.toHaveBeenCalled();
+    expect(mockSkipTransaction).not.toHaveBeenCalled();
+    expect(mockSkipInstallment).not.toHaveBeenCalled();
   });
 
-  it("click en 'Des-anular este mes' llama a skipRecurring con el id y viewMonth", async () => {
-    mockSkipRecurring.mockResolvedValue({ success: true, skipped: false });
-
-    renderRow(fijoAnulado, "2026-07");
+  it("click en 'Des-anular este mes' de un fijo abre el modal de alcance (onSkipScope), NO togglea directo (RF-MF-005)", () => {
+    const onSkipScope = vi.fn();
+    render(
+      <MovementItemRow
+        movement={fijoAnulado}
+        viewMonth="2026-07"
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onSkipScope={onSkipScope}
+      />,
+      { wrapper: createWrapper() },
+    );
 
     const trigger = screen.getByRole("button", { name: /acciones de alquiler/i });
     fireEvent.click(trigger);
@@ -627,9 +652,8 @@ describe("MovementItemRow — acción Anular/Des-anular en KebabMenu (P1)", () =
     const desAnularItem = screen.getByRole("menuitem", { name: /des-anular este mes/i });
     fireEvent.click(desAnularItem);
 
-    await waitFor(() => {
-      expect(mockSkipRecurring).toHaveBeenCalledWith("rec-1", "2026-07");
-    });
+    expect(onSkipScope).toHaveBeenCalledWith(fijoAnulado);
+    expect(mockSkipRecurring).not.toHaveBeenCalled();
   });
 
   it("único NO calculado tiene la acción 'Anular' (sin 'este mes')", () => {
@@ -821,6 +845,7 @@ describe("MovementItemRow — Fase 1.1.7: indicadores calculado/padre", () => {
         viewMonth="2026-06"
         onEdit={vi.fn()}
         onDelete={vi.fn()}
+        onSkipScope={vi.fn()}
         onCreateCalculated={onCreateCalculated}
       />,
       { wrapper: createWrapper() },
@@ -842,6 +867,7 @@ describe("MovementItemRow — Fase 1.1.7: indicadores calculado/padre", () => {
         viewMonth="2026-06"
         onEdit={vi.fn()}
         onDelete={vi.fn()}
+        onSkipScope={vi.fn()}
         onCreateCalculated={onCreateCalculated}
       />,
       { wrapper: createWrapper() },
@@ -863,6 +889,7 @@ describe("MovementItemRow — Fase 1.1.7: indicadores calculado/padre", () => {
         viewMonth="2026-06"
         onEdit={vi.fn()}
         onDelete={vi.fn()}
+        onSkipScope={vi.fn()}
         onCreateCalculated={onCreateCalculated}
       />,
       { wrapper: createWrapper() },
@@ -889,6 +916,7 @@ describe("MovementItemRow — Duplicar movimiento", () => {
         viewMonth="2026-06"
         onEdit={vi.fn()}
         onDelete={vi.fn()}
+        onSkipScope={vi.fn()}
         onDuplicate={onDuplicate}
       />,
       { wrapper: createWrapper() },
@@ -908,6 +936,7 @@ describe("MovementItemRow — Duplicar movimiento", () => {
         viewMonth="2026-06"
         onEdit={vi.fn()}
         onDelete={vi.fn()}
+        onSkipScope={vi.fn()}
         onDuplicate={onDuplicate}
       />,
       { wrapper: createWrapper() },
@@ -924,7 +953,7 @@ describe("MovementItemRow — Duplicar movimiento", () => {
   it("un único NO calculado con onDuplicate muestra 'Duplicar'", () => {
     const onDuplicate = vi.fn();
     render(
-      <MovementItemRow movement={unico} viewMonth="2026-06" onEdit={vi.fn()} onDelete={vi.fn()} onDuplicate={onDuplicate} />,
+      <MovementItemRow movement={unico} viewMonth="2026-06" onEdit={vi.fn()} onDelete={vi.fn()} onSkipScope={vi.fn()} onDuplicate={onDuplicate} />,
       { wrapper: createWrapper() },
     );
 
@@ -937,7 +966,7 @@ describe("MovementItemRow — Duplicar movimiento", () => {
   it("una cuota NO calculada con onDuplicate muestra 'Duplicar'", () => {
     const onDuplicate = vi.fn();
     render(
-      <MovementItemRow movement={cuota} viewMonth="2026-06" onEdit={vi.fn()} onDelete={vi.fn()} onDuplicate={onDuplicate} />,
+      <MovementItemRow movement={cuota} viewMonth="2026-06" onEdit={vi.fn()} onDelete={vi.fn()} onSkipScope={vi.fn()} onDuplicate={onDuplicate} />,
       { wrapper: createWrapper() },
     );
 
@@ -955,6 +984,7 @@ describe("MovementItemRow — Duplicar movimiento", () => {
         viewMonth="2026-06"
         onEdit={vi.fn()}
         onDelete={vi.fn()}
+        onSkipScope={vi.fn()}
         onDuplicate={onDuplicate}
       />,
       { wrapper: createWrapper() },
@@ -975,6 +1005,7 @@ describe("MovementItemRow — Duplicar movimiento", () => {
         viewMonth="2026-06"
         onEdit={vi.fn()}
         onDelete={vi.fn()}
+        onSkipScope={vi.fn()}
         onCreateCalculated={onCreateCalculated}
         onDuplicate={onDuplicate}
       />,
@@ -1049,6 +1080,7 @@ describe("MovementItemRow — Fase 1.1.8: calculado de único", () => {
         viewMonth="2026-06"
         onEdit={vi.fn()}
         onDelete={vi.fn()}
+        onSkipScope={vi.fn()}
         onCreateCalculated={onCreateCalculated}
       />,
       { wrapper: createWrapper() },
@@ -1070,6 +1102,7 @@ describe("MovementItemRow — Fase 1.1.8: calculado de único", () => {
         viewMonth="2026-06"
         onEdit={vi.fn()}
         onDelete={vi.fn()}
+        onSkipScope={vi.fn()}
         onCreateCalculated={onCreateCalculated}
       />,
       { wrapper: createWrapper() },
@@ -1109,6 +1142,7 @@ describe("MovementItemRow — Fase 1.1.8: calculado de cuota", () => {
         viewMonth="2026-06"
         onEdit={vi.fn()}
         onDelete={vi.fn()}
+        onSkipScope={vi.fn()}
         onCreateCalculated={onCreateCalculated}
       />,
       { wrapper: createWrapper() },
@@ -1170,6 +1204,8 @@ describe("MovementItemRow — Fase 1.2.3: display cross-rate", () => {
       isUpdating: false,
       isDeleting: false,
       isSkipping: false,
+      skipRecurringRange: vi.fn(),
+      isSkippingRange: false,
     });
     mockUseTransactions.mockReturnValue({
       createTransaction: vi.fn(),
@@ -1252,22 +1288,30 @@ describe("MovementItemRow — Fase 1.2.3: display cross-rate", () => {
   });
 });
 
-// ─── Tests: skip/kebab — calculado de fijo SÍ tiene toggle anular (RF-MF-005) ─
+// ─── Tests: skip/kebab — ningún calculado ofrece la acción de anular (RF-MCALC-005) ─
+//
+// Fix del bug: antes, `showSkipToggle` se calculaba como `isFijo || (...)`, y
+// `isFijo` no excluía calculados — un calculado de origen fijo ofrecía la
+// acción indebidamente. RF-MF-005 / RF-MCALC-005 son explícitos: un calculado
+// (de fijo, único o cuota) NO tiene skip propio, hereda el estado de
+// anulación de su origen — el toggle no debe aparecer en su kebab en NINGÚN
+// caso. Estos tests reemplazan a los que antes consagraban el bug (afirmaban
+// que un calculado de fijo SÍ mostraba "Anular este mes" / "Des-anular este
+// mes" — ver git history de este archivo).
 
-describe("MovementItemRow — calculado de fijo: acción 'Anular este mes' disponible", () => {
-  it("fijo calculado activo (origin=fijo, calculated presente) SÍ muestra 'Anular este mes' en el KebabMenu", () => {
-    // El backend soporta skip propio en calculados de fijo (skipped = skip propio OR del padre).
+describe("MovementItemRow — calculado de fijo: la acción de anular NO está disponible (RF-MCALC-005)", () => {
+  it("fijo calculado activo (origin=fijo, calculated presente) NO muestra 'Anular este mes' en el KebabMenu", () => {
     renderRow(fijoCalculado);
 
     const trigger = screen.getByRole("button", { name: /acciones de ahorro/i });
     fireEvent.click(trigger);
 
     expect(
-      screen.getByRole("menuitem", { name: /anular este mes/i }),
-    ).toBeInTheDocument();
+      screen.queryByRole("menuitem", { name: /anular este mes/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it("fijo calculado anulado (skipped=true, calculated presente) muestra 'Des-anular este mes'", () => {
+  it("fijo calculado anulado (skipped=true, calculated presente) NO muestra 'Des-anular este mes'", () => {
     const fijoCalculadoAnulado: MovementItem = {
       ...fijoCalculado,
       skipped: true,
@@ -1278,12 +1322,23 @@ describe("MovementItemRow — calculado de fijo: acción 'Anular este mes' dispo
     fireEvent.click(trigger);
 
     expect(
-      screen.getByRole("menuitem", { name: /des-anular este mes/i }),
-    ).toBeInTheDocument();
-    // "Anular este mes" (sin "Des-") no debe aparecer cuando ya está anulado
+      screen.queryByRole("menuitem", { name: /des-anular este mes/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("menuitem", { name: /^anular este mes$/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("el KebabMenu de un fijo calculado tiene solo Editar y Eliminar (sin Anular)", () => {
+    renderRow(fijoCalculado);
+
+    const trigger = screen.getByRole("button", { name: /acciones de ahorro/i });
+    fireEvent.click(trigger);
+
+    const items = screen.getAllByRole("menuitem");
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveTextContent(/^editar$/i);
+    expect(items[1]).toHaveTextContent(/^eliminar$/i);
   });
 
   it("fijo NO calculado (origin=fijo, calculated=null) sigue mostrando 'Anular este mes' (regresión)", () => {

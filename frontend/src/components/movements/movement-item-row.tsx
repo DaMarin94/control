@@ -18,11 +18,15 @@
  *   5. KebabMenu de acciones (aparece en hover de la fila)
  *
  * Acciones editar/borrar: via KebabMenu (portal+fixed por overflow-hidden de la tarjeta).
- * Fijos añaden "Anular este mes" / "Des-anular este mes" (toggle skip — P1, Fase 1.1.1).
- * P3: el toggle de skip se extiende a únicos ("Anular"/"Des-anular", sin alcance temporal)
- *   y a cuotas ("Anular este mes"/"Des-anular este mes"). Calculados de único/cuota NO
- *   ofrecen el toggle (heredan el skip del origen desde el backend); calculados de fijo sí
- *   (comportamiento previo, sin cambios).
+ * Fijos añaden "Anular este mes" / "Des-anular este mes". P3: el toggle de skip se
+ *   extiende a únicos ("Anular"/"Des-anular", sin alcance temporal) y a cuotas ("Anular
+ *   este mes"/"Des-anular este mes"). Ningún calculado (de fijo, único o cuota) ofrece
+ *   la acción — no tiene skip propio, hereda el estado de anulación de su origen
+ *   (RF-MCALC-005).
+ * RF-MF-005 (modal de alcance): en un fijo NO calculado, la acción del kebab ya no
+ *   togglea directo — abre `RecurringSkipScopeModal` (montado por el padre vía
+ *   `onSkipScope`, mismo patrón que `onDelete`), que ofrece alcance "este mes" o
+ *   "un rango de meses". Único y cuota siguen togglando directo, sin modal.
  * Fase 1.1.8: "Crear movimiento calculado" (ex "Crear movimiento desde este") habilitado
  *   también en únicos y cuotas. Marca padre (GitBranch) ya no restringida a fijos —
  *   aplica a cualquier origen con hasCalculated.
@@ -78,7 +82,6 @@ import {
   Copy,
 } from "lucide-react";
 import { KebabMenu } from "@/components/ui/kebab-menu";
-import { useRecurring } from "@/hooks/use-recurring";
 import { useTransactions } from "@/hooks/use-transactions";
 import { useInstallments } from "@/hooks/use-installments";
 import { useSettings } from "@/hooks/use-settings";
@@ -104,6 +107,12 @@ interface MovementItemRowProps {
   viewMonth: string;
   onEdit: (movement: MovementItem) => void;
   onDelete: (movement: MovementItem) => void;
+  /**
+   * Abre el modal de alcance de anulación (RF-MF-005) — solo se invoca para un
+   * fijo NO calculado. Único y cuota siguen togglando directo (sin modal), vía
+   * los hooks locales de este componente.
+   */
+  onSkipScope: (movement: MovementItem) => void;
   /** Handler para "Crear movimiento calculado" — para cualquier ítem NO calculado (Fase 1.1.8) */
   onCreateCalculated?: (movement: MovementItem) => void;
   /** Handler para "Duplicar" (docs/design.md) — para cualquier ítem NO calculado */
@@ -116,8 +125,7 @@ interface MovementItemRowProps {
   limitMark?: EvaluatedLimitMark | null;
 }
 
-export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreateCalculated, onDuplicate, limitMark }: MovementItemRowProps) {
-  const { skipRecurring } = useRecurring();
+export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onSkipScope, onCreateCalculated, onDuplicate, limitMark }: MovementItemRowProps) {
   const { skipTransaction } = useTransactions();
   const { skipInstallment } = useInstallments();
   const { toast } = useToast();
@@ -186,24 +194,23 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
       ? (FREQUENCY_LABEL[movement.frequency] ?? "mensual")
       : "mensual";
 
-  // Handler para el toggle de anular/des-anular — enruta por origen (P3)
+  // Handler para el toggle directo de anular/des-anular — único y cuota NO calculados
+  // (P3). Un fijo NO togglea acá: su acción abre el modal de alcance (onSkipScope).
   async function handleSkipToggle() {
-    const result = isFijo
-      ? await skipRecurring(movement.id, viewMonth)
-      : isCuota
-        ? await skipInstallment(movement.id, viewMonth)
-        : await skipTransaction(movement.id, viewMonth);
+    const result = isCuota
+      ? await skipInstallment(movement.id, viewMonth)
+      : await skipTransaction(movement.id, viewMonth);
     if (!result.success) {
       toast.error(result.error ?? "No se pudo cambiar el estado del movimiento.");
     }
     // Si tiene éxito, React Query invalida la query del mes y la lista se refresca sola
   }
 
-  // Toggle skip visible en: fijos (incluidos calculados de fijo — RF-MF-005; un calculado
-  // de fijo puede anularse por su cuenta, su skipped = skip propio OR skip del padre) y en
-  // únicos/cuotas NO calculados (P3). Los calculados de único/cuota no ofrecen el toggle
-  // porque heredan el skip del origen desde el backend.
-  const showSkipToggle = isFijo || ((isUnico || isCuota) && !isCalculated);
+  // Toggle skip visible en cualquier ítem NO calculado (fijo, único o cuota). Ningún
+  // calculado ofrece la acción — no tiene skip propio, hereda el estado de anulación
+  // de su origen (RF-MCALC-005). Antes, `isFijo` no excluía calculados y un calculado
+  // de origen fijo ofrecía la acción indebidamente — corregido acá.
+  const showSkipToggle = !isCalculated;
   // Rótulo: fijo y cuota llevan "este mes" (alcance temporal); único no (P3 spec).
   const skipLabel = isUnico
     ? isSkipped
@@ -229,7 +236,8 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onCreat
           {
             label: skipLabel,
             icon: isSkipped ? CalendarPlus : CalendarOff,
-            onSelect: handleSkipToggle,
+            // Fijo (RF-MF-005) → abre el modal de alcance; único/cuota → toggle directo.
+            onSelect: isFijo ? () => onSkipScope(movement) : handleSkipToggle,
           },
         ]
       : []),

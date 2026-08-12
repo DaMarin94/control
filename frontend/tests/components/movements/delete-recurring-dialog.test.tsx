@@ -159,6 +159,8 @@ beforeEach(() => {
     isUpdating: false,
     isDeleting: false,
     isSkipping: false,
+    skipRecurringRange: vi.fn(),
+    isSkippingRange: false,
   });
 });
 
@@ -326,6 +328,8 @@ describe("DeleteRecurringDialog — variante calculated-simple", () => {
       isUpdating: false,
       isDeleting: false,
       isSkipping: false,
+      skipRecurringRange: vi.fn(),
+      isSkippingRange: false,
     });
   });
 

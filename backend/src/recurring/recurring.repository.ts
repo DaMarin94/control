@@ -88,6 +88,22 @@ export interface SkipToggleResult {
   month: string;
 }
 
+/** Acción explícita del alcance de rango de anulación (RF-MF-005). No es un toggle. */
+export type SkipRangeAction = 'skip' | 'unskip';
+
+/**
+ * Resultado de aplicar un rango de anulación/des-anulación (RF-MF-005).
+ * affectedCount = cantidad de apariciones REALES del fijo (según su frecuencia)
+ * dentro de [from, to] — no la cantidad de meses del rango ni la cantidad de
+ * filas de skip efectivamente escritas/borradas (la operación es idempotente).
+ */
+export interface SkipRangeResult {
+  action: SkipRangeAction;
+  from: string;
+  to: string;
+  affectedCount: number;
+}
+
 // Include para todas las queries de Recurring
 const RECURRING_INCLUDE = {
   category: {
@@ -446,6 +462,45 @@ export class RecurringRepository {
   async deleteSkip(recurringId: string, month: string): Promise<void> {
     await this.prisma.recurringSkip.delete({
       where: { recurringId_month: { recurringId, month } },
+    });
+  }
+
+  /**
+   * Aplica el alcance de RANGO de RF-MF-005 sobre TODA la cadena (chainId),
+   * en una transacción. El caller (RecurringService.applySkipRange) ya resolvió
+   * qué fila de la cadena cubre cada mes candidato y filtró por frecuencia real.
+   *
+   * - action = 'skip': crea un RecurringSkip por cada `entries` que no exista
+   *   todavía. `createMany` + `skipDuplicates: true` es idempotente contra el
+   *   `@@unique([recurringId, month])` — no duplica los ya anulados.
+   * - action = 'unskip': borra TODOS los RecurringSkip de CUALQUIER fila de la
+   *   cadena cuyo mes caiga en [from, to] inclusive — no solo los de las filas
+   *   que HOY cubren esos meses. Así "quita todas las anulaciones... sin
+   *   importar cómo se crearon" (RF-MF-005, A2), incluidas anulaciones que
+   *   hubieran quedado huérfanas en una fila superada por un split posterior.
+   */
+  async applySkipRange(
+    chainId: string,
+    action: SkipRangeAction,
+    entries: Array<{ recurringId: string; month: string }>,
+    from: string,
+    to: string,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      if (action === 'skip') {
+        if (entries.length === 0) return;
+        await tx.recurringSkip.createMany({
+          data: entries,
+          skipDuplicates: true,
+        });
+      } else {
+        await tx.recurringSkip.deleteMany({
+          where: {
+            month: { gte: from, lte: to },
+            recurring: { chainId },
+          },
+        });
+      }
     });
   }
 }
