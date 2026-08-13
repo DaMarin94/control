@@ -13,6 +13,18 @@
  * Ante un 401: toast + signOut → /login. Guardado con un flag a nivel de
  * módulo porque el token expirado hace fallar varias queries en simultáneo
  * y solo debe dispararse una vez (un toast, un signOut, no un loop).
+ *
+ * Por qué el 401 NUNCA reintenta (gotcha de TanStack Query):
+ * Reintentar un 401 es inútil — el token seguirá siendo inválido — pero
+ * además es activamente dañino: entre el primer fallo y el reintento
+ * programado, TanStack Query espera `retryDelay` (~1s) y, si en ese
+ * instante la pestaña no está visible (`document.visibilityState !==
+ * "visible"` — p.ej. Chrome "occlusion" al taparla con otra ventana), el
+ * retryer queda "paused" indefinidamente hasta que la pestaña vuelve a
+ * estar visible. Mientras está paused, la query NUNCA transiciona a
+ * "error" → QueryCache.onError no dispara → sin toast, sin signOut, y la
+ * pantalla queda colgada en skeleton. Excluir el 401 de `retry` evita la
+ * ventana de espera por completo: el error se propaga en el mismo tick.
  */
 
 import { QueryCache, QueryClient, QueryClientProvider, MutationCache } from "@tanstack/react-query";
@@ -55,8 +67,10 @@ export function createQueryClient(): QueryClient {
       queries: {
         // Tiempo que los datos se consideran frescos antes de refetch (1 min)
         staleTime: 60 * 1000,
-        // Reintentos en error: solo 1 vez (no martillar al backend)
-        retry: 1,
+        // Reintentos en error: solo 1 vez (no martillar al backend), EXCEPTO
+        // en un 401 — ver comentario arriba del porqué no reintenta nunca.
+        retry: (failureCount, error) =>
+          error instanceof ApiError && error.statusCode === 401 ? false : failureCount < 1,
         // No refetch al recuperar el foco de la ventana en desarrollo
         refetchOnWindowFocus: process.env.NODE_ENV === "production",
       },
