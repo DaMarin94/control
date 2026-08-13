@@ -145,6 +145,7 @@ export class InstallmentsController {
    * 400 si month tiene formato inválido.
    */
   @Post(':id/skip')
+  @HttpCode(HttpStatus.OK)
   toggleSkip(
     @Request() req: AuthRequest,
     @Param('id') id: string,

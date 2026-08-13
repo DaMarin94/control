@@ -315,7 +315,7 @@ Tabla **global** (sin `userId`), **interna y no editable por UI**, que guarda un
 
 ## Cotizaciones externas y sincronización (P7a / P7b)
 
-> Captura de cotizaciones FX y de IPC desde fuentes oficiales externas, vía un trigger sin datos en el body (`POST /settings/reference-rates/sync`). El sync captura **solo el mes corriente** (FX e IPC); no puebla histórico. El histórico de IPC viene sembrado por una data migration (`20260623000000_seed_historical_ipc`, ver §`InflationRate`). Tres tablas nuevas —`CurrencyQuote` (variantes FX), `InflationRate` (IPC), `RateSyncLog` (auditoría)— **globales** (sin `userId`), internas, no editables por UI. Reglas funcionales en `requirements.md`, módulo 3.12 (RF-FX-001, RF-IPC-001). Decisiones técnicas de seguridad de la ingesta en `.claude/agents/control-backend.md`, §Sincronización de cotizaciones externas.
+> Captura de cotizaciones FX y de IPC desde fuentes oficiales externas, vía un trigger sin datos en el body (`POST /settings/reference-rates/sync`). Cada corrida captura **un solo mes**: el **mes en curso** para FX, el **último mes publicado por la fuente** para IPC (ver RF-IPC-001); no puebla histórico. El histórico de IPC viene sembrado por una data migration (`20260623000000_seed_historical_ipc`, ver §`InflationRate`). Tres tablas —`CurrencyQuote` (variantes FX), `InflationRate` (IPC), `RateSyncLog` (auditoría)— **globales** (sin `userId`), internas, no editables por UI. Reglas funcionales en `requirements.md`, módulo 3.12 (RF-FX-001, RF-IPC-001). Decisiones técnicas de seguridad de la ingesta en `.claude/agents/control-backend.md`, §Sincronización de cotizaciones externas.
 
 ### `CurrencyQuote` — variantes de cotización FX (tabla relacional)
 
@@ -352,7 +352,7 @@ Tabla **global**, **interna y no editable por UI**, que guarda el IPC nacional (
 
 - **Clave única `yearMonth`.** El IPC nacional es un único valor por mes (sin moneda ni variante). Upsert idempotente por esta clave.
 - **Consumo.** No alimenta la conversión de monedas ni los totales del mes. La consumen el reporte anual de gastos Únicos (RF-REP-010, footer de inflación y % ajustado; ver §Contrato de reporte anual de Únicos) y el reporte anual de Inflación vs Ingresos (RF-REP-012, serie de inflación y ajuste del ingreso; ver §Contrato de reporte anual de Inflación vs Ingresos).
-- **Histórico sembrado por data migration (`20260623000000_seed_historical_ipc`).** El histórico de IPC viene horneado por esta migración de Prisma: **113 meses (2017-01 … 2026-05)** de la serie completa de INDEC (`apis.datos.gob.ar`, variación e índice) insertados con `ON CONFLICT ("yearMonth") DO NOTHING`. Idempotente y convive con el sync diario sin pisarse: el sync solo cubre el **mes corriente**, la migración cubre el pasado.
+- **Histórico sembrado por data migration (`20260623000000_seed_historical_ipc`).** El histórico de IPC viene horneado por esta migración de Prisma: **113 meses (2017-01 … 2026-05)** de la serie completa de INDEC (`apis.datos.gob.ar`, variación e índice) insertados con `ON CONFLICT ("yearMonth") DO NOTHING`. Idempotente y convive con el sync sin pisarse: el sync solo cubre el **último mes publicado por la fuente**, la migración cubre el pasado.
 
 ### `RateSyncLog` — auditoría de la sincronización
 

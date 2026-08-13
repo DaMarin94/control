@@ -139,6 +139,7 @@ export class RecurringController {
    * 404 si el fijo no existe o no pertenece al usuario.
    */
   @Post(':id/skip')
+  @HttpCode(HttpStatus.OK)
   toggleSkip(
     @Request() req: AuthRequest,
     @Param('id') id: string,

@@ -145,6 +145,7 @@ export class TransactionsController {
    * 404 si la transacción no existe o no pertenece al usuario.
    */
   @Post(':id/skip')
+  @HttpCode(HttpStatus.OK)
   toggleSkip(@Request() req: AuthRequest, @Param('id') id: string) {
     return this.transactionsService.toggleSkip(req.user.userId, id);
   }

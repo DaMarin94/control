@@ -198,7 +198,7 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 - **Ordenar secciones** (RF-VM-005) — un botón del header ("Ordenar secciones" / "Listo") activa/desactiva el **modo orden**. En modo orden el usuario **arrastra las secciones para reordenarlas entre sí** (no los ítems internos); el colapsar/expandir queda suspendido (la cabecera arrastra) y "+ Nuevo movimiento" se deshabilita. El orden se **aplica en vivo** y se **persiste por usuario**; no hay acción de cancelar. El shape de la preferencia (`monthSections`) está en `data-model.md`.
 - **Filtrar una sección** (RF-VM-006) — abre el disparador de filtro de la sección y ajusta su **tipo** (Gasto / Ingreso / Ambos) y/o su **categoría** (tres estados: todas / subconjunto / ninguna); la lista de esa sección, su pill contador y su subtotal se recalculan al instante, y los totales del mes reflejan la suma de lo visible. Cada sección tiene controles independientes. El filtro de categoría de una sección lista **solo las categorías presentes en sus movimientos** (no el catálogo completo). **Ocultos en modo orden.** La selección persiste por usuario (clave `monthListFilters`) y se conserva al navegar de mes.
 - **Ordenar la sección Únicos** (RF-VM-001) — el control de orden de la cabecera de **Únicos** alterna entre **por monto** (descendente, default) y **por fecha** (más reciente primero). Solo aplica a Únicos; el orden se persiste por usuario (clave `unicosSort`).
-- **Simular una categoría** (RF-SIM-001) — desde el disparador de filtro de la sección **Únicos**, la acción "Simular categoría" ofrece las **categorías activas** del usuario y crea la simulación sobre **una** de ellas. Una categoría **sin 3 meses con únicos** en los 12 meses anteriores, o **ya simulada**, se ofrece **deshabilitada con el motivo visible** (nunca oculta). Al confirmar, los meses futuros del horizonte pasan a mostrar su movimiento simulado. La simulación **no se edita**: no se ajusta monto ni dirección.
+- **Simular una categoría** (RF-SIM-001) — desde el disparador de filtro de la sección **Únicos**, la acción "Simular categoría" ofrece las **categorías activas** del usuario y crea la simulación sobre **una** de ellas. Una categoría **sin 3 meses con únicos** en los 12 meses anteriores, o **ya simulada**, se ofrece **deshabilitada con el motivo visible** (nunca oculta). Al confirmar, los meses futuros del horizonte pasan a mostrar su movimiento simulado. La simulación **no se edita**: no se ajusta monto ni dirección. La pantalla **expone el horizonte vigente** (hasta qué mes alcanza la proyección, RF-SIM-002) en las dos superficies donde el usuario lo necesita: al elegir la categoría y en el listado de simulaciones activas.
 - **Eliminar una simulación** (RF-SIM-004) — el mismo disparador lista las **simulaciones** del usuario; al eliminar una y confirmar, sus movimientos simulados dejan de derivarse en todos los meses futuros y los totales se recalculan. La eliminación es **definitiva**: no queda registrada en el historial y no se puede deshacer; recuperarla es volver a crear la simulación.
 - **Ver los límites que observan la vista** (RF-LIM-005) — el ícono informativo junto al rótulo del mes abre el popover de solo lectura con el listado. Es informativo: no edita ni activa/desactiva límites (eso vive en `/configuracion/limites`).
 - Acciones globales del sidebar.
@@ -216,7 +216,7 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 - **Modo orden activo (RF-VM-005):** las secciones se pueden arrastrar para reordenarlas; el colapsar/expandir queda suspendido y "+ Nuevo movimiento" deshabilitado. El orden se aplica en vivo y se persiste.
 - **Vacío (sin movimientos en el mes):** **no hay un mensaje de estado vacío global**. Las tres secciones aparecen vacías, cada una con su empty inline propio ("Sin movimientos únicos" / "Sin fijos" / "Sin cuotas"), y los totales del mes en cero, sin error.
 - **Filtros por listado aplicados (RF-VM-006):** cada sección refleja su filtro de tipo y de categoría; su pill y subtotal muestran lo filtrado y los totales del mes suman lo visible en las tres. Una sección cuyo filtro no matchea ningún movimiento (o con categoría en estado **"ninguna"**) queda vacía y no aporta a los totales (sin error). En **modo orden** los controles de filtro no se muestran.
-- **Mes futuro con simulación activa (RF-SIM-003):** la sección Únicos lista, junto a los movimientos reales del mes, los **simulados** de cada simulación cuyo horizonte alcanza ese mes, diferenciados visualmente y sumando a subtotal, contador y totales. Un mes futuro **fuera** del horizonte, o sin simulaciones activas, se ve exactamente igual que sin la feature. Un mes cuyo valor proyectado redondea a **0** no lleva fila simulada de esa simulación.
+- **Mes futuro con simulación activa (RF-SIM-003):** la sección Únicos lista, junto a los movimientos reales del mes, los **simulados** de cada simulación cuyo horizonte alcanza ese mes, diferenciados visualmente y sumando a subtotal, contador y totales — que **señalan que incluyen simulados** mientras haya alguno a la vista (RF-SIM-003). Un mes futuro **fuera** del horizonte, o sin simulaciones activas, se ve exactamente igual que sin la feature. Un mes cuyo valor proyectado redondea a **0** no lleva fila simulada de esa simulación.
 - **Simulación pausada (RF-SIM-002):** una simulación cuya categoría queda por debajo de los **3 meses con únicos** sigue existiendo pero **no deriva movimientos**. La pantalla lo explica en las dos superficies donde el usuario puede preguntárselo: el listado de simulaciones del disparador de filtro (con el motivo por simulación) y el listado de Únicos del mes futuro donde esperaba ver la fila. Vuelve a proyectar sola si la categoría recupera datos.
 - **Card de detalle abierta (RF-VM-007):** superpuesta a la pantalla, en modo solo lectura puro (sin acciones ni footer), sobre el movimiento clickeado. No tiene estado de carga, vacío ni error propios: presenta el dato que la lista ya tiene. Cierra con ✕, Esc o clic en el scrim.
 - **Error:** si falla la carga del mes, se informa el error sin romper la pantalla.
@@ -446,7 +446,7 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 
 ## 9. Configuración (`/configuracion`)
 
-**RF relacionados:** RF-CUR-002, RF-CUR-005, RF-CUR-006, RF-LIM-001, RF-LIM-002, RF-NAV-001. Las secciones **Categorías** (RF-CAT-*) y **Métodos de pago** (RF-PM-*) montan los gestores documentados en §6 y §10.
+**RF relacionados:** RF-CUR-002, RF-CUR-005, RF-CUR-006, RF-LIM-001, RF-LIM-002, RF-SYNC-002, RF-NAV-001. Las secciones **Categorías** (RF-CAT-*) y **Métodos de pago** (RF-PM-*) montan los gestores documentados en §6 y §10.
 
 > **Ruta:** `/configuracion`. **Link en el sidebar**, debajo de "Historial" (orden: Dashboard → Vista del mes → Reportes → Historial → Configuración).
 
@@ -467,6 +467,12 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 **Sección General:**
 - **Ajuste "Moneda por defecto"** (RF-CUR-002): selector entre las **4 monedas curadas (ARS / USD / EUR / BRL)**. Es la moneda en la que se expresan todos los totales (vista del mes, dashboard, reportes). Se lee/escribe vía el contrato `/settings` (ver `data-model.md`).
 - **Sin editor de la tabla de cotizaciones de referencia:** la tabla de referencia es **interna y no editable por UI** (RF-CUR-006), así que General **no** la muestra ni la edita.
+- **Bloque "Datos externos"** (RF-SYNC-002; el dato lo capturan RF-FX-001 y RF-IPC-001): vive **dentro de General**, debajo de la card de moneda. **No** es una quinta sección del hub ni tiene ruta propia. Muestra de **solo lectura** lo que el sistema capturó de las fuentes externas y ofrece dispararlas a mano. Anatomía:
+  - **Cabecera:** título **"Datos externos"**, bajada **"Inflación y cotizaciones que Control usa para convertir y ajustar tus montos."** y el botón **"Actualizar datos"** (**"Actualizando…"** mientras la corrida está en curso).
+  - **Inflación (IPC):** el dato más reciente destacado bajo el eyebrow **"Último dato"** —mes del dato, rótulo **"Variación mensual"** y la variación en %— y, debajo, el resto de los meses del año en curso con su variación. Sin más meses que listar: **"Todavía no hay más datos de {año}."**. La acción **"Ver meses anteriores"** (**"Cargando…"** mientras trae) extiende el historial **un año hacia atrás** por vez y desaparece cuando no queda historial por traer.
+  - **Cotizaciones:** rótulo **"Cotizaciones"**, bajada **"Valores del mes en curso."** y cuatro valores rotulados **"Dólar oficial"**, **"Dólar blue"**, **"Euro"** y **"Real"**; el que no tiene dato capturado muestra un guion.
+  - **Pie:** **"Última actualización: {fecha y hora} · Fuentes: INDEC (inflación) · dolarapi (dólar) · frankfurter (euro, real)."**, donde el instante es el de captura más reciente de todo lo mostrado.
+  - El bloque **no edita** cotizaciones ni IPC (la tabla de referencia sigue siendo interna, RF-CUR-006): lo único que escribe es la corrida de actualización.
 
 **Sección Categorías:** monta el gestor de categorías descrito en **§6**, en `/configuracion/categorias`. Su contenido, acciones, modal y estados son los de §6.
 
@@ -484,6 +490,8 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 
 - **Navegar entre secciones** — la navegación vertical cambia la sección activa y la **URL anidada** sin salir del hub (deep-linkable).
 - **General — cambiar la moneda por defecto** — al elegir una de las 4 monedas, el cambio se persiste (`PATCH /settings`) y **re-expresa los totales en vivo** sin tocar ningún movimiento guardado (RF-CUR-005).
+- **General — actualizar los datos externos** — el botón "Actualizar datos" dispara la captura desde las fuentes y resuelve por **toast**, uno por cada desenlace de RF-SYNC-002: **"Datos actualizados."** / **"Ya estás al día. No había datos nuevos."** / **"No se pudieron actualizar los datos. Intentá de nuevo."**. El botón queda deshabilitado mientras corre.
+- **General — ver meses anteriores de inflación** — extiende el historial de IPC un año hacia atrás por vez, sin salir del bloque.
 - **Categorías — crear / editar / eliminar** — según §6.
 - **Métodos de pago — crear / editar / eliminar / predeterminar por estructura** — según §10.
 - **Límites — crear / eliminar / activar-desactivar** un límite (RF-LIM-002). **No hay editar**: para cambiar un límite se elimina y se crea de nuevo. Cada cambio persiste el blob completo vía `PUT /preferences`.
@@ -498,8 +506,9 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 ### Estados
 
 - **Sección activa por URL:** entrar a `/configuracion` abre General; entrar directo a `/configuracion/categorias`, `/configuracion/metodos-pago` o `/configuracion/limites` abre esa sección con su link vertical marcado.
-- **Cargando:** cada sección resuelve sus propios datos —General vía `GET /settings`; Categorías y Métodos de pago sus listas (§6, §10); Límites el blob de preferencias.
-- **Con datos:** General refleja la moneda default vigente; Categorías y Métodos de pago sus gestores; Límites lista los límites del usuario.
+- **Cargando:** cada sección resuelve sus propios datos —General vía `GET /settings`; Categorías y Métodos de pago sus listas (§6, §10); Límites el blob de preferencias. El bloque **Datos externos** de General carga aparte del ajuste de moneda: uno puede estar resuelto y el otro no.
+- **Con datos:** General refleja la moneda default vigente y el último snapshot de datos externos; Categorías y Métodos de pago sus gestores; Límites lista los límites del usuario.
+- **Datos externos sin poder cargar:** el bloque informa el fallo en el lugar de sus cifras y no rompe el resto de General (la moneda por defecto sigue editable).
 - **Vacío (Límites):** empty-state cuando no hay límites configurados. (Los vacíos de Categorías y Métodos de pago se describen en §6 y §10.)
 - **Guardando / error al guardar:** el cambio se confirma al persistir; ante error del backend se informa sin romper la pantalla (RNF-008) y el ajuste queda sin cambios.
 
@@ -579,15 +588,17 @@ Ver los cambios recientes sobre los movimientos —qué se editó, qué se elimi
 ### Contenido
 
 - **Sidebar** con el link "Historial" marcado como activo.
-- **Header de la pantalla** con el rótulo de la sección. **Sin navegación de período** (el historial no se recorre por mes) y **sin chip de moneda default** (no expone totales; ver Convenciones).
+- **Header de la pantalla** con el rótulo de la sección y la bajada que enuncia la retención vigente (RF-HIST-005): **"Se guardan los últimos 5 cambios de cada movimiento, durante 31 días."**. **Sin navegación de período** (el historial no se recorre por mes) y **sin chip de moneda default** (no expone totales; ver Convenciones).
 - **Lista de entradas de historial** (RF-HIST-002) de **todos** los movimientos del usuario, en una única lista cronológica con la **más reciente primero**. Cada entrada muestra:
   - **Identidad del movimiento:** nombre, tipo (único / fijo / cuotas, y si es calculado) y categoría.
   - **Operación:** **editado** o **eliminado**.
   - **Momento del cambio.**
   - **Qué cambió:** en una **edición**, los campos modificados con su **valor anterior → valor nuevo**; en una **eliminación**, el movimiento tal como estaba antes de borrarse.
-  - **Acción Deshacer**, o —si la entrada está bloqueada (RF-HIST-004)— la misma acción **rotulada como bloqueada y con el motivo visible** ("hay N cambios posteriores de este movimiento"). La acción bloqueada **sigue siendo operable**: abre la explicación del bloqueo con la propuesta de desbloqueo en cadena.
+  - **Acción "Deshacer"**, o —si la entrada está bloqueada (RF-HIST-004)— la misma acción rotulada **"Bloqueado"** con el motivo a la vista: **"Hay N cambio posterior"** / **"Hay N cambios posteriores"**. La acción bloqueada **sigue siendo operable**: abre la explicación del bloqueo con la propuesta de desbloqueo en cadena. El cuerpo de la fila abre el mismo modal que su botón.
 - Las entradas **purgadas** por retención (RF-HIST-005: 5 por movimiento o 31 días) ya no figuran.
 - Un movimiento **eliminado** figura acá aunque no aparezca en ninguna otra superficie de la app (RF-HIST-006).
+- **Modal de deshacer** (entrada deshacible, RF-HIST-003), superpuesto a la pantalla: título **"Deshacer cambio"**; la línea **"Se va a restaurar {movimiento} al estado que tenía antes de este cambio."**; la identidad del movimiento (categoría, estructura y momento del cambio); el bloque de lo que se revierte, encabezado **"Al deshacer queda así:"** en una edición y **"Vuelve a la app:"** en una eliminación; y la **nota de consecuencia** **"Esta entrada se borra del historial."**. Acciones **Cancelar** y **Deshacer** (**"Deshaciendo…"** mientras se aplica).
+- **Modal de entrada bloqueada** (RF-HIST-004): título **"Hay cambios posteriores"**; la explicación de que este no es el cambio más reciente del movimiento y que para deshacerlo hay que deshacer antes **el cambio posterior** / **los N cambios posteriores**; el listado en orden bajo el encabezado **"Se van a deshacer, en este orden:"**, con cada entrada identificada por su momento, su operación (**"Editado"** / **"Eliminado"**) y un resumen de lo que cambió, y la entrada abierta marcada **"(esta)"**; y la **nota de consecuencia** **"Todas se borran del historial."**. Acciones **Cancelar** y **"Deshacer el cambio"** / **"Deshacer los N cambios"**.
 - El detalle visual de la lista, de la representación anterior → nuevo y del estado bloqueado lo define `control-design` (`docs/design.md`).
 
 ### Acciones disponibles

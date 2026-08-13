@@ -359,8 +359,8 @@ Gestión de movimientos fijos, **scopeada por `userId` del JWT**. El módulo exp
 |----------|---------|-------|---------|
 | `POST /recurring` | `{ type, amountCents, categoryId, startMonth, frequency?, description? }` | `201` · `data: Recurring` | `400` |
 | `PATCH /recurring/:id` | `{ amountCents?, categoryId?, description?, currentMonth }` | `200` · `data: Recurring & { historyEntryId }` | `400` · `404` |
-| `POST /recurring/:id/skip` | `{ month }` (`YYYY-MM`) | `201` · `data: { skipped, month }` | `400` · `404` |
-| `POST /recurring/:id/skip` | `{ from, to, action }` | `201` · `data: { action, from, to, affectedCount }` | `400` · `404` |
+| `POST /recurring/:id/skip` | `{ month }` (`YYYY-MM`) | `200` · `data: { skipped, month }` | `400` · `404` |
+| `POST /recurring/:id/skip` | `{ from, to, action }` | `200` · `data: { action, from, to, affectedCount }` | `400` · `404` |
 | `POST /recurring/:id/calculated` | calculado desde el fijo `:id` | `201` · `data: Recurring` | `400` · `404` |
 | `PATCH /recurring/:id/calculated` | edita el calculado `:id` | `200` · `data: Recurring` | `400` · `404` |
 | `DELETE /recurring/:id` | query: `currentMonth`, `fromCurrentMonth` | `200` · `data: { historyEntryId }` | `404` |
@@ -379,7 +379,7 @@ Gestión de movimientos fijos, **scopeada por `userId` del JWT**. El módulo exp
 | `{ month: "YYYY-MM" }` | **Toggle** puntual: si existe el skip `(fila, mes)` lo borra, si no lo crea. | `{ skipped: boolean, month }` |
 | `{ from, to, action: "skip" \| "unskip" }` | Operación **explícita** (el sentido lo declara el cliente, no se togglea) e **idempotente en los dos sentidos** sobre `[from, to]` inclusive. | `{ action, from, to, affectedCount }` |
 
-- **Responde `201`, no `200`** (los dos alcances): es un `@Post` sin `@HttpCode`, así que devuelve el default de NestJS.
+- **Responde `200`, no `201`** (los dos alcances): el POST no crea un recurso nuevo direccionable — es un toggle / una operación sobre las anulaciones del fijo. Mismo criterio que `POST /transactions/:id/skip` y `POST /installments/:id/skip`.
 - **`affectedCount` = apariciones reales** del fijo (según su frecuencia) dentro de `[from, to]`. Es **independiente de cuántas filas se escribieron o borraron realmente**: la idempotencia no cambia el número informado.
 - **El rango opera sobre la cadena completa (`chainId`), no sobre la fila `:id`.** Resuelve **mes por mes qué fila cubre ese mes**, así un rango que cruza un split de edición alcanza también los meses de las filas anteriores. El `unskip` **borra por `chainId` + rango** (todos los `RecurringSkip` de cualquier fila de la cadena con `month` en `[from, to]`), no por la lista de apariciones calculada: así limpia además anulaciones que quedaron en filas superadas por un split posterior.
 - **Todo el rango se aplica en una transacción.**

@@ -36,7 +36,7 @@
 | Reportes + listado — filtro vía leyenda interactiva en cards y orden configurable de Únicos | RF-REP-002/006, RF-VM-001 | Implementado |
 | Navegación global — sidebar persistente (5 entradas: Dashboard, Vista del mes, Reportes, Historial, Configuración) | RF-NAV-001 | Implementado |
 | Configuración — hub con 4 secciones deep-linkables (General, Categorías, Métodos de pago, Límites) bajo `/configuracion/*`; Categorías y Métodos de pago no son entradas del sidebar (ver `docs/frontend.md` § Hub de Configuración) | RF-NAV-001 | Implementado |
-| Navegación global — sidebar mostrable/ocultable por el usuario en todos los anchos, estado persistido (blob `sidebarOpen`, default abierto) | RF-NAV-002 | Definido (no implementado) |
+| Navegación global — sidebar mostrable/ocultable por el usuario en todos los anchos, estado persistido (blob `sidebarOpen`, default abierto) | RF-NAV-002 | Implementado |
 | Crear categoría desde el formulario de movimiento | RF-MU-004 | Implementado |
 | Reportes — pantalla configurable por cards + widget en dashboard | RF-REP-001..005 | Implementado |
 | Reportes — toggle de representación Barra / Línea en la card Gastos por categoría | RF-REP-006 | Implementado |
@@ -56,7 +56,8 @@
 | Gate por debajo del ancho mínimo soportado (640px) — bloqueo CSS puro a viewport completo, cubre toda la app incluido login | RF-APP-002 | Implementado |
 | Límites — marca visual pasiva (todas las superficies: `/mes`, dashboard y los 5 reportes de `/reportes`) + alerta activa (aviso no bloqueante al guardar en los 4 forms de movimiento, keys `mes.*`) + panel en la sección Límites del hub (`/configuracion/limites`, blob `limits`, client-side) | RF-LIM-001..004, RN-022 | Implementado |
 | Límites — popover informativo por superficie (ícono `Info` + listado read-only agrupado por naturaleza; en las 5 cards de `/reportes` y en `/mes`, nunca en el Dashboard; incluye deshabilitados atenuados y refleja el alcance temporal) | RF-LIM-005 | Implementado |
-| Sincronización de cotizaciones externas — FX (dolarapi/Frankfurter) + IPC (datos.gob.ar) vía trigger sin datos | RF-FX-001, RF-IPC-001, RF-SYNC-001 | Definido (no implementado) |
+| Sincronización de cotizaciones externas — FX (dolarapi/Frankfurter) + IPC (datos.gob.ar) vía trigger sin datos, protegido por `CRON_SECRET` | RF-FX-001, RF-IPC-001, RF-SYNC-001 | Implementado |
+| Datos externos en `/configuracion` → General — vista de solo lectura del IPC (último dato + historial) y las cotizaciones del mes + disparo manual de la ingesta autenticado por sesión (tres desenlaces distinguibles por toast) | RF-SYNC-002 | Implementado |
 | Historial de cambios (`/historial`) — registro de ediciones y eliminaciones de movimientos + deshacer LIFO por movimiento (simple y en cadena), borrado lógico reversible, retención 5 por movimiento / 31 días | RF-HIST-001..006, RN-024..026 | Implementado |
 | Historial — deshacer inmediato desde el toast de éxito de editar/eliminar (4 formas, sin confirmación) | RF-HIST-007 | Implementado |
 | Simulación de categoría — alta/baja desde el filtro de Únicos de `/mes` + movimiento simulado derivado por regresión lineal en los meses futuros del horizonte | RF-SIM-001..004, RN-028/029 | Implementado |

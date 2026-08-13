@@ -698,7 +698,7 @@ describe('Recurring (e2e)', () => {
   // -------------------------------------------------------------------------
 
   describe('POST /recurring/:id/skip', () => {
-    it('alcance puntual (toggle, sin cambios): + { skipped: true, month } (201 — sin @HttpCode, default de POST)', async () => {
+    it('alcance puntual (toggle, sin cambios): + { skipped: true, month } (200 — @HttpCode(OK), es un toggle)', async () => {
       const existing = makeDbRecurring({ startMonth: '2026-01' });
       mockPrisma.recurring.findUnique.mockResolvedValue(existing);
       mockPrisma.recurringSkip.findUnique.mockResolvedValue(null);
@@ -707,7 +707,7 @@ describe('Recurring (e2e)', () => {
         .post('/recurring/rec-e2e-001/skip')
         .set('Authorization', `Bearer ${tokenA}`)
         .send({ month: '2026-06' })
-        .expect(201);
+        .expect(200);
 
       expect(res.body.data).toEqual({ skipped: true, month: '2026-06' });
       expect(mockPrisma.recurringSkip.create).toHaveBeenCalledWith({
@@ -728,7 +728,7 @@ describe('Recurring (e2e)', () => {
         .post('/recurring/rec-e2e-001/skip')
         .set('Authorization', `Bearer ${tokenA}`)
         .send({ from: '2026-03', to: '2026-12', action: 'skip' })
-        .expect(201);
+        .expect(200);
 
       expect(res.body.data).toEqual({
         action: 'skip',
@@ -759,7 +759,7 @@ describe('Recurring (e2e)', () => {
         .post('/recurring/rec-e2e-001/skip')
         .set('Authorization', `Bearer ${tokenA}`)
         .send({ from: '2026-01', to: '2026-03', action: 'unskip' })
-        .expect(201);
+        .expect(200);
 
       expect(res.body.data).toEqual({
         action: 'unskip',
@@ -788,12 +788,12 @@ describe('Recurring (e2e)', () => {
         .post('/recurring/rec-e2e-001/skip')
         .set('Authorization', `Bearer ${tokenA}`)
         .send(body)
-        .expect(201);
+        .expect(200);
       const res2 = await request(app.getHttpServer())
         .post('/recurring/rec-e2e-001/skip')
         .set('Authorization', `Bearer ${tokenA}`)
         .send(body)
-        .expect(201);
+        .expect(200);
 
       expect(res1.body.data).toEqual(res2.body.data);
       expect(mockPrisma.recurringSkip.createMany).toHaveBeenCalledTimes(2);
@@ -812,7 +812,7 @@ describe('Recurring (e2e)', () => {
         .post('/recurring/rec-e2e-002/skip')
         .set('Authorization', `Bearer ${tokenA}`)
         .send({ from: '2026-02', to: '2026-10', action: 'skip' })
-        .expect(201);
+        .expect(200);
 
       expect(res.body.data.affectedCount).toBe(4);
       expect(mockPrisma.recurringSkip.createMany).toHaveBeenCalledWith({

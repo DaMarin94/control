@@ -2416,9 +2416,9 @@ El alcance es un **set curado de 4 monedas (ARS / USD / EUR / BRL)**, sin alta d
 
 ### 3.12 Módulo: Sincronización de cotizaciones externas
 
-> El sistema captura **automáticamente** cotizaciones FX (P7a) e IPC argentino (P7b) desde fuentes oficiales externas, vía un trigger sin datos. Es la única excepción a "sin APIs externas en v1". No tiene UI de producto: alimenta la tabla de cotizaciones de referencia (FX) y guarda IPC para una feature futura. Modelo de datos y seguridad de la ingesta en `data-model.md`, §Cotizaciones externas y sincronización (subsección §Seguridad de la ingesta).
+> El sistema captura cotizaciones FX (P7a) e IPC argentino (P7b) desde fuentes oficiales externas, vía un trigger sin datos. Es la única excepción a "sin APIs externas en v1". Lo capturado alimenta la **tabla de cotizaciones de referencia** (FX, RF-CUR-006) y la serie de **IPC** que consumen los reportes anuales (RF-REP-010, RF-REP-012), y se expone de solo lectura al usuario en `/configuracion` → General (RF-SYNC-002). Modelo de datos y seguridad de la ingesta en `data-model.md`, §Cotizaciones externas y sincronización (subsección §Seguridad de la ingesta).
 
-P7 se parte en dos requerimientos independientes (fuentes distintas): **P7a = FX** (RF-FX-001), **P7b = IPC** (RF-IPC-001). Ambos se disparan por el **mismo endpoint** `POST /settings/reference-rates/sync`, que **no recibe valores** en el body —solo gatilla el fetch server-side— y está protegido por un secret de operación (`CRON_SECRET`), no por el JWT de usuario.
+P7 se parte en dos requerimientos independientes (fuentes distintas): **P7a = FX** (RF-FX-001), **P7b = IPC** (RF-IPC-001). Los dos corren en la **misma ingesta**, que **no recibe valores** —solo gatilla el fetch server-side— y tiene **dos vías de disparo**: el **trigger de operación**, protegido por un secret (`CRON_SECRET`) y no por el JWT de usuario (RF-SYNC-001), y el **disparo manual del usuario**, autenticado por su sesión (RF-SYNC-002).
 
 ---
 
@@ -2428,7 +2428,7 @@ P7 se parte en dos requerimientos independientes (fuentes distintas): **P7a = FX
 |---|---|
 | **Descripción** | El sistema obtiene de fuentes oficiales las cotizaciones de las monedas del set curado contra USD, las guarda como variantes (`CurrencyQuote`) y propaga la variante **oficial** a la tabla de cotizaciones de referencia (`ReferenceRate`, RF-CUR-006). |
 | **Actor** | Sistema (disparado por un proceso de operación / cron) |
-| **Prioridad** | Diferida |
+| **Prioridad** | Media |
 | **Precondiciones** | El disparador presenta el secret de operación válido. Hay conectividad con las fuentes. |
 
 **Fuentes:**
@@ -2449,15 +2449,16 @@ P7 se parte en dos requerimientos independientes (fuentes distintas): **P7a = FX
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El sistema obtiene el IPC nacional (INDEC) por mes desde `apis.datos.gob.ar` y lo guarda en `InflationRate`. El histórico ya está sembrado por data migration; la **captura por sync** del mes corriente es la parte diferida de este RF. El dato de `InflationRate` **lo consume el reporte anual de gastos Únicos** (RF-REP-010, métricas de inflación del footer). |
+| **Descripción** | El sistema obtiene el IPC nacional (INDEC) por mes desde `apis.datos.gob.ar` y lo guarda en `InflationRate`. El dato lo consumen los **reportes anuales que muestran inflación** (RF-REP-010, RF-REP-012) y se muestra al usuario en el bloque de datos externos de `/configuracion` (RF-SYNC-002). |
 | **Actor** | Sistema (disparado por un proceso de operación / cron) |
-| **Prioridad** | Diferida |
+| **Prioridad** | Media |
 | **Precondiciones** | El disparador presenta el secret de operación válido. Hay conectividad con la fuente. |
 
 **Criterios de aceptación:**
 - [ ] La fuente es `apis.datos.gob.ar` (series de tiempo INDEC): variación mensual (`145.3_INGNACUAL_DICI_M_38`) y nivel del índice (`148.3_INIVELNAL_DICI_M_26`).
+- [ ] Cada corrida captura el **último mes publicado por la fuente**, que es el mes al que se imputa el dato. INDEC publica con desfasaje: el mes en curso **no tiene dato** hasta que la fuente lo publica, y una corrida que no encuentra un mes nuevo no cambia nada (desenlace "ya estaba al día" de RF-SYNC-002).
 - [ ] Cada mes se guarda en `InflationRate` por `yearMonth` (clave única, upsert idempotente): variación mensual + nivel del índice + fuente + instante de captura.
-- [ ] El IPC **no alimenta** la conversión de monedas ni los totales del mes; sí lo consume el **reporte anual de gastos Únicos** (RF-REP-010) para las métricas de inflación y % ajustado del footer.
+- [ ] El IPC **no alimenta** la conversión de monedas ni los totales del mes; sí lo consumen los reportes anuales que exponen inflación o variación ajustada (RF-REP-010, RF-REP-012) y la superficie de datos externos de `/configuracion` (RF-SYNC-002).
 - [ ] Mismas garantías de ingesta segura que RF-FX-001 (schema estricto, cotas, log de auditoría).
 
 ---
@@ -2468,7 +2469,7 @@ P7 se parte en dos requerimientos independientes (fuentes distintas): **P7a = FX
 |---|---|
 | **Descripción** | La ingesta se dispara con `POST /settings/reference-rates/sync`, que **no recibe valores de cotización** en el body —solo gatilla el fetch server-side a las fuentes oficiales— y está protegido por un secret de operación. El caller no puede inyectar números. |
 | **Actor** | Sistema (proceso de operación / cron autorizado) |
-| **Prioridad** | Diferida |
+| **Prioridad** | Media |
 | **Precondiciones** | El request presenta el secret de operación (`CRON_SECRET`) válido. |
 
 **Criterios de aceptación:**
@@ -2477,6 +2478,34 @@ P7 se parte en dos requerimientos independientes (fuentes distintas): **P7a = FX
 - [ ] El proceso aplica **validación estricta** del dato externo (schema, cotas de cordura) y un **circuit breaker al 15%** (un valor que se desvía > 15% del último guardado **no** sobrescribe, se marca anomalía y se refleja en la respuesta).
 - [ ] Cada intento de escritura (aceptado o rechazado) queda registrado en `RateSyncLog` con su motivo.
 - [ ] La respuesta es **ruidosa ante la anomalía**: un rechazo aislado entre varios targets devuelve `200` con el detalle; una corrida sin ningún target aceptado (fuente caída, dato inválido) responde **no-2xx** (`422`/`502`). Contrato completo en `data-model.md`, §Contrato — `POST /settings/reference-rates/sync`; detalle de seguridad en `.claude/agents/control-backend.md`.
+
+---
+
+#### RF-SYNC-002 — Consulta y disparo manual de los datos externos
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El usuario **ve** los datos externos vigentes —IPC y cotizaciones— y puede **pedir una corrida de captura** a mano, desde la sección **General** de `/configuracion`. Es una superficie de **solo lectura con una sola acción**: lo único que escribe es la corrida. Qué muestra y con qué anatomía, en `screens.md` §9. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El usuario tiene sesión activa. |
+
+**Disparo manual:** corre la **misma ingesta** que el trigger de operación (RF-SYNC-001), siempre sobre **todos** los targets (FX + IPC), pero autenticado por la **sesión del usuario** en lugar del secret de operación. Mientras la corrida está en curso la acción queda inhabilitada.
+
+**Tres desenlaces distinguibles** — el usuario tiene que poder saber cuál de los tres ocurrió:
+
+| Desenlace | Qué significa |
+|---|---|
+| **Se actualizó** | La corrida dejó al menos un valor distinto del que se estaba mostrando. |
+| **Ya estaba al día** | La corrida terminó bien y **ningún valor cambió**. **No es un fallo**: es el desenlace esperado cuando la fuente no publicó nada nuevo. |
+| **Falló** | La corrida no se pudo completar. Lo mostrado no cambia y la acción queda disponible para reintentar. |
+
+**Criterios de aceptación:**
+- [ ] La superficie vive **dentro de la sección General** de `/configuracion`: no es una sección propia del hub ni tiene ruta propia.
+- [ ] Es **solo lectura sobre el dato**: no permite editar ni cargar a mano ninguna cotización ni ningún valor de IPC — la tabla de referencia sigue siendo interna y no editable por UI (RF-CUR-006).
+- [ ] El disparo manual está disponible para **cualquier usuario autenticado** y corre la ingesta **completa** (FX + IPC); no expone ni requiere el secret de operación de RF-SYNC-001.
+- [ ] Los **tres desenlaces** se comunican de forma distinguible entre sí, y **"ya estaba al día" no se presenta como error**.
+- [ ] Un fallo al cargar los datos se informa **sin romper** el resto de General (la moneda por defecto sigue editable).
 
 ---
 
@@ -3009,7 +3038,8 @@ La simulación **no genera filas**: lo que persiste es su configuración (usuari
 - [ ] Cada simulación activa aporta **como máximo un** movimiento simulado por mes futuro del horizonte, en la sección **Únicos**; un mes cuyo valor redondea a 0 no lleva ninguno (RF-SIM-002).
 - [ ] El movimiento simulado es **claramente distinguible** de los reales en la lista; el detalle visual lo define `control-design` (`docs/design.md`).
 - [ ] **Totales del mes (RF-VM-002):** suma su **magnitud** al bucket de su tipo (RN-019) y al **subtotal** y al **contador** de la sección Únicos.
-- [ ] **Filtros de la sección (RF-VM-006):** participa como cualquier único — lo alcanzan tanto el filtro de tipo como el de categoría.
+- [ ] **La composición se señala:** siempre que la sección **Únicos** deje a la vista al menos un movimiento simulado tras aplicar sus filtros, `/mes` **avisa que el número incluye simulados** en dos superficies —los **totales del mes** y el **subtotal de la sección Únicos**— e indica **cuántos** incluye. Es la única señal de composición: el **contador** de la sección no la lleva, y ninguna otra sección puede llevarla (RN-029). Sin simulados a la vista no hay señal en ningún lado. El detalle visual lo define `control-design` (`docs/design.md`).
+- [ ] **Filtros de la sección (RF-VM-006):** participa como cualquier único — lo alcanzan tanto el filtro de tipo como el de categoría. Un filtro que lo excluye lo saca también de subtotal, contador, totales y de la señal de composición.
 - [ ] **Orden (RF-VM-001):** en el orden **por monto** entra por magnitud como cualquier ítem; en el orden **por fecha** —que no tiene— va **al final** de la sección.
 - [ ] **Límites (RF-LIM-003, RF-LIM-004):** los datos que `/mes` emite ya lo incluyen, así que las **marcas pasivas** lo evalúan como a cualquier dato del mes y la **alerta activa** proyecta sobre una base que lo contiene (aplica al guardar un **único** en un mes simulado; fijos, cuotas y calculados se chequean contra el mes en curso, que nunca tiene simulados).
 - [ ] **No entra en `/reportes`** —ni en las cards, ni en las series anuales (módulo 3.9)—: los reportes analizan lo **real**. Tampoco en el **dashboard**, que muestra el mes en curso (nunca simulado).
