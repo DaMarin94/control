@@ -384,7 +384,7 @@ export class MovementsController {
   }
 
   /**
-   * GET /movements/reports?year=YYYY[&categories=<id1,id2,...>][&currency=<ARS|USD|EUR|BRL>][&types=<fijo,cuota,unico>][&direction=<both|expense|income>][&projectFixed=true][&today=YYYY-MM-DD]
+   * GET /movements/reports?year=YYYY[&categories=<id1,id2,...>][&currency=<ARS|USD|EUR|BRL>][&types=<fijo,cuota,unico>][&direction=<both|expense|income>][&projectFixed=true][&today=YYYY-MM-DD][&includeSimulated=true]
    *
    * Devuelve la serie anual de reportes de movimientos del usuario (RF-REP-001/002/005/015).
    * Responde con los 12 meses del año (siempre presentes, en cero si no hay datos),
@@ -408,7 +408,14 @@ export class MovementsController {
    *   Cada mes incluye "projected: boolean" en la respuesta para distinguir el tramo proyectado.
    *   Back-compat dura: ausente o false → comportamiento idéntico al actual.
    * - today (opcional): fecha actual del usuario YYYY-MM-DD para determinar meses futuros.
-   *   Ausente → fecha UTC del sistema. Solo relevante con projectFixed=true.
+   *   Ausente → fecha UTC del sistema. Relevante con projectFixed=true y/o includeSimulated=true.
+   * - includeSimulated (opcional, RF-REP-017): "true" agrega el aporte de los
+   *   movimientos simulados (módulo 3.15) a los meses futuros del año, en la
+   *   clave "simulated" de la respuesta (desagregado del dato real, nunca ya
+   *   sumado). Default: false (ausente o cualquier otro valor). Independiente
+   *   de projectFixed (RF-REP-015): activar uno no activa el otro.
+   *   Back-compat dura: ausente o false → respuesta idéntica a la actual,
+   *   sin la clave "simulated".
    *
    * Criterio de imputación por mes (RN-015):
    * - Únicos: mes local (AT TIME ZONE propia del registro)
@@ -429,6 +436,7 @@ export class MovementsController {
     @Query('direction') directionParam: string | undefined,
     @Query('projectFixed') projectFixedParam: string | undefined,
     @Query('today') todayParam: string | undefined,
+    @Query('includeSimulated') includeSimulatedParam: string | undefined,
   ) {
     // Validar presencia y formato exacto YYYY
     if (!yearParam || !/^\d{4}$/.test(yearParam)) {
@@ -530,6 +538,11 @@ export class MovementsController {
       todayStr = todayParam;
     }
 
+    // RF-REP-017 — Parseo de includeSimulated:
+    // - ausente o cualquier valor distinto de "true" → false (back-compat dura)
+    // - "true" → true (agrega el bloque "simulated" a la respuesta)
+    const includeSimulated: boolean = includeSimulatedParam === 'true';
+
     return this.movementsService.getReportsMovements(
       req.user.userId,
       year,
@@ -539,6 +552,7 @@ export class MovementsController {
       direction,
       projectFixed,
       todayStr,
+      includeSimulated,
     );
   }
 }

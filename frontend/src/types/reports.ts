@@ -60,6 +60,56 @@ export interface ReportsAvailableCategory {
   hasIncome: boolean;
 }
 
+/**
+ * Un mes de la serie SIMULADA (RF-REP-017) — aporte de los movimientos simulados
+ * (módulo 3.15) a ese mes. Mismo índice/orden que `months`.
+ * `0` = sin aporte simulado ese mes (nunca `null` acá — a diferencia de
+ * `SimulatedReportCategory.monthlyExpenseCents`, ver esa interfaz).
+ */
+export interface SimulatedReportMonth {
+  /** "YYYY-MM" */
+  month: string;
+  /** Aporte simulado a la línea de ingresos, en centavos. 0 = sin aporte. */
+  incomeCents: number;
+  /** Aporte simulado a la línea de gastos, en centavos. 0 = sin aporte. */
+  expenseCents: number;
+}
+
+/**
+ * Categoría con su aporte simulado mensual (RF-REP-017). Solo simulados que
+ * resultan GASTO (los que resultan ingreso no se desglosan por categoría,
+ * igual que un ingreso real — RF-REP-001).
+ */
+export interface SimulatedReportCategory {
+  categoryId: string;
+  name: string;
+  /** Color hex — NUNCA se reasigna (RN-013): coincide con el de `categories` cuando la categoría también tiene gasto real. */
+  color: string;
+  /**
+   * Exactamente 12 valores, ene→dic.
+   * `null` = SIN aporte simulado ese mes (no dibujar banda) — DISTINTO de `0`.
+   * No colapsar `null` a `0`: es la señal que autoanula el contorno punteado
+   * cuando no hay aporte (docs/design.md §2.2/§2.3).
+   */
+  monthlyExpenseCents: (number | null)[];
+}
+
+/**
+ * Bloque de movimientos simulados (RF-REP-017) que se apila sobre el dato
+ * real. Presente SOLO cuando la request pidió `includeSimulated=true`; con
+ * el flag ausente/false, esta clave no viene en la respuesta (shape idéntico
+ * al de hoy). Ver docs/design.md, "Movimientos simulados en cards de reporte".
+ */
+export interface SimulatedReportBlock {
+  /** Siempre 12 entradas, mismo índice/orden que `months`. */
+  months: SimulatedReportMonth[];
+  /**
+   * Solo categorías EXPENSE. Puede incluir categorías AUSENTES de `categories[*]`
+   * (categorías sin gasto real en el año que solo aportan vía simulación).
+   */
+  categories: SimulatedReportCategory[];
+}
+
 /** Respuesta de GET /movements/reports?year=YYYY[&categories=...] (dentro del sobre { success, data }). */
 export interface ReportsMovementsResponse {
   /** El año pedido. */
@@ -75,6 +125,9 @@ export interface ReportsMovementsResponse {
    * El front lo usa como universo de la leyenda-filtro (P2_b) en lugar de useCategories.
    * Cada item trae `hasExpense`/`hasIncome` para derivar el universo por tipo de card (fix E2):
    * by-category filtra por `hasExpense === true`; income-expense usa el universo completo.
+   * Con `includeSimulated=true`, este universo SE AMPLÍA: una categoría con aporte solo
+   * simulado entra aunque no tenga nada real (RF-REP-017) — ver `docs/frontend.md`, §Reportes,
+   * para el ajuste de criterio que hace `by-category` (ya no basta filtrar por `hasExpense`).
    */
   availableCategories: ReportsAvailableCategory[];
   /**
@@ -84,6 +137,12 @@ export interface ReportsMovementsResponse {
    * El front lo usa para deshabilitar la navegación ‹ antes del primer año.
    */
   earliestYear: number | null;
+  /**
+   * Movimientos simulados (RF-REP-017) — presente SOLO cuando se pidió
+   * `includeSimulated=true`. Se apila sobre el dato real de `months`/`categories`;
+   * ver `docs/frontend.md` §Reportes y `docs/design.md` para el tratamiento visual.
+   */
+  simulated?: SimulatedReportBlock;
 }
 
 // ─── Tipos de configuración de cards de reporte (Fase 1.1.5) ─────────────────
@@ -277,6 +336,15 @@ export interface ReportCardConfig {
    * calcula la conversión a USD). Solo aplica a type === "unique-grid". Ignorado en otros tipos.
    */
   anchorUsdCents?: number;
+  /**
+   * Toggle "incluir movimientos simulados" (RF-REP-017) — solo `income-expense`
+   * y `by-category`. Ausente/undefined = apagado (default, back-compat: cards
+   * existentes grafican solo lo real, idéntico a como se ven sin la feature).
+   * `true` = la card suma los movimientos simulados (módulo 3.15) al tramo de
+   * meses futuros. Persistido por card, igual patrón que `anchorUsdCents` de
+   * `unique-grid` (el backend no valida esta clave). Ignorado en los demás tipos.
+   */
+  includeSimulated?: boolean;
 }
 
 // ─── Tipos del endpoint de reporte anual de Cuotas (Ola 3, P2) ───────────────

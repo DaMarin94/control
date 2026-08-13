@@ -20,6 +20,11 @@
  *   - `direction` ausente / "both" → omite el param (back-compat).
  *   - `direction` "expense" | "income" → `&direction=expense` / `&direction=income`.
  *
+ * RF-REP-017: se agrega el param `includeSimulated` (opt-in por card, income-expense
+ * y by-category). `true` → `&includeSimulated=true`; ausente/false/cualquier otro
+ * valor → se omite el param (= off, respuesta idéntica a la de hoy). Se agrega a la
+ * query key para que React Query refetche al togglear el chip "Simulados".
+ *
  * Semántica de `categoryIds` (3 estados):
  *   - null   → param `categories` AUSENTE (= todas).
  *   - []     → param `categories` PRESENTE Y VACÍO (`&categories=`) (= ninguna).
@@ -80,6 +85,8 @@ const logger = createLogger("useReports");
  *                      string no vacío = subconjunto CSV "cuota,fijo".
  * @param directionKey  null = "both" (param ausente, back-compat);
  *                      "expense" | "income" = param presente.
+ * @param includeSimulated false/undefined = param ausente (= off, back-compat);
+ *                      true = `&includeSimulated=true` (RF-REP-017).
  */
 export const REPORTS_QUERY_KEY = (
   year: number,
@@ -87,6 +94,7 @@ export const REPORTS_QUERY_KEY = (
   currency?: CurrencyCode,
   typesKey?: string | null,
   directionKey?: string | null,
+  includeSimulated?: boolean,
 ) => [
   "reports",
   year,
@@ -94,6 +102,7 @@ export const REPORTS_QUERY_KEY = (
   currency ?? null,
   typesKey ?? null,
   directionKey ?? null,
+  includeSimulated === true,
 ] as const;
 
 // ─── Serialización del filtro ──────────────────────────────────────────────────
@@ -176,6 +185,8 @@ function serializeDirectionFilter(direction?: "expense" | "income" | "both"): {
  * @param currency      undefined = default del usuario (sin param); presente = override de moneda por card.
  * @param movementTypes undefined = todos los tipos (back-compat); [] = ninguno; lista = subconjunto.
  * @param direction     undefined / "both" = ambas direcciones (back-compat); "expense" | "income" = filtrar.
+ * @param includeSimulated RF-REP-017: undefined/false = off (back-compat, respuesta idéntica a hoy);
+ *                      true = suma los movimientos simulados al tramo futuro (`data.simulated`).
  */
 export function useReports(
   year: number,
@@ -183,6 +194,7 @@ export function useReports(
   currency?: CurrencyCode,
   movementTypes?: Array<"fijo" | "cuota" | "unico">,
   direction?: "expense" | "income" | "both",
+  includeSimulated?: boolean,
 ) {
   const { api, isAuthenticated } = useApi();
 
@@ -192,17 +204,18 @@ export function useReports(
 
   // Serializar el param de moneda (solo si está presente)
   const currencyParam = currency ? `&currency=${currency}` : "";
+  const includeSimulatedParam = includeSimulated ? "&includeSimulated=true" : "";
 
   const query = useQuery<ReportsMovementsResponse>({
-    queryKey: REPORTS_QUERY_KEY(year, categoriesKey, currency, typesKey, directionKey),
+    queryKey: REPORTS_QUERY_KEY(year, categoriesKey, currency, typesKey, directionKey, includeSimulated),
     queryFn: () => {
       // Construir URL manualmente para evitar que URLSearchParams
       // encodee las comas de la lista de categoryIds (RFC 3986: coma es reservada).
       // El backend espera "categories=id1,id2,..." sin encoding.
       // Con [] (ninguna), urlParam = "&categories=" → se manda param vacío explícito.
       // El código de moneda es plano (ARS/USD/EUR/BRL), no necesita encoding.
-      const url = `/movements/reports?year=${year}${urlParam}${currencyParam}${typesParam}${directionParam}`;
-      logger.debug("Cargando serie de reportes", { year, categoriesKey, currency, typesKey, directionKey });
+      const url = `/movements/reports?year=${year}${urlParam}${currencyParam}${typesParam}${directionParam}${includeSimulatedParam}`;
+      logger.debug("Cargando serie de reportes", { year, categoriesKey, currency, typesKey, directionKey, includeSimulated });
       return api.get<ReportsMovementsResponse>(url);
     },
     // No disparar hasta que la sesión resolvió y el token está presente.

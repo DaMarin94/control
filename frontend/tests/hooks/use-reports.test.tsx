@@ -99,13 +99,13 @@ function createWrapper() {
 // ─── Tests REPORTS_QUERY_KEY ─────────────────────────────────────────────────
 
 describe("REPORTS_QUERY_KEY", () => {
-  it("genera la query key correcta para año sin filtros (6 elementos)", () => {
-    // 6 elementos: ["reports", year, categoriesKey, currency??null, typesKey??null, directionKey??null]
-    expect(REPORTS_QUERY_KEY(2026, null)).toEqual(["reports", 2026, null, null, null, null]);
+  it("genera la query key correcta para año sin filtros (7 elementos)", () => {
+    // 7 elementos: ["reports", year, categoriesKey, currency??null, typesKey??null, directionKey??null, includeSimulated===true]
+    expect(REPORTS_QUERY_KEY(2026, null)).toEqual(["reports", 2026, null, null, null, null, false]);
   });
 
   it("genera la query key correcta para año con filtro de categorías (sin moneda)", () => {
-    expect(REPORTS_QUERY_KEY(2026, "cat-1,cat-2")).toEqual(["reports", 2026, "cat-1,cat-2", null, null, null]);
+    expect(REPORTS_QUERY_KEY(2026, "cat-1,cat-2")).toEqual(["reports", 2026, "cat-1,cat-2", null, null, null, false]);
   });
 
   it("query keys de años distintos son distintas", () => {
@@ -209,6 +209,30 @@ describe("REPORTS_QUERY_KEY", () => {
     );
     expect(REPORTS_QUERY_KEY(2026, null)).not.toEqual(
       REPORTS_QUERY_KEY(2026, null, undefined, null, "expense"),
+    );
+  });
+
+  // ── RF-REP-017: includeSimulated en la query key ─────────────────────────
+
+  it("el séptimo elemento es false cuando includeSimulated no se pasa (= off, back-compat)", () => {
+    expect(REPORTS_QUERY_KEY(2026, null)[6]).toBe(false);
+    expect(REPORTS_QUERY_KEY(2026, null, undefined, null, null, undefined)[6]).toBe(false);
+  });
+
+  it("el séptimo elemento es false cuando includeSimulated=false", () => {
+    expect(REPORTS_QUERY_KEY(2026, null, undefined, null, null, false)[6]).toBe(false);
+  });
+
+  it("el séptimo elemento es true cuando includeSimulated=true", () => {
+    expect(REPORTS_QUERY_KEY(2026, null, undefined, null, null, true)[6]).toBe(true);
+  });
+
+  it("query keys con distinto includeSimulated son distintas (refetch al togglear el chip)", () => {
+    expect(REPORTS_QUERY_KEY(2026, null, undefined, null, null, true)).not.toEqual(
+      REPORTS_QUERY_KEY(2026, null, undefined, null, null, false),
+    );
+    expect(REPORTS_QUERY_KEY(2026, null)).not.toEqual(
+      REPORTS_QUERY_KEY(2026, null, undefined, null, null, true),
     );
   });
 
@@ -720,6 +744,100 @@ describe("useReports", () => {
     expect(callUrl).toContain("&currency=USD");
     expect(callUrl).toContain("&types=fijo");
     expect(callUrl).toContain("&direction=expense");
+  });
+
+  // ── RF-REP-017: includeSimulated en la URL ──────────────────────────────────
+
+  it("NO agrega &includeSimulated= cuando includeSimulated es undefined (back-compat)", async () => {
+    mockApiGet.mockResolvedValue(mockReportsResponse);
+
+    const { result } = renderHook(
+      () => useReports(2026, null, undefined, undefined, undefined, undefined),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
+    expect(callUrl).toBe("/movements/reports?year=2026");
+    expect(callUrl).not.toContain("includeSimulated");
+  });
+
+  it("NO agrega &includeSimulated= cuando includeSimulated es false", async () => {
+    mockApiGet.mockResolvedValue(mockReportsResponse);
+
+    const { result } = renderHook(
+      () => useReports(2026, null, undefined, undefined, undefined, false),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
+    expect(callUrl).not.toContain("includeSimulated");
+  });
+
+  it("agrega &includeSimulated=true cuando includeSimulated=true", async () => {
+    mockApiGet.mockResolvedValue(mockReportsResponse);
+
+    const { result } = renderHook(
+      () => useReports(2026, null, undefined, undefined, undefined, true),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const callUrl = mockApiGet.mock.calls[0]?.[0] as string;
+    expect(callUrl).toContain("&includeSimulated=true");
+  });
+
+  it("refetcha al togglear includeSimulated (query keys distintas)", async () => {
+    mockApiGet.mockResolvedValue(mockReportsResponse);
+
+    const initialProps: { sim: boolean | undefined } = { sim: undefined };
+    const { result, rerender } = renderHook(
+      ({ sim }: { sim: boolean | undefined }) => useReports(2026, null, undefined, undefined, undefined, sim),
+      { wrapper: createWrapper(), initialProps }
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(mockApiGet).toHaveBeenCalledTimes(1);
+    expect(mockApiGet.mock.calls[0]?.[0]).not.toContain("includeSimulated");
+
+    mockApiGet.mockResolvedValue({ ...mockReportsResponse, simulated: { months: [], categories: [] } });
+    rerender({ sim: true });
+
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledTimes(2));
+    const secondUrl = mockApiGet.mock.calls[1]?.[0] as string;
+    expect(secondUrl).toContain("&includeSimulated=true");
+  });
+
+  it("expone data.simulated cuando el backend lo devuelve (includeSimulated=true)", async () => {
+    const responseWithSimulated: ReportsMovementsResponse = {
+      ...mockReportsResponse,
+      simulated: {
+        months: Array.from({ length: 12 }, (_, i) => ({
+          month: `2026-${String(i + 1).padStart(2, "0")}`,
+          incomeCents: 0,
+          expenseCents: i === 7 ? 5000 : 0,
+        })),
+        categories: [
+          { categoryId: "cat-1", name: "Alimentación", color: "#4F86C6", monthlyExpenseCents: Array.from({ length: 12 }, (_, i) => (i === 7 ? 5000 : null)) },
+        ],
+      },
+    };
+    mockApiGet.mockResolvedValue(responseWithSimulated);
+
+    const { result } = renderHook(() => useReports(2026, null, undefined, undefined, undefined, true), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+
+    expect(result.current.data!.simulated?.months).toHaveLength(12);
+    expect(result.current.data!.simulated?.months[7]?.expenseCents).toBe(5000);
+    // null ≠ 0: sin aporte ese mes, no 0 — invariante que el front no debe colapsar.
+    expect(result.current.data!.simulated?.categories[0]?.monthlyExpenseCents[0]).toBeNull();
   });
 
   it("refetcha al cambiar direction (query keys distintas)", async () => {

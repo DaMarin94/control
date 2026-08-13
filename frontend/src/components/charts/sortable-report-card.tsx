@@ -124,6 +124,8 @@ interface SortableReportCardProps {
   onDirectionChange: (dir: "expense" | "income" | "both") => void;
   /** Ola 3, P3: techo editable de la escala de color de `unique-grid` (solo en /reportes). */
   onAnchorChange: (usdCents: number) => void;
+  /** RF-REP-017: toggle "incluir movimientos simulados" (income-expense y by-category, solo en /reportes). */
+  onIncludeSimulatedChange: (v: boolean) => void;
 }
 
 export function SortableReportCard({
@@ -140,6 +142,7 @@ export function SortableReportCard({
   onMovementTypesChange,
   onDirectionChange,
   onAnchorChange,
+  onIncludeSimulatedChange,
 }: SortableReportCardProps) {
   const {
     attributes,
@@ -246,6 +249,8 @@ export function SortableReportCard({
           onMovementTypesChange={config.type === "income-expense" ? onMovementTypesChange : undefined}
           direction={config.type === "income-expense" ? (config.direction ?? "both") : undefined}
           onDirectionChange={config.type === "income-expense" ? onDirectionChange : undefined}
+          includeSimulated={config.includeSimulated ?? false}
+          onIncludeSimulatedChange={onIncludeSimulatedChange}
         />
       )}
     </div>

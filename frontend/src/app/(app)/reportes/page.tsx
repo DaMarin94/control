@@ -537,6 +537,24 @@ function ReportesPageContent() {
     });
   }
 
+  // RF-REP-017: toggle "incluir movimientos simulados" — income-expense y by-category.
+  // Si es false (= default), se omite el campo para back-compat (mismo patrón que
+  // direction/movementTypes: ausente = apagado).
+  function handleIncludeSimulatedChange(id: string, v: boolean) {
+    const newCards = cards.map((c) => {
+      if (c.id !== id) return c;
+      if (!v) {
+        const updated = { ...c };
+        delete updated.includeSimulated;
+        return updated;
+      }
+      return { ...c, includeSimulated: true };
+    });
+    void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
+      logger.error("Error al persistir toggle de simulados de card", { error: err, cardId: id });
+    });
+  }
+
   const hasCards = cards.length > 0;
 
   return (
@@ -642,6 +660,7 @@ function ReportesPageContent() {
                   onMovementTypesChange={(types) => handleMovementTypesChange(card.id, types)}
                   onDirectionChange={(dir) => handleDirectionChange(card.id, dir)}
                   onAnchorChange={(usdCents) => handleAnchorChange(card.id, usdCents)}
+                  onIncludeSimulatedChange={(v) => handleIncludeSimulatedChange(card.id, v)}
                 />
               ))}
 

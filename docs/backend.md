@@ -292,6 +292,10 @@ Sobre los **totales mensuales** (`incomeCents`/`expenseCents`), `getReportsMovem
   - La **dirección** (income/expense) de un movimiento **calculado** la fija su `derivedType` —el signo del monto tras aplicar `formulaSign`—, no el `type` de la fila origen: un calculado puede **invertir** el signo del origen (un calculado-de-fijo de gasto puede resultar `INCOME`, y viceversa). El filtro `direction` se aplica sobre ese `derivedType`.
   - El **tipo de movimiento** de un calculado se **hereda de su fuente**: un calculado-de-fijo cuenta como `fijo`, un calculado-de-cuota como `cuota`, un calculado-de-único como `unico`. El filtro `types` matchea por ese tipo heredado, no por una categoría propia del calculado.
 
+#### Aporte simulado (RF-REP-017)
+
+Con `includeSimulated=true` el endpoint agrega el bloque `simulated` delegando la derivación en `SimulationsService` — ver §Simulación de categoría → Los reportes ven simulaciones solo si se las piden. Es **ortogonal** a la proyección de fijos de abajo: comparten el `today` que decide qué mes es futuro y nada más.
+
 #### Proyección de fijos a futuro (RF-REP-015) — capacidad retenida, no consumida por el frontend
 
 El motor vive en `src/common/projection.helper.ts` (`computeFixedBasketProjection`), junto a la regresión de RF-SIM-002 — ver §Simulación de categoría → Infraestructura de proyección compartida. El endpoint conserva esta capacidad, pero **ninguna pantalla la pide hoy** (no hay control de proyección en el frontend). Con `projectFixed=true`, los meses **posteriores a `today`** del año pedido se marcan `projected: true` (ver `docs/data-model.md`, §Contrato de serie de reportes) y suman, sobre el dato real, la proyección de los fijos. Sin el param (caso actual) todos los meses vienen `projected: false` y los totales son los de siempre.
@@ -613,13 +617,27 @@ Crea, lista y elimina simulaciones (RF-SIM-001..004) y **deriva los movimientos 
 
 ### Dependencia unidireccional `Movements → Simulations`
 
-`MovementsService` inyecta `SimulationsService` y le pide `getSimulatedItemsForMonth(userId, month, today)`; **nunca al revés**. `SimulationsService` no depende de `MovementsService` ni de `MovementsModule`, y el sentido de la flecha **no se puede invertir ni volver bidireccional**: sería un ciclo de módulos de Nest.
+`MovementsService` inyecta `SimulationsService` y le pide los movimientos simulados; **nunca al revés**. `SimulationsService` no depende de `MovementsService` ni de `MovementsModule`, y el sentido de la flecha **no se puede invertir ni volver bidireccional**: sería un ciclo de módulos de Nest.
 
 **Consecuencia:** la serie de ajuste de la regresión necesita agregaciones de `Transaction` por mes y categoría, y `SimulationsService` las lee **directo por su propio repositorio** en vez de pedírselas a `TransactionsService`. Es el mismo precedente que `MovementsRepository`, que ya bypasea `TransactionsService` por el mismo motivo (§Movimientos del mes → "Por qué un módulo propio").
 
-### Los reportes nunca consultan simulaciones
+### Dos consumidores, una API de derivación
 
-Ningún endpoint de `/movements/reports*` toca `SimulationsService`: los reportes analizan lo **real** (RN-029). La única superficie que ve movimientos simulados es `GET /movements`.
+| Método | Consumidor | Devuelve |
+|---|---|---|
+| `getSimulatedItemsForMonth(userId, month, today?, displayCurrencyOverride?)` | `GET /movements` (sección Únicos del mes) | `MovementItem[]` del mes |
+| `getSimulatedItemsForMonths(userId, months[], today?, displayCurrencyOverride?)` | `GET /movements/reports` con `includeSimulated=true` (RF-REP-017) | `Map<month, MovementItem[]>` con **todas** las claves pedidas (`[]` las que no califican) |
+
+- **La variante de un mes es un wrapper de la batch.** La lógica de cálculo es una sola.
+- **La batch carga la ventana histórica [A-12..A-1] una sola vez** para los 12 meses del año y evalúa la regresión de cada simulación en cada mes pedido, en vez de repetir la carga mes a mes (recorrer un año con la variante de un mes serían 12 cargas redundantes de la misma ventana).
+- **`displayCurrencyOverride`** — sin él la derivación cae a la **moneda default del usuario** (comportamiento de `GET /movements`); con él la serie de ajuste de la regresión se re-expresa en la **moneda de display de la card** de reporte, para que el aporte simulado venga en la misma moneda que el resto de la respuesta.
+- Los demás endpoints `/movements/reports/annual-*` **no** tocan `SimulationsService`: analizan solo lo real.
+
+### Los reportes ven simulaciones solo si se las piden
+
+`GET /movements/reports` toca `SimulationsService` de forma **opt-in**: sin `includeSimulated=true` no lo consulta y la respuesta es la real pura. La dependencia sigue siendo la **unidireccional `Movements → Simulations`** de arriba — el opt-in no agrega una flecha nueva ni un ciclo.
+
+El bloque `simulated` de la respuesta se arma **aparte** de las series reales (contrato en `docs/data-model.md`, §Contrato de serie de reportes): el aporte simulado **no se suma** dentro de `months`/`categories`. Dentro del armado, el **universo** (`availableCategories`) se amplía **ignorando** los filtros de la card, mientras que las series simuladas **sí** los respetan — el simulado se filtra como un único (tipo `unico`, dirección derivada del mes, categoría simulada).
 
 ### Infraestructura de proyección compartida (`src/common/projection.helper.ts`)
 

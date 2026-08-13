@@ -72,6 +72,19 @@ vi.mock("@/hooks/use-limits", () => ({
   })),
 }));
 
+// Mock de useSimulations (RF-REP-017): controla el motivo de deshabilitado del
+// chip "Simulados". Default = 1 simulación activa (chip habilitado por default
+// en los tests existentes que no lo tocan).
+vi.mock("@/hooks/use-simulations", () => ({
+  useSimulations: vi.fn(() => ({
+    data: {
+      horizonEndMonth: "2027-02",
+      simulations: [{ id: "sim-1", categoryId: "cat-1", category: { id: "cat-1", name: "Alimentación", color: "#4F86C6", scope: "EXPENSE" }, monthsWithData: 6, paused: false, createdAt: "2026-01-01T00:00:00.000Z" }],
+    },
+    isLoading: false,
+  })),
+}));
+
 vi.mock("recharts", () => {
   const React = require("react");
   const MockChart = ({ children, data }: { children?: ReactNode; data?: unknown[] }) =>
@@ -101,9 +114,11 @@ vi.mock("recharts", () => {
 });
 
 import { useReports } from "@/hooks/use-reports";
+import { useSimulations } from "@/hooks/use-simulations";
 import { ReportCard } from "@/components/charts/report-card";
 
 const mockUseReports = vi.mocked(useReports);
+const mockUseSimulations = vi.mocked(useSimulations);
 
 // ─── Datos de ejemplo ─────────────────────────────────────────────────────────
 
@@ -144,6 +159,49 @@ const mockDataWithIncomeCategory: ReportsMovementsResponse = {
     { categoryId: "cat-2", name: "Transporte", color: "#E07B54", hasExpense: true, hasIncome: false },
     { categoryId: "cat-3", name: "Salario", color: "#5FB878", hasExpense: false, hasIncome: true },
   ],
+};
+
+// RF-REP-017: respuesta con bloque `simulated`. cat-3 aporta SOLO vía simulación
+// (ausente de `categories`/hasExpense) — cubre el gotcha de universo de leyenda.
+const mockDataWithSimulated: ReportsMovementsResponse = {
+  ...mockData,
+  availableCategories: [
+    ...mockData.availableCategories,
+    { categoryId: "cat-3", name: "Viajes", color: "#9B6FD1", hasExpense: false, hasIncome: false },
+  ],
+  simulated: {
+    months: Array.from({ length: 12 }, (_, i) => ({
+      month: `2026-${String(i + 1).padStart(2, "0")}`,
+      incomeCents: 0,
+      expenseCents: i === 7 ? 5000 : 0,
+    })),
+    categories: [
+      { categoryId: "cat-3", name: "Viajes", color: "#9B6FD1", monthlyExpenseCents: Array.from({ length: 12 }, (_, i) => (i === 7 ? 5000 : null)) },
+    ],
+  },
+};
+
+// Año completamente vacío salvo el aporte simulado de agosto (índice 7) — RF-REP-017,
+// para el gotcha del criterio de vacío ("Sin movimientos en {año}." no debe aparecer
+// con el toggle encendido si el único dato del año es simulado).
+const mockYearEmptyExceptSimulated: ReportsMovementsResponse = {
+  year: 2026,
+  months: Array.from({ length: 12 }, (_, i) => ({
+    month: `2026-${String(i + 1).padStart(2, "0")}`,
+    incomeCents: 0,
+    expenseCents: 0,
+  })),
+  categories: [],
+  availableCategories: [],
+  earliestYear: null,
+  simulated: {
+    months: Array.from({ length: 12 }, (_, i) => ({
+      month: `2026-${String(i + 1).padStart(2, "0")}`,
+      incomeCents: 0,
+      expenseCents: i === 7 ? 5000 : 0,
+    })),
+    categories: [],
+  },
 };
 
 const emptyData: ReportsMovementsResponse = {
@@ -859,4 +917,204 @@ describe("ReportCard — toggle Barra/Línea en by-category (categoryChartMode)"
     renderCard({ type: "by-category" });
     expect(screen.getByRole("tablist", { name: /representación del reporte/i })).toBeInTheDocument();
   });
+});
+
+// ─── RF-REP-017 — chip "Simulados" y toggle de movimientos simulados ─────────
+
+describe("ReportCard — chip 'Simulados' (RF-REP-017)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseReports.mockReturnValue(makeSuccessReturn(mockDataWithSimulated));
+    mockUseSimulations.mockReturnValue({
+      data: {
+        horizonEndMonth: "2027-02",
+        simulations: [
+          {
+            id: "sim-1",
+            categoryId: "cat-1",
+            category: { id: "cat-1", name: "Alimentación", color: "#4F86C6", scope: "EXPENSE" },
+            monthsWithData: 6,
+            paused: false,
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useSimulations>);
+  });
+
+  // ── Presencia / gate por callback ──────────────────────────────────────────
+
+  it("NO se monta en income-expense del Dashboard (sin onDirectionChange/onIncludeSimulatedChange)", () => {
+    renderCard({ type: "income-expense" });
+    expect(screen.queryByRole("button", { name: /incluir movimientos simulados/i })).not.toBeInTheDocument();
+  });
+
+  it("se monta en income-expense de /reportes (con onDirectionChange + onIncludeSimulatedChange)", () => {
+    renderCard({
+      type: "income-expense",
+      onDirectionChange: vi.fn(),
+      onMovementTypesChange: vi.fn(),
+      onIncludeSimulatedChange: vi.fn(),
+    });
+    expect(screen.getByRole("button", { name: /incluir movimientos simulados/i })).toBeInTheDocument();
+  });
+
+  it("se monta en by-category (con onIncludeSimulatedChange) y vive FUERA del tablist", () => {
+    renderCard({ type: "by-category", onIncludeSimulatedChange: vi.fn() });
+    const chip = screen.getByRole("button", { name: /incluir movimientos simulados/i });
+    expect(chip).toBeInTheDocument();
+    const tablist = screen.getByRole("tablist", { name: /representación del reporte/i });
+    expect(tablist).not.toContainElement(chip);
+  });
+
+  it("NO se monta en by-category sin onIncludeSimulatedChange", () => {
+    renderCard({ type: "by-category" });
+    expect(screen.queryByRole("button", { name: /incluir movimientos simulados/i })).not.toBeInTheDocument();
+  });
+
+  // ── Estado del chip (aria-pressed) ─────────────────────────────────────────
+
+  it("aria-pressed refleja includeSimulated (apagado por defecto)", () => {
+    renderCard({ type: "by-category", onIncludeSimulatedChange: vi.fn() });
+    expect(screen.getByRole("button", { name: /incluir movimientos simulados/i })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("aria-pressed=true cuando includeSimulated=true", () => {
+    renderCard({ type: "by-category", includeSimulated: true, onIncludeSimulatedChange: vi.fn() });
+    expect(screen.getByRole("button", { name: /incluir movimientos simulados/i })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("clickear el chip habilitado llama onIncludeSimulatedChange con el valor invertido", () => {
+    const onChange = vi.fn();
+    renderCard({ type: "by-category", includeSimulated: false, onIncludeSimulatedChange: onChange });
+    fireEvent.click(screen.getByRole("button", { name: /incluir movimientos simulados/i }));
+    expect(onChange).toHaveBeenCalledWith(true);
+  });
+
+  it("pasa includeSimulated a useReports (refetch al togglear)", () => {
+    renderCard({ type: "by-category", includeSimulated: true, onIncludeSimulatedChange: vi.fn() });
+    expect(mockUseReports).toHaveBeenCalledWith(2026, null, undefined, undefined, undefined, true);
+  });
+
+  // ── Deshabilitado con motivo (§1.3) ────────────────────────────────────────
+
+  it("sin ninguna simulación: aria-disabled=true, sigue enfocable (sin `disabled` nativo) y expone el motivo", () => {
+    mockUseSimulations.mockReturnValue({
+      data: { horizonEndMonth: "2027-02", simulations: [] },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useSimulations>);
+    renderCard({ type: "by-category", onIncludeSimulatedChange: vi.fn() });
+
+    const chip = screen.getByRole("button", { name: /incluir movimientos simulados/i });
+    expect(chip).toHaveAttribute("aria-disabled", "true");
+    // NO tiene el atributo `disabled` nativo — sigue enfocable/anunciable (gotcha del spec).
+    expect(chip).not.toBeDisabled();
+    expect(chip).toHaveAttribute(
+      "title",
+      "No tenés ninguna simulación. Se crean desde la sección Únicos de la vista del mes.",
+    );
+    const describedById = chip.getAttribute("aria-describedby");
+    expect(describedById).toBeTruthy();
+    expect(document.getElementById(describedById!)?.textContent).toBe(
+      "No tenés ninguna simulación. Se crean desde la sección Únicos de la vista del mes.",
+    );
+  });
+
+  it("clickear el chip deshabilitado (sin simulaciones) NO llama onIncludeSimulatedChange", () => {
+    mockUseSimulations.mockReturnValue({
+      data: { horizonEndMonth: "2027-02", simulations: [] },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useSimulations>);
+    const onChange = vi.fn();
+    renderCard({ type: "by-category", onIncludeSimulatedChange: onChange });
+    fireEvent.click(screen.getByRole("button", { name: /incluir movimientos simulados/i }));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("año pasado (con simulaciones existentes): motivo '{Año} no tiene meses futuros.'", () => {
+    renderCard({ type: "by-category", year: 2020, onIncludeSimulatedChange: vi.fn() });
+    const chip = screen.getByRole("button", { name: /incluir movimientos simulados/i });
+    expect(chip).toHaveAttribute("aria-disabled", "true");
+    expect(chip).toHaveAttribute("title", "2020 no tiene meses futuros.");
+  });
+
+  it("año en curso en diciembre: motivo '{Año} no tiene meses futuros.'", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-12-15T12:00:00.000Z"));
+      renderCard({ type: "by-category", year: 2026, onIncludeSimulatedChange: vi.fn() });
+      const chip = screen.getByRole("button", { name: /incluir movimientos simulados/i });
+      expect(chip).toHaveAttribute("aria-disabled", "true");
+      expect(chip).toHaveAttribute("title", "2026 no tiene meses futuros.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("año en curso ANTES de diciembre: chip habilitado (tramo futuro alcanzable)", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-06-15T12:00:00.000Z"));
+      renderCard({ type: "by-category", year: 2026, onIncludeSimulatedChange: vi.fn() });
+      const chip = screen.getByRole("button", { name: /incluir movimientos simulados/i });
+      expect(chip).not.toHaveAttribute("aria-disabled");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("precedencia: sin simulaciones Y año sin tramo futuro → gana el motivo de 'sin simulaciones'", () => {
+    mockUseSimulations.mockReturnValue({
+      data: { horizonEndMonth: "2027-02", simulations: [] },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useSimulations>);
+    renderCard({ type: "by-category", year: 2020, onIncludeSimulatedChange: vi.fn() });
+    const chip = screen.getByRole("button", { name: /incluir movimientos simulados/i });
+    expect(chip).toHaveAttribute(
+      "title",
+      "No tenés ninguna simulación. Se crean desde la sección Únicos de la vista del mes.",
+    );
+  });
+
+  // ── Universo de la leyenda (gotcha #1 de control-design) ───────────────────
+
+  it("by-category, toggle APAGADO: una categoría solo-simulada NO entra a la leyenda", () => {
+    renderCard({ type: "by-category", includeSimulated: false, onIncludeSimulatedChange: vi.fn() });
+    expect(screen.queryByText("Viajes")).not.toBeInTheDocument();
+  });
+
+  it("by-category, toggle ENCENDIDO: una categoría solo-simulada (hasExpense=false) SÍ entra a la leyenda", () => {
+    renderCard({ type: "by-category", includeSimulated: true, onIncludeSimulatedChange: vi.fn() });
+    expect(screen.getByText("Viajes")).toBeInTheDocument();
+  });
+
+  // ── Criterio de vacío (gotcha #2 de control-design) ─────────────────────────
+
+  it("año cuyo único dato es simulado: con el toggle APAGADO se muestra 'Sin movimientos'", () => {
+    mockUseReports.mockReturnValue(makeSuccessReturn(mockYearEmptyExceptSimulated));
+    renderCard({ type: "by-category", includeSimulated: false, onIncludeSimulatedChange: vi.fn() });
+    expect(screen.getByText(/sin movimientos en 2026/i)).toBeInTheDocument();
+  });
+
+  it("año cuyo único dato es simulado: con el toggle ENCENDIDO NO se muestra 'Sin movimientos'", () => {
+    mockUseReports.mockReturnValue(makeSuccessReturn(mockYearEmptyExceptSimulated));
+    renderCard({ type: "by-category", includeSimulated: true, onIncludeSimulatedChange: vi.fn() });
+    expect(screen.queryByText(/sin movimientos en 2026/i)).not.toBeInTheDocument();
+  });
+
+  it("income-expense: año cuyo único dato es simulado y toggle ENCENDIDO NO muestra 'Sin movimientos'", () => {
+    mockUseReports.mockReturnValue(makeSuccessReturn(mockYearEmptyExceptSimulated));
+    renderCard({
+      type: "income-expense",
+      includeSimulated: true,
+      onDirectionChange: vi.fn(),
+      onMovementTypesChange: vi.fn(),
+      onIncludeSimulatedChange: vi.fn(),
+    });
+    expect(screen.queryByText(/sin movimientos en 2026/i)).not.toBeInTheDocument();
+  });
+
+  // ── Modo orden / mini — cubierto en sortable-report-card, no acá (ReportCard
+  //    nunca se monta en modo mini; el chip no aplica a ese árbol).
 });

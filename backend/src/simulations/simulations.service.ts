@@ -241,7 +241,7 @@ export class SimulationsService {
   }
 
   // ---------------------------------------------------------------------------
-  // Consumido por MovementsService — derivación on-the-fly (RF-SIM-002/003)
+  // Consumido por MovementsService — derivación on-the-fly (RF-SIM-002/003/RF-REP-017)
   // ---------------------------------------------------------------------------
 
   /**
@@ -249,25 +249,64 @@ export class SimulationsService {
    * para el `month` pedido. `[]` si el mes no es futuro, cae fuera del
    * horizonte, o no hay ninguna simulación activa/elegible que aporte ese mes
    * (RF-SIM-002/003). Nunca genera filas: todo se calcula al vuelo.
+   *
+   * Wrapper de un solo mes sobre `getSimulatedItemsForMonths` (ver ahí el
+   * detalle del cálculo). `displayCurrencyOverride` — RF-REP-017: moneda de
+   * display de la card de reporte que consume el dato; ausente = moneda
+   * default del usuario (comportamiento histórico de `GET /movements`).
    */
   async getSimulatedItemsForMonth(
     userId: string,
     month: string,
     today?: string,
+    displayCurrencyOverride?: Currency,
   ): Promise<MovementItem[]> {
+    const byMonth = await this.getSimulatedItemsForMonths(
+      userId,
+      [month],
+      today,
+      displayCurrencyOverride,
+    );
+    return byMonth.get(month) ?? [];
+  }
+
+  /**
+   * Variante batch de `getSimulatedItemsForMonth`, para `GET /movements/reports`
+   * (RF-REP-017): carga la historia de la ventana [A-12..A-1] UNA sola vez y
+   * evalúa la regresión de cada simulación en cada mes pedido, en vez de
+   * repetir la carga por mes (evita N round-trips redundantes al recorrer un
+   * año completo). Misma semántica que la variante de un solo mes: un mes
+   * pasado/en curso o fuera del horizonte (RN-028) no se evalúa (queda `[]`
+   * en el mapa de salida); una simulación pausada (RN-028) no aporta.
+   *
+   * Devuelve un `Map` con TODAS las claves de `months` presentes (incluso las
+   * que no calificaron, con `[]`), para que el caller pueda indexar sin
+   * chequear presencia.
+   */
+  async getSimulatedItemsForMonths(
+    userId: string,
+    months: string[],
+    today?: string,
+    displayCurrencyOverride?: Currency,
+  ): Promise<Map<string, MovementItem[]>> {
+    const result = new Map<string, MovementItem[]>();
+    for (const m of months) result.set(m, []);
+
     const todayMonthKey = resolveTodayMonthKey(today);
-
-    // El mes en curso y los pasados NUNCA se simulan (RN-028).
-    if (month <= todayMonthKey) return [];
-
     const horizonEndMonth = computeHorizonEndMonth(todayMonthKey);
-    if (month > horizonEndMonth) return [];
+
+    // El mes en curso, los pasados (RN-028) y los que caen fuera del horizonte
+    // NUNCA se simulan — se descartan antes de cualquier acceso a datos.
+    const targetMonths = months.filter(
+      (m) => m > todayMonthKey && m <= horizonEndMonth,
+    );
+    if (targetMonths.length === 0) return result;
 
     const userSimulations = await this.repo.findAllForUser(userId);
-    if (userSimulations.length === 0) return [];
+    if (userSimulations.length === 0) return result;
 
     const userSettings = await this.settingsService.getSettings(userId);
-    const displayCurrency = userSettings.defaultCurrency;
+    const displayCurrency = displayCurrencyOverride ?? userSettings.defaultCurrency;
     const windowMonths = buildWindowMonths(todayMonthKey);
 
     const [data, categories] = await Promise.all([
@@ -275,9 +314,6 @@ export class SimulationsService {
       this.repo.findCategoriesByIds(userSimulations.map((s) => s.categoryId)),
     ]);
     const categoryById = new Map(categories.map((c) => [c.id, c]));
-
-    const position = axisPositionFor(todayMonthKey, month);
-    const items: MovementItem[] = [];
 
     for (const sim of userSimulations) {
       const catData = data.get(sim.categoryId);
@@ -287,44 +323,48 @@ export class SimulationsService {
 
       const monthlyTotals = windowMonths.map((m) => catData?.totalsByMonth.get(m) ?? 0);
       const fit = fitCategoryRegression(monthlyTotals);
-      const rawValue = evaluateRegressionAt(fit, position);
-      const roundedCents = Math.round(rawValue);
-      // Redondea a 0 centavos → no genera movimiento simulado ese mes (RF-SIM-002).
-      if (roundedCents === 0) continue;
-
       const category = categoryById.get(sim.categoryId) ?? this.fallbackCategory(sim.categoryId);
-      const magnitude = Math.abs(roundedCents);
-      // Signo del valor proyectado define la dirección (RN-028): negativo → gasto, positivo → ingreso.
-      const type: MovementType = roundedCents > 0 ? MovementType.INCOME : MovementType.EXPENSE;
 
-      items.push({
-        id: `simulated:${sim.id}:${month}`,
-        origin: 'unico',
-        type,
-        amountCents: magnitude,
-        convertedAmountCents: magnitude,
-        currency: displayCurrency,
-        exchangeRate: 1,
-        description: null,
-        occurredAt: null,
-        timezone: null,
-        category,
-        paymentMethod: null,
-        autoDebit: null,
-        installment: null,
-        frequency: null,
-        startMonth: null,
-        endMonth: null,
-        chainId: null,
-        skipped: false,
-        calculated: null,
-        hasCalculated: false,
-        calculatedChildren: [],
-        simulated: true,
-      });
+      for (const month of targetMonths) {
+        const position = axisPositionFor(todayMonthKey, month);
+        const rawValue = evaluateRegressionAt(fit, position);
+        const roundedCents = Math.round(rawValue);
+        // Redondea a 0 centavos → no genera movimiento simulado ese mes (RF-SIM-002).
+        if (roundedCents === 0) continue;
+
+        const magnitude = Math.abs(roundedCents);
+        // Signo del valor proyectado define la dirección (RN-028): negativo → gasto, positivo → ingreso.
+        const type: MovementType = roundedCents > 0 ? MovementType.INCOME : MovementType.EXPENSE;
+
+        result.get(month)!.push({
+          id: `simulated:${sim.id}:${month}`,
+          origin: 'unico',
+          type,
+          amountCents: magnitude,
+          convertedAmountCents: magnitude,
+          currency: displayCurrency,
+          exchangeRate: 1,
+          description: null,
+          occurredAt: null,
+          timezone: null,
+          category,
+          paymentMethod: null,
+          autoDebit: null,
+          installment: null,
+          frequency: null,
+          startMonth: null,
+          endMonth: null,
+          chainId: null,
+          skipped: false,
+          calculated: null,
+          hasCalculated: false,
+          calculatedChildren: [],
+          simulated: true,
+        });
+      }
     }
 
-    return items;
+    return result;
   }
 
   // ---------------------------------------------------------------------------

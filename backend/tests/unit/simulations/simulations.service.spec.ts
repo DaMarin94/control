@@ -435,5 +435,130 @@ describe('SimulationsService', () => {
       expect(items).toEqual([]);
       expect(repo.getUnicosMonthlyTotalsByCategory).not.toHaveBeenCalled();
     });
+
+    it('pasa displayCurrencyOverride a la conversión — el ítem sintético queda en esa moneda', async () => {
+      const { service, repo } = buildService();
+      repo.findAllForUser.mockResolvedValue([
+        { id: 'sim-1', userId: USER_ID, categoryId: CAT_ID, createdAt: new Date(), updatedAt: new Date() },
+      ]);
+      repo.getUnicosMonthlyTotalsByCategory.mockResolvedValue([
+        row('2026-04', 300000),
+        row('2026-05', 300000),
+        row('2026-06', 300000),
+      ]);
+      repo.findCategoriesByIds.mockResolvedValue([
+        { id: CAT_ID, name: 'Salidas', color: '#FF0000', scope: 'BOTH' as never },
+      ]);
+
+      const items = await service.getSimulatedItemsForMonth(
+        USER_ID,
+        '2026-08',
+        '2026-07-15',
+        Currency.USD,
+      );
+
+      expect(items).toHaveLength(1);
+      expect(items[0].currency).toBe(Currency.USD);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // getSimulatedItemsForMonths() — RF-SIM-002/003, consumido por getReportsMovements (RF-REP-017)
+  // ---------------------------------------------------------------------------
+
+  describe('getSimulatedItemsForMonths()', () => {
+    it('devuelve un Map con TODAS las claves pedidas, incluso las que no calificaron (mes pasado/en curso/fuera de horizonte) → []', async () => {
+      const { service, repo } = buildService();
+      repo.findAllForUser.mockResolvedValue([
+        { id: 'sim-1', userId: USER_ID, categoryId: CAT_ID, createdAt: new Date(), updatedAt: new Date() },
+      ]);
+      repo.getUnicosMonthlyTotalsByCategory.mockResolvedValue([
+        row('2026-04', 300000),
+        row('2026-05', 300000),
+        row('2026-06', 300000),
+      ]);
+      repo.findCategoriesByIds.mockResolvedValue([
+        { id: CAT_ID, name: 'Salidas', color: '#FF0000', scope: 'BOTH' as never },
+      ]);
+
+      // today = 2026-07-15 → mes en curso 2026-07; horizonte hasta 2027-01 (extendido).
+      const months = ['2026-06', '2026-07', '2026-08', '2027-02'];
+      const byMonth = await service.getSimulatedItemsForMonths(USER_ID, months, '2026-07-15');
+
+      expect([...byMonth.keys()]).toEqual(months);
+      expect(byMonth.get('2026-06')).toEqual([]); // pasado
+      expect(byMonth.get('2026-07')).toEqual([]); // en curso
+      expect(byMonth.get('2026-08')).toHaveLength(1); // futuro dentro de horizonte
+      expect(byMonth.get('2027-02')).toEqual([]); // fuera de horizonte
+    });
+
+    it('ningún mes calificado (todos pasados/fuera de horizonte): no llega a pedir simulaciones ni datos', async () => {
+      const { service, repo } = buildService();
+
+      const byMonth = await service.getSimulatedItemsForMonths(USER_ID, ['2026-01', '2026-07'], '2026-07-15');
+
+      expect(byMonth.get('2026-01')).toEqual([]);
+      expect(byMonth.get('2026-07')).toEqual([]);
+      expect(repo.findAllForUser).not.toHaveBeenCalled();
+    });
+
+    it('carga la ventana histórica UNA sola vez para varios meses futuros pedidos (batch, no N llamadas)', async () => {
+      const { service, repo } = buildService();
+      repo.findAllForUser.mockResolvedValue([
+        { id: 'sim-1', userId: USER_ID, categoryId: CAT_ID, createdAt: new Date(), updatedAt: new Date() },
+      ]);
+      repo.getUnicosMonthlyTotalsByCategory.mockResolvedValue([
+        row('2026-04', 300000),
+        row('2026-05', 300000),
+        row('2026-06', 300000),
+      ]);
+      repo.findCategoriesByIds.mockResolvedValue([
+        { id: CAT_ID, name: 'Salidas', color: '#FF0000', scope: 'BOTH' as never },
+      ]);
+
+      const byMonth = await service.getSimulatedItemsForMonths(
+        USER_ID,
+        ['2026-08', '2026-09', '2026-10'],
+        '2026-07-15',
+      );
+
+      expect(repo.getUnicosMonthlyTotalsByCategory).toHaveBeenCalledTimes(1);
+      expect(byMonth.get('2026-08')).toHaveLength(1);
+      expect(byMonth.get('2026-09')).toHaveLength(1);
+      expect(byMonth.get('2026-10')).toHaveLength(1);
+      expect(byMonth.get('2026-08')![0].id).toBe('simulated:sim-1:2026-08');
+      expect(byMonth.get('2026-09')![0].id).toBe('simulated:sim-1:2026-09');
+    });
+
+    it('simulación pausada (< 3 meses con datos): no aporta a NINGÚN mes del batch', async () => {
+      const { service, repo } = buildService();
+      repo.findAllForUser.mockResolvedValue([
+        { id: 'sim-1', userId: USER_ID, categoryId: CAT_ID, createdAt: new Date(), updatedAt: new Date() },
+      ]);
+      repo.getUnicosMonthlyTotalsByCategory.mockResolvedValue([
+        row('2026-05', 300000),
+        row('2026-06', 300000),
+      ]);
+
+      const byMonth = await service.getSimulatedItemsForMonths(
+        USER_ID,
+        ['2026-08', '2026-09'],
+        '2026-07-15',
+      );
+
+      expect(byMonth.get('2026-08')).toEqual([]);
+      expect(byMonth.get('2026-09')).toEqual([]);
+    });
+
+    it('sin simulaciones: Map con todas las claves en [], sin cargar datos mensuales', async () => {
+      const { service, repo } = buildService();
+      repo.findAllForUser.mockResolvedValue([]);
+
+      const byMonth = await service.getSimulatedItemsForMonths(USER_ID, ['2026-08', '2026-09'], '2026-07-15');
+
+      expect(byMonth.get('2026-08')).toEqual([]);
+      expect(byMonth.get('2026-09')).toEqual([]);
+      expect(repo.getUnicosMonthlyTotalsByCategory).not.toHaveBeenCalled();
+    });
   });
 });

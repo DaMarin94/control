@@ -26,7 +26,7 @@
  * prefers-reduced-motion: isAnimationActive={false} cuando está activo.
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react";
 import { createPortal } from "react-dom";
 import {
   AreaChart,
@@ -49,10 +49,12 @@ import {
   EyeOff,
   Pencil,
   RefreshCw,
+  ChartSpline,
 } from "lucide-react";
 import { useReports } from "@/hooks/use-reports";
 import { useSettings } from "@/hooks/use-settings";
 import { useLimits } from "@/hooks/use-limits";
+import { useSimulations } from "@/hooks/use-simulations";
 import {
   computeIncomeExpenseMarks,
   computeByCategoryMarks,
@@ -65,7 +67,7 @@ import { formatCurrency, CURRENCY_SYMBOLS } from "@/lib/format";
 import { ChartTooltipContent } from "@/components/ui/chart";
 import { ChartLegend } from "@/components/ui/chart";
 import { CardCurrencySelect } from "@/components/ui/card-currency-select";
-import type { ReportsMovementsResponse, ReportCardType } from "@/types/reports";
+import type { ReportsMovementsResponse, ReportCardType, SimulatedReportCategory } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
 import { cn } from "@/lib/utils";
 import { SkeletonBlock, SkeletonLine } from "@/components/ui/skeleton";
@@ -130,10 +132,76 @@ interface ChartDataPoint {
   fullLabel: string;
   incomeCents: number;
   expenseCents: number;
+  /** Aporte simulado del mes (RF-REP-017). 0 cuando no hay toggle/aporte — nunca undefined. */
+  simulatedIncomeCents: number;
+  simulatedExpenseCents: number;
   [key: string]: number | string | undefined;
 }
 
-function buildChartData(data: ReportsMovementsResponse): ChartDataPoint[] {
+/**
+ * dataKey del aporte simulado de una categoría en el chart (RF-REP-017).
+ * Prefijo dedicado para no colisionar con el dataKey real (`cat.categoryId`).
+ */
+function simDataKey(categoryId: string): string {
+  return `sim__${categoryId}`;
+}
+
+/**
+ * Categoría "fusionada" real + simulada para el stack de `by-category` (RF-REP-017).
+ * Universo = `data.categories` (real) ∪ `data.simulated.categories` (puede traer
+ * categorías AUSENTES de `data.categories` — sin gasto real en el año, solo aporte
+ * simulado). El color/nombre nunca se reasigna (RN-013): para una categoría presente
+ * en ambos lados se usa el de `data.categories` (son el mismo, por contrato).
+ */
+interface MergedReportCategory {
+  categoryId: string;
+  name: string;
+  color: string;
+  /** 12 valores, real, 0 = sin gasto ese mes (igual que hoy). */
+  monthlyExpenseCents: number[];
+  /** 12 valores, simulado. `null` = SIN aporte ese mes (no dibujar banda) — distinto de 0. */
+  simulatedMonthlyExpenseCents: readonly (number | null)[];
+}
+
+const NULL_MONTHS_12: readonly (number | null)[] = Object.freeze(new Array(12).fill(null));
+
+function buildMergedCategories(
+  data: ReportsMovementsResponse,
+  includeSimulated: boolean,
+): MergedReportCategory[] {
+  const simulatedCategories: SimulatedReportCategory[] = includeSimulated
+    ? data.simulated?.categories ?? []
+    : [];
+  const simMap = new Map(simulatedCategories.map((c) => [c.categoryId, c]));
+
+  const merged: MergedReportCategory[] = data.categories.map((cat) => ({
+    categoryId: cat.categoryId,
+    name: cat.name,
+    color: cat.color,
+    monthlyExpenseCents: cat.monthlyExpenseCents,
+    simulatedMonthlyExpenseCents: simMap.get(cat.categoryId)?.monthlyExpenseCents ?? NULL_MONTHS_12,
+  }));
+
+  const realIds = new Set(data.categories.map((c) => c.categoryId));
+  for (const simCat of simulatedCategories) {
+    if (realIds.has(simCat.categoryId)) continue;
+    // Categoría SIN gasto real en el año — solo aporta vía simulación.
+    merged.push({
+      categoryId: simCat.categoryId,
+      name: simCat.name,
+      color: simCat.color,
+      monthlyExpenseCents: new Array(12).fill(0),
+      simulatedMonthlyExpenseCents: simCat.monthlyExpenseCents,
+    });
+  }
+  return merged;
+}
+
+function buildChartData(
+  data: ReportsMovementsResponse,
+  mergedCategories: MergedReportCategory[],
+  includeSimulated: boolean,
+): ChartDataPoint[] {
   return data.months.map((m, i) => {
     const point: ChartDataPoint = {
       monthIndex: i,
@@ -141,10 +209,13 @@ function buildChartData(data: ReportsMovementsResponse): ChartDataPoint[] {
       fullLabel: MONTH_LABELS_FULL[i] ?? String(i + 1),
       incomeCents: m.incomeCents,
       expenseCents: m.expenseCents,
+      simulatedIncomeCents: includeSimulated ? data.simulated?.months[i]?.incomeCents ?? 0 : 0,
+      simulatedExpenseCents: includeSimulated ? data.simulated?.months[i]?.expenseCents ?? 0 : 0,
     };
-    // Gastos por categoría (Forma 2 + Vista B)
-    data.categories.forEach((cat) => {
+    // Gastos por categoría (Forma 2 + Vista B) — real + capa simulada (RF-REP-017)
+    mergedCategories.forEach((cat) => {
       point[cat.categoryId] = cat.monthlyExpenseCents[i] ?? 0;
+      point[simDataKey(cat.categoryId)] = cat.simulatedMonthlyExpenseCents[i] ?? 0;
     });
     return point;
   });
@@ -182,20 +253,29 @@ export function Form1Tooltip({
 
   const fullLabel = `${MONTH_LABELS_FULL[monthIndex] ?? label} ${year}`;
 
-  function getSeriesValue(series: "income" | "expense"): number {
+  // RF-REP-017: el total mostrado combina real + aporte simulado (si la capa
+  // simulada está montada, su dataKey aparece en el payload; si no, suma 0).
+  // El prefijo "≈" (§2.4) marca la cifra cuando ese mes incluye aporte simulado.
+  function getSeriesValue(series: "income" | "expense"): { total: number; hasSimulated: boolean } {
     const key = series === "income" ? "incomeCents" : "expenseCents";
-    return payload!.find((p) => p.dataKey === key)?.value ?? 0;
+    const simKey = series === "income" ? "simulatedIncomeCents" : "simulatedExpenseCents";
+    const real = payload!.find((p) => p.dataKey === key)?.value ?? 0;
+    const simulated = payload!.find((p) => p.dataKey === simKey)?.value ?? 0;
+    return { total: real + simulated, hasSimulated: simulated > 0 };
   }
 
   const showIncome = direction !== "expense";
   const showExpense = direction !== "income";
+
+  const incomeValue = getSeriesValue("income");
+  const expenseValue = getSeriesValue("expense");
 
   const rows = [
     ...(showIncome
       ? [{
           color: "var(--income)",
           label: "Ingresos",
-          formattedValue: formatCurrency(getSeriesValue("income"), currency),
+          formattedValue: `${incomeValue.hasSimulated ? "≈" : ""}${formatCurrency(incomeValue.total, currency)}`,
           valueColor: "var(--income-ink)",
         }]
       : []),
@@ -203,7 +283,7 @@ export function Form1Tooltip({
       ? [{
           color: "var(--expense)",
           label: "Gastos",
-          formattedValue: formatCurrency(getSeriesValue("expense"), currency),
+          formattedValue: `${expenseValue.hasSimulated ? "≈" : ""}${formatCurrency(expenseValue.total, currency)}`,
           valueColor: "var(--expense-ink)",
         }]
       : []),
@@ -229,26 +309,53 @@ interface Form2TooltipProps {
   data: ReportsMovementsResponse;
   year: number;
   currency: string;
+  /** Categorías real + capa simulada fusionadas (RF-REP-017); reemplaza a `data.categories` como fuente. */
+  mergedCategories: MergedReportCategory[];
+  /** RF-REP-017: la cifra de categoría/total lleva "≈" cuando incluye aporte simulado ese mes. */
+  includeSimulated: boolean;
   /** Marcas de límite (P2 — Tramo 2): reporte.cat.gastoMesCategoria / .gastoMesTotal. */
   categoryMarks?: ByCategoryMarks;
 }
 
-export function Form2Tooltip({ active, payload, label, data, year, currency, categoryMarks }: Form2TooltipProps) {
+export function Form2Tooltip({
+  active,
+  payload,
+  label,
+  data,
+  year,
+  currency,
+  mergedCategories,
+  includeSimulated,
+  categoryMarks,
+}: Form2TooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
   const labelStr = String(label ?? "");
   const monthIndex = MONTH_LABELS_SHORT.indexOf(labelStr);
   if (monthIndex === -1) return null;
   const fullLabel = `${MONTH_LABELS_FULL[monthIndex] ?? label} ${year}`;
-  const catRows = data.categories
-    .filter((cat) => (cat.monthlyExpenseCents[monthIndex] ?? 0) > 0)
-    .map((cat) => ({
-      color: cat.color,
-      label: cat.name,
-      formattedValue: formatCurrency(cat.monthlyExpenseCents[monthIndex] ?? 0, currency),
-      valueColor: "var(--ink)",
-    }));
-  const totalCents = data.months[monthIndex]?.expenseCents ?? 0;
-  const totalRow = { color: "var(--expense)", label: "Total gastos", formattedValue: formatCurrency(totalCents, currency), valueColor: "var(--expense-ink)" };
+  const catRows = mergedCategories
+    .map((cat) => {
+      const real = cat.monthlyExpenseCents[monthIndex] ?? 0;
+      const simulated = includeSimulated ? cat.simulatedMonthlyExpenseCents[monthIndex] ?? 0 : 0;
+      const total = real + simulated;
+      if (total <= 0) return null;
+      return {
+        color: cat.color,
+        label: cat.name,
+        formattedValue: `${simulated > 0 ? "≈" : ""}${formatCurrency(total, currency)}`,
+        valueColor: "var(--ink)",
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null);
+  const realTotalCents = data.months[monthIndex]?.expenseCents ?? 0;
+  const simulatedTotalCents = includeSimulated ? data.simulated?.months[monthIndex]?.expenseCents ?? 0 : 0;
+  const totalCents = realTotalCents + simulatedTotalCents;
+  const totalRow = {
+    color: "var(--expense)",
+    label: "Total gastos",
+    formattedValue: `${simulatedTotalCents > 0 ? "≈" : ""}${formatCurrency(totalCents, currency)}`,
+    valueColor: "var(--expense-ink)",
+  };
 
   // P2 — Tramo 2: combina las marcas de todas las categorías + el total de ESTE mes
   // en una sola (la más fuerte gana) — portador de a11y del mes hovereado.
@@ -518,6 +625,75 @@ function MovementTypeChips({ value, onChange }: MovementTypeChipsProps) {
   );
 }
 
+// ─── SimulatedToggleChip — chip-toggle "Simulados" (RF-REP-017) ───────────────
+
+/**
+ * Chip-toggle "Simulados" — cluster izquierdo de la línea 2 de income-expense
+ * y by-category (último de todos, `income-expense`/`by-category` únicamente).
+ * Reusa el molde del chip-toggle neutro de MovementTypeChips + glifo ChartSpline
+ * (mismo glifo que `/mes` usa para señalar composición con simulados).
+ *
+ * Deshabilitado con motivo (docs/design.md §1.3): SIEMPRE presente, NUNCA
+ * `disabled` nativo (perdería `title`/foco) — `aria-disabled` + `title` +
+ * `aria-describedby` apuntando a un span `sr-only` con el mismo texto. El
+ * click en estado deshabilitado no hace nada; la etiqueta y el glifo no cambian.
+ */
+interface SimulatedToggleChipProps {
+  /** Valor persistido de la card (aria-pressed real, independiente del estado deshabilitado). */
+  pressed: boolean;
+  disabled: boolean;
+  /** Motivo del deshabilitado — null cuando no aplica (chip habilitado). */
+  motive: string | null;
+  onToggle: () => void;
+}
+
+function SimulatedToggleChip({ pressed, disabled, motive, onToggle }: SimulatedToggleChipProps) {
+  const motiveId = useId();
+  // Mientras deshabilitado, el chip se ve SIEMPRE plano (aunque el valor persistido
+  // sea "encendido") — no hay dato simulado que mostrar, mostrarlo elevado mentiría.
+  const isElevated = !disabled && pressed;
+
+  return (
+    <>
+      <button
+        type="button"
+        aria-pressed={pressed}
+        aria-disabled={disabled || undefined}
+        aria-label="Incluir movimientos simulados"
+        aria-describedby={disabled && motive ? motiveId : undefined}
+        title={disabled && motive ? motive : undefined}
+        onClick={() => {
+          if (disabled) return;
+          onToggle();
+        }}
+        className={cn(
+          "inline-flex items-center gap-[6px] px-[10px] py-[5px] rounded-[7px]",
+          "text-[12.5px] font-semibold select-none",
+          "transition-colors duration-[140ms]",
+          "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+          disabled
+            ? "bg-panel-2 border border-line text-muted opacity-45 cursor-default"
+            : isElevated
+              ? "bg-panel border border-line-strong shadow-[var(--shadow-sm)] text-ink active:bg-panel-3"
+              : "bg-panel-2 border border-line text-muted hover:text-ink-2 hover:border-line-strong active:bg-panel-3",
+        )}
+      >
+        <ChartSpline
+          size={13}
+          aria-hidden="true"
+          className={isElevated ? "text-ink-2" : "text-muted"}
+        />
+        Simulados
+      </button>
+      {disabled && motive && (
+        <span id={motiveId} className="sr-only">
+          {motive}
+        </span>
+      )}
+    </>
+  );
+}
+
 // ID del panel de gráfico (para aria-controls de tabs)
 const CHART_PANEL_ID = "report-chart-panel";
 
@@ -588,6 +764,12 @@ interface Form1ChartInnerProps {
   currency: string;
   /** Dirección de cómputo — determina qué series se renderizan en el chart. */
   direction?: "expense" | "income" | "both";
+  /**
+   * RF-REP-017: apila una capa simulada (hueca + punteada) encima de cada
+   * dirección mostrada. Las marcas (`expenseMarks`/`incomeMarks`) ya reflejan
+   * el valor CON simulados cuando está en true (se resuelve en ReportCard).
+   */
+  includeSimulated: boolean;
   /** Marcas de límite por mes (P2 — Tramo 2): reporte.ie.gastoMes / .ingresoMes. [] con limits vacío. */
   expenseMarks?: (EvaluatedLimitMark | null)[];
   incomeMarks?: (EvaluatedLimitMark | null)[];
@@ -600,12 +782,18 @@ function Form1ChartInner({
   reducedMotion,
   currency,
   direction,
+  includeSimulated,
   expenseMarks,
   incomeMarks,
 }: Form1ChartInnerProps) {
   const formatYAxisTick = makeYAxisTickFormatter(currency);
   const showIncome = direction !== "expense";
   const showExpense = direction !== "income";
+
+  const expenseDot = ((props: { cx?: number; cy?: number; index?: number }) =>
+    renderSeriesPointMark(props, expenseMarks)) as unknown as boolean;
+  const incomeDot = ((props: { cx?: number; cy?: number; index?: number }) =>
+    renderSeriesPointMark(props, incomeMarks)) as unknown as boolean;
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -639,16 +827,41 @@ function Form1ChartInner({
           )}
         />
 
-        {/* Gastos primero (debajo), ingresos encima — spec design.md */}
+        {/* Gastos primero (debajo), ingresos encima — spec design.md.
+            Con includeSimulated, cada dirección pasa a ser un stack de 2 capas
+            (real base + simulado encima, mismo stackId) — docs/design.md §2.1.
+            Dot/activeDot (portador de las marcas de límite) vive en la capa
+            TOPE visible: la simulada cuando está montada, si no la real. */}
         {showExpense && (
           <Area
             type="monotone"
             dataKey="expenseCents"
+            stackId={includeSimulated ? "expenseStack" : undefined}
             stroke="var(--expense)"
             strokeWidth={2}
             fill="url(#areaExpenseRep)"
-            dot={((props: { cx?: number; cy?: number; index?: number }) =>
-              renderSeriesPointMark(props, expenseMarks)) as unknown as boolean}
+            dot={includeSimulated ? false : expenseDot}
+            activeDot={
+              includeSimulated
+                ? false
+                : { r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 }
+            }
+            isAnimationActive={!reducedMotion}
+            animationDuration={400}
+            animationEasing="ease-out"
+          />
+        )}
+        {showExpense && includeSimulated && (
+          <Area
+            type="monotone"
+            dataKey="simulatedExpenseCents"
+            stackId="expenseStack"
+            stroke="var(--expense)"
+            strokeWidth={2}
+            strokeDasharray="5 4"
+            fill="var(--expense)"
+            fillOpacity={0.1}
+            dot={expenseDot}
             activeDot={{ r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 }}
             isAnimationActive={!reducedMotion}
             animationDuration={400}
@@ -659,11 +872,32 @@ function Form1ChartInner({
           <Area
             type="monotone"
             dataKey="incomeCents"
+            stackId={includeSimulated ? "incomeStack" : undefined}
             stroke="var(--income)"
             strokeWidth={2}
             fill="url(#areaIncomeRep)"
-            dot={((props: { cx?: number; cy?: number; index?: number }) =>
-              renderSeriesPointMark(props, incomeMarks)) as unknown as boolean}
+            dot={includeSimulated ? false : incomeDot}
+            activeDot={
+              includeSimulated
+                ? false
+                : { r: 4, fill: "var(--income)", stroke: "var(--panel)", strokeWidth: 2 }
+            }
+            isAnimationActive={!reducedMotion}
+            animationDuration={400}
+            animationEasing="ease-out"
+          />
+        )}
+        {showIncome && includeSimulated && (
+          <Area
+            type="monotone"
+            dataKey="simulatedIncomeCents"
+            stackId="incomeStack"
+            stroke="var(--income)"
+            strokeWidth={2}
+            strokeDasharray="5 4"
+            fill="var(--income)"
+            fillOpacity={0.1}
+            dot={incomeDot}
             activeDot={{ r: 4, fill: "var(--income)", stroke: "var(--panel)", strokeWidth: 2 }}
             isAnimationActive={!reducedMotion}
             animationDuration={400}
@@ -680,6 +914,10 @@ function Form1ChartInner({
 interface Form2ChartInnerProps {
   chartData: ChartDataPoint[];
   data: ReportsMovementsResponse;
+  /** Categorías real + capa simulada fusionadas (RF-REP-017); reemplaza a `data.categories`. */
+  mergedCategories: MergedReportCategory[];
+  /** RF-REP-017: monta el bloque de bandas simuladas (hueco + punteado `4 3`) encima del real. */
+  includeSimulated: boolean;
   year: number;
   height: number;
   reducedMotion: boolean;
@@ -692,14 +930,25 @@ interface Form2ChartInnerProps {
    * cualquiera sea el `effect` elegido (docs/design.md: la banda apilada no
    * tiene etiqueta de monto propia donde anclar glyph/badge — ver nota en
    * apply-reports.ts / reporte al orquestador). El portador de a11y completo
-   * es el tooltip (warningNote de Form2Tooltip).
+   * es el tooltip (warningNote de Form2Tooltip). Ya reflejan el valor CON
+   * simulados cuando includeSimulated=true (se resuelve en ReportCard).
    */
   categoryMarks?: ByCategoryMarks;
 }
 
-function Form2ChartInner({ chartData, data, year, height, reducedMotion, currency, categoryMarks }: Form2ChartInnerProps) {
-  const categories = data.categories;
+function Form2ChartInner({
+  chartData,
+  data,
+  mergedCategories,
+  includeSimulated,
+  year,
+  height,
+  reducedMotion,
+  currency,
+  categoryMarks,
+}: Form2ChartInnerProps) {
   const formatYAxisTick = makeYAxisTickFormatter(currency);
+  const isLastCategory = (idx: number) => idx === mergedCategories.length - 1;
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={chartData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }} barCategoryGap="27%">
@@ -716,19 +965,37 @@ function Form2ChartInner({ chartData, data, year, height, reducedMotion, currenc
               data={data}
               year={year}
               currency={currency}
+              mergedCategories={mergedCategories}
+              includeSimulated={includeSimulated}
               categoryMarks={categoryMarks}
             />
           )}
         />
-        {categories.map((cat, idx) => {
-          const isTop = idx === categories.length - 1;
+        {/* Bloque REAL — idéntico a hoy, mismo orden mayor→menor (docs/design.md §2.2) */}
+        {mergedCategories.map((cat, idx) => {
+          const top = isLastCategory(idx);
           const catMonthMarks = categoryMarks?.perCategory.get(cat.categoryId);
           return (
-            <Bar key={cat.categoryId} dataKey={cat.categoryId} stackId="categories" fill={cat.color} stroke="var(--panel)" strokeWidth={1} radius={isTop ? [7, 7, 0, 0] : [0, 0, 0, 0]} isAnimationActive={!reducedMotion} animationDuration={400} animationEasing="ease-out">
+            <Bar
+              key={cat.categoryId}
+              dataKey={cat.categoryId}
+              stackId="categories"
+              fill={cat.color}
+              stroke="var(--panel)"
+              strokeWidth={1}
+              radius={top && !includeSimulated ? [7, 7, 0, 0] : [0, 0, 0, 0]}
+              isAnimationActive={!reducedMotion}
+              animationDuration={400}
+              animationEasing="ease-out"
+            >
               {chartData.map((_, cellIdx) => {
+                // El aporte simulado de ESTE mes "se lleva" el anillo de marca de la
+                // categoría: la banda real ya no es el borde exterior de esta categoría.
+                const hasSimAportThisMonth =
+                  includeSimulated && cat.simulatedMonthlyExpenseCents[cellIdx] !== null;
                 const mark = mergeLimitMarks(
-                  catMonthMarks?.[cellIdx] ?? null,
-                  isTop ? (categoryMarks?.total[cellIdx] ?? null) : null,
+                  hasSimAportThisMonth ? null : catMonthMarks?.[cellIdx] ?? null,
+                  top && !includeSimulated ? categoryMarks?.total[cellIdx] ?? null : null,
                 );
                 return (
                   <Cell
@@ -742,6 +1009,52 @@ function Form2ChartInner({ chartData, data, year, height, reducedMotion, currenc
             </Bar>
           );
         })}
+        {/* Bloque SIMULADO (RF-REP-017) — mismo orden, hueco (0.30) + contorno punteado `4 3`.
+            Meses sin aporte de la categoría: celda invisible (fill/stroke transparentes),
+            NUNCA banda de altura cero con contorno residual (docs/design.md §2.2). */}
+        {includeSimulated &&
+          mergedCategories.map((cat, idx) => {
+            const top = isLastCategory(idx);
+            const catMonthMarks = categoryMarks?.perCategory.get(cat.categoryId);
+            return (
+              <Bar
+                key={`${cat.categoryId}-sim`}
+                dataKey={simDataKey(cat.categoryId)}
+                stackId="categories"
+                fill={cat.color}
+                fillOpacity={0.3}
+                stroke={cat.color}
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+                radius={top ? [7, 7, 0, 0] : [0, 0, 0, 0]}
+                isAnimationActive={!reducedMotion}
+                animationDuration={400}
+                animationEasing="ease-out"
+              >
+                {chartData.map((_, cellIdx) => {
+                  const hasAporte = cat.simulatedMonthlyExpenseCents[cellIdx] !== null;
+                  if (!hasAporte) {
+                    // Sin aporte ese mes: celda invisible, sin contorno residual.
+                    return <Cell key={cellIdx} fill="transparent" stroke="transparent" strokeWidth={0} />;
+                  }
+                  const mark = mergeLimitMarks(
+                    catMonthMarks?.[cellIdx] ?? null,
+                    top ? categoryMarks?.total[cellIdx] ?? null : null,
+                  );
+                  return (
+                    <Cell
+                      key={cellIdx}
+                      fill={cat.color}
+                      fillOpacity={0.3}
+                      stroke={mark ? "var(--warning)" : cat.color}
+                      strokeWidth={mark ? 2 : 1.5}
+                      strokeDasharray="4 3"
+                    />
+                  );
+                })}
+              </Bar>
+            );
+          })}
       </BarChart>
     </ResponsiveContainer>
   );
@@ -752,6 +1065,10 @@ function Form2ChartInner({ chartData, data, year, height, reducedMotion, currenc
 interface FormBChartInnerProps {
   chartData: ChartDataPoint[];
   data: ReportsMovementsResponse;
+  /** Categorías real + capa simulada fusionadas (RF-REP-017); reemplaza a `data.categories`. */
+  mergedCategories: MergedReportCategory[];
+  /** RF-REP-017: monta el bloque de áreas simuladas apilado encima del real. */
+  includeSimulated: boolean;
   year: number;
   height: number;
   reducedMotion: boolean;
@@ -760,7 +1077,8 @@ interface FormBChartInnerProps {
    * Marcas de límite (P2 — Tramo 2): reporte.cat.gastoMesCategoria (por serie) y
    * reporte.cat.gastoMesTotal (serie top del stack). Mismo dato que Forma 2 —
    * acá se expresa como dot/ring sobre el punto de cada serie (anclaje
-   * "series-point"), no como recoloreo/contorno de banda.
+   * "series-point"), no como recoloreo/contorno de banda. Ya reflejan el valor
+   * CON simulados cuando includeSimulated=true (se resuelve en ReportCard).
    */
   categoryMarks?: ByCategoryMarks;
 }
@@ -775,25 +1093,60 @@ interface FormBChartInnerProps {
  * Las bandas llevan fill=category.color a opacidad 0.55 (uniforme, sin degradé).
  * Separadores 1px var(--panel) entre bandas para que colores similares no se fusionen.
  * Tooltip: reutiliza Form2Tooltip (mismo patrón que Forma 2 — solo gastos).
+ *
+ * RF-REP-017: con includeSimulated, se apila un SEGUNDO bloque de N áreas
+ * (mismo stackId, mismo orden) encima del real: intermedias a opacidad 0.18
+ * con separador --panel 1px (igual que las reales); la del TOPE lleva la
+ * firma "--expense 2px punteado 5 4". Los meses sin aporte usan 0 (no null).
+ *
+ * Gotcha de oclusión (fix aplicado, ver el bloque final del JSX): compartir
+ * stackId entre bloque real y simulado significa que el separador --panel de
+ * CUALQUIER capa simulada intermedia se pinta después del contorno real y, en
+ * los meses (o el año entero, si esa categoría nunca se simula) sin aporte
+ * propio, degenera exactamente a la posición del tope real y lo tapa — solo
+ * queda visible el punteado de la capa simulada tope, incluso donde no
+ * debería. La sola presencia del separador --panel 1px NO es "inocua" en este
+ * punto de costura (a diferencia de un separador intermedio dentro de un
+ * mismo bloque): abajo hay una línea con semántica (--expense), no otro
+ * separador. Se redibuja el total real como serie aparte, sin stackId, al
+ * final del árbol (pinta último) — ver comentario ahí.
  */
-function FormBChartInner({ chartData, data, year, height, reducedMotion, currency, categoryMarks }: FormBChartInnerProps) {
-  const expenseCategories = data.categories;
+function FormBChartInner({
+  chartData,
+  data,
+  mergedCategories,
+  includeSimulated,
+  year,
+  height,
+  reducedMotion,
+  currency,
+  categoryMarks,
+}: FormBChartInnerProps) {
   const formatYAxisTick = makeYAxisTickFormatter(currency);
 
   // IDs únicos para los gradientes (evitar colisión con Forma 2 si hay múltiples cards)
-  const gradId = (id: string) => `fbGradE_${id.replace(/[^a-z0-9]/gi, "_")}`;
+  const gradId = (id: string, sim?: boolean) => `fbGradE_${sim ? "sim_" : ""}${id.replace(/[^a-z0-9]/gi, "_")}`;
+  const isLastCategory = (idx: number) => idx === mergedCategories.length - 1;
 
   return (
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={chartData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
         <defs>
-          {/* Gradientes de gasto: fill con color de categoría a opacidad 0.55 (uniforme) */}
-          {expenseCategories.map((cat) => (
+          {/* Gradientes de gasto REAL: fill con color de categoría a opacidad 0.55 (uniforme) */}
+          {mergedCategories.map((cat) => (
             <linearGradient key={gradId(cat.categoryId)} id={gradId(cat.categoryId)} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={cat.color} stopOpacity={0.55} />
               <stop offset="100%" stopColor={cat.color} stopOpacity={0.55} />
             </linearGradient>
           ))}
+          {/* Gradientes de la capa SIMULADA (RF-REP-017): opacidad 0.18 (hueca) */}
+          {includeSimulated &&
+            mergedCategories.map((cat) => (
+              <linearGradient key={gradId(cat.categoryId, true)} id={gradId(cat.categoryId, true)} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={cat.color} stopOpacity={0.18} />
+                <stop offset="100%" stopColor={cat.color} stopOpacity={0.18} />
+              </linearGradient>
+            ))}
         </defs>
 
         <CartesianGrid horizontal vertical={false} stroke="var(--hair)" strokeWidth={1} />
@@ -809,38 +1162,123 @@ function FormBChartInner({ chartData, data, year, height, reducedMotion, currenc
               data={data}
               year={year}
               currency={currency}
+              mergedCategories={mergedCategories}
+              includeSimulated={includeSimulated}
               categoryMarks={categoryMarks}
             />
           )}
         />
 
-        {/* Stack de GASTO — único stackId */}
-        {expenseCategories.map((cat, idx) => {
-          const isTop = idx === expenseCategories.length - 1;
+        {/* Stack REAL — único stackId, sin cambios.
+            El contorno superior del bloque real (isTopSeries) sigue llevando
+            --expense 2px sólido (se conserva por prolijidad de composición del
+            stack), pero con el toggle encendido este trazo YA NO es el que
+            garantiza la lectura sólida en pantalla — ver el "contorno de
+            seguridad" al final del árbol, y la nota ahí sobre por qué.
+            Las marcas de límite del TOTAL y el activeDot interactivo, en cambio, sí
+            se delegan a la capa visualmente superior (real cuando el toggle está
+            apagado, simulada cuando está encendido) para no duplicarlos. */}
+        {mergedCategories.map((cat, idx) => {
+          const isTopSeries = isLastCategory(idx);
+          const showTotalMarksHere = isTopSeries && !includeSimulated;
           const catMonthMarks = categoryMarks?.perCategory.get(cat.categoryId);
-          // Mismo merge que la vista Barra: la marca de este punto es la de la
-          // categoría y, si es la serie top del stack, también la del total del mes.
-          const dotMarks = chartData.map((_, i) =>
-            mergeLimitMarks(catMonthMarks?.[i] ?? null, isTop ? (categoryMarks?.total[i] ?? null) : null),
-          );
+          const dotMarks = chartData.map((_, i) => {
+            const hasSimAportThisMonth = includeSimulated && cat.simulatedMonthlyExpenseCents[i] !== null;
+            return mergeLimitMarks(
+              hasSimAportThisMonth ? null : catMonthMarks?.[i] ?? null,
+              showTotalMarksHere ? categoryMarks?.total[i] ?? null : null,
+            );
+          });
           return (
             <Area
               key={cat.categoryId}
               type="monotone"
               dataKey={cat.categoryId}
               stackId="expense"
-              stroke={isTop ? "var(--expense)" : "var(--panel)"}
-              strokeWidth={isTop ? 2 : 1}
+              stroke={isTopSeries ? "var(--expense)" : "var(--panel)"}
+              strokeWidth={isTopSeries ? 2 : 1}
               fill={`url(#${gradId(cat.categoryId)})`}
               dot={((props: { cx?: number; cy?: number; index?: number }) =>
                 renderSeriesPointMark(props, dotMarks)) as unknown as boolean}
-              activeDot={isTop ? { r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 } : false}
+              activeDot={
+                showTotalMarksHere ? { r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 } : false
+              }
               isAnimationActive={!reducedMotion}
               animationDuration={400}
               animationEasing="ease-out"
             />
           );
         })}
+
+        {/* Stack SIMULADO (RF-REP-017) — mismo stackId, mismo orden, apilado encima */}
+        {includeSimulated &&
+          mergedCategories.map((cat, idx) => {
+            const top = isLastCategory(idx);
+            const catMonthMarks = categoryMarks?.perCategory.get(cat.categoryId);
+            const dotMarks = chartData.map((_, i) =>
+              mergeLimitMarks(catMonthMarks?.[i] ?? null, top ? categoryMarks?.total[i] ?? null : null),
+            );
+            return (
+              <Area
+                key={`${cat.categoryId}-sim`}
+                type="monotone"
+                dataKey={simDataKey(cat.categoryId)}
+                stackId="expense"
+                stroke={top ? "var(--expense)" : "var(--panel)"}
+                strokeWidth={top ? 2 : 1}
+                strokeDasharray={top ? "5 4" : undefined}
+                fill={`url(#${gradId(cat.categoryId, true)})`}
+                dot={((props: { cx?: number; cy?: number; index?: number }) =>
+                  renderSeriesPointMark(props, dotMarks)) as unknown as boolean}
+                activeDot={top ? { r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 } : false}
+                isAnimationActive={!reducedMotion}
+                animationDuration={400}
+                animationEasing="ease-out"
+              />
+            );
+          })}
+
+        {/* Contorno de seguridad del total REAL (fix de oclusión, RF-REP-017).
+            Causa: el bloque simulado comparte el MISMO stackId "expense" que el
+            real, así que sus capas quedan apiladas EN ORDEN DE PINTADO después
+            de él. Cuando una categoría fusionada no tiene aporte simulado ESE
+            mes (el caso común — incluye TODO el año para una categoría que
+            nunca se simula), su capa `sim__` degenera exactamente a la posición
+            del tope real, pero su contorno --panel (el separador entre bandas,
+            igual que usa el bloque real entre categorías) se pinta DESPUÉS y
+            tapa el trazo --expense sólido que hay debajo — el punteado de la
+            categoría simulada tope queda como el único trazo rojo visible, en
+            los 12 meses, no solo donde hay aporte. `mergedCategories.map` de
+            arriba no puede evitarlo por sí solo: el separador --panel de una
+            capa intermedia no sabe que, en este punto exacto del stack, hay un
+            trazo con semántica (no otro separador) debajo.
+            Fix: redibujar el total real como una serie APARTE, sin stackId (no
+            participa del stack; usa el MISMO dataKey `expenseCents` que ya
+            expone `chartData`, que por invariante de contrato — docs/data-model.md
+            §Contrato de reportes — es la suma exacta de las bandas reales), sin
+            fill (no tapa el color de ninguna banda) y como el ÚLTIMO hijo del
+            chart: pinta siempre por ENCIMA de cualquier separador del bloque
+            simulado. Donde hay aporte, esta línea vive en el nivel real (más
+            abajo que el punteado, que sube con el aporte) y no le compite; donde
+            no hay aporte, coincide con el punteado y el resultado se lee sólido
+            — el comportamiento que ya lograban Forma 1 y Barra por otras vías.
+            Solo se monta con el toggle encendido: "cero impacto con el toggle
+            apagado" (docs/design.md §RF-REP-017) — sin él, el DOM es idéntico al
+            de antes de la feature. */}
+        {includeSimulated && (
+          <Area
+            type="monotone"
+            dataKey="expenseCents"
+            stroke="var(--expense)"
+            strokeWidth={2}
+            fill="none"
+            dot={false}
+            activeDot={false}
+            isAnimationActive={!reducedMotion}
+            animationDuration={400}
+            animationEasing="ease-out"
+          />
+        )}
       </AreaChart>
     </ResponsiveContainer>
   );
@@ -1177,6 +1615,18 @@ export interface ReportCardProps {
    * de 2 series Ingresos/Gastos (modo Dashboard).
    */
   onDirectionChange?: (dir: "expense" | "income" | "both") => void;
+  /**
+   * Toggle "incluir movimientos simulados" (RF-REP-017).
+   * undefined / false = apagado (default, back-compat).
+   * Solo aplica a type === "income-expense" | "by-category". Ignorado en otros tipos.
+   */
+  includeSimulated?: boolean;
+  /**
+   * Callback al togglear el chip "Simulados".
+   * Cuando está presente → se monta el chip en la cabecera (solo en /reportes;
+   * el Dashboard no lo pasa, igual gate que movementTypes/direction).
+   */
+  onIncludeSimulatedChange?: (v: boolean) => void;
 }
 
 // ─── EditableTitle — título editable in-situ de la card (Ola 2, P4) ───────────
@@ -1443,6 +1893,8 @@ export function ReportCard({
   onMovementTypesChange,
   direction,
   onDirectionChange,
+  includeSimulated = false,
+  onIncludeSimulatedChange,
 }: ReportCardProps) {
   const reducedMotion = useReducedMotion();
   const { defaultCurrency } = useSettings();
@@ -1461,13 +1913,29 @@ export function ReportCard({
   const reportsMovementTypes = type === "income-expense" ? movementTypes : undefined;
   const reportsDirection = type === "income-expense" ? direction : undefined;
 
+  // RF-REP-017: el chip "Simulados" solo se monta cuando el padre pasa el
+  // callback (mismo gate que movementTypes/direction — el Dashboard nunca lo
+  // pasa). El valor persistido (includeSimulated) SIEMPRE se manda al backend
+  // tal cual, independiente de si el chip está visualmente deshabilitado: en
+  // los dos casos de deshabilitado (sin simulaciones / año sin tramo futuro)
+  // el backend simplemente no tiene nada que agregar, así que no hace falta
+  // "apagar" el param — el resultado ya es idéntico a apagado.
+  const showSimulatedToggle = Boolean(onIncludeSimulatedChange);
+
   const { data, isLoading, isError, isFetching, refetch } = useReports(
     year,
     categoryIds,
     currency,
     reportsMovementTypes,
     reportsDirection,
+    includeSimulated,
   );
+
+  // Simulaciones del usuario — solo para saber si hay ≥1 (motivo de deshabilitado
+  // del chip, docs/design.md §1.3). `enabled` gatea el fetch: el Dashboard (sin
+  // showSimulatedToggle) no dispara esta query.
+  const simulationsQuery = useSimulations(showSimulatedToggle);
+  const hasNoSimulations = (simulationsQuery.data?.simulations.length ?? 0) === 0;
 
   const [removeOpen, setRemoveOpen] = useState(false);
   const removeButtonRef = useRef<HTMLButtonElement>(null);
@@ -1506,18 +1974,39 @@ export function ReportCard({
     }
   }, [isEditingTitle]);
 
-  // Año actual (límite navegación hacia adelante)
-  const [currentYear, setCurrentYear] = useState(() => {
-    const now = new Date();
-    return now.getFullYear();
-  });
+  // Año actual (límite navegación hacia adelante) y mes actual (1-based) —
+  // RF-REP-017 usa el mes para saber si el año en curso ya se quedó sin tramo
+  // futuro (diciembre). Se resuelve post-mount, como currentYear, para no
+  // arrastrar el "ahora" del server al primer render (evita mismatch de hidratación).
+  const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
+  const [currentMonthNum, setCurrentMonthNum] = useState(() => new Date().getMonth() + 1);
   useEffect(() => {
     const now = new Date();
     setCurrentYear(now.getFullYear());
+    setCurrentMonthNum(now.getMonth() + 1);
   }, []);
 
   const earliestYear = data?.earliestYear ?? null;
-  const chartData = data ? buildChartData(data) : [];
+
+  // RF-REP-017: universo de categorías real ∪ simulado para el stack de
+  // by-category (income-expense no lo usa para su propio chart, pero es
+  // inocuo computarlo igual — mismo endpoint, mismo shape de `data.categories`).
+  const mergedCategories = useMemo(
+    () => (data ? buildMergedCategories(data, includeSimulated) : []),
+    [data, includeSimulated],
+  );
+  const chartData = data ? buildChartData(data, mergedCategories, includeSimulated) : [];
+
+  // El chip "Simulados" se deshabilita en dos casos (docs/design.md §1.3),
+  // con precedencia: sin ninguna simulación gana sobre año sin tramo futuro.
+  const hasNoFutureMonthsInYear =
+    year < currentYear || (year === currentYear && currentMonthNum === 12);
+  const simulatedToggleDisabled = hasNoSimulations || hasNoFutureMonthsInYear;
+  const simulatedToggleMotive = hasNoSimulations
+    ? "No tenés ninguna simulación. Se crean desde la sección Únicos de la vista del mes."
+    : hasNoFutureMonthsInYear
+      ? `${year} no tiene meses futuros.`
+      : null;
 
   // Universo estable de categorías para la leyenda-filtro (P2_b).
   // Viene de availableCategories (sin aplicar filtro), no de useCategories.
@@ -1528,20 +2017,31 @@ export function ReportCard({
     [data?.availableCategories],
   );
 
+  // RF-REP-017: ids de categorías con aporte SOLO simulado (o simulado + real) —
+  // usado para no perder de la leyenda de by-category una categoría sin gasto
+  // real en el año que solo entra vía simulación (ver legendUniverse abajo).
+  const simulatedCategoryIds = useMemo(
+    () => new Set((includeSimulated ? data?.simulated?.categories ?? [] : []).map((c) => c.categoryId)),
+    [data?.simulated?.categories, includeSimulated],
+  );
+
   /**
    * Universo de leyenda por tipo de card (fix E2).
-   * by-category: solo categorías con gasto (hasExpense === true) — no debe mostrar
-   * categorías income-only.
+   * by-category: categorías con gasto (hasExpense === true) MÁS, con el toggle
+   * de simulados habilitado, las que solo aportan vía simulación (RF-REP-017 —
+   * el criterio "hasExpense a secas" las dejaría afuera aunque la card las grafique).
    * income-expense: universo completo (con o sin gasto) — así las categorías de
-   * ingreso aparecen en la leyenda y quedan tildadas por default.
+   * ingreso aparecen en la leyenda y quedan tildadas por default. Ya incluye las
+   * simulado-only sin ajuste extra: `availableCategories` se amplía con el flag
+   * (docs/data-model.md) y acá no se filtra por hasExpense/hasIncome.
    * Usado de forma CONSISTENTE en los ítems renderizados, el toggle y hiddenCategoryIds.
    */
   const legendUniverse = useMemo(
     () =>
       type === "by-category"
-        ? availableCategories.filter((c) => c.hasExpense)
+        ? availableCategories.filter((c) => c.hasExpense || simulatedCategoryIds.has(c.categoryId))
         : availableCategories,
-    [availableCategories, type],
+    [availableCategories, type, simulatedCategoryIds],
   );
 
   // ── Lógica de toggle de la leyenda-filtro ──────────────────────────────────
@@ -1600,19 +2100,26 @@ export function ReportCard({
   // Vacío (sin movimientos en el año para esta forma).
   // En income-expense la Dirección controla qué series se consideran;
   // ya no hay hiddenSeries que modifique este cálculo.
+  // RF-REP-017 (señal técnica de control-design): el criterio se evalúa sobre
+  // el dato que la card MUESTRA — con el toggle habilitado, un año cuyo único
+  // dato es simulado NO debe caer en el estado vacío.
   const isYearEmpty = (() => {
     if (!data) return false;
+    const expenseAt = (i: number) =>
+      data.months[i]!.expenseCents + (includeSimulated ? data.simulated?.months[i]?.expenseCents ?? 0 : 0);
+    const incomeAt = (i: number) =>
+      data.months[i]!.incomeCents + (includeSimulated ? data.simulated?.months[i]?.incomeCents ?? 0 : 0);
     if (type === "income-expense") {
       if (direction === "expense") {
-        return data.months.every((m) => m.expenseCents === 0);
+        return data.months.every((_, i) => expenseAt(i) === 0);
       }
       if (direction === "income") {
-        return data.months.every((m) => m.incomeCents === 0);
+        return data.months.every((_, i) => incomeAt(i) === 0);
       }
       // direction = "both" o undefined: ambas series deben estar vacías
-      return data.months.every((m) => m.incomeCents === 0 && m.expenseCents === 0);
+      return data.months.every((_, i) => incomeAt(i) === 0 && expenseAt(i) === 0);
     }
-    return data.months.every((m) => m.expenseCents === 0);
+    return data.months.every((_, i) => expenseAt(i) === 0);
   })();
 
   function handlePrev() {
@@ -1658,13 +2165,18 @@ export function ReportCard({
   // income-expense: reporte.ie.gastoMes / .ingresoMes, un valor por mes de la serie.
   // by-category: reporte.cat.gastoMesCategoria (por banda) / .gastoMesTotal (stack).
   // Con `limits` vacío, evaluateLimits siempre null → cero impacto (restricción rectora).
+  //
+  // RF-REP-017: "las marcas pasivas evalúan el dato que la card muestra: con
+  // simulados si el toggle está habilitado, real si no" — no se agregan keys
+  // nuevas (apply-reports.ts queda intacto); acá se le pasa el valor EFECTIVO
+  // (real + simulado cuando corresponde) para que la evaluación ya sea correcta.
   const incomeExpenseMarks =
     type === "income-expense" && data
       ? computeIncomeExpenseMarks(
           limits,
           year,
-          data.months.map((m) => m.expenseCents),
-          data.months.map((m) => m.incomeCents),
+          data.months.map((m, i) => m.expenseCents + (includeSimulated ? data.simulated?.months[i]?.expenseCents ?? 0 : 0)),
+          data.months.map((m, i) => m.incomeCents + (includeSimulated ? data.simulated?.months[i]?.incomeCents ?? 0 : 0)),
         )
       : undefined;
 
@@ -1673,8 +2185,13 @@ export function ReportCard({
       ? computeByCategoryMarks(
           limits,
           year,
-          data.categories,
-          data.months.map((m) => m.expenseCents),
+          mergedCategories.map((cat) => ({
+            categoryId: cat.categoryId,
+            monthlyExpenseCents: cat.monthlyExpenseCents.map(
+              (cents, i) => cents + (includeSimulated ? cat.simulatedMonthlyExpenseCents[i] ?? 0 : 0),
+            ),
+          })),
+          data.months.map((m, i) => m.expenseCents + (includeSimulated ? data.simulated?.months[i]?.expenseCents ?? 0 : 0)),
         )
       : undefined;
 
@@ -1751,6 +2268,19 @@ export function ReportCard({
                   onChange={(types) => onMovementTypesChange?.(types)}
                 />
                 {/* Categoría ya NO tiene control en la cabecera — está en el footer como leyenda-filtro */}
+                {/* RF-REP-017 — chip "Simulados", último del cluster (divisor viaja con el
+                    chip como subgrupo shrink-0: el primero en bajar de renglón al envolver). */}
+                {showSimulatedToggle && (
+                  <span className="inline-flex items-center gap-[6px] shrink-0">
+                    <span className="block h-[16px] w-px bg-hair shrink-0" aria-hidden="true" />
+                    <SimulatedToggleChip
+                      pressed={includeSimulated}
+                      disabled={simulatedToggleDisabled}
+                      motive={simulatedToggleDisabled ? simulatedToggleMotive : null}
+                      onToggle={() => onIncludeSimulatedChange?.(!includeSimulated)}
+                    />
+                  </span>
+                )}
               </div>
               {/* Cluster derecho — CardControls */}
               <CardControls
@@ -1830,15 +2360,31 @@ export function ReportCard({
             {/* Popover informativo de límites (P2) — by-category nunca vive en Dashboard */}
             <LimitsInfoPopover surface="reporte-by-category" />
           </div>
-          {/* Línea 2: [ViewTabs Barra/Línea izq] / [controles der], items-start */}
+          {/* Línea 2: [ViewTabs Barra/Línea + chip Simulados izq] / [controles der], items-start */}
           <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-[18px]">
-            <ViewTabs
-              tabs={BY_CATEGORY_TABS}
-              value={categoryChartMode}
-              onChange={(v) => onCategoryChartModeChange?.(v)}
-              panelId={CHART_PANEL_ID}
-              ariaLabel="Representación del reporte"
-            />
+            {/* Cluster izquierdo: tabs + (divisor + chip "Simulados", RF-REP-017).
+                items-center para alinear el chip verticalmente al centro del texto de
+                las tabs; el chip vive FUERA del role="tablist" (no es una tab). */}
+            <div className="flex flex-wrap items-center gap-[6px]">
+              <ViewTabs
+                tabs={BY_CATEGORY_TABS}
+                value={categoryChartMode}
+                onChange={(v) => onCategoryChartModeChange?.(v)}
+                panelId={CHART_PANEL_ID}
+                ariaLabel="Representación del reporte"
+              />
+              {showSimulatedToggle && (
+                <span className="inline-flex items-center gap-[6px] shrink-0">
+                  <span className="block h-[16px] w-px bg-hair shrink-0" aria-hidden="true" />
+                  <SimulatedToggleChip
+                    pressed={includeSimulated}
+                    disabled={simulatedToggleDisabled}
+                    motive={simulatedToggleDisabled ? simulatedToggleMotive : null}
+                    onToggle={() => onIncludeSimulatedChange?.(!includeSimulated)}
+                  />
+                </span>
+              )}
+            </div>
             <CardControls
               year={year}
               currentYear={currentYear}
@@ -1894,6 +2440,7 @@ export function ReportCard({
                     reducedMotion={reducedMotion}
                     currency={effectiveCurrency}
                     direction={direction}
+                    includeSimulated={includeSimulated}
                     expenseMarks={incomeExpenseMarks?.expense}
                     incomeMarks={incomeExpenseMarks?.income}
                   />
@@ -1905,6 +2452,8 @@ export function ReportCard({
                   <FormBChartInner
                     chartData={chartData}
                     data={data}
+                    mergedCategories={mergedCategories}
+                    includeSimulated={includeSimulated}
                     year={year}
                     height={height}
                     reducedMotion={reducedMotion}
@@ -1918,6 +2467,8 @@ export function ReportCard({
                 <Form2ChartInner
                   chartData={chartData}
                   data={data}
+                  mergedCategories={mergedCategories}
+                  includeSimulated={includeSimulated}
                   year={year}
                   height={height}
                   reducedMotion={reducedMotion}

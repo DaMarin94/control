@@ -51,6 +51,7 @@
 | Reportes — Ingresos vs Gastos: filtros de tipo de movimiento, dirección y categoría (acotan las 2 series, no es desglose) | RF-REP-014 | Implementado |
 | Reportes — Ingresos vs Gastos: proyección de fijos a futuro (capacidad retenida en el backend, sin UI que la consuma) | RF-REP-015 | Backend disponible, no expuesto en UI |
 | Reportes — botón de refrescar per-card (los 5 tipos + widget del Dashboard; refetch independiente, feedback solo-spinner) | RF-REP-016 | Implementado |
+| Reportes — movimientos simulados en el tramo futuro (toggle opt-in por card en Ingresos vs Gastos y Gastos por categoría, persistido, off por defecto) | RF-REP-017 | Implementado |
 | Multi-moneda — set curado 4 (ARS/USD/EUR/BRL) + tabla de cotizaciones de referencia + pantalla `/configuracion` | RF-CUR-001..006, RN-009 | Implementado |
 | Modo de color — toggle Sistema/Claro/Oscuro en el chrome global (sidebar), persistido (blob `theme`) | RF-APP-001 | Implementado |
 | Gate por debajo del ancho mínimo soportado (640px) — bloqueo CSS puro a viewport completo, cubre toda la app incluido login | RF-APP-002 | Implementado |

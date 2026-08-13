@@ -52,10 +52,6 @@ pnpm dev
 
 ## TODO
 
-0 - Analizar si hay una forma mejor de almacenar los movimientos fijos: la cadena de splits con `chainId` obliga a que el historial agrupe por cadena y no por fila.
-1 - El `DATABASE_URL` del backend usa el endpoint pooler de Neon, pero Neon recomienda el endpoint directo (sin `-pooler`) para migraciones porque el pooler puede fallar con los advisory locks de Prisma: evaluar separar la URL de migraciones de la de runtime.
-2 - Me gustaria que se pueda habilitar ver en los reportes pertinentes, las simulaciones creadas en la pagina del mes
-
 ## Tests
 
 Cada app guarda sus tests en una carpeta `tests/` separada de `src/` (`src/` solo contiene código; ver `docs/technical.md`).

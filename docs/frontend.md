@@ -611,8 +611,9 @@ El gráfico se separa en una **primitiva reutilizable** (motor de charting, agn�
 
 ### Datos (`use-reports`)
 
-- Hook **`useReports(year, categoryIds, currency, movementTypes, direction)`** sobre `GET /movements/reports`. Sin mutaciones (solo lectura). Aplica el patrón obligatorio **`enabled: isAuthenticated`** (ver Queries de lectura gate-adas en Autenticación). **No recibe `projectFixed`/`today`**: ninguna pantalla consume la proyección de fijos (RF-REP-015).
-- **`REPORTS_QUERY_KEY` tiene 6 elementos:** `["reports", year, categoriesKey, currency, movementTypesKey, direction]`, donde `categoriesKey` y `movementTypesKey` son la serialización de cada filtro. Cada dimensión que altera la respuesta va en la key para que React Query refetchee al cambiarla; sin ella no refetchearía.
+- Hook **`useReports(year, categoryIds, currency, movementTypes, direction, includeSimulated)`** sobre `GET /movements/reports`. Sin mutaciones (solo lectura). Aplica el patrón obligatorio **`enabled: isAuthenticated`** (ver Queries de lectura gate-adas en Autenticación). **No recibe `projectFixed`/`today`**: ninguna pantalla consume la proyección de fijos (RF-REP-015), y el corte de "mes futuro" del aporte simulado lo resuelve el backend con su propio `today`.
+- **`REPORTS_QUERY_KEY` tiene 7 elementos:** `["reports", year, categoriesKey, currency, movementTypesKey, direction, includeSimulated]`, donde `categoriesKey` y `movementTypesKey` son la serialización de cada filtro y `includeSimulated` es un booleano normalizado (`undefined` → `false`). Cada dimensión que altera la respuesta va en la key para que React Query refetchee al cambiarla; sin ella no refetchearía.
+- **`includeSimulated` solo se manda cuando es `true`** (`&includeSimulated=true`); `false`/`undefined` **omiten el param**, así la request de una card con el toggle apagado es byte-idéntica a la de una card sin la feature.
 - **`placeholderData: keepPreviousData`.** Al cambiar el filtro de categorías o el año, el gráfico mantiene visibles los datos previos durante el refetch; el skeleton de carga aparece solo en la primera carga (sin caché), no en cada cambio de filtro. Es deliberado para evitar el parpadeo del gráfico.
 - **GOTCHA — el query param `categories` se construye por concatenación de string, NO con `URLSearchParams`.** El backend espera la coma **literal** (`categories=id1,id2,id3`); `URLSearchParams` encodea la coma a `%2C` y el filtro deja de matchear. Patrón reusable para **cualquier endpoint que acepte listas separadas por coma**: armar el query string a mano, no con `URLSearchParams`.
 - Tipos del contrato en **`types/reports.ts`**: `ReportMovementsResponse` / `ReportMonth` / `ReportCategory`.
@@ -630,6 +631,22 @@ Solo en `/reportes` (la income-expense del dashboard **no** los monta; ver gate 
 
 - **Gate `/reportes` vs. dashboard por `onDirectionChange`.** La presencia del callback `onDirectionChange` distingue la card configurable de `/reportes` (monta los filtros y la leyenda-filtro de categorías) de la card del dashboard (sin filtros; conserva solo la leyenda **decorativa** de 2 series, que no filtra).
 - **Sin `hiddenSeries`.** No existe el acoplamiento `hiddenSeries` ↔ `direction`: la dirección sola gobierna qué líneas se ven. El campo `hiddenSeries` está deprecado y la normalización del blob lo strip en runtime para `income-expense` (ver `docs/data-model.md`).
+
+### Aporte simulado en las cards (RF-REP-017)
+
+Toggle por card en `income-expense` y `by-category`, persistido en `includeSimulated` de su entrada del blob `reports` (shape en `docs/data-model.md`). El backend devuelve el aporte **separado** del dato real (clave `simulated`, mismo doc): el front lo **apila/suma** al renderizar, no lo recibe integrado.
+
+- **Universo de categorías fusionado.** Las bandas de `by-category` se arman sobre `data.categories` ∪ `data.simulated.categories` — el bloque simulado puede traer categorías que **no** están en el real (categoría sin gasto real en el año). La leyenda-filtro suma esas categorías al conjunto de `hasExpense` cuando el toggle está encendido.
+- **`null` vs `0` al mapear al chart.** El contrato distingue "sin aporte" (`null`) de un valor; al volcar al `chartData` de Recharts el `null` se traduce a `0` (la geometría necesita un número), y el `null` original se conserva aparte para decidir **si esa capa se dibuja**. Perder esa distinción produce bandas fantasma de altura cero con contorno visible.
+
+**Gotcha estructural — orden de pintado en las áreas apiladas (modo Línea de `by-category`).**
+
+El bloque real y el simulado comparten el mismo `stackId`, así que **el simulado se pinta entero después del real**. En la **costura entre bloques**, la primera capa simulada tiene su baseline exactamente sobre el contorno del tope real; cuando esa categoría no aporta simulación en ese mes (o en todo el año), su curva **degenera a esa misma posición** y su separador `--panel` —pintado después— **ocluye** el trazo `--expense` de abajo, borrando visualmente el contorno del total real.
+
+Por eso el contorno del total real se dibuja **como serie propia, sin `stackId`, y como último hijo del chart**: al pintar al final, queda siempre por encima de cualquier separador del bloque simulado. Donde hay aporte simulado vive por debajo del contorno punteado (que sube con el aporte) y no le compite; donde no hay aporte, coincide con él y se lee sólido. La serie usa el mismo `dataKey` del total de gasto real y `fill="none"` (no tapa ninguna banda), y **solo se monta con el toggle encendido**.
+
+- Un separador `--panel` intermedio es inocuo **dentro** de un bloque (abajo hay otro separador), pero **no** en la costura entre bloques: ahí abajo hay un trazo con semántica.
+- **Un test de atributos no detecta este defecto**: los atributos de cada serie están bien y el resultado visual está mal. Lo que hay que verificar es el **orden de pintado en el DOM** (posición relativa de los nodos dentro del árbol del chart).
 
 ### Puntos de uso
 

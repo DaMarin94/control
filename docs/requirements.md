@@ -1757,7 +1757,7 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 
 El módulo de Reportes visualiza los movimientos del usuario a lo largo de un año, mes a mes. El eje X son los 12 meses del año; el eje Y es el monto. Ofrece **dos tipos de reporte** —ingresos vs. gastos por mes, y gastos por categoría apilados— implementados como un **widget de reporte autónomo, configurable por props**, que lleva embebidos su propia navegación de año y su propio filtro de categorías. La pantalla `/reportes` es **configurable**: el usuario arma su vista agregando y quitando **cards de reporte**; el dashboard monta una sola instancia del widget (ver RF-DASH-001/002).
 
-> **Alcance:** los tipos de reporte descritos en RF-REP-001 (ingresos/gastos y apilado por categoría de gastos), RF-REP-010 (grilla anual de gastos Únicos día × mes), RF-REP-011 (gantt anual de gastos en Cuotas), RF-REP-012 (líneas de Inflación vs Ingresos) y RF-REP-013 (Evolución de gastos fijos). La card de Ingresos vs Gastos admite además filtros por tipo / dirección / categoría (RF-REP-014). Otros tipos de reporte/gráfico (torta, barras de comparación) quedan fuera de alcance (ver sección 6).
+> **Alcance:** los tipos de reporte descritos en RF-REP-001 (ingresos/gastos y apilado por categoría de gastos), RF-REP-010 (grilla anual de gastos Únicos día × mes), RF-REP-011 (gantt anual de gastos en Cuotas), RF-REP-012 (líneas de Inflación vs Ingresos) y RF-REP-013 (Evolución de gastos fijos). La card de Ingresos vs Gastos admite además filtros por tipo / dirección / categoría (RF-REP-014); ella y la de Gastos por categoría pueden incluir los **movimientos simulados** en su tramo futuro, opt-in por card (RF-REP-017). Otros tipos de reporte/gráfico (torta, barras de comparación) quedan fuera de alcance (ver sección 6).
 
 ---
 
@@ -1778,7 +1778,7 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 **Criterios de aceptación:**
 - [ ] El módulo ofrece exactamente **dos tipos de reporte**: `income-expense` (Ingresos vs Gastos) y `by-category` (Gastos por categoría). No hay tipos adicionales.
 - [ ] El eje X representa los 12 meses del año configurado; el eje Y representa el monto.
-- [ ] Los **12 meses están siempre presentes** en el eje X; un mes sin datos se grafica en **cero** (no se omite ni deja hueco). Esto incluye los meses futuros del año en curso, que también se muestran en cero salvo lo que proyecten los fijos activos y las cuotas en tramo (RN-006). La representación visual concreta de un mes en cero la define `control-design`.
+- [ ] Los **12 meses están siempre presentes** en el eje X; un mes sin datos se grafica en **cero** (no se omite ni deja hueco). Esto incluye los meses futuros del año en curso, que también se muestran en cero salvo lo que proyecten los fijos activos y las cuotas en tramo (RN-006) y, en las cards que lo habilitan, los movimientos simulados (RF-REP-017). La representación visual concreta de un mes en cero la define `control-design`.
 - [ ] Ingresos vs Gastos muestra, por mes, el total de ingresos y el total de gastos del mes; ambos totales suman únicos + fijos activos + cuotas del mes (mismo criterio que RF-VM-002).
 - [ ] Gastos por categoría muestra, por mes, el total de gastos del mes descompuesto por categoría, cada porción con el color de su categoría; la suma de las porciones de un mes iguala el total de gastos de ese mes.
 - [ ] Gastos por categoría considera **solo gastos** (`EXPENSE`); los ingresos no aparecen descompuestos por categoría.
@@ -1789,6 +1789,7 @@ El módulo de Reportes visualiza los movimientos del usuario a lo largo de un a�
 
 **Notas:**
 - Las decisiones de presentación visual del reporte (tipo de trazo, relleno de áreas, leyenda, ejes, interacción de hover/tooltip, comportamiento responsivo) son responsabilidad de `control-design` (`docs/design.md`), no de este RF.
+- Los criterios de arriba describen el dato **real** de ambos tipos. Una card `income-expense` o `by-category` puede además sumar los **movimientos simulados** al tramo de meses futuros cuando la propia card lo habilita (RF-REP-017, apagado por defecto).
 
 ---
 
@@ -2238,6 +2239,59 @@ Las tres dimensiones se combinan libremente (ej. "solo gastos fijos de la catego
 - [ ] El **feedback es solo un spinner** mientras recarga; **no hay toast** (ni de éxito ni de error).
 - [ ] Si la recarga **falla**, la card muestra su propio **estado de error** ya existente.
 - [ ] En **modo orden** (RF-REP-009) el botón de refrescar, como el resto de los controles internos de la card, **no está disponible**.
+
+---
+
+#### RF-REP-017 — Movimientos simulados en una card de reporte (opt-in por card)
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Las cards `income-expense` (Ingresos vs Gastos) y `by-category` (Gastos por categoría) exponen un **toggle que habilita los movimientos simulados** (módulo 3.15) en el tramo de **meses futuros** del año que la card muestra. Es un control **por card**, persistido junto al resto de su config (clave `reports`, RF-REP-004) —mismo patrón que el techo de color de `unique-grid` (RF-REP-010)—, **apagado por defecto**: una card sin el toggle habilitado grafica **solo lo real**. Ninguna otra card lo expone; el dashboard tampoco. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | Existe una card `income-expense` o `by-category` en `/reportes`. |
+
+**Alcance por tipo de card:**
+
+| Card | Toggle | Motivo |
+|---|---|---|
+| `income-expense` | **Sí** | Grafica montos de únicos + fijos + cuotas; el simulado es un único y suma a la serie de su dirección. |
+| `by-category` | **Sí**, solo los simulados que resultan **gasto** | Descompone el gasto del mes por categoría; el simulado aporta a la porción de su categoría. |
+| `unique-grid` | **No — imposibilidad estructural** | La grilla ubica cada gasto en una celda **día × mes** y el movimiento simulado **no tiene día** (RF-SIM-003): no hay celda donde ponerlo. |
+| `installment-gantt` | No | Grafica solo **cuotas**; el simulado es un único. |
+| `fixed-evolution` | No | Grafica solo **gastos fijos**; el simulado es un único. |
+| `inflation-income` | No | Grafica **variaciones porcentuales contra el IPC**, no montos. |
+
+**Comportamiento con el toggle habilitado:**
+
+- **Solo el tramo futuro.** El simulado entra únicamente en los meses **futuros dentro del horizonte** de cada simulación (RF-SIM-002). El **mes en curso y los meses pasados** de la card no cambian nunca.
+- **Tramo alcanzable.** La navegación de año topa hacia adelante en el **año en curso** (RF-REP-002), así que el único tramo visible es `A+1 .. diciembre del año en curso`; la extensión del horizonte a `A+6` que cae en el año siguiente **no es alcanzable** desde `/reportes`.
+- **Aporte en `income-expense`.** Cada simulado suma su **magnitud** a la serie de su **dirección derivada** (RN-019): gasto a la serie de gastos, ingreso a la de ingresos.
+- **Aporte en `by-category`.** Entran **solo los simulados que resultan gasto** (`EXPENSE`), apilados en la porción de **su categoría simulada**. Un simulado que resulta **ingreso** queda afuera de esta card, igual que cualquier ingreso real (RF-REP-001). Como la dirección se deriva del signo mes a mes (RF-SIM-002), la **misma** simulación puede aportar porción en un mes futuro y no en el siguiente.
+- **Invariante de `by-category`.** La suma de las porciones de un mes futuro sigue igualando el total de gastos **que esa card muestra** (real + simulado de gasto). La igualdad con la serie "gastos" de una card `income-expense` (RF-REP-001) se sostiene solo cuando **ambas cards tienen el toggle en el mismo estado**: el control es por card.
+- **Filtros de la card — el simulado es un único.** Lo alcanzan como a cualquier único: por **tipo de movimiento** entra con `único` y destildar `único` lo saca (RF-REP-014, solo `income-expense`); por **dirección**, según su dirección derivada del mes (RF-REP-014); por **categoría**, según su categoría simulada (RF-REP-002). La **categoría simulada entra al universo** del filtro de la card aunque no tenga movimientos reales en el año; con el toggle apagado, no. El universo sigue siendo **estable** (no se achica al destildar).
+- **Moneda.** El simulado se re-expresa a la **moneda de display de la card** (RF-REP-007) como cualquier otro dato.
+- **Distinción visual, sin aviso textual.** La porción simulada se distingue **dentro del gráfico**; la card **no** lleva el aviso de composición ("incluye N simulados") que `/mes` exige (RF-SIM-003): habilitar el toggle ya es la declaración del usuario. El detalle visual lo define `control-design` (`docs/design.md`).
+- **Límites (RF-LIM-003).** Las **marcas pasivas** evalúan siempre el **dato que la card muestra**: con el toggle habilitado, el valor **con** simulados; apagado, el real. No se agregan keys — las de la card (`reporte.ie.*`, `reporte.cat.*`) no cambian. Los reportes no tienen límites activos (RF-LIM-004).
+- **Simulación pausada.** Una simulación pausada (RF-SIM-002) no deriva movimientos: no aporta nada a la card y eso no es un error.
+
+**Disponibilidad del control:** el toggle está **siempre presente** en las dos cards y se ofrece **deshabilitado con el motivo visible** —nunca oculto— en dos casos: el usuario **no tiene ninguna simulación**, o el año que la card muestra **no tiene meses futuros alcanzables** (cualquier año anterior al año en curso, y el año en curso cuando el mes en curso es diciembre). Deshabilitar el control **no apaga el valor persistido**: al volver a un año con tramo futuro, la card retoma el estado que tenía.
+
+**Criterios de aceptación:**
+- [ ] El toggle existe **solo** en `income-expense` y `by-category` de `/reportes`; las otras cuatro cards no lo exponen y el **dashboard** no lo tiene en ninguna superficie.
+- [ ] El **default es apagado**: una card sin el toggle habilitado grafica solo lo real, idéntica a como se ve sin la feature.
+- [ ] El estado del toggle se **persiste por card** en la clave `reports` (RF-REP-004); el shape concreto se fija en implementación (`docs/data-model.md`).
+- [ ] Habilitado, los simulados entran **solo** en los meses **futuros dentro del horizonte** (RF-SIM-002); el mes en curso y los pasados de la card no cambian.
+- [ ] En `income-expense` cada simulado suma su **magnitud** a la serie de su **dirección derivada** (RN-019).
+- [ ] En `by-category` entran **solo** los simulados que resultan **gasto**; uno que resulta **ingreso** no aparece en esa card.
+- [ ] Los **filtros** de la card alcanzan al simulado **como a un único**: tipo `único`, dirección derivada y categoría simulada; esa categoría entra al universo del filtro con el toggle habilitado.
+- [ ] Las **marcas pasivas** (RF-LIM-003) evalúan el dato que la card muestra: con simulados si el toggle está habilitado, real si no. No hay keys nuevas.
+- [ ] El toggle se ofrece **deshabilitado con el motivo visible** (nunca oculto) sin simulaciones del usuario o en un año sin meses futuros alcanzables, **sin perder** el valor persistido.
+- [ ] La card **no** muestra aviso textual de composición: la distinción es visual, dentro del gráfico.
+
+**Notas:**
+- **Asimetría con RF-REP-015 (proyección de fijos, capacidad de backend sin UI).** Las dos extienden el tramo futuro de una card y solo una tiene control de usuario; la diferencia es **quién declara ese futuro**. La simulación es una **elección explícita del usuario** —eligió la categoría (RF-SIM-001) y ya ve su resultado en `/mes` (RF-SIM-003)—, con horizonte acotado, y el toggle solo lleva a `/reportes` un dato que el usuario pidió. La proyección de fijos es una **estimación del sistema**, de horizonte ilimitado, que nadie declaró. Habilitar este toggle **no** activa la proyección de fijos: los meses futuros de la card siguen valiendo lo que aportan los fijos activos y las cuotas en tramo (RN-006), más los simulados.
+- El detalle visual del toggle y de la distinción de la porción simulada lo define `control-design` (`docs/design.md`).
 
 ---
 
@@ -2943,7 +2997,7 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 
 ### 3.15 Módulo: Simulación de categoría
 
-La simulación proyecta a los meses futuros el comportamiento de **una categoría** a partir de su historia reciente, y lo muestra como movimientos en la Vista del mes (`/mes`).
+La simulación proyecta a los meses futuros el comportamiento de **una categoría** a partir de su historia reciente, y lo muestra como movimientos en la Vista del mes (`/mes`, RF-SIM-003) y —**opt-in por card**— en las cards de Ingresos vs Gastos y Gastos por categoría de `/reportes` (RF-REP-017).
 
 Su alcance son **únicamente los movimientos únicos**. Los fijos y las cuotas ya se calculan on-the-fly en cualquier mes (RN-006): navegando a un mes futuro, los fijos activos y las cuotas en tramo **ya aparecen**. El único hueco de un mes futuro son los **Únicos** — simular fijos o cuotas duplicaría lo que el sistema ya sabe.
 
@@ -3027,7 +3081,7 @@ La simulación **no genera filas**: lo que persiste es su configuración (usuari
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | En un mes futuro dentro del horizonte, cada simulación activa aporta a la sección **Únicos** de `/mes` **un** movimiento simulado, derivado al vuelo (RF-SIM-002) y **claramente distinguible** de los movimientos reales. Suma a los totales del mes y entra en la evaluación de límites; fuera de `/mes` no existe. |
+| **Descripción** | En un mes futuro dentro del horizonte, cada simulación activa aporta a la sección **Únicos** de `/mes` **un** movimiento simulado, derivado al vuelo (RF-SIM-002) y **claramente distinguible** de los movimientos reales. Suma a los totales del mes y entra en la evaluación de límites. `/mes` es la superficie donde el movimiento simulado se ve **siempre**; en `/reportes` se ve solo en las cards que lo habilitan (RF-REP-017). |
 | **Actor** | Sistema |
 | **Prioridad** | Alta |
 | **Precondiciones** | El mes visualizado es futuro y está dentro del horizonte de al menos una simulación activa. |
@@ -3042,7 +3096,7 @@ La simulación **no genera filas**: lo que persiste es su configuración (usuari
 - [ ] **Filtros de la sección (RF-VM-006):** participa como cualquier único — lo alcanzan tanto el filtro de tipo como el de categoría. Un filtro que lo excluye lo saca también de subtotal, contador, totales y de la señal de composición.
 - [ ] **Orden (RF-VM-001):** en el orden **por monto** entra por magnitud como cualquier ítem; en el orden **por fecha** —que no tiene— va **al final** de la sección.
 - [ ] **Límites (RF-LIM-003, RF-LIM-004):** los datos que `/mes` emite ya lo incluyen, así que las **marcas pasivas** lo evalúan como a cualquier dato del mes y la **alerta activa** proyecta sobre una base que lo contiene (aplica al guardar un **único** en un mes simulado; fijos, cuotas y calculados se chequean contra el mes en curso, que nunca tiene simulados).
-- [ ] **No entra en `/reportes`** —ni en las cards, ni en las series anuales (módulo 3.9)—: los reportes analizan lo **real**. Tampoco en el **dashboard**, que muestra el mes en curso (nunca simulado).
+- [ ] **`/reportes` (módulo 3.9):** entra **solo** en las cards que lo **habilitan** (opt-in por card, RF-REP-017); una card sin habilitarlo grafica solo lo real. **No entra en el dashboard** en ninguna superficie: ni en el resumen mensual (mes en curso, nunca simulado) ni en su widget de reporte.
 - [ ] **Sin acciones de movimiento:** la fila simulada **no** expone kebab (⋮) —ni editar, ni duplicar, ni anular, ni eliminar, ni crear calculado— ni **card de detalle** (RF-VM-007), y **no puede ser origen** de un movimiento calculado.
 - [ ] No genera ni ocupa ninguna fila en la base: existe solo en la respuesta del mes que lo deriva.
 
@@ -3112,7 +3166,7 @@ La simulación **no genera filas**: lo que persiste es su configuración (usuari
 | RN-026 | **Borrado lógico de movimientos y retención (RF-HIST-005, RF-HIST-006).** Eliminar un movimiento lo **marca como eliminado** en lugar de borrarlo: deja de aparecer en **toda** la app (listados, totales, reportes, selectores y contadores) sin excepción, y su única superficie es `/historial`. Los calculados que caen en cascada con él tampoco se borran físicamente, por lo que se restauran junto con el origen al deshacer. Las entradas de historial se purgan por **dos límites, el que ocurra primero**: máximo **5 entradas por movimiento** (al sexto cambio se descarta la más antigua **de ese movimiento**) y vencimiento a los **31 días** de registrada. Al purgarse la entrada de una eliminación, el movimiento se borra **físicamente** y la eliminación es definitiva. |
 | RN-027 | **Historial por defecto en toda mutación de datos del usuario (RF-HIST-001..006).** Toda operación que **modifica o elimina** datos del usuario se **registra en el historial** y es **deshacible**: nace con su captura del estado previo, su entrada agrupada por una clave estable, su undo LIFO y su purga por retención. Es el default del sistema, no un agregado opcional: una funcionalidad que mute datos **no se considera completa** sin su registro de historial. La **única** forma de quedar fuera es una excepción **documentada de forma explícita en el propio RF** de esa funcionalidad. El alcance registrado hoy y sus excepciones vigentes están en RN-024 y en la tabla de alcance de RF-HIST-001. |
 | RN-028 | **Cálculo del movimiento simulado de una categoría (RF-SIM-002).** Con `A` = mes en curso: la serie de ajuste son los **12 meses anteriores** `[A−12 .. A−1]`, un punto por mes con el **total mensual con signo** de los movimientos **únicos** de la categoría (ingresos +, gastos −) en la **moneda default** del usuario, sin los anulados (RN-020) ni los eliminados (RN-026). Los meses **sin únicos de la categoría valen 0 y entran igual**: la ausencia es dato. Sobre esos 12 puntos se ajusta una **regresión lineal por mínimos cuadrados** y se **extrapola** evaluándola en la posición del mes futuro (eje: `A−12` = 1 … `A−1` = 12, mes en curso = 13, `A+1` = 14, …). Se exige un **mínimo de 3 meses con únicos** en la ventana; por debajo no hay simulación. El **signo del valor proyectado define la dirección** (negativo → gasto, positivo → ingreso) y su valor absoluto, la magnitud: el usuario elige solo la categoría, nunca la dirección. El valor se **redondea a centavos enteros** (RN-002) y, si redondea a **0**, ese mes **no genera movimiento**. El **horizonte** va de `A+1` a **diciembre del año en curso**, extendido a `A+6` cuando ese tramo queda por debajo de 6 meses; el **mes en curso y los pasados nunca se simulan**. El cálculo es **on-the-fly en cada lectura** (RN-006): no se persiste ningún monto y la ventana y el horizonte son siempre los vigentes al momento de leer. |
-| RN-029 | **Alcance y ciclo de vida de la simulación de categoría (RF-SIM-001, RF-SIM-003, RF-SIM-004).** La simulación alcanza **solo movimientos únicos**: fijos y cuotas ya se derivan on-the-fly en cualquier mes (RN-006), así que el único hueco de un mes futuro son los Únicos. Persiste **solo la configuración** (usuario + categoría), con **a lo sumo una simulación por categoría** y varias a la vez; **no es editable** —se crea y se elimina, nada más—. Cada simulación aporta **como máximo un** movimiento simulado por mes futuro del horizonte a la sección **Únicos** de `/mes`, distinguible de los reales, que **suma a los totales del mes** (RF-VM-002, con la imputación por tipo de RN-019), participa de los **filtros de sección** (RF-VM-006) y entra en la **evaluación de límites** pasiva y activa (RN-022). **No entra en `/reportes`** ni en las series anuales —los reportes analizan lo real— ni en el dashboard (que muestra el mes en curso, nunca simulado). La fila simulada **no expone acciones de movimiento ni card de detalle** y no puede ser origen de un calculado. Ni crear ni eliminar una simulación se registran en el historial, y su eliminación **no es deshacible**: es la excepción a RN-027, documentada en RF-SIM-004. |
+| RN-029 | **Alcance y ciclo de vida de la simulación de categoría (RF-SIM-001, RF-SIM-003, RF-SIM-004).** La simulación alcanza **solo movimientos únicos**: fijos y cuotas ya se derivan on-the-fly en cualquier mes (RN-006), así que el único hueco de un mes futuro son los Únicos. Persiste **solo la configuración** (usuario + categoría), con **a lo sumo una simulación por categoría** y varias a la vez; **no es editable** —se crea y se elimina, nada más—. Cada simulación aporta **como máximo un** movimiento simulado por mes futuro del horizonte a la sección **Únicos** de `/mes`, distinguible de los reales, que **suma a los totales del mes** (RF-VM-002, con la imputación por tipo de RN-019), participa de los **filtros de sección** (RF-VM-006) y entra en la **evaluación de límites** pasiva y activa (RN-022). En **`/reportes`** entra **solo** en las cards que lo habilitan (opt-in por card, apagado por defecto, RF-REP-017); en el **dashboard** no entra nunca. La fila simulada **no expone acciones de movimiento ni card de detalle** y no puede ser origen de un calculado. Ni crear ni eliminar una simulación se registran en el historial, y su eliminación **no es deshacible**: es la excepción a RN-027, documentada en RF-SIM-004. |
 ---
 
 ## 5. Requerimientos no funcionales
@@ -3176,9 +3230,9 @@ Los siguientes features están explícitamente excluidos de v1. Implementar algu
 | Identidad de cadena de un fijo | Identificador estable, compartido por todas las filas `Recurring` de un mismo fijo lógico, que sobrevive a los splits del pasado. Es a lo que se vincula un movimiento calculado (no a una fila puntual). Ver `docs/data-model.md`, §Identidad de cadena estable. |
 | Modo de color | Modo claro u oscuro de la app, elegible desde el chrome global (sidebar) entre **Sistema** (default, sigue al dispositivo), **Claro** y **Oscuro**. Persiste por usuario en el blob de preferencias (`theme`). Ver RF-APP-001. |
 | Movimiento fijo | Plantilla recurrente mensual activa hasta que el usuario la elimina. Sin día específico dentro del mes. |
-| Movimiento simulado | Movimiento **derivado al vuelo** que una simulación de categoría aporta a la sección Únicos de un mes futuro. No existe como fila, no es editable ni accionable y solo vive en `/mes`. Su dirección y magnitud salen del cálculo (RN-028). Ver RF-SIM-003. |
+| Movimiento simulado | Movimiento **derivado al vuelo** que una simulación de categoría aporta a la sección Únicos de un mes futuro. No existe como fila y no es editable ni accionable. Se ve **siempre** en `/mes` y, **opt-in por card**, en `/reportes` (RF-REP-017). Su dirección y magnitud salen del cálculo (RN-028). Ver RF-SIM-003. |
 | Movimiento único | Movimiento que ocurrió en un instante específico (fecha y hora), una sola vez. Se almacena en UTC junto con su zona horaria original; ver RN-011. |
 | Scope de categoría | Indica a qué tipo de movimiento aplica la categoría: `BOTH`, `EXPENSE`, o `INCOME`. |
-| Simulación de categoría | Configuración del usuario (usuario + categoría) que proyecta a los meses futuros el total de **movimientos únicos** de esa categoría, por regresión lineal sobre los 12 meses anteriores. Se crea y se elimina desde el filtro de la sección Únicos de `/mes`; no se edita y eliminarla es definitivo. Ver módulo 3.15 (RF-SIM-001..004), RN-028/029. |
+| Simulación de categoría | Configuración del usuario (usuario + categoría) que proyecta a los meses futuros el total de **movimientos únicos** de esa categoría, por regresión lineal sobre los 12 meses anteriores. Se crea y se elimina desde el filtro de la sección Únicos de `/mes`; no se edita y eliminarla es definitivo. Ver módulo 3.15 (RF-SIM-001..004), RF-REP-017, RN-028/029. |
 | Soft delete | Eliminación lógica: el registro se marca con `deletedAt` pero no se borra físicamente. |
 | `startMonth` | Primer día del mes a partir del cual un movimiento fijo o grupo de cuotas comienza a aparecer. |

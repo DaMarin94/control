@@ -49,15 +49,24 @@ const MOVEMENTS_QUERY_PREFIX = ["movements"] as const;
 
 // ─── Query: simulaciones activas + horizonte vigente ───────────────────────────
 
-/** Simulaciones activas del usuario + horizonte vigente (banda del popover de Únicos, §2/§4). */
-export function useSimulations() {
+/**
+ * Simulaciones activas del usuario + horizonte vigente (banda del popover de Únicos,
+ * §2/§4; también consumida por el chip "Simulados" de las cards de reporte, RF-REP-017,
+ * para saber si hay al menos una simulación).
+ *
+ * @param enabled Gate adicional (default `true`), AND-eado con `isAuthenticated`. Permite
+ *   a un consumidor que solo necesita el dato condicionalmente (ej. `ReportCard`, que no
+ *   debe pedirlo desde el widget efímero del Dashboard) llamar el hook de forma incondicional
+ *   (regla de hooks) sin disparar la query cuando no corresponde.
+ */
+export function useSimulations(enabled: boolean = true) {
   const { api, isAuthenticated } = useApi();
   const today = useMemo(() => getLocalTodayString(), []);
 
   return useQuery<SimulationsListResponse>({
     queryKey: [...SIMULATIONS_QUERY_KEY, today],
     queryFn: () => api.get<SimulationsListResponse>(`/simulations?today=${today}`),
-    enabled: isAuthenticated,
+    enabled: enabled && isAuthenticated,
   });
 }
 

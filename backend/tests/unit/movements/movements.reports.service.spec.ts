@@ -23,7 +23,7 @@
  *   - Ids desconocidos/no existentes → simplemente no matchean (no es error)
  */
 import { Test, TestingModule } from '@nestjs/testing';
-import { Currency } from '@prisma/client';
+import { CategoryScope, Currency, MovementType } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { MovementsService } from '../../../src/movements/movements.service';
 import {
@@ -72,6 +72,7 @@ const mockSettingsService = {
 
 const mockSimulationsService = {
   getSimulatedItemsForMonth: jest.fn().mockResolvedValue([]),
+  getSimulatedItemsForMonths: jest.fn().mockResolvedValue(new Map()),
 };
 
 // ---------------------------------------------------------------------------
@@ -3025,6 +3026,233 @@ describe('MovementsService — getReportsMovements', () => {
       expect(result.months[6].incomeCents).toBe(0);
       expect(result.months[7].expenseCents).toBe(150000);
       expect(result.months[7].incomeCents).toBe(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // RF-REP-017 — Movimientos simulados en una card de reporte (includeSimulated)
+  // -------------------------------------------------------------------------
+
+  describe('RF-REP-017 — includeSimulated (aporte simulado desagregado)', () => {
+    const CAT_SIM = 'cat-simulada';
+    const YEAR_MONTHS = Array.from({ length: 12 }, (_, i) => `2026-${String(i + 1).padStart(2, '0')}`);
+
+    function makeSimItem(overrides: {
+      categoryId?: string;
+      categoryName?: string;
+      categoryColor?: string;
+      type?: MovementType;
+      amountCents?: number;
+      month?: string;
+    } = {}) {
+      const month = overrides.month ?? '2026-08';
+      return {
+        id: `simulated:sim-1:${month}`,
+        origin: 'unico' as const,
+        type: overrides.type ?? MovementType.EXPENSE,
+        amountCents: overrides.amountCents ?? 5000,
+        convertedAmountCents: overrides.amountCents ?? 5000,
+        currency: Currency.ARS,
+        exchangeRate: 1,
+        description: null,
+        occurredAt: null,
+        timezone: null,
+        category: {
+          id: overrides.categoryId ?? CAT_SIM,
+          name: overrides.categoryName ?? 'Simulada',
+          color: overrides.categoryColor ?? '#333333',
+          scope: CategoryScope.BOTH,
+        },
+        paymentMethod: null,
+        autoDebit: null,
+        installment: null,
+        frequency: null,
+        startMonth: null,
+        endMonth: null,
+        chainId: null,
+        skipped: false,
+        calculated: null,
+        hasCalculated: false,
+        calculatedChildren: [],
+        simulated: true,
+      };
+    }
+
+    it('ausente (default false): no llama a getSimulatedItemsForMonths y la respuesta no lleva la clave "simulated"', async () => {
+      setupEmptyMocks();
+
+      const result = await service.getReportsMovements(USER_A, 2026, null, undefined, null, undefined, undefined, undefined);
+
+      expect(result.simulated).toBeUndefined();
+      expect(mockSimulationsService.getSimulatedItemsForMonths).not.toHaveBeenCalled();
+    });
+
+    it('includeSimulated=false explícito: mismo comportamiento que ausente', async () => {
+      setupEmptyMocks();
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, undefined, undefined, false,
+      );
+
+      expect(result.simulated).toBeUndefined();
+      expect(mockSimulationsService.getSimulatedItemsForMonths).not.toHaveBeenCalled();
+    });
+
+    it('includeSimulated=true sin ningún aporte: bloque "simulated" presente, 12 meses en cero, categories vacío', async () => {
+      setupEmptyMocks();
+      mockSimulationsService.getSimulatedItemsForMonths.mockResolvedValue(new Map());
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, undefined, '2026-06-15', true,
+      );
+
+      expect(result.simulated).toBeDefined();
+      expect(result.simulated!.months).toHaveLength(12);
+      expect(result.simulated!.months.every((m) => m.incomeCents === 0 && m.expenseCents === 0)).toBe(true);
+      expect(result.simulated!.categories).toEqual([]);
+      expect(mockSimulationsService.getSimulatedItemsForMonths).toHaveBeenCalledWith(
+        USER_A,
+        YEAR_MONTHS,
+        '2026-06-15',
+        Currency.ARS,
+      );
+    });
+
+    it('aporte simulado EXPENSE de una categoría sin gasto real: suma a expenseCents del mes, arma la categoría con null en los meses sin aporte, y entra al universo (availableCategories) aunque no tenga gasto real', async () => {
+      setupEmptyMocks();
+      const byMonth = new Map<string, ReturnType<typeof makeSimItem>[]>();
+      byMonth.set('2026-08', [makeSimItem({ amountCents: 5000, month: '2026-08' })]);
+      mockSimulationsService.getSimulatedItemsForMonths.mockResolvedValue(byMonth);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, undefined, '2026-06-15', true,
+      );
+
+      // Índice 7 = agosto
+      expect(result.simulated!.months[7].expenseCents).toBe(5000);
+      expect(result.simulated!.months.filter((_, i) => i !== 7).every((m) => m.expenseCents === 0)).toBe(true);
+
+      expect(result.simulated!.categories).toHaveLength(1);
+      const cat = result.simulated!.categories[0];
+      expect(cat.categoryId).toBe(CAT_SIM);
+      expect(cat.monthlyExpenseCents[7]).toBe(5000);
+      expect(cat.monthlyExpenseCents.filter((_, i) => i !== 7).every((v) => v === null)).toBe(true);
+
+      // No tiene gasto real → no aparece en el desglose real
+      expect(result.categories.some((c) => c.categoryId === CAT_SIM)).toBe(false);
+      // Pero SÍ entra al universo estable de categorías (RF-REP-017)
+      const available = result.availableCategories.find((c) => c.categoryId === CAT_SIM);
+      expect(available).toBeDefined();
+      expect(available!.hasExpense).toBe(true);
+    });
+
+    it('aporte simulado INCOME: suma a incomeCents del mes, NO genera entrada de categoría (by-category es EXPENSE-only), pero entra al universo con hasIncome', async () => {
+      setupEmptyMocks();
+      const byMonth = new Map<string, ReturnType<typeof makeSimItem>[]>();
+      byMonth.set('2026-09', [
+        makeSimItem({ amountCents: 7000, month: '2026-09', type: MovementType.INCOME }),
+      ]);
+      mockSimulationsService.getSimulatedItemsForMonths.mockResolvedValue(byMonth);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, undefined, '2026-06-15', true,
+      );
+
+      // Índice 8 = septiembre
+      expect(result.simulated!.months[8].incomeCents).toBe(7000);
+      expect(result.simulated!.months[8].expenseCents).toBe(0);
+      expect(result.simulated!.categories).toEqual([]);
+
+      const available = result.availableCategories.find((c) => c.categoryId === CAT_SIM);
+      expect(available).toBeDefined();
+      expect(available!.hasIncome).toBe(true);
+      expect(available!.hasExpense).toBe(false);
+    });
+
+    it('filtro de categorías (categoryIds): excluye el aporte simulado de los totales, pero el universo lo sigue mostrando (ignora el filtro, igual que el real)', async () => {
+      setupEmptyMocks();
+      const byMonth = new Map<string, ReturnType<typeof makeSimItem>[]>();
+      byMonth.set('2026-08', [makeSimItem({ amountCents: 5000, month: '2026-08' })]);
+      mockSimulationsService.getSimulatedItemsForMonths.mockResolvedValue(byMonth);
+
+      // Filtro que NO incluye CAT_SIM
+      const result = await service.getReportsMovements(
+        USER_A, 2026, [CAT_A], undefined, null, undefined, undefined, '2026-06-15', true,
+      );
+
+      expect(result.simulated!.months[7].expenseCents).toBe(0);
+      expect(result.simulated!.categories).toEqual([]);
+      // El universo ignora el filtro (mismo criterio que availableCategories real)
+      expect(result.availableCategories.some((c) => c.categoryId === CAT_SIM)).toBe(true);
+    });
+
+    it('filtro de tipo (types sin "unico"): anula el aporte simulado a los totales, pero el universo lo sigue mostrando', async () => {
+      setupEmptyMocks();
+      const byMonth = new Map<string, ReturnType<typeof makeSimItem>[]>();
+      byMonth.set('2026-08', [makeSimItem({ amountCents: 5000, month: '2026-08' })]);
+      mockSimulationsService.getSimulatedItemsForMonths.mockResolvedValue(byMonth);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, ['fijo'], undefined, undefined, '2026-06-15', true,
+      );
+
+      expect(result.simulated!.months[7].expenseCents).toBe(0);
+      expect(result.simulated!.categories).toEqual([]);
+      expect(result.availableCategories.some((c) => c.categoryId === CAT_SIM)).toBe(true);
+    });
+
+    it('filtro de dirección (direction=income): excluye el aporte EXPENSE simulado de los totales, pero el universo sigue marcando hasExpense', async () => {
+      setupEmptyMocks();
+      const byMonth = new Map<string, ReturnType<typeof makeSimItem>[]>();
+      byMonth.set('2026-08', [makeSimItem({ amountCents: 5000, month: '2026-08' })]);
+      mockSimulationsService.getSimulatedItemsForMonths.mockResolvedValue(byMonth);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, 'income', undefined, '2026-06-15', true,
+      );
+
+      expect(result.simulated!.months[7].expenseCents).toBe(0);
+      expect(result.simulated!.categories).toEqual([]);
+      const available = result.availableCategories.find((c) => c.categoryId === CAT_SIM);
+      expect(available!.hasExpense).toBe(true);
+    });
+
+    it('usa la moneda de display (currencyOverride) al pedir los simulados, no siempre la default del usuario', async () => {
+      setupEmptyMocks();
+      mockSimulationsService.getSimulatedItemsForMonths.mockResolvedValue(new Map());
+
+      await service.getReportsMovements(
+        USER_A, 2026, null, Currency.USD, null, undefined, undefined, '2026-06-15', true,
+      );
+
+      expect(mockSimulationsService.getSimulatedItemsForMonths).toHaveBeenCalledWith(
+        USER_A,
+        YEAR_MONTHS,
+        '2026-06-15',
+        Currency.USD,
+      );
+    });
+
+    it('independencia de RF-REP-015: includeSimulated=true sin projectFixed no marca ningún mes como projected', async () => {
+      setupEmptyMocks();
+      mockSimulationsService.getSimulatedItemsForMonths.mockResolvedValue(new Map());
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, undefined, '2026-06-15', true,
+      );
+
+      expect(result.months.every((m) => m.projected === false)).toBe(true);
+    });
+
+    it('independencia de RF-REP-015: projectFixed=true sin includeSimulated no agrega el bloque "simulated"', async () => {
+      setupEmptyMocks();
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, true, '2026-06-15',
+      );
+
+      expect(result.simulated).toBeUndefined();
+      expect(mockSimulationsService.getSimulatedItemsForMonths).not.toHaveBeenCalled();
     });
   });
 });

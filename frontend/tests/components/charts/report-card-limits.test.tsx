@@ -100,8 +100,27 @@ describe("Form2Tooltip — marca visual pasiva (reporte.cat.*)", () => {
     earliestYear: 2025,
   };
 
+  // Form2Tooltip consume mergedCategories (RF-REP-017) en vez de data.categories directo.
+  // Sin toggle de simulados, es la misma info que data.categories con la capa simulada
+  // en null (sin aporte) — ver report-card.tsx, buildMergedCategories.
+  const mergedCategories = data.categories.map((cat) => ({
+    ...cat,
+    simulatedMonthlyExpenseCents: Array<number | null>(12).fill(null),
+  }));
+
   it("sin marcas no muestra ninguna nota de límite", () => {
-    render(<Form2Tooltip active payload={[{ dataKey: "cat-1", value: 10000 }]} label="Ene" data={data} year={2026} currency="ARS" />);
+    render(
+      <Form2Tooltip
+        active
+        payload={[{ dataKey: "cat-1", value: 10000 }]}
+        label="Ene"
+        data={data}
+        year={2026}
+        currency="ARS"
+        mergedCategories={mergedCategories}
+        includeSimulated={false}
+      />,
+    );
     expect(screen.queryByText(/supera el límite/i)).not.toBeInTheDocument();
   });
 
@@ -118,6 +137,8 @@ describe("Form2Tooltip — marca visual pasiva (reporte.cat.*)", () => {
         data={data}
         year={2026}
         currency="ARS"
+        mergedCategories={mergedCategories}
+        includeSimulated={false}
         categoryMarks={categoryMarks}
       />,
     );
@@ -137,6 +158,8 @@ describe("Form2Tooltip — marca visual pasiva (reporte.cat.*)", () => {
         data={data}
         year={2026}
         currency="ARS"
+        mergedCategories={mergedCategories}
+        includeSimulated={false}
         categoryMarks={categoryMarks}
       />,
     );

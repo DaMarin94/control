@@ -95,6 +95,50 @@ export interface ReportsAvailableCategory extends AvailableCategory {
 }
 
 /**
+ * RF-REP-017 — aporte simulado a la serie mensual, por mes, DESAGREGADO del
+ * dato real (nunca ya sumado). El front lo apila arriba de `months[i]`.
+ *
+ * incomeCents / expenseCents: magnitud que ese mes aporta a cada línea
+ * (0 = sin aporte ese mes, incluye meses pasados/en curso, fuera del
+ * horizonte de cualquier simulación, simulación pausada, o filtrado por
+ * tipo/dirección/categoría — mismos filtros de RF-REP-014 que el dato real).
+ */
+export interface ReportSimulatedMonth {
+  month: string; // YYYY-MM, mismo índice que `months`
+  incomeCents: number;
+  expenseCents: number;
+}
+
+/**
+ * RF-REP-017 — aporte simulado por categoría, solo el que resulta GASTO
+ * (`by-category` es EXPENSE-only). Paralelo a `ReportCategory`, pero:
+ *
+ * - Puede incluir categorías AUSENTES de `categories[*]` (sin gasto real en
+ *   el año, aporte 100% simulado).
+ * - `monthlyExpenseCents[i]` es `null` cuando ese mes NO tiene aporte
+ *   simulado (mes real/pasado, sin simulación activa ese mes, simulación
+ *   pausada, o el signo derivado dio INCOME) — deliberadamente distinto de
+ *   `0`: "ausente" vs. "aporte nulo", para que el front no dibuje una banda
+ *   fantasma donde no hay simulación.
+ */
+export interface ReportSimulatedCategory {
+  categoryId: string;
+  name: string;
+  color: string;
+  monthlyExpenseCents: (number | null)[]; // 12 entradas, índice = mes-1
+}
+
+/**
+ * RF-REP-017 — bloque de aporte simulado, presente SOLO cuando el caller
+ * pidió `includeSimulated=true`. Ausente = comportamiento actual exacto
+ * (cero-impacto, el resto de la respuesta no cambia ni un byte).
+ */
+export interface ReportsSimulatedBlock {
+  months: ReportSimulatedMonth[];
+  categories: ReportSimulatedCategory[];
+}
+
+/**
  * Shape completo de la respuesta de GET /movements/reports.
  */
 export interface ReportsMovementsResponse {
@@ -103,6 +147,8 @@ export interface ReportsMovementsResponse {
   categories: ReportCategory[];
   availableCategories: ReportsAvailableCategory[];
   earliestYear: number | null;
+  /** RF-REP-017: presente solo si se pidió `includeSimulated=true`. */
+  simulated?: ReportsSimulatedBlock;
 }
 
 // ---------------------------------------------------------------------------
@@ -486,6 +532,16 @@ export class MovementsService {
    * El shape de la respuesta no cambia: la serie ya viene convertida.
    *
    * CRÍTICO: earliestYear ignora el filtro.
+   *
+   * RF-REP-017 — includeSimulated (opt-in por card, off por defecto):
+   * - Ausente/false → comportamiento actual exacto, sin la clave `simulated`
+   *   en la respuesta (cero-impacto).
+   * - true → agrega `simulated` con el aporte de los movimientos simulados
+   *   (módulo 3.15) a los MESES FUTUROS del año pedido, desagregado del dato
+   *   real. Reusa `SimulationsService.getSimulatedItemsForMonths` (misma
+   *   derivación al vuelo de RF-SIM-002/RN-028 que usa `GET /movements`, sin
+   *   duplicar la fórmula). Independiente de `projectFixed` (RF-REP-015):
+   *   habilitar uno NO activa el otro.
    */
   async getReportsMovements(
     userId: string,
@@ -496,6 +552,7 @@ export class MovementsService {
     direction?: 'both' | 'expense' | 'income',
     projectFixed?: boolean,
     today?: string,
+    includeSimulated?: boolean,
   ): Promise<ReportsMovementsResponse> {
     // Normalizar el filtro de categorías
     const EMPTY_SET = new Set<string>();
@@ -1179,6 +1236,102 @@ export class MovementsService {
       }
     }
 
+    // ---------------------------------------------------------------------------
+    // RF-REP-017: aporte simulado desagregado (opt-in por card, off por defecto)
+    // ---------------------------------------------------------------------------
+    let simulatedBlock: ReportsSimulatedBlock | undefined;
+
+    if (includeSimulated === true) {
+      // Batch: una sola carga de la ventana histórica para los 12 meses del
+      // año (en vez de 12 llamadas independientes) — ver SimulationsService.
+      const simByMonth = await this.simulationsService.getSimulatedItemsForMonths(
+        userId,
+        months12,
+        today,
+        displayCurrency,
+      );
+
+      const simMonths: ReportSimulatedMonth[] = months12.map((m) => ({
+        month: m,
+        incomeCents: 0,
+        expenseCents: 0,
+      }));
+      const simCategoryMeta = new Map<string, AnnualCategoryMeta>();
+      const simCategoryMonthly = new Map<string, (number | null)[]>();
+
+      for (let i = 0; i < 12; i++) {
+        const mes = months12[i];
+        const items = simByMonth.get(mes) ?? [];
+
+        for (const item of items) {
+          const catId = item.category.id;
+
+          // Universo (RF-REP-017): la categoría simulada entra al universo
+          // de la card aunque no tenga movimientos reales en el año — IGNORA
+          // el filtro de categorías y el de tipo, igual que el universo real
+          // (catMetaAll / catHasExpenseAll / catHasIncomeAll más arriba).
+          if (!catMetaAll.has(catId)) {
+            catMetaAll.set(catId, {
+              categoryId: catId,
+              name: item.category.name,
+              color: item.category.color,
+            });
+          }
+          if (item.type === 'EXPENSE') {
+            catHasExpenseAll.add(catId);
+          } else {
+            catHasIncomeAll.add(catId);
+          }
+
+          // Filtros de card (RF-REP-014/017): el simulado es un único — tipo
+          // "unico", dirección derivada del mes, categoría simulada.
+          if (!includeMovType('unico')) continue;
+          if (filterSet !== null && !filterSet.has(catId)) continue;
+
+          const magnitude = item.convertedAmountCents;
+
+          if (item.type === 'INCOME') {
+            if (dir !== 'expense') simMonths[i].incomeCents += magnitude;
+          } else {
+            // by-category es EXPENSE-only (RF-REP-017): un simulado que da
+            // ingreso no aporta banda de categoría, solo la línea de arriba.
+            if (dir !== 'income') {
+              simMonths[i].expenseCents += magnitude;
+              if (!simCategoryMeta.has(catId)) {
+                simCategoryMeta.set(catId, {
+                  categoryId: catId,
+                  name: item.category.name,
+                  color: item.category.color,
+                });
+              }
+              let arr = simCategoryMonthly.get(catId);
+              if (!arr) {
+                arr = new Array(12).fill(null) as (number | null)[];
+                simCategoryMonthly.set(catId, arr);
+              }
+              arr[i] = (arr[i] ?? 0) + magnitude;
+            }
+          }
+        }
+      }
+
+      const simCategories: ReportSimulatedCategory[] = Array.from(simCategoryMeta.values())
+        .map((meta) => ({
+          categoryId: meta.categoryId,
+          name: meta.name,
+          color: meta.color,
+          monthlyExpenseCents: simCategoryMonthly.get(meta.categoryId) ?? new Array(12).fill(null),
+        }))
+        .sort((a, b) => {
+          const totalA = a.monthlyExpenseCents.reduce((s: number, v) => s + (v ?? 0), 0);
+          const totalB = b.monthlyExpenseCents.reduce((s: number, v) => s + (v ?? 0), 0);
+          if (totalB !== totalA) return totalB - totalA;
+          return a.categoryId.localeCompare(b.categoryId);
+        });
+
+      simulatedBlock = { months: simMonths, categories: simCategories };
+    }
+
     // 4. Armar el array months (siempre 12 entradas)
     const monthsResult: ReportMonth[] = months12.map((month, i) => ({
       month,
@@ -1250,6 +1403,7 @@ export class MovementsService {
         categoriesCount: categoriesResult.length,
         availableCategoriesCount: availableCategories.length,
         earliestYear,
+        includeSimulated: includeSimulated === true,
       },
       'Serie de reportes de movimientos calculada',
     );
@@ -1260,6 +1414,7 @@ export class MovementsService {
       categories: categoriesResult,
       availableCategories,
       earliestYear,
+      ...(simulatedBlock !== undefined ? { simulated: simulatedBlock } : {}),
     };
   }
 

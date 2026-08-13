@@ -4549,6 +4549,276 @@ Régimen **único**: el modal se comporta igual en todo ancho soportado (`≥640
 
 ---
 
+## Movimientos simulados en cards de reporte (`/reportes`) — RF-REP-017
+
+> Spec visual del **toggle por card** que incorpora los movimientos simulados (módulo 3.15) al tramo de meses **futuros** de las cards `income-expense` y `by-category`, y del **tratamiento de la porción simulada dentro del gráfico**. La regla funcional (qué entra, en qué meses, cómo lo alcanzan los filtros, la persistencia) es canónica en `requirements.md` RF-REP-017 — acá no se repite. Extiende *Card de reporte*, *Gráficos — Forma 1 y Forma 2*, *Toggle Barra ↔ Línea …*, *Filtros … RF-REP-014* y *Marca visual pasiva de límites*.
+>
+> **No inventa cromo nuevo.** El control reusa el **chip-toggle neutro** de *Filtros … RF-REP-014 §3*; el tratamiento del gráfico reusa el **vocabulario de lo simulado ya cerrado en `/mes`** (*Simulación de categoría (`/mes`)* §1): **relleno hueco + contorno punteado en el color propio + prefijo `≈` en la cifra**. Es la misma idea trasladada de una fila a un canvas.
+
+### 0. Encuadre — una sola idea, tres geometrías
+
+**Lo simulado se apila encima de lo real, hueco y punteado.** En las tres geometrías vale exactamente lo mismo:
+
+1. **La parte real se dibuja idéntica a como se dibuja hoy** — mismo color, mismo relleno, mismo trazo, mismo orden de apilado. El toggle **no reinterpreta ni recolorea nada de lo real**; solo agrega una capa arriba.
+2. **El aporte simulado es una capa apilada por encima de la real**, con el **mismo color** que le corresponde (semántico en `income-expense`, `category.color` en `by-category`), **relleno bajado** (hueco) y **delimitado por un trazo punteado**.
+3. **El borde entre las dos capas es el total real; el borde exterior es el total con simulados.** La distancia entre ambos *es* el aporte de la simulación. No hace falta ningún texto para leerlo.
+
+Esto es literalmente lo que `/mes` hace con la fila simulada (misma geometría que la real, **sin relleno**, **borde punteado** en el color del tipo, glifo/cifra en su color): acá el "relleno hueco + punteado" pasa de una caja de 40×40 a una banda del stack. **Un usuario que ya vio `/mes` reconoce el tratamiento sin aprender nada nuevo.** *(Consistencia — un problema ya resuelto no se resuelve dos veces.)*
+
+**Por qué apilar arriba y no partir el segmento en el lugar de la categoría.** Se evaluó intercalar el aporte simulado **pegado** al segmento real de su categoría (`[real cat1][sim cat1][real cat2][sim cat2]…`). Se **descarta**: desplaza verticalmente los segmentos reales de todas las categorías que quedan por encima, con lo que la misma categoría aparece a distinta altura según haya o no simulación debajo, y **rompe la comparación mes a mes de lo real** — que es el trabajo principal de la card. Con el bloque simulado **al tope**, la composición del bloque real queda **idéntica** a la del toggle apagado (salvo el reescalado del eje Y), y aparece además un borde con significado propio (el total real) que la otra opción no dibuja en ningún lado. La pertenencia del aporte a su categoría la sostiene el **color** (que no se reasigna, RN-013) y el **mismo orden** dentro del bloque simulado que en el real.
+
+**Por qué punteado y no trama/rayado.** El rayado (hatch) es la convención clásica de "proyectado", pero **no existe en este DS** y obligaría a un `pattern` SVG por categoría. El punteado **ya es el idioma de lo simulado** en la app. Se elige coherencia sobre convención externa.
+
+### 1. El toggle — chip "Simulados" en el cluster de cómputo
+
+#### 1.1 Forma — chip-toggle neutro con glifo (molde de los chips de Tipo)
+
+`<button type="button">` con **`aria-pressed`**. Reusa **literal** la caja del chip-toggle de *Filtros … RF-REP-014 §3*: `inline-flex items-center gap-[6px]`, `px-[10px] py-[5px]`, radio `--r-chip` 7px, texto UI **12.5px / 600**, `select-none`, transición 0.14s.
+
+- **Contenido:** `[ChartSpline 13px] Simulados`. El glifo es **el mismo `ChartSpline`** que `/mes` usa para señalar que un subtotal incluye simulados (*Simulación de categoría* §5.1) — es el enlace de vocabulario entre las dos superficies. `aria-hidden="true"`.
+  - **Por qué este chip lleva glifo y los de Tipo no:** en `income-expense` queda **inmediatamente al lado** de "Fijos / Cuotas / Únicos", que son texto pelado. Sin un diferenciador de forma, "Simulados" se leería como un **cuarto tipo de movimiento**, que es exactamente lo que no es (un simulado ya entra como *único*). El glifo + el divisor `--hair` lo declaran como **otra dimensión**. *(Affordance y claridad; prevención de error de lectura.)*
+- **Etiqueta:** **"Simulados"** (plural: incorpora N movimientos simulados). No "Simulación" (eso es la config de `/mes`) ni "Proyección" (eso es la proyección de fijos, RF-REP-015, que este toggle **no** activa).
+- **Encendido (`aria-pressed="true"`):** fondo `--panel` + borde `1px --line-strong` + `--shadow-sm`, texto `--ink`, glifo `--ink-2`. *(Pieza elevada = incluido — misma lógica que el thumb del segmented y los chips de Tipo.)*
+- **Apagado (default, `aria-pressed="false"`):** fondo `--panel-2`, borde `1px --line`, **sin sombra**, texto `--muted`, glifo `--muted`.
+- **Hover (sobre apagado):** texto → `--ink-2`, borde → `--line-strong`. **(sobre encendido):** sin cambio extra. **Active/pressed:** fondo `--panel-3`.
+- **Focus (teclado):** ring `--accent-soft` 3px (`focus-visible`), radio `--r-chip` 7px. Índigo = cromo de foco, no estado de dato.
+- **a11y:** `aria-label="Incluir movimientos simulados"` + `aria-pressed`. Es un toggle button, no un radio ni un checkbox de formulario.
+- **Sin color semántico ni ámbar ni índigo** en ningún estado del chip: es cromo neutro. Lo simulado **no se pinta de un color propio** en ninguna superficie — su señal es la forma (hueco/punteado), nunca un hue nuevo.
+
+> **El chip encendido es la única declaración permanente de que la card incluye simulados.** La card **no lleva aviso textual de composición** (decisión funcional cerrada, RF-REP-017): no se monta ninguna línea "incluye N simulados" ni equivalente. Por eso el estado "encendido" debe leerse a la primera — de ahí el tratamiento elevado + glifo, y no un tratamiento tenue.
+
+#### 1.2 Ubicación exacta — última pieza del cluster izquierdo de la línea 2
+
+El toggle es un control de **alcance del cómputo** (cambia qué dato entra), no de navegación ni de utilidad: vive en el **cluster izquierdo de la línea 2** de la cabecera, que es donde ambas cards ya alojan sus controles de qué/cómo se computa. **Nunca** en el cluster derecho (año · moneda · refrescar · quitar), que es nav + utilidad.
+
+- **`income-expense`** — cluster izquierdo de la línea 2:
+  `[ Dirección (segmented) ] |hair| [ Fijos ][ Cuotas ][ Únicos ] |hair| [ ⌁ Simulados ]`
+- **`by-category`** — cluster izquierdo de la línea 2:
+  `[ Barra | Línea (ViewTabs) ] |hair| [ ⌁ Simulados ]`
+
+- **Divisor:** el mismo mini-divisor vertical ya vigente (`h-[16px] w-px bg-hair shrink-0`, `self-center`), que en `income-expense` ya separa Dirección de Tipo. Acá separa la dimensión "alcance" de las anteriores.
+- **Va último**, después de todo lo demás del cluster. Racional de orden: se toca **menos** que la Dirección/el Tipo/la representación (es un interruptor que se prende una vez), y ser el último lo convierte en **el primero en envolver** en pantalla angosta, que es la prioridad correcta (§4).
+- **`by-category` — el chip vive FUERA del `role="tablist"`.** No es una tab: no debe entrar al `tablist`, no debe recibir el recorrido por flechas de las tabs, y **el underline deslizante de la tab activa nunca se extiende bajo el chip** (el indicador está posicionado dentro del contenedor de tabs; el chip queda afuera, tras el divisor). El chip se alinea **verticalmente al centro del texto de las tabs**; la fila 2 conserva su `items-start` para que `CardControls` siga pegado al tope.
+- **Solo en `/reportes`.** El **Dashboard nunca monta el chip** (RF-REP-017), bajo la misma condición que ya lo deja sin filtros ni selector de moneda: card efímera y despojada. En **modo orden** la card colapsa a mini y no se renderiza ningún control interno — el chip tampoco (regla vigente, sin excepción).
+- **Las otras cuatro cards (`unique-grid`, `installment-gantt`, `fixed-evolution`, `inflation-income`) no lo exponen** y su cabecera no cambia en nada.
+
+#### 1.3 Deshabilitado con motivo — `aria-disabled`, no `disabled`
+
+El chip está **siempre presente** y **nunca se oculta**. Se deshabilita en dos casos (RF-REP-017) y el motivo se entrega **a demanda**, no como cartel:
+
+- **Tratamiento visual:** `opacity-45`, `cursor-default`, **sin hover**, click sin efecto. Es el mismo tratamiento de deshabilitado que ya usan los chevrones del `YearStepper` (`opacity-45 cursor-default`) y el `[+]` en modo orden. **No cambia la etiqueta** (sigue diciendo "Simulados") ni el glifo: un control deshabilitado que además se renombra obliga a releer.
+- **Mecanismo — `aria-disabled="true"`, sin el atributo `disabled` nativo.** Es una decisión deliberada, no un detalle: un `<button disabled>` **no dispara `title` ni recibe foco**, y entonces el motivo quedaría literalmente inalcanzable para teclado y táctil — que es exactamente lo que el requerimiento prohíbe ("motivo visible, nunca oculto"). Con `aria-disabled` el chip sigue siendo **hovereable, enfocable y anunciable**, y el click simplemente no hace nada.
+- **Portador del motivo:** `title` nativo + `aria-describedby` apuntando al mismo texto. Es el mecanismo ya vigente en el DS para motivos e información contextual sobre un nodo (el glifo `ChartSpline` de `/mes`, el título truncado de la card, las marcas de límite). **No se introduce un tooltip estilizado nuevo.**
+- **Copys (uno por causa, sin numerales ni condicionales):**
+  - Sin ninguna simulación: **"No tenés ninguna simulación. Se crean desde la sección Únicos de la vista del mes."**
+  - Año sin tramo futuro alcanzable (cualquier año anterior al en curso, y el año en curso en diciembre): **"{Año} no tiene meses futuros."**
+  - **Precedencia si aplican las dos:** gana **"No tenés ninguna simulación…"**. Es la causa de fondo: navegar a otro año no la resuelve, y decir "2023 no tiene meses futuros" a alguien que además no tiene simulaciones lo manda a una gestión inútil. *(Prevención de error.)*
+- **El valor persistido no se toca.** Un chip deshabilitado con el valor guardado en "encendido" se muestra **en su estado apagado visual** (plano) mientras dura la condición —no hay dato simulado que mostrar, mostrarlo elevado mentiría— y **recupera el estado elevado** al volver a un año con tramo futuro. El toggle no reescribe la preferencia al deshabilitarse.
+
+#### 1.4 Jerarquía dentro de la cabecera
+
+De más a menos peso en el cluster izquierdo: **Dirección / tabs Barra-Línea** (definen qué o cómo se ve: segmented con thumb, o tabs con underline) → **Tipo** (chips) → **Simulados** (chip, último). El chip de Simulados **nunca** toma forma de segmented, ni borde de acento, ni sombra mayor que `--shadow-sm`: no debe competir con el control que define la representación. Contra el cluster derecho, el `YearStepper` sigue siendo la pieza dominante de la cabecera.
+
+#### 1.5 Feedback al accionar
+
+- **Sin skeleton.** Accionar el chip dispara un refetch de la card sobre dato ya presente: aplica la regla vigente de *Skeletons* (skeleton solo con área vacía de dato), igual que cambiar de año o de moneda. El chip cambia de estado **en el acto** (no espera al dato) y el canvas se actualiza al llegar la respuesta.
+- **La señal de "trayendo datos" ya existe y se reusa:** mientras el refetch está en vuelo, el botón de refrescar de la misma card ya gira y queda atenuado (`isFetching`). **No se agrega spinner propio al chip.**
+- **Sin toast.** Es un cambio de vista, no una escritura que necesite anuncio.
+- **Error:** si el refetch falla, la card cae en su **estado de error ya existente** ("No se pudo cargar el gráfico." + Reintentar). El chip conserva su valor.
+
+### 2. La capa simulada dentro del gráfico
+
+Regla transversal: **el punteado marca el límite de lo simulado, y se dibuja donde la geometría ya tiene un borde.** Las dos geometrías que tienen contorno (Forma 1 y el modo Línea) **duplican su contorno en punteado**; la que no lo tiene (modo Barra) le da a la porción simulada **su propio contorno punteado** en el color de su categoría.
+
+#### 2.1 `income-expense` (Forma 1 — áreas superpuestas)
+
+Hoy son **dos áreas independientes, no apiladas**, cada una desde cero (ingresos y gastos son lecturas que se comparan, no que se suman). Eso **no cambia**. Lo que cambia es que **cada dirección pasa a ser un stack de dos capas** desde cero:
+
+| Capa | Relleno | Trazo |
+|---|---|---|
+| **Real** (base) | el gradiente vigente de su serie (`--income` / `--expense`, 0.18 → 0.02) — **sin cambios** | 2px **sólido**, `--income` / `--expense`, opacidad 1 — **sin cambios** |
+| **Aporte simulado** (encima) | **plano a 0.10** del color de la serie (hueco: por debajo del pico del gradiente real, nunca pesa más que lo real) | 2px **punteado `5 4`**, mismo color y opacidad que el trazo real |
+
+- **Lectura resultante:** en el tramo futuro el trazo **sólido** se queda en el nivel real (lo que proyectan fijos y cuotas, RN-006) y el trazo **punteado** se despega por encima, en el nivel con simulados. La cuña entre ambos es el aporte de la simulación.
+- **Propiedad clave — el punteado se autoanula donde no hay aporte.** En los meses sin aporte (todo el pasado, el mes en curso, y los futuros donde la simulación no deriva nada) las dos capas coinciden: el trazo punteado cae **exactamente encima** del sólido, del mismo color y del mismo grosor, y el sólido rellena los huecos del punteado → **se ve una línea sólida**. No hace falta ninguna lógica por tramo ni un segundo trazo condicional: **el punteado aparece solo donde la línea se separa**. Se exige que el resultado no muestre "doble trazo" ni línea agrisada en los meses pasados.
+- **Un simulado que resulta ingreso** apila sobre la serie de ingresos; uno que resulta gasto, sobre la de gastos (RN-019). Mismo tratamiento, distinto color semántico — el color sigue diciendo el tipo, como manda la regla dura 1.
+- **Con la Dirección en "solo gastos" / "solo ingresos"** solo se dibuja el stack de esa dirección, capa simulada incluida. Sin excepciones.
+- **Dots:** siguen ocultos en reposo (`activeDot` solo en hover); el `activeDot` se ancla en el vértice del **contorno con simulados** (el punteado), que es el dato que la card muestra.
+
+#### 2.2 `by-category` — modo Barra (Forma 2, barras apiladas)
+
+El stack de cada mes pasa a tener **dos bloques**, en este orden desde la base:
+
+```
+[ real: cat1 · cat2 · … · catN ]   ← idéntico a hoy, mismo orden mayor→menor
+[ simulado: cat1 · cat2 · … · catN ]  ← mismo orden, solo las que aportan
+```
+
+- **Bloque real:** **sin ningún cambio** — `fill = category.color` sólido, separadores 1px `stroke="var(--panel)"`, orden de apilado por gasto anual DESC, estable en los 12 meses.
+- **Bloque simulado — cada banda:** `fill = category.color` a **opacidad 0.30** (hueca: se lee como la misma categoría, atenuada) + **contorno punteado `4 3`, 1.5px, en `category.color`** en todo su perímetro. Ese contorno **es** el separador de la banda (no lleva además el `--panel` 1px).
+  - El **borde inferior** del bloque simulado —la línea punteada más baja— marca el **total real** del mes. El **tope** del bloque marca el **total con simulados**.
+  - **El color no se reasigna nunca** (RN-013): la porción simulada de "Supermercado" es del **mismo color** que su porción real. Lo único que cambia entre ellas es **relleno y contorno**, jamás el hue. Esa es la condición dura de este spec.
+- **Meses sin aporte de una categoría: la banda no existe.** No se dibuja una banda de altura cero ni un contorno residual — el tope de la barra en esos meses queda **exactamente** donde estaría con el toggle apagado. (Frontend: el dato de la serie simulada en esos meses es **ausente**, no `0`.)
+- **Una simulación que resulta ingreso no aporta banda** en esta card (RF-REP-017) y **su ausencia no se señala**: no hay hueco, ni marca, ni tratamiento distinto. Un mes en el que una simulación aporta banda y el siguiente no, es un estado normal.
+- **Redondeo de la esquina superior:** sigue la regla vigente (la va tomando la última serie del stack, que con el toggle encendido es la capa simulada de la última categoría). Si Recharts complica el redondeo selectivo, **cantos rectos sigue siendo aceptable** — escape ya vigente de la Forma 2, no se reabre.
+- **Ancho de barra, `barCategoryGap`, eje X:** sin cambios. El toggle **no** agrega barras, ni barras fantasma al lado, ni una segunda serie por mes.
+
+#### 2.3 `by-category` — modo Línea (stack de áreas)
+
+Mismo bloque real + bloque simulado, en áreas apiladas. La diferencia con Barra es **dónde vive el punteado**, y no es arbitraria: el modo Línea **ya tiene un contorno con semántica** (*"la firma de gasto la da la línea de contorno superior; el color solo identifica la categoría"*), así que el punteado va **ahí**, no en cada banda.
+
+| Serie | Relleno | Trazo |
+|---|---|---|
+| Áreas **reales** intermedias | `category.color` a **0.55** — sin cambios | `--panel` 1px — sin cambios |
+| Área **real** del tope | `category.color` a **0.55** — sin cambios | **`--expense` 2px sólido** — sin cambios. **Es la firma del gasto real.** |
+| Áreas **simuladas** intermedias | `category.color` a **0.18** (hueca) | `--panel` 1px (mismo separador que en el bloque real) |
+| Área **simulada** del tope | `category.color` a **0.18** | **`--expense` 2px punteado `5 4`.** Es la firma del gasto **con simulados**. |
+
+- **Lectura resultante:** una línea roja **sólida** (gasto real) y, por encima en el tramo futuro, una línea roja **punteada** (gasto con simulados); entre las dos, la cuña de aporte, subdividida por color de categoría en bandas huecas. **Es exactamente la misma lectura que la Forma 1**, con el stack de categorías adentro.
+- **Se autoanula igual:** donde no hay aporte, el punteado rojo cae sobre el sólido rojo y **se ve una sola línea sólida**.
+- **Por qué las bandas simuladas intermedias NO llevan punteado propio acá:** en un área apilada las bandas de altura cero **siguen existiendo** (no se pueden omitir sin cortar la continuidad del stack), así que un punteado por banda se amontonaría sobre el contorno rojo en todos los meses sin aporte y lo ensuciaría. Con `--panel` 1px eso no pasa: es el mismo separador que las bandas reales ya usan, y coincidir es inocuo (ya ocurre hoy con cualquier categoría en cero).
+- **Dots de hover:** el `activeDot` sigue solo en la serie tope, ahora la simulada — es decir, sobre el contorno con simulados.
+
+#### 2.4 Tooltip — la cifra lleva `≈`, la estructura no cambia
+
+El tooltip **conserva exactamente su anatomía vigente** en las tres geometrías: encabezado mes+año, una fila por serie/categoría con valor > 0, monto en **mono tabular**, y en `by-category` la fila final "Total gastos" en `--expense-ink`. **No se agrega ninguna fila de desglose real/simulado, ni un renglón "incluye N simulados", ni una leyenda de composición** — eso es lo que la decisión funcional excluye.
+
+- **Único cambio:** cuando la cifra de esa fila **incluye aporte simulado**, lleva el **prefijo `≈`**, pegado a la cifra y **dentro del mismo span mono** (para no romper la alineación tabular). Es el **mismo prefijo** que `/mes` ya pone en el monto de la fila simulada.
+  - Aplica a la fila de la serie (Forma 1), a la fila de la categoría que aporta (ambos modos de `by-category`) y a la fila **"Total gastos"** cuando el total del mes incluye simulados.
+  - **No es un aviso de composición:** es el glifo de "aproximado" sobre la cifra, ya vigente en el vocabulario de lo simulado. Ninguna frase, ningún conteo.
+- **Ninguna cifra cambia de color, de peso ni de opacidad** por incluir simulados — mismo criterio cerrado en `/mes` §5 ("la señal va al lado del número, nunca sobre el número").
+- **En meses sin aporte el tooltip es carácter por carácter el de hoy** (sin `≈`), tenga el toggle encendido o no.
+
+#### 2.5 Lo que NO cambia (y no se puede agregar sin decisión)
+
+- **La leyenda no gana ítems.** La leyenda es el **filtro de categorías**; agregarle una entrada "Simulados" mezclaría dos ejes y rompería la lógica de tres estados. La categoría simulada aparece en la leyenda **como una categoría más** (entra al universo del filtro con el toggle encendido, RF-REP-017) — sin distintivo, sin swatch especial, sin sufijo.
+- **El tramo futuro no se sombrea.** No se pinta banda de fondo, ni gridline especial, ni etiqueta "futuro" en el eje X. Los 12 meses siguen dibujándose igual (regla vigente: *"los meses futuros se dibujan como cualquier mes vacío, sin tratamiento especial de futuro"*).
+- **El eje Y reescala** si el total con simulados supera el máximo real. Es correcto y esperado: la card muestra el dato que muestra. **La composición del bloque real no cambia** — cada banda conserva su proporción y su vecina; lo único que se mueve es la escala.
+- **Sin animación propia.** La capa simulada entra con el mismo *grow* del canvas (~0.4s ease-out) y respeta `prefers-reduced-motion` (`isAnimationActive={false}`). Prender/apagar el toggle **no** hace morph entre estados: el canvas se redibuja.
+- **El overlay "Sin movimientos en {año}."** no debe aparecer en un año cuyo único dato son simulados con el toggle encendido — el criterio de vacío se evalúa sobre **el dato que la card muestra**. *(Señal técnica para `control-frontend`.)*
+
+### 3. Convivencia con las marcas pasivas de límite
+
+Con el toggle encendido, las marcas evalúan el valor **con** simulados (RF-REP-017). Marca de límite y tratamiento de simulado caen sobre el mismo elemento gráfico, así que se reparten propiedades **ortogonales** y nunca se pisan:
+
+| Dimensión | Propiedad que la porta | Valores |
+|---|---|---|
+| **Real vs. simulado** | **relleno** (sólido ↔ hueco) + **patrón del trazo** (continuo ↔ punteado) | nunca introduce un hue nuevo |
+| **Límite cruzado** | **color del trazo / marcador ámbar** (`--warning`) | nunca cambia el patrón del trazo ni el relleno |
+
+- **Lo simulado nunca es ámbar. El límite nunca puntea.** Son señales de ejes distintos y se leen por separado: *ámbar = "cruzó un umbral"*, *punteado y hueco = "esto es estimado"*.
+- **Forma 1 y modo Línea (anclaje "punto de serie"):** la marca sigue siendo el **`dot` ámbar** vigente (`r=4`, `fill --warning`, `stroke --panel` 1.5px) — o el `ring` ámbar si ese es el `effect` elegido —, ahora anclado en el vértice del **contorno con simulados** (el trazo punteado), que es el dato que la card muestra. Un `dot` sobre una línea punteada es inequívoco: son primitivas distintas y no compiten.
+- **Modo Barra (anclaje "barra"):** la marca sigue siendo el **contorno ámbar** sobre la celda marcada. Sobre una banda **simulada** marcada, el contorno toma **`--warning` 2px manteniendo el punteado** (`4 3`): el **color** lo aporta el límite, el **patrón** lo aporta lo simulado, el **relleno hueco** no se toca. Sobre una banda **real** marcada, el contorno es `--warning` 2px **sólido**, como hoy.
+- **Anclaje de la marca del total del mes** (`reporte.cat.gastoMesTotal`): sigue el criterio mecánico vigente — se ancla en la **última serie del stack**, que con el toggle encendido es la capa simulada de la última categoría. No es una decisión nueva: es el mismo `isTop` de hoy aplicado al stack de hoy.
+- **Portador de a11y:** sin cambios — el **tooltip del chart** enumera los límites cruzados (`warningNote`), y ahora la cifra de ese mismo tooltip lleva su `≈` si incluye simulados. Las dos señales conviven en el mismo bloque sin mezclarse.
+- **Cero-impacto del subsistema de límites intacto:** con `limits: []` no se monta ninguna marca, tenga el toggle el estado que tenga.
+
+### 4. Contención responsive (obligatoria — política P0-a)
+
+Umbral `--bp-wide` **941px**, evaluado sobre el **ancho de contenido** (`<main>`), no sobre el viewport. Piso soportado 640px; por debajo, gate.
+
+- **El chip envuelve, no comprime.** La línea 2 de ambas cards ya es `flex flex-wrap`, y el cluster izquierdo también. El chip es el **último** de ese cluster, así que es **el primero en bajar de renglón** cuando falta ancho — orden de sacrificio correcto: primero cede el interruptor que se toca una vez, no el control de representación ni el de dirección.
+- **El divisor `--hair` viaja con el chip.** El divisor previo y el chip forman un **subgrupo que envuelve como unidad** (`shrink-0`): nunca queda un divisor colgando al final de un renglón ni un chip huérfano abriendo el siguiente. *(Es el defecto clásico de sumar una pieza a un cluster con `flex-wrap`.)*
+- **El chip no tiene ancho mínimo propio** más allá de su contenido (glifo 13px + "Simulados" + padding ≈ 105px) y **no fuerza ancho al canvas**: la capa simulada no agrega ninguna columna, serie horizontal ni etiqueta lateral. El eje Y conserva su `width` de 64px.
+- **Canvas en compacto:** el alto baja a **220px** por la regla vigente. Ahí el bloque simulado es proporcionalmente más chico; si una banda simulada queda por debajo de ~3px de alto, el contorno punteado deja de resolverse y el portador de la información pasa a ser el **tooltip** (que siempre da la cifra con `≈`). Es una degradación aceptada y declarada: **nunca** se compensa engordando el trazo ni tiñendo la banda de otro color.
+- **Alto de toque:** el chip mide ~27px de alto, por debajo de los ~44px de guía. Es **el molde vigente de todo el cromo de la cabecera de card** (chips de Tipo, segmented de Dirección, tabs): se acepta por consistencia en un producto desktop-first, no se abre una excepción nueva. El área accionable es el chip completo, no solo el texto.
+- **Los cuatro invariantes, en este elemento:**
+  1. *Sin scroll horizontal del `body` (≥640px, sidebar abierto o cerrado):* el chip envuelve con su divisor; el canvas es `ResponsiveContainer` al 100% y la capa simulada no le agrega ancho mínimo; ninguna cifra nueva aparece fuera del tooltip. A **392px de contenido** (640px con sidebar abierto) la línea 2 queda en varios renglones y la card no desborda.
+  2. *Modales completos y scrolleables:* la feature **no introduce ningún modal ni overlay**. El único popover de la card (confirmar quitar) no cambia.
+  3. *Ninguna acción inalcanzable:* el chip está en flujo normal y siempre entra al envolver. **Deshabilitado sigue siendo enfocable** (`aria-disabled`, no `disabled`), así que su motivo es alcanzable por teclado y por lector de pantalla incluso sin hover — que es el caso táctil.
+  4. *Superficies anchas scrollean dentro de sí:* el gráfico ya escala dentro de la card y la leyenda conserva su scroll interno de alto acotado. La capa simulada no cambia nada de eso.
+- **Checkpoints obligatorios del QA:** `640px` sidebar cerrado, `640px` sidebar abierto (392px de contenido), `941px` cerrado, `1288px` cerrado.
+
+### 5. Agregados más allá del brief — estado
+
+- **Prefijo `≈` en la cifra del tooltip (§2.4).** Es un **agregado de diseño** sobre el brief, que solo exigía distinción "dentro del gráfico". Se incluye porque (a) es el portador **no-color** de la señal (el punteado por sí solo es forma, pero la cifra no tenía ninguna marca) y (b) es vocabulario **ya vigente** de lo simulado, no lenguaje nuevo. **No es el aviso de composición prohibido**: no hay frase, ni conteo, ni renglón adicional. **Confirmar con el orquestador** si se prefiere el tooltip literalmente intacto.
+- **Copys del motivo del chip deshabilitado (§1.3).** Redactados acá por ser copy de un elemento visual; si el analista prefiere otra formulación, prevalece la suya (y esta sección se actualiza).
+- **Nada más se agrega.** No hay leyenda de "simulado", no hay banda de "futuro", no hay badge en la cabecera, no hay entrada nueva en el tooltip.
+
+### 6. Reglas duras reafirmadas
+
+- **Regla dura 1 (verde = ingreso, rojo = gasto):** en `income-expense` la capa simulada usa **el color semántico de su propia dirección** —porque *es* ingreso o gasto—, jamás uno prestado. En `by-category` las bandas van por `category.color` (identificador) y el rojo aparece **solo** en el contorno del stack en modo Línea y en el "Total gastos" del tooltip, exactamente como hoy. **Lo simulado no tiene color propio** y no se le inventa uno.
+- **Regla dura 2 (índigo solo marca):** no aparece en el canvas. En el chip, solo como **focus ring** (`--accent-soft`).
+- **Regla dura 3 (dinero en mono tabular):** ninguna cifra sale de mono + `tnum`. El `≈` va **dentro del mismo span mono** que la cifra para no romper la alineación de la columna de montos del tooltip. El eje Y sigue en mono abreviado.
+- **Regla dura 4 (claro y oscuro):** el tratamiento es **relleno bajado + punteado del mismo color**, así que hereda automáticamente los tokens de cada modo; no introduce ningún valor fijo dependiente del fondo. Se verifica a ojo que la banda al 0.30 (Barra) / 0.18 (Línea) / 0.10 (Forma 1) siga distinguiéndose del bloque real en oscuro.
+- **Cero-impacto con el toggle apagado:** con el chip apagado (el default), la card es **idéntica a como se ve sin la feature** — mismas series, mismo tooltip sin `≈`, mismo eje. La **única** huella permanente de RF-REP-017 en la UI es el propio chip en la cabecera.
+
+### Checklist de aceptación visual — Movimientos simulados en cards de reporte
+
+> Insumo directo del QA visual per-feature (`docs/qa-visual.md`). Escenario recomendado: usuario con **al menos 2 simulaciones activas** (una que resulte gasto y una que resulte ingreso), **año en curso** con meses futuros, y una card de cada tipo en `/reportes`.
+
+*El control:*
+- [ ] En `income-expense` la línea 2 muestra, en el cluster izquierdo y **en este orden**: segmented de Dirección · divisor `--hair` · chips **Fijos/Cuotas/Únicos** · divisor `--hair` · chip **"Simulados"** con glifo. El chip es **el último**.
+- [ ] En `by-category` la línea 2 muestra: tabs **Barra | Línea** · divisor `--hair` · chip **"Simulados"**. El **underline de la tab activa no se extiende bajo el chip**, y `Tab`/flechas dentro de las tabs **no** enfocan el chip (está fuera del `tablist`).
+- [ ] El chip por defecto está **apagado**: plano (`--panel-2`, borde `--line`, **sin sombra**), texto y glifo `--muted`, `aria-pressed="false"`.
+- [ ] Encendido: **elevado** (`--panel`, borde `--line-strong`, `--shadow-sm`), texto `--ink`, `aria-pressed="true"`.
+- [ ] Focus por teclado: ring `--accent-soft` 3px. El chip **no** usa verde, rojo, ámbar ni índigo en ningún estado (salvo el ring).
+- [ ] **Dashboard:** el widget `income-expense` **no** tiene chip de Simulados en ninguna parte de su cabecera.
+- [ ] **Modo orden** ("Ordenar reportes"): las cards colapsan a mini y **no hay chip** en ningún mini.
+- [ ] Las cards `unique-grid`, `installment-gantt`, `fixed-evolution` e `inflation-income` **no** exponen el chip.
+
+*Deshabilitado con motivo:*
+- [ ] Con **cero simulaciones**: el chip está presente (nunca oculto), atenuado (`opacity-45`), cursor por defecto, sin hover, y su `title`/`aria-describedby` dice **"No tenés ninguna simulación. Se crean desde la sección Únicos de la vista del mes."**
+- [ ] Navegando a un **año pasado** (con simulaciones existentes): el chip se atenúa y el motivo es **"{Año} no tiene meses futuros."**
+- [ ] El chip deshabilitado **recibe foco con `Tab`** (no tiene el atributo `disabled`) y el motivo se anuncia; clickearlo **no hace nada**.
+- [ ] Con las dos causas simultáneas gana el copy de **"No tenés ninguna simulación…"**.
+- [ ] Con el toggle **encendido**, navegar a un año sin futuro atenúa el chip; **volver al año en curso lo devuelve encendido** (el valor persistido no se perdió).
+- [ ] Recargar la página conserva el estado del chip **por card** (dos cards del mismo tipo pueden estar una encendida y otra apagada).
+
+*Cero-impacto con el toggle apagado:*
+- [ ] Con el chip apagado, el canvas de ambas cards es **idéntico** al de antes de la feature: mismas series, mismos trazos sólidos, **ninguna línea punteada** en ningún mes.
+- [ ] El tooltip de cualquier mes **no muestra `≈`** en ninguna cifra.
+
+*`income-expense` con el toggle encendido:*
+- [ ] En los **meses pasados y el mes en curso** se ve **una sola línea sólida** por serie: sin doble trazo, sin tramo agrisado, sin punteado visible.
+- [ ] En el **tramo futuro** con aporte: el trazo **sólido** se queda en el nivel real y un trazo **punteado (`5 4`, 2px, mismo color)** corre por encima; entre ambos hay un relleno tenue del color de la serie.
+- [ ] Un simulado que resulta **ingreso** levanta la línea **verde**; uno que resulta **gasto**, la **roja**. Ninguna serie cambia de color.
+- [ ] Con Dirección = **"Solo gastos"** se ve un único stack (rojo) con su punteado; el verde no aparece.
+- [ ] Destildar **"Únicos"** en los chips de Tipo **quita el aporte simulado** (el punteado vuelve a pegarse al sólido).
+
+*`by-category` — modo Barra:*
+- [ ] En una barra de mes futuro con aporte, la porción simulada está **arriba de todo el bloque real**, con `category.color` **atenuado** y **contorno punteado (`4 3`, 1.5px) del mismo color de su categoría**.
+- [ ] El color de la porción simulada es **exactamente el de su categoría** (comparar contra su porción real y contra su swatch en la leyenda): **no se reasigna ni se recolorea**.
+- [ ] La composición del **bloque real** de un mes futuro (qué categorías y en qué proporción) es la misma con el toggle prendido que apagado — lo único que cambia es la escala del eje Y.
+- [ ] En los **meses sin aporte** el tope de la barra queda donde estaría con el toggle apagado: **ninguna banda de altura cero, ningún contorno punteado residual**.
+- [ ] Una simulación que resulta **ingreso** **no** produce banda en esta card, y su ausencia **no** se señala de ninguna forma.
+- [ ] Un mes con aporte y el siguiente sin aporte de la **misma** simulación se ve normal (sin marca de "faltante").
+
+*`by-category` — modo Línea:*
+- [ ] Se ven **dos contornos rojos**: uno **sólido** (gasto real) y uno **punteado (`5 4`, 2px)** por encima en el tramo con aporte; entre ambos, bandas huecas con color de categoría.
+- [ ] En los meses sin aporte se ve **una sola línea roja sólida** (el punteado coincide y desaparece), y **ningún** trazo punteado de color de categoría ensucia el contorno.
+- [ ] Las bandas simuladas se separan entre sí con el mismo separador `--panel` 1px que las reales.
+- [ ] Alternar **Barra ↔ Línea** conserva el estado del chip y del filtro de categorías; el aporte simulado se ve en los dos modos.
+
+*Tooltip:*
+- [ ] En un mes **con** aporte, la cifra de la fila afectada (y el **"Total gastos"** si corresponde) lleva **`≈` pegado al número, dentro del mismo span mono**, y la columna de montos **sigue alineada**.
+- [ ] En un mes **sin** aporte, el tooltip es **carácter por carácter el de hoy** (sin `≈`).
+- [ ] **No hay ninguna fila, renglón, leyenda ni frase de composición** del tipo "incluye N simulados" en la card ni en el tooltip.
+- [ ] **Ninguna cifra** cambia de color, peso u opacidad por incluir simulados.
+- [ ] La leyenda **no gana un ítem "Simulados"**; una categoría solo simulada aparece como **una categoría más**, sin distintivo.
+
+*Convivencia con límites:*
+- [ ] Con un límite cruzado en un mes futuro **con** simulados en `by-category`/Barra: la banda simulada marcada tiene contorno **ámbar Y punteado** a la vez (color del límite + patrón de lo simulado), y **su relleno sigue hueco**.
+- [ ] Una banda **real** marcada tiene contorno **ámbar sólido** (sin punteado).
+- [ ] En `income-expense`/Línea el `dot` ámbar se apoya sobre el **trazo punteado** (el nivel con simulados), no sobre el sólido.
+- [ ] **Nada de lo simulado es ámbar** y **nada del límite es punteado por sí solo**.
+- [ ] Con `limits: []` no aparece **ninguna** marca ámbar, con el toggle encendido o apagado.
+
+*Estados y feedback:*
+- [ ] Accionar el chip **no** monta skeleton: el canvas se mantiene y se actualiza al llegar el dato; mientras tanto **el botón de refrescar de esa card gira y se atenúa**.
+- [ ] Accionar el chip **no** dispara toast.
+- [ ] Si el refetch falla, la card muestra su estado de error vigente y el chip conserva su valor.
+- [ ] Un año cuyo **único** dato son simulados **no** muestra el overlay "Sin movimientos en {año}." con el toggle encendido.
+- [ ] Simulación **pausada**: la card se ve como con el toggle apagado, **sin error y sin señal** de que falta algo.
+
+*Modos y contención:*
+- [ ] En **oscuro**, la banda simulada se sigue distinguiendo de la real en las tres geometrías, y los contornos punteados se leen.
+- [ ] `prefers-reduced-motion`: prender/apagar el chip actualiza el canvas **sin animación de grow**.
+- [ ] A **640px** (sidebar cerrado y abierto): sin **scroll horizontal del `body`**; el chip **y su divisor bajan juntos** de renglón (nunca un divisor colgando al final de una línea); el chip sigue clickeable y enfocable.
+- [ ] A **941px** y **1288px** (sidebar cerrado): la cabecera no rompe, el cluster izquierdo mantiene su orden y `CardControls` sigue alineado al tope a la derecha.
+
+---
+
 ## Specs de fase
 
 El lenguaje visual vigente y reutilizable que salió de cada fase de implementación está consolidado en las secciones de arriba. Las decisiones puntuales de cada fase, una vez implementadas, dejan de tener documento propio: lo que sobrevive es la regla en presente; el "cuándo/por qué cambió" vive en el historial de git.

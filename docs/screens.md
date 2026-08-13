@@ -350,7 +350,7 @@ Sección del hub de Configuración dedicada a administrar las categorías del us
 
 ## 7. Reportes (pantalla configurable)
 
-**RF relacionados:** RF-REP-001, RF-REP-002, RF-REP-003, RF-REP-004, RF-REP-010, RF-REP-011, RF-REP-012, RF-LIM-005, RF-NAV-001
+**RF relacionados:** RF-REP-001, RF-REP-002, RF-REP-003, RF-REP-004, RF-REP-010, RF-REP-011, RF-REP-012, RF-REP-017, RF-LIM-005, RF-NAV-001
 
 > **Ruta:** `/reportes`. **Link en el sidebar:** rótulo **"Reportes"**, ubicado **debajo de "Vista del mes"** (orden: Dashboard → Vista del mes → Reportes → Historial → Configuración).
 
@@ -366,6 +366,7 @@ Pantalla **configurable** donde el usuario arma su propia vista de reportes a lo
 - **Cards de reporte** — una por cada entrada de la clave `reports`, en el orden del array. Cada card monta un **widget de reporte autónomo** (pantalla 8) en **modo persistido**, con sus flechas de año y su filtro de categorías embebidos. El tipo de card se elige al agregarla; los rótulos del menú "[+]" (y del mini de reorden) son: **"Ingresos vs Gastos"** (`income-expense`), **"Gastos por categoría"** (`by-category`), **"Gastos Únicos"** (`unique-grid`), **"Gastos en Cuotas"** (`installment-gantt`) y **"Inflación vs Ingresos"** (`inflation-income`, ícono `TrendingUp`), según RF-REP-001/010/011/012.
 - **Título de la card** (RF-REP-008) — en la cabecera de cada card, un **título editable**. Si la card no tiene título, muestra el placeholder **"Reporte N"** (N = posición 1-based de la card en la columna, recalculado en vivo).
 - **Popover informativo de límites por card** (RF-LIM-005) — junto al título de cada card, un **ícono informativo** abre un popover de **solo lectura** con los límites que observan esa card (las keys de su tipo de reporte). El ícono se muestra **solo si hay ≥1 límite** (habilitado o no) para esa superficie. Misma anatomía y comportamiento que el popover de `/mes` (pantalla 4), con dos diferencias: el caption es **"Límites de este reporte"** y solo aparece el grupo **"Marcan un dato"** (los reportes no admiten límites activos, así que nunca hay grupo "Avisan al guardar").
+- **Toggle de movimientos simulados** (RF-REP-017) — solo en las cards **"Ingresos vs Gastos"** y **"Gastos por categoría"**: un control que habilita los **movimientos simulados** (RF-SIM-003) en el tramo de **meses futuros** del año que la card muestra. **Apagado por defecto** y **persistido por card**. Se ofrece **deshabilitado con el motivo visible** —nunca oculto— cuando el usuario no tiene ninguna simulación o cuando el año de la card no tiene meses futuros alcanzables (todo año anterior al año en curso, y el año en curso si el mes en curso es diciembre); deshabilitarlo no borra el valor persistido. Las otras cuatro cards no lo exponen.
 - El layout, tamaños y disposición de las cards y del "[+]" los define `control-design`.
 
 ### Acciones disponibles
@@ -375,6 +376,7 @@ Pantalla **configurable** donde el usuario arma su propia vista de reportes a lo
 - **Navegar el año de una card** y **filtrar sus categorías** — embebidos en cada card (widget autónomo, pantalla 8); cada cambio se persiste. Son **independientes por card**: no hay control de año ni filtro compartidos.
 - **Editar el título de una card** (RF-REP-008) — desde la cabecera; máx. 60 caracteres, **Enter o blur** confirman, **Esc** cancela. Confirmar un título vacío vuelve a mostrar el placeholder "Reporte N".
 - **Refrescar una card** (RF-REP-016) — desde la cabecera; vuelve a pedir al backend **solo los datos de esa card**, con feedback solo-spinner. Es **independiente por card**.
+- **Habilitar / deshabilitar los movimientos simulados de una card** (RF-REP-017) — solo en Ingresos vs Gastos y Gastos por categoría. Habilitado, los meses futuros del año en curso suman los movimientos simulados de las simulaciones activas —en Gastos por categoría, **solo los que resultan gasto**— distinguidos dentro del gráfico y sin aviso textual; los filtros de la card los alcanzan como a cualquier **único** (tipo, dirección derivada y categoría simulada). El cambio se **persiste por card** y no afecta a las demás.
 - **Ver los límites que observan una card** (RF-LIM-005) — el ícono informativo junto al título de la card abre el popover de solo lectura con el listado. Es informativo: no edita ni activa/desactiva límites.
 - **Ordenar reportes** (RF-REP-009) — un botón del header ("Ordenar reportes" / "Listo") activa/desactiva el **modo orden**, con el mismo mecanismo que "Ordenar secciones" de `/mes`. Se muestra **solo con 2 o más cards**. En modo orden cada card colapsa a su representación **mini** y el usuario la **arrastra para reordenarla** entre las demás; los controles internos de cada card y el "[+]" quedan deshabilitados. El orden se **aplica en vivo** y se **persiste por usuario** (clave `reports`, RF-REP-004); no hay acción de cancelar.
 - Acciones globales del sidebar.
@@ -390,13 +392,14 @@ Pantalla **configurable** donde el usuario arma su propia vista de reportes a lo
 - **Con cards:** una o más cards montadas, cada una en su año y con su filtro persistidos.
 - **Cargando (por card):** mientras cada widget obtiene los datos de su año (ver pantalla 8).
 - **Error (por card):** si falla la carga de una card, se informa el error en esa card sin romper el resto de la pantalla.
+- **Card con movimientos simulados habilitados (RF-REP-017):** los meses **futuros** del año en curso incorporan los simulados, distinguidos dentro del gráfico; el mes en curso y los meses pasados no cambian. Sin simulaciones activas, con todas pausadas o en un año sin tramo futuro, la card se ve igual que con el toggle apagado, sin error.
 - **Modo orden activo (RF-REP-009):** disponible solo con 2 o más cards; cada card colapsa a su representación **mini** y se puede arrastrar para reordenarla. Los controles internos de cada card y el "[+]" quedan deshabilitados. El orden se aplica en vivo y se persiste.
 
 ---
 
 ## 8. Widget de reporte autónomo (componente reutilizable)
 
-**RF relacionados:** RF-REP-001, RF-REP-002
+**RF relacionados:** RF-REP-001, RF-REP-002, RF-REP-017
 
 > No es una pantalla con ruta propia: es un **recuadro (panel) reutilizable** que se inyecta dentro de otras pantallas (cada card de `/reportes`, pantalla 7, y el Dashboard, pantalla 3). Se documenta acá por ser una unidad funcional con contenido, acciones y estados propios. Cada instancia es **autónoma**: gobierna su propio año y su propio filtro de categorías; no hay control de año ni filtro compartidos entre instancias.
 
@@ -411,6 +414,7 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 - **Categorías seleccionadas (filtro)** — subconjunto de categorías; default **todas**. El universo ofrecido es **solo las categorías con gasto del año** (las que aportan a lo que se muestra), estable (no se achica al destildar). **Tres estados** (igual que el filtro de `/mes`, RF-VM-006): todas (default), subconjunto y **ninguna** (todas destildadas → serie en cero). En `by-category` (y en la card `income-expense` del Dashboard) **la leyenda del gráfico es el filtro** (ver "Acciones disponibles"), sin control separado; la card `income-expense` de `/reportes` expone el filtro de categoría en un **control dedicado** (popup), junto con los filtros de tipo y dirección de RF-REP-014.
 - **Filtros de tipo y dirección (solo `income-expense` de `/reportes`, RF-REP-014)** — además del filtro de categoría, la card acota qué movimientos alimentan sus 2 series por **tipo de movimiento** (fijo / cuota / único, multi-selección; default los tres) y **dirección** (solo gastos / solo ingresos / ambos; default ambos). Son **filtros** que siguen siendo Total-only (no un desglose). La forma de los controles la define `control-design`.
 - **Representación (solo `by-category`, RF-REP-006)** — toggle de dos opciones: **Barra** (barras apiladas por categoría, default) y **Línea** (áreas apiladas por categoría, mismo dato, con línea de contorno = total de gasto). El tipo `income-expense` **no** tiene este toggle. La representación no cambia el año ni el filtro. El detalle visual lo define `control-design`.
+- **Movimientos simulados (solo `income-expense` y `by-category` de `/reportes`, RF-REP-017)** — habilita los **movimientos simulados** (RF-SIM-003) en los meses **futuros** del año que la instancia muestra; default **apagado**, persistido por card. En `by-category` entran solo los que resultan **gasto**. El widget del Dashboard **no** lo expone.
 - **Modo de persistencia** — **persistido** (en `/reportes`: año, filtro **y representación** —`by-category`— se guardan en la clave `reports`, RF-REP-004/006) o **efímero** (en el Dashboard: año y filtro son de sesión, no se persisten — al recargar vuelve a año en curso + todas las categorías).
 
 ### Contenido
@@ -418,6 +422,7 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 - **Eje X:** los 12 meses del año configurado. **Eje Y:** monto.
 - **Tipo Ingresos vs Gastos (`income-expense`):** por cada mes, el total de ingresos y el total de gastos (cada total suma únicos + fijos activos + cuotas del mes, igual que RF-VM-002), **restringido a las categorías seleccionadas**. Es **Total-only**: solo las dos series agregadas, sin sub-vista por categoría ni toggle de representación.
 - **Tipo Gastos por categoría (`by-category`):** por cada mes, el total de gastos descompuesto por categoría apilada —**solo las seleccionadas**—, cada porción con el color propio de su categoría (RF-CAT-005). Solo gastos; los ingresos no se descomponen acá. Se grafica como **Barra** (default) o **Línea** según la representación (RF-REP-006).
+- **Tramo futuro con simulados** (RF-REP-017, solo `income-expense` y `by-category` con el toggle habilitado): los meses futuros del año en curso suman, además de lo que proyectan fijos y cuotas (RN-006), los **movimientos simulados** —en `by-category`, solo los que resultan gasto—, distinguidos dentro del gráfico y **sin aviso textual** de composición. El mes en curso y los pasados no cambian.
 - **Flechas de navegación de año** ‹ › embebidas en el recuadro.
 - **Leyenda interactiva = filtro** embebida: clic en un ítem lo activa/desactiva. En `income-expense` sus ítems son las **series** (Ingresos / Gastos); en `by-category` sus ítems son las **categorías con gasto del año**. Salvo en la card `income-expense` de `/reportes` —que suma controles de filtro dedicados de tipo / dirección / categoría (RF-REP-014)—, no hay un control de filtro aparte: la leyenda lo cumple.
 - **Toggle de representación** Barra / Línea — solo en el tipo `by-category` (RF-REP-006). El detalle visual lo define `control-design`.
@@ -427,10 +432,11 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 - **Navegar de año** — recalcula el recuadro para el año seleccionado, dentro de los límites: hacia atrás el control ‹ se deshabilita antes del **primer año con CUALQUIER movimiento del usuario** (`earliestYear`, no afectado por el filtro); hacia adelante los años futuros quedan bloqueados (máximo navegable = año en curso).
 - **Filtrar vía la leyenda** — clic en un ítem de la leyenda lo activa/desactiva y recalcula el recuadro. En `income-expense` togglea las **series** Ingresos/Gastos (puede ocultar ambas → recuadro vacío); en `by-category` togglea **categorías** (tres estados). En modo persistido, año, series ocultas y filtro de categorías se guardan (RF-REP-004); en modo efímero, no.
 - **Cambiar la representación** (solo `by-category`, RF-REP-006) — alternar Barra / Línea recalcula la visualización de la card sin tocar año ni filtro. En modo persistido la representación se guarda por card (clave `reports`, campo `categoryChartMode`).
+- **Habilitar / deshabilitar los movimientos simulados** (solo `income-expense` y `by-category` de `/reportes`, RF-REP-017) — recalcula **solo el tramo de meses futuros** incorporándolos o quitándolos; no toca año, filtro ni representación. Se guarda por card.
 
 ### Puntos de uso
 
-- **Dashboard (`/`):** se monta **solo el tipo Ingresos vs Gastos** (Total-only), en **modo efímero** — navegación de año **activa** e independiente, filtro de categorías activo pero **no persistido** (al recargar vuelve a año en curso + todas las categorías). El resumen mensual del dashboard (pantalla 3) **no** se ve afectado por este widget.
+- **Dashboard (`/`):** se monta **solo el tipo Ingresos vs Gastos** (Total-only), en **modo efímero** — navegación de año **activa** e independiente, filtro de categorías activo pero **no persistido** (al recargar vuelve a año en curso + todas las categorías). **No expone el toggle de movimientos simulados** (RF-REP-017): el widget del dashboard nunca los incluye. El resumen mensual del dashboard (pantalla 3) **no** se ve afectado por este widget.
 - **Cards de `/reportes` (pantalla 7):** cada card monta una instancia en **modo persistido**; el tipo, el año, el filtro y la representación (`by-category`) vienen de su entrada en `reports` y cada cambio se persiste.
 
 ### Estados
@@ -439,7 +445,7 @@ Visualizar, por mes a lo largo de un año, los movimientos del usuario (eje X: l
 - **Con datos:** recuadro poblado con los 12 meses presentes.
 - **Año sin movimientos (vacío):** los 12 meses se muestran en cero; puede acompañarse de un mensaje de estado vacío, sin error. La representación visual concreta la define `control-design`.
 - **Filtro que vacía el reporte:** si las categorías seleccionadas no tienen movimientos en el año, **o** si el estado es **"ninguna"** (todas destildadas), los 12 meses se grafican en **cero** (sin error); los límites de navegación de año **no** cambian (siguen basados en `earliestYear`, no en el filtro).
-- **Meses sin datos dentro del año:** los meses sin movimientos se grafican en **cero** (sin huecos ni omisiones). Aplica tanto a meses futuros del año en curso como a meses pasados; los meses futuros pueden tener datos proyectados por fijos/cuotas (RN-006).
+- **Meses sin datos dentro del año:** los meses sin movimientos se grafican en **cero** (sin huecos ni omisiones). Aplica tanto a meses futuros del año en curso como a meses pasados; los meses futuros pueden tener datos proyectados por fijos/cuotas (RN-006) y, en una card con el toggle habilitado, movimientos simulados (RF-REP-017).
 - **Error:** si falla la carga, se informa el error sin romper la pantalla anfitriona.
 
 ---
