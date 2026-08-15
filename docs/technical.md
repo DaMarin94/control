@@ -323,6 +323,13 @@ Recuperación de contraseña, verificación de email y account linking (mismo em
 
 ---
 
+## Entorno de desarrollo local
+
+- **`pnpm build` y `next dev` no conviven.** El build regenera `.next/`, que es el mismo directorio que sirve el dev server: tras el build el server queda apuntando a un bundle de CSS que ya no existe y la app se ve **sin estilos** (los elementos caen al stylesheet del user agent). Correr el build solo con el dev server apagado; si ya pasó, reiniciar `next dev`.
+- **Para chequear tipos sin tocar el server:** `pnpm exec tsc --noEmit`.
+
+---
+
 ## Linting y formato
 
 - **ESLint + Prettier** en ambas apps (cada una con su config; NestJS y Next.js ya traen ESLint, se suma Prettier para formato).
