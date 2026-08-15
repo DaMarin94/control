@@ -882,7 +882,18 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   }
 
   const periodLabel = `${mesName} ${yearName}`;
-  const statusLabel = isCurrentMonth ? "Mes en curso" : "Histórico";
+
+  // Dirección de la flecha / rótulo de estado: comparación lexicográfica de
+  // YYYY-MM alcanza. Mes visualizado en el pasado (< mes en curso) → Histórico
+  // + ArrowRight, mes visualizado en el futuro (> mes en curso) → Mes futuro +
+  // ArrowLeft. La flecha es SIEMPRE leading (primer hijo): solo cambia el
+  // sentido del glifo, nunca su posición.
+  const isPastMonth = month < currentMonth;
+  const statusLabel = isCurrentMonth
+    ? "Mes en curso"
+    : isPastMonth
+      ? "Histórico"
+      : "Mes futuro";
 
   // ── Link "Ir al mes en curso" — recentrado temporal (spec docs/design.md) ─
   // Solo se renderiza cuando isCurrentMonth === false (render condicional por
@@ -890,11 +901,6 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   // Se reutiliza la misma referencia de JSX en el bloque desktop y en el
   // bloque mobile (ambos siempre montados; el breakpoint activo se resuelve
   // por CSS), igual que CurrencyChip.
-  // Dirección de la flecha: comparación lexicográfica de YYYY-MM alcanza.
-  // Mes visualizado en el pasado (< mes en curso) → ArrowRight, mes visualizado
-  // en el futuro (> mes en curso) → ArrowLeft. La flecha es SIEMPRE leading
-  // (primer hijo): solo cambia el sentido del glifo, nunca su posición.
-  const isPastMonth = month < currentMonth;
   const goToCurrentMonthButton = !isCurrentMonth ? (
     <button
       type="button"

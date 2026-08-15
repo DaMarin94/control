@@ -634,6 +634,40 @@ describe("MonthViewClient", () => {
     });
   });
 
+  // ── Rótulo de estado del mes (docs/screens.md §4 Header) ────────────────────
+  // Tres estados: pasado → "Histórico", en curso → "Mes en curso",
+  // futuro → "Mes futuro" (bug: antes era binario y el futuro caía en
+  // "Histórico"). getCurrentMonth() está mockeado arriba para "2026-06".
+  // El mismo statusLabel se renderiza dos veces (header desktop + trigger
+  // mobile, ambos siempre montados — mismo patrón que el link "Ir al mes en
+  // curso"), por eso se usa getAllByText.
+
+  describe("Rótulo de estado del mes", () => {
+    beforeEach(() => {
+      mockLoaded(mockWithData);
+    });
+
+    it("mes en curso muestra 'Mes en curso'", () => {
+      renderMonthView("2026-06");
+      const labels = screen.getAllByText("Mes en curso");
+      expect(labels.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("mes pasado muestra 'Histórico'", () => {
+      renderMonthView("2026-05");
+      const labels = screen.getAllByText("Histórico");
+      expect(labels.length).toBeGreaterThanOrEqual(1);
+      expect(screen.queryByText("Mes futuro")).not.toBeInTheDocument();
+    });
+
+    it("mes futuro muestra 'Mes futuro', NO 'Histórico'", () => {
+      renderMonthView("2026-07");
+      const labels = screen.getAllByText("Mes futuro");
+      expect(labels.length).toBeGreaterThanOrEqual(1);
+      expect(screen.queryByText("Histórico")).not.toBeInTheDocument();
+    });
+  });
+
   // ── Totales (RF-VM-002) ───────────────────────────────────────────────────
 
   describe("Totales del mes", () => {

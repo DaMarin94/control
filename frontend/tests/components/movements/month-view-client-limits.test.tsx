@@ -276,4 +276,30 @@ describe("Marca visual pasiva de límites en /mes", () => {
 
     expect(screen.queryByTitle(/supera el límite/i)).not.toBeInTheDocument();
   });
+
+  // Regresión: el rótulo "Histórico"/"Mes en curso"/"Mes futuro" (bug fix de
+  // statusLabel) es puramente visual — isCurrentMonth sigue siendo un booleano
+  // puro y su semántica (alcance temporal "mes en curso" de RF-LIM-003/004) no
+  // se toca. Un mes FUTURO también debe quedar fuera de temporalScope "current",
+  // igual que un mes pasado (caso ya cubierto arriba).
+  it("temporalScope 'current' NO marca en un mes futuro (isCurrentMonth sigue llegando como booleano)", () => {
+    preferencesOverride = limitsPreferences([
+      {
+        id: "l1",
+        enabled: true,
+        anchorKey: "mes.total.gasto",
+        temporalScope: "current",
+        operator: "gt",
+        threshold: 1000,
+        nature: "passive",
+        effect: "badge",
+        label: "Tope de gastos",
+      },
+    ]);
+    mockLoaded(mockData);
+    // getCurrentMonth() está mockeado a "2026-06"; 2026-07 es un mes futuro.
+    render(<MonthViewClient month="2026-07" />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTitle(/supera el límite/i)).not.toBeInTheDocument();
+  });
 });
