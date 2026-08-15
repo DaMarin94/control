@@ -2745,18 +2745,32 @@ Además, un **popover informativo de solo lectura** (RF-LIM-005) lista, por supe
 | **Prioridad** | Media |
 | **Precondiciones** | El usuario tiene al menos un límite sobre una key cableada de la superficie. |
 
-**Superficies con popover:** las **5 cards de `/reportes`** (una por card, sobre las keys de su tipo de reporte) y la **Vista del mes (`/mes`)** (sobre las keys `mes.*`). **No** aparece en el Dashboard: ni el resumen mensual ni el widget efímero Ingresos vs. Gastos lo montan (asimetría deliberada — el Dashboard es superficie de vistazo, sin chrome de listado).
+**Superficies con popover:** la superficie de un límite la fija su **key** (catálogo de RF-LIM-003): `/mes` (las 7 keys `mes.*`) y **una superficie por tipo de reporte** — Ingresos vs Gastos, Gastos por categoría, Gastos Únicos, Gastos en Cuotas, Inflación vs Ingresos. La superficie es el **tipo de reporte, no la instancia de card**: dos cards del mismo tipo listan **el mismo** conjunto de límites.
+
+**No** aparece en el Dashboard: ni el resumen mensual ni el widget efímero Ingresos vs. Gastos lo montan, **aunque ese widget comparta tipo y keys con la card Ingresos vs Gastos de `/reportes`**. Es una **asimetría deliberada**: el Dashboard es superficie de vistazo, sin chrome de listado; las marcas pasivas sí siguen operando ahí (RF-LIM-003).
 
 **Condición de aparición:** el ícono se monta **solo si hay ≥1 límite** —**habilitado o no**— cuya key pertenece a la superficie. Con **cero** límites para la superficie el ícono **no se renderiza** (no reserva espacio). Que el ícono exista es, en sí, la señal de "esta superficie tiene al menos un límite observándola".
 
-**Contenido del popover:**
-- **Listado de límites** de la superficie. Cada ítem muestra el **nombre** del límite (el rótulo del usuario o, en su defecto, el rótulo de su anclaje), su **condición** (operador + umbral) y, si tiene refinamiento, la **categoría** (con su punto de color) o la **sección** que acota.
-- **Agrupado por naturaleza:** los **pasivos** (marca visual, RF-LIM-003) bajo un grupo y los **activos** (aviso al guardar, RF-LIM-004) bajo otro. Como los activos solo existen sobre keys `mes.*`, el **grupo de activos aparece únicamente en `/mes`**; las cards de `/reportes` solo tienen el grupo de pasivos.
-- **Límites deshabilitados incluidos, atenuados:** un límite con `enabled: false` **se lista igual** (el popover informa la config completa), atenuado y etiquetado como desactivado. No produce marca ni aviso, pero el usuario ve que existe y está apagado.
-- **Alcance temporal reflejado:** un límite **pasivo** de alcance **mes en curso** se marca como tal; los de alcance "todos los meses" (default) no llevan qualifier; los activos no usan alcance temporal, así que nunca lo llevan.
+**Contenido del popover:** el **listado de los límites** de la superficie, **agrupado por naturaleza** — los **pasivos** (marca visual, RF-LIM-003) bajo un grupo y los **activos** (aviso al guardar, RF-LIM-004) bajo otro. Como los activos solo existen sobre keys `mes.*`, el **grupo de activos aparece únicamente en `/mes`**; las cards de `/reportes` solo tienen el grupo de pasivos.
+
+Cada ítem del listado muestra:
+
+| Dato | Regla |
+|---|---|
+| **Dato observado** (rótulo del anclaje) | **Siempre**, aunque el límite tenga nombre propio. Es la razón de ser del popover: nombrar qué de esta pantalla se está mirando. |
+| **Nombre del límite** | El rótulo que le puso el usuario, si lo tiene. Sin nombre propio, el rótulo del anclaje **hace de nombre** y no se repite. |
+| **Condición** | Operador + umbral, tal cual se configuró: número puro, sin moneda (RF-LIM-001). |
+| **Refinamiento** | La **categoría** (con su color) o la **sección** que acota el límite, cuando lo tiene. |
+| **Estado** | Un límite con `enabled: false` **se lista igual** —el popover informa la config completa—, atenuado y etiquetado como desactivado. No produce marca ni aviso, pero el usuario ve que existe y está apagado. |
+| **Alcance temporal** | Los **pasivos** de alcance `mes en curso` llevan un **qualifier** que lo enuncia; los de `todos los meses` (default) **no** lo llevan (es la norma; anotarla sería ruido); los **activos** nunca (no usan alcance temporal). |
+
+- **No muestra el efecto visual** del límite pasivo: el popover dice **qué se observa**, no cómo se pinta. El efecto se ve en la propia superficie cuando el dato cruza.
+- **Orden:** dentro de cada grupo, el **orden de configuración** del usuario — el mismo de la sección Límites de `/configuracion` (RF-LIM-002). Los deshabilitados **no** se segregan al final: quedan en su posición, atenuados.
+
+**Listado de configuración, no de evaluación:** el popover enumera **la config**, no el resultado de evaluarla. No depende del **período** que la superficie muestra (el mes navegado en `/mes`, el año de la card en `/reportes`), ni del filtro, la moneda o la representación de la card, ni de si algún límite **cruza** en ese momento; el listado no se achica ni cambia al navegar. Por eso un límite pasivo de alcance `mes en curso` **se lista igual** cuando el período mostrado lo vuelve inaplicable —`/mes` parado en otro mes, o una card anual donde solo alcanza al punto del mes en curso dentro de los 12—: el qualifier enuncia el **alcance del límite**, verdad idéntica en toda superficie, y el usuario deriva de ahí el efecto local. El listado no afirma que algo esté cruzado.
 
 **Comportamiento:**
-- Es **solo lectura**: no edita ni activa/desactiva límites (eso vive en la sección Límites de Configuración, RF-LIM-002). Su única interacción son las vías de apertura y cierre.
+- Es **solo lectura**: no edita, no activa/desactiva y **no navega** a la sección Límites de Configuración (RF-LIM-002). Su única interacción son las vías de apertura y cierre.
 - Abre por click/tap (y, en desktop, también por hover); cierra por click-fuera, Esc o re-clic. No bloquea el fondo.
 
 **Criterios de aceptación:**
@@ -2764,9 +2778,14 @@ Además, un **popover informativo de solo lectura** (RF-LIM-005) lista, por supe
 - [ ] El ícono se monta **solo** con ≥1 límite (habilitado o no) para la superficie; con cero, no se renderiza.
 - [ ] El popover **lista** los límites de la superficie agrupados por naturaleza; no marca ningún dato ni interrumpe ningún guardado.
 - [ ] El grupo de activos aparece **solo en `/mes`**; las cards de `/reportes` solo muestran el grupo de pasivos.
-- [ ] Los límites deshabilitados se listan atenuados y etiquetados como desactivados.
-- [ ] Los límites pasivos de alcance "mes en curso" se marcan con su qualifier; los de "todos los meses" no; los activos nunca.
-- [ ] Es solo lectura: no expone acciones de edición ni de toggle.
+- [ ] Dos cards del **mismo tipo de reporte** listan el mismo conjunto de límites.
+- [ ] Cada ítem nombra **siempre** el dato observado; tener nombre propio no lo reemplaza.
+- [ ] Los límites deshabilitados se listan atenuados y etiquetados como desactivados, **en su posición** dentro del grupo.
+- [ ] Dentro de cada grupo el orden es el de configuración (el de la sección Límites).
+- [ ] Los límites pasivos de alcance "mes en curso" llevan su qualifier; los de "todos los meses" no; los activos nunca.
+- [ ] El listado **no cambia** con el mes navegado, el año de la card, sus filtros ni con que algún límite cruce o no.
+- [ ] El popover **no** muestra el efecto visual de los límites pasivos.
+- [ ] Es solo lectura: no expone acciones de edición, de toggle ni link a `/configuracion/limites`.
 
 **Notas:**
 - El **copy visible** (caption del popover, encabezados de grupo, etiqueta de deshabilitado y qualifier de alcance temporal) está fijado en `screens.md` (pantallas 4 y 7). El spec visual del ícono y el popover lo define `docs/design.md`, §Popover informativo de límites por superficie.
