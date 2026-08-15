@@ -2936,7 +2936,9 @@ Cada key del catálogo (§2 del roadmap) emite en un **tipo de anclaje**. El pan
 | **Total / subtotal de mes** (cifra dominante) | `mes.total.gasto`, `mes.total.ingreso`, `mes.balance`, `mes.seccion.subtotal` | `badge`, `glyph`, `bold`, `tint`†, `ring` | `badge` | `badge` adyacente a la cifra (misma celda, `inline-flex gap justify-end`, como el badge de moneda). `tint`† **solo si la cifra es neutra**; si va coloreada por tipo/signo, `tint` **no se ofrece** para esa key. `ring` para envolver el bloque de total (+ glifo). |
 | **Contador de sección** (pill) | `mes.seccion.conteo` | `glyph`, `badge` | `glyph` | `glyph` a la izquierda del pill contador; o recolorear el pill a `--warning-soft`/`--warning-ink` (`badge`). El contador **no es dinero**, `tint` sería redundante con `badge`. |
 | **Celda de grilla** (fondo ocupado por heatmap) | `reporte.unicos.celda` | `ring`, `dot` | `ring`+`dot` | **`fill` NO disponible** (el fondo lo ocupa la rampa de heatmap, ver *Reporte anual de Únicos*). `ring` ámbar inset 1px + **marcador de esquina** `dot` (la celda ~19px no aloja glifo). Portador a11y = **el texto del tooltip de celda** (que ya existe) enunciando el límite cruzado + `aria-label` de la celda. |
-| **Barra** (color = categoría) | `reporte.cuotas.montoPorCuota`, banda de `by-category` | `glyph`, `badge`, `ring` | `glyph` | La barra ya está teñida por **color de categoría** (identidad) — **no se recolorea**. `glyph` `AlertTriangle` junto a la etiqueta de monto de la barra; `ring` alrededor de la barra. Portador = glifo + tooltip del chart. |
+| **Barra con etiqueta propia** (color = categoría) | `reporte.cuotas.montoPorCuota`, `reporte.cuotas.cantidadCuotas` | `glyph`, `badge`, `ring` | `glyph` | La barra ya está teñida por **color de categoría** (identidad) — **no se recolorea**. La barra del gantt **tiene etiqueta de monto propia** (interna u outer): ahí entran `glyph` y `badge`; `ring` = anillo inset alrededor de la barra. Portador = glifo/badge + tooltip. |
+| **Banda de un stack apilado** (sin etiqueta, alto = valor) | `reporte.cat.gastoMesCategoria` | `ring` (**único**) | `ring` | La banda **no tiene etiqueta de monto** donde colgar un nodo aditivo, y su **alto lo fija el valor** (puede medir pocos px, o cero). Se ofrece **solo `ring`**: contorno ámbar del perímetro en modo Barra; anillo ámbar en el vértice del borde superior de la banda en modo Línea. Si la categoría **no aporta** ese mes (banda inexistente), la marca **escala al cartucho del mes**. Ver *Marcas de límite en `by-category`*. |
+| **Columna de mes de un chart apilado** (total sin elemento propio) | `reporte.cat.gastoMesTotal` | `glyph`, `badge`, `ring` | `glyph` | El total del mes **no es ningún elemento pintado**: es el tope del apilado, no una banda. Su portador es el **cartucho del mes** en el carril del eje X — siempre presente, independiente de la geometría de las bandas e **idéntico en modo Barra y modo Línea**. Los tres efectos se diferencian ahí. Ver *Marcas de límite en `by-category`*. |
 | **Punto/mes de serie en chart** (Recharts) | `reporte.ie.gastoMes`, `reporte.ie.ingresoMes`, `reporte.infl.*` | `dot`, `ring` | `dot` | Marcador `dot` ámbar sobre el punto/barra del mes que cruza; `ring` para envolver una barra específica. Las barras de `income-expense` van tipadas (verde/rojo) → **no recolorear**, marcar por contorno/marcador. Portador = tooltip del chart + `aria`. |
 | **Métrica de footer / porcentaje** (cifra neutra pequeña) | `reporte.unicos.mesTotal`, `reporte.unicos.promedioDiario`, `reporte.unicos.pctVsPrev`, `reporte.unicos.inflacionMes`, `reporte.infl.*` | `tint`, `glyph`, `bold` | `tint` | Cifras **ya neutras** (`--ink-2`) → `tint` a `--warning-ink` es lo más limpio a ese tamaño. En el `%dif` **se conserva** su glifo de dirección `↑`/`↓` (que sigue en `--ink-2`); el `tint` afecta la cifra, no reemplaza la dirección. Portador = el tooltip rico del footer (que ya lista las métricas) + `aria`. |
 
@@ -3155,6 +3157,7 @@ El picker de efecto es el **consumidor** de la tabla *Mapeo efecto ↔ tipo de a
 - **Control:** grupo de **option-cards en radio** (`role="radiogroup"`), una por efecto válido. Cada card: `bg-panel` borde `--line` `--r-ctl`, seleccionada = borde `--accent` + ring `--accent-soft` 3px (cromo de interacción). Contenido de cada card:
   - **Nombre del efecto** (13px/600 `--ink`): Peso · Tinte · Glifo · Punto · Badge · Fondo · Ring (según ids `bold`/`tint`/`glyph`/`dot`/`badge`/`fill`/`ring`).
   - **Preview vivo** (feedback del task): el **mark real** aplicado sobre un **dato de muestra** representativo del anclaje — p. ej. una cifra `$300.000` mono tabular con `glyph` `AlertTriangle` ámbar al lado, o un `badge` `--warning-soft`, o el `tint` `--warning-ink` sobre la cifra. El preview usa los **tokens `warning` reales**, así el usuario ve **exactamente** la marca en ambos modos antes de crear. Para `fill`/`ring` (que "nunca van solos", a11y) el preview muestra el efecto **ya acompañado** de su glifo/badge obligatorio.
+- **Subset de un solo efecto — no se ofrece una elección que no existe.** Cuando la fila del anclaje declara **un único** efecto válido (hoy: `reporte.cat.gastoMesCategoria` → `ring`), el `radiogroup` **no se renderiza**: en su lugar va una **línea informativa** con el mismo preview vivo — glifo/label del efecto (13px/600 `--ink`) + la marca real aplicada sobre el dato de muestra + una bajada 12.5px `--muted` que dice qué forma toma (ej. *"Contorno ámbar sobre la banda de esa categoría."*). Un radio único no es una elección: presentarlo como selector sugiere una libertad que no hay y obliga a un click sin consecuencia. **Carga cognitiva y affordance.**
 - **Default:** la primitiva marcada Default en la tabla queda preseleccionada; el usuario puede cambiar dentro del subset.
 - El preview del picker es la **misma** representación que luego aparece como identificador de efecto en la fila de la lista (§2), para que list ↔ create hablen el mismo idioma visual.
 
@@ -4707,9 +4710,9 @@ Con el toggle encendido, las marcas evalúan el valor **con** simulados (RF-REP-
 | **Límite cruzado** | **color del trazo / marcador ámbar** (`--warning`) | nunca cambia el patrón del trazo ni el relleno |
 
 - **Lo simulado nunca es ámbar. El límite nunca puntea.** Son señales de ejes distintos y se leen por separado: *ámbar = "cruzó un umbral"*, *punteado y hueco = "esto es estimado"*.
-- **Forma 1 y modo Línea (anclaje "punto de serie"):** la marca sigue siendo el **`dot` ámbar** vigente (`r=4`, `fill --warning`, `stroke --panel` 1.5px) — o el `ring` ámbar si ese es el `effect` elegido —, ahora anclado en el vértice del **contorno con simulados** (el trazo punteado), que es el dato que la card muestra. Un `dot` sobre una línea punteada es inequívoco: son primitivas distintas y no compiten.
-- **Modo Barra (anclaje "barra"):** la marca sigue siendo el **contorno ámbar** sobre la celda marcada. Sobre una banda **simulada** marcada, el contorno toma **`--warning` 2px manteniendo el punteado** (`4 3`): el **color** lo aporta el límite, el **patrón** lo aporta lo simulado, el **relleno hueco** no se toca. Sobre una banda **real** marcada, el contorno es `--warning` 2px **sólido**, como hoy.
-- **Anclaje de la marca del total del mes** (`reporte.cat.gastoMesTotal`): sigue el criterio mecánico vigente — se ancla en la **última serie del stack**, que con el toggle encendido es la capa simulada de la última categoría. No es una decisión nueva: es el mismo `isTop` de hoy aplicado al stack de hoy.
+- **Forma 1 — `income-expense` (anclaje "punto de serie", `reporte.ie.*`):** la marca sigue siendo el **`dot` ámbar** vigente (`r=4`, `fill --warning`, `stroke --panel` 1.5px) — o el `ring` ámbar si ese es el `effect` elegido —, ahora anclado en el vértice del **contorno con simulados** (el trazo punteado), que es el dato que la card muestra. Un `dot` sobre una línea punteada es inequívoco: son primitivas distintas y no compiten.
+- **`by-category` — marca de una categoría (`reporte.cat.gastoMesCategoria`), modo Barra:** la marca es el **contorno ámbar** sobre la celda de **esa** banda. Sobre una banda **simulada** marcada, el contorno toma **`--warning` 2px manteniendo el punteado** (`4 3`): el **color** lo aporta el límite, el **patrón** lo aporta lo simulado, el **relleno hueco** no se toca. Sobre una banda **real** marcada, el contorno es `--warning` 2px **sólido**, como hoy. En **modo Línea**, anillo ámbar en el vértice del borde superior de esa banda.
+- **`by-category` — marca del total del mes (`reporte.cat.gastoMesTotal`): NO cuelga de ninguna banda.** Su portador es el **cartucho del mes** en el carril del eje X, fuera del área de trazado — ver *Marcas de límite en `by-category`*. Esto **deroga** el criterio anterior ("se ancla en la última serie del stack"), que producía una marca invisible cada vez que la última categoría del apilado —siempre la de menor gasto anual— no aportaba ese mes. **Consecuencia buena para RF-REP-017:** la capa simulada de la última categoría ya **no** puede recibir dos marcas de dos datos distintos; solo lleva la suya.
 - **Portador de a11y:** sin cambios — el **tooltip del chart** enumera los límites cruzados (`warningNote`), y ahora la cifra de ese mismo tooltip lleva su `≈` si incluye simulados. Las dos señales conviven en el mismo bloque sin mezclarse.
 - **Cero-impacto del subsistema de límites intacto:** con `limits: []` no se monta ninguna marca, tenga el toggle el estado que tenga.
 
@@ -4816,6 +4819,170 @@ Umbral `--bp-wide` **941px**, evaluado sobre el **ancho de contenido** (`<main>`
 - [ ] `prefers-reduced-motion`: prender/apagar el chip actualiza el canvas **sin animación de grow**.
 - [ ] A **640px** (sidebar cerrado y abierto): sin **scroll horizontal del `body`**; el chip **y su divisor bajan juntos** de renglón (nunca un divisor colgando al final de una línea); el chip sigue clickeable y enfocable.
 - [ ] A **941px** y **1288px** (sidebar cerrado): la cabecera no rompe, el cluster izquierdo mantiene su orden y `CardControls` sigue alineado al tope a la derecha.
+
+---
+
+## Marcas de límite en `by-category` — el cartucho de mes (P2)
+
+> Spec visual del **portador** de las marcas pasivas de límite en la card **"Gastos por categoría"** (`/reportes`), en sus **dos modos** (Barra y Línea). Corrige dos defectos de la implementación vigente y **deroga** el criterio de anclaje anterior. Extiende *Marca visual pasiva de límites* (que define el vocabulario de 7 efectos y el mapeo por anclaje) y se articula con *Movimientos simulados en cards de reporte (RF-REP-017)*. **No** cambia el catálogo de efectos (RF-LIM-001) ni la regla de desempate (RF-LIM-003): cambia **dónde se dibuja** la marca y **qué subset ofrece** cada anclaje de esta card.
+
+### 1. Qué se corrige y con qué criterio
+
+**Defecto A — una marca que se evalúa bien y no tiene dónde dibujarse.** El anclaje `reporte.cat.gastoMesTotal` ("Total de gasto apilado del mes") colgaba su marca de la **última banda del stack**. El orden de apilado es determinístico (mayor → menor gasto anual, la mayor en la base), así que "la última" es **mecánicamente la categoría más chica del año**: en cualquier mes donde esa categoría no aporte, el elemento portador mide ~0px y la marca **no se ve**. Un límite configurado, cruzado y correctamente evaluado **no producía ninguna señal**. Es el peor tipo de defecto de *feedback*: el usuario configuró un aviso y el aviso no llega, sin que nada indique que falló.
+
+**Defecto B — tres efectos ofrecidos, uno entregado.** Configuración ofrece `glyph` · `badge` · `ring` con preview distinto para las dos keys de la card; la card entregaba **siempre el mismo contorno ámbar**. La causa es real (una banda apilada no tiene etiqueta de monto donde colgar un glifo ni un badge), pero la respuesta correcta no es entregar cualquier cosa: es **ofrecer solo lo que se cumple**. *Affordance y consistencia: un control cuya elección no tiene consecuencia enseña que la configuración no sirve.*
+
+**Criterio rector de la corrección:** *el portador de una marca no puede depender del valor que la marca observa.* Un dato cuyo tamaño en pantalla puede ser cero no puede ser el soporte de la señal que dice que ese dato cruzó un umbral.
+
+### 2. El portador — **cartucho de mes** en el carril del eje X
+
+La marca del **total del mes** se dibuja en el **rótulo del mes del eje X**: `Ene`…`Dic`. Ese rótulo es el único elemento de la card que (a) **existe siempre**, con dato o sin dato; (b) **tiene exactamente el alcance del anclaje** (el mes completo, no una banda); (c) es **idéntico en modo Barra y en modo Línea** (los 12 slots categóricos son los mismos); y (d) es **texto**, así que aloja de forma natural las tres primitivas del subset.
+
+#### 2.1 Geometría y ubicación
+
+- **Carril:** la banda del eje X ya vigente (`XAxis`, alto 30px), la misma en ambos modos. El cartucho se dibuja **dentro** de esa banda.
+- **No cambia nada del canvas:** ni el `margin` del chart, ni el alto del canvas (260 amplio / 220 compacto), ni el `width: 64` del eje Y, ni la posición de la leyenda.
+- **Centro horizontal:** el tick del mes. **En los meses extremos el cartucho se ancla al tick por su borde interior y crece hacia adentro del área:** el primero (`Ene`) apoya su **borde izquierdo** en el tick, el último (`Dic`) su **borde derecho**; los diez meses intermedios se centran. Es el mismo **clamp en los bordes** que el DS ya aplica a los popovers, así que no agrega vocabulario. La razón es estructural, no cosmética: en los extremos el tick está **pegado al límite del área de trazado**, y un cartucho centrado ahí (a) **excede el área** —se corta en modo Línea y aporta ancho al `body`, contra el invariante 1 de contención (§7)— y (b) si solo se reencuadra el contenedor, el contenido, que va centrado dentro de él, se corre hacia adentro y **pisa el rótulo del mes vecino**. Anclar por el borde interior resuelve las dos cosas de una vez: contenedor y contenido caen dentro del área sin desplazamiento relativo.
+- **Centro vertical:** la línea media del rótulo de hoy — el rótulo no sube ni baja.
+- **Mes sin marca:** el tick es **idéntico al de hoy** (12px/500 `--muted`, `--ui`). No se monta ningún nodo extra, ningún `<rect>`, ningún `<title>`. *(Restricción rectora de cero-impacto, puntos 1 y 4.)*
+
+#### 2.2 Los tres efectos, de verdad distintos
+
+Ordenados quiet → fuerte, **en el mismo orden que la regla de desempate del DS** (`glyph` < `badge` < `ring`):
+
+| Efecto | Forma | Detalle |
+|---|---|---|
+| **`glyph`** *(default)* | `AlertTriangle` **12px** `--warning-ink` a la **izquierda** del rótulo, gap **4px**. El rótulo **no cambia** (12px/500 `--muted`). | El cluster `[glifo · rótulo]` se **centra como unidad** en el tick: se corre el rótulo del **mes marcado**, nunca los de sus vecinos. Registro quiet, correcto para el default: señala sin gritar. |
+| **`badge`** | El rótulo se sirve como **chip ámbar**: fondo `--warning-soft`, radio `--r-chip` (7px), padding **1px 7px**, `AlertTriangle` **11px** + **el nombre del mes** en 11px/600 `.04em`, todo en `--warning-ink`. Chip centrado en el tick. | Molde exacto de `LimitBadge`, con **el mes como texto del badge** en lugar de la palabra "Límite": el eje ya dice el mes y el badge no debe repetir ni sustituir esa información. El texto sigue siendo el portador no-color del badge. |
+| **`ring`** | **El chip del `badge` + anillo `--warning` 1.5px** sobre su mismo radio. | `ring ⊃ badge` es deliberado. La regla de desempate pone `ring` **por encima** de `badge`: si `ring` fuera solo un contorno sobre el rótulo neutro se leería **más quiet** que el badge, y el desempate produciría una marca que se ve **más débil** que la que perdió. Además satisface por construcción *"`ring` nunca va solo"* (lleva glifo y texto). **Trade-off honesto:** badge y ring se parecen más entre sí que cualquiera de los dos con glyph; se acepta porque la alternativa rompe la monotonía del desempate, que es una regla dura. |
+
+#### 2.3 Qué **no** es el cartucho (alternativas evaluadas y descartadas)
+
+- **No es un anillo alrededor de la columna apilada del mes.** Esa "columna" **no existe en modo Línea** (áreas continuas, no barras discretas) y en Barra **vuelve a medir cero** en un mes sin gasto: reintroduce el defecto que estamos corrigiendo, y en Barra compite visualmente con el contorno ámbar de una banda grande marcada.
+- **No es un marcador en el tope del stack.** Ahí ya vive —y debe seguir viviendo— la marca de `gastoMesCategoria` de la última banda; dos señales distintas en el mismo píxel es exactamente el problema de origen.
+- **No es una banda de fondo del mes.** `fill` no está en el subset del anclaje, una franja ámbar competiría con los colores de categoría (identidad) y colisionaría con el **cursor de hover** de la card (franja `--accent-soft` en Barra, guía `--hair` en Línea).
+- **Costo asumido:** el cartucho **no está a la altura del valor**, así que no dice *por cuánto* se cruzó. Es aceptable: el límite es **binario por decisión** (una condición = una marca, sin gradiente), la magnitud la dan el eje Y y el tooltip, y el tooltip ya enumera qué límite se cruzó.
+
+### 3. La banda de categoría — subset restringido a `ring`, con rescate
+
+`reporte.cat.gastoMesCategoria` **conserva su portador natural** (la banda de esa categoría, en ese mes: el dato existe y está pintado), pero:
+
+- **Ofrece un solo efecto: `ring`.** Es el único que la geometría puede expresar sin mentir: la banda no tiene etiqueta de monto (no hay dónde colgar `glyph`/`badge`) y su alto lo fija el valor (a alto chico, ningún nodo aditivo entra). Configuración deja de ofrecer dos opciones que nunca se cumplían. *(Ver la regla de "subset de un solo efecto" en el panel de gestión de límites, §4.)*
+  - **Modo Barra:** contorno `--warning` 2px en el perímetro de la celda (sobre banda simulada, mantiene el punteado `4 3` — RF-REP-017 §3).
+  - **Modo Línea:** anillo `--warning` 1.5px, `r=5.5`, en el vértice del **borde superior** de esa banda. *(Antes, en Línea, un efecto `glyph`/`badge` caía al render por defecto y se dibujaba como `dot` ámbar: la misma divergencia del Defecto B por otra puerta.)*
+- **Rescate — ninguna marca evaluada queda sin portador.** Si la banda **no existe** ese mes (la categoría no aporta: aporte 0, caso alcanzable con un límite `<` / `≤` / `=`), la marca **escala al cartucho del mes**. El cartucho es **el portador siempre presente de la card**; su semántica es *"este mes tiene al menos un límite cruzado; el texto dice cuáles"*, que contiene sin contradicción tanto el total como una categoría sin geometría.
+
+### 4. Un cartucho por mes — fusión y desempate
+
+- Un mes marcado tiene **un solo cartucho**, nunca dos ni tres. Si varias marcas caen en él (el total + una o más categorías rescatadas + varios límites sobre la misma key), se **fusionan con la regla de desempate vigente**: gana **la más fuerte** en el orden quiet→fuerte del DS, y el **texto accesible enumera todas**. La regla de desempate **no se toca**.
+- La marca de una banda **que sí existe** vive en la banda y **no** enciende cartucho: cada señal en el registro que le corresponde. Esa separación es lo que hace legible la card cuando conviven los dos tipos de límite — *"ámbar dentro del gráfico = una categoría; ámbar en el eje = el mes"*.
+
+### 5. Ortogonalidad con RF-REP-017 (simulados)
+
+| Dimensión | Propiedad que la porta | En el cartucho |
+|---|---|---|
+| Real vs. simulado | relleno hueco + patrón punteado, **solo dentro del área de trazado** | **nunca** aparece |
+| Límite cruzado | color ámbar `--warning` | **siempre** sólido |
+
+- El cartucho vive **fuera del área de trazado**; el lenguaje de lo simulado vive **solo dentro**. No comparten superficie: la ambigüedad es imposible por construcción, no por convención.
+- **El cartucho nunca puntea, nunca se ahueca y nunca cambia de forma** con el chip "Simulados". Lo único que el toggle cambia es **el valor evaluado** (con simulados, como manda RF-REP-017) y por lo tanto **en qué meses** aparece el cartucho.
+- **El caso "barra simulada y marcada" queda más limpio que antes:** esa celda ahora puede llevar **una sola** marca (la suya, de categoría), con contorno ámbar + punteado `4 3` + relleno hueco. El total ya no se le monta encima.
+
+### 6. Accesibilidad
+
+- **Nunca solo color:** los tres efectos portan **forma** (el triángulo) y dos de ellos además **texto**. Ninguno depende del hue.
+- **Texto accesible:** el `<g>` del cartucho lleva `role="img"` + `aria-label` con la **enumeración de los límites cruzados** (el mismo texto que ya arma `describeLimitMark`) y un `<title>` hijo — tooltip nativo al hover, mismo molde `aria-label` + `title` de los glifos del DS.
+- **El tooltip del chart sigue siendo el portador completo** (`warningNote`), sin cambios.
+- **Contraste:** `--warning-ink` sobre `--warning-soft` y sobre el fondo de la card — la barra ya validada del callout de advertencia. Claro y oscuro, idénticos: todos los tokens tienen par.
+- **No es un control:** el cartucho no es accionable, así que **no le aplica el mínimo de ~44px** de target. Su información se obtiene por el tooltip del chart, que ya existe y ya es alcanzable.
+
+### 7. Contención responsive (obligatoria — política P0-a)
+
+Umbral `--bp-wide` **941px**, evaluado sobre el **ancho de contenido** (`<main>`), no sobre el viewport. Piso soportado 640px; por debajo, gate.
+
+- **Degradación declarada en compacto.** Por debajo del umbral, **los tres efectos se sirven en la forma quiet**: `AlertTriangle` **11px** + rótulo, **sin chip**. Motivo geométrico: a 640px de contenido el slot de un mes mide ~48px (`(640 − 64) / 12`) y el chip de `badge`/`ring` mide ~49px — no entra sin invadir el mes vecino. **Se degrada la forma, nunca el hecho de marcar:** el mes marcado se sigue viendo marcado y el tooltip sigue enumerando. Precedente vigente y explícito: la banda simulada de menos de 3px que delega en el tooltip (RF-REP-017 §4).
+- **Por qué el umbral nombrado y no un ancho medido a mano:** el DS tiene **un solo** breakpoint. A 941px de contenido el slot mide ~73px y el chip entra con 24px de holgura, así que degradar en el umbral nombrado es conservador y evita introducir un segundo umbral por una pieza.
+- **El cartucho no fuerza ancho ni alto**: se dibuja dentro de la banda de eje ya existente; el eje Y conserva su `width: 64`; el canvas conserva su alto; la leyenda no se mueve.
+- **Solape en anchos extremos, declarado:** con el sidebar abierto a 640px de viewport el contenido queda en ~392px y el slot en ~27px, ancho al que **los 12 rótulos del eje ya se rozan entre sí hoy** (`interval={0}`, condición vigente de la card). El cartucho quiet puede rozar al rótulo vecino: es **solape dentro del SVG, que recorta — no desbordamiento**, y no empuja a nadie. Se acepta como contención, no se compensa ocultando meses ni achicando la tipografía del eje.
+- **Los cuatro invariantes, en este elemento:**
+  1. *Sin scroll horizontal del `body` (≥640px, sidebar abierto o cerrado):* el cartucho vive dentro del `ResponsiveContainer`, no aporta ancho mínimo propio y no agrega columnas, etiquetas laterales ni cifras fuera del tooltip.
+  2. *Modales completos y scrolleables:* la corrección **no introduce ningún modal, popover ni overlay**. El único popover de la card (confirmar quitar) no cambia.
+  3. *Ninguna acción inalcanzable:* el cartucho no es accionable y no tapa ningún control; ni las tabs, ni el chip de Simulados, ni `CardControls` se mueven. El tooltip del chart —portador completo del texto— sigue alcanzable en todo ancho.
+  4. *Superficies anchas scrollean dentro de sí:* el canvas sigue escalando dentro de la card y la leyenda conserva su scroll interno; el cartucho no agrega ninguna dimensión scrolleable.
+- **Checkpoints obligatorios del QA:** `640px` sidebar cerrado, `640px` sidebar abierto (392px de contenido), `941px` cerrado, `1288px` cerrado.
+
+### 8. Alcance — qué cubre esta spec y qué se verificó que no aplica
+
+**Cubre:** las **dos** keys de `by-category` (`reporte.cat.gastoMesTotal` y `reporte.cat.gastoMesCategoria`), en **modo Barra y modo Línea**, en `/reportes`. La card `by-category` **no se monta en el Dashboard** (ahí va `income-expense`), así que no hay caso ahí.
+
+**No aplica al resto — verificado anclaje por anclaje.** El defecto de "marca sin portador" es **exclusivo de `by-category`**, por ser la única superficie donde un dato emitido no tiene un elemento propio dibujado cuyo tamaño sea **independiente del valor**:
+
+- `reporte.unicos.celda` — la celda día×mes **se dibuja siempre** y su tamaño es fijo (~19px), no depende del monto. `ring`+`dot` se ven siempre.
+- `reporte.unicos.*` (footer) — cifras propias, siempre renderizadas; `tint`/`glyph`/`bold` se expresan los tres.
+- `reporte.ie.*` y `reporte.infl.*` — puntos de serie con coordenadas siempre definidas (un valor 0 se dibuja sobre la línea base). `dot`/`ring` se ven siempre y se distinguen entre sí.
+- `reporte.cuotas.*` — la barra del gantt tiene **etiqueta de monto propia** y su ancho lo fija el **período**, no el valor; la card ya diferencia los tres efectos de verdad (glifo/badge en la etiqueta, ring inset en la barra).
+- `mes.*` — filas y cifras siempre presentes en el DOM.
+
+### 9. Agregados más allá del brief — estado
+
+- **Restringir `reporte.cat.gastoMesCategoria` a `ring` (§3).** El brief pedía resolver los tres efectos "en esta card"; se interpreta como **las dos keys de la card**, pero esa key no fue nombrada. Cambia lo que Configuración ofrece. **Confirmar con el orquestador.**
+- **Rescate al cartucho de una marca sin geometría (§3).** Extensión mínima para no reintroducir el mismo defecto por otra puerta (un límite `<` sobre una categoría sin gasto ese mes). **Confirmar con el orquestador.**
+- **Regla de panel para subsets de un solo efecto** (línea informativa en vez de `radiogroup` de un ítem). Consecuencia directa de la restricción anterior; vive en el spec del panel, §4.
+- **El texto del `badge` es el nombre del mes**, no el "Límite" por defecto de `LimitBadge`.
+- **Nada más se agrega.** No hay leyenda de límites, ni contador de marcas, ni renglón nuevo en el tooltip, ni cifra en el eje.
+
+### 10. Reglas duras reafirmadas
+
+- **Regla dura 1 (verde = ingreso · rojo = gasto):** el cartucho es **ámbar**; no toca ninguna banda ni ningún monto. El rojo de la card sigue apareciendo **solo** en el contorno del stack (modo Línea) y en el "Total gastos" del tooltip; el verde no aparece.
+- **Regla dura 2 (índigo solo marca):** no aparece. El cursor `--accent-soft` del hover sigue siendo cromo de interacción y vive **dentro** del área de trazado; el cartucho vive fuera.
+- **Regla dura 3 (dinero en mono tabular):** el cartucho **no muestra ninguna cifra** — ni el umbral ni el total. El nombre del mes es texto UI. Las cifras siguen viviendo en el tooltip y en el eje Y, en mono.
+- **Regla dura 4 (claro y oscuro):** solo tokens `warning`, que tienen par en ambos modos.
+- **Cero-impacto con `limits: []`:** el eje X es **carácter por carácter** el de hoy; no se monta ningún nodo, ninguna clase modificadora ni ningún `<title>`, y ni el `margin`, ni el alto del canvas, ni el `width` del eje Y cambian.
+
+### Checklist de aceptación visual — Marcas de límite en `by-category`
+
+> Insumo directo del QA visual per-feature (`docs/qa-visual.md`). Escenario recomendado: un año con **al menos 4 categorías de gasto** donde la **categoría de menor gasto anual** tenga **cero** en algún mes que sí cruce el umbral del total (es el caso testigo del defecto), y límites creados de a uno para probar cada efecto.
+
+*Cero-impacto:*
+- [ ] Con **`limits: []`**: los 12 rótulos del eje X de `by-category` (Barra y Línea) son **idénticos** a los de antes (12px/500 `--muted`), sin ningún nodo ámbar; el alto del canvas, el eje Y y la posición de la leyenda no cambian.
+
+*El defecto corregido (lo primero que hay que ver):*
+- [ ] Límite pasivo **"Total de gasto apilado del mes > X"** con efecto **Glifo**: en cada mes cuyo total cruza aparece un `AlertTriangle` ámbar **12px** a la izquierda del nombre del mes, **en el carril del eje X**.
+- [ ] **Caso testigo:** en un mes marcado donde la **categoría más chica del apilado no tiene gasto**, la marca se ve **igual de nítida** que en un mes donde todas aportan. *(Antes no se pintaba nada.)*
+- [ ] El **mismo** límite en **modo Línea** produce **exactamente** el mismo cartucho, en el mismo lugar y con la misma forma. Alternar **Barra ↔ Línea** no cambia la marca.
+
+*Los tres efectos, diferenciados:*
+- [ ] Efecto **Badge**: el nombre del mes se sirve como **chip ámbar** (fondo `--warning-soft`, texto `--warning-ink` 11px/600, radio 7px) con el triángulo 11px adentro. El chip **dice el nombre del mes**, no la palabra "Límite".
+- [ ] Efecto **Ring**: el **mismo chip del badge con un anillo ámbar 1.5px** alrededor. Se distingue a simple vista del badge y se lee **más fuerte**, nunca más débil.
+- [ ] Con el mismo umbral, los **tres efectos se ven distintos entre sí**. *(Antes los tres daban el mismo contorno.)*
+- [ ] Ninguno de los tres pinta **contorno ámbar sobre ninguna banda** del apilado cuando el límite es el del **total**.
+
+*Límite por categoría:*
+- [ ] En Configuración, la key **"Gasto de una categoría en un mes"** ofrece **un solo efecto (Ring)**, presentado como **línea informativa con preview**, no como grupo de opciones. No aparecen Glifo ni Badge.
+- [ ] Ese límite pinta **contorno ámbar** sobre la banda de esa categoría (Barra) / **anillo ámbar en el vértice** de su borde superior (Línea), y **no enciende cartucho** en los meses donde la banda existe.
+- [ ] Con un límite de categoría del tipo **`< X`** en un mes donde esa categoría **no tiene gasto**: ese mes **enciende cartucho** y el texto nombra ese límite. **Ningún límite cruzado queda sin señal visible.**
+
+*Fusión:*
+- [ ] Dos límites cruzando el mismo mes con efectos distintos (p. ej. Glifo y Ring sobre el total): se ve **un solo cartucho**, en la forma **Ring** (la más fuerte), y su texto **enumera los dos**.
+- [ ] Nunca hay dos cartuchos en el mismo mes.
+
+*Convivencia con Simulados (RF-REP-017):*
+- [ ] Con el chip **Simulados encendido**, el cartucho es **ámbar sólido**: nunca punteado, nunca hueco. Su forma es la misma que con el toggle apagado; lo único que puede cambiar es **en qué meses** aparece.
+- [ ] Con el toggle encendido, la **capa simulada de la última categoría** ya **no** lleva contorno ámbar por el límite del **total**. Si lleva contorno ámbar es por **su propio** límite de categoría, y entonces mantiene el punteado `4 3` y el relleno hueco.
+- [ ] **Nada de lo simulado es ámbar** y **nada del límite es punteado**.
+
+*a11y y estados:*
+- [ ] Hover sobre el cartucho: **tooltip nativo** con la enumeración de los límites cruzados. Hover sobre la columna del mes: el tooltip del chart sigue mostrando su `warningNote`.
+- [ ] El cartucho **no muestra ninguna cifra** (ni umbral ni total).
+- [ ] Los rótulos de los **meses vecinos no se mueven** al marcarse un mes; la **leyenda no se desplaza** (comparar con y sin marcas).
+- [ ] `prefers-reduced-motion`: el cartucho aparece **sin animación propia** (no crece, no pulsa).
+- [ ] En **oscuro**, los tres efectos se leen igual y el chip mantiene contraste sobre el fondo de la card.
+
+*Contención:*
+- [ ] **< 941px de ancho de contenido:** los tres efectos se sirven en la forma **quiet** (triángulo 11px + rótulo, **sin chip**); el mes marcado se sigue distinguiendo y el tooltip sigue enumerando.
+- [ ] **640px, sidebar cerrado y abierto (392px de contenido):** sin **scroll horizontal del `body`**; nada se sale de la card; los rótulos del eje pueden rozarse (condición vigente de la card), pero ningún elemento empuja al layout.
+- [ ] **941px y 1288px, sidebar cerrado:** el chip de `badge`/`ring` entra en el slot del mes **sin tocar el del mes vecino**.
+- [ ] **Meses extremos (`Ene` y `Dic`) marcados**, en Barra y en Línea y en los cuatro checkpoints: el cartucho queda **entero dentro del área de trazado** (no se corta ni asoma fuera de la card), **no dispara scroll horizontal del `body`**, y **no se superpone con el rótulo del mes vecino** (`Feb` / `Nov`). Verificar con el efecto más ancho (**Ring**) en ancho amplio y con la forma quiet en compacto.
 
 ---
 

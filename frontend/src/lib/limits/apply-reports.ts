@@ -85,13 +85,32 @@ export function computeIncomeExpenseMarks(
   return { expense, income };
 }
 
-// ─── by-category (banda apilada, modo Barra) ──────────────────────────────────
+// ─── by-category (banda apilada, modo Barra/Línea + cartucho del eje X) ───────
+//
+// P2 — "Marcas de límite en by-category — el cartucho de mes" (docs/design.md):
+// `reporte.cat.gastoMesTotal` no tiene elemento pintado propio (no es ninguna
+// banda) — su portador es SIEMPRE el cartucho del mes en el eje X, evaluado acá
+// como el arranque de `cartouche`. `reporte.cat.gastoMesCategoria` conserva su
+// portador natural (la banda de esa categoría, ese mes) SOLO cuando la banda
+// existe (aporte > 0); si el límite cruza en un mes sin aporte (`<`/`≤`/`=`), la
+// banda no existe para dibujar el `ring` — la marca "escala" al cartucho (se
+// funde con la regla de desempate vigente, `mergeLimitMarks`) en vez de perderse.
 
 export interface ByCategoryMarks {
-  /** categoryId → una marca por mes (reporte.cat.gastoMesCategoria). */
+  /**
+   * categoryId → una marca por mes para `reporte.cat.gastoMesCategoria`, SOLO
+   * en los meses donde la banda de esa categoría existe (aporte > 0). En un mes
+   * sin aporte la entrada es `null` aunque el límite haya cruzado — la marca ya
+   * vive en `cartouche` (rescate, ver arriba).
+   */
   perCategory: Map<string, (EvaluatedLimitMark | null)[]>;
-  /** Una marca por mes (reporte.cat.gastoMesTotal) — se aplica a la banda superior del stack. */
-  total: (EvaluatedLimitMark | null)[];
+  /**
+   * Una marca por mes para el cartucho del carril del eje X: fusión (más fuerte
+   * gana, `mergeLimitMarks`) de `reporte.cat.gastoMesTotal` (siempre evaluado
+   * acá, nunca en una banda) + toda marca de `reporte.cat.gastoMesCategoria`
+   * rescatada ese mes.
+   */
+  cartouche: (EvaluatedLimitMark | null)[];
 }
 
 export function computeByCategoryMarks(
@@ -100,20 +119,8 @@ export function computeByCategoryMarks(
   categories: { categoryId: string; monthlyExpenseCents: number[] }[],
   monthsExpenseCents: number[],
 ): ByCategoryMarks {
-  const perCategory = new Map<string, (EvaluatedLimitMark | null)[]>();
-  for (const cat of categories) {
-    const marks = cat.monthlyExpenseCents.map((cents, i) =>
-      evaluateLimits({
-        limits,
-        anchorKey: "reporte.cat.gastoMesCategoria",
-        value: cents / 100,
-        refinement: { categoryId: cat.categoryId },
-        isCurrentMonth: isRealCurrentMonth(year, i),
-      }),
-    );
-    perCategory.set(cat.categoryId, marks);
-  }
-  const total = monthsExpenseCents.map((cents, i) =>
+  // El total NUNCA tiene banda propia — arranca la fusión del cartucho.
+  const cartouche: (EvaluatedLimitMark | null)[] = monthsExpenseCents.map((cents, i) =>
     evaluateLimits({
       limits,
       anchorKey: "reporte.cat.gastoMesTotal",
@@ -121,7 +128,28 @@ export function computeByCategoryMarks(
       isCurrentMonth: isRealCurrentMonth(year, i),
     }),
   );
-  return { perCategory, total };
+
+  const perCategory = new Map<string, (EvaluatedLimitMark | null)[]>();
+  for (const cat of categories) {
+    const bandMarks = cat.monthlyExpenseCents.map((cents, i) => {
+      const mark = evaluateLimits({
+        limits,
+        anchorKey: "reporte.cat.gastoMesCategoria",
+        value: cents / 100,
+        refinement: { categoryId: cat.categoryId },
+        isCurrentMonth: isRealCurrentMonth(year, i),
+      });
+      if (!mark) return null;
+      if (cents > 0) return mark; // La banda existe: portador natural (ring sobre la celda/vértice).
+      // Rescate (docs/design.md §3): sin aporte ese mes no hay banda que marcar —
+      // la marca escala al cartucho, fusionada con lo que ya haya ahí.
+      cartouche[i] = mergeLimitMarks(cartouche[i] ?? null, mark);
+      return null;
+    });
+    perCategory.set(cat.categoryId, bandMarks);
+  }
+
+  return { perCategory, cartouche };
 }
 
 // ─── unique-grid (celda diaria + footer de 5 métricas) ────────────────────────

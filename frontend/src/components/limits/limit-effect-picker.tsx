@@ -88,9 +88,44 @@ export interface LimitEffectPickerProps {
   effects: LimitEffect[];
   value: LimitEffect;
   onChange: (effect: LimitEffect) => void;
+  /**
+   * Bajada de la línea informativa cuando `effects.length === 1` (docs/design.md
+   * §"Panel de gestión de límites" → §4 "Subset de un solo efecto"). Ignorada
+   * cuando hay más de un efecto en el subset (se renderiza el radiogroup).
+   */
+  singleEffectDescription?: string;
 }
 
-export function LimitEffectPicker({ effects, value, onChange }: LimitEffectPickerProps) {
+/**
+ * Cuando el subset de la key tiene UN SOLO efecto válido (hoy:
+ * `reporte.cat.gastoMesCategoria` → `ring`), un `radiogroup` de una sola opción
+ * no es una elección — sugiere una libertad que no existe y obliga a un click
+ * sin consecuencia. Se sirve como línea informativa: mismo preview vivo (nombre
+ * del efecto + mark real sobre el dato de muestra) + una bajada que dice qué
+ * forma toma la marca. No hay input, no hay `onChange`.
+ */
+function LimitEffectSingleInfo({
+  effect,
+  description,
+}: {
+  effect: LimitEffect;
+  description?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-[8px]">
+      <div className="flex items-center gap-[8px]">
+        <span className="text-[13px] font-semibold text-ink">{EFFECT_NAMES[effect]}</span>
+        <LimitEffectPreview effect={effect} />
+      </div>
+      {description && <p className="text-[12.5px] text-muted leading-snug">{description}</p>}
+    </div>
+  );
+}
+
+export function LimitEffectPicker({ effects, value, onChange, singleEffectDescription }: LimitEffectPickerProps) {
+  if (effects.length === 1) {
+    return <LimitEffectSingleInfo effect={effects[0]!} description={singleEffectDescription} />;
+  }
   return (
     <div role="radiogroup" aria-label="Efecto visual" className="grid grid-cols-2 gap-2">
       {effects.map((effect) => {

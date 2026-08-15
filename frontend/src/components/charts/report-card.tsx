@@ -61,7 +61,11 @@ import {
   type ByCategoryMarks,
 } from "@/lib/limits/apply-reports";
 import { describeLimitMark, mergeLimitMarks, type EvaluatedLimitMark } from "@/lib/limits/evaluate";
-import { renderSeriesPointMark } from "@/components/limits/limit-mark";
+import {
+  renderSeriesPointMark,
+  renderCategoryBandLineMark,
+  makeMonthCartoucheTick,
+} from "@/components/limits/limit-mark";
 import { LimitsInfoPopover } from "@/components/limits/limits-info-popover";
 import { formatCurrency, CURRENCY_SYMBOLS } from "@/lib/format";
 import { ChartTooltipContent } from "@/components/ui/chart";
@@ -357,9 +361,10 @@ export function Form2Tooltip({
     valueColor: "var(--expense-ink)",
   };
 
-  // P2 — Tramo 2: combina las marcas de todas las categorías + el total de ESTE mes
-  // en una sola (la más fuerte gana) — portador de a11y del mes hovereado.
-  let mergedMark: EvaluatedLimitMark | null = categoryMarks?.total[monthIndex] ?? null;
+  // P2 — combina el cartucho del mes (total + toda marca de categoría rescatada,
+  // ver apply-reports.ts) con las marcas de banda vigentes ese mes, en una sola
+  // (la más fuerte gana) — portador de a11y del mes hovereado.
+  let mergedMark: EvaluatedLimitMark | null = categoryMarks?.cartouche[monthIndex] ?? null;
   if (categoryMarks) {
     for (const marks of categoryMarks.perCategory.values()) {
       mergedMark = mergeLimitMarks(mergedMark, marks[monthIndex] ?? null);
@@ -734,7 +739,14 @@ function ChartError({ height, onRetry }: { height: number; onRetry: () => void }
 
 interface ChartResponsiveAreaProps {
   desktopHeight: number;
-  children: (height: number) => React.ReactNode;
+  /**
+   * `isCompact` (P2 — Marcas de límite en by-category, docs/design.md §7):
+   * espejo en JS del mismo umbral `--bp-wide`/`--container-wide` (941px) que ya
+   * gobierna esta partición — el cartucho de mes lo necesita para decidir su
+   * forma quiet (sin chip) en el régimen compacto, algo que un `<foreignObject>`
+   * dentro de Recharts no puede resolver con una container query de CSS.
+   */
+  children: (height: number, isCompact: boolean) => React.ReactNode;
 }
 
 function ChartResponsiveArea({ desktopHeight, children }: ChartResponsiveAreaProps) {
@@ -745,13 +757,65 @@ function ChartResponsiveArea({ desktopHeight, children }: ChartResponsiveAreaPro
   return (
     <>
       <div className="@max-wide:hidden" style={{ height: desktopHeight }}>
-        {children(desktopHeight)}
+        {children(desktopHeight, false)}
       </div>
       <div className="@wide:hidden" style={{ height: 220 }}>
-        {children(220)}
+        {children(220, true)}
       </div>
     </>
   );
+}
+
+// ─── Helpers de marca de límite — by-category (P2, "cartucho de mes") ────────
+
+/**
+ * Tick por defecto del eje X — el MISMO objeto de estilo que ya usaban las
+ * cards antes de esta feature. Portador de cero-impacto (obligación del
+ * caller, ver `makeMonthCartoucheTick` en limit-mark.tsx).
+ */
+const DEFAULT_X_AXIS_TICK = {
+  fontSize: 12,
+  fontWeight: 500,
+  fill: "var(--muted)",
+  fontFamily: "var(--ui)",
+} as const;
+
+/**
+ * Resuelve el `tick` del eje X de `by-category` (Barra y Línea) — portador del
+ * cartucho de mes (docs/design.md §"Marcas de límite en by-category — el
+ * cartucho de mes"). Cero-impacto OBLIGATORIO (restricción rectora): si ningún
+ * mes del año tiene marca, devuelve el MISMO objeto de estilo plano que ya
+ * usaba el eje antes de esta feature — no se monta ningún nodo ámbar. Solo con
+ * al menos una marca se activa la factory (`makeMonthCartoucheTick`), que
+ * además replica el tick default mes a mes en los meses SIN marca.
+ */
+export function resolveCartoucheTick(
+  cartoucheMarks: (EvaluatedLimitMark | null)[] | undefined,
+  isCompact: boolean,
+) {
+  const marks = cartoucheMarks ?? [];
+  if (!marks.some(Boolean)) return DEFAULT_X_AXIS_TICK;
+  return makeMonthCartoucheTick(marks, MONTH_LABELS_SHORT, isCompact);
+}
+
+/**
+ * Mark que le corresponde a la banda/punto de UNA categoría en el stack de
+ * `by-category` (Barra o Línea), en un mes dado (P2 — docs/design.md §3 "La
+ * banda de categoría — subset restringido a `ring`, con rescate"). El total
+ * del stack (`reporte.cat.gastoMesTotal`) YA NO se combina acá: su único
+ * portador es el cartucho del eje X (`categoryMarks.cartouche`, ver
+ * `resolveCartoucheTick`) — antes vivía (mal) en la última banda del stack,
+ * que es exactamente el defecto que corrige esta spec. Con aporte simulado ese
+ * mes, la banda REAL deja de ser el borde exterior de la categoría
+ * (RF-REP-017): la marca no le corresponde a la celda/punto real ese mes.
+ */
+export function resolveStackedCategoryMark(
+  catMonthMarks: (EvaluatedLimitMark | null)[] | undefined,
+  monthIndex: number,
+  hasSimulatedAportThisMonth: boolean,
+): EvaluatedLimitMark | null {
+  if (hasSimulatedAportThisMonth) return null;
+  return catMonthMarks?.[monthIndex] ?? null;
 }
 
 // ─── Forma 1 — AreaChart interno ─────────────────────────────────────────────────
@@ -922,16 +986,19 @@ interface Form2ChartInnerProps {
   height: number;
   reducedMotion: boolean;
   currency: string;
+  /** `isCompact` (P2 — docs/design.md §7): forma quiet del cartucho por debajo de `--bp-wide`. */
+  isCompact: boolean;
   /**
-   * Marcas de límite (P2 — Tramo 2): reporte.cat.gastoMesCategoria (por banda) y
-   * reporte.cat.gastoMesTotal (banda superior del stack). La barra ya está
-   * teñida por color de categoría (identidad) — no se recolorea; el efecto se
-   * expresa como contorno ámbar (mecanismo "ring") sobre la celda marcada,
-   * cualquiera sea el `effect` elegido (docs/design.md: la banda apilada no
-   * tiene etiqueta de monto propia donde anclar glyph/badge — ver nota en
-   * apply-reports.ts / reporte al orquestador). El portador de a11y completo
-   * es el tooltip (warningNote de Form2Tooltip). Ya reflejan el valor CON
-   * simulados cuando includeSimulated=true (se resuelve en ReportCard).
+   * Marcas de límite (P2): `reporte.cat.gastoMesCategoria` (banda de esa
+   * categoría, ese mes — subset restringido a `ring`) y `reporte.cat.gastoMesTotal`
+   * (el total del mes: SIN elemento pintado propio, su único portador es el
+   * cartucho del carril del eje X, ver `resolveCartoucheTick`). La barra ya está
+   * teñida por color de categoría (identidad) — no se recolorea; la marca de
+   * banda se expresa como contorno ámbar (mecanismo "ring", único efecto que el
+   * catálogo ofrece para esta key) sobre la celda marcada. El portador de a11y
+   * completo es el tooltip (warningNote de Form2Tooltip) + el `aria-label`/`title`
+   * del cartucho. Ya reflejan el valor CON simulados cuando includeSimulated=true
+   * (se resuelve en ReportCard).
    */
   categoryMarks?: ByCategoryMarks;
 }
@@ -945,6 +1012,7 @@ function Form2ChartInner({
   height,
   reducedMotion,
   currency,
+  isCompact,
   categoryMarks,
 }: Form2ChartInnerProps) {
   const formatYAxisTick = makeYAxisTickFormatter(currency);
@@ -953,7 +1021,13 @@ function Form2ChartInner({
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={chartData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }} barCategoryGap="27%">
         <CartesianGrid horizontal vertical={false} stroke="var(--hair)" strokeWidth={1} />
-        <XAxis dataKey="shortLabel" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 500, fill: "var(--muted)", fontFamily: "var(--ui)" }} interval={0} />
+        <XAxis
+          dataKey="shortLabel"
+          axisLine={false}
+          tickLine={false}
+          tick={resolveCartoucheTick(categoryMarks?.cartouche, isCompact)}
+          interval={0}
+        />
         <YAxis axisLine={false} tickLine={false} tickCount={5} tickFormatter={formatYAxisTick} tick={{ fontSize: 11.5, fill: "var(--muted)", fontFamily: "var(--mono)" }} width={64} />
         <Tooltip
           cursor={{ fill: "var(--accent-soft)", fillOpacity: 0.5 }}
@@ -993,10 +1067,7 @@ function Form2ChartInner({
                 // categoría: la banda real ya no es el borde exterior de esta categoría.
                 const hasSimAportThisMonth =
                   includeSimulated && cat.simulatedMonthlyExpenseCents[cellIdx] !== null;
-                const mark = mergeLimitMarks(
-                  hasSimAportThisMonth ? null : catMonthMarks?.[cellIdx] ?? null,
-                  top && !includeSimulated ? categoryMarks?.total[cellIdx] ?? null : null,
-                );
+                const mark = resolveStackedCategoryMark(catMonthMarks, cellIdx, hasSimAportThisMonth);
                 return (
                   <Cell
                     key={cellIdx}
@@ -1037,10 +1108,7 @@ function Form2ChartInner({
                     // Sin aporte ese mes: celda invisible, sin contorno residual.
                     return <Cell key={cellIdx} fill="transparent" stroke="transparent" strokeWidth={0} />;
                   }
-                  const mark = mergeLimitMarks(
-                    catMonthMarks?.[cellIdx] ?? null,
-                    top ? categoryMarks?.total[cellIdx] ?? null : null,
-                  );
+                  const mark = resolveStackedCategoryMark(catMonthMarks, cellIdx, false);
                   return (
                     <Cell
                       key={cellIdx}
@@ -1073,12 +1141,16 @@ interface FormBChartInnerProps {
   height: number;
   reducedMotion: boolean;
   currency: string;
+  /** `isCompact` (P2 — docs/design.md §7): forma quiet del cartucho por debajo de `--bp-wide`. */
+  isCompact: boolean;
   /**
-   * Marcas de límite (P2 — Tramo 2): reporte.cat.gastoMesCategoria (por serie) y
-   * reporte.cat.gastoMesTotal (serie top del stack). Mismo dato que Forma 2 —
-   * acá se expresa como dot/ring sobre el punto de cada serie (anclaje
-   * "series-point"), no como recoloreo/contorno de banda. Ya reflejan el valor
-   * CON simulados cuando includeSimulated=true (se resuelve en ReportCard).
+   * Marcas de límite (P2): `reporte.cat.gastoMesCategoria` (por serie de
+   * categoría — subset restringido a `ring`, `renderCategoryBandLineMark`
+   * ignora `mark.effect` a propósito, ver limit-mark.tsx) y
+   * `reporte.cat.gastoMesTotal` (el total del mes: SIN punto de serie propio,
+   * su único portador es el cartucho del carril del eje X, ver
+   * `resolveCartoucheTick` — idéntico al de la vista Barra). Ya reflejan el
+   * valor CON simulados cuando includeSimulated=true (se resuelve en ReportCard).
    */
   categoryMarks?: ByCategoryMarks;
 }
@@ -1120,6 +1192,7 @@ function FormBChartInner({
   height,
   reducedMotion,
   currency,
+  isCompact,
   categoryMarks,
 }: FormBChartInnerProps) {
   const formatYAxisTick = makeYAxisTickFormatter(currency);
@@ -1150,7 +1223,13 @@ function FormBChartInner({
         </defs>
 
         <CartesianGrid horizontal vertical={false} stroke="var(--hair)" strokeWidth={1} />
-        <XAxis dataKey="shortLabel" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 500, fill: "var(--muted)", fontFamily: "var(--ui)" }} interval={0} />
+        <XAxis
+          dataKey="shortLabel"
+          axisLine={false}
+          tickLine={false}
+          tick={resolveCartoucheTick(categoryMarks?.cartouche, isCompact)}
+          interval={0}
+        />
         <YAxis axisLine={false} tickLine={false} tickCount={5} tickFormatter={formatYAxisTick} tick={{ fontSize: 11.5, fill: "var(--muted)", fontFamily: "var(--mono)" }} width={64} />
         <Tooltip
           cursor={{ stroke: "var(--hair)", strokeWidth: 1 }}
@@ -1175,19 +1254,21 @@ function FormBChartInner({
             stack), pero con el toggle encendido este trazo YA NO es el que
             garantiza la lectura sólida en pantalla — ver el "contorno de
             seguridad" al final del árbol, y la nota ahí sobre por qué.
-            Las marcas de límite del TOTAL y el activeDot interactivo, en cambio, sí
-            se delegan a la capa visualmente superior (real cuando el toggle está
-            apagado, simulada cuando está encendido) para no duplicarlos. */}
+            El activeDot interactivo (hover) se delega a la capa visualmente
+            superior (real cuando el toggle está apagado, simulada cuando está
+            encendido) para no duplicarlo — concern INDEPENDIENTE de las marcas
+            de límite (P2): el punto de cada categoría lleva SU PROPIA marca
+            (`reporte.cat.gastoMesCategoria`, `renderCategoryBandLineMark`,
+            único efecto `ring`); el total del mes YA NO se hereda acá — vive
+            solo en el cartucho del eje X (docs/design.md §3). */}
         {mergedCategories.map((cat, idx) => {
           const isTopSeries = isLastCategory(idx);
-          const showTotalMarksHere = isTopSeries && !includeSimulated;
+          // Gate del activeDot de hover — NADA que ver con marcas de límite.
+          const isInteractiveTopLine = isTopSeries && !includeSimulated;
           const catMonthMarks = categoryMarks?.perCategory.get(cat.categoryId);
           const dotMarks = chartData.map((_, i) => {
             const hasSimAportThisMonth = includeSimulated && cat.simulatedMonthlyExpenseCents[i] !== null;
-            return mergeLimitMarks(
-              hasSimAportThisMonth ? null : catMonthMarks?.[i] ?? null,
-              showTotalMarksHere ? categoryMarks?.total[i] ?? null : null,
-            );
+            return resolveStackedCategoryMark(catMonthMarks, i, hasSimAportThisMonth);
           });
           return (
             <Area
@@ -1199,9 +1280,9 @@ function FormBChartInner({
               strokeWidth={isTopSeries ? 2 : 1}
               fill={`url(#${gradId(cat.categoryId)})`}
               dot={((props: { cx?: number; cy?: number; index?: number }) =>
-                renderSeriesPointMark(props, dotMarks)) as unknown as boolean}
+                renderCategoryBandLineMark(props, dotMarks)) as unknown as boolean}
               activeDot={
-                showTotalMarksHere ? { r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 } : false
+                isInteractiveTopLine ? { r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 } : false
               }
               isAnimationActive={!reducedMotion}
               animationDuration={400}
@@ -1215,9 +1296,7 @@ function FormBChartInner({
           mergedCategories.map((cat, idx) => {
             const top = isLastCategory(idx);
             const catMonthMarks = categoryMarks?.perCategory.get(cat.categoryId);
-            const dotMarks = chartData.map((_, i) =>
-              mergeLimitMarks(catMonthMarks?.[i] ?? null, top ? categoryMarks?.total[i] ?? null : null),
-            );
+            const dotMarks = chartData.map((_, i) => resolveStackedCategoryMark(catMonthMarks, i, false));
             return (
               <Area
                 key={`${cat.categoryId}-sim`}
@@ -1229,7 +1308,7 @@ function FormBChartInner({
                 strokeDasharray={top ? "5 4" : undefined}
                 fill={`url(#${gradId(cat.categoryId, true)})`}
                 dot={((props: { cx?: number; cy?: number; index?: number }) =>
-                  renderSeriesPointMark(props, dotMarks)) as unknown as boolean}
+                  renderCategoryBandLineMark(props, dotMarks)) as unknown as boolean}
                 activeDot={top ? { r: 4, fill: "var(--expense)", stroke: "var(--panel)", strokeWidth: 2 } : false}
                 isAnimationActive={!reducedMotion}
                 animationDuration={400}
@@ -2430,7 +2509,7 @@ export function ReportCard({
           )}
 
           <ChartResponsiveArea desktopHeight={chartHeight}>
-            {(height) => {
+            {(height, isCompact) => {
               if (type === "income-expense") {
                 return (
                   <Form1ChartInner
@@ -2458,6 +2537,7 @@ export function ReportCard({
                     height={height}
                     reducedMotion={reducedMotion}
                     currency={effectiveCurrency}
+                    isCompact={isCompact}
                     categoryMarks={byCategoryMarks}
                   />
                 );
@@ -2473,6 +2553,7 @@ export function ReportCard({
                   height={height}
                   reducedMotion={reducedMotion}
                   currency={effectiveCurrency}
+                  isCompact={isCompact}
                   categoryMarks={byCategoryMarks}
                 />
               );

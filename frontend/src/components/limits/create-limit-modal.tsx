@@ -462,6 +462,7 @@ export function CreateLimitModal({ onClose }: CreateLimitModalProps) {
                     effects={anchorDef.effects}
                     value={effect || anchorDef.defaultEffect}
                     onChange={setEffect}
+                    singleEffectDescription={anchorDef.singleEffectDescription}
                   />
                 </div>
               )}

@@ -111,11 +111,64 @@ describe("computeByCategoryMarks", () => {
     expect(perCategory.get("cat-2")?.every((m) => m === null)).toBe(true);
   });
 
-  it("marca el total apilado del mes cuando cruza reporte.cat.gastoMesTotal", () => {
+  it("marca el cartucho del mes cuando cruza reporte.cat.gastoMesTotal", () => {
     const limits = [makeLimit({ anchorKey: "reporte.cat.gastoMesTotal", threshold: 500, effect: "ring" })];
-    const { total } = computeByCategoryMarks(limits, 2026, [], [10000, 60000]);
-    expect(total[0]).toBeNull();
-    expect(total[1]?.effect).toBe("ring");
+    const { cartouche } = computeByCategoryMarks(limits, 2026, [], [10000, 60000]);
+    expect(cartouche[0]).toBeNull();
+    expect(cartouche[1]?.effect).toBe("ring");
+  });
+
+  it("caso testigo del defecto: el total marca el cartucho aunque TODAS las categorías estén en 0 ese mes", () => {
+    // La categoría más chica del stack (o, acá, todas) no aporta nada ese mes:
+    // el total sigue viniendo del ancho del mes (monthsExpenseCents), no de las
+    // bandas — el cartucho no depende de que exista ningún elemento pintado.
+    const limits = [makeLimit({ anchorKey: "reporte.cat.gastoMesTotal", threshold: 500, effect: "glyph" })];
+    const categories = [
+      { categoryId: "cat-chica", monthlyExpenseCents: [0, 0] },
+      { categoryId: "cat-grande", monthlyExpenseCents: [0, 0] },
+    ];
+    const { cartouche } = computeByCategoryMarks(limits, 2026, categories, [10000, 60000]);
+    expect(cartouche[1]?.effect).toBe("glyph");
+  });
+
+  it("rescate: una marca de gastoMesCategoria sin banda ese mes (aporte 0) escala al cartucho", () => {
+    const limits = [
+      makeLimit({
+        anchorKey: "reporte.cat.gastoMesCategoria",
+        threshold: 50,
+        operator: "lt",
+        refinement: { categoryId: "cat-1" },
+        effect: "ring",
+      }),
+    ];
+    const categories = [{ categoryId: "cat-1", monthlyExpenseCents: [0, 30000] }]; // $0, $300
+    const { perCategory, cartouche } = computeByCategoryMarks(limits, 2026, categories, [0, 30000]);
+    // Sin banda (aporte 0, mes 0): la marca NO vive en perCategory...
+    expect(perCategory.get("cat-1")?.[0]).toBeNull();
+    // ...escala al cartucho.
+    expect(cartouche[0]?.effect).toBe("ring");
+    // Mes 1: SÍ hay banda (aporte > 0, $300 no cruza < $50) — ni banda ni cartucho.
+    expect(perCategory.get("cat-1")?.[1]).toBeNull();
+    expect(cartouche[1]).toBeNull();
+  });
+
+  it("fusión: el total y una categoría rescatada en el mismo mes producen UN cartucho con la marca más fuerte", () => {
+    const limits = [
+      makeLimit({ anchorKey: "reporte.cat.gastoMesTotal", threshold: 500, effect: "glyph" }),
+      makeLimit({
+        id: "l2",
+        anchorKey: "reporte.cat.gastoMesCategoria",
+        threshold: 50,
+        operator: "lt",
+        refinement: { categoryId: "cat-1" },
+        effect: "ring",
+      }),
+    ];
+    const categories = [{ categoryId: "cat-1", monthlyExpenseCents: [0] }];
+    const { cartouche } = computeByCategoryMarks(limits, 2026, categories, [60000]); // $600 > $500
+    // ring (7) > glyph (3): gana la banda rescatada, y matched enumera las dos.
+    expect(cartouche[0]?.effect).toBe("ring");
+    expect(cartouche[0]?.matched).toHaveLength(2);
   });
 });
 

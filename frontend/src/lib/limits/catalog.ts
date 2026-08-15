@@ -58,6 +58,8 @@ export type LimitAnchorType =
   | "section-counter"
   | "grid-cell"
   | "bar"
+  | "stacked-band"
+  | "stacked-month"
   | "series-point"
   | "footer-metric";
 
@@ -82,6 +84,13 @@ export interface LimitAnchorDef {
   effects: LimitEffect[];
   /** Efecto preseleccionado en el picker (columna "Default"). */
   defaultEffect: LimitEffect;
+  /**
+   * Bajada de la línea informativa cuando `effects.length === 1` (docs/design.md
+   * §"Panel de gestión de límites" §4, "Subset de un solo efecto"): describe qué
+   * forma toma la marca, en vez del `radiogroup` de una sola opción. Solo se lee
+   * cuando `effects.length === 1`.
+   */
+  singleEffectDescription?: string;
   /** Naturalezas que la key admite (P/A del catálogo). Fase 1 solo consume "passive". */
   natures: Array<"passive" | "active">;
   /** true si este tramo la ofrece en el panel de creación (ver nota de alcance arriba). */
@@ -220,15 +229,25 @@ export const LIMIT_ANCHOR_REGISTRY: LimitAnchorDef[] = [
   },
 
   // ── Reportes — card by-category (Tramo 2: ofrecidas y cableadas) ────────────
+  //
+  // P2 — corrección "Marcas de límite en by-category — el cartucho de mes"
+  // (docs/design.md): gastoMesCategoria conserva su portador natural (la banda),
+  // restringido a `ring` (única primitiva que la geometría de una banda sin
+  // etiqueta de monto puede expresar sin mentir). gastoMesTotal deja de ser
+  // "bar" — no es ningún elemento pintado del stack, es la columna de mes; su
+  // portador es el cartucho del eje X (siempre presente, idéntico en Barra y
+  // Línea). Ver también el rescate de §3 (banda inexistente → escala al
+  // cartucho) implementado en apply-reports.ts.
   {
     key: "reporte.cat.gastoMesCategoria",
     label: "Gasto de una categoría en un mes",
     surface: "reporte-by-category",
-    anchorType: "bar",
+    anchorType: "stacked-band",
     unit: "money",
     refinement: { kind: "category", required: true },
-    effects: ["glyph", "badge", "ring"],
-    defaultEffect: "glyph",
+    effects: ["ring"],
+    defaultEffect: "ring",
+    singleEffectDescription: "Contorno ámbar sobre la banda de esa categoría.",
     natures: ["passive"],
     offeredInPanel: true,
   },
@@ -236,7 +255,7 @@ export const LIMIT_ANCHOR_REGISTRY: LimitAnchorDef[] = [
     key: "reporte.cat.gastoMesTotal",
     label: "Total de gasto apilado del mes",
     surface: "reporte-by-category",
-    anchorType: "bar",
+    anchorType: "stacked-month",
     unit: "money",
     effects: ["glyph", "badge", "ring"],
     defaultEffect: "glyph",

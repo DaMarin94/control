@@ -256,6 +256,29 @@ describe("CreateLimitModal — umbral: signo válido según unit (catalog-driven
   });
 });
 
+describe("CreateLimitModal — subset de un solo efecto (P2, docs/design.md §4)", () => {
+  it("con 'Gasto de una categoría en un mes' (subset = solo Ring), NO se renderiza el radiogroup de efecto", async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    await selectAnchor(user, "Gasto de una categoría en un mes");
+
+    expect(screen.queryByRole("radiogroup", { name: /efecto visual/i })).not.toBeInTheDocument();
+    // La línea informativa muestra el nombre del efecto único (Ring) igual.
+    expect(screen.getByText(/efecto visual/i)).toBeInTheDocument();
+    expect(screen.getByText(/^ring$/i)).toBeInTheDocument();
+  });
+
+  it("con una key de subset múltiple (Gasto del mes), el radiogroup de efecto SÍ se renderiza", async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    await selectAnchor(user, "Gasto del mes");
+
+    expect(screen.getByRole("radiogroup", { name: /efecto visual/i })).toBeInTheDocument();
+  });
+});
+
 describe("CreateLimitModal — hereda el contrato de ModalShell (ex-offender)", () => {
   it("el panel usa max-height dvh (no vh — offender original: max-h-[90vh])", () => {
     renderModal();
