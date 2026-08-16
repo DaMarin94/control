@@ -53,7 +53,7 @@ import type { FormulaOperator, MovementItem } from "@/types/movement";
 import { ActiveLimitDialog } from "@/components/limits/active-limit-dialog";
 import { toCanonicalAmountCents, type ProjectionSection } from "@/lib/limits/project";
 import type { LimitConfig } from "@/types/limit";
-import { formatCurrency, getCurrentMonth } from "@/lib/format";
+import { formatCurrency, getCurrentMonth, MAX_DESCRIPTION_LENGTH } from "@/lib/format";
 import { descaleOperand, buildFormulaExpression } from "@/lib/formula";
 import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/logger";
@@ -208,7 +208,10 @@ const calculatedSchema = z.object({
   /** Signo del resultado: "1" o "-1" (convertido a number al enviar) */
   sign: z.enum(["1", "-1"]),
   categoryId: z.string().min(1, "La categoría es requerida"),
-  description: z.string().optional(),
+  description: z
+    .string()
+    .max(MAX_DESCRIPTION_LENGTH, "La descripción no puede superar los 200 caracteres")
+    .optional(),
 });
 
 type CalculatedFormData = z.infer<typeof calculatedSchema>;

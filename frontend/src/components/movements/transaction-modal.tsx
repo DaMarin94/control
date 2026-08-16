@@ -9,16 +9,33 @@
  * - Tabs .dtabs: Único / Fijo / Cuotas (solo en creación), fondo panel-3, activo blanco + shadow-sm
  * - Cierra con X o Esc (el click en el scrim NO cierra — decisión explícita)
  *
+ * Footer como slot del ENVASE (docs/design.md §Superficie de captura →
+ * "0. Encuadre"): ninguno de los tres forms (Único/Fijo/Cuotas) dibuja su
+ * propio footer — el estado se reporta desde la capa de lógica
+ * (`use*FormLogic`, `movement-form-footer.ts`). Este componente es el
+ * ENVASE de escritorio: dibuja Cancelar+Guardar en `ModalShellFooter`,
+ * asociando el botón al `<form>` activo vía `form={footerState.formId}`
+ * (asociación nativa de HTML — el botón no es descendiente del `<form>`).
+ * El envase de la superficie de captura (`CaptureShell`) usa el mismo
+ * mecanismo con su propia composición (solo Guardar, ancho completo).
+ *
  * Lógica de tabs, mode, y contenido preservada intacta.
  */
 
 import { useState } from "react";
-import { cn } from "@/lib/utils";
-import { ModalShell, ModalShellHeader } from "@/components/ui/modal-shell";
+import { Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ModalShell, ModalShellHeader, ModalShellFooter } from "@/components/ui/modal-shell";
+import { MovementTypeTabs, type MovementTabId } from "@/components/movements/movement-type-tabs";
+import { MovementCaptureForms } from "@/components/movements/movement-capture-forms";
 import { TransactionForm, type TransactionPrefill } from "@/components/movements/transaction-form";
 import { RecurringForm, type RecurringPrefill } from "@/components/movements/recurring-form";
 import { InstallmentForm, type InstallmentPrefill } from "@/components/movements/installment-form";
 import { CalculatedForm } from "@/components/movements/calculated-form";
+import {
+  DEFAULT_MOVEMENT_FORM_FOOTER_STATE,
+  type MovementFormFooterState,
+} from "@/components/movements/movement-form-footer";
 import { type Transaction } from "@/types/transaction";
 import { type Recurring } from "@/types/recurring";
 import { type InstallmentGroup } from "@/types/installment";
@@ -26,18 +43,7 @@ import { type MovementItem } from "@/types/movement";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-type TabId = "single" | "fixed" | "installments";
-
-interface Tab {
-  id: TabId;
-  label: string;
-}
-
-const TABS: Tab[] = [
-  { id: "single", label: "Único" },
-  { id: "fixed", label: "Fijo" },
-  { id: "installments", label: "Cuotas" },
-];
+type TabId = MovementTabId;
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -153,6 +159,9 @@ export function TransactionModal(props: TransactionModalProps) {
   const defaultMonth = mode === "create" ? props.defaultMonth : undefined;
 
   const [activeTab, setActiveTab] = useState<TabId>("single");
+  const [footerState, setFooterState] = useState<MovementFormFooterState>(
+    DEFAULT_MOVEMENT_FORM_FOOTER_STATE,
+  );
 
   // Título del modal
   let title = "Nuevo movimiento";
@@ -173,38 +182,12 @@ export function TransactionModal(props: TransactionModalProps) {
 
       {/* ── Tabs .dtabs (solo en modo crear normal, no en calculado) ── */}
       {!isEditing && !isCalculatedMode && (
-        <div
-          className="flex gap-1 mx-[22px] mb-4 p-1 rounded-ctl bg-panel-3 shrink-0"
-          role="tablist"
-          aria-label="Tipo de movimiento"
-        >
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              aria-controls={`tab-panel-${tab.id}`}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "flex-1 text-[13.5px] font-semibold cursor-pointer px-2 py-[9px] rounded-[7px]",
-                "transition-colors duration-[140ms]",
-                "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
-                activeTab === tab.id
-                  ? "bg-panel text-ink shadow-[var(--shadow-sm)]"
-                  : "text-muted hover:text-ink",
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <MovementTypeTabs activeTab={activeTab} onTabChange={setActiveTab} />
       )}
 
       {/* ── Contenido — flex-1/min-h-0: el form activo (su propio <form> es
-          flex-col) se lleva el alto restante y scrollea su cuerpo, con el
-          footer de acciones pineado dentro de cada form (hermano del
-          cuerpo scrolleable, no hijo de él). ── */}
+          flex-col) se lleva el alto restante y scrollea su cuerpo. El footer
+          de acciones ya NO vive acá — es `ModalShellFooter` más abajo. ── */}
       {isCalculatedMode ? (
         /* Modos de calculado: create-calculated / edit-calculated */
         <CalculatedForm
@@ -224,12 +207,14 @@ export function TransactionModal(props: TransactionModalProps) {
               transaction={props.transaction}
               onClose={onClose}
               editingSkipped={props.editingSkipped}
+              onFooterStateChange={setFooterState}
             />
           ) : mode === "duplicate-single" ? (
             <TransactionForm
               transaction={null}
               prefill={props.transactionPrefill}
               onClose={onClose}
+              onFooterStateChange={setFooterState}
             />
           ) : mode === "edit-fixed" ? (
             <RecurringForm
@@ -237,6 +222,7 @@ export function TransactionModal(props: TransactionModalProps) {
               onClose={onClose}
               viewMonth={props.viewMonth}
               editingSkipped={props.editingSkipped}
+              onFooterStateChange={setFooterState}
             />
           ) : mode === "duplicate-fixed" ? (
             <RecurringForm
@@ -244,58 +230,58 @@ export function TransactionModal(props: TransactionModalProps) {
               prefill={props.recurringPrefill}
               onClose={onClose}
               viewMonth={props.viewMonth}
+              onFooterStateChange={setFooterState}
             />
           ) : mode === "edit-installment" ? (
             <InstallmentForm
               installment={props.installment}
               onClose={onClose}
               editingSkipped={props.editingSkipped}
+              onFooterStateChange={setFooterState}
             />
           ) : (
             <InstallmentForm
               installment={null}
               prefill={props.installmentPrefill}
               onClose={onClose}
+              onFooterStateChange={setFooterState}
             />
           )}
         </div>
       ) : (
-        <>
-          {activeTab === "single" && (
-            <div
-              id="tab-panel-single"
-              role="tabpanel"
-              aria-labelledby="tab-single"
-              className="flex-1 min-h-0 flex flex-col"
-            >
-              <TransactionForm transaction={null} onClose={onClose} />
-            </div>
-          )}
-          {activeTab === "fixed" && (
-            <div
-              id="tab-panel-fixed"
-              role="tabpanel"
-              aria-labelledby="tab-fixed"
-              className="flex-1 min-h-0 flex flex-col"
-            >
-              <RecurringForm recurring={null} onClose={onClose} defaultMonth={defaultMonth} />
-            </div>
-          )}
-          {activeTab === "installments" && (
-            <div
-              id="tab-panel-installments"
-              role="tabpanel"
-              aria-labelledby="tab-installments"
-              className="flex-1 min-h-0 flex flex-col"
-            >
-              <InstallmentForm
-                installment={null}
-                onClose={onClose}
-                defaultMonth={defaultMonth}
-              />
-            </div>
-          )}
-        </>
+        <MovementCaptureForms
+          activeTab={activeTab}
+          onClose={onClose}
+          onFooterStateChange={setFooterState}
+          defaultMonth={defaultMonth}
+        />
+      )}
+
+      {/* ── Footer — slot del envase, no del form (docs/design.md §Superficie
+          de captura → "0. Encuadre"). Ausente en modo calculado:
+          CalculatedForm todavía dibuja el suyo (fuera de este refactor). ── */}
+      {!isCalculatedMode && (
+        <ModalShellFooter>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            disabled={footerState.isLoading}
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="submit"
+            form={footerState.formId}
+            size="sm"
+            disabled={footerState.disabled}
+            className="gap-1.5"
+          >
+            <Check size={14} aria-hidden="true" />
+            {footerState.submitLabel}
+          </Button>
+        </ModalShellFooter>
       )}
     </ModalShell>
   );

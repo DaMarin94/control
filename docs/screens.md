@@ -19,14 +19,16 @@
 9. [Configuración (`/configuracion`)](#9-configuración-configuracion)
 10. [Métodos de pago — sección de Configuración (`/configuracion/metodos-pago`)](#10-métodos-de-pago--sección-de-configuración-configuracionmetodos-pago)
 11. [Historial de cambios (`/historial`)](#11-historial-de-cambios-historial)
+12. [Superficie de captura de movimiento](#12-superficie-de-captura-de-movimiento)
 
 ---
 
 ## Convenciones
 
+- **Superficie según el tamaño del viewport.** Las pantallas 1 a 11 son la app, que se usa en **régimen de app**. En **régimen de captura** (criterio en RF-APP-003) la única superficie es la **captura de movimiento** (§12) —o el acceso (§1, "Variante en régimen de captura") si no hay sesión—; ninguna de las pantallas 2 a 11 es alcanzable en régimen de captura. Cada pantalla no repite esta restricción.
 - El **sidebar** (RF-NAV-001) está presente en todas las pantallas autenticadas (Dashboard, Vista del mes, Reportes, Historial, y Configuración y sus secciones —Categorías, Métodos de pago, Límites—) y **no** se muestra en las pantallas no autenticadas (Login, Registro). Su definición vive en RF-NAV-001 y no se repite en cada pantalla; solo se indica qué link queda marcado como activo. **Tiene cinco links**, en este orden: Dashboard → Vista del mes → Reportes → Historial → Configuración. **Categorías y Métodos de pago no son links del sidebar**: se administran como secciones del hub de Configuración (§9), cada una en su ruta anidada deep-linkable (`/configuracion/categorias`, `/configuracion/metodos-pago`); estando en ellas, el link activo del sidebar es "Configuración". Aloja, en su parte inferior, el **control de modo de color** (toggle Sistema / Claro / Oscuro) sobre el menú de usuario (RF-APP-001).
   - **Estado de implementación: implementado.** El sidebar (RF-NAV-001) **ya está implementado** (ver `features.md`). Los accesos definidos en cada pantalla (enlace "Ver todos" del dashboard, acción "Ir a ver" del toast post-guardado, URL directa) se conservan y conviven con el sidebar.
-- El **formulario de carga** (pantalla 5) es un modal sin ruta propia. Se invoca desde el sidebar y desde el dashboard, y se superpone a la pantalla actual.
+- El **formulario de carga** (pantalla 5) es un modal sin ruta propia. Se invoca desde el sidebar y desde el dashboard, y se superpone a la pantalla actual. En **régimen de captura** el mismo formulario (modo creación) no se superpone a nada: es la superficie completa (§12).
 - **Chip de moneda default en el header.** Las pantallas con montos/totales —**Dashboard**, **Vista del mes** y **Reportes**— muestran en su header (fila del eyebrow) un **chip indicador de la moneda default vigente** del usuario (código de la moneda del set curado: ARS / USD / EUR / BRL, RF-CUR-002). Es **informativo**: comunica en qué moneda están expresados los montos y totales de la pantalla y **linkea a `/configuracion`** (no cambia la moneda in-situ). Se muestra **siempre**, también en mono-moneda. **`/configuracion` NO lo lleva** (es donde la moneda se edita). El patrón es común a las tres pantallas y no se repite su definición en cada una; el detalle visual lo define `control-design` (ver `docs/design.md`).
 
 ---
@@ -43,7 +45,7 @@ Punto de entrada de la aplicación para usuarios sin sesión. Permite iniciar se
 
 - Logo / nombre "Control".
 - **Formulario de email + contraseña:** campo email, campo contraseña y botón "Iniciar sesión" (RF-AUTH-005).
-- **Botón "Iniciar sesión con Google"** (RF-AUTH-001).
+- **Botón "Iniciar sesión con Google"** (RF-AUTH-001) — siempre presente; **habilitado solo si el proveedor de Google está configurado**.
 - **Enlace a la pantalla de registro** ("Crear cuenta" o equivalente) hacia `/registro`.
 
 No muestra el sidebar.
@@ -51,7 +53,7 @@ No muestra el sidebar.
 ### Acciones disponibles
 
 - **Iniciar sesión con email y contraseña** — valida los campos y envía las credenciales al backend para verificación (RF-AUTH-005).
-- **Iniciar sesión con Google** — dispara el flujo OAuth de Google (RF-AUTH-001).
+- **Iniciar sesión con Google** — dispara el flujo OAuth de Google (RF-AUTH-001). Solo con el proveedor configurado.
 - **Ir a registro** — navega a `/registro` (RF-AUTH-006).
 
 ### Navegación
@@ -63,12 +65,23 @@ No muestra el sidebar.
 ### Estados
 
 - **Inicial:** logo, formulario de email + contraseña, botón de Google y enlace a registro.
+- **Google sin configurar (RF-AUTH-001):** el botón se muestra **deshabilitado** y rotulado como no disponible; el login con email + contraseña funciona igual.
 - **Validación con error (email/contraseña):** email con formato inválido o campos incompletos — se muestra el error y no se envía la request (RF-AUTH-005, A2).
 - **Credenciales inválidas (A1):** se muestra un mensaje de error **genérico** que no revela si falló el email o la contraseña; permite reintentar conservando el email ingresado.
 - **Cargando / en proceso:** el sistema está verificando las credenciales contra el backend, o redirigiendo/procesando la respuesta de Google.
 - **Cancelado por el usuario en Google (RF-AUTH-001 A1):** vuelve a mostrar la pantalla de login.
 - **Error en el flujo OAuth (RF-AUTH-001 A2):** se muestra un mensaje de error y se permite reintentar.
 - **Error del backend en login con credenciales (RF-AUTH-005 A3):** se informa el error y se permite reintentar sin perder el email ingresado.
+
+### Variante en régimen de captura (RF-APP-004)
+
+En régimen de captura, esta pantalla es el **acceso** a la superficie de captura (§12) y es lo que se muestra ante cualquier ruta abierta sin sesión. Diferencias respecto de la pantalla en régimen de app:
+
+- **Sin enlace a registro:** no se ofrece crear cuenta, y `/registro` abierta en régimen de captura muestra el acceso (RF-AUTH-006 no es alcanzable en régimen de captura).
+- **Métodos:** los mismos de arriba — email + contraseña (RF-AUTH-005) y Google sujeto a la configuración del proveedor (RF-AUTH-001).
+- **Llega desde:** cualquier ruta abierta en régimen de captura sin sesión; el **cierre de sesión** desde la superficie de captura (§12, RF-AUTH-004).
+- **Lleva a:** la superficie de captura de movimiento (§12) tras autenticarse con éxito, no al Dashboard.
+- Los estados de validación y error son los mismos listados arriba.
 
 ---
 
@@ -166,8 +179,8 @@ Lista completa de todos los movimientos del mes activo (únicos, fijos activos y
 
 - **Sidebar** con el link "Vista del mes" marcado como activo.
 - **Header de la pantalla** con el rótulo del mes activo: eyebrow "Tu mes", título con el nombre del mes y año, y **sub-línea de estado** del mes visualizado. El estado tiene **tres** valores, según la comparación del mes visualizado con el mes en curso, con **copy oficial**: **"Histórico"** (mes anterior), **"Mes en curso"** (el mes actual), **"Mes futuro"** (mes posterior). El mismo copy se usa **sin variantes** en la otra superficie que lo muestra: el disparador compacto de mes del header en pantallas angostas (pill stepper), que lo lleva como sub-línea del rótulo. "Mes futuro" nombra la **ubicación temporal** del mes, no una estimación: un mes futuro muestra los fijos y cuotas reales que caen ahí (RN-006) y, si las hay, las filas simuladas (RF-SIM-003). El estado del rótulo es **independiente del alcance temporal "mes en curso"** de los límites (RF-LIM-003 / RF-LIM-004), que es binario y no se ve afectado por este tercer valor. En la fila del eyebrow va el **chip de moneda default** (ver Convenciones). El botón **"+ Nuevo movimiento"** vive en este header, junto al botón **"Ordenar secciones"** que activa el modo orden (RF-VM-005; ver "Acciones disponibles").
-- **Navegación de mes** para ir al mes anterior y al mes siguiente (RF-VM-004), resuelta como **flechas gigantes a los costados del contenido** (`‹ contenido ›`; ‹ = mes anterior, › = mes siguiente). En pantallas angostas/mobile el patrón **colapsa a un control compacto** (pill stepper) ubicado en el header. Es presentacional: la acción funcional (navegar ±1 mes) es la de RF-VM-004 y no cambia. La navegación es **ilimitada** (sin rango de año): las flechas / el stepper no se deshabilitan nunca.
-- **Salto rápido de mes/año** (RF-VM-004): el **rótulo del mes** (título en desktop, centro del pill stepper en mobile) es un disparador que abre un **popover de dos ruedas** (mes y año) para saltar a cualquier mes/año; al confirmar con "Ir" navega como el avance secuencial. El "Ir" queda deshabilitado hasta que el año tenga 4 dígitos. El disparador **sigue accionable en modo orden** y el popover respeta la regla de no cerrar por click afuera (cierra por "Ir", "Cancelar", Esc o re-clic en el disparador). El spec visual lo define `control-design` (ver `docs/design.md`).
+- **Navegación de mes** para ir al mes anterior y al mes siguiente (RF-VM-004), resuelta como **flechas gigantes a los costados del contenido** (`‹ contenido ›`; ‹ = mes anterior, › = mes siguiente). En pantallas angostas el patrón **colapsa a un control compacto** (pill stepper) ubicado en el header. Es presentacional: la acción funcional (navegar ±1 mes) es la de RF-VM-004 y no cambia. La navegación es **ilimitada** (sin rango de año): las flechas / el stepper no se deshabilitan nunca.
+- **Salto rápido de mes/año** (RF-VM-004): el **rótulo del mes** (título en pantallas amplias, centro del pill stepper en pantallas angostas) es un disparador que abre un **popover de dos ruedas** (mes y año) para saltar a cualquier mes/año; al confirmar con "Ir" navega como el avance secuencial. El "Ir" queda deshabilitado hasta que el año tenga 4 dígitos. El disparador **sigue accionable en modo orden** y el popover respeta la regla de no cerrar por click afuera (cierra por "Ir", "Cancelar", Esc o re-clic en el disparador). El spec visual lo define `control-design` (ver `docs/design.md`).
 - **Popover informativo de límites** (RF-LIM-005): junto al rótulo del mes, un **ícono informativo** abre un popover de **solo lectura** que **lista los límites que observan esta vista** (keys `mes.*`), agrupados por naturaleza. Es la única superficie con el grupo de límites **activos**. El contenido de cada ítem, el orden y la condición de aparición del ícono los fija RF-LIM-005; el listado **no cambia al navegar de mes**. **Copy oficial:** caption **"Límites de esta vista"**; encabezados de grupo **"Marcan un dato"** (pasivos, RF-LIM-003) y **"Avisan al guardar"** (activos, RF-LIM-004); etiqueta de límite apagado **"Desactivado"**; qualifier de alcance temporal **"Solo mes en curso"**. No marca ni avisa: informa. El detalle visual lo define `control-design` (`docs/design.md`).
 - **Totales del mes** (RF-VM-002): total de gastos, total de ingresos y balance (ingresos − gastos), con positivo y negativo diferenciables. Son la **suma de lo visible** tras aplicar los filtros por listado (RF-VM-006), expresada en la **moneda default vigente** del usuario (cada movimiento entra convertido — RF-CUR-005). Se actualizan al agregar, editar o eliminar un movimiento **y al cambiar cualquier filtro de sección**.
 - **Filtros por listado** (RF-VM-006): cada una de las tres secciones tiene **sus propios** controles de filtro —un **filtro de tipo** (Gasto / Ingreso / **Ambos**, default Ambos) y un **filtro de categoría** (tres estados, default todas)— que filtran **solo esa sección**. El pill contador y el subtotal de cada sección reflejan lo filtrado; los totales del mes son la suma de lo visible en las tres. Los controles **no se muestran en modo orden** (RF-VM-005). El estado es **por pantalla** (no por mes): se mantiene al navegar entre meses y se persiste por usuario (clave `monthListFilters`, ver `data-model.md`). No es global: dashboard y reportes tienen su propio filtro. Detalle visual en `docs/design.md`. Ver "Acciones disponibles" y "Estados". El disparador de la sección **Únicos** aloja además la **simulación de categoría** (RF-SIM-001/004): la acción **"Simular categoría"** y el listado de las **simulaciones** del usuario, con su eliminación. Es el único punto de entrada de la feature.
@@ -276,7 +289,7 @@ Modal para crear o editar un movimiento. No tiene ruta propia: se superpone a la
 
 ### Navegación
 
-- **Se invoca desde:** botón "Nuevo movimiento" del sidebar (cualquier pantalla autenticada); acceso de carga del dashboard; estado vacío del dashboard (CTA "Cargá tu primer movimiento"); acción editar de la vista del mes (modo edición).
+- **Se invoca desde:** botón "Nuevo movimiento" del sidebar (cualquier pantalla autenticada); acceso de carga del dashboard; estado vacío del dashboard (CTA "Cargá tu primer movimiento"); acción editar de la vista del mes (modo edición). En **régimen de captura**, el modo creación de este formulario es la superficie completa y su confirmación al guardar no ofrece navegación posterior (§12, RF-APP-003).
 - **Tras guardar:** el modal se cierra y el usuario permanece en la pantalla en la que estaba. En **creación**, el toast ofrece "Ir a ver", que navega a la vista del mes del movimiento guardado (mes de la fecha en únicos; mes de inicio en fijos y cuotas); en **edición**, ofrece "Deshacer", que revierte el cambio en el acto sin salir de la pantalla (RF-HIST-007). Si el usuario no interactúa con el toast, este desaparece y el usuario sigue en su pantalla.
 - **Sin categorías disponibles:** si no existe ninguna categoría aplicable al tipo seleccionado, el formulario bloquea el guardado y ofrece un enlace a la sección Categorías del hub de Configuración (`/configuracion/categorias`) para crear una. (Independientemente de este caso, el botón "+ Nueva" junto al selector de categoría permite crear una categoría sin salir del formulario — RF-MU-004.)
 
@@ -628,3 +641,52 @@ La pantalla **no edita movimientos** ni ofrece acceso al formulario de carga des
 - **Confirmación de deshacer abierta:** muestra el cambio a revertir; en una entrada bloqueada, además el motivo y la propuesta de deshacer los N posteriores.
 - **Deshaciendo:** mientras se aplica la restauración; al terminar, la entrada (y las posteriores, si fue en cadena) desaparecen de la lista.
 - **Error:** si falla la carga del historial o el deshacer, se informa el error sin romper la pantalla y sin restaurar nada a medias.
+
+---
+
+## 12. Superficie de captura de movimiento
+
+**RF relacionados:** RF-APP-003, RF-APP-004, RF-AUTH-004, RF-CM-001, RF-MU-001, RF-MF-001, RF-MF-006, RF-MC-001, RF-CAT-002, RF-CUR-001, RF-CUR-003, RF-CUR-004, RF-PM-006, RF-LIM-004; RNF-008
+
+> **Sin ruta propia:** es la superficie que resuelve **cualquier** ruta de la app abierta en **régimen de captura** (criterio de régimen en RF-APP-003). Sin sesión, esa misma ruta resuelve en el acceso (§1, "Variante en régimen de captura").
+
+### Propósito
+
+Cargar un movimiento en régimen de captura. Es **toda** la app en ese régimen: no hay ninguna otra pantalla ni sección disponible, y la única acción fuera de la carga es **cerrar sesión**.
+
+### Contenido
+
+- El **formulario de carga en modo creación, completo** (§5): tabs **Único / Fijo / Cuotas** con Único activo por defecto, selector **Gasto / Ingreso** con Gasto por defecto, todos los campos de cada tab, el botón **"+ Nueva"** junto a categoría (RF-MU-004) y el bloque **"Más opciones"** (moneda + cotización, método de pago y su checkbox de débito automático). El contenido campo por campo no se repite acá: es el de §5, modo creación.
+- **Defaults de mes:** en Fijo y Cuotas, el mes de inicio arranca en el **mes actual** (no hay mes contexto en régimen de captura). En Único, fecha y hora del momento actual.
+- **La identidad de la sesión activa** (RF-APP-003): el usuario ve con qué cuenta está cargando. Qué dato se muestra y dónde lo define `control-design`.
+- **Un control para cerrar sesión** (RF-AUTH-004). Su ubicación la define `control-design`.
+- **No muestra el sidebar**, ni navegación de período, ni chip de moneda default.
+- No se superpone a ninguna otra pantalla: no hay pantalla por debajo.
+
+### Acciones disponibles
+
+- **Cambiar de tab** (Único / Fijo / Cuotas) — limpia el formulario, igual que en §5.
+- **Seleccionar tipo** Gasto / Ingreso.
+- **Crear categoría con "+ Nueva"** (RF-MU-004) — mismo flujo inline de §5, sin perder los datos ya cargados.
+- **Guardar** — valida y persiste. Si el movimiento cruzaría uno o más límites **activos**, antes de persistir aparece el diálogo de aviso con **"Guardar igual"** y **"Cancelar"** (RF-LIM-004).
+- **Cerrar sesión** (RF-AUTH-004) — invalida la sesión y deja el acceso (§1, "Variante en régimen de captura"). Es la única acción que no es cargar un movimiento.
+
+No expone edición, duplicado, eliminación ni movimiento calculado: esos modos parten de un movimiento existente, que solo se alcanza desde la vista del mes.
+
+### Navegación
+
+- **Llega desde:** cualquier ruta de la app abierta en régimen de captura con sesión activa; el acceso (§1, "Variante en régimen de captura") tras autenticarse.
+- **Lleva a:** solo al **acceso** (§1, "Variante en régimen de captura"), y únicamente al cerrar sesión. **Tras guardar no hay navegación posterior** — no existe "Ir a ver", porque no hay ninguna otra pantalla a la que ir. La superficie queda lista para cargar otro movimiento.
+- **La orientación no cambia nada:** rotar la pantalla no cambia el régimen (se mide la dimensión menor del viewport, RF-APP-003), así que sigue mostrando esta superficie y no da acceso a la app.
+
+### Estados
+
+- **Inicial:** tab Único activo, tipo Gasto, fecha y hora del momento actual, resto vacío.
+- **Tab Fijo:** nota de recurrencia ajustada a la frecuencia elegida (RF-MF-006), igual que en §5.
+- **Validación con error:** mismos casos y comportamiento que §5 — se muestra el error y no se guarda.
+- **Sin categorías disponibles:** el guardado queda bloqueado. Como la sección Categorías de Configuración no es alcanzable en régimen de captura, la salida es el botón **"+ Nueva"** junto al selector de categoría (RF-MU-004).
+- **Modal de categoría superpuesto (RF-MU-004):** se muestra por encima del formulario, que permanece montado con sus datos intactos.
+- **Aviso de límite activo (RF-LIM-004):** diálogo superpuesto que enumera el/los límite(s) que se cruzarían, con "Guardar igual" y "Cancelar".
+- **Guardando:** la superficie indica que la operación está en curso.
+- **Guardado con éxito:** una **confirmación** de que el movimiento se guardó, **sin acciones de navegación**, y el formulario listo para cargar otro.
+- **Error del backend al guardar (RNF-008):** el formulario conserva los datos ingresados y permite reintentar sin perder información.

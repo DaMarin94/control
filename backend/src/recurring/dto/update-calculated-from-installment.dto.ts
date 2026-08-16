@@ -5,6 +5,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  MaxLength,
 } from 'class-validator';
 import { FormulaOperator } from '@prisma/client';
 
@@ -28,6 +29,7 @@ export class UpdateCalculatedFromInstallmentDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(200, { message: 'La descripción no puede superar los 200 caracteres' })
   description?: string | null;
 
   @IsOptional()

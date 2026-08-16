@@ -1,5 +1,45 @@
 @import "tailwindcss";
 
+/* ============================================================
+   Dos regímenes de superficie — la frontera es el TAMAÑO del viewport
+   (docs/design.md §Contención responsive → "Dos regímenes de superficie";
+   RF-APP-003/004). CSS PURO: ningún JS decide qué superficie pintar, así
+   que no hay flash, y la frontera reacciona a resize/rotación en vivo, en
+   los dos sentidos.
+
+   Criterio canónico (requirements.md RF-APP-003) — la dimensión MENOR del
+   viewport es < 600px, es decir `ancho < 600px` **o** `alto < 600px`:
+   - Se mide el VIEWPORT (width/height de Media Queries L4, sintaxis de
+     rango `width < 600px`), nunca la pantalla física (`device-width`) ni
+     ningún rasgo de aparato (`any-hover`/`any-pointer`): el criterio es de
+     TAMAÑO, no de dispositivo — una ventana de escritorio angostada por
+     debajo del umbral entra en régimen de captura igual que un teléfono.
+   - El OR de las dos dimensiones capta "la menor < 600" sin importar cuál
+     de las dos sea en cada orientación (el navegador puede reportarlas
+     swapeadas al rotar).
+
+   `capture:` — variante positiva (régimen de captura: la única superficie
+   es la captura de un movimiento, o el acceso sin sesión).
+   `app-regime:` — el complemento exacto (régimen de app: la app completa,
+   con la política de contención de §Contención responsive).
+
+   El número 600 (`--bp-capture` más abajo en @theme) y la condición
+   completa viven ÚNICAMENTE acá — no se repiten en ningún .tsx, que solo
+   consume `capture:` / `app-regime:`. La sintaxis de rango de Media
+   Queries L4 no admite `var()`, así que el literal se repite entre el
+   token de @theme (documentación/referencia) y esta media query — ver
+   comentario de `--bp-capture`. */
+@custom-variant capture (@media (width < 600px) or (height < 600px));
+@custom-variant app-regime (@media (width >= 600px) and (height >= 600px));
+
+/* Umbral de ALTO exclusivo de la superficie de captura (docs/design.md
+   §Superficie de captura → "12. Disposición corta"). Ortogonal a los
+   breakpoints de ANCHO (--bp-wide/--bp-capture): un viewport de captura
+   bajo (teclado virtual abierto, o el dispositivo en horizontal). El
+   número 480 vive únicamente acá — no se repite en ningún .tsx, que solo
+   consume `short:`. */
+@custom-variant short (@media (max-height: 480px));
+
 /*
  * Control — Design System "Precise Ledger"
  * Tokens de Fase 1: solo modo claro, preset Medio/Índigo.
@@ -57,14 +97,21 @@
      multicolumna con header stepper (sin flechas) al mismo tiempo. */
   --container-arrows: 1288px;
 
-  /* Ancho mínimo soportado — gate por debajo del piso (RF-APP-002, docs/design.md
-     §Contención responsive → "Ancho mínimo soportado"). Habilita las variantes
-     `floor:` (min-width del piso) y `max-floor:` (por debajo del piso, el
-     complemento exacto — no hardcodear ese ancho a mano en ningún lado más).
-     Por debajo del piso la app no promete contención: se gatea (ViewportGate
-     en el root layout). El valor vive únicamente acá. Antes 768px; bajó a
-     640px por decisión del usuario (docs/design.md §"Ancho mínimo soportado"). */
-  --breakpoint-floor: 640px;
+  /* Frontera entre regímenes — 600px, los DOS ejes (docs/design.md
+     §Contención responsive → "Dos regímenes de superficie" / "El piso del
+     régimen de app": `--bp-capture`). Token de REFERENCIA/documentación,
+     deliberadamente FUERA del namespace `--breakpoint-*`: ese prefijo hace
+     que Tailwind v4 genere automáticamente una variante `capture:`/
+     `max-capture:` de UN SOLO eje (`min-width`), que colisionaría por
+     nombre con el `@custom-variant capture` de dos ejes (ancho O alto)
+     declarado al inicio de este archivo. La condición real vive ahí — la
+     sintaxis de rango de Media Queries L4 no admite `var()` dentro de un
+     `@custom-variant`, así que el literal 600 se repite en los dos lugares.
+     Es también el PISO del régimen de app, leído desde el lado grande: no
+     hay un token de piso aparte — un segundo umbral cerca de este solo
+     abriría una franja fantasma. Si este valor cambia, actualizar también
+     los dos `@custom-variant` de arriba. */
+  --bp-capture: 600px;
 
   /* Acento índigo */
   --color-accent:       oklch(0.52 0.17 264);
@@ -165,6 +212,14 @@
   --row-pad:  14px;
   --card-pad: 22px;
   --gap:      18px;
+
+  /* ---- inset inferior del viewport de toasts (docs/design.md §Superficie de
+     captura, §8: "el envase publica su alto de footer y el viewport de
+     toasts lo respeta"). Default = el mismo 26px que ya usaba ToastViewport
+     hardcodeado; en régimen de captura se sube por encima del footer
+     pineado (ver override más abajo en este archivo) para que un toast
+     nunca tape el botón Guardar. ---- */
+  --toast-inset-bottom: 26px;
 
   /* ---- familias de fuente (las variables de next/font se inyectan en <body>) ---- */
   --ui:   "Space Grotesk", system-ui, sans-serif;
@@ -445,4 +500,35 @@
 @media (prefers-reduced-motion: no-preference) {
   /* Transiciones de color/opacidad del toggle ≤0.14s ya en los elementos;
      nada adicional que animar en la región scroll. */
+}
+
+/* ============================================================
+   Superficie de captura — inset del viewport de toasts (docs/design.md
+   §Superficie de captura → "8. Footer": la pila de toasts se ancla por
+   encima del footer pineado, no al borde del viewport). Alto del footer
+   (§1/§12): 12px pad-top + 52px botón + max(14px, safe-area-bottom)
+   pad-bottom; en apaisado (`short:`, §12) el footer baja a 48px con 10px
+   de padding. Se suma un respiro de 12px entre el footer y el toast.
+
+   Mecanismo (Cambio 3): la densidad de la superficie de captura ya NO se
+   logra con cascada CSS pisando utilidades (`.capture-touch`, mecanismo
+   retirado) — cada composición de captura (components/capture/capture-*)
+   declara sus propios tamaños directamente en su JSX. Esta variable sigue
+   viviendo acá porque el destino (`--toast-inset-bottom`) es un token
+   global consumido por `ToastViewport`, no una superficie particular.
+   ============================================================ */
+@media (width < 600px), (height < 600px) {
+  :root {
+    --toast-inset-bottom: calc(
+      12px + 52px + max(14px, env(safe-area-inset-bottom)) + 12px
+    );
+  }
+
+  @media (max-height: 480px) {
+    :root {
+      --toast-inset-bottom: calc(
+        10px + 48px + max(10px, env(safe-area-inset-bottom)) + 12px
+      );
+    }
+  }
 }

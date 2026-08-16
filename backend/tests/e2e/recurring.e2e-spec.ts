@@ -305,6 +305,18 @@ describe('Recurring (e2e)', () => {
       expect(res.body.success).toBe(false);
     });
 
+    it('400 si description supera los 200 caracteres', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/recurring')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...VALID_CREATE_BODY, description: 'a'.repeat(201) })
+        .expect(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.message).toContain(
+        'La descripción no puede superar los 200 caracteres',
+      );
+    });
+
     it('400 si amountCents es negativo (RN-002)', async () => {
       const res = await request(app.getHttpServer())
         .post('/recurring')

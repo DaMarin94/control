@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CalculatedForm } from "@/components/movements/calculated-form";
 import { ToastProvider } from "@/components/ui/toast";
@@ -526,6 +526,39 @@ describe("CalculatedForm — payload de create no incluye type (RF-MCALC-003)", 
     expect(callData).toHaveProperty("formulaOperator");
     expect(callData).toHaveProperty("formulaOperand");
     expect(callData).toHaveProperty("formulaSign");
+  });
+});
+
+// ─── Tests: límite de largo de descripción ────────────────────────────────────
+
+describe("CalculatedForm — validación de descripción", () => {
+  it("muestra 'La descripción no puede superar los 200 caracteres' y bloquea el submit cuando la excede", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    render(
+      <CalculatedForm mode="create" movement={origenFijo} onClose={onClose} viewMonth="2026-06" />,
+      { wrapper: createWrapper() },
+    );
+
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+
+    const select = screen.getByRole("combobox");
+    await user.selectOptions(select, "cat-income");
+
+    const descriptionInput = screen.getByLabelText(/descripción/i);
+    fireEvent.change(descriptionInput, { target: { value: "a".repeat(201) } });
+
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/la descripción no puede superar los 200 caracteres/i),
+      ).toBeInTheDocument();
+    });
+    expect(mockCreateCalculated).not.toHaveBeenCalled();
   });
 });
 

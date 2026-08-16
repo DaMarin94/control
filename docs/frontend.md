@@ -117,20 +117,49 @@ Todo **popover / kebab / tooltip / confirmación** anclado dentro de una superfi
 
 ### Breakpoint — variantes `wide:` / `max-wide:`
 
-La disposición responsive se decide con las variantes **`wide:`** (`width ≥ 941px`) y **`max-wide:`** (`width < 941px`), habilitadas por el token `--breakpoint-wide: 941px` declarado en `@theme` (Tailwind v4) en `frontend/src/app/globals.css`. **El número `941` no se repite en ningún `.tsx`** y no se escriben media queries a mano para la disposición general (ver `docs/design.md` § Contención responsive para la política del breakpoint y el ancho mínimo soportado).
+La disposición responsive se decide con las variantes **`wide:`** (`width ≥ 941px`) y **`max-wide:`** (`width < 941px`), habilitadas por el token `--breakpoint-wide: 941px` declarado en `@theme` (Tailwind v4) en `frontend/src/app/globals.css`. **El número `941` no se repite en ningún `.tsx`** y no se escriben media queries a mano para la disposición general (ver `docs/design.md` § Contención responsive para la política del breakpoint y el piso del régimen de app).
 
-Hay un **segundo breakpoint nombrado**: `--breakpoint-floor: 640px` en el mismo `@theme`, junto a `--breakpoint-wide`. Habilita las variantes **`floor:`** / **`max-floor:`**. Como con `941`, **el número `640` no se escribe a mano fuera de esa definición** (el copy del gate no menciona ningún número). Lo consume `ViewportGate` (ver sección siguiente).
+### Régimen de superficie — variantes `capture:` / `app-regime:`
 
-### Gate por debajo del ancho mínimo — `ViewportGate` (RF-APP-002)
+Qué superficie se pinta lo decide **CSS puro**, con dos `@custom-variant` declarados en `globals.css`: **`capture:`** (régimen de captura) y **`app-regime:`** (su complemento exacto). La condición evalúa **los dos ejes** —`width < 600px` **o** `height < 600px`—; por eso rotar no cambia de régimen (intercambiar ancho y alto no cambia cuál es la menor). El criterio funcional canónico está en `requirements.md`, RF-APP-003. **El número no se escribe en ningún `.tsx`**: los componentes solo consumen las variantes.
 
-`ViewportGate` (`src/components/layout/viewport-gate.tsx`) bloquea la app por debajo de `640px` con un mensaje a viewport completo. Se monta en `src/app/layout.tsx` (root layout — el único que envuelve tanto el route group `(app)` como `/login`), así que cubre toda la app incluido el login. Implementa RF-APP-002.
+- **`--bp-capture: 600px` vive en `@theme` como token de referencia, deliberadamente fuera del namespace `--breakpoint-*`.** Ese prefijo hace que Tailwind v4 genere sola una variante `capture:` de **un solo eje** (`min-width`), que colisionaría por nombre con el `@custom-variant` de dos ejes. La condición real vive en los `@custom-variant`, y como la sintaxis de rango de Media Queries L4 no admite `var()`, el literal `600` está en los dos lugares: se cambian juntos.
+- **Gotcha de build — el operador es el textual `or`, no una lista por comas.** `@custom-variant capture (@media (width < 600px), (height < 600px))` genera CSS roto con Tailwind v4 / Lightning CSS ("Invalid empty selector"). La forma válida es `(@media (width < 600px) or (height < 600px))`.
+- **`short:`** (`@custom-variant`, `@media (max-height: 480px)`) es un umbral del **eje vertical**, exclusivo de la superficie de captura y ortogonal a los de ancho; el `480` vive solo en esa declaración. En `docs/design.md` § Superficie de captura → *Disposición corta* se lo nombra `--bp-short`.
 
-**Mecanismo: CSS puro, sin una línea de JS.**
+## Dos regímenes de superficie (RF-APP-003/004)
 
-- `<body>` lleva `max-floor:invisible max-floor:overflow-hidden`; `<html>` lleva `max-floor:overflow-hidden`.
-- **Se usa `visibility: hidden`, no `display: none`**, porque la visibilidad **se hereda por el árbol del DOM real**. `ModalShell` portalea a `document.body`, así que sus overlays viven **fuera** del wrapper de React de `{children}`: con `display:none` sobre ese wrapper, un modal abierto seguiría visible al cruzar el piso. Con `visibility:hidden` en `<body>`, el modal queda oculto y **fuera del tab order** — los elementos con `visibility:hidden` no son focusables ni entran al árbol de accesibilidad.
-- `ViewportGate` **revierte la herencia sobre sí mismo** (`max-floor:visible max-floor:flex`) para mostrarse mientras el resto del `<body>` queda invisible. Por defecto es `hidden`, así que a `≥640px` no aparece ni ocupa layout.
-- **El gate se pinta por encima del viewport de toasts** (`z-[100]` contra el `z-[90]` del `ToastViewport`): los dos son `fixed` a viewport completo y el gate se monta **antes** en el root layout, así que sin ese orden explícito un toast en pantalla al angostar la ventana bajo el piso queda flotando sobre el bloqueo.
+El root layout (`app/layout.tsx`) monta **las dos ramas a la vez**: el árbol de la app (`<div className="capture:hidden">{children}</div>`) y `CaptureSurfaceRoot` (`components/capture/`, raíz `hidden capture:block`). Ninguna decisión de superficie pasa por JS ni por un listener de resize: se resuelve antes del primer paint, así que cruzar la frontera conmuta sin recarga y sin flash. La contrapartida estructural es que **el documento siempre contiene los dos árboles** (ver ids del DOM, abajo).
+
+`CaptureSurfaceRoot` recibe `isAuthenticated` / `email` **resueltos en el servidor** (el layout ya corre `auth()`), no de `useSession()`: así no hay un estado "loading" intermedio en el primer render. Entrar y salir de la sesión navegan, así que esas props se recalculan frescas en cada respuesta del servidor.
+
+### Una lógica, dos composiciones (patrón)
+
+**La lógica de una feature vive en un hook agnóstico de UI; cada superficie aporta su propia composición.** Hoy: `use-transaction-form-logic.ts`, `use-recurring-form-logic.ts`, `use-installment-form-logic.ts` y `useLoginFormLogic` (`app/login/login-form.tsx`). Los consumen **dos composiciones hermanas**: el modal de escritorio (`components/movements/`) y la superficie de captura (`components/capture/`).
+
+- **Ninguna deriva de la otra.** No hay composición "base" con overrides de CSS ni props de densidad: markup, densidad y envase son propios de cada superficie.
+- **El hook nunca sabe en qué superficie se renderiza.** Lo que varía entre superficies (qué botones hay, qué pasa después de guardar) entra como opción de quien lo instancia (p. ej. `onCreateSuccess`), nunca como condicional interno.
+- **Regla para features futuras:** una feature que deba existir en los dos regímenes se parte así — lógica compartida, composiciones separadas.
+
+### Footer como slot del envase
+
+**Los forms de movimiento no dibujan sus botones.** El hook de lógica reporta hacia arriba el estado del footer —`MovementFormFooterState` (`components/movements/movement-form-footer.ts`): `formId`, `isLoading`, `disabled`, `submitLabel`— vía `onFooterStateChange`, y el **envase** dibuja los botones reales.
+
+- El reporte va en **`useLayoutEffect`**, no `useEffect`: el envase necesita el estado correcto **antes** del primer paint del botón externo.
+- El botón se asocia al form con **`<button type="submit" form={formId}>`** — asociación nativa de HTML que funciona **aunque el botón no sea descendiente del `<form>`**, que es exactamente el caso: el footer es **hermano** del cuerpo scrolleable, nunca su hijo.
+- Es lo que permite que el modal de escritorio tenga **Cancelar + Guardar** y la captura solo **Guardar**, sin un condicional de superficie dentro del form.
+
+### ids del DOM — prefijo `useId()` (regla)
+
+**Todo componente que pueda estar montado más de una vez simultáneamente genera sus ids del DOM con un prefijo de `useId()`** (en los forms de movimiento es el mismo `formId` del footer: ``id={`${formId}-amount`}`` y su `htmlFor` en espejo). Con ids literales el documento queda con **ids duplicados**: un `<label for="amount">` visible resuelve al **primer** nodo del documento con ese id —que puede ser el del árbol oculto por CSS—, y clickear la etiqueta enfoca un input invisible. Como las dos superficies de régimen están montadas a la vez, el caso es permanente, no hipotético.
+
+### Viewport meta — `interactive-widget: overlays-content`
+
+`app/layout.tsx` declara `interactiveWidget: "overlays-content"` **deliberadamente**. Con `resizes-content`, abrir el teclado virtual **encoge el viewport de layout** y altera toda media query de alto: el teclado puede cruzar el umbral de la disposición corta (`short:`, 480px de alto) y dispararla —o incluso el umbral de régimen— **mientras el usuario tipea**. Con `overlays-content` el viewport de layout (y con él `dvh` y toda media query de alto) queda estable con o sin teclado. Mantener **Guardar** visible sobre el teclado se resuelve por otra vía: `useVisualViewportInset` (`hooks/use-visual-viewport-inset.ts`), consumido solo por `CaptureShell`.
+
+### Toasts por encima del footer pineado — `--toast-inset-bottom`
+
+`ToastViewport` ancla la pila de toasts con la variable `--toast-inset-bottom`; en régimen de captura `globals.css` la sobreescribe con el alto del footer pineado (más el safe-area), de modo que un toast nunca tapa **Guardar**. Valores y criterio visual en `docs/design.md` § Superficie de captura.
 
 ## Autenticación (Auth.js / NextAuth v5)
 
@@ -852,7 +881,7 @@ El logo de marca que se ve **dentro de la app** (gem del sidebar, chip del login
 - Tests en `tests/` (carpeta hermana de `src/`), espejando el árbol de `src/`. Ver convención completa en `docs/technical.md`.
 - Con `vi.useFakeTimers()` activo: `waitFor` no funciona (usa `setInterval` internamente). Disparar eventos con `fireEvent` y avanzar el tiempo con `act(() => vi.advanceTimersByTime(...))`, luego assertions síncronas. En `afterEach` usar `vi.clearAllTimers()` (no `runAllTimers()`) antes de `vi.useRealTimers()` para evitar warnings de act() de React 19.
 - **jsdom no ejecuta CSS:** los elementos ocultos por CSS (clases `hidden` de Tailwind, `grid-rows-[0fr]` colapsado) **siguen presentes en el árbol**. Consecuencias:
-  - **Dos variantes responsive del mismo contenido** (desktop/mobile alternadas con `hidden`) quedan ambas → `getByText`/`getByLabelText` fallan por duplicado. Patrón: `aria-hidden="true"` en la variante que no debe estar en el árbol de accesibilidad, y `getAllByText` cuando el texto se comparte. Aplica a `/mes` (flechas ≥1288px vs stepper ≤1287px).
+  - **Dos variantes responsive del mismo contenido** (amplia/compacta alternadas con `hidden`) quedan ambas → `getByText`/`getByLabelText` fallan por duplicado. Patrón: `aria-hidden="true"` en la variante que no debe estar en el árbol de accesibilidad, y `getAllByText` cuando el texto se comparte. Aplica a `/mes` (flechas ≥1288px vs stepper ≤1287px).
   - **Lo mismo con container queries (`@wide:`/`@max-wide:`): jsdom no las evalúa**, así que los **dos regímenes conviven en el DOM** y ninguno "gana". Cuando el texto o el botón se comparte entre variantes, acotar el query con **`within(dialog)`** (o el contenedor que corresponda) o usar **`getAllByRole`** y elegir; `getByRole`/`getByText` a secas fallan por duplicado.
   - **Disclosure colapsable (técnica grid-rows):** afirmar contra render / no-render del nodo, no contra visibilidad. Ej. el bloque "Moneda y cotización": el selector de moneda siempre está en el DOM; el input de cotización solo se renderiza cuando `currency !== defaultCurrency` — testear ese montaje condicional.
   - **`role="region"` duplicado:** si el `<section>` padre del acordeón ya provee `role=region` vía `aria-labelledby`, no poner otro `role=region` con el mismo nombre en el `<div>` interno, o `getByRole("region", { name })` falla por duplicado.

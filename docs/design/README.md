@@ -1,7 +1,7 @@
 # Handoff: Control — App de finanzas personales
 
 ## Overview
-**Control** es una app web (desktop-first) para registrar gastos e ingresos del mes y ver el balance real de un vistazo. El alcance de este handoff cubre el flujo completo de 5 vistas: **Login, Dashboard, Vista del mes, Modal de carga de movimiento y Categorías.**
+**Control** es una app web para registrar gastos e ingresos del mes y ver el balance real de un vistazo. El producto resuelve **dos regímenes de superficie** decididos por el tamaño del viewport: **régimen de app** (desktop-first) y **régimen de captura**; la política canónica —criterio, umbrales y superficies— vive en `docs/design.md` §Contención responsive y §Superficie de captura. Este handoff cubre el **régimen de app**, con el flujo completo de 5 vistas: **Login, Dashboard, Vista del mes, Modal de carga de movimiento y Categorías.**
 
 El idioma de la UI es **español (es-AR)**. Formato de moneda argentino: separador de miles `.` y decimales `,` → `$ 219.400,00`.
 
@@ -104,18 +104,18 @@ Diálogos usan radio fijo 18px; logo gem 10px; avatar 50%.
 ## Pantallas / Vistas
 
 ### 1. Login  (`/login`)
-- **Propósito:** único punto de entrada sin sesión. Acceso solo con Google.
+- **Propósito:** punto de entrada sin sesión. Conviven **dos métodos de acceso**: **email + contraseña** como camino principal y siempre disponible, y **Google**, condicionado a que el proveedor esté configurado en el entorno. Regla canónica en `requirements.md` → **RF-AUTH-001** (Google) y **RF-AUTH-005** (credenciales); pantalla y estados en `screens.md` §1.
 - **Layout:** grid 2 columnas `1.05fr 1fr`, alto = viewport. Izquierda = panel de marca; derecha = acceso. En ≤940px colapsa a 1 columna (marca arriba, min-height 280px).
 - **Panel de marca (izq):** fondo gradiente diagonal del acento (`135–150°`, de `--accent-press` a `--accent` a un hue +30). Textura de grilla sutil (líneas a `white/0.07`, celdas 44px, con máscara radial de fade) + un glow radial inferior-derecho. Contenido en `space-between`: arriba logo (gem blanco 44px radio 13px con "C" en `--accent-ink` + wordmark "Control" 22px/700 blanco); centro hero (`h2` 42px/700 tracking -.03em "Tus finanzas del mes, sin sorpresas." + `p` 16px a `white/0.82`); abajo línea con ícono escudo "Privado · solo vos ves tus números." a `white/0.7`.
-- **Panel de acceso (der):** fondo `--paper`. Tarjeta centrada max-width 360px: eyebrow "Bienvenido"; `h3` 28px/700 "Ingresá a Control"; sub 14.5px muted; **botón Google** ancho completo (ver componente `gbtn`); fine-print 12.5px con links subrayados (Términos / Política);
-- **Interacción:** click en el botón Google → navega a Dashboard.
+- **Panel de acceso (der):** fondo `--paper`. Tarjeta centrada max-width 360px, en este orden: eyebrow "Bienvenido"; `h3` 28px/700 "Ingresá a Control"; sub 14.5px muted; **botón Google** ancho completo (ver componente `gbtn`); **separador** hairline con rótulo centrado ("o ingresá con email", 12px uppercase `--faint`); **formulario de email + contraseña** (labels 12.5px, `.input`, botón primario "Iniciar sesión" a ancho completo); fine-print 12.5px con links subrayados (Términos / Política); enlace a **registro** ("¿No tenés cuenta? Registrate" → `/registro`, en `--accent-ink`).
+- **Interacción:** acceso exitoso por cualquiera de los dos métodos → Dashboard (o la ruta protegida que originó la redirección). Con el proveedor de Google sin configurar, el botón se muestra **deshabilitado** y rotulado como no disponible; el acceso con email + contraseña funciona igual. Errores de credenciales: mensaje **genérico** (no revela si falló el email o la contraseña) en bloque `--expense-soft` sobre el formulario, conservando el email ingresado.
 
 ### 2. Dashboard  (`/`)
 - **Propósito:** panorama del mes en curso. Sin lista de movimientos (eso vive en Vista del mes).
-- **Layout:** frame de app = grid `248px 1fr` (sidebar + contenido). Contenido: padding 34px 40px, max-width 1120px.
+- **Layout:** frame de app = sidebar de 248px + contenido. Contenido: padding 34px 40px, max-width 1120px. La sidebar es **chrome toggleable**: el usuario la muestra u oculta y el contenido recupera el ancho completo (`docs/design.md` §Sidebar — mostrar/ocultar).
 - **Header (`.phead`):** izq eyebrow "Tu mes" + `h1` "Junio **2026**" (el año en `--accent-ink`). Der: botón primario grande "+ Nuevo movimiento".
 - **Fila de stats:** grid `1fr 1fr`, gap `--gap`. Dos tarjetas:
-  - **Gastos** — ícono cuadrado `--expense-soft`/`--expense-ink` con flecha abajo; valor mono 30px `$ 219.400,00` (decimales en `.cents` 18px muted); meta "8 movimientos · 2 fijos".
+  - **Gastos** — ícono cuadrado `--expense-soft`/`--expense-ink` con flecha abajo; valor mono 30px `$ 219.400,00`; meta "8 movimientos · 2 fijos".
   - **Ingresos** — ícono `--income-soft`/`--income-ink` flecha arriba; valor mono 30px en `--income-ink` `$ 365.000,00`; meta "2 movimientos · sueldo + freelance".
 - **Balance hero:** tarjeta full-width, fondo gradiente del acento, texto blanco. Label "Balance de junio"; cifra mono 46px `+ $ 145.600,00`; **barra de proporción** (alto 7px, pill) ingreso vs gasto (verde claro / rojo claro, anchos 62.5% / 37.5%); debajo, fila de leyenda "Ingresos $ 365.000" / "Gastos $ 219.400". Detalles decorativos: dos círculos (uno relleno `white/0.08`, otro solo borde) en pseudo-elementos.
 - **Footer de sección:** link "Ver todos los movimientos →" que navega a Vista del mes.
@@ -125,17 +125,18 @@ Diálogos usan radio fijo 18px; logo gem 10px; avatar 50%.
 - **Header:** izq = **stepper de mes** (pill con `‹` / label "Junio 2026" + sub "Mes en curso" / `›`). Der: botón "+ Nuevo movimiento".
 - **Totales:** grid `1fr 1fr 1.1fr`: tarjeta Gastos, tarjeta Ingresos, y mini-balance (versión chica del hero, cifra 28px). Versión compacta de los stats (padding 16px 18px, valor 23px).
 - **Grupos:** cada uno con `.ghead` = título uppercase (Únicos/Fijos/Cuotas) + contador pill + regla horizontal flexible + subtotal del grupo en mono. Debajo, una `.list` (tarjeta con bordes redondeados, filas divididas por hairline).
-- **Fila de movimiento (`.mov`):** grid `40px 1fr auto auto`:
+- **Fila de movimiento (`.mov`):** grid `40px 1fr auto auto auto`:
   1. Ícono 40px radio 11px — tintado por tipo (`is-gasto` rojo soft / `is-ingreso` verde soft) con flecha abajo/arriba.
   2. Texto: nombre 14.5px/600 + sub-línea (categoría · tipo · si es fijo, ícono repetir + "mensual").
   3. Fecha en mono (`02 Jun`); en cuotas, debajo `cuota 3/12` en mono pequeño.
   4. Monto mono 15.5px (gastos con `−$`, ingresos con `+$` en `--income-ink`).
+  5. Kebab de acciones.
 - **Datos demo:** Únicos (4): Supermercado −24.300, Carga de nafta −12.500, Proyecto freelance +45.000, Regalo cumpleaños −15.000. Fijos (4): Sueldo +320.000, Alquiler −120.000, Internet −18.500, Gimnasio −15.000. Cuotas (2): Notebook 3/12 −9.900, Heladera 5/18 −14.200.
 - **Regla:** las secciones vacías no se muestran.
 
 ### 4. Modal de carga de movimiento  (overlay)
 - **Propósito:** crear (o editar) un movimiento.
-- **Estructura:** scrim fijo (`ink/0.46` + `backdrop-filter: blur(3px)`), diálogo centrado max-width 440px, radio 18px, `--shadow-lg`.
+- **Estructura:** scrim fijo (`ink/0.46` + `backdrop-filter: blur(3px)`), diálogo centrado max-width 460px, radio 18px, `--shadow-lg`.
 - **Header:** título "Nuevo movimiento" + botón cerrar (X).
 - **Tabs de tipo (`.dtabs`):** segmented "Único · Fijo · Cuotas" sobre fondo `--panel-3`, pill activo blanco con sombra. **Solo en creación.**
 - **Toggle Gasto/Ingreso (`.gi`):** dos botones 50/50. Activo Gasto → borde+texto `--expense`, fondo `--expense-soft`; activo Ingreso → equivalente verde.
@@ -148,15 +149,15 @@ Diálogos usan radio fijo 18px; logo gem 10px; avatar 50%.
   - **Descripción** (siempre, opcional).
 - **Footer:** der "Cancelar" (ghost) + "Guardar" (primario con check).
 - **Al guardar:** cierra el modal y muestra **toast** "Movimiento guardado" con acción "Ir a ver" → Vista del mes.
-- **Modo edición (de los wireframes, aún no implementado):** abre directamente en el tipo del movimiento, **sin tabs**, título "Editar · {tipo}". Si no hay categorías para el tipo elegido, mostrar bloque de advertencia con CTA a `/categorias`.
+- **Modo edición (de los wireframes, no incluido en el prototipo):** abre directamente en el tipo del movimiento, **sin tabs**, título "Editar · {tipo}". Si no hay categorías para el tipo elegido, mostrar bloque de advertencia con CTA a `/configuracion/categorias`.
 
-### 5. Categorías  (`/categorias`)
+### 5. Categorías  (`/configuracion/categorias`)
 - **Propósito:** administrar categorías (nombre + alcance).
 - **Header:** eyebrow "Configuración" + `h1` "Categorías"; der botón "+ Nueva categoría". Bajada: "8 categorías activas. El **alcance** define en qué tipo de movimiento aparece cada una al cargar."
 - **Lista (`.cat-list`):** tarjeta con filas. Cada fila (`.catrow`) = grid `16px 1fr auto auto auto`: swatch de color 14px radio 5px · nombre 15px/600 · contador "N movimientos" muted · **badge de alcance** · acciones (editar / borrar) que aparecen en hover (`opacity 0→1`).
 - **Badge de alcance (`.scope`):** chip con punto + texto. `gasto` (rojo soft), `ingreso` (verde soft), `ambos` (acento soft).
 - **Datos demo:** Supermercado·Gasto, Sueldo·Ingreso, Alquiler·Gasto, Transporte·Gasto, Freelance·Ingreso, Varios·Ambos, Servicios·Gasto, Ocio·Gasto.
-- **Modal Nueva categoría:** max-width 380px. Campos: Nombre; **Alcance** = picker de 3 (`.scopepick`: Ambos / Gasto / Ingreso, activo en acento) con nota explicativa. Footer Cancelar / Guardar. Al guardar → toast "Categoría creada".
+- **Modal Nueva categoría:** max-width 460px. Campos: Nombre; **Alcance** = picker de 3 (`.scopepick`: Ambos / Gasto / Ingreso, activo en acento) con nota explicativa. Footer Cancelar / Guardar. Al guardar → toast "Categoría creada".
 - **Borrado:** soft delete con confirmación (los wireframes lo prevén; no implementado en el prototipo).
 
 ---
@@ -166,16 +167,16 @@ Diálogos usan radio fijo 18px; logo gem 10px; avatar 50%.
 | Clase | Descripción |
 |---|---|
 | `.btn` / `.btn.ghost` / `.btn.sm` / `.btn.lg` | Botón primario (acento) y secundario (panel + borde). Hover: `translateY(-1px)` + sombra. Inset highlight `white/0.2` arriba. |
-| `.gbtn` | Botón "Continuar con Google": panel, borde fuerte, gmark cuadrado placeholder con "G". **No usar el logo oficial de Google** — placeholder neutro; en producción usar el botón/marca oficial según las guías de Google Sign-In. |
+| `.gbtn` | Botón "Continuar con Google": panel, borde fuerte, gmark cuadrado placeholder con "G". Con el proveedor sin configurar va **deshabilitado** (opacidad reducida, sin puntero) y rotulado como no disponible. **No usar el logo oficial de Google** — placeholder neutro; en producción usar el botón/marca oficial según las guías de Google Sign-In. |
 | `.card` / `.stat` | Superficie base + variante de métrica con ícono `.ki`. |
 | `.balance` | Tarjeta hero de gradiente con barra de proporción. |
-| `.mov` | Fila de movimiento (grid 4-col). Variantes `is-gasto` / `is-ingreso`. |
+| `.mov` | Fila de movimiento (grid 5-col). Variantes `is-gasto` / `is-ingreso`. |
 | `.scope` | Badge de alcance/tipo. Variantes gasto/ingreso/ambos/cuota. |
 | `.nav` | Item de sidebar; estado `.on` = fondo `--accent-soft`, texto `--accent-ink`. |
 | `.stepper` | Navegador de mes (pill). |
 | `.input` / `.input.amount` / `.input.select` | Campos; focus = borde acento + ring `--accent-soft` 3px. |
 | `.dtabs`, `.gi`, `.scopepick` | Segmented controls del modal. |
-| `.toast` | Notificación inferior-centro, auto-dismiss 3.8s, con acción opcional. |
+| `.toast` | Notificación inferior-centro, auto-dismiss 5s (8s con acción), con acción opcional. |
 
 ### Iconografía
 Set propio de íconos line (stroke `currentColor`, ~1.8px, 24px viewBox) en un sprite SVG `<symbol>`: dash, month (calendario), tags, plus, arrow, up, down, chevrons (L/R/D), check, edit, trash, lock, shield, info, warn, x, cal, repeat. En el codebase, mapear a la librería de íconos existente (Lucide/Phosphor/Heroicons) — los nombres coinciden bastante con Lucide. **Ingreso = flecha arriba, Gasto = flecha abajo, Recurrente = ícono repeat.**
@@ -183,17 +184,17 @@ Set propio de íconos line (stroke `currentColor`, ~1.8px, 24px viewBox) en un s
 ---
 
 ## Interacciones y comportamiento
-- **Navegación entre pantallas:** sidebar + tabs de la barra superior (esta última es chrome del *prototipo*, no parte del producto — en la app real la navegación es la sidebar + rutas). Rutas sugeridas: `/login`, `/` (dashboard), `/mes`, `/categorias`. Modales como overlay (no ruta, o ruta-modal según convención del codebase).
+- **Navegación entre pantallas:** sidebar + tabs de la barra superior (esta última es chrome del *prototipo*, no parte del producto — en la app real la navegación es la sidebar + rutas). Rutas: `/login`, `/` (dashboard), `/mes`, `/configuracion/categorias`. Modales como overlay (no ruta, o ruta-modal según convención del codebase).
 - **Modal:** abre desde cualquier "+ Nuevo movimiento". Cierra con X, Cancelar, click en scrim, o `Esc`. Cambiar de tab reordena los campos (ver pantalla 4).
 - **Toggle Gasto/Ingreso:** exclusivo; cambia el color del control.
 - **Stepper de mes:** `‹`/`›` cambian mes/año; el label muestra "Mes en curso" para junio 2026 o "Histórico" para el resto. (En el prototipo los totales/listas son estáticos; en producción se recalculan por mes.)
 - **Hover de acciones:** los íconos editar/borrar de Categorías aparecen al hover de la fila.
 - **Toast:** aparece al guardar; "Ir a ver" navega y lo descarta.
 - **Animaciones:** entrada de pantalla fade+translateY 4px (.32s); modal `pop` (scale .98→1, .22s, `cubic-bezier(.2,.9,.3,1.1)`); toast slide-up (.3s). Transiciones de hover .14s. Respetar `prefers-reduced-motion`.
-- **Responsive:** desktop-first. En ≤940px se oculta la sidebar (hay que prever nav mobile) y el login pasa a 1 columna. El target principal acordado es **desktop web**.
+- **Responsive:** el producto tiene **dos regímenes de superficie** decididos por el tamaño del viewport — por debajo del umbral se ve la **superficie de captura** (cargar un movimiento, más acceso y cierre de sesión); por encima, la app completa de este handoff. Dentro del **régimen de app** el diseño es desktop-first y el compromiso es **contener, no rediseñar**: en la disposición compacta las grillas colapsan a 1 columna y el login pasa a 1 columna. La **sidebar no depende del breakpoint**: es chrome que el usuario muestra u oculta en cualquier ancho. Criterio, umbrales nombrados, disposiciones e invariantes de contención son canónicos en `docs/design.md` §Contención responsive, §Superficie de captura y §Sidebar — mostrar/ocultar.
 
 ## State management (sugerido)
-- `session` / `user` (auth Google).
+- `session` / `user` (sesión autenticada por email + contraseña o por Google).
 - `currentMonth` (mes/año activo) → deriva totales y listas.
 - `movements[]`: `{ id, tipo: 'unico'|'fijo'|'cuotas', flujo: 'gasto'|'ingreso', monto, categoriaId, fecha?, descripcion?, cuotas?: { actual, total, mesInicio } }`.
 - `categories[]`: `{ id, nombre, color, scope: 'ambos'|'gasto'|'ingreso', deletedAt? (soft delete) }`.

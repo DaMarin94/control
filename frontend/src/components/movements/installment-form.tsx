@@ -1,500 +1,105 @@
 "use client";
 
 /**
- * Formulario de movimiento en cuotas (RF-MC-001 / RF-MC-003).
+ * InstallmentForm — composición de ESCRITORIO (capa 3) del form de
+ * movimiento en cuotas (RF-MC-001/003). Consume `useInstallmentFormLogic`
+ * (capa 1) y arma su propia UI con las primitivas del DS (capa 2) —
+ * docs/design.md §Superficie de captura → "0. Encuadre — una lógica, dos
+ * composiciones". Su composición hermana en régimen de captura es
+ * `CaptureInstallmentForm` (components/capture/).
  *
- * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
- * - Badge "Gasto" read-only (cuotas son siempre EXPENSE)
- * - Monto por cuota: input mono 20px con prefijo "$"
- * - Grid 2-col para Cantidad de cuotas + Mes de inicio
- * - Footer: Cancelar / Guardar
- *
- * Lógica de negocio preservada intacta.
+ * Este componente NO cambió su render respecto de la versión previa al
+ * refactor de capas — mismo JSX, mismos ids, mismas clases.
  */
 
-import { useEffect, useRef, useState } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { Controller } from "react-hook-form";
 import Link from "next/link";
-import { AlertTriangle, Check, ArrowDown } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { AlertTriangle, ArrowDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { MoreOptionsSection } from "@/components/movements/more-options-section";
-import { useCategories } from "@/hooks/use-categories";
-import { useInstallments } from "@/hooks/use-installments";
-import { useSettings } from "@/hooks/use-settings";
-import { useReferenceRate } from "@/hooks/use-reference-rate";
-import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
-import { useDefaultPaymentMethodPrefill } from "@/hooks/use-default-payment-method-prefill";
-import { useToast } from "@/hooks/use-toast";
-import { useUndoHistory } from "@/hooks/use-history";
-import { buildUndoAction } from "@/lib/toast-undo";
-import { type Category, type CategoryScope } from "@/types/category";
+import { type Category } from "@/types/category";
 import { CategoryFormModal } from "@/app/(app)/configuracion/categorias/category-form-modal";
 import { type InstallmentGroup } from "@/types/installment";
 import { ActiveLimitDialog } from "@/components/limits/active-limit-dialog";
-import { toCanonicalAmountCents } from "@/lib/limits/project";
-import type { LimitConfig } from "@/types/limit";
+import type { MovementFormFooterState } from "@/components/movements/movement-form-footer";
 import {
-  parseCurrencyInput,
-  parseExchangeRateInput,
-  formatExchangeRate,
-  formatCurrency,
-  getCurrentMonth,
-  sanitizeAmountInput,
-  MAX_AMOUNT_CENTS,
-} from "@/lib/format";
-import { useRouter } from "next/navigation";
+  useInstallmentFormLogic,
+  type InstallmentPrefill,
+} from "@/hooks/use-installment-form-logic";
+import { sanitizeAmountInput, formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { CurrencyCode } from "@/types/settings";
 
-// ─── Schema ───────────────────────────────────────────────────────────────────
-
-const installmentSchema = z.object({
-  amountInput: z
-    .string()
-    .min(1, "El monto es requerido")
-    .refine((val) => parseCurrencyInput(val) !== null, {
-      message: "Ingresá un monto mayor a 0",
-    })
-    .refine(
-      (val) => {
-        const cents = parseCurrencyInput(val);
-        return cents === null || cents <= MAX_AMOUNT_CENTS;
-      },
-      { message: "El monto es demasiado grande" },
-    ),
-  currency: z.enum(["ARS", "USD", "EUR", "BRL"]),
-  /** Input de cotización como string. Solo se valida cuando currency !== defaultCurrency. */
-  exchangeRateInput: z.string(),
-  totalInstallments: z
-    .string()
-    .min(1, "La cantidad de cuotas es requerida")
-    .refine(
-      (val) => {
-        const num = parseInt(val, 10);
-        return !isNaN(num) && num > 0 && Number.isInteger(num);
-      },
-      { message: "Ingresá una cantidad de cuotas mayor a 0" },
-    ),
-  startMonth: z
-    .string()
-    .min(1, "El mes de inicio es requerido")
-    .regex(/^\d{4}-\d{2}$/, "El mes debe tener formato YYYY-MM"),
-  categoryId: z.string().min(1, "La categoría es requerida"),
-  /** Método de pago opcional (RF-PM-006). "" = ninguno. */
-  paymentMethodId: z.string().optional(),
-  /**
-   * Débito automático (P4 — corrección de alcance). Atributo del movimiento;
-   * el control solo se renderiza cuando el método elegido es de tipo DEBIT.
-   */
-  autoDebit: z.boolean().optional(),
-  description: z.string().optional(),
-});
-
-type InstallmentFormData = z.infer<typeof installmentSchema>;
+export type { InstallmentPrefill };
 
 // ─── Props ────────────────────────────────────────────────────────────────────
-
-/**
- * Prefill de "Duplicar movimiento" (docs/design.md §"Duplicar movimiento") —
- * valores del grupo de cuotas ORIGEN copiados tal cual, incluido el
- * `startMonth` original. Distinto de `InstallmentGroup` (que trae campos de
- * servidor pensados para PATCH) — ver gotcha en month-view-client.tsx.
- * `amountCents` es el monto POR CUOTA (misma magnitud que `InstallmentGroup.amountCents`
- * y que `MovementItem.amountCents` para origin==="cuota" — se copia sin transformar).
- */
-export interface InstallmentPrefill {
-  amountCents: number;
-  currency: CurrencyCode;
-  exchangeRate: number;
-  totalInstallments: number;
-  categoryId: string;
-  paymentMethodId: string | null;
-  autoDebit: boolean | null;
-  description: string | null;
-  /** Mes de inicio ORIGINAL del grupo de cuotas — se copia tal cual */
-  startMonth: string;
-}
 
 interface InstallmentFormProps {
   installment: InstallmentGroup | null;
   onClose: () => void;
   defaultMonth?: string;
-  /**
-   * true si, en modo edición, la cuota está ACTUALMENTE anulada (skipped) para
-   * el mes visualizado. El form no expone el toggle de anular — este flag
-   * alimenta la intercepción de límites activos (D16). Ausente = false.
-   */
+  /** true si, en edición, la cuota está ACTUALMENTE anulada para el mes visualizado — alimenta D16. */
   editingSkipped?: boolean;
-  /**
-   * Prefill de "Duplicar movimiento" — llena `defaultValues` en modo CREAR
-   * (POST) sin activar `isEditing`. Ignorado si `installment` está presente.
-   */
+  /** Prefill de "Duplicar movimiento" — solo aplica en modo crear. */
   prefill?: InstallmentPrefill | null;
-}
-
-/** Datos ya validados/parseados, pendientes de persistir tras "Guardar igual" (P2 — Fase 2). */
-interface PendingSave {
-  data: InstallmentFormData;
-  amountCents: number;
-  parsedExchangeRate: number;
-  totalInstallments: number;
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function filterCategoriesForExpense(
-  categories: { id: string; name: string; scope: CategoryScope }[],
-) {
-  return categories.filter((cat) => cat.scope === "EXPENSE" || cat.scope === "BOTH");
+  /** La zona de acción es un slot del envase — ver `movement-form-footer.ts`. */
+  onFooterStateChange: (state: MovementFormFooterState) => void;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
-export function InstallmentForm({ installment, onClose, defaultMonth, editingSkipped, prefill }: InstallmentFormProps) {
-  const isEditing = installment !== null;
-  // Modo "Duplicar" (docs/design.md): crea (POST) con defaultValues del prefill,
-  // sin activar isEditing. Mutuamente excluyente con isEditing.
-  const isPrefillActive = !isEditing && prefill != null;
-  const router = useRouter();
-  const { toast } = useToast();
-  const { undo } = useUndoHistory();
-  const { categories } = useCategories();
-  const { createInstallment, updateInstallment, isCreating, isUpdating } = useInstallments();
-  const { defaultCurrency, lastExchangeRate } = useSettings();
-
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [exchangeRateError, setExchangeRateError] = useState<string | undefined>();
-  const [isExchangeRateModified, setIsExchangeRateModified] = useState(false);
-
-  // P2 — Fase 2: intercepción de límites activos al guardar (D11).
-  const [crossedLimits, setCrossedLimits] = useState<LimitConfig[] | null>(null);
-  const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
-  // Una cuota (recurrente) se chequea contra el MES EN CURSO real (D13), sin
-  // importar el mes de inicio elegido.
-  const { evaluate: evaluateActiveLimits } = useActiveLimitProjection(getCurrentMonth());
-
-  const isLoading = isEditing ? isUpdating : isCreating;
-
-  // Cotización pre-cargada inicial:
-  // - Editando: la del grupo de cuotas (siempre presente, nunca null en el backend).
-  // - Creando: se rellena luego desde referenceRate/lastExchangeRate.
-  const initialEditingExchangeRateInput = isEditing
-    ? formatExchangeRate(installment.exchangeRate ?? 1)
-    : "";
-
-  const defaultValues: InstallmentFormData = isEditing
-    ? {
-        amountInput: String(installment.amountCents / 100).replace(".", ","),
-        currency: installment.currency ?? defaultCurrency,
-        exchangeRateInput: initialEditingExchangeRateInput,
-        totalInstallments: String(installment.totalInstallments),
-        startMonth: installment.startMonth,
-        categoryId: installment.categoryId,
-        paymentMethodId: installment.paymentMethodId ?? "",
-        autoDebit: installment.autoDebit ?? false,
-        description: installment.description ?? "",
-      }
-    : prefill
-      ? {
-          amountInput: String(prefill.amountCents / 100).replace(".", ","),
-          currency: prefill.currency,
-          exchangeRateInput: formatExchangeRate(prefill.exchangeRate ?? 1),
-          totalInstallments: String(prefill.totalInstallments),
-          // Duplicar: el mes de inicio ORIGINAL del grupo de cuotas.
-          startMonth: prefill.startMonth,
-          categoryId: prefill.categoryId,
-          paymentMethodId: prefill.paymentMethodId ?? "",
-          autoDebit: prefill.autoDebit ?? false,
-          description: prefill.description ?? "",
-        }
-      : {
-          amountInput: "",
-          currency: defaultCurrency,
-          exchangeRateInput: "",
-          totalInstallments: "",
-          startMonth: defaultMonth ?? getCurrentMonth(),
-          categoryId: "",
-          paymentMethodId: "",
-          autoDebit: false,
-          description: "",
-        };
-
-  const [preloadedExchangeRateInput, setPreloadedExchangeRateInput] = useState(
-    initialEditingExchangeRateInput,
-  );
-
-  // En edición: moneda original al abrir el modal. Si el usuario la cambia, se
-  // pre-carga la cotización de referencia para la nueva moneda (como en creación).
-  const initialCurrencyRef = useRef<CurrencyCode>(
-    isEditing
-      ? (installment?.currency ?? defaultCurrency)
-      : (prefill?.currency ?? defaultCurrency),
-  );
+export function InstallmentForm({
+  installment,
+  onClose,
+  defaultMonth,
+  editingSkipped,
+  prefill,
+  onFooterStateChange,
+}: InstallmentFormProps) {
+  const logic = useInstallmentFormLogic({
+    installment,
+    onClose,
+    defaultMonth,
+    editingSkipped,
+    prefill,
+    onFooterStateChange,
+  });
 
   const {
+    formId,
     register,
-    handleSubmit,
-    watch,
-    setValue,
     control,
-    reset,
-    formState: { errors },
-  } = useForm<InstallmentFormData>({
-    resolver: zodResolver(installmentSchema),
-    defaultValues,
-  });
-
-  // Registro del campo Monto — se reusa en el onChange que sanitiza la entrada
-  // (#4: solo dígitos + un único separador decimal) antes de que RHF la capture.
-  const amountFieldRegister = register("amountInput");
-
-  const selectedCurrency = watch("currency") as CurrencyCode;
-  const selectedStartMonth = watch("startMonth");
-  const exchangeRateInput = watch("exchangeRateInput");
-  const selectedPaymentMethodId = watch("paymentMethodId") ?? "";
-  const selectedAutoDebit = watch("autoDebit") ?? false;
-  const watchedAmountInput = watch("amountInput");
-  const watchedTotalInstallments = watch("totalInstallments");
-
-  // ── Preview en vivo "Total del plan" (docs/design.md §"Total del plan de
-  // cuotas — las tres superficies"): informativo, no valida ni bloquea Guardar.
-  // Mismo criterio de validez que el schema (monto parseable > 0 y cantidad
-  // entera > 0), más el estado de error de zod de ambos campos.
-  const planAmountCents = parseCurrencyInput(watchedAmountInput);
-  const planTotalNum = parseInt(watchedTotalInstallments, 10);
-  const planPreviewValid =
-    planAmountCents !== null &&
-    planAmountCents > 0 &&
-    !errors.amountInput &&
-    !isNaN(planTotalNum) &&
-    planTotalNum > 0 &&
-    !errors.totalInstallments;
-  const isPlanCrossRate = selectedCurrency !== defaultCurrency;
-
-  // Prefill del método de pago por defecto — solo al crear una cuota
-  // (RF-PM-007). Valor inicial editable; no pisa una selección manual del usuario.
-  useDefaultPaymentMethodPrefill({
-    slot: "cuota",
-    isEditing,
-    currentPaymentMethodId: selectedPaymentMethodId,
-    setPaymentMethodId: (id) => setValue("paymentMethodId", id),
-  });
-
-  // Mes relevante para la cotización de referencia:
-  // - Crear: mes de inicio seleccionado (o mes actual como fallback)
-  // - Editar: el startMonth del grupo (no cambia en edición)
-  const referenceMonth = isEditing
-    ? (installment.startMonth ?? getCurrentMonth())
-    : (selectedStartMonth?.length >= 7 ? selectedStartMonth : getCurrentMonth());
-
-  // Hook de cotización de referencia — Fase 1.2.4
-  const { referenceRate } = useReferenceRate({
-    month: referenceMonth,
-    currency: selectedCurrency,
+    errors,
+    amountFieldRegister,
+    setValue,
+    selectedCurrency,
+    exchangeRateInput,
+    selectedPaymentMethodId,
+    selectedAutoDebit,
     defaultCurrency,
-  });
-
-  useEffect(() => {
-    if (isEditing) {
-      const newCurrency = installment.currency ?? defaultCurrency;
-      reset({
-        amountInput: String(installment.amountCents / 100).replace(".", ","),
-        currency: newCurrency,
-        exchangeRateInput: formatExchangeRate(installment.exchangeRate ?? 1),
-        totalInstallments: String(installment.totalInstallments),
-        startMonth: installment.startMonth,
-        categoryId: installment.categoryId,
-        paymentMethodId: installment.paymentMethodId ?? "",
-        autoDebit: installment.autoDebit ?? false,
-        description: installment.description ?? "",
-      });
-      // Actualizar la referencia de moneda inicial para que el effect de pre-carga
-      // pueda detectar correctamente si el usuario la cambia en esta sesión.
-      initialCurrencyRef.current = newCurrency;
-      setIsExchangeRateModified(false);
-    }
-  }, [installment, isEditing, reset, defaultCurrency]);
-
-  // Pre-cargar defaultCurrency al crear cuando cambia — NO en modo "Duplicar"
-  // (isPrefillActive): la moneda copiada del original debe sobrevivir intacta.
-  useEffect(() => {
-    if (!isEditing && !isPrefillActive) {
-      setValue("currency", defaultCurrency);
-    }
-  }, [defaultCurrency, isEditing, isPrefillActive, setValue]);
-
-  // Pre-cargar cotización: prioridad referenceRate → lastExchangeRate → vacío (Fase 1.2.4).
-  // En modo crear (sin prefill): siempre al cambiar referencia o moneda.
-  // En modo edición Y en modo "Duplicar": solo si el usuario cambió la moneda
-  // (≠ moneda original/copiada al abrir) y no modificó la cotización manualmente.
-  useEffect(() => {
-    const lockedInitial = isEditing || isPrefillActive;
-    const currencyChanged = selectedCurrency !== initialCurrencyRef.current;
-    if (lockedInitial && !currencyChanged) return;
-    if (lockedInitial && isExchangeRateModified) return;
-    const rate =
-      referenceRate !== null
-        ? referenceRate
-        : lastExchangeRate;
-    const formatted = rate !== null ? formatExchangeRate(rate) : "";
-    setPreloadedExchangeRateInput(formatted);
-    setValue("exchangeRateInput", formatted);
-    if (!lockedInitial) {
-      setIsExchangeRateModified(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [referenceRate, lastExchangeRate, isEditing, isPrefillActive, selectedCurrency, setValue]);
-
-  // Detectar si el usuario modificó la cotización respecto al valor pre-cargado
-  useEffect(() => {
-    setIsExchangeRateModified(
-      exchangeRateInput !== preloadedExchangeRateInput && exchangeRateInput !== ""
-    );
-  }, [exchangeRateInput, preloadedExchangeRateInput]);
-
-  const availableCategories = filterCategoriesForExpense(
-    (categories ?? []).map((c) => ({ id: c.id, name: c.name, scope: c.scope })),
-  );
-
-  const noCategoriesAvailable = availableCategories.length === 0;
-
-  async function persist({ data, amountCents, parsedExchangeRate, totalInstallments }: PendingSave) {
-    if (isEditing) {
-      const result = await updateInstallment(installment.id, {
-        amountCents,
-        totalInstallments,
-        startMonth: data.startMonth,
-        categoryId: data.categoryId,
-        description: data.description || null,
-        currency: data.currency,
-        exchangeRate: parsedExchangeRate,
-        paymentMethodId: data.paymentMethodId || null,
-        autoDebit: data.autoDebit ?? false,
-      });
-
-      if (!result.success) {
-        toast.error(result.error ?? "No se pudo guardar el movimiento.");
-        return;
-      }
-
-      const updated = result.installment;
-      const name = updated?.description || updated?.category.name || installment.description || installment.category.name;
-      if (result.historyEntryId) {
-        toast.success(`Actualizado: ‘${name}’.`, {
-          groupId: installment.id,
-          action: {
-            label: "Deshacer",
-            pendingLabel: "Deshaciendo…",
-            onClick: buildUndoAction(undo, result.historyEntryId),
-          },
-        });
-      } else {
-        toast.success(`Actualizado: ‘${name}’.`);
-      }
-      onClose();
-    } else {
-      const result = await createInstallment({
-        type: "EXPENSE",
-        amountCents,
-        totalInstallments,
-        startMonth: data.startMonth,
-        categoryId: data.categoryId,
-        description: data.description || undefined,
-        currency: data.currency,
-        exchangeRate: parsedExchangeRate,
-        paymentMethodId: data.paymentMethodId || undefined,
-        autoDebit: data.autoDebit ?? false,
-      });
-
-      if (!result.success) {
-        toast.error(result.error ?? "No se pudo guardar el movimiento.");
-        return;
-      }
-
-      const startMonth = data.startMonth;
-      toast.success("Movimiento guardado correctamente.", {
-        action: {
-          label: "Ir a ver",
-          onClick: () => router.push(`/mes?month=${startMonth}`),
-        },
-      });
-
-      onClose();
-    }
-  }
-
-  async function onSubmit(data: InstallmentFormData) {
-    const amountCents = parseCurrencyInput(data.amountInput);
-    if (amountCents === null) return;
-
-    const totalInstallments = parseInt(data.totalInstallments, 10);
-
-    // Cuando moneda === defaultCurrency el campo cotización está oculto (Fase 1.2.4).
-    // El backend ignora exchangeRate en ese caso, así que enviamos 1 directamente.
-    // Solo cuando moneda ≠ default validamos y parseamos el input visible.
-    let parsedExchangeRate: number;
-    if (data.currency === defaultCurrency) {
-      parsedExchangeRate = 1;
-      setExchangeRateError(undefined);
-    } else {
-      const parsed = parseExchangeRateInput(data.exchangeRateInput);
-      if (parsed === null) {
-        setExchangeRateError("Ingresá una cotización mayor a 0");
-        return;
-      }
-      parsedExchangeRate = parsed;
-      setExchangeRateError(undefined);
-    }
-
-    const pending: PendingSave = { data, amountCents, parsedExchangeRate, totalInstallments };
-
-    // P2 — Fase 2: compuerta de intercepción (D11). Sin cruces → persiste
-    // directo, EXACTAMENTE como hoy (cero fricción). Con cruces → aviso.
-    const canonicalAmountCents = toCanonicalAmountCents(
-      amountCents,
-      data.currency,
-      defaultCurrency,
-      parsedExchangeRate,
-    );
-    const crossed = evaluateActiveLimits({
-      type: "EXPENSE",
-      convertedAmountCents: canonicalAmountCents,
-      categoryId: data.categoryId,
-      section: "cuotas",
-      skipped: editingSkipped ?? false,
-      editingId: isEditing ? installment.id : undefined,
-    });
-
-    if (crossed.length > 0) {
-      setCrossedLimits(crossed);
-      setPendingSave(pending);
-      return;
-    }
-
-    await persist(pending);
-  }
-
-  function handleCancelLimitDialog() {
-    setCrossedLimits(null);
-    setPendingSave(null);
-  }
-
-  async function handleConfirmSaveAnyway() {
-    if (!pendingSave) return;
-    const toPersist = pendingSave;
-    setCrossedLimits(null);
-    setPendingSave(null);
-    await persist(toPersist);
-  }
+    isExchangeRateModified,
+    exchangeRateError,
+    planAmountCents,
+    planTotalNum,
+    planPreviewValid,
+    isPlanCrossRate,
+    availableCategories,
+    noCategoriesAvailable,
+    onSubmit,
+    showCategoryModal,
+    openCategoryModal,
+    closeCategoryModal,
+    handleCategoryCreated,
+    crossedLimits,
+    handleCancelLimitDialog,
+    handleConfirmSaveAnyway,
+    isLoading,
+  } = logic;
 
   return (
     <>
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col flex-1 min-h-0">
+      <form id={formId} onSubmit={onSubmit} noValidate className="flex flex-col flex-1 min-h-0">
         <div className="flex-1 min-h-0 overflow-y-auto px-[22px] pb-[22px] space-y-[14px]">
           {/* ── Tipo (read-only: siempre Gasto) ── */}
           <div className="flex flex-col gap-[7px]">
@@ -512,7 +117,7 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
 
           {/* ── Monto por cuota ── */}
           <div className="flex flex-col gap-[7px]">
-            <Label htmlFor="inst-amount" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+            <Label htmlFor={`${formId}-amount`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Monto por cuota
             </Label>
             <div
@@ -526,7 +131,7 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
             >
               <span className="text-[15px] text-muted mono shrink-0">$</span>
               <input
-                id="inst-amount"
+                id={`${formId}-amount`}
                 type="text"
                 inputMode="decimal"
                 placeholder="0,00"
@@ -546,11 +151,11 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
           {/* ── Cantidad de cuotas + Mes de inicio (grid 2-col) ── */}
           <div className="grid grid-cols-2 gap-[14px]">
             <div className="flex flex-col gap-[7px]">
-              <Label htmlFor="inst-total" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+              <Label htmlFor={`${formId}-total`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Cant. de cuotas
               </Label>
               <Input
-                id="inst-total"
+                id={`${formId}-total`}
                 type="number"
                 inputMode="numeric"
                 min="1"
@@ -561,11 +166,11 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
               />
             </div>
             <div className="flex flex-col gap-[7px]">
-              <Label htmlFor="inst-start-month" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+              <Label htmlFor={`${formId}-start-month`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Mes de inicio
               </Label>
               <Input
-                id="inst-start-month"
+                id={`${formId}-start-month`}
                 type="month"
                 error={errors.startMonth?.message}
                 {...register("startMonth")}
@@ -609,8 +214,6 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
                   </span>
                 )}
               </span>
-              {/* Derivación — siempre renderizada (invisible cuando inválido) para que
-                  la tira no cambie de alto al pasar de estado parcial a completo. */}
               <span
                 className={cn(
                   "mono text-[11.5px] text-muted whitespace-nowrap",
@@ -619,7 +222,7 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
               >
                 {planPreviewValid
                   ? `${planTotalNum} × ${formatCurrency(planAmountCents!, selectedCurrency)}`
-                  : " "}
+                  : " "}
               </span>
             </div>
           </div>
@@ -627,12 +230,12 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
           {/* ── Categoría ── */}
           <div className="flex flex-col gap-[7px]">
             <div className="flex items-center justify-between">
-              <Label htmlFor="inst-category" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+              <Label htmlFor={`${formId}-category`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Categoría
               </Label>
               <button
                 type="button"
-                onClick={() => setShowCategoryModal(true)}
+                onClick={openCategoryModal}
                 className="text-[12.5px] font-semibold text-accent-ink hover:text-accent transition-colors duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-sm"
               >
                 + Nueva
@@ -660,7 +263,7 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
                 control={control}
                 render={({ field }) => (
                   <Select
-                    id="inst-category"
+                    id={`${formId}-category`}
                     value={field.value}
                     onChange={field.onChange}
                     error={errors.categoryId?.message}
@@ -679,12 +282,12 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
 
           {/* ── Descripción ── */}
           <div className="flex flex-col gap-[7px]">
-            <Label htmlFor="inst-description" className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+            <Label htmlFor={`${formId}-description`} className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Descripción{" "}
               <span className="text-faint font-normal">(opcional)</span>
             </Label>
             <Input
-              id="inst-description"
+              id={`${formId}-description`}
               type="text"
               placeholder="Ej: Notebook Lenovo"
               error={errors.description?.message}
@@ -694,7 +297,7 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
 
           {/* ── Más opciones: moneda+cotización + método de pago (P4) ── */}
           <MoreOptionsSection
-            idPrefix="inst"
+            idPrefix={formId}
             currency={selectedCurrency}
             exchangeRateInput={exchangeRateInput}
             defaultCurrency={defaultCurrency}
@@ -708,28 +311,6 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
             onAutoDebitChange={(checked) => setValue("autoDebit", checked)}
           />
         </div>
-
-        {/* ── Footer (pineado — hermano del cuerpo scrolleable, no hijo) ── */}
-        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2 shrink-0">
-          <div className="flex gap-3">
-            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              size="sm"
-              disabled={isLoading || noCategoriesAvailable}
-              className="gap-1.5"
-            >
-              <Check size={14} aria-hidden="true" />
-              {isLoading
-                ? "Guardando..."
-                : isEditing
-                  ? "Guardar cambios"
-                  : "Guardar"}
-            </Button>
-          </div>
-        </div>
       </form>
 
       {/* ── Modal inline de nueva categoría (RF-MU-004) ── */}
@@ -737,11 +318,8 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
         <CategoryFormModal
           category={null}
           lockScopeToType="EXPENSE"
-          onClose={() => setShowCategoryModal(false)}
-          onCreated={(cat: Category) => {
-            setValue("categoryId", cat.id);
-            setShowCategoryModal(false);
-          }}
+          onClose={closeCategoryModal}
+          onCreated={(cat: Category) => handleCategoryCreated(cat)}
         />
       )}
 
@@ -752,6 +330,7 @@ export function InstallmentForm({ installment, onClose, defaultMonth, editingSki
           onCancel={handleCancelLimitDialog}
           onConfirm={handleConfirmSaveAnyway}
           isConfirming={isLoading}
+          stacked
         />
       )}
     </>

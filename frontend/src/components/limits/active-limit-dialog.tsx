@@ -20,6 +20,7 @@ import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getAnchorDef, formatThreshold } from "@/lib/limits/catalog";
 import { ModalShell, ModalShellHeader, ModalShellBody, ModalShellFooter } from "@/components/ui/modal-shell";
+import { cn } from "@/lib/utils";
 import type { LimitConfig, LimitOperator } from "@/types/limit";
 
 /**
@@ -43,9 +44,34 @@ export interface ActiveLimitDialogProps {
   onConfirm: () => void;
   /** true mientras se persiste tras "Guardar igual" (deshabilita los botones). */
   isConfirming?: boolean;
+  /**
+   * true (default) = se apila ENCIMA de un modal ya abierto (z-50 — caso de
+   * la app, donde este aviso vive dentro de `TransactionModal`). false = no
+   * hay modal debajo: monta su scrim en la capa normal (z-40) — caso de la
+   * superficie de captura, donde el aviso es el único overlay
+   * sobre la superficie (docs/design.md §Superficie de captura
+   * → "10. Overlays sobre la superficie").
+   */
+  stacked?: boolean;
+  /**
+   * false (default) = botones a tamaño `sm` estándar (caso de la app). true =
+   * botones a `flex-1` y 48px de alto — targets cómodos para el dedo (caso de
+   * la superficie de captura, docs/design.md §Superficie de captura →
+   * "10. Overlays sobre la superficie": "Botones del diálogo con densidad de
+   * esta superficie"). Misma composición (Cancelar ghost + Guardar igual
+   * primario); solo crece el blanco.
+   */
+  expandedButtons?: boolean;
 }
 
-export function ActiveLimitDialog({ crossed, onCancel, onConfirm, isConfirming = false }: ActiveLimitDialogProps) {
+export function ActiveLimitDialog({
+  crossed,
+  onCancel,
+  onConfirm,
+  isConfirming = false,
+  stacked = true,
+  expandedButtons = false,
+}: ActiveLimitDialogProps) {
   // Foco inicial en "Cancelar" (D11 + a11y): un Enter reflejo del click en
   // Guardar que disparó la intercepción no debe saltar el aviso por accidente.
   // `ModalShell` gatea su propio mount (portal SSR-safe) antes de montar los
@@ -66,7 +92,7 @@ export function ActiveLimitDialog({ crossed, onCancel, onConfirm, isConfirming =
   return (
     <ModalShell
       variant="dialog"
-      stacked
+      stacked={stacked}
       role="alertdialog"
       onClose={onCancel}
       labelledBy="active-limit-dialog-title"
@@ -126,12 +152,19 @@ export function ActiveLimitDialog({ crossed, onCancel, onConfirm, isConfirming =
           type="button"
           variant="ghost"
           size="sm"
+          className={cn(expandedButtons && "flex-1 h-12")}
           onClick={onCancel}
           disabled={isConfirming}
         >
           Cancelar
         </Button>
-        <Button type="button" size="sm" onClick={onConfirm} disabled={isConfirming}>
+        <Button
+          type="button"
+          size="sm"
+          className={cn(expandedButtons && "flex-1 h-12")}
+          onClick={onConfirm}
+          disabled={isConfirming}
+        >
           {isConfirming ? "Guardando..." : "Guardar igual"}
         </Button>
       </ModalShellFooter>

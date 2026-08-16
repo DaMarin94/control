@@ -64,6 +64,14 @@ export function formatCurrency(amountCents: number, currency = "ARS"): string {
 export const MAX_AMOUNT_CENTS = 2_147_483_647;
 
 /**
+ * Tope de largo aceptado por el backend para `description`: espejo de UX del
+ * `@MaxLength(200)` presente en los 12 DTOs (transacciones, recurrentes,
+ * cuotas, calculados) — mismo límite y mismo mensaje que el backend. Ver
+ * docs/technical.md §Validación.
+ */
+export const MAX_DESCRIPTION_LENGTH = 200;
+
+/**
  * Sanitiza el input crudo de un campo de monto a medida que se tipea: conserva
  * solo dígitos y un único separador decimal (coma o punto — el primero que
  * aparece), descarta cualquier otro carácter (letras, símbolos, separadores

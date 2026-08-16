@@ -9,6 +9,7 @@ import {
   IsPositive,
   IsString,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { Currency, MovementType } from '@prisma/client';
@@ -55,6 +56,7 @@ export class CreateTransactionDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(200, { message: 'La descripción no puede superar los 200 caracteres' })
   description?: string;
 
   /**

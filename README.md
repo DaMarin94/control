@@ -52,6 +52,14 @@ pnpm dev
 
 ## TODO
 
+Divergencias abiertas entre la escala de texto de [`docs/design.md`](docs/design.md) (§ Tipografía → *Escala de texto (roles)*) y el código.
+
+- **Eyebrow del login fuera de escala.** El rol *Eyebrow / labels* es **12px / .1em**, pero el eyebrow "Bienvenido" usa **13px** en `frontend/src/app/login/page.tsx:31` y en `frontend/src/app/registro/page.tsx`. El dashboard sí cumple los 12px (`frontend/src/components/dashboard/dashboard-client.tsx:131`); falta alinear login y registro.
+
+- **Peso del rol *Meta / subtítulos*.** La escala pide **12.5px / peso 500**; el código usa 12.5px con **peso 400** en las metas de las stat-cards del dashboard (`frontend/src/components/dashboard/dashboard-client.tsx:195` y `:222`) y en la tercera columna de la fila de movimiento (`frontend/src/components/movements/movement-item-row.tsx:396`).
+
+- **Rol de facto sin definir en la escala** (hay que decidirlo, no solo corregir una cifra). Las etiquetas de las stat-cards usan **11.5px / .08em en `/mes`** (`frontend/src/components/movements/month-view-client.tsx:1202` y `:1227`) y **12.5px / .08em en el dashboard** (`frontend/src/components/dashboard/dashboard-client.tsx:179`, `:207`, `:251`). Ninguno de los dos cae en un rol existente —ni *Eyebrow / labels* (12px / .1em) ni *Meta / subtítulos* (12.5px / 500)—: es un rol tipográfico en uso que la escala nunca definió, y encima con dos tamaños distintos para el mismo propósito. Resolverlo implica definir el rol en la escala y unificar el código.
+
 ## Tests
 
 Cada app guarda sus tests en una carpeta `tests/` separada de `src/` (`src/` solo contiene código; ver `docs/technical.md`).

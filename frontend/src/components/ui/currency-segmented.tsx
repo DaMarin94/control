@@ -16,6 +16,12 @@
  *   aplica px-[8px] como mínimo vía la clase `currency-segmented-compact`.
  *   En /configuracion cabe sin problemas (a la derecha de `flex justify-between`).
  *   En el form (grid de 2 col, mitad del ancho) puede necesitar el padding reducido.
+ * - Prop `touchTarget="roomy"` (opt-in, default "default"): sube el padding vertical
+ *   del segmento de py-[6px] a py-[13px] — el único ajuste, sin tocar tipografía, color
+ *   ni el resto de la geometría. Consumida EXCLUSIVAMENTE por la superficie de captura
+ *   (`CaptureMoreOptions`, docs/design.md §Superficie de captura → §4 "Densidad táctil":
+ *   piso de 44px para todo control). La versión de escritorio (`/configuracion`, forms
+ *   de escritorio) nunca la pasa — queda con py-[6px] (31px), sin cambio de comportamiento.
  * - Segmento seleccionado: thumb `--panel` (blanco) + `--shadow-sm`, texto `--ink`.
  *   Se desliza entre las 4 posiciones (0.14s; instantáneo con prefers-reduced-motion).
  * - Segmento no seleccionado: texto `--muted`; hover → `--ink-2`.
@@ -53,6 +59,12 @@ interface CurrencySegmentedProps {
    * true: px-[8px] — útil en grid de 2 col donde el segmented ocupa la mitad.
    */
   compact?: boolean;
+  /**
+   * Densidad táctil del segmento — "default" (py-[6px], 31px) o "roomy"
+   * (py-[13px], ≥44px). Ver comentario de arriba: solo la superficie de
+   * captura pasa "roomy".
+   */
+  touchTarget?: "default" | "roomy";
 }
 
 export function CurrencySegmented({
@@ -61,6 +73,7 @@ export function CurrencySegmented({
   ariaLabel = "Moneda",
   disabled = false,
   compact = false,
+  touchTarget = "default",
 }: CurrencySegmentedProps) {
   const selectedIndex = CURRENCIES.findIndex((c) => c.value === value);
 
@@ -107,7 +120,8 @@ export function CurrencySegmented({
             onClick={() => onChange(currency.value)}
             onKeyDown={(e) => handleKeyDown(e, i)}
             className={cn(
-              "relative z-10 flex-1 rounded-pill py-[6px]",
+              "relative z-10 flex-1 rounded-pill",
+              touchTarget === "roomy" ? "py-[13px]" : "py-[6px]",
               "text-[13px] font-semibold mono tracking-[0.01em]",
               "transition-colors duration-[140ms]",
               "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",

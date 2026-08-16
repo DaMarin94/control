@@ -25,6 +25,7 @@ import { useState } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RecurringForm } from "@/components/movements/recurring-form";
+import { TestMovementFormFooter } from "../../utils/movement-form-footer";
 import { CalculatedForm } from "@/components/movements/calculated-form";
 import { DeleteRecurringDialog } from "@/components/movements/delete-recurring-dialog";
 import { ToastProvider } from "@/components/ui/toast";
@@ -346,11 +347,16 @@ function EditThenDeleteFijo() {
   const [step, setStep] = useState<"edit" | "delete" | "done">("edit");
   if (step === "edit") {
     return (
-      <RecurringForm
-        recurring={mockRecurring}
-        onClose={() => setStep("delete")}
-        viewMonth="2026-06"
-      />
+      <TestMovementFormFooter>
+        {(onFooterStateChange) => (
+          <RecurringForm
+            recurring={mockRecurring}
+            onClose={() => setStep("delete")}
+            viewMonth="2026-06"
+            onFooterStateChange={onFooterStateChange}
+          />
+        )}
+      </TestMovementFormFooter>
     );
   }
   if (step === "delete") {

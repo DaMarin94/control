@@ -11,6 +11,7 @@ import { render, screen, waitFor, fireEvent, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { TransactionForm, type TransactionPrefill } from "@/components/movements/transaction-form";
 import { ToastProvider } from "@/components/ui/toast";
+import { TestMovementFormFooter } from "../../utils/movement-form-footer";
 import type { Transaction } from "@/types/transaction";
 import type { Category } from "@/types/category";
 import type { PaymentMethod } from "@/types/payment-method";
@@ -223,12 +224,17 @@ function renderForm(props: {
   const onClose = props.onClose ?? vi.fn();
   return render(
     <ToastProvider>
-      <TransactionForm
-        transaction={props.transaction ?? null}
-        onClose={onClose}
-        editingSkipped={props.editingSkipped}
-        prefill={props.prefill}
-      />
+      <TestMovementFormFooter>
+        {(onFooterStateChange) => (
+          <TransactionForm
+            transaction={props.transaction ?? null}
+            onClose={onClose}
+            editingSkipped={props.editingSkipped}
+            prefill={props.prefill}
+            onFooterStateChange={onFooterStateChange}
+          />
+        )}
+      </TestMovementFormFooter>
     </ToastProvider>,
   );
 }
@@ -346,6 +352,29 @@ describe("TransactionForm — validación", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/el monto es demasiado grande/i)).toBeInTheDocument();
+    });
+    expect(mockCreateTransaction).not.toHaveBeenCalled();
+  });
+
+  it("muestra 'La descripción no puede superar los 200 caracteres' y bloquea el submit cuando la excede", async () => {
+    const user = userEvent.setup();
+    renderForm({});
+
+    const amountInput = screen.getByLabelText(/monto/i);
+    await user.type(amountInput, "100");
+
+    const categorySelect = screen.getByLabelText(/categoría/i);
+    await user.selectOptions(categorySelect, "cat-expense");
+
+    const descriptionInput = screen.getByLabelText(/descripción/i);
+    fireEvent.change(descriptionInput, { target: { value: "a".repeat(201) } });
+
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/la descripción no puede superar los 200 caracteres/i),
+      ).toBeInTheDocument();
     });
     expect(mockCreateTransaction).not.toHaveBeenCalled();
   });

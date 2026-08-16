@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   Matches,
+  MaxLength,
   ValidateIf,
 } from 'class-validator';
 import { FormulaOperator } from '@prisma/client';
@@ -82,6 +83,7 @@ export class CreateCalculatedRecurringDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(200, { message: 'La descripción no puede superar los 200 caracteres' })
   description?: string;
 }
 

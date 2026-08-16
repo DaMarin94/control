@@ -54,7 +54,8 @@
 | Reportes — movimientos simulados en el tramo futuro (toggle opt-in por card en Ingresos vs Gastos y Gastos por categoría, persistido, off por defecto) | RF-REP-017 | Implementado |
 | Multi-moneda — set curado 4 (ARS/USD/EUR/BRL) + tabla de cotizaciones de referencia + pantalla `/configuracion` | RF-CUR-001..006, RN-009 | Implementado |
 | Modo de color — toggle Sistema/Claro/Oscuro en el chrome global (sidebar), persistido (blob `theme`) | RF-APP-001 | Implementado |
-| Gate por debajo del ancho mínimo soportado (640px) — bloqueo CSS puro a viewport completo, cubre toda la app incluido login | RF-APP-002 | Implementado |
+| Superficie de captura — única superficie en régimen de captura (`min(ancho, alto) < 600px`): crear un movimiento con el formulario completo (Único/Fijo/Cuotas), identidad de la sesión y cierre de sesión | RF-APP-003 | Implementado |
+| Acceso en régimen de captura — login (email + contraseña, Google condicional) sin registro | RF-APP-004 | Implementado |
 | Límites — marca visual pasiva (todas las superficies: `/mes`, dashboard y los 5 reportes de `/reportes`) + alerta activa (aviso no bloqueante al guardar en los 4 forms de movimiento, keys `mes.*`) + panel en la sección Límites del hub (`/configuracion/limites`, blob `limits`, client-side) | RF-LIM-001..004, RN-022 | Implementado |
 | Límites — popover informativo por superficie (ícono `Info` + listado read-only agrupado por naturaleza; en las 5 cards de `/reportes` y en `/mes`, nunca en el Dashboard; incluye deshabilitados atenuados y refleja el alcance temporal) | RF-LIM-005 | Implementado |
 | Sincronización de cotizaciones externas — FX (dolarapi/Frankfurter) + IPC (datos.gob.ar) vía trigger sin datos, protegido por `CRON_SECRET` | RF-FX-001, RF-IPC-001, RF-SYNC-001 | Implementado |

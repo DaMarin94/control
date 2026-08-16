@@ -13,13 +13,14 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useState } from "react";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RecurringForm, type RecurringPrefill } from "@/components/movements/recurring-form";
 import { ToastProvider } from "@/components/ui/toast";
 import type { Category } from "@/types/category";
 import type { Recurring } from "@/types/recurring";
 import type { PaymentMethod } from "@/types/payment-method";
+import { TestMovementFormFooter } from "../../utils/movement-form-footer";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -229,13 +230,18 @@ function renderForm(props: {
   const onClose = props.onClose ?? vi.fn();
   return render(
     <ToastProvider>
-      <RecurringForm
-        recurring={props.recurring ?? null}
-        onClose={onClose}
-        editingSkipped={props.editingSkipped}
-        prefill={props.prefill}
-        viewMonth={props.viewMonth}
-      />
+      <TestMovementFormFooter>
+        {(onFooterStateChange) => (
+          <RecurringForm
+            recurring={props.recurring ?? null}
+            onClose={onClose}
+            editingSkipped={props.editingSkipped}
+            prefill={props.prefill}
+            viewMonth={props.viewMonth}
+            onFooterStateChange={onFooterStateChange}
+          />
+        )}
+      </TestMovementFormFooter>
     </ToastProvider>,
   );
 }
@@ -340,6 +346,30 @@ describe("RecurringForm — validación", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/el monto es demasiado grande/i)).toBeInTheDocument();
+    });
+    expect(mockCreateRecurring).not.toHaveBeenCalled();
+  });
+
+  it("muestra 'La descripción no puede superar los 200 caracteres' y bloquea el submit cuando la excede", async () => {
+    const user = userEvent.setup();
+    renderForm({});
+
+    const amountInput = screen.getByLabelText(/monto/i);
+    await user.type(amountInput, "1500");
+
+    const categorySelect = screen.getByLabelText(/categoría/i);
+    await user.selectOptions(categorySelect, "cat-expense");
+
+    const descriptionInput = screen.getByLabelText(/descripción/i);
+    fireEvent.change(descriptionInput, { target: { value: "a".repeat(201) } });
+
+    const submitBtn = screen.getByRole("button", { name: /^guardar$/i });
+    await user.click(submitBtn);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/la descripción no puede superar los 200 caracteres/i),
+      ).toBeInTheDocument();
     });
     expect(mockCreateRecurring).not.toHaveBeenCalled();
   });
@@ -735,7 +765,15 @@ describe("RecurringForm — no resetea el monto tipeado ante re-render del padre
       const recurringProp: Recurring = { ...mockRecurring };
       return (
         <ToastProvider>
-          <RecurringForm recurring={recurringProp} onClose={onClose} />
+          <TestMovementFormFooter>
+            {(onFooterStateChange) => (
+              <RecurringForm
+                recurring={recurringProp}
+                onClose={onClose}
+                onFooterStateChange={onFooterStateChange}
+              />
+            )}
+          </TestMovementFormFooter>
           <button type="button" onClick={() => forceRerender((n) => n + 1)}>
             simular re-render del padre
           </button>

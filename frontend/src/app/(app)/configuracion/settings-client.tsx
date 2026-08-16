@@ -7,7 +7,10 @@
  * - Shell idéntico a /categorias (ya aplicado en page.tsx).
  * - Tarjeta de ajuste (.card del DS): `--panel`, borde `--line`, `--r-card` 14px,
  *   `--shadow-sm`, padding `--card-pad` 22px.
- * - Fila de ajuste: flex items-center justify-between gap-6.
+ * - Fila de ajuste: flex items-center justify-between gap-6, con flex-wrap
+ *   (control debajo del rótulo si no entran ambos en el piso del régimen de
+ *   app, 600px — evita el scroll horizontal del body, invariante 1 de
+ *   docs/design.md §Contención responsive).
  *   Izq: identidad (título 14.5px/600 --ink + descripción 12.5px/500 --muted mt-[2px]).
  *   Der: control (segmented neutro).
  * - Estado loading: skeleton pill animate-pulse del tamaño del segmented.
@@ -55,7 +58,7 @@ export function SettingsClient() {
         className="rounded-[14px] border border-line bg-panel shadow-[var(--shadow-sm)]"
         style={{ padding: "var(--card-pad)" }}
       >
-        <div className="flex items-center justify-between gap-6">
+        <div className="flex items-center justify-between gap-6 flex-wrap">
           {/* Izquierda: identidad del ajuste */}
           <div>
             <p className="text-[14.5px] font-semibold text-ink">

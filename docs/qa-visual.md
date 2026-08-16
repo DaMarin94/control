@@ -25,18 +25,18 @@ Este doc es un **asset de trabajo vivo**: el prompt genérico de regresión y la
 - Datos inválidos que se guardan.
 - Estados vacíos rotos (NaN, undefined, empty feo).
 - Crashes.
-- **Contención responsive** — los cuatro invariantes de `docs/design.md` § Contención responsive, verificados entre el **ancho mínimo soportado (`640px`) y arriba** (incluyendo la disposición compacta, `< --bp-wide`, 640–940px, además del amplio). Por debajo de `640px` la app no promete contención (muestra el gate): fuera de alcance.
-  1. Sin scroll horizontal del `body` en todo ancho `≥ 640px`.
+- **Contención responsive** — los cuatro invariantes de `docs/design.md` § Contención responsive, verificados en **régimen de app**, cuyo piso es `600px` (incluyendo la disposición compacta, `< --bp-wide`, 600–940px, además del amplio).
+  1. Sin scroll horizontal del `body` en todo ancho del régimen de app.
   2. Modales completos y scrolleables: no cortados, no atrapantes.
   3. Ninguna acción inalcanzable (fuera de pantalla o tapada).
   4. Las superficies anchas scrollean dentro de sí mismas, no rompen el layout de la página.
+- **Superficie de captura y su acceso** (régimen de captura, `min(ancho, alto) < 600px`, RF-APP-003/004): son superficies del producto y se recorren como cualquier otra. Su contrato visual sale de `docs/design.md` § Superficie de captura.
 
-El grueso del recorrido va en **escritorio normal**; los cuatro invariantes de contención se verifican **siempre**, también achicando la ventana entre `640px` y `--bp-wide` (disposición compacta). Por debajo de `640px` no se verifica: no es un ancho soportado.
+El grueso del recorrido va en **escritorio normal**; los cuatro invariantes de contención se verifican **siempre**, también achicando la ventana entre `600px` y `--bp-wide` (disposición compacta). Por debajo de `600px` no se miden esos invariantes: ahí no hay app, hay superficie de captura, y lo que se verifica es esa superficie.
 
 > **El régimen responsive del área autenticada se juzga contra el ancho de `<main>`, no del viewport.** El sidebar abierto le resta ~248px al ancho disponible, así que la disposición compacta/amplia puede cambiar con el sidebar abierto o cerrado al mismo viewport. Hay que QA-ear la contención **con el sidebar abierto Y cerrado**.
 
 **Exclusiones vigentes** — se atacan como esfuerzos propios y **no** se incluyen en los prompts por ahora:
-- **Adaptación / rediseño mobile:** evaluar si la experiencia en pantalla chica es *buena* o *cómoda*. Lo único que se verifica en pantalla chica es que **no se rompe** (los cuatro invariantes de contención, arriba); adaptar o rediseñar para mobile queda fuera.
 - **Accesibilidad**: uso por teclado, foco, contraste, legibilidad, información transmitida solo por color.
 
 ## Método — cómo se verifica el responsive
@@ -49,7 +49,7 @@ Redimensionar la ventana del navegador desde las herramientas **no es confiable*
 
 **Trampas que invalidan el resultado:**
 
-- **Manejar la app con `.click()` por JavaScript atraviesa el gate de viewport.** El bloqueo por debajo de `640px` es visual: los nodos siguen en el DOM y siguen siendo clickeables por código. Medir por debajo del piso soportado produce hallazgos sobre estados que un usuario real no puede alcanzar. **Verificar siempre que el ancho medido esté por encima del piso.**
+- **El documento contiene las dos superficies de régimen a la vez.** La app y la superficie de captura están montadas siempre; el CSS oculta la que no corresponde al tamaño del viewport. Un `querySelector` + `.click()` por JavaScript alcanza igual los nodos del árbol oculto, y así se producen hallazgos sobre estados que un usuario real no puede tocar. **Verificar que el nodo medido o clickeado pertenece a la superficie visible** (p. ej. `offsetParent !== null`).
 - **El truncado se mide, no se mira:** `scrollHeight > clientHeight` sobre el elemento de texto. A ojo, un `line-clamp` truncado y uno que entra justo son indistinguibles.
 - **Medir con `offsetWidth` / `offsetHeight`, no con `getBoundingClientRect()`.** Dentro del iframe la animación de entrada de un modal puede no completarse, y el `transform` residual (`scale(0.98)`) hace que el rect devuelva menos que el tamaño real: un panel de 440px mide 431 y se reporta como falso defecto de contención. `offsetWidth` es inmune al transform.
 - **Los eventos sintéticos mienten.** Un `new MouseEvent('mouseenter')` **no** dispara el `onMouseEnter` de React — para hover, usar el cursor real. Y una `Response` armada a mano tiene que respetar el sobre real del cliente HTTP (`{ success, statusCode, error: { message } }`, ver `frontend/src/lib/api.ts`). Los dos producen falsos negativos.
@@ -61,19 +61,19 @@ Doc vivo: cuando una feature agrega una superficie nueva, se agrega a la lista d
 ---
 Sos un QA senior con mentalidad adversarial. Tu objetivo NO es confirmar que la app anda: es ENCONTRAR maneras de romperla. La app se llama Control, un diario de gastos personal. Recorré todo, meté datos que no deberían entrar, forzá flujos raros, y documentá cada falla con screenshot y pasos para reproducir.
 
-FUERA DE ALCANCE (ignoralo): adaptación/rediseño mobile —si la experiencia en pantalla chica es *cómoda* o *buena* no es tu problema— y accesibilidad (teclado, foco, contraste, legibilidad, info por color).
+FUERA DE ALCANCE (ignoralo): accesibilidad (teclado, foco, contraste, legibilidad, info por color).
 
 BORRADOS, DENTRO DEL GUION: los casos que borran datos (borrar una categoría o un método de pago en uso, eliminar movimientos, eliminar una simulación) están dentro del alcance y **los ejecutás vos, sin pedir confirmación**, igual que crear, editar y anular/des-anular. Estás sobre una base local de desarrollo: su data es descartable y no hay que revertir nada. Lo único que NO hacés es crear cuentas, ingresar credenciales o loguearte.
 
-DENTRO DE ALCANCE, SIEMPRE — contención responsive: además de probar en escritorio normal, achicá la ventana hasta 640px (el ancho mínimo soportado), pasando por la disposición compacta (640–940px), y verificá los cuatro invariantes. No bajes de 640px: por debajo de ese ancho la app muestra el gate y no promete contención. Ojo: el régimen compacto/amplio del área autenticada se mide contra el ancho de `<main>`, no del viewport — el sidebar abierto resta ~248px, así que probá con el sidebar abierto Y cerrado.
-1. El `body` no tiene scroll horizontal en ningún ancho ≥ 640px.
+DENTRO DE ALCANCE, SIEMPRE — contención responsive: además de probar en escritorio normal, achicá la ventana hasta 600px (el piso del régimen de app), pasando por la disposición compacta (600–940px), y verificá los cuatro invariantes. Ojo: el régimen compacto/amplio del área autenticada se mide contra el ancho de `<main>`, no del viewport — el sidebar abierto resta ~248px, así que probá con el sidebar abierto Y cerrado. Por debajo de 600px (o con menos de 600px de alto) no hay app: hay superficie de captura, que se recorre aparte (ver superficies).
+1. El `body` no tiene scroll horizontal en ningún ancho ≥ 600px.
 2. Los modales se ven completos y scrollean: ni cortados ni atrapantes.
 3. Ninguna acción queda fuera de pantalla ni tapada.
 4. Las superficies anchas (tablas, grillas, gráficos) scrollean dentro de sí mismas sin romper el layout de la página.
 
 Enfocate en: datos inválidos que se guardan, roturas visuales de layout, modales cortados, opciones inalcanzables, estados rotos y crashes.
 
-Superficies (recorrelas todas): Login (Google); /mes (movimientos por sección Únicos/Fijos/Cuotas, navegación de meses, menú de acciones editar/eliminar/anular por ítem); banda "Simulación" del popover de filtro de la sección Únicos (botón de alta, lista de simulaciones con su acción de eliminar, nota de horizonte); modal selector de categoría a simular (candidatas deshabilitadas con motivo visible); fila de movimiento simulado en un mes futuro (mezclada con los únicos reales, sin kebab ni card de detalle); alta/edición de movimiento (modal con tipos Único/Fijo/Cuota/Calculado; campos monto, descripción, categoría, fecha, y en "Más opciones" moneda+cotización y método de pago + débito automático); Dashboard; /reportes (crear/configurar 5 tipos de card, filtros por categoría, orden, año, refrescar); /historial (entradas de edición/eliminación, deshacer simple y en cadena); /configuracion (solapas General [moneda, tema] y Límites); Categorías (alta/edición/borrado, color, soft delete); Métodos de pago (alta/edición/borrado, tipo crédito/débito/efectivo, campos según tipo).
+Superficies (recorrelas todas): Login (Google); /mes (movimientos por sección Únicos/Fijos/Cuotas, navegación de meses, menú de acciones editar/eliminar/anular por ítem); banda "Simulación" del popover de filtro de la sección Únicos (botón de alta, lista de simulaciones con su acción de eliminar, nota de horizonte); modal selector de categoría a simular (candidatas deshabilitadas con motivo visible); fila de movimiento simulado en un mes futuro (mezclada con los únicos reales, sin kebab ni card de detalle); alta/edición de movimiento (modal con tipos Único/Fijo/Cuota/Calculado; campos monto, descripción, categoría, fecha, y en "Más opciones" moneda+cotización y método de pago + débito automático); Dashboard; /reportes (crear/configurar 5 tipos de card, filtros por categoría, orden, año, refrescar); /historial (entradas de edición/eliminación, deshacer simple y en cadena); /configuracion (solapas General [moneda, tema] y Límites); Categorías (alta/edición/borrado, color, soft delete); Métodos de pago (alta/edición/borrado, tipo crédito/débito/efectivo, campos según tipo); superficie de captura (con el viewport por debajo de 600px en cualquiera de los dos ejes: tabs Único/Fijo/Cuotas, todos los campos incluido "Más opciones", aviso de límite, confirmación al guardar sin navegación, identidad de la sesión y cierre de sesión, y que nada más de la app sea alcanzable); acceso en régimen de captura (login sin registro, y que cruzar la frontera de 600px en los dos sentidos conmute de superficie sin recargar ni parpadear).
 
 Mentalidad para romperla, por cada campo:
 - Texto: vacío, solo espacios, 2000+ chars, emojis/unicode RTL, HTML/JS (`<script>`, `<img onerror>`) verificando que NO ejecute, comillas/backslashes/`{{7*7}}`/`'; DROP TABLE`/saltos de línea, espacios al borde, nombres duplicados, recrear con nombre de uno borrado (¿ofrece reactivar?).
@@ -96,7 +96,7 @@ Reporte: por hallazgo (1) dónde, (2) pasos, (3) qué pasó, (4) qué esperabas,
 
 Guion per-feature que el orquestador sigue al cierre de cada tarea con superficie visual — lo ejecuta él directo contra el navegador, o lo entrega como prompt al usuario en el fallback. Estructura fija, en este orden, para que salga consistente:
 
-1. **Rol + objetivo** — QA visual adversarial, con las mismas exclusiones (adaptación/rediseño mobile y a11y fuera) y el mismo chequeo permanente de los cuatro invariantes de contención responsive entre el ancho mínimo soportado (`640px`) y arriba (sin bajar de `640px`), con el sidebar abierto Y cerrado.
+1. **Rol + objetivo** — QA visual adversarial, con la misma exclusión (a11y fuera) y el mismo chequeo permanente de los cuatro invariantes de contención responsive desde el piso del régimen de app (`600px`) hacia arriba, con el sidebar abierto Y cerrado. Si la feature tiene superficie en régimen de captura, se recorre también ahí.
 2. **Contexto breve de la feature** — qué hace, en términos de UI.
 3. **Invariantes críticos** (testear primero) — p. ej. "cero-impacto con config vacía": la app se ve igual si la feature no está activada.
 4. **Recorrido superficie por superficie** de lo que la feature toca — con qué mirar y qué esperar en cada una.

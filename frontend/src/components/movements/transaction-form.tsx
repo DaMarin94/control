@@ -1,538 +1,105 @@
 "use client";
 
 /**
- * Formulario de movimiento único (RF-MU-001 / RF-MU-002).
+ * TransactionForm — composición de ESCRITORIO (capa 3) del form de
+ * movimiento único (RF-MU-001/002). Consume `useTransactionFormLogic`
+ * (capa 1, lógica agnóstica de UI) y arma su propia UI con las primitivas
+ * del DS (capa 2) — docs/design.md §Superficie de captura → "0. Encuadre —
+ * una lógica, dos composiciones". Su composición hermana en régimen de
+ * captura es `CaptureTransactionForm` (components/capture/); ninguna deriva
+ * de la otra, las dos consumen el mismo hook.
  *
- * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
+ * Este componente NO cambió su render respecto de la versión previa al
+ * refactor de capas — mismo JSX, mismos ids, mismas clases.
+ *
  * - Toggle Gasto/Ingreso (.gi): dos botones 50/50 con variantes on-gasto/on-ingreso
  * - Monto: input mono 20px con prefijo "$"
  * - Bloque .warn para "sin categorías" (expense-soft, border expense/0.25)
- * - Footer: Cancelar ghost / Guardar
- *
- * Lógica de negocio preservada intacta.
+ * - Footer: slot del envase (ModalShellFooter en TransactionModal) — ver movement-form-footer.ts
  */
 
-import { useEffect, useRef, useState } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { Controller } from "react-hook-form";
 import Link from "next/link";
-import { AlertTriangle, Calendar, Check, ArrowDown, ArrowUp } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { AlertTriangle, Calendar, ArrowDown, ArrowUp } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { MoreOptionsSection } from "@/components/movements/more-options-section";
-import { useCategories } from "@/hooks/use-categories";
-import { useTransactions } from "@/hooks/use-transactions";
-import { useSettings } from "@/hooks/use-settings";
-import { useReferenceRate } from "@/hooks/use-reference-rate";
-import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
-import { useDefaultPaymentMethodPrefill } from "@/hooks/use-default-payment-method-prefill";
-import { useToast } from "@/hooks/use-toast";
-import { useUndoHistory } from "@/hooks/use-history";
-import { buildUndoAction } from "@/lib/toast-undo";
-import { type Transaction, type TransactionType } from "@/types/transaction";
-import { type Category, type CategoryScope } from "@/types/category";
+import { type Transaction } from "@/types/transaction";
+import { type Category } from "@/types/category";
 import { CategoryFormModal } from "@/app/(app)/configuracion/categorias/category-form-modal";
 import { ActiveLimitDialog } from "@/components/limits/active-limit-dialog";
-import { toCanonicalAmountCents } from "@/lib/limits/project";
-import type { LimitConfig } from "@/types/limit";
+import type { MovementFormFooterState } from "@/components/movements/movement-form-footer";
 import {
-  parseCurrencyInput,
-  parseExchangeRateInput,
-  formatExchangeRate,
-  getBrowserTimezone,
-  localToUtcIso,
-  utcToLocalDate,
-  utcToLocalTime,
-  sanitizeAmountInput,
-  MAX_AMOUNT_CENTS,
-} from "@/lib/format";
-import { useRouter } from "next/navigation";
+  useTransactionFormLogic,
+  type TransactionPrefill,
+} from "@/hooks/use-transaction-form-logic";
+import { sanitizeAmountInput } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { CurrencyCode } from "@/types/settings";
 
-// ─── Schema ───────────────────────────────────────────────────────────────────
-
-const transactionSchema = z.object({
-  type: z.enum(["EXPENSE", "INCOME"]),
-  amountInput: z
-    .string()
-    .min(1, "El monto es requerido")
-    .refine((val) => parseCurrencyInput(val) !== null, {
-      message: "Ingresá un monto mayor a 0",
-    })
-    .refine(
-      (val) => {
-        const cents = parseCurrencyInput(val);
-        return cents === null || cents <= MAX_AMOUNT_CENTS;
-      },
-      { message: "El monto es demasiado grande" },
-    ),
-  currency: z.enum(["ARS", "USD", "EUR", "BRL"]),
-  /**
-   * Input de cotización como string (puede tener decimales, locale es-AR).
-   * Solo se valida cuando currency !== defaultCurrency (se valida en onSubmit).
-   * Se inicializa vacío/"0" si no aplica.
-   */
-  exchangeRateInput: z.string(),
-  categoryId: z.string().min(1, "La categoría es requerida"),
-  /** Método de pago opcional (RF-PM-006). "" = ninguno. */
-  paymentMethodId: z.string().optional(),
-  /**
-   * Débito automático (P4 — corrección de alcance). Atributo del movimiento;
-   * el control solo se renderiza cuando el método elegido es de tipo DEBIT.
-   */
-  autoDebit: z.boolean().optional(),
-  date: z.string().min(1, "La fecha es requerida"),
-  time: z.string().min(1, "La hora es requerida"),
-  description: z.string().optional(),
-});
-
-type TransactionFormData = z.infer<typeof transactionSchema>;
+export type { TransactionPrefill };
 
 // ─── Props ────────────────────────────────────────────────────────────────────
-
-/**
- * Prefill de "Duplicar movimiento" (docs/design.md §"Duplicar movimiento") —
- * valores del único ORIGEN copiados tal cual, incluida la fecha/hora original
- * (no "ahora"). Distinto de `Transaction` (que trae campos de servidor como
- * `id`/`createdAt` pensados para PATCH) — ver gotcha en month-view-client.tsx.
- */
-export interface TransactionPrefill {
-  type: TransactionType;
-  amountCents: number;
-  currency: CurrencyCode;
-  exchangeRate: number;
-  categoryId: string;
-  paymentMethodId: string | null;
-  autoDebit: boolean | null;
-  description: string | null;
-  /** Instante original en UTC (ISO 8601) — se copia tal cual, no "ahora" */
-  occurredAt: string;
-  timezone: string;
-}
 
 interface TransactionFormProps {
   transaction: Transaction | null;
   onClose: () => void;
-  /**
-   * true si, en modo edición, el movimiento está ACTUALMENTE anulado (skipped).
-   * El form no expone el toggle de anular (RF-MU-005 vive en el KebabMenu de
-   * /mes) — este flag alimenta la intercepción de límites activos (D16: un
-   * movimiento que se edita YA anulado no proyecta). Ausente = false.
-   */
+  /** true si, en edición, el movimiento está ACTUALMENTE anulado — alimenta D16. */
   editingSkipped?: boolean;
-  /**
-   * Prefill de "Duplicar movimiento" — llena `defaultValues` en modo CREAR
-   * (POST) sin activar `isEditing`. Ignorado si `transaction` está presente.
-   */
+  /** Prefill de "Duplicar movimiento" — solo aplica en modo crear. */
   prefill?: TransactionPrefill | null;
-}
-
-/** Datos ya validados/parseados, pendientes de persistir tras "Guardar igual" (P2 — Fase 2). */
-interface PendingSave {
-  data: TransactionFormData;
-  amountCents: number;
-  parsedExchangeRate: number;
-  occurredAt: string;
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function filterCategoriesByType(
-  categories: { id: string; name: string; scope: CategoryScope }[],
-  type: TransactionType,
-) {
-  return categories.filter((cat) => {
-    if (type === "EXPENSE") return cat.scope === "EXPENSE" || cat.scope === "BOTH";
-    return cat.scope === "INCOME" || cat.scope === "BOTH";
-  });
-}
-
-function getNowLocalDateAndTime() {
-  const now = new Date();
-  const tz = getBrowserTimezone();
-
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-
-  const parts = formatter.formatToParts(now);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
-
-  const date = `${get("year")}-${get("month")}-${get("day")}`;
-  const hour = get("hour") === "24" ? "00" : get("hour");
-  const time = `${hour}:${get("minute")}`;
-
-  return { date, time };
+  /** La zona de acción es un slot del envase — ver `movement-form-footer.ts`. */
+  onFooterStateChange: (state: MovementFormFooterState) => void;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
-export function TransactionForm({ transaction, onClose, editingSkipped, prefill }: TransactionFormProps) {
-  const isEditing = transaction !== null;
-  // Modo "Duplicar" (docs/design.md): crea (POST) con defaultValues del prefill,
-  // sin activar isEditing. Mutuamente excluyente con isEditing (transaction===null
-  // cuando prefill está presente).
-  const isPrefillActive = !isEditing && prefill != null;
-  const router = useRouter();
-  const { toast } = useToast();
-  const { undo } = useUndoHistory();
-  const { categories } = useCategories();
-  const { createTransaction, updateTransaction, isCreating, isUpdating } = useTransactions();
-  const { defaultCurrency, lastExchangeRate } = useSettings();
-
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
-  // Error de cotización (validación manual en onSubmit, no por Zod)
-  const [exchangeRateError, setExchangeRateError] = useState<string | undefined>();
-  // Rastrear si el usuario modificó el valor de cotización respecto al pre-cargado
-  const [isExchangeRateModified, setIsExchangeRateModified] = useState(false);
-
-  // P2 — Fase 2: intercepción de límites activos al guardar (D11).
-  const [crossedLimits, setCrossedLimits] = useState<LimitConfig[] | null>(null);
-  const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
-
-  const isLoading = isEditing ? isUpdating : isCreating;
-  // Duplicar: el timezone del ORIGEN — para reconstruir el mismo instante si
-  // el usuario no toca fecha/hora (localToUtcIso usa este timezone en el submit).
-  const timezone = isEditing
-    ? transaction.timezone
-    : (prefill?.timezone ?? getBrowserTimezone());
-  const { date: nowDate, time: nowTime } = getNowLocalDateAndTime();
-
-  // Cotización pre-cargada inicial (para el defaultValues del form):
-  // - Editando: la del movimiento (siempre presente, nunca null en el backend).
-  // - Creando (blanco o duplicar): vacío — en duplicar esto es intencional: el
-  //   valor del campo viene del prefill, no de la referencia del mes, así que
-  //   arranca en desacuerdo con el value real y dispara la nota "Cotización
-  //   modificada" (docs/design.md) sin necesidad de un flag aparte.
-  const initialEditingExchangeRateInput = isEditing
-    ? formatExchangeRate(transaction.exchangeRate ?? 1)
-    : "";
-
-  const defaultValues: TransactionFormData = isEditing
-    ? {
-        type: transaction.type,
-        amountInput: String(transaction.amountCents / 100).replace(".", ","),
-        currency: transaction.currency ?? defaultCurrency,
-        exchangeRateInput: initialEditingExchangeRateInput,
-        categoryId: transaction.categoryId,
-        paymentMethodId: transaction.paymentMethodId ?? "",
-        autoDebit: transaction.autoDebit ?? false,
-        date: utcToLocalDate(transaction.occurredAt, transaction.timezone),
-        time: utcToLocalTime(transaction.occurredAt, transaction.timezone),
-        description: transaction.description ?? "",
-      }
-    : prefill
-      ? {
-          type: prefill.type,
-          amountInput: String(prefill.amountCents / 100).replace(".", ","),
-          currency: prefill.currency,
-          exchangeRateInput: formatExchangeRate(prefill.exchangeRate ?? 1),
-          categoryId: prefill.categoryId,
-          paymentMethodId: prefill.paymentMethodId ?? "",
-          autoDebit: prefill.autoDebit ?? false,
-          date: utcToLocalDate(prefill.occurredAt, timezone),
-          time: utcToLocalTime(prefill.occurredAt, timezone),
-          description: prefill.description ?? "",
-        }
-      : {
-          type: "EXPENSE",
-          amountInput: "",
-          currency: defaultCurrency,
-          exchangeRateInput: "",
-          categoryId: "",
-          paymentMethodId: "",
-          autoDebit: false,
-          date: nowDate,
-          time: nowTime,
-          description: "",
-        };
-
-  // Rastrear el valor de pre-carga para detectar si el usuario lo modificó
-  const [preloadedExchangeRateInput, setPreloadedExchangeRateInput] = useState(
-    initialEditingExchangeRateInput,
-  );
-
-  // En edición: moneda original al abrir el modal. Si el usuario la cambia, se
-  // pre-carga la cotización de referencia para la nueva moneda (como en creación).
-  const initialCurrencyRef = useRef<CurrencyCode>(
-    isEditing
-      ? (transaction?.currency ?? defaultCurrency)
-      : (prefill?.currency ?? defaultCurrency),
-  );
+export function TransactionForm({
+  transaction,
+  onClose,
+  editingSkipped,
+  prefill,
+  onFooterStateChange,
+}: TransactionFormProps) {
+  const logic = useTransactionFormLogic({
+    transaction,
+    editingSkipped,
+    prefill,
+    onClose,
+    onFooterStateChange,
+  });
 
   const {
+    formId,
     register,
-    handleSubmit,
-    watch,
-    setValue,
     control,
-    reset,
-    formState: { errors },
-  } = useForm<TransactionFormData>({
-    resolver: zodResolver(transactionSchema),
-    defaultValues,
-  });
-
-  // Registro del campo Monto — se reusa en el onChange que sanitiza la entrada
-  // (#4: solo dígitos + un único separador decimal) antes de que RHF la capture.
-  const amountFieldRegister = register("amountInput");
-
-  const selectedType = watch("type");
-  const selectedCategoryId = watch("categoryId");
-  const selectedCurrency = watch("currency") as CurrencyCode;
-  const selectedDate = watch("date");
-  const exchangeRateInput = watch("exchangeRateInput");
-  const selectedPaymentMethodId = watch("paymentMethodId") ?? "";
-  const selectedAutoDebit = watch("autoDebit") ?? false;
-
-  // Prefill del método de pago por defecto — solo al crear un movimiento único
-  // (RF-PM-007). Valor inicial editable; no pisa una selección manual del usuario.
-  useDefaultPaymentMethodPrefill({
-    slot: "unico",
-    isEditing,
-    currentPaymentMethodId: selectedPaymentMethodId,
-    setPaymentMethodId: (id) => setValue("paymentMethodId", id),
-  });
-
-  // Mes del movimiento derivado de la fecha seleccionada (para el endpoint de referencia)
-  const movementMonth = selectedDate?.length >= 7 ? selectedDate.substring(0, 7) : nowDate.substring(0, 7);
-
-  // P2 — Fase 2: proyección de límites activos — único proyecta sobre SU mes (D13).
-  const { evaluate: evaluateActiveLimits } = useActiveLimitProjection(movementMonth);
-
-  // Hook de cotización de referencia — Fase 1.2.4
-  // Solo activo en modo crear y cuando la moneda difiere de la default (currency ≠ default).
-  const { referenceRate } = useReferenceRate({
-    month: movementMonth,
-    currency: selectedCurrency,
-    defaultCurrency,
-  });
-
-  useEffect(() => {
-    if (isEditing) {
-      const newCurrency = transaction.currency ?? defaultCurrency;
-      reset({
-        type: transaction.type,
-        amountInput: String(transaction.amountCents / 100).replace(".", ","),
-        currency: newCurrency,
-        exchangeRateInput: formatExchangeRate(transaction.exchangeRate ?? 1),
-        categoryId: transaction.categoryId,
-        paymentMethodId: transaction.paymentMethodId ?? "",
-        autoDebit: transaction.autoDebit ?? false,
-        date: utcToLocalDate(transaction.occurredAt, transaction.timezone),
-        time: utcToLocalTime(transaction.occurredAt, transaction.timezone),
-        description: transaction.description ?? "",
-      });
-      // Actualizar la referencia de moneda inicial para que el effect de pre-carga
-      // pueda detectar correctamente si el usuario la cambia en esta sesión.
-      initialCurrencyRef.current = newCurrency;
-      setIsExchangeRateModified(false);
-    }
-  }, [transaction, isEditing, reset, defaultCurrency]);
-
-  // Pre-cargar cotización al crear: prioridad referenceRate → lastExchangeRate → vacío (Fase 1.2.4).
-  // Se recalcula cuando cambia: defaultCurrency, selectedCurrency, referenceRate, lastExchangeRate.
-  // En modo "Duplicar" (isPrefillActive) NO se fuerza la moneda default — la
-  // moneda copiada del original debe sobrevivir intacta (docs/design.md).
-  useEffect(() => {
-    if (!isEditing && !isPrefillActive) {
-      setValue("currency", defaultCurrency);
-      // Para el par que muestra el label cuando moneda===default, la cotización relevante
-      // es siempre referenceRate/lastExchangeRate de la "otra" moneda. En ese caso
-      // no cambiamos nada — el campo queda como estaba (o vacío al inicio).
-      // Cuando la moneda cambia a algo distinto de la default, tomamos la referencia del mes.
-    }
-  }, [defaultCurrency, isEditing, isPrefillActive, setValue]);
-
-  // Pre-cargar cotización: prioridad referenceRate → lastExchangeRate → vacío (Fase 1.2.4).
-  // En modo crear (sin prefill): siempre al cambiar referencia o moneda.
-  // En modo edición Y en modo "Duplicar": solo si el usuario cambió la moneda
-  // (≠ moneda original/copiada al abrir) y no modificó la cotización manualmente
-  // — así la cotización copiada del original sobrevive intacta hasta que el
-  // usuario cambie de moneda (mismo mecanismo que en edición).
-  useEffect(() => {
-    const lockedInitial = isEditing || isPrefillActive;
-    const currencyChanged = selectedCurrency !== initialCurrencyRef.current;
-    if (lockedInitial && !currencyChanged) return;
-    if (lockedInitial && isExchangeRateModified) return;
-    const rate =
-      referenceRate !== null
-        ? referenceRate
-        : lastExchangeRate;
-    const formatted = rate !== null ? formatExchangeRate(rate) : "";
-    setPreloadedExchangeRateInput(formatted);
-    setValue("exchangeRateInput", formatted);
-    if (!lockedInitial) {
-      setIsExchangeRateModified(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [referenceRate, lastExchangeRate, isEditing, isPrefillActive, selectedCurrency, setValue]);
-
-  // Detectar si el usuario modificó la cotización respecto al valor pre-cargado
-  useEffect(() => {
-    setIsExchangeRateModified(
-      exchangeRateInput !== preloadedExchangeRateInput && exchangeRateInput !== ""
-    );
-  }, [exchangeRateInput, preloadedExchangeRateInput]);
-
-  const availableCategories = filterCategoriesByType(
-    (categories ?? []).map((c) => ({ id: c.id, name: c.name, scope: c.scope })),
+    errors,
+    amountFieldRegister,
+    setValue,
     selectedType,
-  );
-
-  useEffect(() => {
-    if (selectedCategoryId && categories) {
-      const isCompatible = availableCategories.some((c) => c.id === selectedCategoryId);
-      if (!isCompatible) {
-        setValue("categoryId", "");
-      }
-    }
-  }, [selectedType, categories, selectedCategoryId, availableCategories, setValue]);
-
-  const noCategoriesAvailable = availableCategories.length === 0;
-
-  async function persist({ data, amountCents, parsedExchangeRate, occurredAt }: PendingSave) {
-    if (isEditing) {
-      const result = await updateTransaction(transaction.id, {
-        type: data.type,
-        amountCents,
-        categoryId: data.categoryId,
-        occurredAt,
-        timezone,
-        description: data.description || null,
-        currency: data.currency,
-        exchangeRate: parsedExchangeRate,
-        paymentMethodId: data.paymentMethodId || null,
-        autoDebit: data.autoDebit ?? false,
-      });
-
-      if (!result.success) {
-        toast.error(result.error ?? "No se pudo guardar el movimiento.");
-        return;
-      }
-
-      const updated = result.transaction;
-      const name = updated?.description || updated?.category.name || transaction.description || transaction.category.name;
-      if (result.historyEntryId) {
-        toast.success(`Actualizado: ‘${name}’.`, {
-          groupId: transaction.id,
-          action: {
-            label: "Deshacer",
-            pendingLabel: "Deshaciendo…",
-            onClick: buildUndoAction(undo, result.historyEntryId),
-          },
-        });
-      } else {
-        toast.success(`Actualizado: ‘${name}’.`);
-      }
-      onClose();
-    } else {
-      const result = await createTransaction({
-        type: data.type,
-        amountCents,
-        categoryId: data.categoryId,
-        occurredAt,
-        timezone,
-        description: data.description || undefined,
-        currency: data.currency,
-        exchangeRate: parsedExchangeRate,
-        paymentMethodId: data.paymentMethodId || undefined,
-        autoDebit: data.autoDebit ?? false,
-      });
-
-      if (!result.success) {
-        toast.error(result.error ?? "No se pudo guardar el movimiento.");
-        return;
-      }
-
-      const month = occurredAt.substring(0, 7);
-      toast.success("Movimiento guardado correctamente.", {
-        action: {
-          label: "Ir a ver",
-          onClick: () => router.push(`/mes?month=${month}`),
-        },
-      });
-
-      onClose();
-    }
-  }
-
-  async function onSubmit(data: TransactionFormData) {
-    const amountCents = parseCurrencyInput(data.amountInput);
-    if (amountCents === null) return;
-
-    // Cuando moneda === defaultCurrency el campo cotización está oculto (Fase 1.2.4).
-    // El backend ignora exchangeRate en ese caso, así que enviamos 1 directamente.
-    // Solo cuando moneda ≠ default validamos y parseamos el input visible.
-    let parsedExchangeRate: number;
-    if (data.currency === defaultCurrency) {
-      parsedExchangeRate = 1;
-      setExchangeRateError(undefined);
-    } else {
-      const parsed = parseExchangeRateInput(data.exchangeRateInput);
-      if (parsed === null) {
-        setExchangeRateError("Ingresá una cotización mayor a 0");
-        return;
-      }
-      parsedExchangeRate = parsed;
-      setExchangeRateError(undefined);
-    }
-
-    const occurredAt = localToUtcIso(data.date, data.time, timezone);
-    const pending: PendingSave = { data, amountCents, parsedExchangeRate, occurredAt };
-
-    // P2 — Fase 2: compuerta de intercepción (D11). Sin cruces → persiste
-    // directo, EXACTAMENTE como hoy (cero fricción). Con cruces → aviso.
-    const canonicalAmountCents = toCanonicalAmountCents(
-      amountCents,
-      data.currency,
-      defaultCurrency,
-      parsedExchangeRate,
-    );
-    const crossed = evaluateActiveLimits({
-      type: data.type,
-      convertedAmountCents: canonicalAmountCents,
-      categoryId: data.categoryId,
-      section: "unicos",
-      skipped: editingSkipped ?? false,
-      editingId: isEditing ? transaction.id : undefined,
-    });
-
-    if (crossed.length > 0) {
-      setCrossedLimits(crossed);
-      setPendingSave(pending);
-      return;
-    }
-
-    await persist(pending);
-  }
-
-  function handleCancelLimitDialog() {
-    setCrossedLimits(null);
-    setPendingSave(null);
-  }
-
-  async function handleConfirmSaveAnyway() {
-    if (!pendingSave) return;
-    const toPersist = pendingSave;
-    setCrossedLimits(null);
-    setPendingSave(null);
-    await persist(toPersist);
-  }
+    selectedCurrency,
+    exchangeRateInput,
+    selectedPaymentMethodId,
+    selectedAutoDebit,
+    defaultCurrency,
+    isExchangeRateModified,
+    exchangeRateError,
+    availableCategories,
+    noCategoriesAvailable,
+    onSubmit,
+    showCategoryModal,
+    openCategoryModal,
+    closeCategoryModal,
+    handleCategoryCreated,
+    crossedLimits,
+    handleCancelLimitDialog,
+    handleConfirmSaveAnyway,
+    isLoading,
+  } = logic;
 
   return (
     <>
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col flex-1 min-h-0">
+      <form id={formId} onSubmit={onSubmit} noValidate className="flex flex-col flex-1 min-h-0">
         <div className="flex-1 min-h-0 overflow-y-auto px-[22px] pb-[22px] space-y-[14px]">
           {/* ── Toggle Gasto/Ingreso (.gi) ── */}
           <Controller
@@ -577,7 +144,7 @@ export function TransactionForm({ transaction, onClose, editingSkipped, prefill 
 
           {/* ── Monto (input amount mono) ── */}
           <div className="flex flex-col gap-[7px]">
-            <Label htmlFor="tx-amount" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+            <Label htmlFor={`${formId}-amount`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Monto
             </Label>
             <div
@@ -591,7 +158,7 @@ export function TransactionForm({ transaction, onClose, editingSkipped, prefill 
             >
               <span className="text-[15px] text-muted mono shrink-0">$</span>
               <input
-                id="tx-amount"
+                id={`${formId}-amount`}
                 type="text"
                 inputMode="decimal"
                 placeholder="0,00"
@@ -611,19 +178,18 @@ export function TransactionForm({ transaction, onClose, editingSkipped, prefill 
           {/* ── Categoría ── */}
           <div className="flex flex-col gap-[7px]">
             <div className="flex items-center justify-between">
-              <Label htmlFor="tx-category" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+              <Label htmlFor={`${formId}-category`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Categoría
               </Label>
               <button
                 type="button"
-                onClick={() => setShowCategoryModal(true)}
+                onClick={openCategoryModal}
                 className="text-[12.5px] font-semibold text-accent-ink hover:text-accent transition-colors duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-sm"
               >
                 + Nueva
               </button>
             </div>
 
-            {/* Bloque .warn cuando no hay categorías */}
             {noCategoriesAvailable ? (
               <div className="flex items-start gap-[11px] rounded-ctl border px-[14px] py-[13px] bg-expense-soft" style={{ borderColor: "oklch(0.57 0.16 27 / 0.25)" }}>
                 <AlertTriangle size={18} className="text-expense-ink shrink-0 mt-[1px]" aria-hidden="true" />
@@ -645,7 +211,7 @@ export function TransactionForm({ transaction, onClose, editingSkipped, prefill 
                 control={control}
                 render={({ field }) => (
                   <Select
-                    id="tx-category"
+                    id={`${formId}-category`}
                     value={field.value}
                     onChange={field.onChange}
                     error={errors.categoryId?.message}
@@ -665,25 +231,25 @@ export function TransactionForm({ transaction, onClose, editingSkipped, prefill 
           {/* ── Fecha y hora ── */}
           <div className="grid grid-cols-2 gap-[14px]">
             <div className="flex flex-col gap-[7px]">
-              <Label htmlFor="tx-date" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+              <Label htmlFor={`${formId}-date`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 <span className="inline-flex items-center gap-1">
                   <Calendar size={13} aria-hidden="true" />
                   Fecha
                 </span>
               </Label>
               <Input
-                id="tx-date"
+                id={`${formId}-date`}
                 type="date"
                 error={errors.date?.message}
                 {...register("date")}
               />
             </div>
             <div className="flex flex-col gap-[7px]">
-              <Label htmlFor="tx-time" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+              <Label htmlFor={`${formId}-time`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Hora
               </Label>
               <Input
-                id="tx-time"
+                id={`${formId}-time`}
                 type="time"
                 error={errors.time?.message}
                 {...register("time")}
@@ -693,12 +259,12 @@ export function TransactionForm({ transaction, onClose, editingSkipped, prefill 
 
           {/* ── Descripción ── */}
           <div className="flex flex-col gap-[7px]">
-            <Label htmlFor="tx-description" className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
+            <Label htmlFor={`${formId}-description`} className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Descripción{" "}
               <span className="text-faint font-normal">(opcional)</span>
             </Label>
             <Input
-              id="tx-description"
+              id={`${formId}-description`}
               type="text"
               placeholder="Ej: Compra en Día"
               error={errors.description?.message}
@@ -708,7 +274,7 @@ export function TransactionForm({ transaction, onClose, editingSkipped, prefill 
 
           {/* ── Más opciones: moneda+cotización + método de pago (P4) ── */}
           <MoreOptionsSection
-            idPrefix="tx"
+            idPrefix={formId}
             currency={selectedCurrency}
             exchangeRateInput={exchangeRateInput}
             defaultCurrency={defaultCurrency}
@@ -722,26 +288,6 @@ export function TransactionForm({ transaction, onClose, editingSkipped, prefill 
             onAutoDebitChange={(checked) => setValue("autoDebit", checked)}
           />
         </div>
-
-        {/* ── Footer (pineado — hermano del cuerpo scrolleable, no hijo) ── */}
-        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2 shrink-0">
-          <div className="flex gap-3">
-            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              size="sm"
-              disabled={isLoading || noCategoriesAvailable}
-              className="gap-1.5"
-            >
-              <Check size={14} aria-hidden="true" />
-              {isLoading
-                ? isEditing ? "Guardando..." : "Guardando..."
-                : isEditing ? "Guardar cambios" : "Guardar"}
-            </Button>
-          </div>
-        </div>
       </form>
 
       {/* ── Modal inline de nueva categoría (RF-MU-004) ── */}
@@ -749,11 +295,8 @@ export function TransactionForm({ transaction, onClose, editingSkipped, prefill 
         <CategoryFormModal
           category={null}
           lockScopeToType={selectedType}
-          onClose={() => setShowCategoryModal(false)}
-          onCreated={(cat: Category) => {
-            setValue("categoryId", cat.id);
-            setShowCategoryModal(false);
-          }}
+          onClose={closeCategoryModal}
+          onCreated={(cat: Category) => handleCategoryCreated(cat)}
         />
       )}
 
@@ -764,6 +307,7 @@ export function TransactionForm({ transaction, onClose, editingSkipped, prefill 
           onCancel={handleCancelLimitDialog}
           onConfirm={handleConfirmSaveAnyway}
           isConfirming={isLoading}
+          stacked
         />
       )}
     </>

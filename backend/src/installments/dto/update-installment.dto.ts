@@ -9,6 +9,7 @@ import {
   IsString,
   Matches,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { Currency } from '@prisma/client';
@@ -49,6 +50,7 @@ export class UpdateInstallmentDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(200, { message: 'La descripción no puede superar los 200 caracteres' })
   description?: string | null;
 
   /** Moneda del grupo. Opcional. Fase 1.2.4: acepta ARS, USD, EUR, BRL. */

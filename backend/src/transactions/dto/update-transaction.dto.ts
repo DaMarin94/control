@@ -9,6 +9,7 @@ import {
   IsPositive,
   IsString,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { Currency, MovementType } from '@prisma/client';
@@ -52,6 +53,7 @@ export class UpdateTransactionDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(200, { message: 'La descripción no puede superar los 200 caracteres' })
   description?: string;
 
   /** Moneda del movimiento (ARS | USD | EUR | BRL). Opcional. Fase 1.2.4: +EUR +BRL. */

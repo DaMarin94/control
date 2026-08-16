@@ -6,7 +6,8 @@
  * Re-estilada con tokens del DS "Precise Ledger" (Fase 3).
  * Rework: chrome toggleable (docs/design.md §"Sidebar — mostrar/ocultar").
  *
- * Un solo elemento, 248px, dos estados — válido en TODO ancho ≥640px. Ya NO
+ * Un solo elemento, 248px, dos estados — válido en TODO el régimen de app
+ * (ancho Y alto ≥600px, `--bp-capture`). Ya NO
  * auto-colapsa por breakpoint (se retiró el modelo de hamburguesa + drawer +
  * overlay). El estado (`open`) y su persistencia viven en el padre (AppShell
  * + useSidebarOpen); este componente es puramente presentacional + dueño de

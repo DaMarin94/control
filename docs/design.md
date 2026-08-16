@@ -251,7 +251,7 @@ El control del modo de color vive en el **chrome global** (el sidebar / `AppSide
 - **Estados (idénticos al segmented neutro del DS):** *seleccionado* = thumb `--panel` + `--shadow-sm`, icono `--ink`. *No seleccionado* = icono `--muted` → `--ink-2` en hover. *Focus (teclado)* = ring `--accent-soft` 3px sobre el segmento activo. *Disabled* = `opacity-50` + `cursor-not-allowed` mientras persiste el cambio. El índigo aparece **solo** como focus ring (cromo de interacción), nunca tiñendo iconos.
 - **A11y:** `role="radiogroup"` con `aria-label="Modo de color"` + 3 `role="radio"` con `aria-checked` y `aria-label` por opción (con el modo resuelto en Sistema, arriba); flechas ←/→ ciclan por los 3. Como no hay texto visible, **cada segmento debe tener su `aria-label`** (no basta el `aria-label` del grupo).
 - **Persistencia:** persiste **en vivo** al seleccionar (sin botón Guardar). El cambio aplica el nuevo modo a toda la app de inmediato (con la transición de color de ~0.18s descrita arriba). Mientras persiste, el toggle queda *disabled* (estado de arriba). **No** lleva toast: es un control de chrome de feedback inmediato, donde el flip de color **es** la confirmación.
-- **Responsive:** el toggle vive en el **mismo bloque inferior** del sidebar, en su fila propia encima del `UserMenu`, en todos los anchos. El sidebar es un **único elemento de 248px** cuyo mostrar/ocultar lo controla el usuario (ver §Sidebar — mostrar/ocultar); no hay variante mobile separada ni drawer aparte. El toggle de iconos cabe holgado. Cuando el sidebar está cerrado, el control de tema queda oculto junto con el resto del bloque inferior.
+- **Responsive:** el toggle vive en el **mismo bloque inferior** del sidebar, en su fila propia encima del `UserMenu`, en todos los anchos. El sidebar es un **único elemento de 248px** cuyo mostrar/ocultar lo controla el usuario (ver §Sidebar — mostrar/ocultar); no hay una segunda variante ni drawer aparte. El toggle de iconos cabe holgado. Cuando el sidebar está cerrado, el control de tema queda oculto junto con el resto del bloque inferior.
 - **Skeleton:** si el bloque inferior del sidebar tiene estado de carga, el placeholder del toggle es un `SkeletonPill` (radio `--r-pill`) del alto del control (~36px) y ancho del toggle de 3 iconos (~108px). En la práctica el tema se resuelve antes del primer paint (sin FOUC), así que el toggle no suele requerir skeleton propio.
 
 > **Resumen.** El control de modo de color **es** un toggle de iconos (`Monitor` Sistema · `Sun` Claro · `Moon` Oscuro, sin label visible) que vive en el bloque inferior de `AppSidebar`, en fila propia encima del `UserMenu`, con label "Tema" `--faint` a la izquierda y el toggle alineado a la derecha. Sus valores visuales (track, thumb, focus ring, estados, transición y a11y) son los descritos arriba en esta sección.
@@ -260,7 +260,7 @@ El control del modo de color vive en el **chrome global** (el sidebar / `AppSide
 
 ## Principios de jerarquía y layout
 
-- **Desktop-first.** El target principal es desktop web. El **sidebar** (248px) es chrome que el usuario **muestra u oculta** a voluntad en cualquier ancho soportado (ver §Sidebar — mostrar/ocultar), no un elemento que auto-colapsa por breakpoint. Debajo del breakpoint el login pasa a 1 columna y las grillas colapsan a 1 columna.
+- **La app es desktop-first.** El target de **la app** es desktop web. El **sidebar** (248px) es chrome que el usuario **muestra u oculta** a voluntad en todo el régimen de app (ver §Sidebar — mostrar/ocultar), no un elemento que auto-colapsa por breakpoint. Debajo del breakpoint el login pasa a 1 columna y las grillas colapsan a 1 columna. Este principio rige **el régimen de app**; en régimen de captura no se ve la app sino una superficie propia, con su propio lenguaje de densidad (ver §Superficie de captura).
 - **Jerarquía por peso + tamaño + color, no por decoración.** El monto y los totales dominan visualmente; la meta (categoría, fecha, contadores) va en neutros terciarios.
 - **Semántica antes que estética:** el color de un monto comunica ingreso/gasto, nunca es decorativo.
 - **Movimiento sobrio:** entrada de pantalla fade + translateY (.32s), modal `pop` (scale .98→1, .22s), toast slide-up (.3s), hover .14s. Respetar `prefers-reduced-motion`.
@@ -269,7 +269,39 @@ El control del modo de color vive en el **chrome global** (el sidebar / `AppSide
 
 ## Contención responsive
 
-El producto es **desktop-first** y se diseña para desktop web. En pantalla chica el compromiso no es adaptar ni rediseñar: es **contener**. No se promete una buena experiencia en pantalla chica; se promete que **no se rompe**. Esta distinción es deliberada y acota el trabajo: nada se rediseña para mobile.
+### Dos regímenes de superficie — la frontera es el tamaño
+
+Control resuelve **dos superficies distintas**, y lo que decide cuál se ve es **el tamaño del viewport**. El dispositivo **no participa del criterio**: no se pregunta si hay mouse, si hay táctil, ni qué aparato es. Un teléfono, una tablet y una ventana de escritorio del mismo tamaño ven exactamente lo mismo.
+
+**Criterio canónico — la dimensión menor del viewport** (canónico en `requirements.md`, RF-APP-003):
+
+| Condición del viewport | Régimen | Qué se ve |
+|---|---|---|
+| **`ancho < 600px` o `alto < 600px`** (la dimensión **menor** es `< 600px`) | **Régimen de captura** | La **superficie de captura** de un movimiento, o el **acceso** sin sesión → §Superficie de captura |
+| **`ancho ≥ 600px` y `alto ≥ 600px`** | **Régimen de app** | La app completa, con la política de contención de esta sección |
+
+- **Se mide la dimensión menor, no solo el ancho.** Un viewport `932 × 430` está en régimen de captura por su **alto**, aunque le sobre ancho. Un viewport `580 × 900` lo está por su **ancho**.
+- **Umbral nombrado:** `--bp-capture` = **600px**, el mismo número en los dos ejes. Se materializa como token para que no se repita en ningún `.tsx`; la condición se expresa como una media query de dos ramas (`max-width` **o** `max-height`), no con JavaScript, para que cruzar la frontera sea instantáneo y sin recarga.
+- **El criterio se evalúa en vivo, en los dos regímenes.** Redimensionar la ventana o rotar la pantalla mueve al usuario de un régimen al otro **sin recargar y sin parpadeo**. No hay estado congelado ni medición de una sola vez.
+- **Ningún tamaño queda sin producto.** Por debajo del umbral hay siempre algo usable: la superficie de captura. En ningún tamaño la app bloquea, avisa o pide agrandar la ventana.
+
+**Invariantes de la frontera** (visuales, verificables a ojo):
+
+- **Sin flash de superficie equivocada.** Al cargar en cualquier tamaño se pinta directamente la superficie que corresponde: nunca se ve la app por un frame en régimen de captura, ni la superficie de captura por un frame en régimen de app. Mismo estándar de "sin parpadeo" que rige el modo de color.
+- **La frontera es continua.** Achicar una ventana de escritorio por debajo del umbral **entra en la superficie de captura**, con su densidad y su composición; agrandarla vuelve a la app. En los dos sentidos, **sin recarga, sin pantalla intermedia y sin bloqueo**: nunca hay un tamaño en el que el producto se niegue a mostrarse.
+- **No hay tercera superficie.** Ningún tamaño ve una mezcla: o la app con su contención, o la superficie de captura.
+
+**Todo lo que sigue en esta sección** —breakpoint, piso, los cuatro invariantes, ancho de contenido, checkpoints— **es la política del régimen de app.** La superficie de captura tiene su propia sección y su propio contrato de densidad.
+
+**Vocabulario** (obligatorio, para que doc y diseño no diverjan):
+
+- **Régimen de captura** / **régimen de app** — los dos lados de la frontera de tamaño. **Superficie de captura** — lo que se ve del lado chico.
+- "Compacto" y "pantalla chica" nombran **siempre** una **ventana angosta dentro del régimen de app** (`< --bp-wide`, y por definición `≥ 600px` en los dos ejes). Nunca nombran el régimen de captura.
+- **No se usan** "celular", "móvil", "mobile" ni "dispositivo" para nombrar el criterio ni la superficie: la frontera es una condición de **tamaño**, y nombrarla por el aparato reintroduce una distinción que el producto no hace.
+
+### La política del régimen de app — contener, no adaptar
+
+Dentro del régimen de app el producto es **desktop-first** y se diseña para desktop web. Cuando la ventana se angosta, el compromiso no es adaptar ni rediseñar: es **contener**. No se promete una buena experiencia en una ventana angosta; se promete que **no se rompe**. Esta distinción es deliberada y acota el trabajo: **ninguna pantalla de la app se rediseña para pantalla chica** — por debajo del umbral de captura no hace falta ese rediseño, porque ahí no se ve la app sino la superficie de captura.
 
 ### El breakpoint — un solo umbral nombrado
 
@@ -278,31 +310,29 @@ El sistema tiene **un único breakpoint**: `--bp-wide` = **941px**. Es la fronte
 - **Amplio** (`min-width: 941px`, `≥ --bp-wide`): disposición desktop plena — grillas multicolumna, login a 2 columnas. (Las **flechas laterales de `PeriodNav`** ya **no** aparecen en este umbral: tienen su propio umbral derivado `--bp-arrows` = 1288px, el ancho al que entran con sus 20px de aire sin solapar el listado — ver § Contención responsive → *Umbral de flechas*.)
 - **Compacto** (`max-width: 940px`, `< --bp-wide`): grillas colapsan a 1 columna; login a 1 columna; flechas laterales de `PeriodNav` ocultas (stepper compacto en el header). **El sidebar ya no depende de este umbral:** su presencia la controla el usuario en cualquier ancho, no el breakpoint (ver §Sidebar — mostrar/ocultar). **Regla de resumen-primero:** cuando una grilla de resumen colapsa al stack de 1 columna, la tarjeta más importante lidera el stack aunque en amplio ocupe otra posición. En las stat-cards de `/mes` (Gastos · Ingresos · Balance) el **Balance** —el resultado neto, el dato que el usuario busca primero— se reordena al tope en compacto (`order-first`), mientras que en amplio conserva su columna hero a la derecha (`1.1fr`). Es reordenamiento visual sobre tarjetas no interactivas: no afecta foco ni orden de lectura de contenido relevante.
 
-No existe escala de breakpoints (`sm`/`md`/`lg`) ni config de `screens`: hay un solo umbral **de layout general** y se lo nombra `--bp-wide`. Cualquier media query nueva usa este umbral (o lo justifica explícitamente si necesita otro). La **única excepción justificada** es `--bp-arrows` (1288px), umbral **derivado de la geometría** (cap 1120 + 2×84) que gobierna exclusivamente el régimen de `PeriodNav` (flechas + header grande vs. stepper); no es un breakpoint de layout sino la anchura mínima a la que las flechas overlay entran sin solapar el contenido (ver § Contención responsive → *Umbral de flechas*). Los valores sueltos `lg:`/`md:`/`sm:` que aún aparecen en el código son deuda, no escala vigente.
+No existe escala de breakpoints (`sm`/`md`/`lg`) ni config de `screens`: hay un solo umbral **de layout general** y se lo nombra `--bp-wide`. Cualquier media query nueva usa este umbral (o lo justifica explícitamente si necesita otro). Los otros tres umbrales del sistema son de propósito acotado y están justificados uno por uno:
+
+- **`--bp-capture` (600px, los dos ejes)** — la **frontera entre regímenes** (ver *Dos regímenes de superficie*). No es un umbral de layout: decide qué superficie se monta.
+- **`--bp-arrows` (1288px)** — umbral **derivado de la geometría** (cap 1120 + 2×84) que gobierna exclusivamente el régimen de `PeriodNav` (flechas + header grande vs. stepper). No es un breakpoint de layout sino la anchura mínima a la que las flechas overlay entran sin solapar el contenido (ver *Umbral de flechas*).
+- **`--bp-short` (480px de alto)** — único umbral **de alto**, exclusivo de la superficie de captura y ortogonal a los de ancho (ver §Superficie de captura → *Disposición corta*).
+
+Los valores sueltos `lg:`/`md:`/`sm:` que aún aparecen en el código son deuda, no escala vigente.
 
 El umbral está **materializado en el código** como `--breakpoint-wide: 941px` dentro de `@theme` (Tailwind v4) en `frontend/src/app/globals.css`. Eso habilita las variantes `wide:` (`width ≥ 941px`) y `max-wide:` (`width < 941px`), complemento exacto. El número **no se repite** en ningún `.tsx`: la disposición se decide con `wide:` / `max-wide:`, no con media queries a mano.
 
-### Ancho mínimo soportado — 640px (`--bp-floor`)
+### El piso del régimen de app — 600px, por construcción
 
-La app **promete contención desde `640px` hacia arriba**. Por debajo de ese ancho no promete nada: no es un viewport soportado. Los cuatro invariantes rigen en todo ancho `≥ 640px`; el "sin scroll horizontal del `body`" (invariante 1) vale sobre ese piso, no de forma absoluta.
+El régimen de app existe **desde 600px hacia arriba en los dos ejes**: ese es su piso, y no es un número aparte — es el mismo `--bp-capture` que define la frontera, leído desde el lado grande. **No hay un token de piso propio**: un segundo umbral cerca del primero solo abriría una franja fantasma entre ambos y obligaría a decidir qué pasa ahí. La app **promete contención en todo su régimen** (`≥ 600px`), y por debajo no hay nada que contener: hay otra superficie.
 
-**Token del piso.** El piso se nombra `--bp-floor` = **640px**, materializado en el código como `--breakpoint-floor` dentro de `@theme` (Tailwind v4) en `frontend/src/app/globals.css`. Habilita las variantes `floor:` (`width ≥ 640px`) y `max-floor:` (`width < 640px`), complemento exacto que gobierna el gate. El número no se repite en ningún `.tsx`. **Antes era 768px; bajó a 640px** por decisión del usuario (el gate arranca recién bajo 640, y entre 640 y 768 la app debe estar contenida, no gateada).
+El piso importa por una razón estructural, no por convención: el ancho mínimo de una columna `fr` de una grilla lo fija el **`min-content` de su contenido**, y en las stat-cards ese contenido es una **cifra de dinero**. Por eso una grilla de montos **no tiene un ancho mínimo fijo**: el ancho al que deja de entrar **depende de los datos del usuario** — cifras más largas rompen a viewports más anchos. En la franja `600–768px`, y todavía más con el sidebar abierto (que le resta 248px al ancho de contenido, dejando **352px** en el piso), una cifra larga puede exceder el `min-content` de su card. La contención en ese caso **no se resuelve truncando el monto** (la cifra es el dato, nunca se corta): la card colapsa a 1 columna y, si aun así no entra, la superficie **scrollea dentro de sí misma** (invariante 4). El `body` nunca scrollea. Regla de diseño: al dimensionar una grilla de montos, no se asume un ancho mínimo fijo; se asume que lo fija el dato, y que el ancho disponible puede ser `viewport − 248px` cuando el sidebar está abierto.
 
-El piso existe por una razón estructural, no por convención: el ancho mínimo de una columna `fr` de una grilla lo fija el **`min-content` de su contenido**, y en las stat-cards ese contenido es una **cifra de dinero**. Por eso una grilla de montos **no tiene un ancho mínimo fijo**: el ancho al que deja de entrar **depende de los datos del usuario** — cifras más largas rompen a viewports más anchos. Bajar el piso a `640px` **estrecha ese margen**: en la franja `640–768px`, y todavía más con el sidebar abierto (que le resta 248px al ancho de contenido), una cifra larga puede exceder el `min-content` de su card. La contención en ese caso **no se resuelve truncando el monto** (la cifra es el dato, nunca se corta): la card colapsa a 1 columna y, si aun así no entra, la superficie **scrollea dentro de sí misma** (invariante 4). El `body` nunca scrollea. Regla de diseño: al dimensionar una grilla de montos, no se asume un ancho mínimo fijo; se asume que lo fija el dato, y que el ancho disponible puede ser `viewport − 248px` cuando el sidebar está abierto.
-
-### El gate — qué pasa por debajo del piso
-
-Por debajo del ancho mínimo soportado (`< 640px`) no se contiene ni se adapta: se **gatea**. Una pantalla a viewport completo **impide usar la app** y le dice al usuario qué hacer (agrandar la ventana o usar una pantalla más grande). Cubre **toda la app, incluido el login**, y es un **bloqueo** sin escape: no hay "continuar igual". No genera scroll. La regla funcional, el alcance y el copy exacto son canónicos en `requirements.md`, RF-APP-002 — acá no se repiten. **El gate se decide por el ancho del viewport, no por el ancho de contenido:** que el sidebar esté abierto y estreche el contenido a menos de 640px **no** dispara el gate (el usuario puede cerrarlo para recuperar ancho).
-
-Es **CSS puro**: la aparición y desaparición del gate se deciden con una media query sobre el ancho del viewport (`max-width: 639px`), no con JavaScript. Así, al cruzar el piso (rotar, redimensionar), la app aparece o desaparece **sin recargar ni parpadear**. Una solución con JS reintroduciría el parpadeo de hidratación y la recarga: por eso la condición es estructuralmente CSS, no una elección de estilo.
-
-Visualmente el gate **reusa tokens y primitivas ya existentes** del design system (no introduce valores nuevos): superficie de fondo de la app (`paper`), tipografía UI del sistema, colores de texto `ink`/`muted`/`faint`, y el espaciado estándar. Es una pantalla de una sola columna centrada, jerarquizada en tres capas: **ícono monolínea** (ancla visual que declara "esto es intencional, no está roto"), **título** y **una línea de apoyo**, sin controles. El texto de apoyo es **agnóstico de dispositivo** (no asume desktop ni orientación) y **no expone el umbral en px** al usuario. Al cruzar el piso por rotación o redimensionado, la media query `max-floor` reevalúa el ancho del viewport y muestra/oculta el gate **en vivo, sin recarga ni parpadeo**: no hay manejo especial de rotación. Funciona idéntico en claro y oscuro (todos sus tokens son theme-aware).
+**El régimen se decide por el viewport, no por el ancho de contenido.** Que el sidebar esté abierto y estreche el contenido a menos de 600px **no** cambia de régimen: la app sigue montada y el usuario puede cerrar el sidebar para recuperar ancho. Lo que sí sigue al ancho de contenido es la **disposición** (compacto/amplio), ver *Ancho de contenido de página*.
 
 ### Los cuatro invariantes de contención
 
-Todo lo que se diseña respeta estos cuatro invariantes en todo ancho **`≥ 640px`** (el ancho mínimo soportado), **en cualquiera de los dos estados del sidebar** (abierto o cerrado). Son verificables a ojo y material permanente del QA visual (no los detecta ni el build ni los tests):
+Todo lo que se diseña **para la app** respeta estos cuatro invariantes en **todo el régimen de app** (`≥ 600px` en los dos ejes), **en cualquiera de los dos estados del sidebar** (abierto o cerrado). Son verificables a ojo y material permanente del QA visual (no los detecta ni el build ni los tests). La superficie de captura **también los cumple**, con su propia lectura de cada uno (ver §Superficie de captura → *Invariantes de la superficie*):
 
-1. **Sin scroll horizontal del `body`** en todo ancho `≥ 640px` (el ancho mínimo soportado), con el sidebar abierto o cerrado. Por debajo del piso la app no promete contención.
+1. **Sin scroll horizontal del `body`** en todo ancho `≥ 600px`, con el sidebar abierto o cerrado.
 2. **Modales completos y scrolleables:** no cortados, no atrapantes — el usuario siempre puede ver el modal entero y salir de él.
 3. **Ninguna acción inalcanzable:** ningún control queda fuera de pantalla ni tapado.
 4. **Las superficies anchas scrollean dentro de sí mismas** (tablas, gráficos, filas anchas), sin romper el layout de la página.
@@ -313,13 +343,13 @@ Regla transversal para el ancho del contenido en **todas** las pantallas del ár
 
 - El contenido **llena el ancho disponible** del `<main>` menos el padding lateral de página (`px-10` = 40px por lado), **hasta un tope de 1120px**.
 - Alcanzado 1120px, el contenido **capea y se centra**; el sobrante queda como margen exterior parejo a ambos lados. Este comportamiento por encima de 1120 es correcto y deseado — no se toca.
-- **Nunca hay banda muerta al costado del contenido por debajo de 1120px.** Entre el piso soportado (640px) y 1120px el contenido **crece para ocupar el ancho**. Que el contenido quede angosto (a su `max-content`) y pegado a un lado, dejando media pantalla vacía, es un **defecto** — y arrastra síntomas (columnas aplastadas, nombres truncados a una letra en la lista de `/mes`).
+- **Nunca hay banda muerta al costado del contenido por debajo de 1120px.** Entre el piso del régimen (600px) y 1120px el contenido **crece para ocupar el ancho**. Que el contenido quede angosto (a su `max-content`) y pegado a un lado, dejando media pantalla vacía, es un **defecto** — y arrastra síntomas (columnas aplastadas, nombres truncados a una letra en la lista de `/mes`).
 - **El "ancho disponible" es el del `<main>`, no el del viewport.** Con el sidebar **abierto**, el `<main>` está corrido 248px y su ancho es `viewport − 248px`; con el sidebar **cerrado**, el `<main>` ocupa el viewport completo. El tope de 1120px y el centrado se miden **contra el ancho del `<main>`** (el ancho de contenido), no contra el viewport. Consecuencia: el contenido cabe en 1120 y se centra cuando el `<main>` supera 1120 + gutters, lo que ocurre a viewport ≈1160 con sidebar cerrado y a viewport ≈1408 con sidebar abierto. En ambos casos el comportamiento visual es el mismo; solo cambia el viewport al que se alcanza el cap, porque el offset del sidebar ahora es **toggle-driven, no breakpoint-driven**.
 - **El régimen de disposición (compacto/amplio) también se decide por el ancho del `<main>`, no por el viewport.** El umbral `--bp-wide` (941px) que colapsa grillas a 1 columna debe evaluarse sobre el **ancho de contenido disponible** (`viewport − 248px` si el sidebar está abierto), no sobre el viewport crudo. Motivo: con el sidebar abierto a viewport 1000px el contenido mide ~712px; si el layout creyera "amplio" por el viewport, montaría grillas multicolumna en un hueco de 712px y desbordaría → scroll horizontal del `body` (rompe el invariante 1). El mecanismo natural es una **container query sobre `<main>`** en vez de una media query sobre el viewport; el mecanismo exacto lo resuelve `control-frontend`, pero el contrato es: **la disposición sigue al ancho de contenido, no al viewport.**
 - **Flechas ‹ › de `PeriodNav` — overlay, NO gutters, y solo cuando entran limpias.** Son las flechas laterales del patrón de navegación de período. Aparecen **solo cuando el ancho de contenido es ≥ 1288px** (`--bp-arrows`; ver *Umbral de flechas* abajo), medido sobre `<main>` por **container query**, no por viewport. Por debajo se ocultan y el consumidor renderiza el stepper compacto en el header. Con el sidebar **cerrado** aparecen a viewport ≥1288; con el sidebar **abierto** recién a viewport ≈1536 (1288 + 248), porque hasta ahí el contenido no llega a 1288.
   - **No reservan ancho de columna.** Corrige el modelo anterior (grilla `auto min(…) auto` con dos gutters de 84px que le comían 168px al contenido y dejaban `/mes` más angosto que las otras tres pantallas al mismo viewport — defecto medido en el navegador). El bloque de contenido de `/mes` usa **exactamente el mismo mecanismo que el resto** (`px-10 max-w-[1120px] mx-auto`: llena hasta 1120, capea y centra) y por lo tanto tiene el **mismo ancho a igual viewport**. Las flechas son **overlay**: posicionadas en valor **absoluto respecto del bloque de contenido** y centradas verticalmente al viewport (sticky, sin cambios). Flanquean el bloque **desde afuera, sin empujarlo ni angostarlo**.
   - **Umbral de flechas — `--bp-arrows` = 1288px.** Es el ancho de `<main>` a partir del cual la flecha (64px) entra **entera en el margen exterior con sus 20px de aire completos**, sin tocar el bloque de contenido. Se deriva de la geometría, no es un breakpoint arbitrario: `1288 = 1120 (cap de contenido) + 2 × 84 (botón 64 + aire 20, por lado)`. **Convive con `--bp-wide` (941), no lo reemplaza.** Reparto de responsabilidades: `--bp-wide` (941) sigue gobernando el **colapso de grillas** (stat-cards 1↔3 columnas) — sin cambios; `--bp-arrows` (1288) gobierna el **régimen de `PeriodNav`** (flechas + header `.phead` grande vs. stepper compacto). Entre 941 y 1288 conviven **grillas multicolumna** (régimen amplio de grilla) con **header stepper y sin flechas** (régimen compacto de `PeriodNav`): son dos ejes independientes que antes compartían umbral por coincidencia.
-  - **Posición horizontal de la flecha overlay (siempre limpia, nunca solapa):** como la flecha solo se muestra con `<main>` ≥ 1288, el margen exterior por lado es **siempre ≥ 84px** (botón 64 + 20 de aire). La flecha se ubica **entera en el margen exterior**, con **≥20px de aire** entre su borde interior y el borde del bloque, **sin invadir jamás** ni la banda de padding `px-10` ni el contenido. La fórmula de offset no cambia (`max(0px, calc((100% − 1120px) / 2 − 84px))`); lo único que cambia es que el gate de visibilidad sube a 1288, de modo que el tramo donde esa fórmula clampeaba a 0 y pegaba la flecha al borde de `<main>` (solapando el listado) **ya no muestra flechas** — las cede al stepper.
+  - **Posición horizontal de la flecha overlay (siempre limpia, nunca solapa):** como la flecha solo se muestra con `<main>` ≥ 1288, el margen exterior por lado es **siempre ≥ 84px** (botón 64 + 20 de aire). La flecha se ubica **entera en el margen exterior**, con **≥20px de aire** entre su borde interior y el borde del bloque, **sin invadir jamás** ni la banda de padding `px-10` ni el contenido. La fórmula de offset no cambia (`max(0px, calc((100% − 1120px) / 2 − 84px))`); lo único que cambia es que el umbral de visibilidad sube a 1288, de modo que el tramo donde esa fórmula clampeaba a 0 y pegaba la flecha al borde de `<main>` (solapando el listado) **ya no muestra flechas** — las cede al stepper.
   - **Borde resuelto (reversa de la decisión anterior).** El modelo previo **toleraba** que en el tramo ~941–1288 la flecha flotara sobre la banda de padding y, en el piso, solapara ~24px sobre el filo del contenido (opción 1: "solapar, tolerado"). Esa tolerancia **queda revocada**: el usuario reportó el solape como defecto real (viewport ~955–1138, sidebar cerrado). Se elige ahora **no-solape estricto**: donde la flecha no entra con su aire completo, **cede paso al stepper compacto** (patrón ya existente y plenamente funcional), en vez de solapar (rechazado: es el defecto reportado) o reservar gutter (rechazado: reintroduce el angostamiento). Es la opción más consistente: reusa un estado ya diseñado, no inventa tratamiento visual nuevo, y garantiza que la flecha nunca toca el listado.
 - **Mecanismo canónico de ancho (las cuatro páginas):** `px-10 max-w-[1120px] mx-auto` sobre un `div` de bloque. Un bloque con `max-width` **llena** el ancho disponible y solo capea al máximo. Las cuatro páginas lo usan para el **ancho de contenido**, incluida `/mes` (dentro de `PeriodNav`, el bloque central es este mismo patrón); las flechas de `/mes` se superponen encima como overlay, sin participar del cálculo de ancho.
 - **Trampa retirada (grilla con gutters):** el modelo previo de `PeriodNav` como grilla `auto min(calc(100% − 168px), 1120px) auto` queda **descartado**. Causaba dos defectos medidos: (a) contenido de `/mes` 168px más angosto que las demás pantallas; (b) a ~785px la pista central colapsaba a ~0 y las stat-cards quedaban en slivers de ~40px. Ambos desaparecen con el modelo overlay: el ancho lo da el bloque canónico (nunca colapsa a `max-content`, nunca se angosta por las flechas) y las flechas dejan de tocar el layout de ancho. El mecanismo CSS exacto del overlay lo resuelve `control-frontend`.
@@ -328,15 +358,17 @@ Regla transversal para el ancho del contenido en **todas** las pantallas del ár
 
 **Todo spec de diseño declara el comportamiento en pantalla chica.** Es obligatorio: un spec sin la sección de contención (qué pasa en compacto, cómo se cumplen los cuatro invariantes en ese elemento) está incompleto. El comportamiento en compacto no es un extra opcional del spec — es parte de la definición del elemento.
 
+**Y si el elemento vive además en la superficie de captura** (el form de movimiento y todo lo que cuelga de él: tabs, campos, aviso de límite, modal de nueva categoría), el spec declara también su **densidad táctil** ahí: target mínimo, alto del control y comportamiento con el teclado abierto. Es la misma obligación, en el otro régimen.
+
 ### Franja de checkpoints — anchos de referencia (con el sidebar en juego)
 
-Anchos concretos que el QA visual verifica a ojo. El **ancho de contenido** = `viewport − 248px` con el sidebar abierto, o `= viewport` con el sidebar cerrado. La disposición sigue al **ancho de contenido**, no al viewport.
+Anchos concretos que el QA visual verifica a ojo, **dentro del régimen de app** (es decir, siempre con `alto ≥ 600px`; si el alto baja del umbral, lo que se verifica es la superficie de captura, ver §Superficie de captura). El **ancho de contenido** = `viewport − 248px` con el sidebar abierto, o `= viewport` con el sidebar cerrado. La disposición sigue al **ancho de contenido**, no al viewport.
 
 | Viewport | Sidebar | Ancho de contenido | Disposición esperada |
 |---|---|---|---|
-| `< 640px` | — | — | **Gate** (bloqueo, sin app). No importa el estado del sidebar. |
-| `640px` (piso) | cerrado | 640px | Compacto: grillas a 1 columna, sin flechas, stepper en header. Sin scroll del `body`. |
-| `640px` (piso) | abierto | 392px | Compacto extremo: 1 columna. Los montos no se truncan; si una cifra no entra, su superficie scrollea dentro de sí (invariante 4). Sin scroll del `body`. |
+| `< 600px` de ancho (o `< 600px` de alto) | — | — | **Fuera del régimen de app:** se monta la **superficie de captura**. |
+| `600px` (piso) | cerrado | 600px | Compacto: grillas a 1 columna, sin flechas, stepper en header. Sin scroll del `body`. |
+| `600px` (piso) | abierto | 352px | Compacto extremo: 1 columna. Los montos no se truncan; si una cifra no entra, su superficie scrollea dentro de sí (invariante 4). Sin scroll del `body`. |
 | `~700px` | cerrado | 700px | Compacto, 1 columna. |
 | `~700px` | abierto | ~452px | Compacto, 1 columna (mismo régimen que un viewport angosto). |
 | `941px` | cerrado | 941px | **Umbral de grilla (`--bp-wide`):** grillas multicolumna (stat-cards 3 col). **Aún sin flechas** — header con **stepper compacto** (falta ancho para las flechas con aire). |
@@ -347,13 +379,369 @@ Anchos concretos que el QA visual verifica a ojo. El **ancho de contenido** = `v
 | `~1408px` | abierto | 1120px | Con el sidebar abierto el cap se alcanza acá. Grillas multicolumna, **stepper, aún sin flechas** (contenido 1120 < 1288). |
 | `1536px` | abierto | 1288px | Con el sidebar abierto recién acá el contenido llega a 1288: **aparecen las flechas** con aire completo. |
 
-**Regla de lectura:** ninguna fila puede producir scroll horizontal del `body`, modal cortado, acción inalcanzable ni banda muerta por debajo del cap. Los checkpoints que más rompen históricamente son los de **sidebar abierto a ancho apretado** (640–941 viewport): ahí el contenido es angosto y el layout debe estar en régimen compacto, no amplio.
+**Regla de lectura:** ninguna fila puede producir scroll horizontal del `body`, modal cortado, acción inalcanzable ni banda muerta por debajo del cap. Los checkpoints que más rompen históricamente son los de **sidebar abierto a ancho apretado** (600–941 viewport): ahí el contenido es angosto y el layout debe estar en régimen compacto, no amplio.
+
+**Checkpoint del piso — cuál se verifica.** El piso vigente del régimen de app es **600px**. Los specs de esta guía que fijan su checkpoint del piso en **640px** siguen siendo válidos como verificación, pero **no son el piso**: quien los ejecute verifica también a 600px, que es el ancho más apretado en el que la app se monta.
+
+---
+
+## Superficie de captura
+
+> Spec visual de **la única superficie que Control ofrece en régimen de captura** (`min(ancho, alto) < 600px`, ver §Contención responsive → *Dos regímenes de superficie*): cargar un movimiento. Requerimiento y alcance funcional: `requirements.md` RF-APP-003 (captura, con el criterio canónico de tamaño) y RF-APP-004 (acceso); pantalla: `screens.md` §12 y §1 "Variante en régimen de captura".
+>
+> **Qué hay acá y qué no.** En régimen de captura hay **una** capacidad —crear un movimiento— más **ver de qué cuenta es la sesión** y **cerrarla**. No hay navegación, no hay dashboard, no hay `/mes`, no hay configuración, no hay edición ni duplicado. Esta sección define cómo se ve y cómo se toca eso; **no** habilita nada más.
+
+### 0. Encuadre — una lógica, dos composiciones
+
+**Modelo de tres capas.** Cada superficie que captura un movimiento se construye así:
+
+1. **Lógica de feature — compartida, agnóstica de UI.** Estado del formulario, defaults, validación y sus mensajes, mutaciones, conversión de monedas, proyección de límites, comportamiento post-guardado. No sabe qué superficie la consume ni pinta nada. **Fuente única de verdad funcional:** una regla de negocio cambia una vez y cambia en todas las superficies.
+2. **Primitivas del design system — compartidas.** `Input`, `Select`, `Button`, `ModalShell`, tokens de color, tipografía, radios, sombras, focus ring, estados. Las dos superficies hablan **el mismo idioma visual**.
+3. **Composición por superficie — propia.** Cada superficie arma su propia UI consumiendo el hook. El **modal de escritorio** (`ModalShell` variante `form`) y la **superficie de captura** son **composiciones hermanas**: ninguna es una variante ni un caso especial de la otra.
+
+**Regla general — vale para toda superficie de captura futura, no solo para esta.** La lógica se comparte **hacia arriba** (un hook común); la presentación **no se comparte de costado**. Una superficie nueva no hereda el markup de otra ni lo corrige con CSS de cascada o overrides de utilidades: consume el mismo hook y compone lo suyo. Si dos superficies se ven distinto, es porque **cada composición lo declara**, no porque una le esté pisando estilos a la otra.
+
+**La frontera — qué comparte y qué es propio:**
+
+| Compartido (idéntico, sin excepción) | Propio de cada superficie |
+|---|---|
+| Reglas de negocio, validación y sus mensajes | Estructura del DOM y agrupación de bloques |
+| El **conjunto de campos** y sus defaults | Ritmo vertical y espaciados |
+| Copys de label, error, vacío y toast | Tamaños de control, tipografía de campo y alto de fila |
+| Paleta, tipografía, radios, sombras, focus ring | Qué zona queda fija y cuál scrollea |
+| **Semántica de color** (verde ingreso · rojo gasto · índigo solo marca) y **dinero en mono tabular** | Composición de la zona de acción (qué botones, con qué ancho) |
+| Primitivas del DS | Orden visual de los bloques |
+| Los cuatro invariantes de contención | Densidad (puntero fino vs. dedo) |
+
+- **El orden visual es propio, pero hoy coincide.** La superficie de captura respeta el mismo orden que el modo creación (`screens.md` §5) porque no hay motivo para divergir; cualquier divergencia futura se declara **acá**, no se descubre en el navegador.
+- **Alcance cerrado: composición libre, capacidades no.** El contenido funcional es **idéntico** al del modal de creación (RF-APP-003): mismos tres tipos, mismos campos, mismo "Más opciones". La libertad de esta sección es de **forma**, nunca de alcance — ningún campo nuevo, ninguna acción nueva, ningún destino nuevo.
+
+**Diferencias de envase, en una tabla:**
+
+| | Modal de escritorio | Superficie de captura |
+|---|---|---|
+| Pieza | `ModalShell` (variante `form`) | **Envase de captura** (pantalla completa) |
+| Fondo | scrim oscurecido + panel flotante `max-w-[460px]` | **sin scrim, sin panel**: la superficie *es* la pantalla |
+| Cierre | ✕ y `Esc` | **no existe**: no hay pantalla debajo a la que volver |
+| Zona de acción | `Cancelar` + `Guardar` | **solo `Guardar`**, a ancho de columna |
+| Densidad | puntero fino | **dedo** (§4) |
+
+**La zona de acción es un slot del envase, no del form.** El form aporta sus campos y su submit; **quién dibuja los botones y con qué composición lo decide el envase**. Por eso acá no hay "Cancelar" huérfano ni un footer de modal recortado: el envase monta una sola acción. Ningún form declara su propia barra de acciones por su cuenta.
+
+### 1. Envase de captura — anatomía y zonas
+
+Columna flex a **alto completo del viewport dinámico**, con **tres zonas** y **una sola región que scrollea** — mismo contrato conceptual que `ModalShell`, distinta encarnación:
+
+- **Raíz:** `flex flex-col`, `height: 100dvh` (**`dvh`, nunca `vh`**), `overflow-hidden`, fondo `--paper`. El **`body` no scrollea nunca** (ni vertical ni horizontal): todo el scroll vive en la zona 2.
+- **Zona 1 — Cabecera (`shrink-0`, pineada).** Fondo `--panel`, `border-b border-hair`. Contiene, en este orden: la **fila de sesión** (§5) y la **barra de tabs** (§6). No scrollea: la identidad de la cuenta y el cambio de tipo están **siempre a la vista**. Padding horizontal `max(16px, env(safe-area-inset-left/right))`; padding superior `max(10px, env(safe-area-inset-top))`; `padding-bottom: 12px`.
+- **Zona 2 — Cuerpo (`flex-1 min-h-0 overflow-y-auto overscroll-contain`).** El form activo. `padding: 16px 16px 20px` (los laterales, otra vez, `max(16px, safe-area)`), con el **ritmo vertical propio de §4**. Es la **única** región con scroll.
+- **Zona 3 — Footer de acción (`shrink-0`, pineado, hermano del cuerpo — nunca hijo).** Fondo `--panel`, `border-t border-hair`, `padding: 12px 16px`, `padding-bottom: max(14px, env(safe-area-inset-bottom))`. Aloja **un solo control**: `Guardar` a ancho de columna (§8).
+
+**Columna de contenido — `min(100%, 480px)`, centrada.** Las tres zonas **pintan su fondo y sus hairlines a ancho completo del viewport** (incluida la banda de safe area), pero **su contenido se alinea a una misma columna** de `min(ancho disponible, 480px)`, centrada horizontalmente. Consecuencias:
+
+- En un viewport angosto (el caso más común) la columna **es** el ancho disponible y la regla es inerte: nada cambia.
+- En un viewport **ancho y bajo** —que también es régimen de captura— la columna evita que el form se estire. Una fila de campos de 51px estirada a 900px pierde el ritmo vertical, aleja el label de su valor y convertiría a `Guardar` en un blanco absurdo de 900px de ancho.
+- **480px** no es arbitrario: es el panel del modal de escritorio (460px) más el aire que la densidad táctil necesita. Mantiene las dos superficies en la misma familia de medida sin copiar su estructura.
+- **El chrome sí corre de borde a borde:** las hairlines de cabecera y footer son cortes estructurales de la pantalla, no bordes de una tarjeta. Cortarlas a 480px haría leer el envase como un panel flotante, que es exactamente lo que no es.
+
+**Las hairlines de corte son permanentes**, no condicionales al overflow. A diferencia del modal —un panel flotante que se lee como una sola superficie cuando el contenido entra—, acá cabecera y footer son **chrome estructural** de la pantalla: su línea los separa del cuerpo siempre, y así el usuario sabe desde el primer vistazo que hay una zona que se mueve y dos que no.
+
+**Sin ✕, sin scrim, sin `Esc`.** No hay nada que cerrar. El envase tampoco toma body-lock: no hay fondo que bloquear.
+
+### 2. Safe areas y alto real
+
+- **`dvh`, nunca `vh`.** El alto del envase sigue el **viewport dinámico**: con la barra del navegador entrando y saliendo, ni el footer ni la cabecera se cortan.
+- **Safe areas en los cuatro lados.** Toda la cadena de padding del envase usa `max(valor-de-diseño, env(safe-area-inset-*))`: arriba por el notch / isla, abajo por la barra de gestos del sistema, y **a los costados** cuando el inset lateral existe (con el notch a un costado, el contenido no se mete debajo). Ningún control queda bajo un inset del sistema.
+- **El fondo llega hasta el borde; el contenido no.** `--panel` de la cabecera y del footer pinta **hasta el borde físico** de la pantalla (incluida la banda del inset), mientras que sus controles respetan el inset. Sin esto, la barra de gestos queda sobre una franja de `--paper` que se lee como un corte.
+
+### 3. Teclado virtual abierto
+
+**Contrato (verificable a ojo):** con el teclado abierto, (a) el **campo con foco queda visible**, y (b) el botón **Guardar sigue alcanzable** — nunca queda tapado por el teclado ni "atrapado" debajo de él.
+
+- **El envase sigue al viewport visual.** Cuando el teclado se abre, el alto útil del envase es el que queda **por encima del teclado**: la cabecera se mantiene arriba, el cuerpo se achica y el footer con Guardar se apoya **sobre el borde superior del teclado**. Cómo se consigue (declaración de `interactive-widget` en el viewport meta y/o seguimiento del viewport visual) lo resuelve `control-frontend`; **el contrato es visual y no negociable**: el footer no se hunde bajo el teclado.
+- **Aire de scroll alrededor del campo enfocado.** Todo control del cuerpo declara `scroll-margin-top: 16px` y `scroll-margin-bottom: 88px`, de modo que el auto-scroll del navegador nunca deje el campo pegado al filo de la cabecera ni debajo del footer pineado.
+- **Sin `autofocus` al entrar.** La superficie **no** abre el teclado sola. Si lo hiciera, el teclado taparía la mitad inferior antes de que el usuario pueda elegir tab o tipo, y la primera impresión de la pantalla sería un campo y un teclado. El primer toque lo da el usuario.
+
+### 4. Densidad táctil y ritmo — la escala propia de esta superficie
+
+Los valores del DS están dimensionados para puntero fino. La superficie de captura **compone su propia escala**, no ajusta la del modal: **misma paleta, misma tipografía, mismos radios, mismos estados**: cambia el tamaño del blanco y el aire, no el lenguaje. Nada de esto se logra pisando estilos del modal — cada valor es de la composición de esta superficie.
+
+**Tamaños de control:**
+
+| Elemento | Valor en la superficie de captura | Alto resultante |
+|---|---|---|
+| **Target mínimo de cualquier control** | `44 × 44px` de área tocable | — |
+| **Separación entre targets adyacentes** | `≥ 8px` | — |
+| **Input de texto / select** (`Input`, `Select`) | `px-[14px] py-[13px]`, texto **16px** | 51px |
+| **Campo Monto** | ver *Campo Monto* abajo | **64px** |
+| **Segmento Gasto / Ingreso** | `py-[14px]`, texto 15px/600, grilla 2 col `gap-2` | 52px |
+| **Pestaña Único/Fijo/Cuotas** | `py-[13px]`, texto 14px/600 | 46px |
+| **Fila de checkbox** (débito automático) | fila entera tocable, `min-h-[44px]`, caja 20px, label 15px | 44px |
+| **Disparador "Más opciones"** | fila entera tocable, `min-h-[44px]` con `py-[12px]` | 44px |
+| **Botón de texto "+ Nueva"** | `min-h-[44px]`, márgenes negativos para no engordar la fila del label | 44px |
+| **Acción primaria (Guardar)** | `h-[52px]`, texto 16px/600 | 52px |
+
+**Cómo se lee la columna "Alto resultante":** es el alto **medido de la caja ya renderizada** —incluye el renglón del texto al `line-height` del cuerpo del DS (1.45) y el borde del control—, no la suma nominal del padding. **El alto es el contrato y el padding es la variable de ajuste:** si un cambio de tipografía corre el renglón, se recalcula el padding para sostener el alto, nunca al revés. Los controles de alto fijo (`h-[52px]`, `min-h-[44px]`) lo fijan directo.
+
+**Ritmo vertical (propio de esta superficie, no el del modal):**
+
+| Relación | Separación | Por qué |
+|---|---|---|
+| Entre **bloques de campo** consecutivos | **16px** | El modal usa 14; con controles de 51–52px y targets de 44 el aire sube un escalón de la escala, o los blancos se leen como una masa continua. |
+| **Label → su control** | **6px** | Suficiente para que el par se lea como una unidad y no como dos líneas sueltas. Es la mitad justa del aire entre bloques: la proximidad hace el agrupamiento, no una caja. |
+| **Control → su mensaje de error** | **6px** | El error pertenece al campo; se agrupa con él, no con el bloque siguiente. |
+| **Debajo del bloque Monto** | **20px** | Un escalón extra: el protagonista se separa del resto del form en vez de formar fila con él. |
+| Dentro de un **par en dos columnas** (Fecha · Hora) | **14px** horizontal | Mismo gap que el par de escritorio: horizontalmente el aire ya alcanza. |
+| Antes del disparador **"Más opciones"** | **16px** + hairline `--line` de ancho de columna arriba | Separa el núcleo obligatorio del cajón opcional con la primitiva más barata del DS. |
+| Último bloque → borde inferior del cuerpo | **20px** | Colchón para que el último campo no quede lamiendo la hairline del footer al final del scroll. |
+
+**Campo Monto — dimensiones propias:**
+
+- **Ancho: el 100% de la columna de contenido.** No lleva ancho intrínseco, `size`, ni caja angosta: `w-full min-w-0`. Un campo de importe más angosto que sus vecinos se lee como "acá va poco" y obliga a mirar dos veces cuál es el campo principal; el protagonista es el más grande **en los dos ejes**.
+- **Alto total 64px**, con caja `px-[14px] py-[10.5px]` alrededor de una cifra de 28px — cuyo renglón, al `line-height` del DS, se lleva ~41px de esos 64: el padding vertical es lo que queda. Es el control más alto del cuerpo —**12px por encima del siguiente**, el toggle de 52px— y esa jerarquía es intencional: se distingue de un input común **antes de leerlo**. El número de contrato es el **alto**: el padding vertical es lo que se ajusta para sostenerlo.
+- Composición interna: prefijo `$` **20px mono `--muted`**, `shrink-0`, 8px de separación, y la cifra ocupando el resto (`flex-1 min-w-0`), alineada a la izquierda contra el prefijo. Tipografía, color, borde y estados: §7.
+
+**Otras reglas de la escala:**
+
+- **16px es el piso tipográfico de todo campo de texto, y es funcional, no estético.** Por debajo de 16px el navegador **hace zoom al enfocar** el campo: la pantalla salta, el layout se corre y el usuario pierde el contexto. El texto de campo sube de 15 → **16px** en esta superficie.
+- **Labels y textos de apoyo no cambian** (12.5px/600 `--ink-2` el label, 12px `--expense-ink` el error): el label no es un blanco de toque y agrandarlo solo robaría alto.
+- **Sin estados hover.** El vocabulario visible es **reposo · presionado · foco · deshabilitado**. El estado presionado usa el mismo escalón que el `active` del DS (`--panel-3` en superficies neutras, `--accent-press` en el primario). El **focus ring de 3px `--accent-soft` se conserva** (teclado externo y accesibilidad).
+- **Los `Select` conservan su chevron y su geometría del DS**: la primitiva es la misma, solo cambian su padding y su tipografía por composición. El glifo no se reubica ni se recorta.
+
+### 5. Cabecera A — chrome de la sesión (identidad + cierre)
+
+**Identidad y cierre de sesión son una sola unidad conceptual: quién sos / cómo dejás de serlo.** No son navegación y su tratamiento visual lo tiene que dejar obvio.
+
+**Chip de sesión (siempre visible, sin acción del usuario).** A la izquierda de la fila, alineado al inicio, `max-w-full`:
+
+- **Avatar** — círculo 30px con el gradiente de acento y la inicial del email, **idéntico al del `UserMenu`** de la app (`linear-gradient(140deg, oklch(0.7 0.1 264), oklch(0.55 0.13 304))`, texto blanco 12.5px/700).
+- **Email** — 13px/500 `--ink-2`, `truncate`. **El dato de identidad es el email**, no el nombre: es único, siempre existe, y es lo único que distingue dos cuentas de la misma persona. El truncado corta el final (el dominio), nunca el inicio, que es lo que discrimina.
+- **Chevron** `ChevronDown` 14px `--muted`, `shrink-0`, rota 180° al abrir.
+- Caja: `rounded-ctl`, `px-2 py-[7px]`, alto total 44px, presionado `bg-panel-2`, foco ring `--accent-soft`. `aria-haspopup="menu"`, `aria-expanded`.
+
+**Popover de cierre de sesión.** Se abre **hacia abajo**, anclado al borde inferior del chip, alineado a su izquierda: panel `bg-panel`, `border border-line`, `rounded-ctl`, `shadow-[var(--shadow-md)]`, ancho `min(240px, calc(100vw - 32px))`, `gap` de 6px con el disparador. Un **único ítem**: `LogOut` 16px `--muted` + **"Cerrar sesión"** 15px/500 `--ink-2`, fila de 48px, presionado `bg-panel-2`. Cierra por toque afuera / `Esc` / re-toque (regla de popovers del DS).
+
+- **Por qué dos pasos y no un botón directo.** El cierre de sesión es **inmediato y sin confirmación** (hereda el comportamiento de la app). Su protección contra el toque accidental **no** es un diálogo: es que vive **detrás de la identidad**, a dos toques deliberados. Un botón de logout suelto en la cabecera se toca sin querer, y un logout accidental a mitad de carga **pierde todo lo tipeado**.
+- **Por qué arriba y por qué a la izquierda.** El extremo superior es la zona **más difícil de alcanzar con el pulgar** — exactamente lo que se quiere para la única acción irreversible de la pantalla. Y queda a más de media pantalla de distancia del botón Guardar: **el ítem "Cerrar sesión" y el botón Guardar nunca conviven en la misma mitad vertical.**
+- **Esto no es un menú de navegación, y se ve.** Un ítem, en infinitivo, sin destino, sin separadores, sin íconos en fila, anclado a la cara del usuario. **Regla dura de esta superficie: el popover aloja exactamente un ítem.** Agregarle un segundo no es un retoque cosmético — es abrir una puerta que esta superficie no tiene, y requiere decisión explícita (RF-APP-003: cerrar sesión es la **única** capacidad además de crear).
+
+**Título accesible.** La superficie declara un `<h1>` **"Nuevo movimiento"** visualmente oculto (`sr-only`): la pantalla no lleva título visible (las tabs ya dicen qué es y el alto es escaso), pero el documento necesita encabezado para lectores de pantalla.
+
+### 6. Cabecera B — barra de tabs (Único / Fijo / Cuotas)
+
+Mismo molde `.dtabs` de la app, **a ancho de columna**:
+
+- Track: `flex gap-1 p-1 rounded-ctl bg-panel-3`, ancho completo de la columna de contenido; los tres segmentos `flex-1` (tercios exactos).
+- Segmento activo: `bg-panel text-ink shadow-[var(--shadow-sm)]`; inactivo: `text-muted`. Texto **14px/600** (13.5 en la app), `py-[13px]`.
+- `role="tablist"` / `role="tab"` con `aria-selected`, igual que en la app.
+- **Pineada:** cambiar de tipo no exige scrollear. Es la decisión que reencuadra todo el form, y en una pantalla donde el 70% del contenido está fuera de vista tiene que estar anclada.
+- Cambiar de tab **limpia el formulario** (comportamiento vigente) y **devuelve el scroll del cuerpo al tope**.
+
+### 7. Cuerpo — el form, con el Monto de protagonista
+
+El **conjunto de campos**, los defaults y las validaciones son los del modo creación (`screens.md` §5) — compartidos, capa 1. Lo que esta sección fija es la **composición propia**: qué tan grande es cada cosa y en qué orden se lee. Todos los bloques ocupan el **ancho de la columna de contenido** (§1) y respetan el ritmo de §4.
+
+- **Toggle Gasto / Ingreso** — primer bloque, dos segmentos al 50%, `py-[14px]`, 15px/600, con `ArrowDown` / `ArrowUp` 16px. Colores semánticos vigentes (`--expense` / `--income` con sus `-soft` / `-ink`): son la única cosa **más grande y más coloreada** que el resto arriba del Monto, porque son la decisión que cambia el signo de todo.
+- **Monto — el campo protagonista.** Es el dato por el que existe la pantalla:
+  - Cifra en **mono tabular** (`tnum`) **28px/600**, `tracking-[-0.01em]`, color `--ink`. Es la tipografía de dinero más grande del producto después del balance hero — deliberado: en esta superficie el monto es *el* dato.
+  - Prefijo `$` **20px `--muted` mono**, `shrink-0`, separado 8px; la cifra toma el resto de la caja (`flex-1 min-w-0`).
+  - Caja: **ancho completo de la columna**, alto **64px**, `rounded-ctl`, `border-[1.5px] border-line-strong bg-panel`, `px-[14px] py-[10.5px]`; foco `border-accent` + ring 3px `--accent-soft`; error `border-expense` + ring `--expense-soft`.
+  - **`inputMode="decimal"`**: el teclado que aparece es el **numérico con separador decimal**, no el alfanumérico. Un teclado de texto para tipear un importe es fricción pura y fuente de error de tipeo.
+  - **El monto en el campo nunca se tiñe** de verde ni de rojo: el color de tipo vive en el toggle de arriba (regla dura 1: el color comunica ingreso/gasto, y ya lo está comunicando el control que lo decide).
+  - **20px de aire debajo** (§4): el protagonista no forma fila con los campos que siguen.
+- **Categoría** — label + botón de texto **"+ Nueva"** a la derecha de la misma fila (44px de alto, `--accent-ink`), select a 51px debajo.
+- **Fecha y Hora** — dos columnas (`grid-cols-2 gap-[14px]`). Si a 16px el control nativo no entra, la grilla cae a **una columna** antes que recortar el control: un date-picker cortado es un dato que no se puede ingresar.
+- **Descripción** — campo estándar, 51px.
+- **"Más opciones"** — el mismo disclosure colapsado por default, precedido de la hairline y el aire de §4, con su resumen a la derecha (moneda · cotización · método). La fila del disparador es tocable entera, 44px. Expandido, su contenido hereda la escala y el ritmo de §4 — sin excepciones ni densidades intermedias.
+
+### 8. Footer — la acción primaria
+
+- **Un solo control: `Guardar`.** `Button variant=default`, **`w-full` de la columna de contenido** (§1), `h-[52px]`, texto 16px/600, ícono `Check` 16px. Ancho completo de columna porque es la única acción: cualquier ancho menor deja aire muerto y un blanco más chico sin ganar nada; y el cap de 480px evita el extremo opuesto (un botón desmesurado en un viewport ancho y bajo).
+- **Alcanzabilidad con el pulgar:** pineado al borde inferior, es el **blanco más fácil de la pantalla**, sobre el eje natural del pulgar en cualquiera de las dos manos. Es la contracara exacta del cierre de sesión (§5), que vive en el vértice más difícil.
+- **Estados:** cargando → rótulo **"Guardando…"**, `disabled`, sin spinner (patrón vigente de la app). Deshabilitado también cuando no hay categorías disponibles para el tipo elegido.
+- **No hay "Cancelar", y su ausencia no deja hueco:** el botón ocupa el ancho entero de la columna. Cancelar significaría "volver a la pantalla anterior" y esa pantalla no existe.
+- **Los toasts no se montan sobre él.** La pila de toasts se ancla **por encima del footer**, no al borde del viewport: el envase publica su alto de footer y el viewport de toasts lo respeta (`--toast-inset-bottom`, default 26px en el resto de la app). Un toast tapando el botón Guardar dejaría la acción primaria inalcanzable durante los segundos siguientes a cada guardado — que es justo cuando el usuario quiere cargar el siguiente.
+
+### 9. Guardado con éxito — confirmación y estado posterior
+
+**Copy exacto** (`toast.success`, sin acción, duración estándar de 5000 ms):
+
+> **Movimiento guardado correctamente.**
+
+- **Es el mismo copy que la app usa al crear un movimiento.** Guardar es la misma acción con el mismo resultado en las dos superficies; darle un mensaje propio a esta obligaría a mantener dos acuses para un solo hecho y rompería la consistencia del producto sin ganar nada.
+- **Sin acción y sin navegación.** Acá el toast **no lleva "Ir a ver"**: en esta superficie no existe destino al que ir. Es un toast de éxito puro acuse — esa es la única diferencia con el de la app.
+- **Sin monto y sin nombre en el copy.** Una cifra en el pill obligaría a mono tabular sin truncado, y a 360px de ancho cualquier dato variable compite por espacio con la frase y termina recortado.
+- El tick conserva el mapeo vigente por tipo de toast.
+
+**Qué queda en pantalla después** — la superficie **queda lista para el siguiente movimiento**:
+
+1. El formulario **se resetea al estado inicial de la tab activa**: monto vacío, descripción vacía, tipo de vuelta en **Gasto**, categoría en su default, fecha y hora **recalculadas al momento actual**, "Más opciones" colapsado.
+2. La **tab activa no cambia**. Cambiarla sería mover el suelo bajo el usuario; y quien acaba de cargar una cuota es probable que cargue otra.
+3. El **scroll del cuerpo vuelve al tope** y el **teclado se cierra** (ningún campo queda enfocado). Con el teclado abierto y el scroll a mitad de camino, el usuario no vería el toast ni sabría si quedó algo cargado.
+4. El **foco se mueve al contenedor del formulario** (no a un campo): el lector de pantalla anuncia el comienzo del form y el teclado virtual no se reabre solo.
+
+### 10. Overlays sobre la superficie
+
+Los dos overlays que esta superficie puede montar —**aviso de límite activo** (`ActiveLimitDialog`) y **modal de nueva categoría**— **siguen consumiendo `ModalShell`**. `ModalShell` es una **primitiva del DS** (capa 2): se comparte tal cual, no se duplica ni se reencarna para esta superficie. La libertad de composición aplica a lo que esta superficie **arma**, no a las primitivas que **consume**.
+
+- **Sin modal debajo, el aviso deja de ser apilado.** En la app el aviso se monta *encima* del modal de movimiento (`stacked`, `z-50`). Acá la superficie de captura **es la base**: el aviso monta su scrim en la capa normal (`z-40`) sobre la superficie completa, que queda oscurecida y bloqueada detrás. Todo lo demás del aviso —variante `dialog`, callout ámbar, enumeración de cruces, copy, jerarquía de botones, foco inicial en "Cancelar", `role="alertdialog"`— **no cambia**.
+- **Ancho real en régimen de captura:** en un viewport angosto `max-w-[440px]` no llega a aplicarse y el diálogo ocupa el ancho disponible menos el padding del scrim; en uno ancho y bajo, capea en 440px y se centra. **El padding del scrim respeta las safe areas**: `max(24px, env(safe-area-inset-*))` por lado (en el resto del producto los insets valen 0, así que la regla es inerte ahí). El `max-height` sigue atado al padding por construcción.
+- **Botones del diálogo con densidad de esta superficie:** la fila se conserva (Cancelar ghost a la izquierda, "Guardar igual" primario a la derecha), con los dos a `flex-1` y **48px de alto**. Misma composición que en la app; solo crece el blanco.
+- **"Cancelar" devuelve a la superficie de captura con el form intacto**, igual que devuelve al modal en la app.
+- El **modal de nueva categoría** hereda exactamente lo mismo: `ModalShell`, safe areas en el scrim, escala y ritmo de §4 en sus campos y botones.
+
+### 11. Errores, validación y estados
+
+- **Validación:** mismos casos y mensajes que en la app. Al fallar el submit, el cuerpo **scrollea automáticamente al primer campo con error** y ese campo recibe el foco. En una pantalla donde la mayor parte del form está fuera de vista, un error silencioso arriba del scroll es un callejón: el usuario toca Guardar y no pasa nada visible.
+- **Error del backend:** `toast.error` con el mensaje vigente; el formulario **conserva todo lo ingresado** y permite reintentar. Nada se limpia ante un error.
+- **Sin categorías para el tipo elegido:** el bloque de aviso (fondo `--expense-soft`, `AlertTriangle`, texto `--expense-ink`) se conserva, pero **sin el enlace a Configuración → Categorías**: esa pantalla no es alcanzable desde este régimen y ofrecer una puerta cerrada es un callejón. El copy en esta superficie es: **"Sin categorías para este tipo. Usá el botón "+ Nueva" de arriba."** — la única salida real, y está a la vista, justo encima.
+- **Carga inicial:** la cabecera se pinta **completa desde el primer paint** (la identidad viene de la sesión, no espera a nada). Lo que puede llegar tarde son los datos de los selects: ahí se usa el sistema de skeletons vigente, en el cuerpo.
+
+### 12. Disposición corta — `--bp-short`
+
+**Esta superficie no tiene disposición por ancho:** la columna de contenido de §1 ya resuelve los dos extremos (angosto = fluido, ancho = capea a 480 y se centra). Su **única disposición alternativa es por alto**, porque el alto es lo que el chrome pineado consume y el cuerpo no puede recuperar.
+
+**Umbral nombrado:** `--bp-short` = **480px de alto de viewport**. Es un umbral del **eje vertical**, ortogonal a `--bp-wide` (que es de ancho) y **exclusivo de esta superficie**: por eso no reusa ninguno de los existentes. Se materializa como token para que el número no se repita.
+
+Por debajo de `--bp-short`:
+
+- **La fila de sesión y la barra de tabs se funden en una sola fila.** El chip de sesión queda a la izquierda (`max-w-[45%]`, el email sigue truncando), la barra de tabs toma el resto (`flex-1`). Se ahorran ~54px de alto sin esconder nada: **la identidad sigue visible sin acción del usuario** y las tabs siguen pineadas.
+- **El footer baja a `h-[48px]`** de botón con `padding: 10px`.
+- **El cuerpo conserva todo**: mismos campos, mismo orden, misma densidad; simplemente scrollea más. Nada se recorta ni se esconde detrás de un acordeón.
+- **Safe areas laterales activas:** con un inset del sistema a un costado, la cabecera, el cuerpo y el footer respetan `env(safe-area-inset-left/right)`.
+- Presupuesto de alto a 360px de alto: cabecera 70 + footer 68 → **~222px de cuerpo**, suficiente para 3–4 campos por vista.
+- **La fila fundida se alinea a la columna de contenido**, igual que el resto: en un viewport ancho y bajo, identidad y tabs quedan juntas en el centro, no separadas por medio metro de aire.
+
+### 13. Acceso (login) en régimen de captura
+
+Una sola columna, centrada, **sin el panel de marca** (`BrandSide`): a este tamaño un panel decorativo se comería la pantalla y empujaría el formulario abajo del pliegue.
+
+- **Envase:** `min-height: 100dvh`, fondo `--paper`, contenido en columna centrada verticalmente cuando entra y **scrolleable cuando no** (viewport bajo). Padding `24px` + safe areas en los cuatro lados. Ancho de la columna: `min(360px, 100% - 48px)`.
+- **Marca (arriba, centrada):** el **chip de gem** del DS —contenedor blanco 44×44 `rounded-[13px]` con el ícono 34×34 `rounded-[9px]`— acompañado del wordmark **"Control"** 20px/700 `--ink` debajo. Misma construcción de marca que el login en grande, en su versión compacta.
+- **Título:** `<h1>` **"Ingresá a Control"** 24px/700 `--ink`, `tracking-[-0.02em]`, centrado, con 20px de aire respecto de la marca. **Sin eyebrow y sin subtítulo:** en esta pantalla el alto es el recurso escaso y ninguno de los dos aporta información que el usuario necesite para entrar.
+- **Orden de los controles** (el email + contraseña es el camino principal, RF-APP-004):
+  1. **Email** — label + campo 51px (la misma caja de §4: `px-[14px] py-[13px]`, texto 16px), `inputMode="email"`, `autocomplete="email"`.
+  2. **Contraseña** — label + campo 51px, `autocomplete="current-password"`.
+  3. **"Iniciar sesión"** — primario, `w-full`, `h-[52px]`, 16px/600. Cargando: **"Iniciando sesión…"**, `disabled`.
+  4. **Separador** — hairline `--line` de lado a lado con un rótulo centrado sobre fondo `--paper`: **"o"**, 12px `--faint`, uppercase, `tracking-[.08em]`. El rótulo es una sola letra porque acá el camino principal va **primero** (credenciales) y Google es la alternativa: no hace falta anunciar el método que ya se leyó arriba.
+  5. **Botón de Google** — `w-full`, `h-[52px]`, molde `.gbtn` vigente (panel + `border-line-strong` + gmark 22px). **Siempre presente**; deshabilitado (`opacity-50`, rótulo "Google (no disponible)") si el proveedor no está configurado.
+- **Sin enlace a registro.** No se crea cuenta desde este régimen: no hay "¿No tenés cuenta?" ni ninguna otra salida.
+- **Fine print** (Términos / Política de privacidad) al pie, 12.5px `--faint`, centrado, `mt-[22px]`.
+- **Errores:** el bloque de error genérico sobre el formulario (`--expense-soft` / `--expense-ink`, `role="alert"`), con el mismo copy genérico de la app; el email ingresado se conserva.
+- Tras entrar, el destino es la **superficie de captura**.
+
+### 14. Invariantes de la superficie
+
+Los cuatro invariantes de contención, leídos en este régimen:
+
+1. **Sin scroll del `body` — ni horizontal ni vertical.** La raíz es `100dvh` + `overflow-hidden`; el único scroll es el del cuerpo. Ningún elemento excede el ancho disponible: los campos son fluidos dentro de la columna, el email trunca y las cifras nunca se recortan.
+2. **Overlays completos y escapables:** el aviso de límite y el modal de categoría entran enteros, scrollean adentro si hace falta y siempre ofrecen su salida (Cancelar / ✕).
+3. **Ninguna acción inalcanzable:** Guardar está pineado y nunca queda bajo el teclado ni bajo un toast; las tabs y la identidad están pineadas; el primer error se trae a la vista solo.
+4. **Las superficies anchas scrollean dentro de sí:** no aplica — en esta superficie no hay tablas ni gráficos. La contención del cuerpo es scroll vertical propio.
+
+Y los específicos de este régimen:
+
+5. **Ninguna puerta fuera de la superficie.** No hay enlaces a `/mes`, `/configuracion`, `/registro` ni a ninguna otra ruta: ni en el form, ni en los estados vacíos, ni en los avisos, ni en el popover de sesión.
+6. **Todo control es tocable con el dedo:** ≥44px, con ≥8px de separación.
+7. **El cierre de sesión nunca comparte mitad de pantalla con Guardar.**
+8. **El contenido nunca se estira:** ningún bloque del cuerpo, la cabecera o el footer supera los 480px de la columna, por ancho de viewport que sobre.
+
+### 15. Agregados más allá del brief — estado
+
+1. **Popover de un solo ítem para el cierre de sesión** (en vez de un botón suelto): decidido acá para preservar los dos pasos que la app ya exige y proteger contra el toque accidental. **No agrega capacidad**: el ítem sigue siendo uno solo.
+2. **`<h1>` `sr-only` "Nuevo movimiento"**: agregado de accesibilidad, sin superficie visual.
+3. **Auto-scroll al primer campo con error**: agregado de flujo, sin elemento nuevo.
+4. **Token `--bp-short` (480px de alto)**: umbral nuevo, justificado en §12 (eje vertical, exclusivo de esta superficie).
+5. **Piso tipográfico de 16px en campos de texto**: desviación deliberada del cuerpo de 15px del DS, justificada por el zoom forzado al enfocar (§4).
+6. **Safe areas en el padding del scrim de `ModalShell`**: regla global e inerte en régimen de app (los `env()` valen 0), no un caso especial.
+7. **Anclaje de la pila de toasts por encima del footer pineado** (`--toast-inset-bottom`): una variable en el sistema de toasts, no un caso especial por pantalla.
+8. **Retiro del enlace a Configuración → Categorías** en el bloque de "sin categorías" dentro de esta superficie: es cumplimiento de RF-APP-003 (nada más de la app es alcanzable), no un agregado.
+9. **Columna de contenido capeada en 480px** (§1): regla de composición propia, sin elemento ni capacidad nueva. Cubre el viewport ancho y bajo, que es régimen de captura tanto como el angosto.
+
+### 16. Reglas duras reafirmadas
+
+- **Regla 1 (verde = ingreso · rojo = gasto):** los únicos verdes y rojos de la superficie son el toggle Gasto/Ingreso y los estados de error (rojo `--expense`, uso vigente). El campo Monto **no se tiñe** por tipo ni por signo.
+- **Regla 2 (índigo solo marca / interacción):** el índigo vive en Guardar, en el avatar, en "+ Nueva" y en el focus ring. **Ninguna cifra es índigo.**
+- **Regla 3 (dinero en mono tabular):** el Monto va en mono `tnum` a 28px; la cotización y todo importe del bloque "Más opciones", igual. Ninguna cifra se trunca.
+- **Regla 4 (ambos modos de color):** toda la superficie consume tokens semánticos; se ve correcta en claro y en oscuro, incluida la banda de safe area (que pinta con el mismo `--panel` de su zona).
+
+### Checklist de aceptación visual — Superficie de captura
+
+**Tamaños de verificación** (los mismos en cualquier aparato: teléfono, tablet o ventana de escritorio redimensionada):
+**A** `375 × 812` (angosto y alto) · **B** `932 × 430` (ancho y bajo) · **C** `1200 × 540` (ancho grande, alto por debajo del umbral) · **D** `599 × 900` (justo por debajo del umbral de ancho) · **E** `600 × 600` (justo en régimen de app).
+
+*Frontera de superficie (es tamaño, no aparato):*
+- [ ] En **A, B, C y D**, con sesión activa, cualquier ruta muestra **la superficie de captura**; sin sesión, **el acceso**. Nunca el dashboard, `/mes`, `/reportes`, `/configuracion` ni `/registro`.
+- [ ] En **E** (600×600) se muestra **la app completa**, con sidebar y navegación.
+- [ ] **Achicar una ventana de escritorio** por debajo de 600px de ancho **o** de alto entra en la superficie de captura; agrandarla vuelve a la app. En los dos sentidos: **sin recarga, sin parpadeo y sin pantalla de bloqueo intermedia**.
+- [ ] **En ningún tamaño** aparece un aviso de "agrandá la ventana", una pantalla de bloqueo ni un mensaje de tamaño no soportado.
+- [ ] **Rotar** (o invertir ancho y alto) no produce una superficie distinta de la que corresponde al nuevo tamaño, y no parpadea.
+- [ ] Al cargar directo en **A**, **no hay flash**: no se ve la app ni por un instante.
+
+*Envase, zonas y columna:*
+- [ ] La pantalla **no scrollea como página**: solo scrollea el cuerpo. Cabecera (identidad + tabs) y footer (Guardar) quedan quietos.
+- [ ] **Sin scroll horizontal** en ningún estado ni tamaño, con cualquier email largo y cualquier categoría de nombre largo.
+- [ ] **Sin scrim, sin panel flotante, sin ✕**: la superficie ocupa la pantalla entera.
+- [ ] En **C** (1200px de ancho): el contenido —tabs, campos, Monto y Guardar— **queda capeado en 480px y centrado**; nada se estira de borde a borde. Las **hairlines** de cabecera y footer **sí** corren de borde a borde.
+- [ ] En **A** la columna es fluida: los campos llegan al padding lateral, sin banda muerta a los costados.
+- [ ] Con la barra del navegador entrando/saliendo, ni el footer ni la cabecera se cortan (**`dvh`**).
+- [ ] Con insets del sistema (notch / barra de gestos), **ningún control queda debajo** de ellos, y el fondo de cabecera y footer **llega hasta el borde** físico.
+
+*Teclado:*
+- [ ] Al enfocar cualquier campo, **el botón Guardar sigue visible** y tocable por encima del teclado.
+- [ ] El campo enfocado **no queda tapado** por la cabecera ni por el footer.
+- [ ] Al enfocar un campo de texto **la pantalla no hace zoom** (piso de 16px).
+- [ ] Al abrir la superficie **el teclado no aparece solo**.
+
+*Densidad, ritmo y contenido:*
+- [ ] Tabs **Único / Fijo / Cuotas** ocupan el ancho de la columna en tres tercios iguales y están **pineadas**.
+- [ ] Toggle **Gasto/Ingreso**, campos, selects, checkbox de débito automático, "Más opciones" y "+ Nueva": todos se tocan cómodo (**≥44px**), sin toques fallidos entre vecinos.
+- [ ] **Ritmo:** el aire entre bloques de campo es **visiblemente mayor** que el que hay entre un label y su control (16 vs. 6): cada label se lee pegado a su campo, no flotando entre dos.
+- [ ] El campo **Monto** ocupa **todo el ancho de la columna**, es el control **más alto** del form (64px, contra 52 del toggle y 51 de los campos de texto: la diferencia se ve a ojo), va en **mono tabular** y abre el **teclado numérico con decimal**.
+- [ ] Debajo del Monto hay **más aire** que entre los demás campos.
+- [ ] Los **selects** muestran su chevron completo, sin recortes ni desalineación entre label y control, en todos los tamaños.
+- [ ] "Más opciones" está precedido por una **hairline** de ancho de columna; expandido, sus campos tienen **la misma altura y el mismo ritmo** que los de arriba.
+- [ ] El monto tipeado **no se pinta de verde ni de rojo** al cambiar Gasto/Ingreso.
+- [ ] El form está **completo**: los tres tipos, todos los campos y "Más opciones" con moneda, cotización, método de pago y débito automático. **Ningún campo ni acción extra** respecto del modal de creación.
+
+*Coherencia con el modal de escritorio:*
+- [ ] Abriendo el mismo form en la app (modal de creación) y en la superficie de captura: **mismos campos, mismos labels, mismos mensajes de error, mismos colores semánticos** y misma familia tipográfica. Solo cambian tamaños, aire y disposición.
+- [ ] Tocar la superficie de captura **no altera** el modal de escritorio: chevrons de los selects, alineación label/input y footer del modal quedan **exactamente como estaban**.
+
+*Sesión:*
+- [ ] El **email de la cuenta activa se ve al entrar**, sin tocar nada.
+- [ ] Tocar el chip abre un popover con **un solo ítem: "Cerrar sesión"**. No hay ningún otro destino en toda la pantalla.
+- [ ] El ítem de cierre de sesión queda **lejos del botón Guardar** (mitad superior vs. borde inferior).
+- [ ] "Cerrar sesión" lleva al **acceso de esta superficie**, sin diálogo de confirmación.
+
+*Guardar:*
+- [ ] **Guardar** es el único botón del footer, a **ancho de columna**, pineado abajo (en **C** no mide más de 480px).
+- [ ] Al guardar aparece el toast **"Movimiento guardado correctamente."** — **sin botón "Ir a ver"** ni ninguna otra acción, y **sin tapar el botón Guardar**.
+- [ ] Después de guardar: form **limpio**, tab **sin cambiar**, scroll **arriba**, teclado **cerrado**, fecha/hora **recalculadas**.
+- [ ] Con un **límite activo cruzado**, aparece el aviso ámbar con "Cancelar" / "Guardar igual" (botones de 48px); "Cancelar" devuelve el form **intacto**.
+- [ ] En **C**, el aviso de límite y el modal de nueva categoría **capean en 440px y quedan centrados**, no estirados.
+- [ ] Un error de validación **trae el primer campo con error a la vista**; un error del backend **no borra nada** de lo cargado.
+- [ ] Sin categorías para el tipo: el aviso ofrece **solo "+ Nueva"** — **no hay enlace a Configuración**.
+
+*Alto por debajo de 480px (`--bp-short`, tamaños B y C):*
+- [ ] Identidad y tabs comparten **una sola fila**, ambas visibles; Guardar sigue pineado abajo; el cuerpo scrollea con **todos** los campos, sin recortes ni acordeones nuevos.
+- [ ] En **C**, esa fila fundida también queda **dentro de la columna de 480px**, centrada.
+- [ ] Con un inset del sistema a un costado, nada queda debajo de él.
+
+*Acceso:*
+- [ ] El acceso es **una columna**: marca, "Ingresá a Control", email, contraseña, "Iniciar sesión", separador, botón de Google.
+- [ ] **No hay enlace a "Crear cuenta"**; abrir `/registro` en régimen de captura muestra el acceso.
+- [ ] Con Google sin configurar, el botón se ve **deshabilitado y rotulado** como no disponible, y el ingreso con email + contraseña funciona igual.
+- [ ] En **B** y **C**, la columna del acceso **scrollea** en vez de recortarse, y sigue **centrada** (no estirada) a 1200px de ancho.
+
+*Modo de color:*
+- [ ] Toda la superficie (captura y acceso) se ve correcta en **claro y en oscuro**, incluidas las bandas de safe area.
 
 ---
 
 ## Sidebar — mostrar/ocultar (chrome toggleable)
 
-Implementa **RF-NAV-002**. El sidebar (`AppSidebar`, 248px) deja de auto-colapsar por breakpoint: es **chrome que el usuario muestra u oculta a voluntad en cualquier ancho** ≥640px. Un solo elemento, dos estados (**abierto** / **cerrado**). No hay drawer mobile aparte, no hay overlay, no hay rail de íconos. El estado persiste en la preferencia `sidebarOpen` (default **abierto**).
+Implementa **RF-NAV-002**. El sidebar (`AppSidebar`, 248px) deja de auto-colapsar por breakpoint: es **chrome que el usuario muestra u oculta a voluntad en todo el régimen de app** (`≥ 600px` en ambos ejes). Un solo elemento, dos estados (**abierto** / **cerrado**). No hay drawer aparte, no hay overlay, no hay rail de íconos. El estado persiste en la preferencia `sidebarOpen` (default **abierto**).
 
 ### Estado abierto (default)
 
@@ -388,7 +776,7 @@ Implementa **RF-NAV-002**. El sidebar (`AppSidebar`, 248px) deja de auto-colapsa
 
 ### Borde crítico — sidebar abierto a ancho apretado: empuja, no overlay
 
-Con el sidebar **abierto** a un viewport chico (ej. 700px → contenido ~452px), el sidebar **empuja y estrecha el contenido**; **nunca** pasa a overlay por encima del contenido. Razón: el overlay reintroduciría exactamente la variante mobile/drawer que este rework elimina, y rompería el modelo de "un elemento, dos estados" válido en todos los anchos. La consecuencia (contenido angosto a viewport chico con sidebar abierto) se absorbe con los mecanismos de contención ya definidos: **la disposición sigue al ancho de contenido** (colapsa a compacto/1-columna) y las superficies anchas **scrollean dentro de sí** (invariante 4). Es coherente con la filosofía de contención: no se promete buena experiencia a 452px, se promete que **no se rompe**. Si el usuario quiere más ancho, cierra el sidebar — es su decisión, no la del breakpoint.
+Con el sidebar **abierto** a un viewport chico (ej. 700px → contenido ~452px), el sidebar **empuja y estrecha el contenido**; **nunca** pasa a overlay por encima del contenido. Razón: el overlay abriría una **segunda variante del sidebar** —un panel que se superpone al contenido— y rompería el modelo de "un elemento, dos estados" válido en todo el régimen de app. La consecuencia (contenido angosto a viewport chico con sidebar abierto) se absorbe con los mecanismos de contención ya definidos: **la disposición sigue al ancho de contenido** (colapsa a compacto/1-columna) y las superficies anchas **scrollean dentro de sí** (invariante 4). Es coherente con la filosofía de contención: no se promete buena experiencia a 452px, se promete que **no se rompe**. Si el usuario quiere más ancho, cierra el sidebar — es su decisión, no la del breakpoint.
 
 ### Transición de abrir/cerrar
 
@@ -717,7 +1105,7 @@ Regla **transversal a TODOS los modales/diálogos** de la app: transaction-modal
 
 **Max-height del diálogo (contemplando el padding del scrim).** El scrim es `fixed inset-0 flex items-center justify-center p-6` (padding **24px**). El diálogo lleva:
 
-- `max-height: calc(100dvh - 48px)` — **48px = 2 × 24px** de padding del scrim (arriba + abajo). Se usa **`dvh`** (dynamic viewport height), no `vh`, para respetar la barra dinámica del navegador en mobile. Si en algún breakpoint el frontend baja el padding del scrim, el `calc` debe seguir a ese valor (siempre `100dvh − 2×padding`).
+- `max-height: calc(100dvh - 48px)` — **48px = 2 × 24px** de padding del scrim (arriba + abajo). Se usa **`dvh`** (dynamic viewport height), no `vh`, para respetar la barra dinámica del navegador (la que aparece y desaparece al scrollear y cambia el alto útil). Si en algún breakpoint el frontend baja el padding del scrim, el `calc` debe seguir a ese valor (siempre `100dvh − 2×padding`).
 - Mientras el contenido **cabe**, el diálogo se dimensiona por su contenido (como hoy) y no aparece scroll ni footer "flotando"; el `max-height` solo entra en juego cuando el contenido supera el alto disponible.
 
 **Tratamiento de la scrollbar interna, radios y clipping.**
@@ -768,7 +1156,7 @@ El contrato de arriba **no se cumple copiando el mismo markup a mano en cada mod
 - [ ] **Scrollbar en el gutter:** la barra de scroll no se monta sobre inputs ni labels.
 - [ ] **Cabe sin scroll → se ve normal:** un modal cuyo contenido entra en pantalla (p. ej. una confirmación de borrado) se ve sin scroll, sin líneas de corte y con el footer al pie natural.
 - [ ] **Apilamiento correcto:** si se abre una confirmación sobre otro modal, el fondo sigue bloqueado; al cerrar la de arriba el lock persiste hasta cerrar el último modal.
-- [ ] **`dvh`, no `vh`:** el panel usa `max-h-[calc(100dvh-48px)]`. Verificación específica en el navegador con barra dinámica (mobile): el modal **no** queda cortado por debajo de la barra del navegador (síntoma de `vh`).
+- [ ] **`dvh`, no `vh`:** el panel usa `max-h-[calc(100dvh-48px)]`. Verificación específica en un navegador con barra dinámica: el modal **no** queda cortado por debajo de la barra del navegador (síntoma de `vh`).
 - [ ] **Los 3 offenders migrados:** en viewport bajo, **crear límite** (`create-limit-modal`, el form más alto) pinea footer y scrollea el cuerpo; los dos **`reactivation-prompt`** (categorías y métodos de pago) también respetan el `max-height` y las tres zonas. Ninguno arma su propio scrim: todos consumen `ModalShell`.
 
 ### Superficies con scroll interno — contención de tablas y gráficos anchos
@@ -830,7 +1218,7 @@ Patrón **genérico** para navegar un período (mes o año): `‹ contenido ›`
 - **Forma lateral (canónica, a ancho de página):** el contenido es el **bloque canónico** `‹ contenido ›` y las flechas ‹ › son **overlay** que lo flanquean **sin reservar ancho** (simetría respecto del **contenido**, no del viewport). Cada flecha: `button` circular **64×64px**, glifo `ChevronLeft`/`ChevronRight` (lucide) **46px** `stroke-width 1.75`, **sin fill** en reposo, glifo `--faint`. **Vigente en `/mes`** (período = mes; flags siempre `true`) y en **reportes** (mismo patrón).
   - **Ancho de la columna central = ancho de contenido de página:** rige la regla *Ancho de contenido de página* (§ Contención responsive). El bloque central usa el **mismo mecanismo que las otras tres pantallas** (`px-10 max-w-[1120px] mx-auto`: llena el ancho disponible del `<main>` hasta **1120px**, y de ahí capea y centra) → **mismo ancho a igual viewport**. Las flechas **NO consumen ancho de columna** (se retiró el modelo de gutters de 84px/lado que angostaba `/mes` respecto del resto). Son overlay, absolutas respecto del bloque, centradas verticalmente al viewport. **Posición horizontal:** las flechas solo se muestran con `<main>` ≥ **1288px** (`--bp-arrows`), ancho al que el margen exterior por lado es **siempre ≥84px** (64 + 20 de aire); por eso la flecha va **siempre entera en el margen exterior** con **≥20px de aire** al borde del bloque y **nunca toca** el listado (ni el padding `px-10`). Por debajo de 1288 no hay flechas: cede al stepper. La fórmula de offset no cambia; sube el umbral de visibilidad. Detalle y racional del borde (incluida la reversa de la tolerancia de solape anterior): § Contención responsive → *Flechas ‹ › de `PeriodNav` — overlay, NO gutters*.
   - **Centrado vertical de las flechas:** la flecha está **centrada verticalmente en el VIEWPORT**, siempre, sin importar el largo del listado, y **permanece anclada al centro del viewport** mientras se hace scroll y con cualquier cantidad de contenido. El mecanismo técnico exacto lo resuelve control-frontend (p. ej. garantizar que el área de las celdas laterales tenga alto suficiente —`min-height` del viewport— para que el anclaje pueda centrar también con listas cortas); el **comportamiento visual a cumplir** es: flecha centrada verticalmente en el viewport, constante al scrollear, con cualquier cantidad de contenido.
-- **Forma compacta (`.stepper` pill):** el **modo de colapso** del mismo patrón, también usado **embebido** cuando no hay lugar para flechas laterales (cards apiladas, mobile). Pill `.stepper` del DS: `--r-pill`, `--panel`, borde `--line`, `--shadow-sm`, padding 4px; dos botones circulares **32px** (chevron-left/right, glifo 18px, `--ink-2` → `--ink` sobre `--panel-2` en hover) y, al centro, el rótulo del período (si es número → **mono tabular**, regla dura 3). **Vigente como control de año embebido per-card** en `/reportes` y en el Dashboard (ver *card de reporte* abajo).
+- **Forma compacta (`.stepper` pill):** el **modo de colapso** del mismo patrón, también usado **embebido** cuando no hay lugar para flechas laterales (cards apiladas, ventana angosta). Pill `.stepper` del DS: `--r-pill`, `--panel`, borde `--line`, `--shadow-sm`, padding 4px; dos botones circulares **32px** (chevron-left/right, glifo 18px, `--ink-2` → `--ink` sobre `--panel-2` en hover) y, al centro, el rótulo del período (si es número → **mono tabular**, regla dura 3). **Vigente como control de año embebido per-card** en `/reportes` y en el Dashboard (ver *card de reporte* abajo).
 
 **Estados de la flecha/chevron (comunes a ambas formas):**
 
@@ -1224,7 +1612,7 @@ Esta vista **no** se construye con Recharts (ni el wrapper `chart.tsx`). Rechart
 Estructura del canvas, de arriba a abajo: **header de meses (fila sticky)** → **cuerpo de 31 filas de día** → **footer de métricas por mes**. A la izquierda, una **columna fija de días** (1–31).
 
 - **Geometría:** **13 columnas** = 1 columna de rótulo de día (estrecha, ~28px) + 12 columnas de mes (de ancho igual, `1fr` cada una, mínimo legible ~64px). **32 filas** de cuerpo = 1 header de meses + 31 de día. La grilla **no scrollea internamente en desktop**: a 1120px de card, 12×~80px de mes + 28px de día entran cómodos. En `≤940px` la card permite **scroll horizontal** del bloque de grilla (overflow-x), manteniendo la **columna de día sticky a la izquierda** y el **header de meses sticky arriba**, para que el usuario nunca pierda los dos ejes de referencia.
-- **Header de meses (`<thead>`):** nombre corto es-AR (`Ene Feb … Dic`), **UI 12px/600 `--muted`**, centrado en su columna, sin rotar. Fondo `--panel` con borde inferior `--line` 1px; **sticky** al hacer scroll vertical (no aplica en desktop, sí en mobile scroll). La celda esquina (intersección día×mes header) va vacía.
+- **Header de meses (`<thead>`):** nombre corto es-AR (`Ene Feb … Dic`), **UI 12px/600 `--muted`**, centrado en su columna, sin rotar. Fondo `--panel` con borde inferior `--line` 1px; **sticky** al hacer scroll vertical (no aplica en amplio, sí cuando el bloque de grilla scrollea en compacto). La celda esquina (intersección día×mes header) va vacía.
 - **Columna de días (`<th scope="row">`):** número de día **mono tabular 11px `--muted`** (`tnum`), alineado a la **derecha** de su celda estrecha (los números se leen por su unidad), con `pr-[6px]`. Fondo `--panel`, borde derecho `--hair` 1px que la separa del cuerpo; **sticky** a la izquierda en scroll horizontal.
 - **Celdas de día (cuerpo):** cada celda es un cuadro de la grilla. **Alto de fila objetivo ~18–20px** (31 filas × ~19px ≈ 590px de cuerpo; es una card alta, aceptable para una planilla anual). **Gap entre celdas: 2px** (hairline de fondo `--panel`/`--paper` que las separa, igual recurso que los separadores 1px de la Forma 2) para que el heatmap se lea como mosaico de fichas y no como bloque continuo. Cada celda lleva su **tinte de heatmap** (§3) y, encima, el **monto del día** en **mono tabular 10.5px** (`tnum`), centrado, color de texto calculado por contraste contra el tinte de la celda (ver §3, texto por contraste). **Densidad vs. cifra completa:** a ~64–80px de ancho de columna, un total diario formateado completo (`$1.234,56`) no entra; por eso la **cifra en celda va abreviada** (`$0` · `$8` · `$13` · `$1,2k`), mismo criterio que el eje Y de los charts (*Ejes → Eje Y*), y la **cifra completa** vive en el **tooltip/hover** de la celda. El tinte ya comunica la magnitud relativa; el número en celda es la lectura aproximada; el tooltip da el exacto.
 - **Manejo de días inexistentes (30/31 en meses cortos, 29/30/31 en febrero):** la celda del día que **no existe** en ese mes (ej. Feb 30, Abr 31) **no se pinta ni rotula**: es una **celda nula** con fondo `--panel-2` (el neutro de "no aplica", levemente hundido), **sin tinte de heatmap, sin número, sin tooltip**. Se distingue claramente de un día con `$0` (que sí existe y sí lleva tinte de piso + "$0"). Así la silueta de cada mes (28/29/30/31 filas vivas) se lee de un vistazo: las colas nulas de febrero y de los meses de 30 quedan en gris neutro. `aria`: la celda nula es `aria-hidden` o con `aria-label="—"`; no participa de la navegación de datos.
@@ -1392,11 +1780,11 @@ Contenido, de arriba a abajo:
   - **Vacío o cero:** **"Guardar" queda deshabilitado** (`disabled`, `opacity-60`), y aparece una **micro-línea de ayuda 12px `--muted`** bajo el input: *"Ingresá un monto mayor a cero."* (neutra, **sin rojo** — el rojo es reservado a gasto, regla 1; no se comunica el error solo por color, hay texto). No se usa `--warning` ámbar (reservado a avisos, no a validación de form).
 - **Foco (teclado):** todos los controles del popover (input, selector, botones) tienen ring `--accent-soft` 3px `focus-visible`. Orden de tabulación: input → moneda → Cancelar → Guardar. Al abrir, el foco entra al **input de monto** (con el texto seleccionado, para reemplazo directo).
 
-##### 9.5 Comportamiento en pantalla chica (contención, `≥ 640px`, sidebar abierto o cerrado)
+##### 9.5 Comportamiento en pantalla chica (contención, todo el régimen de app, sidebar abierto o cerrado)
 
 El disparador es un chip de 32px que **fluye en el mismo `flex flex-wrap justify-end`** de la barra de controles (viaja junto a moneda / refrescar / quitar cuando la cabecera envuelve a segunda línea, `< --bp-wide` / con sidebar apretando el ancho). No cambia de forma ni se separa en su propia línea; el `flex-wrap` reacomoda. Los cuatro invariantes:
 
-1. **Sin scroll horizontal del `body`:** el popover está portaleado a `body`, `position: fixed`, y **clampea su `left`/`right` a 12px del borde del viewport** — nunca empuja ancho ni genera barra horizontal, ni siquiera en el piso 640px con sidebar abierto (contenido 392px).
+1. **Sin scroll horizontal del `body`:** el popover está portaleado a `body`, `position: fixed`, y **clampea su `left`/`right` a 12px del borde del viewport** — nunca empuja ancho ni genera barra horizontal, ni siquiera a 640px con sidebar abierto (contenido 392px).
 2. **Completo y no atrapante:** `max-height: min(60vh, 360px)` con `overflow-y-auto` interno; si el contenido (caption + input + microcopy + acciones) no entra, **scrollea dentro del popover**, con la fila de acciones siempre alcanzable (el popover es corto; casi nunca desborda). Esc / click-fuera siempre lo cierran.
 3. **Ninguna acción inalcanzable:** al no haber lugar abajo, el popover **flipea hacia arriba**; el clamp horizontal garantiza que "Guardar"/"Cancelar" queden siempre on-screen. El disparador, al fluir en el wrap, nunca queda tapado.
 4. **Superficie contenida:** el popover no ensancha la card ni la grilla; la grilla mantiene su propio scroll interno (§*Superficies con scroll interno*), independiente de este overlay.
@@ -1612,7 +2000,7 @@ Quinta opción del `AddCardMenu`, siguiendo la nomenclatura única (§Card de re
 La sidebar (`<aside>`, 248px) tiene padding vertical propio `py-[22px]` (de la escala de espaciado). El **logo** (bloque `<Link>` con el gem "C" + wordmark "Control / Finanzas del mes") es el primer elemento del contenido; debe abrir la columna con un aire superior **consistente** con el resto del espaciado, no pegado arriba.
 
 - **Valor vigente:** el logo lleva `pt` de **`10px`**. Sumado al `py-[22px]` del `<aside>`, da un aire superior total de **32px** (22 + 10) por encima del gem — un valor de la escala (32) que equilibra contra el `pb-[18px]` inferior del logo y el ritmo de la lista de nav que sigue.
-- **Dónde se aplica:** se ajusta el **`pt` del `<Link>` del logo** (10px), **no** el `py` del `<aside>`. El `py-[22px]` del `<aside>` es el padding estructural de la columna (vale igual arriba y abajo, y para desktop y drawer mobile) y no se toca; el aire fino del logo es responsabilidad del propio bloque del logo. El `pb-[18px]` del logo no cambia.
+- **Dónde se aplica:** se ajusta el **`pt` del `<Link>` del logo** (10px), **no** el `py` del `<aside>`. El `py-[22px]` del `<aside>` es el padding estructural de la columna (vale igual arriba y abajo, y en los dos estados del sidebar) y no se toca; el aire fino del logo es responsabilidad del propio bloque del logo. El `pb-[18px]` del logo no cambia.
 
 ### Logo de marca — ícono real (gem) en sidebar y login
 
@@ -2325,10 +2713,10 @@ La card es **read-only pura**: se compone de **título + ✕ + hero + ficha**, y
 - **R2 (índigo solo marca):** el único índigo es cromo de interacción (focus del ✕). Ninguna cifra se tiñe de índigo.
 - **R3 (dinero en mono tabular):** hero, monto original, cotización, resultado de fórmula, los números de cuota y el **monto de cada derivado** del bloque "Calculados" van en **mono tabular**.
 
-#### Comportamiento en pantalla chica (compacto, `< --bp-wide` / hasta el piso 640px, sidebar abierto o cerrado)
+#### Comportamiento en pantalla chica (compacto, `< --bp-wide`, hasta el piso del régimen de app, sidebar abierto o cerrado)
 
 - **La card hereda la contención del `ModalShell`:** `max-h: calc(100dvh − 48px)` (**`dvh`**), cuerpo `overflow-y-auto`, header pineado, body-lock, portal, clipping al radio 18px. **Invariante 2** (modal completo y scrolleable) cubierto por el shell; la card no tiene footer/acción, así que no aplica el invariante de control pineado al pie.
-- **Panel `w-full max-w-[440px]`:** en contenido angosto (piso 392px con sidebar abierto) el panel encoge a `viewport − 2×24px` de scrim. Las **filas rótulo·valor son `flex-wrap`:** cuando el valor no entra al lado del rótulo, **envuelve a su propia línea** debajo — el rótulo nunca empuja a la cifra ni la trunca.
+- **Panel `w-full max-w-[440px]`:** en contenido angosto (392px con el sidebar abierto a 640px de viewport) el panel encoge a `viewport − 2×24px` de scrim. Las **filas rótulo·valor son `flex-wrap`:** cuando el valor no entra al lado del rótulo, **envuelve a su propia línea** debajo — el rótulo nunca empuja a la cifra ni la trunca.
 - **Ninguna cifra se trunca (regla dura).** Si en el ancho mínimo una cifra (hero, original, cotización) no entra, su bloque **scrollea dentro de sí** (invariante 4); **nunca** desborda el body (invariante 1) ni corta el número.
 - **Bloque "Calculados" (compacto):** cada caja de derivado sigue el mecanismo de "Origen" — ícono de tipo `shrink-0`, **nombre `truncate min-w-0`** (cede primero), **monto `shrink-0 whitespace-nowrap` en mono nunca truncado** (regla dura). Las cajas apilan verticalmente; sin scroll horizontal. Si en el ancho mínimo el nombre + monto no entran juntos, el nombre trunca con elipsis y el monto queda íntegro.
 - **La fila adelgazada mejora su contención** respecto de hoy: col 4 pasa a una sola línea y la sublínea pierde segmentos → menos presión de ancho. Mantiene su grid; col 2 (identidad) trunca con `min-w-0`; col 4 (cifra mono) nunca trunca; la lista sigue el mecanismo de contención vigente de `/mes` (inv. 1 y 4). El clic para abrir la card funciona igual en compacto (la card queda contenida por el shell).
@@ -2407,7 +2795,7 @@ En Control una compra en cuotas se registra por su **monto por cuota** (`Install
 
 #### 4. Contención responsive (obligatoria)
 
-Umbral `--bp-wide`; piso 640px (contenido 392px con sidebar abierto).
+Umbral `--bp-wide`; rige en todo el régimen de app, con checkpoint apretado a 640px (contenido 392px con sidebar abierto).
 
 - **Card:** el `DetailRow` es `flex-wrap` → si la cifra + chip no entran al lado del rótulo, **envuelven a su propia línea** (inv. 4). El bloque de valor es `inline-flex items-center gap-[6px] justify-end flex-wrap`, chip `shrink-0`, cifra `whitespace-nowrap` **nunca truncada** (R3). Sin scroll horizontal del body (inv. 1); la card sigue completa y scrolleable por el `ModalShell` (inv. 2).
 - **Tooltip:** portal `fixed`, sin cambios de anclaje ni de flip. Rótulo `flex-1 min-w-0` (trunca primero), cifra `shrink-0 whitespace-nowrap`. El tooltip crece de ancho antes que romper la cifra; no genera overflow horizontal de la página (inv. 1).
@@ -2540,7 +2928,7 @@ El **segmented neutro de moneda** (molde del triple switch de tipo) es el contro
 - **Estados:** *seleccionado* = thumb `--panel` + `--shadow-sm`, texto `--ink`. *No seleccionado* = `--muted` → `--ink-2` en hover. *Disabled* = `opacity-50` + `cursor-not-allowed` (el set completo, ej. mientras persiste el cambio de default en `/configuracion`). *Focus (teclado)* = ring `--accent-soft` 3px sobre el segmento activo. **Sin color semántico ni índigo en los segmentos** (regla dura "la moneda es cromo neutro").
 - **A11y:** `role="radiogroup"` + 4 `role="radio"` con `aria-checked`; flechas ←/→ ciclan por los 4 (el wrap módulo contempla `CURRENCIES.length`, no hardcodeado).
 - **Etiquetas:** `"ARS" / "USD" / "EUR" / "BRL"` en `mono`. **Orden vigente:** `ARS → USD → EUR → BRL` (ARS/USD primero por back-compat y peso de uso; EUR/BRL después). Mismo orden en el form y en `/configuracion`.
-- **Responsive / mobile — el punto a vigilar:** en `/configuracion` el segmented vive a la **derecha de la fila de ajuste** (`flex justify-between`), con holgura; 4 segmentos cortos entran sin problema en desktop. El caso ajustado es el **bloque del form**, donde el segmented ocupa **la mitad** del `grid grid-cols-2` (comparte fila con Cotización) y en mobile el form se angosta. Regla de comportamiento a cumplir:
+- **Responsive / compacto — el punto a vigilar:** en `/configuracion` el segmented vive a la **derecha de la fila de ajuste** (`flex justify-between`), con holgura; 4 segmentos cortos entran sin problema en amplio. El caso ajustado es el **bloque del form**, donde el segmented ocupa **la mitad** del `grid grid-cols-2` (comparte fila con Cotización) y en ventana angosta el form se estrecha. Regla de comportamiento a cumplir:
   - El segmented **nunca hace scroll horizontal interno** ni recorta etiquetas. Las 4 etiquetas son cortas (3 chars `mono`); para ganar espacio cuando la columna se angosta, el segmented **puede reducir el padding horizontal de los segmentos** de `px-[14px]` hacia un mínimo de `px-[8px]` (manteniendo `py-[6px]`, el thumb y los tokens), antes que apretar el texto. El texto se mantiene a `13px`; **no** se reduce el tamaño de fuente ni se truncan códigos.
   - Si en el viewport más angosto soportado el `grid grid-cols-2` dejara el segmented sin aire para las 4 etiquetas legibles, el bloque moneda+cotización **colapsa a una sola columna apilada** (Moneda arriba, Cotización abajo, mismo `gap`), dándole al segmented el **ancho completo del form**. Es el mismo recurso de apilado que ya usa el DS cuando dos campos no caben en 2-col; **no** se inventa un control nuevo ni se cambia el segmented por otra forma. (El breakpoint exacto lo resuelve `control-frontend` midiendo; el comportamiento a cumplir es: 4 etiquetas siempre legibles, sin recorte ni scroll, apilando si hace falta.)
 
@@ -2588,7 +2976,7 @@ El form (tabs Único / Fijo / Cuota) agrupa **dos campos secundarios** —**mone
 1. **Segmento moneda (siempre presente):** el **código de moneda** en **`mono` 12px `--muted`** (ej. `"ARS"`, `"USD"`). Si `moneda ≠ default`, se suma la cotización: `"USD · 1.480,00"` (código + `·` separador `--faint` + valor mono `--ink-2`). Si `moneda == default`, solo el código. `shrink-0`: este segmento **nunca** se trunca (es la lectura de mayor prioridad —afecta el importe— y es corto).
 2. **Divisor de grupo + segmento método (solo si hay método elegido):** un **hairline vertical** (`--line` 1px, `h-[12px]`, `mx-[8px]`, `self-center`, `shrink-0`, `aria-hidden`) separa el grupo moneda del grupo método —**no** se reusa el `·`, que ya es separador *interno* del grupo moneda, para no ambiguar la agrupación—. Luego: **glifo del método** (16px `--ink-2`, `shrink-0`) + **nombre del método** (UI 12px `--ink-2`, `truncate`). **Sin chip de tipo** en el resumen (se omite para no recargar). Si **no hay método** (`"Sin método de pago"`), este segmento **y su divisor se omiten por completo** — el resumen queda solo con el segmento moneda.
 - **Débito automático NO aparece en el resumen:** es un sub-modificador del método (checkbox dentro del sub-bloque), no un tercer campo; sumarlo recargaría el resumen. El resumen resume **dos** campos: moneda y método.
-- **Truncado / overflow:** el **nombre del método** es el **único elemento flexible** (`truncate`, elipsis) — cede primero cuando la fila se angosta (mobile). El label "Más opciones", el segmento moneda completo y el glifo del método **nunca** se truncan (`shrink-0`); el glifo del método se conserva aun con el nombre truncado (identifica el método visualmente).
+- **Truncado / overflow:** el **nombre del método** es el **único elemento flexible** (`truncate`, elipsis) — cede primero cuando la fila se angosta (compacto). El label "Más opciones", el segmento moneda completo y el glifo del método **nunca** se truncan (`shrink-0`); el glifo del método se conserva aun con el nombre truncado (identifica el método visualmente).
 - **Casos combinados (referencia):**
   - `moneda=default`, sin método → `ARS` (caso más común; limpio).
   - `moneda=default`, método Visa → `ARS │ [glifo] Visa`.
@@ -2616,20 +3004,20 @@ El form (tabs Único / Fijo / Cuota) agrupa **dos campos secundarios** —**mone
 
 ### Selector de salto de mes/año en `/mes` (popover "rueda")
 
-Hace **interactivo el rótulo de período** de `/mes` para **saltar rápido** a cualquier mes/año, sin reemplazar la navegación secuencial (flechas desktop / pill stepper mobile). Es **solo UI nueva**: al confirmar reusa la navegación de período existente (RF-VM-004) — navega al mes elegido. Convive con `PeriodNav` (flechas laterales gigantes ≥1288px y forma `.stepper` <1288px) como **atajo de salto largo**, no como reemplazo del "anterior/siguiente".
+Hace **interactivo el rótulo de período** de `/mes` para **saltar rápido** a cualquier mes/año, sin reemplazar la navegación secuencial (flechas laterales en amplio / pill stepper en compacto). Es **solo UI nueva**: al confirmar reusa la navegación de período existente (RF-VM-004) — navega al mes elegido. Convive con `PeriodNav` (flechas laterales gigantes ≥1288px y forma `.stepper` <1288px) como **atajo de salto largo**, no como reemplazo del "anterior/siguiente".
 
 #### 1. Affordance — el rótulo de período se vuelve disparador
 
 El rótulo del período es el disparador. **No** se agrega un botón aparte ni un ícono suelto que compita; el propio período (que ya es el elemento de mayor jerarquía del header) toma la afordancia, con un glifo de apoyo que comunica "esto despliega".
 
-- **Desktop (≥1288px) — el `<h1>` "Junio 2026" pasa a `<button>`-like.** El H1 (32px/700, tracking `-.02em`, `--ink`) se envuelve en un disparador (`<button>` con el H1 adentro, `inline-flex items-center gap-[8px]`), conservando exactamente su tipografía y tamaño. A su derecha, un glifo **`ChevronsUpDown`** (lucide, **18px**, `stroke-width 2`, `--faint` en reposo, `shrink-0`, `aria-hidden`) — el glifo de doble flecha ↕ comunica "valores que suben/bajan", coherente con la metáfora de "rueda". El eyebrow ("Tu mes" + `CurrencyChip`) y el sub-label de estado ("Mes en curso"/"Histórico") **no cambian** y **quedan fuera** del disparador (el botón envuelve solo el H1 + chevron).
-- **Mobile (<1288px) — el centro del pill `.stepper` se vuelve disparador.** El bloque central del `.stepper` (el texto `{mes} {año}` + sub-label de estado, hoy un `<div>` inerte entre las dos flechas) pasa a ser un `<button>` que abre el mismo popover. Las **flechas ‹ › del pill no cambian** (siguen navegando anterior/siguiente). Se suma el mismo glifo `ChevronsUpDown` **15px** `--faint` a la derecha del texto del mes, dentro del botón central, `gap-[6px]`. El sub-label "Mes en curso/Histórico" sigue debajo, dentro del botón. El centro deja de ser `aria-hidden`: ahora es accionable (label real). El pill conserva su molde (`--r-pill`, `--panel`, borde `--line`, `--shadow-sm`, padding 4px).
+- **Amplio de `PeriodNav` (≥1288px) — el `<h1>` "Junio 2026" pasa a `<button>`-like.** El H1 (32px/700, tracking `-.02em`, `--ink`) se envuelve en un disparador (`<button>` con el H1 adentro, `inline-flex items-center gap-[8px]`), conservando exactamente su tipografía y tamaño. A su derecha, un glifo **`ChevronsUpDown`** (lucide, **18px**, `stroke-width 2`, `--faint` en reposo, `shrink-0`, `aria-hidden`) — el glifo de doble flecha ↕ comunica "valores que suben/bajan", coherente con la metáfora de "rueda". El eyebrow ("Tu mes" + `CurrencyChip`) y el sub-label de estado ("Mes en curso"/"Histórico") **no cambian** y **quedan fuera** del disparador (el botón envuelve solo el H1 + chevron).
+- **Compacto de `PeriodNav` (<1288px) — el centro del pill `.stepper` se vuelve disparador.** El bloque central del `.stepper` (el texto `{mes} {año}` + sub-label de estado, hoy un `<div>` inerte entre las dos flechas) pasa a ser un `<button>` que abre el mismo popover. Las **flechas ‹ › del pill no cambian** (siguen navegando anterior/siguiente). Se suma el mismo glifo `ChevronsUpDown` **15px** `--faint` a la derecha del texto del mes, dentro del botón central, `gap-[6px]`. El sub-label "Mes en curso/Histórico" sigue debajo, dentro del botón. El centro deja de ser `aria-hidden`: ahora es accionable (label real). El pill conserva su molde (`--r-pill`, `--panel`, borde `--line`, `--shadow-sm`, padding 4px).
 - **Por qué `ChevronsUpDown` y no `ChevronDown`/`Calendar`:** el popover **no** es un menú desplegable plano (sería `ChevronDown`) ni un date-picker de calendario (sería `Calendar`): es un **selector de dos ruedas** (mes y año que suben/bajan). El doble chevron vertical ↕ es la afordancia exacta del patrón "stepper/rueda" y no se confunde con el chevron lateral ‹ › de navegación secuencial ni con el chevron de disclosure ▶.
 
-**Estados del disparador (desktop e mobile, comunes):**
+**Estados del disparador (comunes a las dos disposiciones):**
 
 - **Reposo:** H1/label en su color normal (`--ink`); chevron `--faint`; `cursor: pointer`.
-- **Hover:** chevron sube a `--ink-2`; el H1 **no** cambia de color (se mantiene `--ink` para no parpadear el título). Transición 0.14s. En mobile, el botón central **no** toma fondo (el pill ya es la superficie); el chevron a `--ink-2` es la única señal.
+- **Hover:** chevron sube a `--ink-2`; el H1 **no** cambia de color (se mantiene `--ink` para no parpadear el título). Transición 0.14s. En compacto, el botón central **no** toma fondo (el pill ya es la superficie); el chevron a `--ink-2` es la única señal.
 - **Focus (teclado):** ring `--accent-soft` 3px (`focus-visible`), radio `--r-chip` 7px ajustado al box del disparador (envuelve H1 + chevron sin recortar el descender de la tipografía).
 - **Abierto:** el chevron pasa a `--ink-2` (mismo que hover) y se mantiene mientras el popover está abierto (señal de "activo"); el disparador lleva `aria-expanded="true"` + `aria-haspopup="dialog"`.
 
@@ -2695,8 +3083,8 @@ Superficie flotante portaleada a body, anclada al disparador. **No** es un calen
 
 #### 5. Ubicación, anclaje y flip
 
-- **Desktop (≥1288px):** el popover se ancla **bajo el disparador (el H1)**, alineado a la **izquierda** del H1 (su borde izquierdo coincide con el inicio de "Junio 2026"), con `gap` vertical **8px** entre el H1 y el borde superior del popover. Como el header de `/mes` vive en la columna central de `PeriodNav` (régimen ≥1288px), el popover queda dentro del ancho de contenido, sin colisionar con las flechas laterales gigantes.
-- **Mobile (<1288px):** se ancla **bajo el pill `.stepper`**, **centrado** respecto del botón central del pill (no respecto del viewport), `gap` 8px. Si el centrado lo sacaría del viewport, se alinea al borde con margen mínimo 12px (clamp horizontal).
+- **Amplio de `PeriodNav` (≥1288px):** el popover se ancla **bajo el disparador (el H1)**, alineado a la **izquierda** del H1 (su borde izquierdo coincide con el inicio de "Junio 2026"), con `gap` vertical **8px** entre el H1 y el borde superior del popover. Como el header de `/mes` vive en la columna central de `PeriodNav` (régimen ≥1288px), el popover queda dentro del ancho de contenido, sin colisionar con las flechas laterales gigantes.
+- **Compacto de `PeriodNav` (<1288px):** se ancla **bajo el pill `.stepper`**, **centrado** respecto del botón central del pill (no respecto del viewport), `gap` 8px. Si el centrado lo sacaría del viewport, se alinea al borde con margen mínimo 12px (clamp horizontal).
 - **Flip vertical (sin lugar abajo):** si no hay espacio suficiente debajo del disparador para los 240px de alto aproximado del popover (cerca del borde inferior del viewport), **flipea hacia arriba** y se ancla **sobre** el disparador (mismo `gap` 8px, ahora por encima), con la animación `pop` desde el borde inferior. El mecanismo (medición/colisión) lo resuelve `control-frontend`; el comportamiento a cumplir: el popover **siempre queda completamente visible** dentro del viewport, flipeando arriba/abajo y clampeando horizontal según haga falta.
 
 #### 6. Convivencia con la navegación existente
@@ -2749,13 +3137,13 @@ Lleva **una** flecha `lucide-react`, **siempre en posición leading (a la izquie
 
 #### 4. Ubicación, separador y anti-empuje horizontal
 
-- **Desktop (≥1288px): en la fila del `statusLabel`, como hermano posterior del span `Histórico`.** La fila es `flex items-center gap-[8px]` (baja de `gap-[10px]` para ceñir el grupo `estado · remedio`). Orden de fuente: `[span Histórico] · [link]`.
+- **Amplio de `PeriodNav` (≥1288px): en la fila del `statusLabel`, como hermano posterior del span `Histórico`.** La fila es `flex items-center gap-[8px]` (baja de `gap-[10px]` para ceñir el grupo `estado · remedio`). Orden de fuente: `[span Histórico] · [link]`.
 - **Separador: `·` (middot) en `--faint`.** Se elige el middot — no un simple gap — porque agrupa las dos piezas como **"estado · su remedio"** (patrón de separador de meta ya vigente en el DS, p. ej. la sublínea del ítem de salto). El `·` va en `--faint` (más tenue que ambos textos `--muted`) para recederse a pura puntuación. **Solo se renderiza junto al link** (mes histórico): en mes-en-curso la fila muestra únicamente `Mes en curso`, sin `·` ni link.
 - **En mes-en-curso la fila es idéntica a hoy:** solo el span `Mes en curso` (12.5px/500 `--muted`). El subsistema del link es **aditivo**: no cambia esa fila cuando no aplica.
-- **Mobile (<1288px): fuera del pill `.stepper`**, que está envuelto en `aria-hidden="true"` (meterlo adentro lo volvería inaccesible — el `statusLabel` mobile vive *dentro* del pill, así que el link **no** puede ir junto a él). Se ubica como **último hijo** de la fila flex del header mobile, **después** del pill y del `CurrencyChip`. Al estar fuera del `aria-hidden`, es **plenamente accesible y focalizable** en su orden natural. En teléfonos angostos `flex-wrap` lo baja a su propia línea bajo el pill.
+- **Compacto de `PeriodNav` (<1288px): fuera del pill `.stepper`**, que está envuelto en `aria-hidden="true"` (meterlo adentro lo volvería inaccesible — en esta disposición el `statusLabel` vive *dentro* del pill, así que el link **no** puede ir junto a él). Se ubica como **último hijo** de la fila flex del header compacto, **después** del pill y del `CurrencyChip`. Al estar fuera del `aria-hidden`, es **plenamente accesible y focalizable** en su orden natural. En ventanas muy angostas `flex-wrap` lo baja a su propia línea bajo el pill.
 - **Anti-empuje horizontal:**
   - **`Histórico`/`Mes en curso` inmunes:** el span de estado está anclado a la izquierda de la fila; `·` y link son **posteriores** y crecen **hacia la derecha, sobre espacio vacío**. Nada a la izquierda del link se desplaza. El flip de sentido de la flecha **no mueve** el borde izquierdo del link (→ y ← misma caja).
-  - **`CurrencyChip` inmune:** en desktop vive en la fila del *eyebrow* (otra fila, arriba); en mobile va **antes** del link en orden de fuente. En ninguno de los dos casos lo toca la aparición del link.
+  - **`CurrencyChip` inmune:** en amplio vive en la fila del *eyebrow* (otra fila, arriba); en compacto va **antes** del link en orden de fuente. En ninguno de los dos casos lo toca la aparición del link.
   - **Cluster de acciones inmune (desktop):** el header exterior es `justify-between`, acciones ancladas al **borde derecho**; ensanchar el cluster izquierdo **no las mueve** mientras no haya `flex-wrap`. El link es corto (`whitespace-nowrap`, ~150px) y a ≥1288px sobra ancho: **no se dispara wrap**. (Ítem medible en §8.)
 - **Reversión de la iteración anterior (instrucción para `control-frontend`):** el link **sale de la fila del título**. La fila del título (`MonthJumpTriggerDesktop`) vuelve a su estado pre-feature (solo el trigger; su `gap-[12px]` extra pierde sentido con un único hijo). El `<button>` del link se mueve a la fila del `statusLabel`, después del span y del `·`.
 
@@ -2765,8 +3153,8 @@ Lleva **una** flecha `lucide-react`, **siempre en posición leading (a la izquie
 - **Invariante de alto verificable (números, no "a ojo"):** el alto de la fila lo fija la **caja de línea del texto de 12.5px**, presente en **ambos** estados (`Mes en curso` sola, o `Histórico · [link]`). La flecha de 13px se centra **dentro** de esa caja de línea (13px < caja de línea de un texto de 12.5px) y **no** la excede. Por lo tanto el alto de la fila es **idéntico** con y sin link: `getBoundingClientRect().height` de la fila del `statusLabel` debe dar **el mismo valor** (delta **0px**) alternando entre un mes histórico (con link) y el mes en curso (sin link). Si el medido difiere en algo distinto de 0px, la causa es la flecha excediendo la caja → aplicar el fallback de 12px de §3.
 - **Todo lo que va debajo conserva su `y`:** al no crecer la fila del `statusLabel`, los totales y el label "GASTOS" **conservan su coordenada `y`** (0px de desplazamiento) entre mes-en-curso e histórico.
 - **Fila del título — sin cambios:** su alto lo fija el H1 (32px, `leading-none`); ya no aloja el link, así que es estable por construcción.
-- **Flechas ‹ › inmunes por estructura:** en desktop viven en las columnas laterales del grid de `PeriodNav`; en mobile dentro del pill, y el link es hermano **posterior** al pill.
-- **Mobile — reflow vertical aceptado (trade-off explícito):** por ser el último elemento, su ausencia/presencia nunca mueve lateralmente pill ni chip; en teléfonos angostos aparece en segunda línea y empuja hacia abajo el contenido siguiente. Se acepta ese reflow (viaja con la entrada de vista del cambio de mes) en vez de reservar una línea vacía permanente.
+- **Flechas ‹ › inmunes por estructura:** en amplio viven en las columnas laterales del grid de `PeriodNav`; en compacto dentro del pill, y el link es hermano **posterior** al pill.
+- **Compacto — reflow vertical aceptado (trade-off explícito):** por ser el último elemento, su ausencia/presencia nunca mueve lateralmente pill ni chip; en ventanas muy angostas aparece en segunda línea y empuja hacia abajo el contenido siguiente. Se acepta ese reflow (viaja con la entrada de vista del cambio de mes) en vez de reservar una línea vacía permanente.
 
 #### 6. Estados
 
@@ -2784,7 +3172,7 @@ Lleva **una** flecha `lucide-react`, **siempre en posición leading (a la izquie
 - **A11y — el verbo ya está en el texto visible:** el nombre accesible es **"Ir al mes en curso"** tomado del contenido de texto. **No hace falta `aria-label` extra** (sería redundante). La flecha es `aria-hidden="true"`.
 - **Contraste:** `--muted` sobre el fondo del header cumple el contraste mínimo para texto (es el mismo tono con que ya se muestra `Histórico`). El subrayado en hover/focus es un portador **no-dependiente-del-color** de la interacción.
 - **Cambio de sentido de la flecha — no se anuncia:** el nombre accesible es **idéntico** apunte → o ← y el destino ("mes en curso") es inequívoco. **No** se usa `aria-live` ni región de anuncio: el flip es refuerzo puramente visual para usuarios videntes.
-- **Orden de foco:** en desktop, tras el disparador de salto (H1) → en la fila del `statusLabel` → antes del cluster de acciones de la derecha. En mobile, en la fila del header tras el pill (que es `aria-hidden`) → focalizable en su orden natural.
+- **Orden de foco:** en amplio, tras el disparador de salto (H1) → en la fila del `statusLabel` → antes del cluster de acciones de la derecha. En compacto, en la fila del header tras el pill (que es `aria-hidden`) → focalizable en su orden natural.
 
 #### 8. Checklist de aceptación visual
 
@@ -2800,9 +3188,9 @@ Lleva **una** flecha `lucide-react`, **siempre en posición leading (a la izquie
 - [ ] El link **no** usa índigo, **ni** verde, **ni** rojo, en ningún estado.
 - [ ] **La fila del `statusLabel` mide lo MISMO con y sin link:** `getBoundingClientRect().height` de esa fila da **el mismo valor (delta 0px)** entre un mes histórico (con link) y el mes en curso (sin link). La fila **no** lleva `min-h-[34px]` ni ninguna reserva de alto.
 - [ ] **Ningún elemento del header se desplaza** al aparecer/desaparecer el link: H1 + `ChevronsUpDown`, `CurrencyChip`, flechas ‹ ›, totales y label "GASTOS" **conservan su `x` e `y`** (0px). Verificable con `getBoundingClientRect` alternando mes histórico ↔ mes en curso.
-- [ ] En **desktop** el cluster de acciones ("Ordenar secciones" / "+ Nuevo movimiento") **no se reposiciona** ni dispara `flex-wrap` a 1288px al aparecer el link.
-- [ ] En **desktop** el link **ya no está en la fila del título** (salió de junto al `ChevronsUpDown`) y **está en la fila del `statusLabel`**, después del `·`.
-- [ ] En **mobile** el link está **fuera del pill** (`aria-hidden`) y es **clickeable/focalizable**; pill y chip **no** se mueven lateralmente.
+- [ ] A **≥1288px** el cluster de acciones ("Ordenar secciones" / "+ Nuevo movimiento") **no se reposiciona** ni dispara `flex-wrap` a 1288px al aparecer el link.
+- [ ] A **≥1288px** el link está **en la fila del `statusLabel`**, después del `·`, y **no** en la fila del título (no aparece junto al `ChevronsUpDown`).
+- [ ] A **<1288px** el link está **fuera del pill** (`aria-hidden`) y es **clickeable/focalizable**; pill y chip **no** se mueven lateralmente.
 - [ ] Con `prefers-reduced-motion` el link no tiene animación de entrada; solo la transición de color de hover/focus (no posicional).
 - [ ] Orden de foco por teclado: disparador de salto (H1) → link "Ir al mes en curso" → acciones de la derecha.
 
@@ -3052,11 +3440,11 @@ La sección activa se **deriva del `pathname`** (deep-link), no de estado efíme
 
 **Responsive (≤940px, `max-wide` — P0-a, obligatorio):**
 
-- El contenedor pasa de dos columnas a **una**: la nav **arriba**, el contenido **debajo**. En Tailwind mobile-first: base = compacto `flex flex-col gap-6`; `wide:flex-row wide:gap-8 wide:items-start`.
-- El **track no desaparece en compacto**: sigue siendo la superficie recesada de grupo (`bg-panel-2 border border-line rounded-[var(--r-card)]`), pero pasa de columna a **barra horizontal que envuelve**. El elemento `<nav>` combina, mobile-first: `flex flex-row flex-wrap gap-1 bg-panel-2 border border-line rounded-[var(--r-card)] p-1 wide:flex-col wide:w-[200px] wide:shrink-0 wide:p-1.5`. Es decir: **base compacto** = fila envolvente con **padding `p-1` (4px)**; **`wide:`** = columna 200px con **padding `p-1.5` (6px)**. Los ítems se **ciñen a su contenido**: ítem base `w-auto`, `wide:w-full`. Quedan **cuatro pastillas cortas** ("General" · "Categorías" · "Métodos de pago" · "Límites") dentro del track, separadas por `gap-1` (4px), con el track a su vez separado del contenido por el `gap-6`.
-- **Padding compacto justificado (contra desborde a ~392px):** el track compacto usa `p-1` (4px por lado = 8px totales de aire horizontal) en vez del `p-1.5` amplio, para no comer ancho útil en el piso. La pastilla más ancha ("Métodos de pago" ~145px + `px-3` 24px = ~169px) + los 8px de padding del track = ~177px, **muy por debajo** de los ~392px de contenido disponible (piso 640px con sidebar abierto), así que **ningún ítem individual desborda** el track. Las 4 pastillas suman ~385px + 3 gaps de 4px + 8px de padding ≈ **405px**; a ~392px **envuelven a una segunda fila** dentro del track (comportamiento esperado del `flex-wrap`), **nunca** scroll horizontal. A anchos mayores caben en una sola fila. La cabecera de sección de la derecha también envuelve su botón bajo la identidad por su `flex-wrap` propio.
+- El contenedor pasa de dos columnas a **una**: la nav **arriba**, el contenido **debajo**. En Tailwind, con el compacto como base y `wide:` encima: base `flex flex-col gap-6`; `wide:flex-row wide:gap-8 wide:items-start`.
+- El **track no desaparece en compacto**: sigue siendo la superficie recesada de grupo (`bg-panel-2 border border-line rounded-[var(--r-card)]`), pero pasa de columna a **barra horizontal que envuelve**. El elemento `<nav>` combina, con el compacto como base: `flex flex-row flex-wrap gap-1 bg-panel-2 border border-line rounded-[var(--r-card)] p-1 wide:flex-col wide:w-[200px] wide:shrink-0 wide:p-1.5`. Es decir: **base compacto** = fila envolvente con **padding `p-1` (4px)**; **`wide:`** = columna 200px con **padding `p-1.5` (6px)**. Los ítems se **ciñen a su contenido**: ítem en compacto `w-auto`, `wide:w-full`. Quedan **cuatro pastillas cortas** ("General" · "Categorías" · "Métodos de pago" · "Límites") dentro del track, separadas por `gap-1` (4px), con el track a su vez separado del contenido por el `gap-6`.
+- **Padding compacto justificado (contra desborde a ~392px):** el track compacto usa `p-1` (4px por lado = 8px totales de aire horizontal) en vez del `p-1.5` amplio, para no comer ancho útil en el extremo angosto. La pastilla más ancha ("Métodos de pago" ~145px + `px-3` 24px = ~169px) + los 8px de padding del track = ~177px, **muy por debajo** de los ~392px de contenido disponible (640px de viewport con sidebar abierto), así que **ningún ítem individual desborda** el track. Las 4 pastillas suman ~385px + 3 gaps de 4px + 8px de padding ≈ **405px**; a ~392px **envuelven a una segunda fila** dentro del track (comportamiento esperado del `flex-wrap`), **nunca** scroll horizontal. A anchos mayores caben en una sola fila. La cabecera de sección de la derecha también envuelve su botón bajo la identidad por su `flex-wrap` propio.
 - **Los cuatro invariantes de contención en este elemento:**
-  1. *Sin scroll horizontal ≥640px:* las 4 etiquetas cortas en `flex-wrap` **dentro del track** envuelven a 2 filas antes que desbordar; el track crece en alto (no en ancho), y su padding compacto `p-1` garantiza que ni el ítem más ancho ni la suma fuercen scroll del `body`, incluso a ~392px de contenido (sidebar abierto en el piso).
+  1. *Sin scroll horizontal en todo el régimen de app:* las 4 etiquetas cortas en `flex-wrap` **dentro del track** envuelven a 2 filas antes que desbordar; el track crece en alto (no en ancho), y su padding compacto `p-1` garantiza que ni el ítem más ancho ni la suma fuercen scroll del `body`, incluso a ~392px de contenido (sidebar abierto a 640px de viewport).
   2. *Modales completos:* la nav no abre modal; los modales de los gestores (crear categoría / método / límite) son independientes y este cambio no los afecta.
   3. *Ninguna acción inalcanzable:* los 4 ítems son inline dentro del track y siempre visibles (envuelven, no se recortan ni scrollean); el contenido de la sección queda debajo, completo, con su botón de acción alcanzable (envuelto bajo la identidad si hace falta).
   4. *Superficies anchas scrollean dentro de sí:* el track es de ancho acotado (envuelve, no scrollea) y no introduce superficie ancha; el contenido (card de Moneda / lista de límites) conserva su propia contención.
@@ -3075,7 +3463,7 @@ La sección activa se **deriva del `pathname`** (deep-link), no de estado efíme
 - [ ] Foco de teclado: anillo índigo de 3px visible sobre el ítem enfocado; Tab recorre los enlaces.
 - [ ] **Deep-link:** entrar directo a `/configuracion/categorias` (o `/metodos-pago` `/limites`) pinta esa sección como activa y muestra su contenido, sin pasar por General.
 - [ ] Al cambiar de sección, **solo** cambia el contenido de la derecha; la `.phead` de página y el track de nav **no se mueven ni parpadean**.
-- [ ] En ≤940px la nav pasa **arriba** del contenido: el track se vuelve **barra horizontal** (padding interno 4px) con las pastillas cortas envueltas dentro; con 4 ítems pueden **envolver a 2 filas dentro del track** (el track crece en alto, no en ancho). En el piso (640px, y con sidebar abierto ~392px de contenido) **no** hay scroll horizontal del `body`, ningún ítem desborda el track, y las 4 secciones quedan alcanzables.
+- [ ] En ≤940px la nav pasa **arriba** del contenido: el track se vuelve **barra horizontal** (padding interno 4px) con las pastillas cortas envueltas dentro; con 4 ítems pueden **envolver a 2 filas dentro del track** (el track crece en alto, no en ancho). A 640px (y con sidebar abierto ~392px de contenido) **no** hay scroll horizontal del `body`, ningún ítem desborda el track, y las 4 secciones quedan alcanzables.
 - [ ] Claro y oscuro: el track `panel-2` y el tile activo `panel` **contrastan** en ambos modos; en oscuro el tile activo se separa del track por su `border border-line` (la sombra oscura casi no lee, el borde la sostiene).
 
 *Jerarquía de cabecera (§1.b):*
@@ -3317,9 +3705,9 @@ Reusa el **molde de popover del DS** (*Moneda por reporte* §3, *Cierre de overl
 
 ### 5. Comportamiento en pantalla chica (contención, política P0-a) — los cuatro invariantes
 
-Rige en todo ancho **≥640px** (`--bp-floor`), con el sidebar abierto o cerrado.
+Rige en **todo el régimen de app** (`≥ 600px` en ambos ejes), con el sidebar abierto o cerrado.
 
-1. **Sin scroll horizontal del `body`.** El popover es **overlay por portal** (no participa del flujo de la card ni del header), anclado al disparador y **clampeado al viewport con margen mínimo 12px**: nunca empuja el layout ni asoma fuera del borde. Su ancho (`max-w-[300px]`) entra holgado incluso en el piso de 640px con el sidebar abierto (contenido ~392px). El disparador `Info` es un glifo de 16px en 32×32 → no ensancha ni el header de `/mes` ni la cabecera de card (en las cards vive en la identidad izquierda, lejos del clúster de controles que ya gestiona su propio wrap).
+1. **Sin scroll horizontal del `body`.** El popover es **overlay por portal** (no participa del flujo de la card ni del header), anclado al disparador y **clampeado al viewport con margen mínimo 12px**: nunca empuja el layout ni asoma fuera del borde. Su ancho (`max-w-[300px]`) entra holgado incluso a 640px de viewport con el sidebar abierto (contenido ~392px). El disparador `Info` es un glifo de 16px en 32×32 → no ensancha ni el header de `/mes` ni la cabecera de card (en las cards vive en la identidad izquierda, lejos del clúster de controles que ya gestiona su propio wrap).
 2. **Popover completo y escapable — nunca cortado ni atrapante.** Si no hay lugar debajo del disparador, **flipea hacia arriba** (mismo mecanismo de colisión que la rueda mes/año §5 y los demás popovers; lo resuelve `control-frontend`); si el borde lateral lo cortaría, **clampea horizontal** a 12px del borde. Con **muchos límites**, el popover **capea su alto** (`max-h-[min(60vh,360px)]`) y **scrollea dentro de sí mismo** (invariante 4): el contenido se recorre en el popover, el `body` no. Siempre se puede ver entero y salir (`Esc` / click-fuera / re-clic siempre disponibles, sin trap).
 3. **Ninguna acción inalcanzable.** El disparador de 32×32 cumple hit-area del DS y queda on-screen en todo ancho (en `/mes` compacto viaja con el `flex-wrap` del stepper; en cards, en la identidad izquierda que nunca sale de pantalla). El popover no tiene controles operables (es lectura); sus únicas "acciones" son las vías de cierre, todas alcanzables por teclado y puntero.
 4. **Superficies anchas scrollean dentro de sí mismas.** El listado largo scrollea **dentro del popover** (punto 2), no en la página. El popover nunca fuerza scroll del `body`.
@@ -3453,7 +3841,7 @@ Umbral único `--bp-wide` (941px). La sección **no introduce ninguna superficie
 - **Card Inflación:** el destacado es `flex justify-between` con identidad corta + cifra corta (entra a cualquier ancho); las filas del historial son `justify-between` de mes + % (cortísimas); "Ver meses anteriores" es full-width. Nada desborda.
 - **Card Cotizaciones:** `grid-cols-2` se sostiene hasta el piso (celdas cortas, `$1.100,00` entra en ~185px); no colapsa a 1 columna.
 - **Los cuatro invariantes en este elemento:**
-  1. *Sin scroll horizontal ≥640px:* todas las filas son `justify-between` de texto corto y la grilla de cotizaciones es de 2 columnas angostas que caben a ~392px de contenido; nada fuerza scroll del `body`.
+  1. *Sin scroll horizontal en todo el régimen de app:* todas las filas son `justify-between` de texto corto y la grilla de cotizaciones es de 2 columnas angostas que caben a ~392px de contenido; nada fuerza scroll del `body`.
   2. *Modales completos:* la sección no abre modales.
   3. *Ninguna acción inalcanzable:* el único control de acción ("Actualizar datos") envuelve bajo la identidad pero queda siempre visible y alcanzable; "Ver meses anteriores" es full-width dentro de la card.
   4. *Superficies anchas scrollean dentro de sí:* no hay superficie ancha (ni tabla ni grilla día×mes); las cards conservan su propia contención vertical.
@@ -3743,7 +4131,7 @@ Mismo `ModalShell variant="dialog"`. Es el **único** camino para deshacer una e
 ### 7. Vacío, carga y error
 
 **Vacío (el caso más común).** Reusa el lenguaje **dashed = acá todavía no hay nada** (sección vacía del acordeón, recuadro `[+]` de reportes). En lugar de la tarjeta-lista: caja `rounded-card border border-dashed border-line bg-panel-2`, `px-6 py-10`, contenido centrado en columna, `gap-[10px]`:
-- **Círculo `--panel-3` de 48px** con glifo **`History` 22px `--muted`** — el mismo ancla visual del gate: declara "esto está bien así, no está roto".
+- **Círculo `--panel-3` de 48px** con glifo **`History` 22px `--muted`** — el ancla visual del vacío sano: declara "esto está bien así, no está roto".
 - **Título** 14.5px/600 `--ink`: *"Todavía no hay cambios registrados."*
 - **Línea de apoyo** 13px `--muted`, `max-w-[42ch]`, centrada: *"Cuando edites o elimines un movimiento, el cambio aparece acá y lo vas a poder deshacer."*
 - **Sin CTA.** Mandar al usuario a `/mes` "a editar algo" para llenar esta pantalla sería absurdo: el vacío es el estado sano.
@@ -3791,7 +4179,7 @@ Así la acción nunca queda apretada ni inalcanzable, y el par de valores no com
 - **La lista del modal de cadena** (§6.2) tiene su propia contención —resumen de **un solo valor**, cifra indivisible, wrap a segunda línea— porque ahí el ancho útil es fijo (`max-w-[440px]` menos padding) y no depende del viewport. Misma regla dura: **ninguna cifra trunca, nunca**.
 
 **Los cuatro invariantes en este elemento:**
-1. *Sin scroll horizontal del `body` (≥640px, sidebar abierto o cerrado):* la fila no tiene ancho mínimo rígido — col 2 es `min-w-0` con truncado y el bloque de cambios envuelve. En compacto la acción sale de la fila y deja de presionar el ancho. A 392px de contenido (piso con sidebar abierto) la entrada se lee apilada, sin barra horizontal.
+1. *Sin scroll horizontal del `body` (todo el régimen de app, sidebar abierto o cerrado):* la fila no tiene ancho mínimo rígido — col 2 es `min-w-0` con truncado y el bloque de cambios envuelve. En compacto la acción sale de la fila y deja de presionar el ancho. A 392px de contenido (640px con el sidebar abierto) la entrada se lee apilada, sin barra horizontal.
 2. *Modales completos y scrolleables:* los dos modales son `ModalShell variant="dialog"` — `max-h: calc(100dvh − 48px)` en `dvh`, cuerpo scrolleable, footer pineado, body-lock, clipping al radio 18px. El **modal de cadena es el más alto** (callout + hasta 5 filas + nota): es el caso que hay que verificar en viewport bajo — el footer con "Deshacer los N cambios" debe quedar pineado y visible.
 3. *Ninguna acción inalcanzable:* el botón de la fila ("Deshacer" o "Bloqueado", **los dos activos**) está siempre visible (nunca hover-only); en compacto ocupa su propia fila. La fila entera es una superficie de activación grande (≥44px de alto real), lo que da un target holgado también en touch.
 4. *Superficies anchas scrollean dentro de sí:* **no aplica** — el historial no es una tabla ancha de columnas fijas (es una lista vertical, como `limits-tab`). Su contención es **truncado + wrap**; forzar un carril de scroll horizontal acá sería inventar un problema.
@@ -4099,7 +4487,7 @@ Un mes futuro más allá del horizonte **no lleva ninguna señal**: se ve exacta
 
 **Los cuatro invariantes en estos elementos:**
 
-1. *Sin scroll horizontal del `body` (≥640px, sidebar abierto o cerrado):* la fila simulada no agrega ancho mínimo (misma geometría que la real, col 2 truncable); el popover es de ancho fijo portaleado; las líneas de texto envuelven. A 392px de contenido (piso con sidebar abierto) la fila se lee con la identidad truncada y el monto entero.
+1. *Sin scroll horizontal del `body` (todo el régimen de app, sidebar abierto o cerrado):* la fila simulada no agrega ancho mínimo (misma geometría que la real, col 2 truncable); el popover es de ancho fijo portaleado; las líneas de texto envuelven. A 392px de contenido (640px con el sidebar abierto) la fila se lee con la identidad truncada y el monto entero.
 2. *Modales completos y scrolleables:* los dos son `ModalShell variant="dialog"`; el selector de categorías scrollea su lista con el footer pineado.
 3. *Ninguna acción inalcanzable:* la banda del popover es `shrink-0` y el popover se acota al viewport y se invierte de anclaje — el botón "Simular categoría" y los de eliminar están siempre a la vista. La fila simulada no tiene acciones, así que no aporta riesgo.
 4. *Superficies anchas scrollean dentro de sí:* aplica a las dos listas del popover (categorías y activas), cada una con su propio carril; la lista de `/mes` no es una tabla ancha.
@@ -4211,7 +4599,7 @@ Fila única, `items-center`, `gap-[14px]`:
 - **Toast sin acción:** `max-w-[min(460px,calc(100vw-32px))]`. Ancho natural, capeado.
 - **Toast con acción:** **ancho fijo** `w-[min(520px,calc(100vw-32px))]`. No es un rango `min-w`/`max-w`: es **una sola propiedad**.
   - **Por qué fijo y no un rango.** El pill con acción es un blanco de clic que además **se reemplaza en su misma posición** (§5, identidad de grupo) mientras el puntero viaja hacia él. Con un rango, dos movimientos de nombres distintos producen dos pills de **anchos distintos en el mismo slot**: el blanco cambia de tamaño bajo el cursor. Es el mismo modo de falla que §5 previene en el eje vertical, en el eje horizontal. Ancho fijo = geometría estable entre toasts sucesivos. *(Prevención de error.)*
-  - **Por qué 520 y no 460.** El toast con acción carga 119px de cromo que uno normal no tiene. A 460px su columna de mensaje queda en **227px** contra los 360px de un toast sin acción: 37% menos de texto por la sola presencia del botón. Subir a 520 devuelve **287px** de mensaje. A 520 el pill entra con holgura en el piso soportado (520 + 32 = 552 ≤ 640).
+  - **Por qué 520 y no 460.** El toast con acción carga 119px de cromo que uno normal no tiene. A 460px su columna de mensaje queda en **227px** contra los 360px de un toast sin acción: 37% menos de texto por la sola presencia del botón. Subir a 520 devuelve **287px** de mensaje. A 520 el pill entra con holgura en el piso del régimen de app (520 + 32 = 552 ≤ 600).
   - **Prohibido `min-width` sin clamp — regla general del DS.** En CSS `min-width` **gana sobre** `max-width`: un piso fijo (`min-w-[320px]`) convive con un clamp de viewport (`max-w-[…100vw-32px]`) hasta que se cruzan, y a partir de ahí **el elemento se sale de la pantalla**. Ningún elemento del DS declara un piso de ancho que su propio clamp de viewport no pueda vencer: o se usa una sola propiedad `width: min(deseado, clamp)` (lo que se hace acá), o el piso se escribe también clampeado (`min-width: min(piso, clamp)`). Aplica a todo el sistema, no solo al toast.
 - **El desenlace (c/d) no hereda el ancho.** El toast que reemplaza al de acción ya no tiene acción, así que toma la regla sin acción (natural, ≤460): se **angosta**. Es correcto y esperado, no un defecto — para ese momento el blanco de clic ya no existe y la pila no se reordena (los demás pills no se mueven al cambiar el ancho de uno). Lo que sí puede mover la pila es un cambio de **cantidad de líneas** en el swap; ocurre una sola vez, después del clic, sin ningún blanco en vuelo.
 
@@ -4274,14 +4662,14 @@ Fila única, `items-center`, `gap-[14px]`:
 
 ### 6. Contención responsive (obligatoria)
 
-**Alcance: el piso es 640px (`--bp-floor`) y el gate cubre lo de abajo.** Por debajo de 640px la app está **gateada** (§ Ancho mínimo soportado / El gate): no hay pantalla que contener. El toast es chrome global montado en `z-[90]`, por encima de casi todo — **el gate lo cubre igual**: el bloqueo es a viewport completo y **ningún pill queda visible por debajo del piso**. Medir el toast a 324px o 374px de viewport no mide un estado soportado: mide un gate que no está tapando lo que debe. Si en QA aparece un pill bajo el piso, el hallazgo es **del gate**, no del toast.
+**Alcance: el toast es chrome de los dos regímenes.** Montado en `z-[90]`, por encima de casi todo, con el mismo molde en ambos. Lo único que cambia es **dónde apoya la pila**: en **régimen de app** se ancla abajo-centro a `--toast-inset-bottom` (26px del borde inferior); en **régimen de captura** el envase publica el alto de su footer en esa misma variable y la pila queda **por encima del footer pineado**, para que ningún pill tape el botón Guardar (ver §Superficie de captura → *8. Footer — la acción primaria*). El clamp de ancho `100vw − 32px` es la última palabra en los dos regímenes: en una pantalla angosta manda sobre los 520px y el pill se angosta con ella.
 
-- **Ancho:** el pill con acción es **ancho fijo** `w-[min(520px,calc(100vw-32px))]` y el pill sin acción `max-w-[min(460px,calc(100vw-32px))]` (§1). **Ningún `min-width` sin clamp** — el piso `min-w-[320px]` queda **retirado**: cruzaba el clamp a 352px de viewport y, como `min-width` gana sobre `max-width`, sacaba el pill de la pantalla por los dos bordes. Aunque ese ancho está bajo el piso soportado, el defecto se corrige igual: un elemento **jamás** debe poder desbordar el viewport, esté o no en un ancho que se promete. El clamp `calc(100vw-32px)` ahora es la última palabra en todo ancho. El pill es `fixed` sobre el viewport, así que **el estado del sidebar no lo afecta**: no se angosta ni se corre.
+- **Ancho:** el pill con acción es **ancho fijo** `w-[min(520px,calc(100vw-32px))]` y el pill sin acción `max-w-[min(460px,calc(100vw-32px))]` (§1). **Ningún `min-width` sin clamp** — el piso `min-w-[320px]` queda **retirado**: cruzaba el clamp a 352px de viewport y, como `min-width` gana sobre `max-width`, sacaba el pill de la pantalla por los dos bordes. Aunque ese ancho cae en régimen de captura, el defecto se corrige igual: un elemento **jamás** debe poder desbordar el viewport, sea cual sea el régimen. El clamp `calc(100vw-32px)` ahora es la última palabra en todo ancho. El pill es `fixed` sobre el viewport, así que **el estado del sidebar no lo afecta**: no se angosta ni se corre.
 - **El mensaje envuelve, la acción no.** Mensaje `min-w-0` + `line-clamp-2`; acción y ✕ `shrink-0`. El pill crece de alto (48→63px) antes que empujar la acción fuera.
-- **El ancho de mensaje es constante en todo ancho soportado.** Con el pill fijo en 520, la columna de mensaje mide **287px a 640px, a 941px, a 1120px y a 1920px** — el toast no tiene régimen compacto: se comporta idéntico en toda la franja. Eso hace que el criterio de no-truncado se verifique **una sola vez** y valga para todos los anchos.
+- **El ancho de mensaje es constante en todo el régimen de app.** Con el pill fijo en 520, la columna de mensaje mide **287px a 640px, a 941px, a 1120px y a 1920px** — el toast no tiene disposición compacta: se comporta idéntico en toda la franja. Eso hace que el criterio de no-truncado se verifique **una sola vez** y valga para todos los anchos.
 - **Truncado permitido solo en texto, y el nombre nunca desaparece entero.** El nombre puede terminar en elipsis, pero el copy lo pone al comienzo de la frase (§2): con 287px × 2 líneas, la elipsis recorta **el final de un nombre largo**, nunca llega a comerse la frase antes del nombre. **No hay cifras en este copy**; si alguna vez se agregara un monto, iría en **mono tabular** y **no truncaría jamás** (regla dura 3).
 - **Los cuatro invariantes:**
-  1. *Sin scroll horizontal del `body` (≥640px, sidebar abierto o cerrado):* `fixed` + ancho clampeado a `100vw-32px` en una sola propiedad + `translate-x-1/2`; el toast no participa del flujo ni del ancho de `<main>`.
+  1. *Sin scroll horizontal del `body` (todo el régimen de app, sidebar abierto o cerrado):* `fixed` + ancho clampeado a `100vw-32px` en una sola propiedad + `translate-x-1/2`; el toast no participa del flujo ni del ancho de `<main>`.
   2. *Modales completos y scrolleables:* el toast no es modal ni bloquea. El viewport de toasts es `z-[90]` y los modales `z-40/50`, así que un pill **se dibuja por encima** de un modal y puede solaparse con su footer en viewport bajo. **Regla vigente: el ancla del toast es siempre abajo-centro**, haya o no un modal abierto. El toast con acción es un **blanco de clic**, y un blanco que cambia de lugar según el contexto es un blanco impredecible: el usuario no puede aprender dónde aparece el undo (mismo criterio que §5 aplica al apilado). **Invariante a preservar: ni la acción del toast ni los controles del modal quedan inaccesibles.** Lo que lo sostiene hoy: el pill **nunca atrapa** (✕ siempre habilitado, `pointer-events` solo en el pill —el contenedor es `pointer-events-none`— y auto-dismiss), los modales scrollean dentro de sí y la banda ocupada por la pila está acotada (≤235px, invariante 3). **Se verifica en QA** a 700×640 con el form de movimiento abierto: si el invariante se rompe, se resuelve con el caso a la vista.
   3. *Ninguna acción inalcanzable:* acción y ✕ **siempre visibles** (nunca hover-only), hit area ≥44px (48px real vía `after`), y con 3 pills apilados la banda ocupada (≤235px) deja libre el resto de la pantalla también a 640px de alto.
   4. *Superficies anchas scrollean dentro de sí:* **no aplica** — el toast no es una superficie de datos; su contención es wrap + clamp de ancho.
@@ -4345,7 +4733,7 @@ Fila única, `items-center`, `gap-[14px]`:
 
 *Contención y modos:*
 - [ ] A **640px** de viewport (sidebar abierto y cerrado): el pill entra completo, **sin scroll horizontal del `body`**, y no se corre ni se angosta al abrir/cerrar el sidebar.
-- [ ] **Por debajo de 640px no se evalúa el toast, se evalúa el gate:** a **375px** y a **324px** con un toast recién emitido, la pantalla muestra **solo el gate** y **ningún pill queda visible** (ni asomando, ni por encima del bloqueo). Si se ve un pill, el hallazgo es del **gate** (`z-index` del bloqueo vs. `z-[90]` del viewport de toasts), no del toast.
+- [ ] **En régimen de captura el pill apoya sobre el footer, no sobre el borde:** a **375px** y a **324px** de ancho, con un toast recién emitido, el pill queda **entero por encima del footer pineado** (`--toast-inset-bottom` = alto del footer) — **no tapa el botón Guardar**, que sigue visible y operable —, entra completo con su clamp `100vw − 32px` y **no genera scroll horizontal**.
 - [ ] A **700×640** con el **form de movimiento abierto**: con un toast en pantalla, **la acción del toast y los controles del footer del modal siguen alcanzables** (el pill puede solaparse, pero nada queda inaccesible: ✕ operable, footer alcanzable con scroll del modal). Si algo queda inaccesible, es una **rotura del invariante 2** (§6) y se reporta como hallazgo.
 - [ ] Se ve correcto en **claro y oscuro**: pill invertido, divisor y foco visibles en ambos, tick con su color semántico.
 
@@ -4482,11 +4870,11 @@ Cinco decisiones, todas al servicio del caso frecuente:
 
 ### 6. Contención responsive (obligatoria)
 
-Régimen **único**: el modal se comporta igual en todo ancho soportado (`≥640px`), con el sidebar abierto o cerrado. No tiene disposición compacta propia.
+Régimen **único**: el modal se comporta igual en todo el régimen de app (`≥ 600px` en ambos ejes), con el sidebar abierto o cerrado. No tiene disposición compacta propia.
 
 - **Ancho:** lo da `ModalShell variant="dialog"` — `w-full max-w-[440px]` dentro de un scrim `p-6`, es decir **`min(440px, 100vw − 48px)`**. A 640px de viewport el diálogo mide **440px exactos**. El scrim es `fixed inset-0` sobre el **viewport**: el estado del sidebar **no** cambia el ancho ni la posición del modal.
 - **Prohibido el piso de ancho sin clamp (regla general del DS).** Ningún elemento de este modal —ni el par `.row2`, ni los `Select`, ni la caja de resultado, ni las filas de radio— declara `min-width` en px. Las dos celdas del par van `min-w-0`; si el rótulo `Mmm AAAA` no entrara, **trunca el `<select>` nativo**, no empuja el diálogo. Es el mismo modo de falla que ya se pagó una vez (un piso ganándole al clamp de viewport): acá no hay piso que pueda ganar.
-- **Aritmética a 640px:** diálogo 440 − `px-[22px]`×2 = **396** de cuerpo; bloque de rango indentado 36 ⇒ **360**; `.row2` con gap 14 ⇒ **173px por selector** — holgado para `Sep 2026` con su chevron. El par **nunca** envuelve a dos filas en ancho soportado.
+- **Aritmética a 640px:** diálogo 440 − `px-[22px]`×2 = **396** de cuerpo; bloque de rango indentado 36 ⇒ **360**; `.row2` con gap 14 ⇒ **173px por selector** — holgado para `Sep 2026` con su chevron. El par **nunca** envuelve a dos filas en el régimen de app.
 - **Invariante 1 (sin scroll horizontal del `body`):** el modal no aporta ancho; el fondo queda bloqueado por el body-lock del shell.
 - **Invariante 2 (modal completo y scrolleable):** con el rango abierto el diálogo mide ≈500px de alto. Por debajo de ≈560px de viewport alto, el **cuerpo scrollea** y header + footer quedan pineados por el shell (`max-h-[calc(100dvh−48px)]`) — sin ajuste propio.
 - **Invariante 3 (ninguna acción inalcanzable):** los dos botones del footer están pineados; los `<select>` son nativos y su panel lo posiciona el SO, sin riesgo de clipping por overflow.
@@ -4718,7 +5106,7 @@ Con el toggle encendido, las marcas evalúan el valor **con** simulados (RF-REP-
 
 ### 4. Contención responsive (obligatoria — política P0-a)
 
-Umbral `--bp-wide` **941px**, evaluado sobre el **ancho de contenido** (`<main>`), no sobre el viewport. Piso soportado 640px; por debajo, gate.
+Umbral `--bp-wide` **941px**, evaluado sobre el **ancho de contenido** (`<main>`), no sobre el viewport. Rige en **todo el régimen de app** (`≥ 600px` en ambos ejes).
 
 - **El chip envuelve, no comprime.** La línea 2 de ambas cards ya es `flex flex-wrap`, y el cluster izquierdo también. El chip es el **último** de ese cluster, así que es **el primero en bajar de renglón** cuando falta ancho — orden de sacrificio correcto: primero cede el interruptor que se toca una vez, no el control de representación ni el de dirección.
 - **El divisor `--hair` viaja con el chip.** El divisor previo y el chip forman un **subgrupo que envuelve como unidad** (`shrink-0`): nunca queda un divisor colgando al final de un renglón ni un chip huérfano abriendo el siguiente. *(Es el defecto clásico de sumar una pieza a un cluster con `flex-wrap`.)*
@@ -4726,7 +5114,7 @@ Umbral `--bp-wide` **941px**, evaluado sobre el **ancho de contenido** (`<main>`
 - **Canvas en compacto:** el alto baja a **220px** por la regla vigente. Ahí el bloque simulado es proporcionalmente más chico; si una banda simulada queda por debajo de ~3px de alto, el contorno punteado deja de resolverse y el portador de la información pasa a ser el **tooltip** (que siempre da la cifra con `≈`). Es una degradación aceptada y declarada: **nunca** se compensa engordando el trazo ni tiñendo la banda de otro color.
 - **Alto de toque:** el chip mide ~27px de alto, por debajo de los ~44px de guía. Es **el molde vigente de todo el cromo de la cabecera de card** (chips de Tipo, segmented de Dirección, tabs): se acepta por consistencia en un producto desktop-first, no se abre una excepción nueva. El área accionable es el chip completo, no solo el texto.
 - **Los cuatro invariantes, en este elemento:**
-  1. *Sin scroll horizontal del `body` (≥640px, sidebar abierto o cerrado):* el chip envuelve con su divisor; el canvas es `ResponsiveContainer` al 100% y la capa simulada no le agrega ancho mínimo; ninguna cifra nueva aparece fuera del tooltip. A **392px de contenido** (640px con sidebar abierto) la línea 2 queda en varios renglones y la card no desborda.
+  1. *Sin scroll horizontal del `body` (todo el régimen de app, sidebar abierto o cerrado):* el chip envuelve con su divisor; el canvas es `ResponsiveContainer` al 100% y la capa simulada no le agrega ancho mínimo; ninguna cifra nueva aparece fuera del tooltip. A **392px de contenido** (640px con sidebar abierto) la línea 2 queda en varios renglones y la card no desborda.
   2. *Modales completos y scrolleables:* la feature **no introduce ningún modal ni overlay**. El único popover de la card (confirmar quitar) no cambia.
   3. *Ninguna acción inalcanzable:* el chip está en flujo normal y siempre entra al envolver. **Deshabilitado sigue siendo enfocable** (`aria-disabled`, no `disabled`), así que su motivo es alcanzable por teclado y por lector de pantalla incluso sin hover — que es el caso táctil.
   4. *Superficies anchas scrollean dentro de sí:* el gráfico ya escala dentro de la card y la leyenda conserva su scroll interno de alto acotado. La capa simulada no cambia nada de eso.
@@ -4898,14 +5286,14 @@ Ordenados quiet → fuerte, **en el mismo orden que la regla de desempate del DS
 
 ### 7. Contención responsive (obligatoria — política P0-a)
 
-Umbral `--bp-wide` **941px**, evaluado sobre el **ancho de contenido** (`<main>`), no sobre el viewport. Piso soportado 640px; por debajo, gate.
+Umbral `--bp-wide` **941px**, evaluado sobre el **ancho de contenido** (`<main>`), no sobre el viewport. Rige en **todo el régimen de app** (`≥ 600px` en ambos ejes).
 
 - **Degradación declarada en compacto.** Por debajo del umbral, **los tres efectos se sirven en la forma quiet**: `AlertTriangle` **11px** + rótulo, **sin chip**. Motivo geométrico: a 640px de contenido el slot de un mes mide ~48px (`(640 − 64) / 12`) y el chip de `badge`/`ring` mide ~49px — no entra sin invadir el mes vecino. **Se degrada la forma, nunca el hecho de marcar:** el mes marcado se sigue viendo marcado y el tooltip sigue enumerando. Precedente vigente y explícito: la banda simulada de menos de 3px que delega en el tooltip (RF-REP-017 §4).
 - **Por qué el umbral nombrado y no un ancho medido a mano:** el DS tiene **un solo** breakpoint. A 941px de contenido el slot mide ~73px y el chip entra con 24px de holgura, así que degradar en el umbral nombrado es conservador y evita introducir un segundo umbral por una pieza.
 - **El cartucho no fuerza ancho ni alto**: se dibuja dentro de la banda de eje ya existente; el eje Y conserva su `width: 64`; el canvas conserva su alto; la leyenda no se mueve.
 - **Solape en anchos extremos, declarado:** con el sidebar abierto a 640px de viewport el contenido queda en ~392px y el slot en ~27px, ancho al que **los 12 rótulos del eje ya se rozan entre sí hoy** (`interval={0}`, condición vigente de la card). El cartucho quiet puede rozar al rótulo vecino: es **solape dentro del SVG, que recorta — no desbordamiento**, y no empuja a nadie. Se acepta como contención, no se compensa ocultando meses ni achicando la tipografía del eje.
 - **Los cuatro invariantes, en este elemento:**
-  1. *Sin scroll horizontal del `body` (≥640px, sidebar abierto o cerrado):* el cartucho vive dentro del `ResponsiveContainer`, no aporta ancho mínimo propio y no agrega columnas, etiquetas laterales ni cifras fuera del tooltip.
+  1. *Sin scroll horizontal del `body` (todo el régimen de app, sidebar abierto o cerrado):* el cartucho vive dentro del `ResponsiveContainer`, no aporta ancho mínimo propio y no agrega columnas, etiquetas laterales ni cifras fuera del tooltip.
   2. *Modales completos y scrolleables:* la corrección **no introduce ningún modal, popover ni overlay**. El único popover de la card (confirmar quitar) no cambia.
   3. *Ninguna acción inalcanzable:* el cartucho no es accionable y no tapa ningún control; ni las tabs, ni el chip de Simulados, ni `CardControls` se mueven. El tooltip del chart —portador completo del texto— sigue alcanzable en todo ancho.
   4. *Superficies anchas scrollean dentro de sí:* el canvas sigue escalando dentro de la card y la leyenda conserva su scroll interno; el cartucho no agrega ninguna dimensión scrolleable.

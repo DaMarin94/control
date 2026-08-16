@@ -547,7 +547,7 @@ function ToastViewport({ toasts, onDismiss, onAction, onPause, onResume }: Toast
      */
     <div
       aria-label="Notificaciones"
-      className="pointer-events-none fixed bottom-[26px] left-1/2 z-[90] flex -translate-x-1/2 flex-col items-center gap-[10px]"
+      className="pointer-events-none fixed bottom-[var(--toast-inset-bottom)] left-1/2 z-[90] flex -translate-x-1/2 flex-col items-center gap-[10px]"
     >
       {toasts.map((t) => (
         <ToastItem

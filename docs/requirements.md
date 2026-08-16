@@ -1,7 +1,7 @@
 # Requerimientos Funcionales — Control
 
 > Requerimientos funcionales de Control: qué hace el sistema, bajo qué condiciones, y los criterios verificables de cada requerimiento. Para el modelo de datos ver `data-model.md`; para el estado de implementación ver `features.md`; para las pantallas, `screens.md`.
-> Aplica a la plataforma **web**; mobile está fuera de scope.
+> Aplica a la plataforma **web**; no hay aplicación nativa.
 
 ---
 
@@ -61,10 +61,10 @@ La recuperación de contraseña ("olvidé mi contraseña"), la verificación de 
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El sistema permite iniciar sesión mediante Google OAuth 2.0. |
+| **Descripción** | El sistema permite iniciar sesión mediante Google OAuth 2.0. El método está **condicionado a que el proveedor de Google esté configurado** en el entorno de la app. |
 | **Actor** | Usuario no autenticado |
 | **Prioridad** | Alta |
-| **Precondiciones** | El usuario no tiene sesión activa. Tiene una cuenta de Google válida. |
+| **Precondiciones** | El usuario no tiene sesión activa. Tiene una cuenta de Google válida. El proveedor de Google está configurado. |
 
 **Flujo principal:**
 1. El usuario accede a la aplicación.
@@ -81,6 +81,7 @@ La recuperación de contraseña ("olvidé mi contraseña"), la verificación de 
 - *A2 — Error en el flujo OAuth:* el sistema muestra un mensaje de error y permite reintentar.
 
 **Criterios de aceptación:**
+- [ ] El botón de Google está **siempre presente** en la superficie de login, y queda **habilitado solo si el proveedor de Google está configurado**. Sin configurar, se muestra **deshabilitado** y rotulado como no disponible: no dispara ningún flujo. El login con email + contraseña (RF-AUTH-005) funciona igual en ambos casos.
 - [ ] Completar el flujo OAuth exitosamente redirige al dashboard con sesión activa.
 - [ ] Si es la primera vez que el usuario ingresa, el sistema crea su registro automáticamente.
 - [ ] Si el usuario ya existe, el sistema actualiza nombre e imagen si cambiaron.
@@ -1727,7 +1728,7 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 - [ ] La opción "Cerrar sesión" vive dentro del menú de usuario y dispara el flujo de RF-AUTH-004.
 
 **Notas:**
-- Este RF cubre la decisión sobre RF-AUTH-004 (cierre de sesión disponible "desde cualquier pantalla"): el punto de acceso al cierre de sesión es el menú de usuario del sidebar.
+- Este RF cubre la decisión sobre RF-AUTH-004 (cierre de sesión disponible "desde cualquier pantalla") **en la app**: el punto de acceso al cierre de sesión es el menú de usuario del sidebar. En régimen de captura no hay sidebar; el cierre de sesión vive en la superficie de captura (RF-APP-003).
 
 ---
 
@@ -1741,7 +1742,7 @@ La navegación global de la app se resuelve con un **sidebar lateral** persisten
 | **Precondiciones** | El usuario tiene sesión activa. |
 
 **Criterios de aceptación:**
-- [ ] Existe un control manual que **alterna** entre sidebar abierto y cerrado, accesible en **cualquier ancho de viewport soportado** (≥ 640px, RF-APP-002).
+- [ ] Existe un control manual que **alterna** entre sidebar abierto y cerrado, accesible en **cualquier ancho de viewport** del régimen de app (RF-APP-003).
 - [ ] **Abierto** (estado por defecto): el sidebar se comporta como en RF-NAV-001 — ocupa su ancho y **empuja** el contenido de la pantalla.
 - [ ] **Cerrado**: el sidebar queda **oculto** y el contenido de la pantalla ocupa el **ancho completo**.
 - [ ] El estado abierto/cerrado **no depende del breakpoint**: el sidebar **no auto-colapsa** por ancho de viewport. La única causa del cambio de estado es la acción del usuario sobre el control.
@@ -2426,6 +2427,8 @@ El alcance es un **set curado de 4 monedas (ARS / USD / EUR / BRL)**, sin alta d
 ### 3.11 Módulo: Apariencia
 
 > El usuario elige el **modo de color** de la app (Sistema / Claro / Oscuro) desde un control en el **chrome global** (sidebar, RF-NAV-001). Persiste por usuario en el blob de preferencias (`theme`); modelo de datos en `data-model.md`, §Claves del blob → `theme`. Arquitectura de aplicación (override de tokens, anti-flash) en `docs/frontend.md`, §Modo de color (theming).
+>
+> El módulo define además **qué superficie corresponde a cada tamaño de viewport**: en **régimen de captura** (criterio canónico en RF-APP-003), la única superficie es la **captura de movimiento** (RF-APP-003) y, sin sesión, su **acceso** (RF-APP-004); en **régimen de app**, la app completa.
 
 ---
 
@@ -2447,24 +2450,51 @@ El alcance es un **set curado de 4 monedas (ARS / USD / EUR / BRL)**, sin alta d
 
 ---
 
-#### RF-APP-002 — Gate por debajo del ancho mínimo soportado (640px)
+#### RF-APP-003 — Superficie de captura de movimiento
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | Por debajo del ancho mínimo soportado (viewport `< 640px`), la app muestra un **gate**: una pantalla que **impide usarla**. El ancho mínimo soportado (640px) y la política de contención viven en `docs/design.md`, §Contención responsive. |
-| **Actor** | Cualquier visitante (autenticado o no) |
-| **Prioridad** | Media |
-| **Precondiciones** | Viewport `< 640px`. |
+| **Descripción** | En **régimen de captura**, Control es **una sola superficie: cargar un movimiento**. La superficie muestra **de qué cuenta es la sesión activa** y permite **cerrar sesión**; fuera de eso, ninguna otra pantalla, sección ni acción de la app es alcanzable. |
+| **Actor** | Usuario autenticado, en régimen de captura |
+| **Prioridad** | Alta |
+| **Precondiciones** | El viewport cumple el criterio de régimen de captura. El usuario tiene sesión activa (sin sesión, RF-APP-004). |
+
+**Criterio de régimen** (canónico; lo referencia RF-APP-004): se está en **régimen de captura** cuando la **dimensión menor del viewport es `< 600px`** —es decir, `ancho < 600px` **o** `alto < 600px`—. En cualquier otro caso se está en **régimen de app** y la superficie es la app completa.
+
+El criterio mira **el tamaño del viewport y nada más**: qué aparato sea (teléfono, tablet, computadora) no interviene. Una ventana de escritorio angostada por debajo del umbral está en régimen de captura; un viewport con **las dos** dimensiones `≥ 600px` está en régimen de app.
 
 **Criterios de aceptación:**
-- [ ] El gate se muestra cuando el viewport es **`< 640px`** (por debajo del ancho mínimo soportado) y **cubre toda la app**, incluida la pantalla de login. El login queda gateado porque por debajo del piso la app no se puede usar: ofrecer una puerta a una casa inaccesible no tiene sentido.
-- [ ] Es un **bloqueo, no un aviso descartable**: no hay botón "continuar igual" ni forma de saltearlo. Mientras el viewport esté por debajo del piso, no hay acceso a ninguna pantalla de la app.
-- [ ] Cuando el viewport vuelve a **`≥ 640px`** (al rotar el dispositivo o redimensionar la ventana), la app aparece **sin recargar** y sin parpadeo. Por eso la condición del gate es **CSS puro** (media query sobre el ancho del viewport): sin listener de `resize`, sin estado en JS, sin depender de hidratación. Es una decisión técnica, no cosmética — cualquier implementación basada en JS reintroduce el parpadeo y la necesidad de recargar.
-- [ ] El gate **ocupa el viewport y no genera scroll** (ni vertical ni horizontal).
-- [ ] **Copy (es-AR):**
-  - Título: **Necesitás una pantalla más grande**
-  - Línea: **Control necesita más espacio para mostrarte tus movimientos con claridad. Agrandá la ventana o abrilo en una pantalla más grande.**
-- [ ] La composición visual (jerarquía, tamaño, color, tipografía) reusa **tokens y primitivas ya existentes** del design system; no introduce valores nuevos. El detalle visual lo enmarca `control-design` (`docs/design.md`, §Contención responsive).
+- [ ] La capacidad de la superficie es **crear un movimiento**, con el **formulario de creación completo**: los tres tipos (**Único / Fijo / Cuotas**), el selector **Gasto / Ingreso** y **todos** sus campos, incluido el bloque "Más opciones" (moneda, cotización, método de pago, débito automático). No es un formulario reducido ni un subconjunto de campos; el contenido, las validaciones y los defaults son los del modo creación de `screens.md`, §5.
+- [ ] **La identidad de la sesión activa es visible** en la superficie: el usuario ve **con qué cuenta** está cargando, sin ninguna acción de su parte. En régimen de captura no hay ninguna otra pantalla donde verificarlo después, así que un movimiento cargado en la cuenta equivocada sería un error silencioso e irreversible. **Qué dato** se muestra (nombre, email, avatar) y su tratamiento visual lo define `control-design`.
+- [ ] **Cerrar sesión está disponible** (RF-AUTH-004). Es la **única** capacidad además de crear un movimiento: no habilita navegación, ni configuración, ni ninguna otra pantalla. Al cerrar sesión, el destino es el **acceso** (RF-APP-004). **Dónde vive el control** y cómo se ve lo define `control-design`.
+- [ ] **Nada más de la app es alcanzable en régimen de captura**: ni dashboard, ni vista del mes, ni reportes, ni historial, ni configuración y sus secciones, ni el registro. Cualquier ruta de la app abierta en régimen de captura resuelve en esta superficie (o en el acceso, RF-APP-004, si no hay sesión).
+- [ ] Sobre movimientos, la superficie **solo crea**: no hay edición, duplicado, eliminación ni movimiento calculado (esos modos parten de un movimiento existente, que solo se alcanza desde `/mes`).
+- [ ] **Defaults de mes:** en **Fijo** y **Cuotas**, el mes de inicio arranca en el **mes actual** (en régimen de captura no existe mes contexto; `screens.md`, §5). En **Único**, fecha y hora del momento actual.
+- [ ] **La orientación no cambia nada:** como el criterio mira la dimensión **menor** del viewport, rotar la pantalla intercambia ancho y alto sin cambiar de régimen. La superficie de captura es la misma en cualquier orientación, y rotar **no** da acceso a la app.
+- [ ] **El cambio de régimen es continuo y en los dos sentidos:** cruzar la frontera —redimensionando la ventana o rotando— conmuta de superficie **en vivo**, sin recargar la página, sin pantalla intermedia y sin parpadeo. El estado en memoria de la sesión de navegación sobrevive al cruce, tantas veces como se cruce.
+- [ ] **El aviso de límite activo se conserva** (RF-LIM-004): si el movimiento que se está por guardar cruzaría uno o más límites activos, antes de persistir aparece el diálogo no bloqueante con **"Guardar igual"** y **"Cancelar"**, igual que en régimen de app.
+- [ ] **Al guardar con éxito: solo una confirmación.** La superficie informa que el movimiento se guardó y queda lista para cargar otro. La confirmación **no ofrece navegación posterior** — no existe "Ir a ver" (RF-MU-001, RF-MF-001, RF-MC-001) porque no hay ninguna otra pantalla a la que ir.
+- [ ] Los estados de validación, de guardado en curso y de error del backend son los del formulario (`screens.md`, §5; RNF-008): ante un error el formulario conserva lo ingresado y permite reintentar.
+- [ ] El movimiento creado en régimen de captura es **idéntico** a uno creado en régimen de app: mismas reglas y mismos datos. No queda marcado ni diferenciado por la superficie de carga.
+
+---
+
+#### RF-APP-004 — Acceso (login) en régimen de captura
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Sin sesión activa, el **régimen de captura** muestra el **acceso**: la puerta a la superficie de captura (RF-APP-003). Se inicia sesión con los mismos métodos que en régimen de app. **No se crean cuentas desde esta superficie.** |
+| **Actor** | Usuario no autenticado, en régimen de captura |
+| **Prioridad** | Alta |
+| **Precondiciones** | El viewport cumple el criterio de régimen de captura (RF-APP-003). El usuario no tiene sesión activa. |
+
+**Criterios de aceptación:**
+- [ ] Sin sesión, **cualquier** ruta abierta en régimen de captura resuelve en el acceso; con sesión activa, en la superficie de captura (RF-APP-003). También se llega acá al **cerrar sesión** desde esa superficie (RF-APP-003, RF-AUTH-004).
+- [ ] **Métodos disponibles:** **email + contraseña** (RF-AUTH-005) como camino principal y **Google**, este último sujeto a que el proveedor esté configurado (condición y comportamiento en RF-AUTH-001). Son los mismos métodos del login en régimen de app (`screens.md`, §1).
+- [ ] **El registro no es alcanzable en régimen de captura** (RF-AUTH-006): no hay enlace de creación de cuenta y la ruta `/registro` abierta en régimen de captura resuelve en el acceso. Crear una cuenta requiere el régimen de app.
+- [ ] Tras iniciar sesión con éxito, el usuario llega a la **superficie de captura** (RF-APP-003), no al dashboard.
+- [ ] Los errores y validaciones son los de cada método: RF-AUTH-005 (A1 credenciales inválidas con mensaje genérico, A2 validación, A3 error del backend) y RF-AUTH-001 (A1 cancelación, A2 error del flujo OAuth).
+- [ ] La sesión resultante es **la misma** en cualquier régimen: persiste entre visitas (RF-AUTH-003) y sirve para entrar a la app completa en régimen de app, sin volver a autenticarse.
 
 ---
 
@@ -3186,6 +3216,7 @@ La simulación **no genera filas**: lo que persiste es su configuración (usuari
 | RN-027 | **Historial por defecto en toda mutación de datos del usuario (RF-HIST-001..006).** Toda operación que **modifica o elimina** datos del usuario se **registra en el historial** y es **deshacible**: nace con su captura del estado previo, su entrada agrupada por una clave estable, su undo LIFO y su purga por retención. Es el default del sistema, no un agregado opcional: una funcionalidad que mute datos **no se considera completa** sin su registro de historial. La **única** forma de quedar fuera es una excepción **documentada de forma explícita en el propio RF** de esa funcionalidad. El alcance registrado hoy y sus excepciones vigentes están en RN-024 y en la tabla de alcance de RF-HIST-001. |
 | RN-028 | **Cálculo del movimiento simulado de una categoría (RF-SIM-002).** Con `A` = mes en curso: la serie de ajuste son los **12 meses anteriores** `[A−12 .. A−1]`, un punto por mes con el **total mensual con signo** de los movimientos **únicos** de la categoría (ingresos +, gastos −) en la **moneda default** del usuario, sin los anulados (RN-020) ni los eliminados (RN-026). Los meses **sin únicos de la categoría valen 0 y entran igual**: la ausencia es dato. Sobre esos 12 puntos se ajusta una **regresión lineal por mínimos cuadrados** y se **extrapola** evaluándola en la posición del mes futuro (eje: `A−12` = 1 … `A−1` = 12, mes en curso = 13, `A+1` = 14, …). Se exige un **mínimo de 3 meses con únicos** en la ventana; por debajo no hay simulación. El **signo del valor proyectado define la dirección** (negativo → gasto, positivo → ingreso) y su valor absoluto, la magnitud: el usuario elige solo la categoría, nunca la dirección. El valor se **redondea a centavos enteros** (RN-002) y, si redondea a **0**, ese mes **no genera movimiento**. El **horizonte** va de `A+1` a **diciembre del año en curso**, extendido a `A+6` cuando ese tramo queda por debajo de 6 meses; el **mes en curso y los pasados nunca se simulan**. El cálculo es **on-the-fly en cada lectura** (RN-006): no se persiste ningún monto y la ventana y el horizonte son siempre los vigentes al momento de leer. |
 | RN-029 | **Alcance y ciclo de vida de la simulación de categoría (RF-SIM-001, RF-SIM-003, RF-SIM-004).** La simulación alcanza **solo movimientos únicos**: fijos y cuotas ya se derivan on-the-fly en cualquier mes (RN-006), así que el único hueco de un mes futuro son los Únicos. Persiste **solo la configuración** (usuario + categoría), con **a lo sumo una simulación por categoría** y varias a la vez; **no es editable** —se crea y se elimina, nada más—. Cada simulación aporta **como máximo un** movimiento simulado por mes futuro del horizonte a la sección **Únicos** de `/mes`, distinguible de los reales, que **suma a los totales del mes** (RF-VM-002, con la imputación por tipo de RN-019), participa de los **filtros de sección** (RF-VM-006) y entra en la **evaluación de límites** pasiva y activa (RN-022). En **`/reportes`** entra **solo** en las cards que lo habilitan (opt-in por card, apagado por defecto, RF-REP-017); en el **dashboard** no entra nunca. La fila simulada **no expone acciones de movimiento ni card de detalle** y no puede ser origen de un calculado. Ni crear ni eliminar una simulación se registran en el historial, y su eliminación **no es deshacible**: es la excepción a RN-027, documentada en RF-SIM-004. |
+| RN-030 | **Descripción de un movimiento: opcional, máximo 200 caracteres.** La descripción es **opcional** en todos los tipos que la aceptan —único, fijo, cuotas y calculado— y su texto no puede superar los **200 caracteres**. El límite aplica al texto, no a la opcionalidad: un movimiento sin descripción es válido y, al editar, un `null` explícito la **limpia**. Excederlo produce `400`. La regla se valida en **ambas capas** —backend como fuente de verdad y frontend antes de enviar, para que el error se vea en el propio campo— con el **mismo mensaje**. Ver `data-model.md`, §Límite de descripción de movimiento. |
 ---
 
 ## 5. Requerimientos no funcionales

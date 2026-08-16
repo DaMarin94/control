@@ -13,10 +13,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { InstallmentForm, type InstallmentPrefill } from "@/components/movements/installment-form";
 import { ToastProvider } from "@/components/ui/toast";
+import { TestMovementFormFooter } from "../../utils/movement-form-footer";
 import type { Category } from "@/types/category";
 import type { InstallmentGroup } from "@/types/installment";
 import type { PaymentMethod } from "@/types/payment-method";
@@ -226,12 +227,17 @@ function renderForm(props: {
   const onClose = props.onClose ?? vi.fn();
   return render(
     <ToastProvider>
-      <InstallmentForm
-        installment={props.installment ?? null}
-        onClose={onClose}
-        editingSkipped={props.editingSkipped}
-        prefill={props.prefill}
-      />
+      <TestMovementFormFooter>
+        {(onFooterStateChange) => (
+          <InstallmentForm
+            installment={props.installment ?? null}
+            onClose={onClose}
+            editingSkipped={props.editingSkipped}
+            prefill={props.prefill}
+            onFooterStateChange={onFooterStateChange}
+          />
+        )}
+      </TestMovementFormFooter>
     </ToastProvider>,
   );
 }
@@ -399,6 +405,33 @@ describe("InstallmentForm — validación", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/el monto es demasiado grande/i)).toBeInTheDocument();
+    });
+    expect(mockCreateInstallment).not.toHaveBeenCalled();
+  });
+
+  it("muestra 'La descripción no puede superar los 200 caracteres' y bloquea el submit cuando la excede", async () => {
+    const user = userEvent.setup();
+    renderForm({});
+
+    const amountInput = screen.getByLabelText(/monto por cuota/i);
+    await user.type(amountInput, "1500");
+
+    const totalInput = screen.getByLabelText(/cant\. de cuotas/i);
+    await user.type(totalInput, "12");
+
+    const categorySelect = screen.getByLabelText(/categoría/i);
+    await user.selectOptions(categorySelect, "cat-expense");
+
+    const descriptionInput = screen.getByLabelText(/descripción/i);
+    fireEvent.change(descriptionInput, { target: { value: "a".repeat(201) } });
+
+    const submitBtn = screen.getByRole("button", { name: /^guardar$/i });
+    await user.click(submitBtn);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/la descripción no puede superar los 200 caracteres/i),
+      ).toBeInTheDocument();
     });
     expect(mockCreateInstallment).not.toHaveBeenCalled();
   });
