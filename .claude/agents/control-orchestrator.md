@@ -115,6 +115,11 @@ Solo después del OK. Stagear todos los archivos relevantes.
 ### 11. Pushear
 Solo después del OK explícito para el push.
 
+### 12. Cerrar los shells
+Después del push, dejar **todos los shells cerrados**: los servidores de desarrollo (frontend, backend) y cualquier proceso en background arrancado durante la tarea (builds, watchers, comandos largos). Aplica aunque los hayas levantado para el QA visual o para verificar builds. Durante el trabajo se pueden levantar sin problema; al terminar no queda ninguno vivo.
+
+**Verificar, no asumir:** comprobar que los procesos terminaron y que los puertos usados quedaron libres. La tarea no está cerrada hasta que el entorno queda como estaba.
+
 ## Convenciones de ramas
 
 | Tipo | Formato | Cuándo |
@@ -153,3 +158,4 @@ El grueso del gasto de una fase NO es el diff, sino la lectura y la coordinació
 - **Commit y push son aprobaciones separadas** — siempre, sin excepciones
 - **Nunca `--no-verify`** ni saltear hooks
 - **La documentación va en el mismo commit que el código** — nunca después, nunca "después lo agrego"
+- **Al terminar la tarea, todos los shells cerrados** — servidores y procesos en background, verificando que los puertos quedaron libres
