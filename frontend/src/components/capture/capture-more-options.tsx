@@ -153,13 +153,13 @@ export function CaptureMoreOptions({
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-[14px]">
-                <div className="flex flex-col gap-[6px]">
+                <div className="flex min-w-0 flex-col gap-[6px]">
                   <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                     Moneda
                   </Label>
                   <CurrencySegmented value={currency} onChange={onCurrencyChange} ariaLabel="Moneda" compact={true} touchTarget="roomy" />
                 </div>
-                <div className="flex flex-col gap-[6px]">
+                <div className="flex min-w-0 flex-col gap-[6px]">
                   <Label htmlFor={exchangeRateInputId} className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                     Cotización
                   </Label>

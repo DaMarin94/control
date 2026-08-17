@@ -202,7 +202,7 @@ export function CaptureTransactionForm({ onFooterStateChange, onCreateSuccess, s
 
         {/* ── Fecha y hora ── */}
         <div className="mt-[16px] grid grid-cols-2 gap-[14px]">
-          <div className="flex flex-col gap-[6px]">
+          <div className="flex min-w-0 flex-col gap-[6px]">
             <Label htmlFor={`${formId}-date`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               <span className="inline-flex items-center gap-1">
                 <Calendar size={13} aria-hidden="true" />
@@ -211,7 +211,7 @@ export function CaptureTransactionForm({ onFooterStateChange, onCreateSuccess, s
             </Label>
             <Input id={`${formId}-date`} type="date" error={errors.date?.message} className={FIELD_INPUT_CLASS} {...register("date")} />
           </div>
-          <div className="flex flex-col gap-[6px]">
+          <div className="flex min-w-0 flex-col gap-[6px]">
             <Label htmlFor={`${formId}-time`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Hora
             </Label>

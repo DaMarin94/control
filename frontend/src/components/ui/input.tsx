@@ -23,12 +23,12 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type, error, ...props }, ref) => {
     return (
-      <div className="flex flex-col gap-1">
+      <div className="flex w-full min-w-0 flex-col gap-1">
         <input
           type={type}
           className={cn(
             // Layout y tipografía base
-            "flex w-full font-ui text-[15px] text-ink",
+            "flex w-full min-w-0 font-ui text-[15px] text-ink",
             // Superficie y borde
             "rounded-ctl border-[1.5px] border-line bg-panel",
             // Padding DS: 11px vertical, 13px horizontal

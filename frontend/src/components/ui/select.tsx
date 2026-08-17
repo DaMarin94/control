@@ -24,13 +24,13 @@ export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElemen
 const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
   ({ className, error, children, ...props }, ref) => {
     return (
-      <div className="flex flex-col gap-1">
+      <div className="flex w-full min-w-0 flex-col gap-1">
         {/* Wrapper relativo para posicionar el chevron */}
-        <div className="relative">
+        <div className="relative min-w-0">
           <select
             className={cn(
               // Layout y tipografía base
-              "flex w-full appearance-none font-ui text-[15px] text-ink",
+              "flex w-full min-w-0 appearance-none font-ui text-[15px] text-ink",
               // Superficie y borde
               "rounded-ctl border-[1.5px] border-line bg-panel",
               // Padding DS: 11px vertical, 13px horizontal; pr extra para el ícono

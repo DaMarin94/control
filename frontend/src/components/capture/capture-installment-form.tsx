@@ -124,7 +124,7 @@ export function CaptureInstallmentForm({ defaultMonth, onFooterStateChange, onCr
 
         {/* ── Cantidad de cuotas + Mes de inicio ── */}
         <div className="mt-[20px] grid grid-cols-2 gap-[14px]">
-          <div className="flex flex-col gap-[6px]">
+          <div className="flex min-w-0 flex-col gap-[6px]">
             <Label htmlFor={`${formId}-total`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Cant. de cuotas
             </Label>
@@ -140,7 +140,7 @@ export function CaptureInstallmentForm({ defaultMonth, onFooterStateChange, onCr
               {...register("totalInstallments")}
             />
           </div>
-          <div className="flex flex-col gap-[6px]">
+          <div className="flex min-w-0 flex-col gap-[6px]">
             <Label htmlFor={`${formId}-start-month`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Mes de inicio
             </Label>
