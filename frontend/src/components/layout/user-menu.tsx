@@ -96,7 +96,7 @@ export function UserMenu({ email }: UserMenuProps) {
       {open && (
         <div
           role="menu"
-          className="absolute bottom-full left-0 mb-2 w-full rounded-ctl border border-line bg-panel shadow-[var(--shadow-md)] overflow-hidden"
+          className="absolute bottom-full left-0 z-50 mb-2 w-full rounded-ctl border border-line bg-panel shadow-[var(--shadow-md)] overflow-hidden"
         >
           <button
             type="button"
