@@ -30,14 +30,19 @@ export function buildWindowMonths(todayMonthKey: string): string[] {
 }
 
 /**
- * Horizonte de la simulación (RN-028): de `A+1` a diciembre del año en curso,
- * extendido a `A+6` cuando ese tramo queda por debajo de 6 meses (el tramo
- * simulado NUNCA es menor a 6 meses). Devuelve el ÚLTIMO mes del horizonte
- * (inclusive), "YYYY-MM".
+ * Fin del horizonte de la simulación (RN-028): diciembre del año en curso,
+ * extendido a `A+6` cuando el tramo `A+1..diciembre` queda por debajo de 6
+ * meses (el tramo simulado NUNCA es menor a 6 meses contados desde `A+1`).
+ * Devuelve el ÚLTIMO mes del horizonte (inclusive), "YYYY-MM". El cálculo en
+ * sí no cambió con la extensión del arranque a `A` (ver `simulations.service.ts`,
+ * `getSimulatedItemsForMonths`): el umbral de extensión sigue midiéndose sobre
+ * el tramo posterior a `A`, solo cambió qué tan atrás arranca el horizonte
+ * simulable (ahora incluye `A`, antes empezaba en `A+1`).
  *
- * Ejemplo: A = 2026-07 → tramo natural [08..12] = 5 meses (< 6) → extendido a
- * A+6 = 2027-01 (horizonte ago..ene, 6 meses). A = 2026-06 → tramo natural
- * [07..12] = 6 meses (no extiende) → horizonte jul..dic.
+ * Ejemplo: A = 2026-07 → tramo `A+1..dic` ([08..12]) = 5 meses (< 6) →
+ * extendido a A+6 = 2027-01. El horizonte simulable resultante es jul..ene
+ * (incluye el mes en curso). A = 2026-06 → tramo `A+1..dic` ([07..12]) = 6
+ * meses (no extiende) → horizonte jun..dic.
  */
 export function computeHorizonEndMonth(todayMonthKey: string): string {
   const year = todayMonthKey.slice(0, 4);

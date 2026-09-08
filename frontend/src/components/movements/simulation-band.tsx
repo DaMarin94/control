@@ -54,7 +54,7 @@ export function SimulationBand({
       </button>
 
       {!hasActive ? (
-        <p className="text-[11.5px] text-muted">Proyecta una categoría a los meses futuros.</p>
+        <p className="text-[11.5px] text-muted">Proyecta categorías desde este mes en adelante.</p>
       ) : (
         <>
           <div className="flex flex-col max-h-[132px] overflow-y-auto">

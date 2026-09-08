@@ -52,7 +52,7 @@ export function DeleteSimulationDialog({ simulation, onClose }: DeleteSimulation
           <span className="text-[13px] font-semibold text-ink">{categoryName}</span>
         </div>
         <p className="text-[12.5px] text-muted">
-          Sus movimientos simulados dejan de aparecer en los meses futuros y los totales se recalculan sin ellos.
+          Sus movimientos simulados dejan de aparecer en este mes y en los siguientes, y los totales se recalculan sin ellos.
         </p>
       </ModalShellBody>
 

@@ -320,15 +320,6 @@ describe('SimulationsService', () => {
   // ---------------------------------------------------------------------------
 
   describe('getSimulatedItemsForMonth()', () => {
-    it('el mes en curso nunca lleva simulados', async () => {
-      const { service, repo } = buildService();
-      repo.findAllForUser.mockResolvedValue([
-        { id: 'sim-1', userId: USER_ID, categoryId: CAT_ID, createdAt: new Date(), updatedAt: new Date() },
-      ]);
-      const items = await service.getSimulatedItemsForMonth(USER_ID, '2026-07', '2026-07-15');
-      expect(items).toEqual([]);
-    });
-
     it('un mes pasado nunca lleva simulados', async () => {
       const { service } = buildService();
       const items = await service.getSimulatedItemsForMonth(USER_ID, '2026-05', '2026-07-15');
@@ -463,11 +454,116 @@ describe('SimulationsService', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Remanente (nueva regla): el monto simulado de CUALQUIER mes del horizonte
+  // —incluido el mes en curso, que ahora arranca el horizonte— es
+  // proyección(mes) − total real con signo de únicos de esa categoría en ese
+  // mes. Serie de ajuste PLANA (mismo monto los 12 meses de la ventana) para
+  // que la proyección sea exacta y verificable a mano: slope=0, intercept =
+  // el monto plano, así que evaluateRegressionAt da ese mismo monto en
+  // cualquier posición futura.
+  // ---------------------------------------------------------------------------
+
+  describe('Remanente — proyección menos real con signo (RN-028)', () => {
+    const FLAT_WINDOW_MONTHS = [
+      '2025-07', '2025-08', '2025-09', '2025-10', '2025-11', '2025-12',
+      '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06',
+    ];
+
+    /** Serie histórica plana de gasto (EXPENSE) del mismo monto los 12 meses de la ventana. */
+    function flatExpenseWindow(amountCents: number): RawSimulationUnicoRow[] {
+      return FLAT_WINDOW_MONTHS.map((m) => row(m, amountCents, 'EXPENSE'));
+    }
+
+    /** El mock de la query respeta el rango [firstMonth..lastMonth], como el `$queryRaw` real. */
+    function mockRangeAware(repo: jest.Mocked<SimulationsRepository>, rows: RawSimulationUnicoRow[]) {
+      repo.getUnicosMonthlyTotalsByCategory.mockImplementation((_userId, firstMonth, lastMonth) =>
+        Promise.resolve(rows.filter((r) => r.monthKey >= firstMonth && r.monthKey <= lastMonth)),
+      );
+    }
+
+    it('mes en curso simulado (RN-028 — arranca el horizonte): sin reales cargados, el remanente es la proyección completa', async () => {
+      const { service, repo } = buildService();
+      repo.findAllForUser.mockResolvedValue([
+        { id: 'sim-1', userId: USER_ID, categoryId: CAT_ID, createdAt: new Date(), updatedAt: new Date() },
+      ]);
+      mockRangeAware(repo, flatExpenseWindow(100000)); // serie plana: $1000 de gasto por mes
+      repo.findCategoriesByIds.mockResolvedValue([
+        { id: CAT_ID, name: 'Salidas', color: '#FF0000', scope: 'BOTH' as never },
+      ]);
+
+      const items = await service.getSimulatedItemsForMonth(USER_ID, '2026-07', '2026-07-15');
+
+      expect(items).toHaveLength(1);
+      expect(items[0].type).toBe(MovementType.EXPENSE);
+      expect(items[0].amountCents).toBe(100000);
+    });
+
+    it('remanente normal: un real más chico en la MISMA dirección reduce el monto simulado sin cancelarlo', async () => {
+      const { service, repo } = buildService();
+      repo.findAllForUser.mockResolvedValue([
+        { id: 'sim-1', userId: USER_ID, categoryId: CAT_ID, createdAt: new Date(), updatedAt: new Date() },
+      ]);
+      mockRangeAware(repo, [
+        ...flatExpenseWindow(100000),
+        row('2026-07', 30000, 'EXPENSE'), // gasto real ya cargado en el mes en curso
+      ]);
+      repo.findCategoriesByIds.mockResolvedValue([
+        { id: CAT_ID, name: 'Salidas', color: '#FF0000', scope: 'BOTH' as never },
+      ]);
+
+      const items = await service.getSimulatedItemsForMonth(USER_ID, '2026-07', '2026-07-15');
+
+      expect(items).toHaveLength(1);
+      expect(items[0].type).toBe(MovementType.EXPENSE);
+      expect(items[0].amountCents).toBe(70000); // 100000 (proyección) − 30000 (real) = 70000
+    });
+
+    it('remanente cancelado por exceso: un real que supera la proyección y cambia de signo NO emite fila', async () => {
+      const { service, repo } = buildService();
+      repo.findAllForUser.mockResolvedValue([
+        { id: 'sim-1', userId: USER_ID, categoryId: CAT_ID, createdAt: new Date(), updatedAt: new Date() },
+      ]);
+      mockRangeAware(repo, [
+        ...flatExpenseWindow(100000),
+        row('2026-07', 150000, 'EXPENSE'), // el real ya gastó MÁS que lo proyectado
+      ]);
+      repo.findCategoriesByIds.mockResolvedValue([
+        { id: CAT_ID, name: 'Salidas', color: '#FF0000', scope: 'BOTH' as never },
+      ]);
+
+      const items = await service.getSimulatedItemsForMonth(USER_ID, '2026-07', '2026-07-15');
+
+      // remanente = -100000 - (-150000) = +50000 → cambia de signo respecto de
+      // la proyección (gasto) → NO se emite fila (no se convierte en ingreso).
+      expect(items).toEqual([]);
+    });
+
+    it('remanente en un mes FUTURO (no el en curso) con reales ya cargados: se descuenta igual', async () => {
+      const { service, repo } = buildService();
+      repo.findAllForUser.mockResolvedValue([
+        { id: 'sim-1', userId: USER_ID, categoryId: CAT_ID, createdAt: new Date(), updatedAt: new Date() },
+      ]);
+      mockRangeAware(repo, [
+        ...flatExpenseWindow(100000),
+        row('2026-10', 40000, 'EXPENSE'), // el usuario ya cargó gasto real en un mes futuro
+      ]);
+      repo.findCategoriesByIds.mockResolvedValue([
+        { id: CAT_ID, name: 'Salidas', color: '#FF0000', scope: 'BOTH' as never },
+      ]);
+
+      const items = await service.getSimulatedItemsForMonth(USER_ID, '2026-10', '2026-07-15');
+
+      expect(items).toHaveLength(1);
+      expect(items[0].amountCents).toBe(60000); // 100000 − 40000 = 60000
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // getSimulatedItemsForMonths() — RF-SIM-002/003, consumido por getReportsMovements (RF-REP-017)
   // ---------------------------------------------------------------------------
 
   describe('getSimulatedItemsForMonths()', () => {
-    it('devuelve un Map con TODAS las claves pedidas, incluso las que no calificaron (mes pasado/en curso/fuera de horizonte) → []', async () => {
+    it('devuelve un Map con TODAS las claves pedidas, incluso las que no calificaron (mes pasado/fuera de horizonte) → []; el en curso SÍ califica', async () => {
       const { service, repo } = buildService();
       repo.findAllForUser.mockResolvedValue([
         { id: 'sim-1', userId: USER_ID, categoryId: CAT_ID, createdAt: new Date(), updatedAt: new Date() },
@@ -481,28 +577,29 @@ describe('SimulationsService', () => {
         { id: CAT_ID, name: 'Salidas', color: '#FF0000', scope: 'BOTH' as never },
       ]);
 
-      // today = 2026-07-15 → mes en curso 2026-07; horizonte hasta 2027-01 (extendido).
+      // today = 2026-07-15 → mes en curso 2026-07 (arranca el horizonte, RN-028);
+      // horizonte hasta 2027-01 (extendido).
       const months = ['2026-06', '2026-07', '2026-08', '2027-02'];
       const byMonth = await service.getSimulatedItemsForMonths(USER_ID, months, '2026-07-15');
 
       expect([...byMonth.keys()]).toEqual(months);
       expect(byMonth.get('2026-06')).toEqual([]); // pasado
-      expect(byMonth.get('2026-07')).toEqual([]); // en curso
+      expect(byMonth.get('2026-07')).toHaveLength(1); // en curso — arranca el horizonte
       expect(byMonth.get('2026-08')).toHaveLength(1); // futuro dentro de horizonte
       expect(byMonth.get('2027-02')).toEqual([]); // fuera de horizonte
     });
 
-    it('ningún mes calificado (todos pasados/fuera de horizonte): no llega a pedir simulaciones ni datos', async () => {
+    it('ningún mes calificado (todos pasados): no llega a pedir simulaciones ni datos', async () => {
       const { service, repo } = buildService();
 
-      const byMonth = await service.getSimulatedItemsForMonths(USER_ID, ['2026-01', '2026-07'], '2026-07-15');
+      const byMonth = await service.getSimulatedItemsForMonths(USER_ID, ['2026-01', '2026-06'], '2026-07-15');
 
       expect(byMonth.get('2026-01')).toEqual([]);
-      expect(byMonth.get('2026-07')).toEqual([]);
+      expect(byMonth.get('2026-06')).toEqual([]);
       expect(repo.findAllForUser).not.toHaveBeenCalled();
     });
 
-    it('carga la ventana histórica UNA sola vez para varios meses futuros pedidos (batch, no N llamadas)', async () => {
+    it('carga la ventana histórica y los reales del horizonte en UNA query cada uno (batch, no N llamadas por mes)', async () => {
       const { service, repo } = buildService();
       repo.findAllForUser.mockResolvedValue([
         { id: 'sim-1', userId: USER_ID, categoryId: CAT_ID, createdAt: new Date(), updatedAt: new Date() },
@@ -522,7 +619,10 @@ describe('SimulationsService', () => {
         '2026-07-15',
       );
 
-      expect(repo.getUnicosMonthlyTotalsByCategory).toHaveBeenCalledTimes(1);
+      // Dos llamadas TOTALES (ventana histórica + rango del horizonte pedido),
+      // no una por mes — con 3 meses pedidos, N llamadas serían 3+.
+      expect(repo.getUnicosMonthlyTotalsByCategory).toHaveBeenCalledTimes(2);
+      expect(repo.getUnicosMonthlyTotalsByCategory).toHaveBeenCalledWith(USER_ID, '2026-08', '2026-10');
       expect(byMonth.get('2026-08')).toHaveLength(1);
       expect(byMonth.get('2026-09')).toHaveLength(1);
       expect(byMonth.get('2026-10')).toHaveLength(1);

@@ -139,7 +139,7 @@ describe('Simulations (e2e)', () => {
   // ---------------------------------------------------------------------------
 
   describe('POST /simulations', () => {
-    it('201 + sobre { success: true, data } cuando la categoría tiene ≥3 meses con únicos', async () => {
+    it('201 + sobre { success: true, data: { created, failed } } cuando la categoría tiene ≥3 meses con únicos', async () => {
       mockPrisma.category.findUnique.mockResolvedValue({
         id: CAT_ID,
         userId: USER_A_ID,
@@ -163,28 +163,34 @@ describe('Simulations (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post('/simulations')
         .set('Authorization', `Bearer ${tokenA}`)
-        .send({ categoryId: CAT_ID })
+        .send({ categoryIds: [CAT_ID] })
         .expect(201);
 
       expect(res.body.success).toBe(true);
-      expect(res.body.data.id).toBe('sim-e2e-1');
-      expect(res.body.data.categoryId).toBe(CAT_ID);
-      expect(res.body.data.paused).toBe(false);
+      expect(res.body.data.created).toHaveLength(1);
+      expect(res.body.data.created[0].id).toBe('sim-e2e-1');
+      expect(res.body.data.created[0].categoryId).toBe(CAT_ID);
+      expect(res.body.data.created[0].paused).toBe(false);
+      expect(res.body.data.failed).toEqual([]);
     });
 
-    it('400 si la categoría no existe / no es del usuario (RN-003 — no revela ajenidad)', async () => {
+    it('201 con failed[0] cuando la categoría no existe / no es del usuario (RN-003 — no revela ajenidad), sin volcar la request entera', async () => {
       mockPrisma.category.findUnique.mockResolvedValue(null);
 
       const res = await request(app.getHttpServer())
         .post('/simulations')
         .set('Authorization', `Bearer ${tokenA}`)
-        .send({ categoryId: 'cat-inexistente' })
-        .expect(400);
+        .send({ categoryIds: ['cat-inexistente'] })
+        .expect(201);
 
-      expect(res.body.success).toBe(false);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.created).toEqual([]);
+      expect(res.body.data.failed).toEqual([
+        { categoryId: 'cat-inexistente', message: expect.any(String) },
+      ]);
     });
 
-    it('400 si la categoría tiene menos de 3 meses con únicos en la ventana', async () => {
+    it('201 con failed[0] cuando la categoría tiene menos de 3 meses con únicos en la ventana', async () => {
       mockPrisma.category.findUnique.mockResolvedValue({
         id: CAT_ID,
         userId: USER_A_ID,
@@ -193,14 +199,17 @@ describe('Simulations (e2e)', () => {
       });
       mockPrisma.$queryRaw.mockResolvedValue([makeSqlRow('2026-05', 10000), makeSqlRow('2026-06', 10000)]);
 
-      await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .post('/simulations')
         .set('Authorization', `Bearer ${tokenA}`)
-        .send({ categoryId: CAT_ID })
-        .expect(400);
+        .send({ categoryIds: [CAT_ID] })
+        .expect(201);
+
+      expect(res.body.data.created).toEqual([]);
+      expect(res.body.data.failed[0].categoryId).toBe(CAT_ID);
     });
 
-    it('409 si ya existe una simulación sobre la categoría', async () => {
+    it('201 con failed[0] cuando ya existe una simulación sobre la categoría', async () => {
       mockPrisma.category.findUnique.mockResolvedValue({
         id: CAT_ID,
         userId: USER_A_ID,
@@ -215,21 +224,62 @@ describe('Simulations (e2e)', () => {
         updatedAt: new Date(),
       });
 
-      await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .post('/simulations')
         .set('Authorization', `Bearer ${tokenA}`)
-        .send({ categoryId: CAT_ID })
-        .expect(409);
+        .send({ categoryIds: [CAT_ID] })
+        .expect(201);
+
+      expect(res.body.data.created).toEqual([]);
+      expect(res.body.data.failed[0]).toEqual({
+        categoryId: CAT_ID,
+        message: expect.any(String),
+      });
+    });
+
+    it('éxito mixto: una categoría se crea y otra falla en la MISMA llamada, sin voltear a la primera', async () => {
+      const OTHER_CAT_ID = 'cat-sim-e2e-002';
+      mockPrisma.category.findUnique.mockImplementation((args: { where: { id: string } }) => {
+        if (args.where.id === CAT_ID) {
+          return Promise.resolve({ id: CAT_ID, userId: USER_A_ID, scope: 'BOTH', deletedAt: null });
+        }
+        return Promise.resolve(null); // OTHER_CAT_ID no existe → falla
+      });
+      mockPrisma.$queryRaw.mockResolvedValue([
+        makeSqlRow('2026-04', 10000),
+        makeSqlRow('2026-05', 10000),
+        makeSqlRow('2026-06', 10000),
+      ]);
+      mockPrisma.simulation.create.mockResolvedValue({
+        id: 'sim-e2e-mixed',
+        userId: USER_A_ID,
+        categoryId: CAT_ID,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      mockPrisma.category.findMany.mockResolvedValue([makeDbCategory()]);
+
+      const res = await request(app.getHttpServer())
+        .post('/simulations')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ categoryIds: [CAT_ID, OTHER_CAT_ID] })
+        .expect(201);
+
+      expect(res.body.data.created).toHaveLength(1);
+      expect(res.body.data.created[0].categoryId).toBe(CAT_ID);
+      expect(res.body.data.failed).toEqual([
+        { categoryId: OTHER_CAT_ID, message: expect.any(String) },
+      ]);
     });
 
     it('401 sin JWT', async () => {
       await request(app.getHttpServer())
         .post('/simulations')
-        .send({ categoryId: CAT_ID })
+        .send({ categoryIds: [CAT_ID] })
         .expect(401);
     });
 
-    it('400 si falta categoryId en el body', async () => {
+    it('400 si falta categoryIds en el body', async () => {
       await request(app.getHttpServer())
         .post('/simulations')
         .set('Authorization', `Bearer ${tokenA}`)
@@ -237,11 +287,27 @@ describe('Simulations (e2e)', () => {
         .expect(400);
     });
 
+    it('400 si categoryIds viene vacío', async () => {
+      await request(app.getHttpServer())
+        .post('/simulations')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ categoryIds: [] })
+        .expect(400);
+    });
+
+    it('400 si categoryIds trae un id repetido', async () => {
+      await request(app.getHttpServer())
+        .post('/simulations')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ categoryIds: [CAT_ID, CAT_ID] })
+        .expect(400);
+    });
+
     it('400 si "today" tiene formato inválido (mismo contrato que los GET)', async () => {
       await request(app.getHttpServer())
         .post('/simulations?today=15-07-2026')
         .set('Authorization', `Bearer ${tokenA}`)
-        .send({ categoryId: CAT_ID })
+        .send({ categoryIds: [CAT_ID] })
         .expect(400);
     });
 
@@ -274,20 +340,23 @@ describe('Simulations (e2e)', () => {
       );
 
       // today=2026-08-15 → A=2026-08 → ventana [2025-08..2026-07] → los 3
-      // meses caen ADENTRO → ≥3 meses con dato → 201.
-      await request(app.getHttpServer())
+      // meses caen ADENTRO → ≥3 meses con dato → se crea.
+      const res1 = await request(app.getHttpServer())
         .post('/simulations?today=2026-08-15')
         .set('Authorization', `Bearer ${tokenA}`)
-        .send({ categoryId: CAT_ID })
+        .send({ categoryIds: [CAT_ID] })
         .expect(201);
+      expect(res1.body.data.created).toHaveLength(1);
 
       // today=2025-08-15 → A=2025-08 → ventana [2024-08..2025-07] → los 3
-      // meses caen AFUERA (posteriores) → 0 meses con dato → 400.
-      await request(app.getHttpServer())
+      // meses caen AFUERA (posteriores) → 0 meses con dato → falla.
+      const res2 = await request(app.getHttpServer())
         .post('/simulations?today=2025-08-15')
         .set('Authorization', `Bearer ${tokenA}`)
-        .send({ categoryId: CAT_ID })
-        .expect(400);
+        .send({ categoryIds: [CAT_ID] })
+        .expect(201);
+      expect(res2.body.data.created).toEqual([]);
+      expect(res2.body.data.failed[0].categoryId).toBe(CAT_ID);
     });
   });
 

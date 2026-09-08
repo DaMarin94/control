@@ -12,7 +12,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { SimulationsService } from './simulations.service';
-import { CreateSimulationDto } from './dto/create-simulation.dto';
+import { CreateSimulationsDto } from './dto/create-simulations.dto';
 
 interface AuthRequest extends Request {
   user: { userId: string };
@@ -65,27 +65,33 @@ export class SimulationsController {
 
   /**
    * POST /simulations[?today=YYYY-MM-DD]
-   * Body: { categoryId }
+   * Body: { categoryIds: string[] }
    *
-   * Crea una simulación sobre una categoría (RF-SIM-001). `400` si la
-   * categoría es inválida (inexistente/ajena/eliminada) o no llega al mínimo
-   * de 3 meses con únicos en la ventana histórica. `409` si ya hay una
-   * simulación sobre esa categoría. No genera entrada de historial
-   * (RF-HIST-001).
+   * Crea una simulación por cada categoría de `categoryIds` (RF-SIM-001),
+   * con FALLO PARCIAL TOLERADO y sin transacción atómica: las categorías
+   * válidas se crean, las que fallan se reportan — una categoría inválida no
+   * voltea a las demás. Cada categoría se valida con las mismas reglas de
+   * siempre (propia y activa; mínimo 3 meses con únicos; no simulada ya) y,
+   * si falla, su entrada en `failed` trae el MISMO mensaje legible que
+   * produciría un `create()` individual. `201` siempre (incluso si todas
+   * fallaron) — el propio body distingue éxito/fracaso por categoría. No
+   * genera entrada de historial (RF-HIST-001, excepción documentada en
+   * RF-SIM-004).
    *
    * `today` (opcional): fecha local del usuario YYYY-MM-DD para resolver la
    * ventana histórica del mínimo de 3 meses (RN-028) — mismo contrato que los
-   * `GET`. Ausente → fecha UTC del sistema.
+   * `GET`. Ausente → fecha UTC del sistema. Se aplica igual a todas las
+   * categorías del batch.
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
   create(
     @Request() req: AuthRequest,
-    @Body() dto: CreateSimulationDto,
+    @Body() dto: CreateSimulationsDto,
     @Query('today') todayParam: string | undefined,
   ) {
     const today = this.parseToday(todayParam);
-    return this.simulationsService.create(req.user.userId, dto.categoryId, today);
+    return this.simulationsService.createMany(req.user.userId, dto.categoryIds, today);
   }
 
   /**

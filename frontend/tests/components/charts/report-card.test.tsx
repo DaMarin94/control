@@ -1032,27 +1032,29 @@ describe("ReportCard — chip 'Simulados' (RF-REP-017)", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("año pasado (con simulaciones existentes): motivo '{Año} no tiene meses futuros.'", () => {
+  it("año pasado (con simulaciones existentes): motivo '{Año} ya pasó. La simulación solo alcanza desde este mes en adelante.'", () => {
     renderCard({ type: "by-category", year: 2020, onIncludeSimulatedChange: vi.fn() });
     const chip = screen.getByRole("button", { name: /incluir movimientos simulados/i });
     expect(chip).toHaveAttribute("aria-disabled", "true");
-    expect(chip).toHaveAttribute("title", "2020 no tiene meses futuros.");
+    expect(chip).toHaveAttribute(
+      "title",
+      "2020 ya pasó. La simulación solo alcanza desde este mes en adelante.",
+    );
   });
 
-  it("año en curso en diciembre: motivo '{Año} no tiene meses futuros.'", () => {
+  it("año en curso en diciembre: chip HABILITADO (el horizonte arranca en el mes en curso, incluye diciembre)", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
       vi.setSystemTime(new Date("2026-12-15T12:00:00.000Z"));
       renderCard({ type: "by-category", year: 2026, onIncludeSimulatedChange: vi.fn() });
       const chip = screen.getByRole("button", { name: /incluir movimientos simulados/i });
-      expect(chip).toHaveAttribute("aria-disabled", "true");
-      expect(chip).toHaveAttribute("title", "2026 no tiene meses futuros.");
+      expect(chip).not.toHaveAttribute("aria-disabled");
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("año en curso ANTES de diciembre: chip habilitado (tramo futuro alcanzable)", () => {
+  it("año en curso ANTES de diciembre: chip habilitado (tramo alcanzado disponible)", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
       vi.setSystemTime(new Date("2026-06-15T12:00:00.000Z"));
@@ -1064,7 +1066,13 @@ describe("ReportCard — chip 'Simulados' (RF-REP-017)", () => {
     }
   });
 
-  it("precedencia: sin simulaciones Y año sin tramo futuro → gana el motivo de 'sin simulaciones'", () => {
+  it("un año FUTURO con simulaciones sigue habilitado (no cambia)", () => {
+    renderCard({ type: "by-category", year: 2027, onIncludeSimulatedChange: vi.fn() });
+    const chip = screen.getByRole("button", { name: /incluir movimientos simulados/i });
+    expect(chip).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("precedencia: sin simulaciones Y año pasado → gana el motivo de 'sin simulaciones'", () => {
     mockUseSimulations.mockReturnValue({
       data: { horizonEndMonth: "2027-02", simulations: [] },
       isLoading: false,

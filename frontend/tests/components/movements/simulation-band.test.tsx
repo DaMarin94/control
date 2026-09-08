@@ -3,10 +3,10 @@
  * §2/§4/§6.1, RF-SIM-001/004).
  * Verifica:
  * - El botón "Simular categoría" está SIEMPRE presente (punto de entrada único).
- * - Sin simulaciones activas: copy "Proyecta una categoría a los meses futuros."
+ * - Sin simulaciones activas: copy "Proyecta categorías desde este mes en adelante."
  *   y NO se muestra la nota de horizonte.
  * - Con ≥1 activa: lista con punto de color + nombre + botón eliminar, y la
- *   nota "Se proyecta hasta {mes} {año}." al pie.
+ *   nota "Se proyecta desde este mes hasta {mes} {año}." al pie.
  * - Simulación pausada: chip "Sin datos", nombre atenuado, segunda línea con
  *   el motivo — y el botón eliminar SIGUE disponible.
  * - onOpenCreate / onRequestDelete se invocan correctamente.
@@ -48,7 +48,7 @@ describe("SimulationBand", () => {
     expect(screen.getByRole("button", { name: /simular categoría/i })).toBeInTheDocument();
   });
 
-  it("sin activas: muestra la línea 'Proyecta una categoría a los meses futuros.' y sin nota de horizonte", () => {
+  it("sin activas: muestra la línea 'Proyecta categorías desde este mes en adelante.' y sin nota de horizonte", () => {
     render(
       <SimulationBand
         horizonEndMonth="2026-12"
@@ -57,7 +57,7 @@ describe("SimulationBand", () => {
         onRequestDelete={vi.fn()}
       />,
     );
-    expect(screen.getByText("Proyecta una categoría a los meses futuros.")).toBeInTheDocument();
+    expect(screen.getByText("Proyecta categorías desde este mes en adelante.")).toBeInTheDocument();
     expect(screen.queryByText(/se proyecta hasta/i)).not.toBeInTheDocument();
   });
 
@@ -85,7 +85,7 @@ describe("SimulationBand", () => {
       />,
     );
     expect(screen.getByText("Suscripciones")).toBeInTheDocument();
-    expect(screen.getByText("Se proyecta hasta diciembre 2026.")).toBeInTheDocument();
+    expect(screen.getByText("Se proyecta desde este mes hasta diciembre 2026.")).toBeInTheDocument();
   });
 
   it("botón eliminar de una fila llama a onRequestDelete con esa simulación", () => {

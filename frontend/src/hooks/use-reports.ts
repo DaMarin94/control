@@ -186,7 +186,8 @@ function serializeDirectionFilter(direction?: "expense" | "income" | "both"): {
  * @param movementTypes undefined = todos los tipos (back-compat); [] = ninguno; lista = subconjunto.
  * @param direction     undefined / "both" = ambas direcciones (back-compat); "expense" | "income" = filtrar.
  * @param includeSimulated RF-REP-017: undefined/false = off (back-compat, respuesta idéntica a hoy);
- *                      true = suma los movimientos simulados al tramo futuro (`data.simulated`).
+ *                      true = suma los movimientos simulados al tramo alcanzado —desde el mes en
+ *                      curso hasta el fin del horizonte— (`data.simulated`).
  */
 export function useReports(
   year: number,

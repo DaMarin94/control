@@ -1996,9 +1996,10 @@ export function ReportCard({
   // callback (mismo gate que movementTypes/direction — el Dashboard nunca lo
   // pasa). El valor persistido (includeSimulated) SIEMPRE se manda al backend
   // tal cual, independiente de si el chip está visualmente deshabilitado: en
-  // los dos casos de deshabilitado (sin simulaciones / año sin tramo futuro)
-  // el backend simplemente no tiene nada que agregar, así que no hace falta
-  // "apagar" el param — el resultado ya es idéntico a apagado.
+  // los dos casos de deshabilitado (sin simulaciones / año sin ningún mes
+  // alcanzado por el horizonte) el backend simplemente no tiene nada que
+  // agregar, así que no hace falta "apagar" el param — el resultado ya es
+  // idéntico a apagado.
   const showSimulatedToggle = Boolean(onIncludeSimulatedChange);
 
   const { data, isLoading, isError, isFetching, refetch } = useReports(
@@ -2053,16 +2054,12 @@ export function ReportCard({
     }
   }, [isEditingTitle]);
 
-  // Año actual (límite navegación hacia adelante) y mes actual (1-based) —
-  // RF-REP-017 usa el mes para saber si el año en curso ya se quedó sin tramo
-  // futuro (diciembre). Se resuelve post-mount, como currentYear, para no
-  // arrastrar el "ahora" del server al primer render (evita mismatch de hidratación).
+  // Año actual (límite navegación hacia adelante). Se resuelve post-mount para
+  // no arrastrar el "ahora" del server al primer render (evita mismatch de
+  // hidratación).
   const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
-  const [currentMonthNum, setCurrentMonthNum] = useState(() => new Date().getMonth() + 1);
   useEffect(() => {
-    const now = new Date();
-    setCurrentYear(now.getFullYear());
-    setCurrentMonthNum(now.getMonth() + 1);
+    setCurrentYear(new Date().getFullYear());
   }, []);
 
   const earliestYear = data?.earliestYear ?? null;
@@ -2077,14 +2074,15 @@ export function ReportCard({
   const chartData = data ? buildChartData(data, mergedCategories, includeSimulated) : [];
 
   // El chip "Simulados" se deshabilita en dos casos (docs/design.md §1.3),
-  // con precedencia: sin ninguna simulación gana sobre año sin tramo futuro.
-  const hasNoFutureMonthsInYear =
-    year < currentYear || (year === currentYear && currentMonthNum === 12);
-  const simulatedToggleDisabled = hasNoSimulations || hasNoFutureMonthsInYear;
+  // con precedencia: sin ninguna simulación gana sobre año sin ningún mes
+  // alcanzado. El horizonte arranca en el mes en curso (RN-028), así que el
+  // año en curso SIEMPRE tiene al menos un mes simulable — incluido diciembre.
+  const hasNoReachedMonthsInYear = year < currentYear;
+  const simulatedToggleDisabled = hasNoSimulations || hasNoReachedMonthsInYear;
   const simulatedToggleMotive = hasNoSimulations
     ? "No tenés ninguna simulación. Se crean desde la sección Únicos de la vista del mes."
-    : hasNoFutureMonthsInYear
-      ? `${year} no tiene meses futuros.`
+    : hasNoReachedMonthsInYear
+      ? `${year} ya pasó. La simulación solo alcanza desde este mes en adelante.`
       : null;
 
   // Universo estable de categorías para la leyenda-filtro (P2_b).

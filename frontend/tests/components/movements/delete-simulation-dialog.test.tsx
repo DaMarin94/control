@@ -60,10 +60,10 @@ describe("DeleteSimulationDialog", () => {
     expect(screen.getAllByText("Suscripciones").length).toBeGreaterThan(0);
   });
 
-  it("muestra la nota de consecuencia (totales recalculados)", () => {
+  it("muestra la nota de consecuencia (totales recalculados) — 'en este mes y en los siguientes'", () => {
     render(<DeleteSimulationDialog simulation={simulation} onClose={vi.fn()} />);
     expect(
-      screen.getByText(/sus movimientos simulados dejan de aparecer en los meses futuros/i),
+      screen.getByText(/sus movimientos simulados dejan de aparecer en este mes y en los siguientes/i),
     ).toBeInTheDocument();
   });
 

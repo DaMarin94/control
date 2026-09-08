@@ -1,8 +1,10 @@
 /**
  * Tests de los hooks de Simulación de categoría — /simulations (RF-SIM-001..004).
  * Verifica: GET /simulations y /simulations/candidates (gateados por
- * isAuthenticated / enabled), POST /simulations (éxito con invalidación de
- * ["simulations"] + candidates + ["movements"]; 400/409; error de servidor),
+ * isAuthenticated / enabled), POST /simulations — BATCH: `{ categoryIds }`,
+ * 201 SIEMPRE con `{ created, failed }` (éxito con invalidación de
+ * ["simulations"] + candidates + ["movements"]; el catch solo cubre red/500/
+ * 400 de body inválido, sintetizando un `failed` genérico por categoryId),
  * DELETE /simulations/:id (éxito con las mismas invalidaciones; 404; error de servidor).
  */
 
@@ -198,27 +200,51 @@ describe("useCreateSimulation", () => {
     });
   });
 
-  it("éxito: llama POST /simulations con { categoryId } y devuelve la simulación creada", async () => {
-    mockApiPost.mockResolvedValue(mockSimulation);
+  it("éxito total: llama POST /simulations con { categoryIds } y devuelve { created, failed: [] }", async () => {
+    mockApiPost.mockResolvedValue({ created: [mockSimulation], failed: [] });
     const { Wrapper } = createWrapper();
 
     const { result } = renderHook(() => useCreateSimulation(), { wrapper: Wrapper });
 
     let createResult: Awaited<ReturnType<typeof result.current.createSimulation>>;
     await act(async () => {
-      createResult = await result.current.createSimulation("cat-1");
+      createResult = await result.current.createSimulation(["cat-1"]);
     });
 
-    expect(createResult!.success).toBe(true);
-    expect(createResult!.simulation).toEqual(mockSimulation);
+    expect(createResult!.created).toEqual([mockSimulation]);
+    expect(createResult!.failed).toEqual([]);
     expect(mockApiPost).toHaveBeenCalledWith(
       expect.stringMatching(/^\/simulations\?today=\d{4}-\d{2}-\d{2}$/),
-      { categoryId: "cat-1" }
+      { categoryIds: ["cat-1"] }
+    );
+  });
+
+  it("fallo parcial (201 con creadas y fallidas): devuelve created + failed tal cual el backend", async () => {
+    mockApiPost.mockResolvedValue({
+      created: [mockSimulation],
+      failed: [{ categoryId: "cat-2", message: "Ya tenés una simulación activa para esta categoría" }],
+    });
+    const { Wrapper } = createWrapper();
+
+    const { result } = renderHook(() => useCreateSimulation(), { wrapper: Wrapper });
+
+    let createResult: Awaited<ReturnType<typeof result.current.createSimulation>>;
+    await act(async () => {
+      createResult = await result.current.createSimulation(["cat-1", "cat-2"]);
+    });
+
+    expect(createResult!.created).toEqual([mockSimulation]);
+    expect(createResult!.failed).toEqual([
+      { categoryId: "cat-2", message: "Ya tenés una simulación activa para esta categoría" },
+    ]);
+    expect(mockApiPost).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/simulations\?today=\d{4}-\d{2}-\d{2}$/),
+      { categoryIds: ["cat-1", "cat-2"] }
     );
   });
 
   it("manda el today con la fecha LOCAL (no la UTC) cerca de medianoche en UTC-3 (RN-028)", async () => {
-    mockApiPost.mockResolvedValue(mockSimulation);
+    mockApiPost.mockResolvedValue({ created: [mockSimulation], failed: [] });
 
     const originalTZ = process.env.TZ;
     process.env.TZ = "America/Argentina/Buenos_Aires"; // UTC-3, sin horario de verano
@@ -232,7 +258,7 @@ describe("useCreateSimulation", () => {
       const { result } = renderHook(() => useCreateSimulation(), { wrapper: Wrapper });
 
       await act(async () => {
-        await result.current.createSimulation("cat-1");
+        await result.current.createSimulation(["cat-1"]);
       });
 
       const callUrl = mockApiPost.mock.calls[0]?.[0] as string;
@@ -245,14 +271,14 @@ describe("useCreateSimulation", () => {
   });
 
   it("éxito: invalida simulations, candidates y movements", async () => {
-    mockApiPost.mockResolvedValue(mockSimulation);
+    mockApiPost.mockResolvedValue({ created: [mockSimulation], failed: [] });
     const { Wrapper, queryClient } = createWrapper();
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
 
     const { result } = renderHook(() => useCreateSimulation(), { wrapper: Wrapper });
 
     await act(async () => {
-      await result.current.createSimulation("cat-1");
+      await result.current.createSimulation(["cat-1"]);
     });
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
@@ -261,37 +287,32 @@ describe("useCreateSimulation", () => {
     expect(invalidatedKeys).toContainEqual(["movements"]);
   });
 
-  it("400 (menos de 3 meses con datos): propaga el mensaje del backend", async () => {
-    mockApiPost.mockRejectedValue(new ApiError("La categoría necesita al menos 3 meses con movimientos únicos en los últimos 12 meses (tiene 1)", 400));
+  // Los fallos POR CATEGORÍA (categoría inválida, <3 meses, ya simulada) ya NO
+  // tiran un 400/409 a nivel HTTP — el backend los devuelve dentro de `failed`
+  // con 201 (ver test de "fallo parcial" arriba). Lo que sigue cubre el caso
+  // en que la REQUEST en sí falla (red / 500 / 400 de body inválido que la UI
+  // ya previene): el hook sintetiza un `failed` genérico por cada categoryId
+  // pedido, para que el modal no tenga que distinguir este caso de un "0 de N".
+
+  it("400 de body inválido (red/validación no prevista por la UI): sintetiza failed genérico por categoryId", async () => {
+    mockApiPost.mockRejectedValue(new ApiError("categoryIds no debe estar vacío", 400));
     const { Wrapper } = createWrapper();
 
     const { result } = renderHook(() => useCreateSimulation(), { wrapper: Wrapper });
 
     let createResult: Awaited<ReturnType<typeof result.current.createSimulation>>;
     await act(async () => {
-      createResult = await result.current.createSimulation("cat-1");
+      createResult = await result.current.createSimulation(["cat-1", "cat-2"]);
     });
 
-    expect(createResult!.success).toBe(false);
-    expect(createResult!.error).toMatch(/al menos 3 meses/i);
+    expect(createResult!.created).toEqual([]);
+    expect(createResult!.failed).toEqual([
+      { categoryId: "cat-1", message: "No se pudo crear la simulación. Intentá de nuevo." },
+      { categoryId: "cat-2", message: "No se pudo crear la simulación. Intentá de nuevo." },
+    ]);
   });
 
-  it("409 (ya simulada): propaga el mensaje del backend", async () => {
-    mockApiPost.mockRejectedValue(new ApiError("Ya tenés una simulación activa para esta categoría", 409));
-    const { Wrapper } = createWrapper();
-
-    const { result } = renderHook(() => useCreateSimulation(), { wrapper: Wrapper });
-
-    let createResult: Awaited<ReturnType<typeof result.current.createSimulation>>;
-    await act(async () => {
-      createResult = await result.current.createSimulation("cat-1");
-    });
-
-    expect(createResult!.success).toBe(false);
-    expect(createResult!.error).toMatch(/ya tenés una simulación activa/i);
-  });
-
-  it("error de servidor (500): mensaje genérico", async () => {
+  it("error de servidor (500): sintetiza failed genérico por categoryId, created vacío", async () => {
     mockApiPost.mockRejectedValue(new ApiError("Internal Server Error", 500));
     const { Wrapper } = createWrapper();
 
@@ -299,11 +320,13 @@ describe("useCreateSimulation", () => {
 
     let createResult: Awaited<ReturnType<typeof result.current.createSimulation>>;
     await act(async () => {
-      createResult = await result.current.createSimulation("cat-1");
+      createResult = await result.current.createSimulation(["cat-1"]);
     });
 
-    expect(createResult!.success).toBe(false);
-    expect(createResult!.error).toMatch(/no se pudo crear/i);
+    expect(createResult!.created).toEqual([]);
+    expect(createResult!.failed).toEqual([
+      { categoryId: "cat-1", message: "No se pudo crear la simulación. Intentá de nuevo." },
+    ]);
   });
 
   it("isCreating pasa a true mientras la mutación está pendiente", async () => {
@@ -313,7 +336,7 @@ describe("useCreateSimulation", () => {
     const { result } = renderHook(() => useCreateSimulation(), { wrapper: Wrapper });
 
     act(() => {
-      void result.current.createSimulation("cat-1");
+      void result.current.createSimulation(["cat-1"]);
     });
 
     await waitFor(() => {

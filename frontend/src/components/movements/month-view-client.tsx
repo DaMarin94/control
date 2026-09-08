@@ -118,7 +118,7 @@ import {
 } from "@/lib/format";
 import { sumMovementTotals, groupSubtotalCents, sortUnicosBySort } from "@/lib/movements";
 import {
-  isFutureMonthWithinHorizon,
+  isMonthWithinHorizon,
   formatSubtotalSimulatedLabel,
   formatTotalsSimulatedLine,
   formatPausedListNote,
@@ -634,7 +634,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   const showPausedSimulationNote =
     horizonEndMonth !== null &&
     pausedSimulationsCount > 0 &&
-    isFutureMonthWithinHorizon(month, currentMonth, horizonEndMonth);
+    isMonthWithinHorizon(month, currentMonth, horizonEndMonth);
 
   // ── P2 — Fase 1: marca visual pasiva de límites ───────────────────────────
   // Anclajes de nivel-mes: mes.total.gasto / mes.total.ingreso / mes.balance.

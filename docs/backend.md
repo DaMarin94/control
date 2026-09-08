@@ -160,7 +160,7 @@ CRUD de métodos de pago. El DELETE es soft delete (`deletedAt`). Ver el contrat
 Lectura y escritura del blob JSON de preferencias del usuario autenticado. El `PUT` **reemplaza el blob entero** (no mergea) y hace upsert. Ver el contrato completo en la sección **Preferencias de usuario (PreferencesModule)**.
 
 ### `POST /simulations` · `GET /simulations` · `GET /simulations/candidates` · `DELETE /simulations/:id`
-Simulaciones de categoría (RF-SIM-001..004). El `DELETE` es **borrado físico**, no registra historial y no es deshacible. El `POST` y los dos `GET` aceptan `today` (`YYYY-MM-DD`, opcional) para fijar el mes en curso del cálculo, con el mismo parseo y el mismo `400` ante formato inválido; el `DELETE` no. Contrato completo (y el gotcha del fallback UTC) en `docs/data-model.md`, §Simulación de categoría; mecánica en la sección **Simulación de categoría (SimulationsModule)**.
+Simulaciones de categoría (RF-SIM-001..004). El `POST` es un **alta múltiple** (`categoryIds[]`) que responde `201` incluso con fallos por categoría. El `DELETE` es **borrado físico**, no registra historial y no es deshacible. El `POST` y los dos `GET` aceptan `today` (`YYYY-MM-DD`, opcional) para fijar el mes en curso del cálculo, con el mismo parseo y el mismo `400` ante formato inválido; el `DELETE` no. Contrato completo (y el gotcha del fallback UTC) en `docs/data-model.md`, §Simulación de categoría; mecánica en la sección **Simulación de categoría (SimulationsModule)**.
 
 ### `GET /history` · `POST /history/:id/undo`
 Listado de entradas vigentes del historial de cambios y deshacer. El `POST` **no lleva body** y resuelve por sí solo el undo en cadena cuando la entrada está bloqueada (RF-HIST-004); responde `200` con `{ undone: true }` (no es un DELETE, no aplica la convención del 204). Contrato completo en `docs/data-model.md`, §Historial de cambios; mecánica en la sección **Historial de cambios (HistoryModule)**.
@@ -629,7 +629,8 @@ Crea, lista y elimina simulaciones (RF-SIM-001..004) y **deriva los movimientos 
 | `getSimulatedItemsForMonths(userId, months[], today?, displayCurrencyOverride?)` | `GET /movements/reports` con `includeSimulated=true` (RF-REP-017) | `Map<month, MovementItem[]>` con **todas** las claves pedidas (`[]` las que no califican) |
 
 - **La variante de un mes es un wrapper de la batch.** La lógica de cálculo es una sola.
-- **La batch carga la ventana histórica [A-12..A-1] una sola vez** para los 12 meses del año y evalúa la regresión de cada simulación en cada mes pedido, en vez de repetir la carga mes a mes (recorrer un año con la variante de un mes serían 12 cargas redundantes de la misma ventana).
+- **La batch hace DOS cargas de datos por llamada, no una por mes.** Una es la **ventana histórica `[A-12..A-1]`** (serie de ajuste + `monthsWithData`/`paused`); la otra, el **rango del horizonte pedido**, para los **únicos reales que el remanente descuenta** (RN-028). Cada una es **una sola query**: el costo es **O(1) por llamada**, no O(meses) — recorrer un año no multiplica round-trips.
+- **Las dos cargas no se fusionan en una.** El helper que las resuelve acumula en el mismo `monthsWithData` **todo** lo que devuelve la query; mezclar los dos rangos inflaría el conteo de "meses con dato" de la ventana histórica con meses del horizonte y falsearía el mínimo de 3 meses.
 - **`displayCurrencyOverride`** — sin él la derivación cae a la **moneda default del usuario** (comportamiento de `GET /movements`); con él la serie de ajuste de la regresión se re-expresa en la **moneda de display de la card** de reporte, para que el aporte simulado venga en la misma moneda que el resto de la respuesta.
 - Los demás endpoints `/movements/reports/annual-*` **no** tocan `SimulationsService`: analizan solo lo real.
 
@@ -654,11 +655,21 @@ Las dos proyecciones a futuro del backend viven en el **mismo módulo**, como **
 
 ### Derivación del movimiento simulado
 
-- **`getSimulatedItemsForMonth` corta temprano y devuelve `[]`** si el mes pedido no es futuro respecto del mes en curso, si cae fuera del horizonte, si el usuario no tiene simulaciones o si la simulación está **pausada** (`monthsWithData < 3`). El consumidor no evalúa ninguna de esas condiciones.
+- **`getSimulatedItemsForMonth` corta temprano y devuelve `[]`** si el mes pedido es **anterior** al mes en curso, si cae fuera del horizonte, si el usuario no tiene simulaciones o si la simulación está **pausada** (`monthsWithData < 3`). El **mes en curso no corta**: abre el horizonte. El consumidor no evalúa ninguna de esas condiciones.
+- **El monto emitido es el remanente** (RN-028): proyección del mes menos el total real con signo de los únicos de la categoría en ese mes, cargado con **el mismo criterio y el mismo helper** que la serie de ajuste (sin anulados ni eliminados, cada único convertido con el TC de **su** mes). Un mes cuyo remanente redondea a 0, o cuyo signo no coincide con el de la proyección, **no emite ítem**.
 - **Ventana, horizonte y posición del eje viven en `simulation-window.helper.ts`** (`resolveTodayMonthKey` / `buildWindowMonths` / `computeHorizonEndMonth` / `axisPositionFor`), no dispersos en el service — reusarlos, no reimplementar la aritmética de RN-028.
+- **Gotcha — el umbral de `computeHorizonEndMonth` mide un tramo distinto del que se simula, y está bien así.** El chequeo de "menos de 6 meses" que dispara la extensión a `A+6` cuenta los meses **estrictamente posteriores** al mes en curso (`A+1..diciembre`), mientras que el horizonte simulable **incluye** el mes en curso (`A..fin`). **No es un off-by-one**: son dos magnitudes distintas (el largo del tramo natural que decide si hace falta extender vs. el rango que efectivamente se deriva). "Arreglar" el umbral para que cuente desde `A` corre el corte de la extensión un mes.
 - **Serie de ajuste convertida por el mes de cada único** (no por el TC de hoy): mismo criterio que `getAnnualUnicosAggregated`. El signo lo pone el `type` del único (ingreso `+`, gasto `−`) al agregarse por mes.
-- **`400` no revelador al crear.** La validación de categoría reusa `CategoryValidatorService` con `skipScopeCheck`: una simulación **no tiene `type` fijo** (su dirección la decide el cálculo mes a mes), así que cualquier `scope` de categoría es válido.
-- **El `409` está en dos capas.** El chequeo previo cubre el caso normal; el catch del `P2002` del índice único solo blinda una carrera concurrente.
+- **Rechazo no revelador al crear.** La validación de categoría reusa `CategoryValidatorService` con `skipScopeCheck`: una simulación **no tiene `type` fijo** (su dirección la decide el cálculo mes a mes), así que cualquier `scope` de categoría es válido.
+- **El conflicto "ya simulada" está en dos capas.** El chequeo previo cubre el caso normal; el catch del `P2002` del índice único solo blinda una carrera concurrente.
+
+### Alta múltiple (`POST /simulations`)
+
+Contrato en `docs/data-model.md`, §Simulación de categoría; regla funcional en `requirements.md`, RF-SIM-001.
+
+- **El único `400` es el del body** (array vacío o con ids duplicados), y lo resuelve la validación del DTO antes de tocar la DB. Un rechazo **por categoría** nunca sale como status de error: viaja en `failed` con `201`.
+- **Secuencial, no `Promise.all`.** Cada `categoryId` pasa por el **mismo** camino de creación de a una (mismas validaciones, mismos mensajes legibles) y su error se captura en `failed` sin voltear a los demás. Procesar en serie mantiene el resultado **determinístico** frente a cualquier colisión entre categorías del mismo lote, en vez de dejarla a una carrera.
+- **No atómico y sin historial.** No hay transacción que envuelva el lote: lo creado queda creado aunque el resto falle. La simulación no participa del historial (RF-SIM-004), así que no hay nada que revertir ni que registrar.
 
 ## Historial de cambios (HistoryModule)
 

@@ -239,7 +239,8 @@ export interface MovementItem {
   /**
    * Simulación de categoría (RF-SIM-003, módulo 3.15). `true` únicamente para
    * el movimiento sintético que una simulación activa deriva al vuelo para un
-   * mes futuro dentro de su horizonte (id sintético `simulated:{simulationId}:{month}`).
+   * mes dentro de su horizonte (mes en curso incluido, pasados nunca — id
+   * sintético `simulated:{simulationId}:{month}`).
    * `false` en todo ítem real (único/fijo/cuota, calculado o no).
    *
    * En un ítem simulado son `null`: occurredAt, timezone, paymentMethod,

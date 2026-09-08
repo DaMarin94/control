@@ -6,11 +6,16 @@
  * establecido, docs/technical.md §Convenciones de hooks).
  *
  * Crear/eliminar una simulación afecta los movimientos simulados de TODOS los
- * meses futuros de su horizonte: se invalida la familia `["movements"]` por
- * prefijo (mismo patrón que `useRecurring` — un fijo también afecta muchos
- * meses a la vez). Ni crear ni eliminar generan entrada de historial
- * (RF-SIM-001/004) — la simulación de categoría queda entera fuera de
- * `/historial`, así que no hay `["history"]` que invalidar acá.
+ * meses de su horizonte (desde el mes en curso, incluido, hasta el fin del
+ * horizonte): se invalida la familia `["movements"]` por prefijo (mismo
+ * patrón que `useRecurring` — un fijo también afecta muchos meses a la vez).
+ * Ni crear ni eliminar generan entrada de historial (RF-SIM-001/004) — la
+ * simulación de categoría queda entera fuera de `/historial`, así que no hay
+ * `["history"]` que invalidar acá.
+ *
+ * Crear es un BATCH: POST /simulations recibe `categoryIds: string[]` y
+ * devuelve 201 SIEMPRE (`{ created, failed }`), incluso si fallaron todas —
+ * no es un error duro (ver `useCreateSimulation`).
  *
  * Se manda `today=YYYY-MM-DD` (fecha local del navegador, NO UTC — ver
  * `getLocalTodayString` en `@/lib/format`) en GET /simulations, GET
@@ -28,6 +33,8 @@ import type {
   SimulationDto,
   SimulationsListResponse,
   SimulationCandidatesResponse,
+  CreateSimulationBatchResponse,
+  CreateSimulationFailure,
 } from "@/types/simulation";
 import { createLogger } from "@/lib/logger";
 import { getLocalTodayString } from "@/lib/format";
@@ -88,22 +95,28 @@ export function useSimulationCandidates(enabled: boolean) {
   });
 }
 
-// ─── Mutation: crear simulación ─────────────────────────────────────────────────
+// ─── Mutation: crear simulaciones (batch) ──────────────────────────────────────
 
-export interface CreateSimulationResult {
-  success: boolean;
-  simulation?: SimulationDto;
-  error?: string;
+/**
+ * Resultado del batch — `created` y `failed` reflejan el body del backend
+ * (201 SIEMPRE, incluso 0 de N). Cuando la request en sí falla (red / 500 /
+ * un 400 de body inválido que la UI ya previene: vacío o con duplicados), se
+ * sintetiza un `failed` con un mensaje genérico por cada `categoryId` pedido
+ * — el modal no distingue ese caso de un "0 de N" real del backend.
+ */
+export interface CreateSimulationBatchResult {
+  created: SimulationDto[];
+  failed: CreateSimulationFailure[];
 }
 
 export function useCreateSimulation() {
   const { api } = useApi();
   const queryClient = useQueryClient();
 
-  const mutation = useMutation<SimulationDto, ApiError, { categoryId: string }>({
-    mutationFn: ({ categoryId }) => {
+  const mutation = useMutation<CreateSimulationBatchResponse, ApiError, { categoryIds: string[] }>({
+    mutationFn: ({ categoryIds }) => {
       const today = getLocalTodayString();
-      return api.post<SimulationDto>(`/simulations?today=${today}`, { categoryId });
+      return api.post<CreateSimulationBatchResponse>(`/simulations?today=${today}`, { categoryIds });
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: SIMULATIONS_QUERY_KEY });
@@ -112,30 +125,30 @@ export function useCreateSimulation() {
     },
     onError: (err) => {
       if (err.isServerError()) {
-        logger.error("Error de servidor al crear simulación", { statusCode: err.statusCode });
+        logger.error("Error de servidor al crear simulaciones", { statusCode: err.statusCode });
       }
     },
   });
 
-  async function createSimulation(categoryId: string): Promise<CreateSimulationResult> {
+  async function createSimulation(categoryIds: string[]): Promise<CreateSimulationBatchResult> {
     try {
-      const simulation = await mutation.mutateAsync({ categoryId });
-      return { success: true, simulation };
+      const response = await mutation.mutateAsync({ categoryIds });
+      return { created: response.created, failed: response.failed };
     } catch (err) {
+      const genericMessage = "No se pudo crear la simulación. Intentá de nuevo.";
       if (err instanceof ApiError) {
-        // 400 (categoría inválida / <3 meses) y 409 (ya simulada) traen mensaje
-        // ya legible del backend — el selector ya las ofrece deshabilitadas con
-        // su motivo, así que esto solo cubre una carrera (candidatos stale).
-        if (err.statusCode === 400 || err.statusCode === 409) {
-          return { success: false, error: err.message };
+        if (!(err.statusCode === 400 || err.statusCode === 409)) {
+          logger.error("Error al crear simulaciones", { statusCode: err.statusCode });
         }
-        logger.error("Error al crear simulación", { statusCode: err.statusCode });
-        return { success: false, error: "No se pudo crear la simulación. Intentá de nuevo." };
+      } else {
+        logger.error("Error inesperado al crear simulaciones", {
+          error: err instanceof Error ? err.message : "desconocido",
+        });
       }
-      logger.error("Error inesperado al crear simulación", {
-        error: err instanceof Error ? err.message : "desconocido",
-      });
-      return { success: false, error: "No se pudo crear la simulación. Intentá de nuevo." };
+      return {
+        created: [],
+        failed: categoryIds.map((categoryId) => ({ categoryId, message: genericMessage })),
+      };
     }
   }
 

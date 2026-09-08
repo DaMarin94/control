@@ -612,7 +612,7 @@ CalculatedInfo = {                           // solo en ítems que son calculado
 - **`simulated` — el movimiento simulado viaja mezclado en `movements.unicos`** (RF-SIM-003). No es una lista aparte: viene **mezclado y reordenado** junto a los únicos reales por el mismo criterio de magnitud DESC (desempate por `occurredAt` DESC, que un simulado no tiene y por eso cede en un empate exacto), participa del filtro `categories` y **suma a `totals`** como cualquier único. Solo puede darse con `origin: "unico"` y `simulated: true`; **todo ítem real trae `simulated: false`**.
   - **`id` sintético y estable: `simulated:{simulationId}:{month}`** — nunca el id de una fila (no existe fila). Sirve de key de render y es idéntico entre lecturas del mismo mes; **no** es dirigible por ningún endpoint.
   - **Campos en `null` / vacíos por definición** (el simulado no tiene esos datos, RF-SIM-003): `occurredAt`, `timezone`, `paymentMethod`, `autoDebit`, `installment`, `frequency`, `startMonth`, `endMonth` y `calculated` en `null`; `hasCalculated: false` y `calculatedChildren: []` (no puede ser origen ni derivado de un calculado). `skipped` es siempre `false` (no se anula). `currency` es la **default vigente** del usuario con `exchangeRate: 1`, y `amountCents == convertedAmountCents` = **magnitud** (el signo lo lleva el `type`, derivado del cálculo).
-  - **El corte de horizonte se resuelve server-side.** Un mes pasado, el mes en curso o un mes fuera del horizonte (RN-028) simplemente no traen ítems simulados: el consumidor no filtra por mes ni recalcula el horizonte para decidir qué mostrar.
+  - **El corte de horizonte se resuelve server-side.** Un mes pasado o fuera del horizonte (RN-028) simplemente no trae ítems simulados: el consumidor no filtra por mes ni recalcula el horizonte para decidir qué mostrar. El **mes en curso sí** los trae —abre el horizonte— y su ítem es el **remanente** ya neteado contra los únicos reales de ese mes (RN-028), no un monto a sumar aparte.
 
 ---
 
@@ -768,8 +768,8 @@ ReportCategory = {
 **`simulated` — aporte simulado (RF-REP-017), solo con `includeSimulated=true`:**
 
 - **Aditivo, no incorporado.** `months` y `categories` siguen trayendo **solo lo real**: el bloque `simulated` es un segundo juego de series que el consumidor **suma o apila** sobre el real (`months[i] + simulated.months[i]`, banda real + banda simulada de la misma categoría). Lo real nunca se altera por el flag.
-- **`null` ≠ `0` en `monthlyExpenseCents`.** `null` = **sin aporte simulado ese mes** (el consumidor no dibuja banda). El `0` no llega por esa vía: un aporte que redondea a exactamente 0 se descarta aguas arriba y queda como ausencia.
-- **`simulated.months` — siempre 12 entradas**, mismo índice y orden que `months`. `incomeCents`/`expenseCents` en **0** donde no hay aporte (por ser mes pasado/en curso, fuera del horizonte, simulación pausada, o dirección opuesta).
+- **`null` ≠ `0` en `monthlyExpenseCents`.** `null` = **sin aporte simulado ese mes** (el consumidor no dibuja banda). El `0` no llega por esa vía: un aporte que redondea a exactamente 0 —o que se cancela por cambio de signo (RN-028)— se descarta aguas arriba y queda como ausencia.
+- **`simulated.months` — siempre 12 entradas**, mismo índice y orden que `months`. `incomeCents`/`expenseCents` en **0** donde no hay aporte (mes pasado, fuera del horizonte, simulación pausada, remanente cancelado o dirección opuesta). El **mes en curso sí puede traer aporte**: abre el horizonte y su aporte es el **remanente** del mes (RN-028), con lo que ese mes queda **mixto** (real a la fecha + remanente).
 - **`simulated.categories` es solo `EXPENSE`.** Un simulado que resulta ingreso aporta a `simulated.months[i].incomeCents` y **no** genera entrada de categoría. Puede **incluir categorías ausentes de `categories[*]`** (una categoría sin gasto real en el año pero con aporte simulado). Orden: gasto simulado anual DESC, desempate por `categoryId` ASC.
 - **`availableCategories` se amplía con el flag.** Una categoría con aporte **solo simulado** entra al universo/leyenda aunque no tenga movimientos reales en el año, con `hasExpense`/`hasIncome` según la **dirección derivada** de sus aportes. La ampliación **ignora los filtros** (`categories`, `types`, `direction`), igual que el universo real: sigue siendo un superconjunto estable.
 - **Los filtros de la card sí acotan `simulated`.** El simulado es un **único**: lo alcanzan `types` (entra con `unico`), `direction` (por su dirección derivada del mes) y `categories` (por su categoría simulada) — misma semántica que cualquier movimiento real.
@@ -954,12 +954,13 @@ Simulation = {
 
 | Endpoint | Body | Éxito | Errores |
 |---|---|---|---|
-| `POST /simulations` | `{ categoryId }` | `201` · `data: SimulationDto` | `400` · `409` |
+| `POST /simulations` | `{ categoryIds: string[] }` | `201` · `data: CreateSimulationsResponse` | `400` |
 | `GET /simulations` | — | `200` · `data: SimulationsListResponse` | — |
 | `GET /simulations/candidates` | — | `200` · `data: SimulationCandidatesResponse` | — |
 | `DELETE /simulations/:id` | — | `204` sin body | `404` |
 
-- **`POST /simulations` — `400` cubre las dos causas de rechazo por dato**: categoría inexistente, ajena o eliminada (mismo criterio **no revelador** que el resto de los movimientos: nunca `404`) **y** categoría con **menos de 3 meses con únicos** en la ventana (RF-SIM-002). **`409`** = esa categoría **ya tiene una simulación**; el conflicto es por existencia (índice único `(userId, categoryId)`) y no mira `paused`. El selector ya ofrece esas categorías deshabilitadas con su motivo, así que los dos errores solo se alcanzan en una carrera con datos stale.
+- **`POST /simulations` es un ALTA MÚLTIPLE con fallo parcial tolerado (RF-SIM-001).** El body es `{ categoryIds: string[] }`: **no vacío** y **sin ids duplicados** — cualquiera de las dos cosas es `400` de body inválido, el **único** `400` del endpoint. Fuera de eso responde **`201` siempre**, incluso si fallaron **todas** las categorías: un fallo por categoría no es un error duro de la operación, viaja en `failed`.
+- **Los `message` de `failed` son los textos legibles por categoría**, uno por causa de rechazo: categoría inexistente, ajena o eliminada (mismo criterio **no revelador** que el resto de los movimientos: nunca `404`); categoría con **menos de 3 meses con únicos** en la ventana (RF-SIM-002); categoría que **ya tiene una simulación** (existencia según el índice único `(userId, categoryId)`, sin mirar `paused`). El selector ya ofrece esas categorías deshabilitadas con su motivo, así que solo se alcanzan en una carrera con datos stale.
 - **`DELETE /simulations/:id` es un borrado físico**: una simulación inexistente o ajena responde `404`. No genera entrada de historial y **no es deshacible** (RF-SIM-004).
 
 ### Shapes
@@ -972,6 +973,14 @@ SimulationDto = {
   monthsWithData: number,        // 0..12 — meses CON únicos de la categoría en la ventana vigente
   paused: boolean,               // true ⇔ monthsWithData < 3
   createdAt: string              // ISO 8601
+}
+
+CreateSimulationsResponse = {          // body de POST /simulations — 201 SIEMPRE
+  created: SimulationDto[],            // una por categoría creada (puede ser [])
+  failed: Array<{
+    categoryId: string,
+    message: string                    // texto legible del rechazo de ESA categoría
+  }>
 }
 
 SimulationsListResponse = {
@@ -993,7 +1002,8 @@ SimulationCandidatesResponse = {
 
 - **`monthsWithData` y `paused` son derivados vigentes, no estado guardado.** Se recomputan en cada lectura sobre la ventana `[A−12 .. A−1]` del momento (RN-028), así que la misma simulación puede pasar de `paused: false` a `true` sin que nadie la toque.
 - **`paused: true` = viva en DB pero sin derivar.** La simulación **no se elimina** al caer por debajo del mínimo de 3 meses: deja de aportar movimientos simulados y vuelve a aportarlos sola si la categoría recupera datos (RF-SIM-002).
-- **`horizonEndMonth` es uno solo, a nivel respuesta.** El horizonte depende únicamente del mes en curso, no de la simulación: es idéntico para todas y por eso viaja **fuera** del array.
+- **`horizonEndMonth` es uno solo, a nivel respuesta.** El horizonte depende únicamente del mes en curso, no de la simulación: es idéntico para todas y por eso viaja **fuera** del array. Es el **último** mes (inclusive); el primero es siempre el **mes en curso** (RN-028) y por eso no se transmite.
+- **`created` + `failed` cubren exactamente las categorías pedidas**, sin repetidos: `created.length + failed.length === categoryIds.length`. El orden de ambos arrays es el del body.
 - **`candidates` — el universo es el catálogo de categorías ACTIVAS del usuario** (RF-SIM-001), en el orden del catálogo (nombre ASC), **sin reagrupar por elegibilidad**. No se filtra por elegibilidad ni por el mes navegado: la respuesta trae **todas** con los dos datos que permiten al consumidor decidir y explicar el motivo — `monthsWithData` (< 3 = sin datos suficientes) y `alreadySimulated`.
 
 ---

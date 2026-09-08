@@ -58,7 +58,19 @@ export interface SimulationCandidatesResponse {
   categories: SimulationCandidate[];
 }
 
-/** Body de POST /simulations. */
+/** Body de POST /simulations — batch: 1 o más categorías, sin ids duplicados (400 si vacío o con duplicados). */
 export interface CreateSimulationRequest {
+  categoryIds: string[];
+}
+
+/** Fallo de una categoría puntual dentro del batch — `message` ya viene legible del backend (mismo texto que hoy en 400/409). */
+export interface CreateSimulationFailure {
   categoryId: string;
+  message: string;
+}
+
+/** 201 SIEMPRE (incluso si fallaron todas): POST /simulations con desenlace mixto tolerado. */
+export interface CreateSimulationBatchResponse {
+  created: SimulationDto[];
+  failed: CreateSimulationFailure[];
 }
