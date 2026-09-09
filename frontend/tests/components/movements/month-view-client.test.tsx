@@ -189,6 +189,7 @@ vi.mock("@/hooks/use-simulations", () => ({
   useSimulationCandidates: vi.fn(() => ({ data: undefined, isLoading: false, isError: false })),
   useCreateSimulation: vi.fn(() => ({ createSimulation: vi.fn(), isCreating: false })),
   useDeleteSimulation: vi.fn(() => ({ deleteSimulation: vi.fn(), isDeleting: false })),
+  useExtendSimulation: vi.fn(() => ({ extendSimulation: vi.fn(), isExtending: false })),
 }));
 
 const mockPush = vi.fn();

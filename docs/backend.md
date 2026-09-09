@@ -109,7 +109,7 @@ Un registro de movimiento con `deletedAt != null` **no debe aparecer en ninguna 
 | `payment-methods` | `/payment-methods` | Métodos de pago (CRUD + soft delete) |
 | `preferences` | `/preferences` | Preferencias de usuario (blob JSON, lectura/escritura) |
 | `history` | `/history` | Historial de cambios: listado de entradas + deshacer (simple y en cadena) |
-| `simulations` | `/simulations` | Simulaciones de categoría: crear, listar, candidatas y eliminar + derivación de los movimientos simulados del mes |
+| `simulations` | `/simulations` | Simulaciones de categoría: crear, listar, candidatas, extender y eliminar + derivación de los movimientos simulados del mes |
 | `users` | — | Creación de cuenta + categorías por defecto |
 | `auth` | `/auth` | Registro, login y Google; emisión y validación del JWT (guard global) |
 | `prisma` | — | PrismaService |
@@ -159,8 +159,8 @@ CRUD de métodos de pago. El DELETE es soft delete (`deletedAt`). Ver el contrat
 ### `GET /preferences` · `PUT /preferences`
 Lectura y escritura del blob JSON de preferencias del usuario autenticado. El `PUT` **reemplaza el blob entero** (no mergea) y hace upsert. Ver el contrato completo en la sección **Preferencias de usuario (PreferencesModule)**.
 
-### `POST /simulations` · `GET /simulations` · `GET /simulations/candidates` · `DELETE /simulations/:id`
-Simulaciones de categoría (RF-SIM-001..004). El `POST` es un **alta múltiple** (`categoryIds[]`) que responde `201` incluso con fallos por categoría. El `DELETE` es **borrado físico**, no registra historial y no es deshacible. El `POST` y los dos `GET` aceptan `today` (`YYYY-MM-DD`, opcional) para fijar el mes en curso del cálculo, con el mismo parseo y el mismo `400` ante formato inválido; el `DELETE` no. Contrato completo (y el gotcha del fallback UTC) en `docs/data-model.md`, §Simulación de categoría; mecánica en la sección **Simulación de categoría (SimulationsModule)**.
+### `POST /simulations` · `GET /simulations` · `GET /simulations/candidates` · `PATCH /simulations/:id/extend` · `DELETE /simulations/:id`
+Simulaciones de categoría (RF-SIM-001..005). El `POST` es un **alta múltiple** (`categoryIds[]`) que responde `201` incluso con fallos por categoría. El `PATCH .../extend` (`{ months: 1|3|6|12 }`) corre el `endMonth` hacia adelante sin re-derivarlo ni clampearlo. El `DELETE` es **borrado físico**, no registra historial y no es deshacible. El `POST`, los dos `GET` y el `PATCH` aceptan `today` (`YYYY-MM-DD`, opcional) para fijar el mes en curso del cálculo, con el mismo parseo y el mismo `400` ante formato inválido; el `DELETE` no. Contrato completo (y el gotcha del fallback UTC) en `docs/data-model.md`, §Simulación de categoría; mecánica en la sección **Simulación de categoría (SimulationsModule)**.
 
 ### `GET /history` · `POST /history/:id/undo`
 Listado de entradas vigentes del historial de cambios y deshacer. El `POST` **no lleva body** y resuelve por sí solo el undo en cadena cuando la entrada está bloqueada (RF-HIST-004); responde `200` con `{ undone: true }` (no es un DELETE, no aplica la convención del 204). Contrato completo en `docs/data-model.md`, §Historial de cambios; mecánica en la sección **Historial de cambios (HistoryModule)**.
@@ -613,7 +613,7 @@ El helper que arma el `AuthResponse` de los tres flujos de auth es **`async`** p
 
 ## Simulación de categoría (SimulationsModule)
 
-Crea, lista y elimina simulaciones (RF-SIM-001..004) y **deriva los movimientos simulados** que `GET /movements` embebe en la sección Únicos. Contrato de API y modelo en `docs/data-model.md`, §Simulación de categoría; reglas de cálculo en `requirements.md`, RN-028/029.
+Crea, lista, extiende y elimina simulaciones (RF-SIM-001..005) y **deriva los movimientos simulados** que `GET /movements` embebe en la sección Únicos. Contrato de API y modelo en `docs/data-model.md`, §Simulación de categoría; reglas de cálculo en `requirements.md`, RN-028/029.
 
 - **Migración `20260909000000_add_simulation_timespan` escrita a mano**, no por diff automático: agrega `startMonth`/`endMonth` como `NOT NULL` sobre una tabla con filas existentes, siguiendo el patrón de migración manual ya documentado (`docs/technical.md`, §Migración que preserva datos con un mapeo custom) — columnas **nullable primero**, **backfill** con `UPDATE`, recién después `SET NOT NULL`. Backfill: `startMonth` = mes de `createdAt` (`to_char(createdAt, 'YYYY-MM')`); `endMonth` = la misma fórmula de `computeHorizonEndMonth` reescrita en SQL puro (diciembre del año de `startMonth`, extendido a `startMonth + 6` si ese tramo queda por debajo de 6 meses).
 
@@ -675,6 +675,12 @@ Contrato en `docs/data-model.md`, §Simulación de categoría; regla funcional e
 - **`startMonth` se clampea una sola vez, contra el mes en curso, y se aplica a todo el lote.** El caller no necesita clampearlo; ausente = mes en curso. Cada categoría creada en el mismo `POST` comparte el mismo `startMonth` ya clampeado, y de ahí deriva su propio `endMonth` (RN-028/029) — el tramo resultante puede diferir igual entre categorías si alguna ya tenía una simulación previa con otro tramo, pero las creadas en esta misma llamada arrancan todas iguales.
 - **Secuencial, no `Promise.all`.** Cada `categoryId` pasa por el **mismo** camino de creación de a una (mismas validaciones, mismos mensajes legibles) y su error se captura en `failed` sin voltear a los demás. Procesar en serie mantiene el resultado **determinístico** frente a cualquier colisión entre categorías del mismo lote, en vez de dejarla a una carrera.
 - **No atómico y sin historial.** No hay transacción que envuelva el lote: lo creado queda creado aunque el resto falle. La simulación no participa del historial (RF-SIM-004), así que no hay nada que revertir ni que registrar.
+
+### Extender (`PATCH /simulations/:id/extend`)
+
+Contrato en `docs/data-model.md`, §Simulación de categoría; regla funcional en `requirements.md`, RF-SIM-005.
+
+- **Gotcha — el endpoint no valida que el usuario esté parado en el último mes del tramo.** Esa condición (`viewedMonth === endMonth`) es de **UI**, no de integridad del dato: `endMonth + months` es un `SimulationDto` válido sin importar qué mes esté mirando el caller, así que el endpoint se ve más permisivo que la regla funcional — la restricción de "dónde aparece el botón" vive enteramente en el frontend.
 
 ## Historial de cambios (HistoryModule)
 

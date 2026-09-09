@@ -36,6 +36,7 @@ const mockPrisma = {
     findUnique: jest.fn().mockResolvedValue(null),
     findMany: jest.fn().mockResolvedValue([]),
     create: jest.fn(),
+    update: jest.fn(),
     delete: jest.fn(),
   },
   referenceRate: {
@@ -483,6 +484,104 @@ describe('Simulations (e2e)', () => {
         .get('/simulations/candidates?startMonth=2026/10')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(400);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // PATCH /simulations/:id/extend
+  // ---------------------------------------------------------------------------
+
+  describe('PATCH /simulations/:id/extend', () => {
+    it('200 + endMonth corrido, sin tocar startMonth', async () => {
+      mockPrisma.simulation.findUnique.mockResolvedValue({
+        id: 'sim-e2e-extend',
+        userId: USER_A_ID,
+        categoryId: CAT_ID,
+        startMonth: '2026-01',
+        endMonth: '2026-12',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      mockPrisma.simulation.update.mockResolvedValue({
+        id: 'sim-e2e-extend',
+        userId: USER_A_ID,
+        categoryId: CAT_ID,
+        startMonth: '2026-01',
+        endMonth: '2027-06',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      mockPrisma.category.findMany.mockResolvedValue([makeDbCategory()]);
+      mockPrisma.$queryRaw.mockResolvedValue([
+        makeSqlRow('2026-04', 10000),
+        makeSqlRow('2026-05', 10000),
+        makeSqlRow('2026-06', 10000),
+      ]);
+
+      const res = await request(app.getHttpServer())
+        .patch('/simulations/sim-e2e-extend/extend?today=2026-07-15')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ months: 6 })
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.startMonth).toBe('2026-01');
+      expect(res.body.data.endMonth).toBe('2027-06');
+      expect(mockPrisma.simulation.update).toHaveBeenCalledWith({
+        where: { id: 'sim-e2e-extend' },
+        data: { endMonth: '2027-06' },
+      });
+    });
+
+    it('400 si "months" no está en el set permitido {1,3,6,12}', async () => {
+      await request(app.getHttpServer())
+        .patch('/simulations/sim-e2e-extend/extend')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ months: 2 })
+        .expect(400);
+    });
+
+    it('400 si falta "months" en el body', async () => {
+      await request(app.getHttpServer())
+        .patch('/simulations/sim-e2e-extend/extend')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({})
+        .expect(400);
+    });
+
+    it('404 si no existe', async () => {
+      mockPrisma.simulation.findUnique.mockResolvedValue(null);
+
+      await request(app.getHttpServer())
+        .patch('/simulations/no-existe/extend')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ months: 3 })
+        .expect(404);
+    });
+
+    it('404 si es de otro usuario (no revela ajenidad)', async () => {
+      mockPrisma.simulation.findUnique.mockResolvedValue({
+        id: 'sim-ajena',
+        userId: USER_B_ID,
+        categoryId: CAT_ID,
+        startMonth: '2026-01',
+        endMonth: '2026-12',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await request(app.getHttpServer())
+        .patch('/simulations/sim-ajena/extend')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ months: 3 })
+        .expect(404);
+    });
+
+    it('401 sin JWT', async () => {
+      await request(app.getHttpServer())
+        .patch('/simulations/sim-e2e-extend/extend')
+        .send({ months: 3 })
+        .expect(401);
     });
   });
 

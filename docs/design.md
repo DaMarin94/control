@@ -4573,6 +4573,102 @@ Dentro de la banda (§2), debajo del botón. **Es la única superficie donde se 
   - **Footer:** `Cancelar` (ghost sm) + **`Eliminar`** (`variant="destructive" size="sm"`; en carga "Eliminando…").
   - **Éxito:** cierra, `toast` *"Simulación eliminada."*, el mes se recarga sin sus filas simuladas. **Error:** `toast.error` y el modal queda abierto.
 
+### 4.1 Extender el tramo de una simulación — disparador condicional, revelado en el lugar
+
+Implementa la extensión de `endMonth` sobre una simulación existente. **Contrato ya cerrado con backend:** `PATCH /simulations/:id/extend?today=YYYY-MM-DD`, body `{ months: 1|3|6|12 }`, devuelve el `SimulationDto` con el `endMonth` corrido (mismos campos de hoy). **`startMonth` no se toca nunca** — la operación mueve solo el fin.
+
+**Tres decisiones ya cerradas por el usuario, que esta sección no reabre:**
+
+1. **El disparador aparece SOLO en la fila cuya simulación tiene `endMonth` igual al mes que se está viendo en `/mes`** (`viewedMonth === simulation.endMonth`) — no "siempre visible". Es una condición **por fila**, evaluada contra el **mes visualizado**, no contra el mes en curso real: dos simulaciones con distinto `endMonth` llevan el disparador en meses distintos, y una simulación cuyo `endMonth` no es el mes que se está mirando ahora mismo **no lo lleva**, aunque siga activa.
+2. **El menú ofrece 1 / 3 / 6 / 12 meses**, siempre las cuatro, siempre en ese orden.
+3. **Sin tope de extensión.** Extender mueve el `endMonth`; la fila deja de cumplir la condición del punto 1 en cuanto el `endMonth` cambia, así que **no se puede repetir el clic desde el mismo lugar** — para otra vuelta hay que navegar al nuevo último mes. Un clic por visita, por diseño; no hace falta ningún tope artificial.
+
+**Nota de wiring para `control-frontend` (no es una decisión visual, pero la condición depende de ella).** `SimulationBand`/`SimulationListItem` reciben hoy `currentMonth`, documentado como *"mes en curso REAL"* (`getCurrentMonth()`). Ese prop **no sirve** para la condición 1, que necesita el **mes visualizado** (`month`, el param de ruta que ya existe en `month-view-client.tsx:620`). Hace falta un prop nuevo — p. ej. `viewedMonth` — distinto de `currentMonth`. Sin ese dato la condición de aparición no es implementable como está decidida.
+
+**El problema de diseño y la decisión.** Cuatro opciones dentro de un popover de 260px, sin un dropdown anidado (dos overlays con su propio listener de "click afuera" compitiendo es fragilidad sin precedente en el DS) y sin gastar espacio en las filas que no lo necesitan — con la condición 1, el disparador vive **en una sola fila a la vez** (o en un puñado, si más de una simulación termina el mismo mes): el costo de espacio es acotado, no sistémico.
+
+*Alternativas evaluadas:*
+
+- **(A) Ícono + menú flotante (`Popover`/`DropdownMenu`) anclado al botón.** Es exactamente el patrón descartado en la evaluación original: un overlay dentro de un overlay, con su propio "click afuera" peleando contra el del popover de filtro — el mismo modo de falla que este DS evita en todos lados ("un solo overlay a la vez"). **Descartada.**
+- **(B, elegida) Revelado en el lugar ("inline disclosure").** La línea 2 de la fila —el mismo carril que ya usa el tramo o la nota de pausa (§4)— es el espacio libre: un link de texto **"Extender"** reemplaza, al hacer clic, su propio contenido por los **cuatro valores en línea** (`1 mes · 3 meses · 6 meses · 12 meses`), sin salir del flujo normal del documento. No hay `position: fixed/absolute`, no hay `z-index`, no hay un segundo listener de click-afuera compitiendo con el del popover: es contenido inline que aparece y desaparece como cualquier otro estado condicional de la fila (mismo mecanismo que ya usa el chip "Sin datos" o el propio tramo). *(Consistencia — extiende el lenguaje de "texto tenue accionable" ya cerrado con el usuario en el link "Ir al mes en curso" del header de `/mes`: reposo `--muted`, hover `--ink-2` + subrayado, sin peso extra — rechazado explícitamente en esa feature por leer "demasiado a botón"; el mismo criterio aplica acá.)*
+
+#### Anatomía — línea 2, tres estados posibles
+
+La línea 2 de la fila (§4: `w-full text-[11.5px] text-muted`) pasa a tener tres estados excluyentes, condicionados a si la fila cumple la condición 1 y en qué paso de la extensión está:
+
+**a) Reposo, con disparador** (condición 1 cumplida, nada en curso). El texto que ya existía (tramo o nota de pausa) **se conserva entero**, y a continuación —**separado por un espacio, no por un `·`** (el texto ya termina en punto; un `·` después de un punto duplicaría la puntuación — mismo criterio que ya usa la nota de pausa para encadenar dos oraciones: *"…tiene {N}). No proyecta."*)— aparece el link **"Extender"** con un `ChevronDown` 11px `aria-hidden` a `3px` de gap, mismo `--muted`/`currentColor`:
+
+  - Activa, ya arrancó: *"Proyecta hasta noviembre 2026. Extender ⌄"*
+  - Activa, todavía no arrancó: *"Proyecta de marzo 2027 a diciembre 2027. Extender ⌄"*
+  - Pausada: *"Necesita 3 meses con datos (tiene 2). No proyecta. Extender ⌄"*
+
+  El link: `inline-flex items-center gap-[3px]`, texto **11.5px** (hereda el tamaño de la línea que lo contiene — no el 12.5px de "Ir al mes en curso", que vivía en una fila propia; acá conviene dentro de una oración de 11.5px y **debe** heredarlo para no crear un salto de tamaño a mitad de frase), `text-muted`, `cursor-pointer` explícito (gotcha de Tailwind v4 ya documentado). **Hover:** `text-ink-2` + `underline underline-offset-[2px]`, transición de color `140ms`. **Focus:** `focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-[var(--r-chip)]`, sin outline nativo. **Sin peso extra** (permanece al peso de la oración que lo precede) — mismo rechazo ya cerrado con el usuario para "Ir al mes en curso": un link más pesado leería como botón, y acá compite por atención con el chip "Sin datos" de la misma fila.
+  - El `ChevronDown` **no es decorativo puro**: señala honestamente que el clic **revela opciones**, no que ejecuta una acción de un solo paso — mismo vocabulario que ya usan los acordeones y los disparadores de filtro para "esto se abre".
+
+**b) Eligiendo** (tras el clic en "Extender"). El contenido de la línea 2 se **reemplaza entero** — la oración de tramo/pausa se oculta mientras se elige; no hace falta releerla, el chip "Sin datos" de la línea 1, si aplica, sigue visible — por las cuatro opciones:
+
+  `1 mes · 3 meses · 6 meses · 12 meses`
+
+  - Contenedor: `flex flex-wrap items-center gap-x-[6px] gap-y-[2px]`.
+  - Cada valor es un botón de texto con el **mismo molde** que "Extender" (11.5px, `--muted` reposo, hover `--ink-2` + subrayado, foco `--accent-soft`). `aria-label="Extender {N} {mes|meses}"` — el texto visible es solo "1 mes"/"3 meses"/etc.; el verbo va en el `aria-label`, mismo criterio que ya fija "Ir al mes en curso" para el nombre accesible. `whitespace-nowrap` **por botón** — "12 meses" nunca separa el número de la unidad.
+  - Separadores `·` en `--faint`, `aria-hidden`, entre cada par (nunca al final).
+  - **Hit area:** `py-[3px] -my-[3px]` en cada botón — padding + margen negativo cancelan el efecto visual y amplían el alto de clic sin separar los valores entre sí. No hace falta el truco de pseudo-elemento del toast con Deshacer: acá los valores son adyacentes y una extensión horizontal se pisaría con el vecino.
+  - **Ancho:** con los cuatro valores entra en una sola línea dentro de los 236px útiles del popover (holgado — ronda los 200-215px). Si algún renderer lo empujara a envolver, envuelve a **dos líneas entre valores**, nunca partiendo un valor (`whitespace-nowrap` por botón) — mismo criterio de contención ya vigente para la variante larga del tramo (§8.4).
+  - **Foco al revelarse:** pasa al primer valor ("1 mes") — patrón estándar de disclosure; quien llegó por teclado no pierde el hilo.
+  - **`aria-live="polite"` `aria-atomic="true"`** en el contenedor de la línea 2: el cambio de "Proyecta hasta… Extender" a "1 mes · 3 meses · 6 meses · 12 meses" (y los estados siguientes) se anuncia a lectores de pantalla sin que el usuario tenga que "descubrir" el cambio por su cuenta.
+
+**c) En vuelo** (`Extendiendo…`). Al elegir un valor, la línea 2 pasa a un texto **no interactivo**: *"Extendiendo…"*, mismo molde ya usado en toda la app para operaciones en curso ("Eliminando…", "Deshaciendo…") — **sin spinner**, el cambio de rótulo es el feedback. El botón de eliminar (`Trash2`) **de esa misma fila** se deshabilita mientras dura (mismo `opacity` y `pointer-events-none` que cualquier control deshabilitado del DS) — previene una carrera entre eliminar y extender sobre la misma simulación; **las demás filas no se ven afectadas.**
+
+#### Cómo vuelve atrás (sin elegir nada)
+
+Solo puede haber **una fila "eligiendo" a la vez** en toda la banda — es un estado único, no por fila, así que:
+
+- **Click afuera de las 4 opciones** (en cualquier otro punto del popover: otra fila, la lista de categorías, el bloque de tipo, el botón "Simular categoría", el propio nombre o punto de color de la fila) colapsa de vuelta al estado (a). Click **fuera del popover entero** ya cierra el popover completo (comportamiento existente) y con él, el estado de elección.
+- **Escape** colapsa el estado (a) **sin cerrar el popover**. Si no hay ninguna fila "eligiendo", `Escape` sigue cerrando el popover como hoy. *(Mismo criterio de anidamiento que ya rige entre un modal hijo y su padre en este DS: lo más interno se cierra primero.)* El foco vuelve al link "Extender" de la fila que se colapsó.
+- **Elegir otra fila** — clickear "Extender" en una fila distinta colapsa la primera (vuelve a su estado (a)) y abre la segunda. Nunca conviven dos filas "eligiendo".
+- **Sin botón de cerrar dedicado.** *Alternativa evaluada:* un glifo `×` junto a las cuatro opciones. **Descartada** — los tres caminos de arriba ya cubren el cierre sin elegir, y un quinto elemento en una línea que ya tiene cuatro valores y sus separadores es cromo redundante en el espacio más apretado de la fila. *(Carga cognitiva.)*
+
+#### Éxito, error y toasts
+
+- **Éxito:** `toast.success` **"Simulación extendida."** — mismo molde breve que **"Simulación eliminada."** (§4): no repite la fecha nueva en el toast porque **la fila la muestra al lado**, en el mismo popover que el usuario ya tiene abierto. La query de simulaciones se revalida; la fila recalcula su `endMonth` y, como ya no coincide con el mes visualizado, la condición 1 deja de cumplirse: la línea 2 **vuelve por sí sola** a mostrar el tramo/pausa **sin disparador**, sin ninguna marca de "recién extendida" (decisión ya cerrada — el usuario la rechazó). El popover **no se cierra**.
+- **Error:** `toast.error` **"No se pudo extender la simulación. Intentá de nuevo."** — la línea 2 **vuelve al estado (b)** (las cuatro opciones), no al (a): permite reintentar de un clic, sin volver a pasar por "Extender" (mismo espíritu que "el modal queda abierto" en eliminar, y que "reintentar funciona de un clic" en el batch de crear, §3). El popover **no se cierra**.
+- **Sin confirmación previa.** Elegir un valor dispara la extensión directo (no hay paso de "¿Extender 3 meses? Sí/No") — el radio de daño es bajo (mueve una fecha hacia adelante, no elimina nada — "la app no borra nada sola") y el usuario ya tomó la decisión al elegir el número; una confirmación extra sería fricción sin nada real que prevenir.
+
+#### Tramo ya vencido — se ofrecen las cuatro opciones igual, sin distinción
+
+Si el usuario navega a un mes **pasado** que es el `endMonth` de una simulación ya vencida, el disparador aparece igual (la condición 1 no distingue pasado/presente/futuro) y **las cuatro opciones se muestran sin ocultar ni deshabilitar ninguna**, aunque alguna termine devolviendo un `endMonth` que sigue en el pasado (p. ej. fin = dic 2026, hoy = mar 2027, "1 mes" → ene 2027, sigue vencida).
+
+*Alternativas evaluadas:*
+
+- **(a) Ocultar las opciones cuyo resultado siga en el pasado.** Exige que el frontend repita en JS la aritmética de fecha que hoy vive en el backend (`endMonth + N meses`, comparado contra el mes en curso real) solo para prevenir algo que **no es un error** — la operación es válida y no deja el dato en peor estado. **Descartada.**
+- **(b) Deshabilitar con motivo** ("Todavía no alcanza el mes en curso"). Reintroduce exactamente el patrón que **esta misma spec ya abandonó** en el selector del modal (§3, punto 3 del encabezado: "deshabilitada con el motivo visible" fue revertido a "se oculta"). Repetirlo acá para un caso mucho menos frecuente sería inconsistente con una decisión ya tomada en la misma feature. **Descartada.**
+- **(c, elegida) Ofrecerlas igual, sin distinción.** Ninguna opción es dañina: todas mueven `endMonth` hacia adelante, siempre. Si el resultado sigue vencido, el usuario simplemente repite la operación navegando al nuevo último mes — **exactamente el mismo patrón sin tope, un clic por visita**, ya aceptado como normal por el razonamiento que sacó el tope (punto 3 del encabezado). No es una situación nueva: es el mismo mecanismo aplicado más veces.
+
+**Sin ningún cartel ni nota que diga "esta simulación está vencida"** — restricción dura ya cerrada ("NO existe cartel ni estado de terminada/vencida. Rechazado explícitamente"). El disparador, las cuatro opciones y los tres estados (reposo/eligiendo/en vuelo) son **idénticos** esté el `endMonth` en el pasado, en el mes en curso o en el futuro.
+
+#### Simulación pausada — convive con la nota de "Sin datos"
+
+La simulación pausada **también** ofrece extender (simetría ya cerrada con Eliminar: "existe, solo no proyecta", y eliminarla o extenderla son ambas cosas que el usuario puede querer hacer sobre algo que sigue configurado). En la línea 2:
+
+- **Reposo:** *"Necesita 3 meses con datos (tiene {N}). No proyecta. Extender ⌄"* — la nota de pausa se conserva entera; el disparador se agrega al final con el mismo criterio que en la fila activa.
+- **Eligiendo / en vuelo:** igual que cualquier fila — la nota de pausa se oculta temporalmente y vuelve, sin cambios, en cuanto se resuelve (éxito, error, o se cancela la elección). **Extender no cambia el estado de pausa**: mueve el fin, no toca `monthsWithData` ni el chip "Sin datos" (que vive en la línea 1 y no se ve afectado en ningún momento de este flujo).
+
+#### Contención responsive
+
+El popover mantiene su **ancho fijo de 260px en todo el rango de viewport** (§8.2 — no tiene disposición compacta, igual que el toast con Deshacer). Todo lo de esta sección hereda esa invariancia: no hay un layout distinto para pantalla chica, solo se verifica que se comporte igual en todo el rango.
+
+- **Invariante 1 (sin scroll horizontal):** ningún elemento nuevo declara ancho mínimo — el link "Extender" y los cuatro valores son texto corto con `whitespace-nowrap` **por ítem**, no por el conjunto; si el conjunto envuelve, envuelve entre valores, nunca generando overflow.
+- **Invariante 2 (modales completos):** no aplica — no se introduce ningún modal.
+- **Invariante 3 (ninguna acción inalcanzable):** la fila "eligiendo" vive dentro del carril ya scrolleable de la lista de activas (`max-h-[176px] overflow-y-auto`, §8.2); si queda fuera de vista al revelarse, el scroll del carril la alcanza igual que a cualquier otra fila. El popover sigue acotándose al viewport y abriendo hacia arriba si hace falta (§8.2), sin cambios.
+- **Invariante 4 (superficies anchas scrollean dentro de sí):** aplica el mismo carril ya documentado; esta sección no agrega ninguno nuevo.
+- **`max-h-[176px]` no cambia.** El disparador, el revelado y el "Extendiendo…" viven **en el mismo carril de línea 2** que ya ocupaba el tramo o la nota de pausa — no agregan una tercera línea en el caso esperado (los cuatro valores entran en una línea, ver arriba). En el caso extremo de envolver a dos líneas, la fila crece temporalmente exactamente igual que ya puede pasar hoy con la variante larga del tramo (§8.4) — no es una regresión nueva, es el mismo comportamiento ya tolerado.
+
+#### Reglas duras
+
+- **Ningún verde ni rojo.** Extender no es una acción destructiva ni un monto: el link, los cuatro valores y el "Extendiendo…" son enteramente neutros (`--muted`/`--ink-2`), igual que el resto del texto de la fila. El rojo sigue exclusivo del botón Eliminar (regla dura 1).
+- **Sin índigo salvo el anillo de foco**, que es la utilidad de foco ya universal en todo el DS, no una marca de esta acción (regla dura 2).
+- **El toast de error usa el mapeo ya vigente** (`error` → tick `--expense`) — cromo de error de sistema, no una cifra de dinero.
+
 ### 5. Composición del subtotal y de los totales — se señala, sin tocar las cifras
 
 Un total que mezcla real y simulado sin avisar es engañoso. Pero la cifra **no está mal**: lo que necesita revelarse es su **composición**. Por eso la señal va **al lado** del número, nunca **sobre** el número.
@@ -4683,6 +4779,7 @@ Un mes que **ninguna simulación alcanza** —más allá del fin de todas, o **a
 11. **Estados vacíos por causa (§3.8)** — pedidos explícitamente ("conviene que el usuario entienda cuál le tocó"). Cuatro copys sobre un estado que ya existía como borde teórico. **Nueva — a implementar.**
 12. **Línea de tramo por simulación en la lista de activas (§4)** — respuesta directa a *"que el usuario pueda saber hasta cuándo llega cada una"*. Muestra un dato que la simulación ya tiene; **no agrega acción**. **Nueva — a implementar.** *Requiere que el dato viaje por el contrato (ver 9.1).*
 13. **Desenlace "Simulación creada." por fila (§3.4)** — reemplaza al motivo *"Ya la estás simulando"* de las K filas creadas, que quedó derogado junto con el resto de los motivos. Es copy sobre un resultado que ya se mostraba. **Nueva — a implementar.**
+14. **Extender el tramo de una simulación (§4.1)** — decidida con el usuario fuera de este documento (contrato de backend ya cerrado: `PATCH /simulations/:id/extend`). A diferencia de los ítems 1-13, introduce **capacidad nueva** (mover `endMonth` hacia adelante desde `/mes`), no solo copy o cromo sobre un dato existente. **Nueva — a implementar.** *Requiere que `SimulationBand` reciba el mes VISUALIZADO además del mes en curso real (ver nota de wiring en §4.1) — sin ese dato la condición de aparición del disparador no es implementable.*
 
 **9.1 Señales de documentación (no son de este doc — van al analista):**
 
@@ -4692,6 +4789,7 @@ Un mes que **ninguna simulación alcanza** —más allá del fin de todas, o **a
 - **`isMonthWithinHorizon` deja de ser suficiente:** el helper compara contra `currentMonth` + un `horizonEndMonth` único. Con tramos por simulación la pertenencia se evalúa **contra el tramo de cada simulación**. Renombre/firma quedan en manos del analista + frontend; lo que este doc fija es que **ninguna superficie puede seguir asumiendo un horizonte único**.
 - *(Histórico, ya aplicado)* **Horizonte desde el mes en curso:** el helper `isFutureMonthWithinHorizon` se renombró a `isMonthWithinHorizon`. Un helper que se llama `isFuture…` y devuelve `true` para el mes en curso es una trampa para el próximo que lo lea.
 - **Remanente:** la semántica "proyección − únicos reales del mes" y la regla "remanente 0 o de signo invertido → sin fila" pertenecen a `requirements.md` / `data-model.md`.
+- **RF nuevo — extender el tramo de una simulación (§4.1).** No existe hoy en `requirements.md` (RF-SIM-001..004) ni en `screens.md` §4: hay que documentar el flujo (disparador condicional a `viewedMonth === endMonth`, menú de 1/3/6/12 meses, sin confirmación, sin tope) como un RF nuevo (p. ej. RF-SIM-005) con sus CA, y reflejar el contrato `PATCH /simulations/:id/extend?today=YYYY-MM-DD` (body `{ months: 1|3|6|12 }`) en `backend.md`/`frontend.md` si no está.
 - **Ripple a RF-REP-017 — RESUELTO dentro de este cambio (aprobado por el usuario).** El chip "Simulados" de `/reportes` se deshabilitaba por año cuando *"cualquier año anterior al en curso, **y el año en curso en diciembre**"*, con el copy *"{Año} no tiene meses futuros."* Con el horizonte arrancando en el mes en curso, la rama de diciembre pasa a ser falsa y el criterio "meses futuros" deja de describir el corte. **La condición y el copy nuevos están en §1.3 de *Movimientos simulados en cards de reporte*.** Señal para el analista: **espejar en `requirements.md` (RF-REP-017)** la condición de deshabilitado por año (**`year < currentYear`**, sin caso de diciembre) y el copy nuevo.
 
 **9.2 Inventario de copy — estado vigente (incluye el barrido de "futuros", ya aplicado, y los cambios de esta tanda):**
@@ -4710,6 +4808,10 @@ Un mes que **ninguna simulación alcanza** —más allá del fin de todas, o **a
 | Consecuencia del borrado (§4) | "…dejan de aparecer en este mes y en los siguientes, y los totales…" | **"…dejan de aparecer en los meses que alcanza, y los totales…"** |
 | Sublínea de la fila (§1.2) | "tendencia de 12 meses" | **sin cambios** — texto único, sin variante (decisión del usuario) |
 | Motivo de año del chip "Simulados" de `/reportes` (§1.3 de la spec de reportes) | "{Año} ya pasó. La simulación solo alcanza desde este mes en adelante." | **"{Año} ya pasó. Las simulaciones no alcanzan meses pasados."** — la frase vieja citaba la regla del horizonte único, que ya no existe |
+| Disparador de extender, línea 2 de la fila (§4.1) | *(no existía)* | **"{tramo o nota de pausa existente} Extender ⌄"** — agregado con un espacio, sin `·` |
+| Opciones de extender, reveladas (§4.1) | *(no existía)* | **"1 mes · 3 meses · 6 meses · 12 meses"** |
+| Extender en vuelo (§4.1) | *(no existía)* | **"Extendiendo…"** |
+| Toast de extender (§4.1) | *(no existía)* | Éxito: **"Simulación extendida."** · Error: **"No se pudo extender la simulación. Intentá de nuevo."** |
 
 **Helpers de copy** (`frontend/src/lib/simulations.ts` — el frontend no inventa ninguna de estas cadenas):
 
@@ -4725,6 +4827,8 @@ Un mes que **ninguna simulación alcanza** —más allá del fin de todas, o **a
 - **Sin helper de segmento de tendencia:** el texto *"tendencia de 12 meses"* es una constante, no una función de estado.
 - **Pertenencia al horizonte:** ya no se resuelve con un `endMonth` único (ver 9.1); se evalúa contra el tramo de **cada** simulación.
 - Sin cambios: `formatMinDataMotive` (ahora **solo** para §6.1), `formatSubtotalSimulatedLabel`, `formatTotalsSimulatedLine`, `formatPausedListNote`.
+- `formatExtendSuccessToast()` → *"Simulación extendida."* **(nuevo — §4.1; constante)**
+- Las cuatro opciones ("1 mes" / "3 meses" / "6 meses" / "12 meses") y el toast de error ("No se pudo extender la simulación. Intentá de nuevo.") son **constantes literales** — no hay pluralización dinámica que resolver (el único singular es "1 mes", fijo).
 
 ### 10. Reglas duras reafirmadas
 
@@ -4733,6 +4837,7 @@ Un mes que **ninguna simulación alcanza** —más allá del fin de todas, o **a
 - **Regla dura 1, extensión al fallo parcial:** el **rojo** aparece únicamente en los **mensajes de error por fila** (`--expense-ink`) —el único inquilino tintado del slot de desenlace, §3.4; el *"Simulación creada."* es neutro— — cromo de error de sistema, mismo uso que el error de carga de la lista ya vigente, nunca sobre un monto. El **ámbar** aparece únicamente en el **tick del toast `warning`** del desenlace mixto: vocabulario cerrado de tipos de sistema, ortogonal a los datos del mes, donde el ámbar sigue reservado a límites cruzados. La **caja de resumen es neutra** (`--panel-2` / `--ink-2`): resume éxitos y fallos juntos.
 - **Regla dura 3 (dinero en mono tabular):** el monto simulado va en mono tabular con `tnum`, mismo tamaño y peso que el real, con el `≈` **dentro** del mismo span mono para no romper la alineación de la columna. Ninguna cifra trunca nunca.
 - **Regla dura 4 (claro y oscuro):** todos los tokens usados son theme-aware (`--panel`, `--panel-2`, `--panel-3`, `--hair`, `--line`, `--ink`, `--ink-2`, `--muted`, `--faint`, `--expense`/`-soft`/`-ink`, `--income`/`-soft`/`-ink`, `--accent`/`-soft`). El **borde punteado** es el punto a verificar en oscuro: `--expense`/`--income` están recalibrados y el contorno debe leerse claramente sobre `--panel` en los dos modos.
+- **Extender (§4.1) no introduce excepciones nuevas a ninguna regla dura:** neutro en color (sin verde/rojo — no es destructivo ni un monto), sin índigo salvo el anillo de foco (utilidad universal, no marca), sin ninguna cifra de dinero de por medio.
 
 ### Checklist de aceptación visual — Simulación de categoría
 
@@ -4816,6 +4921,21 @@ Un mes que **ninguna simulación alcanza** —más allá del fin de todas, o **a
 - [ ] La confirmación es un diálogo con **caja de identidad** y nota de consecuencia, footer `Cancelar` + **`Eliminar` rojo**.
 - [ ] La nota de consecuencia dice **"…dejan de aparecer en los meses que alcanza…"** (ya **no** "en los meses futuros" ni "en este mes y en los siguientes").
 - [ ] Al confirmar: toast, la fila desaparece de la banda y **las filas simuladas de esa categoría desaparecen de todos los meses de su tramo**, con totales recalculados.
+
+*Extender el tramo:*
+- [ ] El link **"Extender"** (con `ChevronDown` 11px) aparece **únicamente** en la fila cuya simulación tiene `endMonth` igual al **mes que se está viendo** en `/mes` — nunca en las demás filas, aunque estén activas. Cambiar de mes visualizado mueve el disparador a la fila que corresponda (o lo hace desaparecer si ninguna coincide).
+- [ ] En una simulación **ya arrancada**, la línea 2 dice **"Proyecta hasta {mes} {año}. Extender ⌄"**; en una que **todavía no arrancó**, **"Proyecta de {mes} {año} a {mes} {año}. Extender ⌄"**; en una **pausada**, **"Necesita 3 meses con datos (tiene {N}). No proyecta. Extender ⌄"** — siempre agregado al final de la oración existente, con un espacio, **sin `·`**.
+- [ ] Clic en "Extender" reemplaza el contenido de la línea 2 por **"1 mes · 3 meses · 6 meses · 12 meses"**, cuatro valores clickeables separados por `·` en `--faint`; ninguno rompe entre el número y "mes(es)". El foco pasa al primero.
+- [ ] **Nunca hay dos filas "eligiendo" a la vez:** clickear "Extender" en otra fila colapsa la primera.
+- [ ] **Escape** colapsa la elección sin cerrar el popover (el popover se cierra con un segundo `Escape`, cuando ya no hay ninguna fila eligiendo). **Click afuera de las 4 opciones** (en cualquier punto del popover) también colapsa. **No hay ningún botón `×` dedicado** para cancelar.
+- [ ] Elegir un valor dispara la extensión **sin confirmación**: la línea 2 pasa a **"Extendiendo…"** (texto plano, sin spinner) y el botón **Eliminar de esa misma fila** se deshabilita mientras dura; las demás filas siguen operables con normalidad.
+- [ ] **Éxito:** `toast.success` **"Simulación extendida."**, el popover **no se cierra**, y la fila —al recalcular su `endMonth`— **deja de mostrar el disparador** en ese mismo mes visualizado (porque ya no es el `endMonth`), sin ninguna marca de "recién extendida".
+- [ ] **Error:** `toast.error` **"No se pudo extender la simulación. Intentá de nuevo."**, la línea 2 **vuelve a las cuatro opciones** (no al link "Extender"), lista para reintentar de un clic.
+- [ ] En un mes **ya vencido** (navegando hacia atrás hasta el `endMonth` de una simulación cuyo fin ya pasó), las **cuatro opciones se ofrecen igual**, ninguna oculta ni deshabilitada — aunque el resultado de alguna siga cayendo en el pasado. **En ningún caso aparece un cartel o nota de "vencida"/"terminada".**
+- [ ] En una simulación **pausada**, extender **no cambia** el chip "Sin datos" ni el resto de su línea 1; al resolverse (éxito, error o cancelar la elección), la nota de pausa **vuelve intacta**.
+- [ ] El link "Extender" y los cuatro valores son **enteramente neutros** (`--muted` reposo, `--ink-2` + subrayado en hover, foco `--accent-soft`) — **sin verde, sin rojo, sin índigo** salvo el anillo de foco.
+- [ ] El `max-h-[176px]` de la lista de activas **no cambia**; el revelado ocupa el mismo carril de línea 2 que ya usaba el tramo o la nota de pausa.
+- [ ] A **260px de popover, en todo el rango de viewport** (el popover no tiene disposición compacta): las cuatro opciones entran en una línea; si envuelven, envuelven **entre valores**, nunca partiendo "12 meses". Se verifica igual en **modo claro y oscuro**.
 
 *Composición de totales:*
 - [ ] Con ≥1 fila simulada visible, la cabecera de **Únicos** muestra el glifo `ChartSpline` `--muted` **pegado a la izquierda del subtotal** (y a la derecha de una marca de límite, si la hubiera), con `title` explicando el conteo.

@@ -1391,7 +1391,14 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                                 key === "unicos"
                                   ? (closePopover) => (
                                       <SimulationBand
+                                        // OJO: dos meses DISTINTOS. `currentMonth`
+                                        // es el mes en curso REAL (resuelve si
+                                        // cada simulación ya arrancó, §4);
+                                        // `viewedMonth` es el mes que se está
+                                        // viendo (condición de aparición del
+                                        // disparador de extender, §4.1).
                                         currentMonth={currentMonth}
+                                        viewedMonth={month}
                                         simulations={simulationsQuery.data?.simulations ?? []}
                                         onOpenCreate={() => {
                                           closePopover();

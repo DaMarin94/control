@@ -6,7 +6,7 @@
  */
 
 import { formatMonthLabel } from "@/lib/format";
-import type { SimulationCandidate } from "@/types/simulation";
+import type { ExtendSimulationMonths, SimulationCandidate } from "@/types/simulation";
 
 /**
  * `true` si `month` cae dentro del TRAMO de ESA simulación: desde su arranque
@@ -176,4 +176,39 @@ export function formatBatchPartialToast(created: number, total: number): string 
 export function formatBatchPartialSummary(created: number, total: number): string {
   const lead = created === 1 ? `Se creó 1 de ${total}.` : `Se crearon ${created} de ${total}.`;
   return `${lead} Las que siguen tildadas no se pudieron crear — el motivo está en cada fila.`;
+}
+
+// ─── Extender el tramo (§4.1) ─────────────────────────────────────────────────
+
+export interface ExtendMonthOption {
+  months: ExtendSimulationMonths;
+  /** Texto visible del botón — el verbo NO va acá (§4.1 b). */
+  label: string;
+  /** Nombre accesible del botón: el verbo va acá, mismo criterio que "Ir al mes en curso". */
+  ariaLabel: string;
+}
+
+/**
+ * Las cuatro opciones del revelado, SIEMPRE las cuatro y siempre en este orden
+ * (§4.1, decisión 2). No hay pluralización dinámica que resolver: el único
+ * singular es "1 mes" y es fijo, así que la tabla es constante.
+ */
+export const EXTEND_MONTH_OPTIONS: readonly ExtendMonthOption[] = [
+  { months: 1, label: "1 mes", ariaLabel: "Extender 1 mes" },
+  { months: 3, label: "3 meses", ariaLabel: "Extender 3 meses" },
+  { months: 6, label: "6 meses", ariaLabel: "Extender 6 meses" },
+  { months: 12, label: "12 meses", ariaLabel: "Extender 12 meses" },
+];
+
+/**
+ * Toast de éxito al extender el tramo (§4.1) — constante. No repite la fecha
+ * nueva: la fila la muestra al lado, en el popover que sigue abierto.
+ */
+export function formatExtendSuccessToast(): string {
+  return "Simulación extendida.";
+}
+
+/** Toast de error al extender el tramo (§4.1) — constante, único para cualquier causa de fallo. */
+export function formatExtendErrorToast(): string {
+  return "No se pudo extender la simulación. Intentá de nuevo.";
 }

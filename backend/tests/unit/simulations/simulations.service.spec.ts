@@ -26,6 +26,7 @@ import { Currency, MovementType, Prisma } from '@prisma/client';
 import { SimulationsService } from '../../../src/simulations/simulations.service';
 import { SimulationsRepository, RawSimulationUnicoRow } from '../../../src/simulations/simulations.repository';
 import { computeHorizonEndMonth } from '../../../src/simulations/simulation-window.helper';
+import { addMonths } from '../../../src/common/month.helper';
 
 const mockLogger = {
   log: jest.fn(),
@@ -42,6 +43,7 @@ function makeRepoMock(): jest.Mocked<SimulationsRepository> {
     findByCategory: jest.fn().mockResolvedValue(null),
     findAllForUser: jest.fn().mockResolvedValue([]),
     delete: jest.fn().mockResolvedValue(undefined),
+    updateEndMonth: jest.fn(),
     findCategoriesByIds: jest.fn().mockResolvedValue([]),
     getUnicosMonthlyTotalsByCategory: jest.fn().mockResolvedValue([]),
   } as unknown as jest.Mocked<SimulationsRepository>;
@@ -287,6 +289,101 @@ describe('SimulationsService', () => {
       const { service, repo } = buildService();
       repo.findById.mockResolvedValue(simRow({ userId: 'otro-user', startMonth: '2026-07' }));
       await expect(service.remove(USER_ID, 'sim-1')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // extend() — RF-SIM (extender tramo)
+  // ---------------------------------------------------------------------------
+
+  describe('extend()', () => {
+    it('extiende el fin del tramo N meses y lo persiste, sin tocar startMonth', async () => {
+      const { service, repo } = buildService();
+      const sim = simRow({ startMonth: '2026-01', endMonth: '2026-12' });
+      repo.findById.mockResolvedValue(sim);
+      repo.updateEndMonth.mockResolvedValue({ ...sim, endMonth: '2027-06' });
+      repo.getUnicosMonthlyTotalsByCategory.mockResolvedValue([
+        row('2026-04', 10000),
+        row('2026-05', 10000),
+        row('2026-06', 10000),
+      ]);
+      repo.findCategoriesByIds.mockResolvedValue([
+        { id: CAT_ID, name: 'Salidas', color: '#FF0000', scope: 'BOTH' as never },
+      ]);
+
+      const result = await service.extend(USER_ID, 'sim-1', 6, '2026-07-15');
+
+      expect(repo.updateEndMonth).toHaveBeenCalledWith('sim-1', '2027-06');
+      expect(result.startMonth).toBe('2026-01');
+      expect(result.endMonth).toBe('2027-06');
+    });
+
+    it('la extensión es una suma directa sobre el endMonth VIGENTE, no una reaplicación de computeHorizonEndMonth', async () => {
+      const { service, repo } = buildService();
+      // endMonth vigente ya vencido/desalineado respecto de la fórmula del alta.
+      const sim = simRow({ startMonth: '2025-01', endMonth: '2025-06' });
+      repo.findById.mockResolvedValue(sim);
+      const expectedEndMonth = addMonths('2025-06', 3);
+      repo.updateEndMonth.mockResolvedValue({ ...sim, endMonth: expectedEndMonth });
+      repo.findCategoriesByIds.mockResolvedValue([
+        { id: CAT_ID, name: 'Salidas', color: '#FF0000', scope: 'BOTH' as never },
+      ]);
+
+      await service.extend(USER_ID, 'sim-1', 3, '2026-07-15');
+
+      expect(repo.updateEndMonth).toHaveBeenCalledWith('sim-1', expectedEndMonth);
+    });
+
+    it('extender una simulación cuyo endMonth ya pasó funciona igual (sin rama especial)', async () => {
+      const { service, repo } = buildService();
+      const sim = simRow({ startMonth: '2025-01', endMonth: '2025-06' });
+      repo.findById.mockResolvedValue(sim);
+      repo.updateEndMonth.mockResolvedValue({ ...sim, endMonth: '2025-07' });
+      repo.findCategoriesByIds.mockResolvedValue([
+        { id: CAT_ID, name: 'Salidas', color: '#FF0000', scope: 'BOTH' as never },
+      ]);
+
+      const result = await service.extend(USER_ID, 'sim-1', 1, '2026-07-15');
+
+      expect(result.endMonth).toBe('2025-07');
+      expect(result.startMonth).toBe('2025-01');
+    });
+
+    it('el DTO devuelto trae monthsWithData/paused recalculados a la fecha de la extensión', async () => {
+      const { service, repo } = buildService();
+      const sim = simRow({ startMonth: '2026-01', endMonth: '2026-12' });
+      repo.findById.mockResolvedValue(sim);
+      repo.updateEndMonth.mockResolvedValue({ ...sim, endMonth: '2027-06' });
+      repo.getUnicosMonthlyTotalsByCategory.mockResolvedValue([
+        row('2026-05', 10000),
+        row('2026-06', 10000),
+      ]);
+      repo.findCategoriesByIds.mockResolvedValue([
+        { id: CAT_ID, name: 'Salidas', color: '#FF0000', scope: 'BOTH' as never },
+      ]);
+
+      const result = await service.extend(USER_ID, 'sim-1', 6, '2026-07-15');
+
+      expect(result.monthsWithData).toBe(2);
+      expect(result.paused).toBe(true);
+    });
+
+    it('404 si la simulación no existe', async () => {
+      const { service, repo } = buildService();
+      repo.findById.mockResolvedValue(null);
+
+      await expect(service.extend(USER_ID, 'no-existe', 3)).rejects.toThrow(NotFoundException);
+      expect(repo.updateEndMonth).not.toHaveBeenCalled();
+    });
+
+    it('404 si la simulación es de otro usuario', async () => {
+      const { service, repo } = buildService();
+      repo.findById.mockResolvedValue(
+        simRow({ userId: 'otro-user', startMonth: '2026-01', endMonth: '2026-12' }),
+      );
+
+      await expect(service.extend(USER_ID, 'sim-1', 3)).rejects.toThrow(NotFoundException);
+      expect(repo.updateEndMonth).not.toHaveBeenCalled();
     });
   });
 

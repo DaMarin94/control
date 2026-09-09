@@ -13,14 +13,43 @@
  * - Simulación pausada: chip "Sin datos", nombre atenuado, segunda línea con
  *   el motivo de pausa (NO el tramo) — y el botón eliminar SIGUE disponible.
  * - onOpenCreate / onRequestDelete se invocan correctamente.
+ * - EXTENDER EL TRAMO (§4.1): el disparador aparece SOLO en la fila cuyo
+ *   `endMonth` es el mes VISUALIZADO (no el mes en curso), revela las cuatro
+ *   opciones, nunca hay dos filas eligiendo, y el desenlace (éxito/error)
+ *   sigue lo especificado.
  */
 
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { SimulationBand } from "@/components/movements/simulation-band";
 import type { SimulationDto } from "@/types/simulation";
 
+// ─── Mocks ────────────────────────────────────────────────────────────────────
+
+vi.mock("@/hooks/use-simulations", () => ({
+  useExtendSimulation: vi.fn(),
+}));
+
+const mockToastSuccess = vi.fn();
+const mockToastError = vi.fn();
+vi.mock("@/hooks/use-toast", () => ({
+  useToast: vi.fn(() => ({
+    toast: { success: mockToastSuccess, error: mockToastError, warning: vi.fn(), info: vi.fn() },
+  })),
+}));
+
+import { useExtendSimulation } from "@/hooks/use-simulations";
+
+const mockUseExtendSimulation = vi.mocked(useExtendSimulation);
+const mockExtendSimulation = vi.fn();
+
 const CURRENT_MONTH = "2026-06";
+/**
+ * Mes VISUALIZADO por default en estos tests — distinto del `endMonth` de las
+ * simulaciones de abajo, así que el disparador de extender NO aparece salvo
+ * que un test lo pida explícitamente.
+ */
+const VIEWED_MONTH = "2026-06";
 
 const activeSimulation: SimulationDto = {
   id: "sim-1",
@@ -59,11 +88,21 @@ const pausedSimulation: SimulationDto = {
   createdAt: "2026-05-01T12:00:00.000Z",
 };
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockUseExtendSimulation.mockReturnValue({
+    extendSimulation: mockExtendSimulation,
+    isExtending: false,
+  });
+  mockExtendSimulation.mockResolvedValue({ success: true });
+});
+
 describe("SimulationBand", () => {
   it("el botón 'Simular categoría' está presente incluso sin simulaciones activas (cero-impacto)", () => {
     render(
       <SimulationBand
         currentMonth={CURRENT_MONTH}
+        viewedMonth={VIEWED_MONTH}
         simulations={[]}
         onOpenCreate={vi.fn()}
         onRequestDelete={vi.fn()}
@@ -76,6 +115,7 @@ describe("SimulationBand", () => {
     render(
       <SimulationBand
         currentMonth={CURRENT_MONTH}
+        viewedMonth={VIEWED_MONTH}
         simulations={[]}
         onOpenCreate={vi.fn()}
         onRequestDelete={vi.fn()}
@@ -90,6 +130,7 @@ describe("SimulationBand", () => {
     render(
       <SimulationBand
         currentMonth={CURRENT_MONTH}
+        viewedMonth={VIEWED_MONTH}
         simulations={[]}
         onOpenCreate={onOpenCreate}
         onRequestDelete={vi.fn()}
@@ -103,6 +144,7 @@ describe("SimulationBand", () => {
     render(
       <SimulationBand
         currentMonth={CURRENT_MONTH}
+        viewedMonth={VIEWED_MONTH}
         simulations={[activeSimulation]}
         onOpenCreate={vi.fn()}
         onRequestDelete={vi.fn()}
@@ -118,6 +160,7 @@ describe("SimulationBand", () => {
     render(
       <SimulationBand
         currentMonth={CURRENT_MONTH}
+        viewedMonth={VIEWED_MONTH}
         simulations={[activeSimulation]}
         onOpenCreate={vi.fn()}
         onRequestDelete={vi.fn()}
@@ -130,6 +173,7 @@ describe("SimulationBand", () => {
     render(
       <SimulationBand
         currentMonth={CURRENT_MONTH}
+        viewedMonth={VIEWED_MONTH}
         simulations={[notYetStartedSimulation]}
         onOpenCreate={vi.fn()}
         onRequestDelete={vi.fn()}
@@ -142,6 +186,7 @@ describe("SimulationBand", () => {
     render(
       <SimulationBand
         currentMonth={CURRENT_MONTH}
+        viewedMonth={VIEWED_MONTH}
         simulations={[activeSimulation, notYetStartedSimulation]}
         onOpenCreate={vi.fn()}
         onRequestDelete={vi.fn()}
@@ -156,6 +201,7 @@ describe("SimulationBand", () => {
     render(
       <SimulationBand
         currentMonth={CURRENT_MONTH}
+        viewedMonth={VIEWED_MONTH}
         simulations={[activeSimulation]}
         onOpenCreate={vi.fn()}
         onRequestDelete={onRequestDelete}
@@ -169,6 +215,7 @@ describe("SimulationBand", () => {
     render(
       <SimulationBand
         currentMonth={CURRENT_MONTH}
+        viewedMonth={VIEWED_MONTH}
         simulations={[pausedSimulation]}
         onOpenCreate={vi.fn()}
         onRequestDelete={vi.fn()}
@@ -185,6 +232,7 @@ describe("SimulationBand", () => {
     render(
       <SimulationBand
         currentMonth={CURRENT_MONTH}
+        viewedMonth={VIEWED_MONTH}
         simulations={[activeSimulation, pausedSimulation]}
         onOpenCreate={vi.fn()}
         onRequestDelete={vi.fn()}
@@ -193,5 +241,153 @@ describe("SimulationBand", () => {
     expect(screen.getByText("Suscripciones")).toBeInTheDocument();
     expect(screen.getByText("Viajes")).toBeInTheDocument();
     expect(screen.getByText("Sin datos")).toBeInTheDocument();
+  });
+});
+
+// ─── Extender el tramo (§4.1) ─────────────────────────────────────────────────
+
+/** El `endMonth` de `activeSimulation` / `pausedSimulation`. */
+const END_MONTH = "2026-12";
+
+describe("SimulationBand — extender el tramo (§4.1)", () => {
+  it("NO muestra el disparador cuando el mes visualizado no es el endMonth de la simulación", () => {
+    render(
+      <SimulationBand
+        currentMonth={CURRENT_MONTH}
+        viewedMonth={VIEWED_MONTH}
+        simulations={[activeSimulation]}
+        onOpenCreate={vi.fn()}
+        onRequestDelete={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Extender" })).not.toBeInTheDocument();
+  });
+
+  it("muestra el disparador SOLO en la fila cuyo endMonth es el mes visualizado", () => {
+    render(
+      <SimulationBand
+        currentMonth={CURRENT_MONTH}
+        viewedMonth={END_MONTH}
+        simulations={[activeSimulation, notYetStartedSimulation]}
+        onOpenCreate={vi.fn()}
+        onRequestDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByRole("button", { name: "Extender" })).toHaveLength(1);
+    // La oración del tramo se conserva entera, con el link agregado al final.
+    expect(screen.getByText(/proyecta hasta diciembre 2026\./i)).toBeInTheDocument();
+  });
+
+  it("una simulación PAUSADA también ofrece extender, conservando la nota de pausa", () => {
+    render(
+      <SimulationBand
+        currentMonth={CURRENT_MONTH}
+        viewedMonth={END_MONTH}
+        simulations={[pausedSimulation]}
+        onOpenCreate={vi.fn()}
+        onRequestDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/necesita 3 meses con datos \(tiene 1\)\. no proyecta\./i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Extender" })).toBeInTheDocument();
+  });
+
+  it("clic en 'Extender' revela las cuatro opciones y oculta el tramo", () => {
+    render(
+      <SimulationBand
+        currentMonth={CURRENT_MONTH}
+        viewedMonth={END_MONTH}
+        simulations={[activeSimulation]}
+        onOpenCreate={vi.fn()}
+        onRequestDelete={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Extender" }));
+    expect(screen.getByRole("button", { name: "Extender 1 mes" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Extender 3 meses" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Extender 6 meses" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Extender 12 meses" })).toBeInTheDocument();
+    expect(screen.queryByText(/proyecta hasta diciembre 2026\./i)).not.toBeInTheDocument();
+  });
+
+  it("Escape colapsa la elección y vuelve al disparador", () => {
+    render(
+      <SimulationBand
+        currentMonth={CURRENT_MONTH}
+        viewedMonth={END_MONTH}
+        simulations={[activeSimulation]}
+        onOpenCreate={vi.fn()}
+        onRequestDelete={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Extender" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("button", { name: "Extender 1 mes" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Extender" })).toBeInTheDocument();
+  });
+
+  it("elegir un valor dispara la extensión con esos meses y avisa con toast de éxito", async () => {
+    render(
+      <SimulationBand
+        currentMonth={CURRENT_MONTH}
+        viewedMonth={END_MONTH}
+        simulations={[activeSimulation]}
+        onOpenCreate={vi.fn()}
+        onRequestDelete={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Extender" }));
+    fireEvent.click(screen.getByRole("button", { name: "Extender 3 meses" }));
+    await waitFor(() => expect(mockExtendSimulation).toHaveBeenCalledWith("sim-1", 3));
+    await waitFor(() => expect(mockToastSuccess).toHaveBeenCalledWith("Simulación extendida."));
+  });
+
+  it("error: toast.error y la línea vuelve a las cuatro opciones (no al disparador)", async () => {
+    mockExtendSimulation.mockResolvedValue({
+      success: false,
+      error: "No se pudo extender la simulación. Intentá de nuevo.",
+    });
+    render(
+      <SimulationBand
+        currentMonth={CURRENT_MONTH}
+        viewedMonth={END_MONTH}
+        simulations={[activeSimulation]}
+        onOpenCreate={vi.fn()}
+        onRequestDelete={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Extender" }));
+    fireEvent.click(screen.getByRole("button", { name: "Extender 1 mes" }));
+    await waitFor(() =>
+      expect(mockToastError).toHaveBeenCalledWith("No se pudo extender la simulación. Intentá de nuevo."),
+    );
+    expect(screen.getByRole("button", { name: "Extender 1 mes" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Extender" })).not.toBeInTheDocument();
+  });
+
+  it("en vuelo: 'Extendiendo…' y el botón eliminar de ESA fila deshabilitado", async () => {
+    let resolveExtend: (value: { success: boolean }) => void = () => {};
+    mockExtendSimulation.mockReturnValue(
+      new Promise<{ success: boolean }>((resolve) => {
+        resolveExtend = resolve;
+      }),
+    );
+    render(
+      <SimulationBand
+        currentMonth={CURRENT_MONTH}
+        viewedMonth={END_MONTH}
+        simulations={[activeSimulation]}
+        onOpenCreate={vi.fn()}
+        onRequestDelete={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Extender" }));
+    fireEvent.click(screen.getByRole("button", { name: "Extender 6 meses" }));
+    await waitFor(() => expect(screen.getByText("Extendiendo…")).toBeInTheDocument());
+    expect(
+      screen.getByRole("button", { name: /eliminar la simulación de suscripciones/i }),
+    ).toBeDisabled();
+    resolveExtend({ success: true });
+    await waitFor(() => expect(mockToastSuccess).toHaveBeenCalled());
   });
 });

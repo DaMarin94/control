@@ -7,12 +7,14 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
   Request,
 } from '@nestjs/common';
 import { SimulationsService } from './simulations.service';
 import { CreateSimulationsDto } from './dto/create-simulations.dto';
+import { ExtendSimulationDto } from './dto/extend-simulation.dto';
 
 interface AuthRequest extends Request {
   user: { userId: string };
@@ -122,6 +124,31 @@ export class SimulationsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Request() req: AuthRequest, @Param('id') id: string) {
     return this.simulationsService.remove(req.user.userId, id);
+  }
+
+  /**
+   * PATCH /simulations/:id/extend[?today=YYYY-MM-DD]
+   * Body: { months: 1 | 3 | 6 | 12 }
+   *
+   * Corre el `endMonth` de una simulación `months` meses hacia adelante
+   * (RF-SIM). `startMonth` no se toca nunca. `400` si `months` no está en el
+   * set permitido (validado a nivel DTO). `404` si la simulación no existe o
+   * no es del usuario (mismo criterio que `DELETE`). No genera entrada de
+   * historial (RF-SIM-004, misma excepción que crear/eliminar).
+   *
+   * `today` (opcional): mismo contrato que el resto de los endpoints —
+   * recalcula `monthsWithData`/`paused`/`effectiveStartMonth` del DTO de
+   * respuesta.
+   */
+  @Patch(':id/extend')
+  extend(
+    @Request() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() dto: ExtendSimulationDto,
+    @Query('today') todayParam: string | undefined,
+  ) {
+    const today = this.parseToday(todayParam);
+    return this.simulationsService.extend(req.user.userId, id, dto.months, today);
   }
 
   private parseToday(todayParam: string | undefined): string | undefined {

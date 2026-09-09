@@ -76,6 +76,15 @@ export class SimulationsRepository {
   }
 
   /**
+   * Corre `endMonth` hacia adelante (RF-SIM — extender tramo). `startMonth`
+   * no se toca: el caller ya resolvió el nuevo `endMonth` (`addMonths` sobre
+   * el vigente), el repositorio solo persiste.
+   */
+  async updateEndMonth(id: string, endMonth: string): Promise<Simulation> {
+    return this.prisma.simulation.update({ where: { id }, data: { endMonth } });
+  }
+
+  /**
    * Categorías por id, SIN filtrar por deletedAt (RF-CAT-004 — mismo criterio
    * que el resto del sistema: una categoría eliminada sigue embebiéndose donde
    * ya la referencian). Usado para el embed de `category` en las simulaciones

@@ -12,10 +12,11 @@
  * suyo (`startMonth`/`effectiveStartMonth`/`endMonth`). Crear/eliminar una
  * simulación afecta los movimientos simulados de TODOS los meses de SU tramo:
  * se invalida la familia `["movements"]` por prefijo (mismo patrón que
- * `useRecurring` — un fijo también afecta muchos meses a la vez). Ni crear ni
- * eliminar generan entrada de historial (RF-SIM-001/004) — la simulación de
- * categoría queda entera fuera de `/historial`, así que no hay `["history"]`
- * que invalidar acá.
+ * `useRecurring` — un fijo también afecta muchos meses a la vez). Extender el
+ * tramo (§4.1) cae en la misma bolsa: corre `endMonth` y con eso cambia qué
+ * meses reciben simulados. Ni crear, ni eliminar, ni extender generan entrada
+ * de historial (RF-SIM-001/004) — la simulación de categoría queda entera
+ * fuera de `/historial`, así que no hay `["history"]` que invalidar acá.
  *
  * Crear es un BATCH: POST /simulations recibe `{ categoryIds, startMonth? }`
  * y devuelve 201 SIEMPRE (`{ created, failed }`), incluso si fallaron todas —
@@ -39,8 +40,11 @@ import type {
   SimulationCandidatesResponse,
   CreateSimulationBatchResponse,
   CreateSimulationFailure,
+  ExtendSimulationMonths,
+  ExtendSimulationResponse,
 } from "@/types/simulation";
 import { createLogger } from "@/lib/logger";
+import { formatExtendErrorToast } from "@/lib/simulations";
 import { getLocalTodayString } from "@/lib/format";
 
 const logger = createLogger("useSimulations");
@@ -227,4 +231,76 @@ export function useDeleteSimulation() {
   }
 
   return { deleteSimulation, isDeleting: mutation.isPending };
+}
+
+// ─── Mutation: extender el tramo de una simulación ─────────────────────────────
+
+export interface ExtendSimulationResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * PATCH /simulations/:id/extend — corre `endMonth` N meses hacia adelante
+ * (docs/design.md §4.1). `startMonth` no se toca nunca, no hay tope (extender
+ * un tramo ya vencido es válido) y NO genera entrada de historial, igual que
+ * crear/eliminar: la simulación de categoría queda entera fuera de
+ * `/historial`, así que tampoco hay `["history"]` que invalidar acá.
+ *
+ * Invalida las MISMAS TRES familias que eliminar: correr el fin del tramo
+ * cambia qué meses reciben movimientos simulados, así que la familia
+ * `["movements"]` se invalida por prefijo (todos los meses).
+ */
+export function useExtendSimulation() {
+  const { api } = useApi();
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation<
+    ExtendSimulationResponse,
+    ApiError,
+    { id: string; months: ExtendSimulationMonths }
+  >({
+    mutationFn: ({ id, months }) => {
+      const today = getLocalTodayString();
+      return api.patch<ExtendSimulationResponse>(`/simulations/${id}/extend?today=${today}`, {
+        months,
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: SIMULATIONS_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: SIMULATION_CANDIDATES_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: MOVEMENTS_QUERY_PREFIX });
+    },
+    onError: (err) => {
+      if (err.isServerError()) {
+        logger.error("Error de servidor al extender simulación", { statusCode: err.statusCode });
+      }
+    },
+  });
+
+  /**
+   * Nunca tira: el componente decide con el resultado (mismo criterio que
+   * `deleteSimulation`). El mensaje de error es ÚNICO para cualquier fallo
+   * (§4.1 — el toast de error es una constante literal, no distingue causas).
+   */
+  async function extendSimulation(
+    id: string,
+    months: ExtendSimulationMonths,
+  ): Promise<ExtendSimulationResult> {
+    try {
+      await mutation.mutateAsync({ id, months });
+      return { success: true };
+    } catch (err) {
+      if (err instanceof ApiError) {
+        logger.error("Error al extender simulación", { statusCode: err.statusCode });
+      } else {
+        logger.error("Error inesperado al extender simulación", {
+          error: err instanceof Error ? err.message : "desconocido",
+        });
+      }
+      return { success: false, error: formatExtendErrorToast() };
+    }
+  }
+
+  return { extendSimulation, isExtending: mutation.isPending };
 }

@@ -21,6 +21,7 @@ import {
   MIN_MONTHS_WITH_DATA,
   resolveTodayMonthKey,
 } from './simulation-window.helper';
+import { addMonths } from '../common/month.helper';
 import { fitCategoryRegression, evaluateRegressionAt } from '../common/projection.helper';
 import { convertToDisplayCurrency } from '../common/currency.helper';
 import { CategoryValidatorService } from '../categories/category-validator.service';
@@ -242,6 +243,56 @@ export class SimulationsService {
     await this.repo.delete(id);
 
     this.logger.log({ userId, simulationId: id }, 'Simulación de categoría eliminada');
+  }
+
+  // ---------------------------------------------------------------------------
+  // PATCH /simulations/:id/extend — RF-SIM (extender tramo)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Corre el `endMonth` de una simulación `months` meses hacia adelante
+   * (RF-SIM). `startMonth` NUNCA se toca — el ancla de la simulación no
+   * cambia, solo su fin. A diferencia del alta, el nuevo `endMonth` es una
+   * suma directa (`addMonths`): no se vuelve a aplicar `computeHorizonEndMonth`
+   * (esa regla es solo del alta), no hay clamp contra el mes en curso ni tope
+   * superior. No genera entrada de historial (RF-SIM-004, misma excepción que
+   * crear/eliminar).
+   */
+  async extend(userId: string, id: string, months: number, today?: string): Promise<SimulationDto> {
+    const simulation = await this.repo.findById(id);
+    if (!simulation || simulation.userId !== userId) {
+      throw new NotFoundException('Simulación no encontrada');
+    }
+
+    const newEndMonth = addMonths(simulation.endMonth, months);
+    const updated = await this.repo.updateEndMonth(id, newEndMonth);
+
+    const todayMonthKey = resolveTodayMonthKey(today);
+    const windowMonths = buildWindowMonths(todayMonthKey);
+    const [userSettings, [category]] = await Promise.all([
+      this.settingsService.getSettings(userId),
+      this.repo.findCategoriesByIds([updated.categoryId]),
+    ]);
+
+    const monthlyData = await this.loadCategoryMonthlyData(userId, windowMonths, userSettings.defaultCurrency);
+    const monthsWithData = monthlyData.get(updated.categoryId)?.monthsWithData.size ?? 0;
+
+    this.logger.log(
+      { userId, simulationId: id, months, endMonth: updated.endMonth },
+      'Simulación de categoría extendida',
+    );
+
+    return {
+      id: updated.id,
+      categoryId: updated.categoryId,
+      category: category ?? this.fallbackCategory(updated.categoryId),
+      monthsWithData,
+      paused: monthsWithData < MIN_MONTHS_WITH_DATA,
+      startMonth: updated.startMonth,
+      effectiveStartMonth: effectiveStartMonth(updated.startMonth, todayMonthKey),
+      endMonth: updated.endMonth,
+      createdAt: updated.createdAt.toISOString(),
+    };
   }
 
   // ---------------------------------------------------------------------------

@@ -83,6 +83,25 @@ export interface CreateSimulationRequest {
   startMonth?: string;
 }
 
+/**
+ * Meses que puede correr el fin del tramo en una extensión (docs/design.md
+ * §4.1): SIEMPRE los cuatro, siempre en ese orden. Cualquier otro valor lo
+ * rechaza el backend con 400.
+ */
+export type ExtendSimulationMonths = 1 | 3 | 6 | 12;
+
+/**
+ * Body de PATCH /simulations/:id/extend — mueve SOLO `endMonth` hacia adelante;
+ * `startMonth` no se toca nunca. Sin tope: extender un tramo ya vencido es una
+ * operación válida, sin rama especial (§4.1).
+ */
+export interface ExtendSimulationRequest {
+  months: ExtendSimulationMonths;
+}
+
+/** 200 de PATCH /simulations/:id/extend — mismo shape de siempre, con el `endMonth` corrido. */
+export type ExtendSimulationResponse = SimulationDto;
+
 /** Fallo de una categoría puntual dentro del batch — `message` ya viene legible del backend (mismo texto que hoy en 400/409). */
 export interface CreateSimulationFailure {
   categoryId: string;

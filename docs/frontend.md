@@ -738,13 +738,14 @@ Quinto tipo de card (`ReportCardType = "inflation-income"`). Componente **`compo
 - **Línea cortada en meses futuros.** Las series usan `connectNulls={false}`: la línea no conecta a través de meses `null`.
 - **Color de la línea de inflación = token `--rate`** (ver §Design system → token `--rate`).
 
-## Simulación de categoría (`/mes` — RF-SIM-001..004)
+## Simulación de categoría (`/mes` — RF-SIM-001..005)
 
 Toda la feature vive en `/mes`: el punto de entrada es el **popover de filtro de la sección Únicos** y la salida son filas simuladas mezcladas en esa misma sección. El spec visual está en `docs/design.md`; el contrato de la API, en `docs/data-model.md` §Simulación de categoría.
 
 ### Componentes
 
-- **`components/movements/simulation-band.tsx`** — bloque "Simulación" del popover de Únicos: botón de alta (siempre presente) + lista de las simulaciones del usuario (con su estado activa / pausada), cada fila con su **propio tramo** (`formatSimulationSpan`, dos extremos si todavía no arrancó, solo el fin si ya arrancó) y su acción de eliminar, más una **nota general constante** de la regla de arranque (`formatHorizonBandNote`) — no hay un tramo único que enunciar a nivel banda.
+- **`components/movements/simulation-band.tsx`** — bloque "Simulación" del popover de Únicos: botón de alta (siempre presente) + lista de las simulaciones del usuario (con su estado activa / pausada), cada fila con su **propio tramo** (`formatSimulationSpan`, dos extremos si todavía no arrancó, solo el fin si ya arrancó), su acción de extender (RF-SIM-005) y su acción de eliminar, más una **nota general constante** de la regla de arranque (`formatHorizonBandNote`) — no hay un tramo único que enunciar a nivel banda.
+  - **Gotcha — recibe `currentMonth` y `viewedMonth`, dos meses distintos que no se colapsan.** `currentMonth` es el mes en curso real (resuelve si el tramo de una simulación ya arrancó, para elegir entre "Proyecta de… a…" y "Proyecta hasta…"); `viewedMonth` es el mes de la ruta `/mes` (decide, comparado contra el `endMonth` de cada fila, si esa fila muestra el disparador "Extender"). Tratarlos como el mismo valor rompe el disparador en cualquier mes que no sea el mes en curso.
 - **`components/movements/simulate-category-modal.tsx`** — selector sobre el universo de candidatas: lista **solo las elegibles** (`isEligibleCandidate`, ≥3 meses con datos y sin simulación activa) — las demás quedan **ocultas**, no deshabilitadas —, con la nota de elegibilidad al pie (`formatEligibilityNote`) y los **cuatro** estados vacíos por causa (`getCandidatesEmptyCause` / `formatCandidatesEmpty`).
 - **`components/movements/delete-simulation-dialog.tsx`** — confirmación de la eliminación.
 - **`components/movements/simulated-movement-row.tsx`** — la fila simulada dentro del listado de Únicos. Es una fila **no interactiva** (sin kebab, sin card de detalle) con la **misma geometría** que `movement-item-row.tsx`: lo que cambia es el tratamiento, nunca el grid (si no, la columna de montos se desalinea entre filas reales y simuladas).
