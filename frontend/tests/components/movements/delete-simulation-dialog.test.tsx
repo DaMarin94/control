@@ -39,6 +39,9 @@ const simulation: SimulationDto = {
   category: { id: "cat-1", name: "Suscripciones", color: "#3B7DE0", scope: "BOTH" },
   monthsWithData: 6,
   paused: false,
+  startMonth: "2026-06",
+  effectiveStartMonth: "2026-06",
+  endMonth: "2026-12",
   createdAt: "2026-06-01T12:00:00.000Z",
 };
 
@@ -60,10 +63,10 @@ describe("DeleteSimulationDialog", () => {
     expect(screen.getAllByText("Suscripciones").length).toBeGreaterThan(0);
   });
 
-  it("muestra la nota de consecuencia (totales recalculados) — 'en este mes y en los siguientes'", () => {
+  it("muestra la nota de consecuencia (totales recalculados) — 'en los meses que alcanza'", () => {
     render(<DeleteSimulationDialog simulation={simulation} onClose={vi.fn()} />);
     expect(
-      screen.getByText(/sus movimientos simulados dejan de aparecer en este mes y en los siguientes/i),
+      screen.getByText(/sus movimientos simulados dejan de aparecer en los meses que alcanza/i),
     ).toBeInTheDocument();
   });
 

@@ -8,25 +8,29 @@
  * simulación alcanza solo movimientos únicos).
  *
  * El botón "Simular categoría" está SIEMPRE presente (es el único punto de
- * entrada de la feature); la lista de activas y la nota de horizonte solo
- * con ≥1 simulación activa (§0 — cero-impacto).
+ * entrada de la feature); la lista de activas y la nota general solo con ≥1
+ * simulación activa (§0 — cero-impacto).
+ *
+ * El tramo dejó de ser único (§0, cambio 1): cada simulación declara el suyo
+ * en su fila (§4, segunda línea) — la nota general de la banda pasó a ser una
+ * constante que declara la REGLA ("de dónde sale el arranque"), no un tramo.
  */
 
 import { ChartSpline, Trash2 } from "lucide-react";
 import type { SimulationDto } from "@/types/simulation";
-import { formatMinDataMotive, formatHorizonBandNote } from "@/lib/simulations";
+import { formatMinDataMotive, formatHorizonBandNote, formatSimulationSpan } from "@/lib/simulations";
 import { cn } from "@/lib/utils";
 
 export interface SimulationBandProps {
-  /** `null` mientras el horizonte todavía no llegó (primer fetch en vuelo). */
-  horizonEndMonth: string | null;
+  /** Mes en curso REAL ("hoy", `getCurrentMonth()`) — resuelve si cada simulación ya arrancó (§4). */
+  currentMonth: string;
   simulations: SimulationDto[];
   onOpenCreate: () => void;
   onRequestDelete: (simulation: SimulationDto) => void;
 }
 
 export function SimulationBand({
-  horizonEndMonth,
+  currentMonth,
   simulations,
   onOpenCreate,
   onRequestDelete,
@@ -54,21 +58,20 @@ export function SimulationBand({
       </button>
 
       {!hasActive ? (
-        <p className="text-[11.5px] text-muted">Proyecta categorías desde este mes en adelante.</p>
+        <p className="text-[11.5px] text-muted">Proyecta categorías desde el mes que estás viendo.</p>
       ) : (
         <>
-          <div className="flex flex-col max-h-[132px] overflow-y-auto">
+          <div className="flex flex-col max-h-[176px] overflow-y-auto">
             {simulations.map((simulation) => (
               <SimulationListItem
                 key={simulation.id}
                 simulation={simulation}
+                currentMonth={currentMonth}
                 onDelete={() => onRequestDelete(simulation)}
               />
             ))}
           </div>
-          {horizonEndMonth && (
-            <p className="text-[11.5px] text-muted">{formatHorizonBandNote(horizonEndMonth)}</p>
-          )}
+          <p className="text-[11.5px] text-muted">{formatHorizonBandNote()}</p>
         </>
       )}
     </div>
@@ -79,15 +82,16 @@ export function SimulationBand({
 
 interface SimulationListItemProps {
   simulation: SimulationDto;
+  currentMonth: string;
   onDelete: () => void;
 }
 
-function SimulationListItem({ simulation, onDelete }: SimulationListItemProps) {
+function SimulationListItem({ simulation, currentMonth, onDelete }: SimulationListItemProps) {
   const isPaused = simulation.paused;
   const categoryName = simulation.category.name;
 
   return (
-    <div className="flex flex-wrap items-center gap-[8px] py-[6px] min-h-[30px]">
+    <div className="flex flex-wrap items-center gap-[8px] py-[6px]">
       <span
         className="h-[8px] w-[8px] rounded-full shrink-0"
         style={{ background: simulation.category.color }}
@@ -122,10 +126,14 @@ function SimulationListItem({ simulation, onDelete }: SimulationListItemProps) {
         <Trash2 size={14} aria-hidden="true" />
       </button>
 
-      {/* Segunda línea, siempre visible cuando pausada — neutro, no ámbar (§6.1) */}
-      {isPaused && (
+      {/* Segunda línea — pausa (§6.1) si aplica; si no, el TRAMO de esta simulación (§4). Nunca las dos. */}
+      {isPaused ? (
         <p className="w-full text-[11.5px] text-muted">
           {formatMinDataMotive(simulation.monthsWithData)}. No proyecta.
+        </p>
+      ) : (
+        <p className="w-full text-[11.5px] text-muted">
+          {formatSimulationSpan(simulation.startMonth, simulation.endMonth, currentMonth)}
         </p>
       )}
     </div>

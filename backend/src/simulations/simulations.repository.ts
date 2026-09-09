@@ -34,8 +34,20 @@ export interface SimulationCategoryEmbed {
 export class SimulationsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(userId: string, categoryId: string): Promise<Simulation> {
-    return this.prisma.simulation.create({ data: { userId, categoryId } });
+  /**
+   * `startMonth`/`endMonth` ("YYYY-MM"): tramo propio de la simulación, ya
+   * resuelto por el caller (clamp de mes pasado + fórmula de horizonte) —
+   * el repositorio solo persiste, no calcula.
+   */
+  async create(
+    userId: string,
+    categoryId: string,
+    startMonth: string,
+    endMonth: string,
+  ): Promise<Simulation> {
+    return this.prisma.simulation.create({
+      data: { userId, categoryId, startMonth, endMonth },
+    });
   }
 
   /** Busca una simulación por id, sin filtrar por userId (ownership la valida el caller). */

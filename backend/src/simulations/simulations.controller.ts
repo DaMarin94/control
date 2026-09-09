@@ -32,8 +32,10 @@ export class SimulationsController {
    * GET /simulations[?today=YYYY-MM-DD]
    *
    * Lista las simulaciones del usuario, con `monthsWithData` (0..12, ventana
-   * histórica vigente) y `paused` (RF-SIM-002 — cayó por debajo del mínimo de
-   * 3 meses) por simulación, más `horizonEndMonth` (mismo para todas — RN-028).
+   * histórica vigente), `paused` (RF-SIM-002 — cayó por debajo del mínimo de
+   * 3 meses) y el TRAMO PROPIO de cada simulación (`startMonth` crudo,
+   * `effectiveStartMonth` clampeado contra el mes en curso, `endMonth`
+   * persistido) — ya no hay un `horizonEndMonth` único para todas.
    *
    * `today` (opcional): fecha local del usuario YYYY-MM-DD para resolver el
    * mes en curso ("A" de RN-028). Ausente → fecha UTC del sistema.
@@ -48,24 +50,32 @@ export class SimulationsController {
   }
 
   /**
-   * GET /simulations/candidates[?today=YYYY-MM-DD]
+   * GET /simulations/candidates[?today=YYYY-MM-DD][&startMonth=YYYY-MM]
    *
    * Universo de categorías ACTIVAS del usuario (RF-SIM-001) con `monthsWithData`
-   * y `alreadySimulated`, para el selector "Simular categoría". Más
-   * `horizonEndMonth` (para la nota "Alcanza hasta {Mes}").
+   * y `alreadySimulated`, para el selector "Simular categoría". Más el tramo
+   * (`startMonth`/`endMonth`) que TENDRÍA una simulación creada desde
+   * `startMonth` (para la nota "Alcanza hasta {Mes}") — reemplaza al
+   * `horizonEndMonth` único de antes, que dejó de tener sentido cuando el
+   * tramo pasó a ser propio de cada simulación.
+   *
+   * `startMonth` (opcional, "YYYY-MM"): mes desde el que se crearía el lote.
+   * Ausente = mes en curso. `400` si viene mal formado.
    */
   @Get('candidates')
   findCandidates(
     @Request() req: AuthRequest,
     @Query('today') todayParam: string | undefined,
+    @Query('startMonth') startMonthParam: string | undefined,
   ) {
     const today = this.parseToday(todayParam);
-    return this.simulationsService.findCandidates(req.user.userId, today);
+    const startMonth = this.parseStartMonth(startMonthParam);
+    return this.simulationsService.findCandidates(req.user.userId, today, startMonth);
   }
 
   /**
    * POST /simulations[?today=YYYY-MM-DD]
-   * Body: { categoryIds: string[] }
+   * Body: { categoryIds: string[], startMonth?: "YYYY-MM" }
    *
    * Crea una simulación por cada categoría de `categoryIds` (RF-SIM-001),
    * con FALLO PARCIAL TOLERADO y sin transacción atómica: las categorías
@@ -79,9 +89,11 @@ export class SimulationsController {
    * RF-SIM-004).
    *
    * `today` (opcional): fecha local del usuario YYYY-MM-DD para resolver la
-   * ventana histórica del mínimo de 3 meses (RN-028) — mismo contrato que los
-   * `GET`. Ausente → fecha UTC del sistema. Se aplica igual a todas las
-   * categorías del batch.
+   * ventana histórica del mínimo de 3 meses (RN-028) y el mes en curso para
+   * el clamp de `startMonth` — mismo contrato que los `GET`. Ausente → fecha
+   * UTC del sistema. `startMonth` del body (opcional, "YYYY-MM") ancla el
+   * tramo de las simulaciones creadas; ausente = mes en curso. Se aplica
+   * igual a todas las categorías del batch.
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -91,7 +103,12 @@ export class SimulationsController {
     @Query('today') todayParam: string | undefined,
   ) {
     const today = this.parseToday(todayParam);
-    return this.simulationsService.createMany(req.user.userId, dto.categoryIds, today);
+    return this.simulationsService.createMany(
+      req.user.userId,
+      dto.categoryIds,
+      today,
+      dto.startMonth,
+    );
   }
 
   /**
@@ -115,5 +132,15 @@ export class SimulationsController {
       );
     }
     return todayParam;
+  }
+
+  private parseStartMonth(startMonthParam: string | undefined): string | undefined {
+    if (startMonthParam === undefined) return undefined;
+    if (!/^\d{4}-\d{2}$/.test(startMonthParam)) {
+      throw new BadRequestException(
+        'El parámetro "startMonth" debe tener formato YYYY-MM (ej: 2026-06)',
+      );
+    }
+    return startMonthParam;
   }
 }

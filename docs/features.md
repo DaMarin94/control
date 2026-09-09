@@ -62,7 +62,7 @@
 | Datos externos en `/configuracion` → General — vista de solo lectura del IPC (último dato + historial) y las cotizaciones del mes + disparo manual de la ingesta autenticado por sesión (tres desenlaces distinguibles por toast) | RF-SYNC-002 | Implementado |
 | Historial de cambios (`/historial`) — registro de ediciones y eliminaciones de movimientos + deshacer LIFO por movimiento (simple y en cadena), borrado lógico reversible, retención 5 por movimiento / 31 días | RF-HIST-001..006, RN-024..026 | Implementado |
 | Historial — deshacer inmediato desde el toast de éxito de editar/eliminar (4 formas, sin confirmación) | RF-HIST-007 | Implementado |
-| Simulación de categoría — alta múltiple / baja desde el filtro de Únicos de `/mes` + movimiento simulado (remanente por regresión lineal) en los meses del horizonte, desde el mes en curso | RF-SIM-001..004, RN-028/029 | Implementado |
+| Simulación de categoría — alta múltiple / baja desde el filtro de Únicos de `/mes` + movimiento simulado (remanente por regresión lineal) en los meses del tramo propio de cada simulación, desde el mes en curso | RF-SIM-001..004, RN-028/029 | Implementado |
 | Preferencias de usuario — cimiento (blob JSON + sesión) | — | Implementado (sin UI de producto) |
 
 ---

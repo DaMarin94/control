@@ -2082,7 +2082,7 @@ export function ReportCard({
   const simulatedToggleMotive = hasNoSimulations
     ? "No tenés ninguna simulación. Se crean desde la sección Únicos de la vista del mes."
     : hasNoReachedMonthsInYear
-      ? `${year} ya pasó. La simulación solo alcanza desde este mes en adelante.`
+      ? `${year} ya pasó. Las simulaciones no alcanzan meses pasados.`
       : null;
 
   // Universo estable de categorías para la leyenda-filtro (P2_b).

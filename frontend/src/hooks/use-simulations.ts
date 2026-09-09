@@ -5,22 +5,26 @@
  * RF-SIM-001..004). Wrapper fino sobre React Query + useApi (patrón
  * establecido, docs/technical.md §Convenciones de hooks).
  *
- * Crear/eliminar una simulación afecta los movimientos simulados de TODOS los
- * meses de su horizonte (desde el mes en curso, incluido, hasta el fin del
- * horizonte): se invalida la familia `["movements"]` por prefijo (mismo
- * patrón que `useRecurring` — un fijo también afecta muchos meses a la vez).
- * Ni crear ni eliminar generan entrada de historial (RF-SIM-001/004) — la
- * simulación de categoría queda entera fuera de `/historial`, así que no hay
- * `["history"]` que invalidar acá.
+ * El TRAMO ES PROPIO DE CADA SIMULACIÓN (docs/design.md §0, cambio 1): se
+ * ancla al mes desde el que se la crea (`startMonth`, body de POST
+ * /simulations), nunca revive un mes pasado (el backend clampea) y ya no hay
+ * un `horizonEndMonth` único a nivel respuesta — cada `SimulationDto` trae el
+ * suyo (`startMonth`/`effectiveStartMonth`/`endMonth`). Crear/eliminar una
+ * simulación afecta los movimientos simulados de TODOS los meses de SU tramo:
+ * se invalida la familia `["movements"]` por prefijo (mismo patrón que
+ * `useRecurring` — un fijo también afecta muchos meses a la vez). Ni crear ni
+ * eliminar generan entrada de historial (RF-SIM-001/004) — la simulación de
+ * categoría queda entera fuera de `/historial`, así que no hay `["history"]`
+ * que invalidar acá.
  *
- * Crear es un BATCH: POST /simulations recibe `categoryIds: string[]` y
- * devuelve 201 SIEMPRE (`{ created, failed }`), incluso si fallaron todas —
+ * Crear es un BATCH: POST /simulations recibe `{ categoryIds, startMonth? }`
+ * y devuelve 201 SIEMPRE (`{ created, failed }`), incluso si fallaron todas —
  * no es un error duro (ver `useCreateSimulation`).
  *
  * Se manda `today=YYYY-MM-DD` (fecha local del navegador, NO UTC — ver
  * `getLocalTodayString` en `@/lib/format`) en GET /simulations, GET
  * /simulations/candidates y POST /simulations: los tres calculan/validan
- * contra `horizonEndMonth`/la ventana histórica (RN-028), y sin `today` el
+ * contra la ventana histórica y el mes en curso (RN-028), y sin `today` el
  * backend cae a su propia fecha UTC — mismo desfase de mes que corrige
  * `today` en `use-movements.ts`.
  */
@@ -83,14 +87,22 @@ export function useSimulations(enabled: boolean = true) {
  * Universo de categorías activas con elegibilidad para simular (RF-SIM-001,
  * §3). Se pide solo mientras el modal "Simular categoría" está abierto
  * (`enabled`) — no hace falta mantenerlo cargado con el resto de `/mes`.
+ *
+ * @param startMonth Mes visualizado en `/mes` ("YYYY-MM") — el tramo es
+ *   propio de cada simulación (§0) y ancla al mes desde el que se crea; el
+ *   backend necesita este dato para devolver el tramo HIPOTÉTICO que la
+ *   bajada del modal enuncia (§3.1, `startMonth`/`endMonth` de la respuesta).
  */
-export function useSimulationCandidates(enabled: boolean) {
+export function useSimulationCandidates(enabled: boolean, startMonth: string) {
   const { api, isAuthenticated } = useApi();
   const today = useMemo(() => getLocalTodayString(), []);
 
   return useQuery<SimulationCandidatesResponse>({
-    queryKey: [...SIMULATION_CANDIDATES_QUERY_KEY, today],
-    queryFn: () => api.get<SimulationCandidatesResponse>(`/simulations/candidates?today=${today}`),
+    queryKey: [...SIMULATION_CANDIDATES_QUERY_KEY, today, startMonth],
+    queryFn: () =>
+      api.get<SimulationCandidatesResponse>(
+        `/simulations/candidates?today=${today}&startMonth=${startMonth}`,
+      ),
     enabled: enabled && isAuthenticated,
   });
 }
@@ -113,10 +125,17 @@ export function useCreateSimulation() {
   const { api } = useApi();
   const queryClient = useQueryClient();
 
-  const mutation = useMutation<CreateSimulationBatchResponse, ApiError, { categoryIds: string[] }>({
-    mutationFn: ({ categoryIds }) => {
+  const mutation = useMutation<
+    CreateSimulationBatchResponse,
+    ApiError,
+    { categoryIds: string[]; startMonth: string }
+  >({
+    mutationFn: ({ categoryIds, startMonth }) => {
       const today = getLocalTodayString();
-      return api.post<CreateSimulationBatchResponse>(`/simulations?today=${today}`, { categoryIds });
+      return api.post<CreateSimulationBatchResponse>(`/simulations?today=${today}`, {
+        categoryIds,
+        startMonth,
+      });
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: SIMULATIONS_QUERY_KEY });
@@ -130,9 +149,17 @@ export function useCreateSimulation() {
     },
   });
 
-  async function createSimulation(categoryIds: string[]): Promise<CreateSimulationBatchResult> {
+  /**
+   * @param startMonth Mes visualizado en `/mes` ("YYYY-MM") — ancla el tramo
+   *   del lote completo (§0, cambio 1); nunca revive un mes pasado (el
+   *   backend clampea contra su propio "hoy").
+   */
+  async function createSimulation(
+    categoryIds: string[],
+    startMonth: string,
+  ): Promise<CreateSimulationBatchResult> {
     try {
-      const response = await mutation.mutateAsync({ categoryIds });
+      const response = await mutation.mutateAsync({ categoryIds, startMonth });
       return { created: response.created, failed: response.failed };
     } catch (err) {
       const genericMessage = "No se pudo crear la simulación. Intentá de nuevo.";

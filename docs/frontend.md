@@ -744,11 +744,11 @@ Toda la feature vive en `/mes`: el punto de entrada es el **popover de filtro de
 
 ### Componentes
 
-- **`components/movements/simulation-band.tsx`** — bloque "Simulación" del popover de Únicos: botón de alta (siempre presente) + lista de las simulaciones del usuario (con su estado activa / pausada) con su acción de eliminar + nota de horizonte.
-- **`components/movements/simulate-category-modal.tsx`** — selector de una categoría del universo de candidatas.
+- **`components/movements/simulation-band.tsx`** — bloque "Simulación" del popover de Únicos: botón de alta (siempre presente) + lista de las simulaciones del usuario (con su estado activa / pausada), cada fila con su **propio tramo** (`formatSimulationSpan`, dos extremos si todavía no arrancó, solo el fin si ya arrancó) y su acción de eliminar, más una **nota general constante** de la regla de arranque (`formatHorizonBandNote`) — no hay un tramo único que enunciar a nivel banda.
+- **`components/movements/simulate-category-modal.tsx`** — selector sobre el universo de candidatas: lista **solo las elegibles** (`isEligibleCandidate`, ≥3 meses con datos y sin simulación activa) — las demás quedan **ocultas**, no deshabilitadas —, con la nota de elegibilidad al pie (`formatEligibilityNote`) y los **cuatro** estados vacíos por causa (`getCandidatesEmptyCause` / `formatCandidatesEmpty`).
 - **`components/movements/delete-simulation-dialog.tsx`** — confirmación de la eliminación.
 - **`components/movements/simulated-movement-row.tsx`** — la fila simulada dentro del listado de Únicos. Es una fila **no interactiva** (sin kebab, sin card de detalle) con la **misma geometría** que `movement-item-row.tsx`: lo que cambia es el tratamiento, nunca el grid (si no, la columna de montos se desalinea entre filas reales y simuladas).
-- **`lib/simulations.ts`** — helpers puros: chequeo de horizonte y el copy sensible al conteo (singular/plural con frase propia). El resto del copy vive inline en los componentes.
+- **`lib/simulations.ts`** — helpers puros: `isMonthWithinSimulationSpan` (pertenencia de un mes al **tramo de una simulación puntual** — `effectiveStartMonth..endMonth` — evaluada simulación por simulación, sin horizonte único) y el copy sensible al conteo (singular/plural con frase propia). El resto del copy vive inline en los componentes.
 
 ### `SectionFilterPanel` — `footerSlot` y anclaje invertible
 
@@ -761,10 +761,11 @@ Los dos hechos estructurales de `components/ui/section-filter-popover.tsx` que l
 ### Datos (`use-simulations`)
 
 - **`useSimulations()`** (`GET /simulations`) y **`useSimulationCandidates(enabled)`** (`GET /simulations/candidates`, pedida **solo mientras el modal está abierto**).
-- **Manda `today` con la fecha local del navegador** (`YYYY-MM-DD`, getters locales de `Date` — **nunca `toISOString()`**) en las **tres** llamadas: los dos `GET` y el `POST` de `useCreateSimulation`. Con el fallback UTC del backend, ventana histórica y horizonte quedan corridos un mes en UTC−N cerca de fin de mes, y esta superficie se contradice con las que sí lo mandan (contrato y gotcha en `docs/data-model.md`, §Simulación de categoría → Endpoints). La fecha la deriva el helper compartido **`getLocalTodayString()` de `lib/format.ts`** — usarlo, no reimplementarlo.
+- **Manda `today` con la fecha local del navegador** (`YYYY-MM-DD`, getters locales de `Date` — **nunca `toISOString()`**) en las **tres** llamadas: los dos `GET` y el `POST` de `useCreateSimulation`. Con el fallback UTC del backend, ventana histórica y tramo quedan corridos un mes en UTC−N cerca de fin de mes, y esta superficie se contradice con las que sí lo mandan (contrato y gotcha en `docs/data-model.md`, §Simulación de categoría → Endpoints). La fecha la deriva el helper compartido **`getLocalTodayString()` de `lib/format.ts`** — usarlo, no reimplementarlo.
 - **`today` es un elemento extra de la query key, y las claves exportadas siguen siendo el prefijo.** `SIMULATIONS_QUERY_KEY` (`["simulations"]`) y `SIMULATION_CANDIDATES_QUERY_KEY` (`["simulations","candidates"]`) son las claves **base**, y las queries reales agregan `today` al final. Invalidar siempre con las base — se aplica tal cual el gotcha de prefijo de `MOVEMENTS_QUERY_KEY` (ver §Datos (`use-movements`)), incluido el modo de falla silencioso si se rompe el prefijo.
-- **Crear y eliminar invalidan la familia `["movements"]` por prefijo**, no un mes: una simulación afecta los movimientos simulados de **todos** los meses de su horizonte (mismo patrón que `useRecurring`).
-- **`400` y `409` traen mensaje legible del backend y se muestran tal cual**: el selector ya ofrece las categorías inelegibles deshabilitadas con su motivo, así que esos errores solo aparecen en una carrera con candidatas stale.
+- **Crear y eliminar invalidan la familia `["movements"]` por prefijo**, no un mes: una simulación afecta los movimientos simulados de **todos** los meses de su tramo (mismo patrón que `useRecurring`).
+- **El alta es múltiple y el endpoint responde `201` siempre**, incluso si fallaron todas las categorías pedidas. Los rechazos por categoría llegan dentro de `failed[]` del body, cada uno con su **mensaje legible** del backend, y el modal los muestra en la fila de esa categoría — no son status de error HTTP.
+- **Si la llamada lanza** (400 de body inválido, 500, red caída), el hook no propaga el mensaje del backend: sintetiza un **mensaje genérico único** ("No se pudo crear la simulación. Intentá de nuevo.") y lo replica como una entrada de `failed` por cada `categoryId` pedido, para que el modal trate ese caso igual que un fallo parcial normal.
 
 ## Historial de cambios (`/historial` — RF-HIST-001..006)
 

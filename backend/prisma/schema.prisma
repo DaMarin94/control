@@ -687,6 +687,14 @@ model Simulation {
   userId     String
   categoryId String
 
+  // Tramo PROPIO de esta simulación (deja de derivarse de "hoy" para todas por
+  // igual): startMonth = mes desde el que se creó (clamp: nunca un mes
+  // pasado); endMonth = fin del tramo, calculado al crear y PERSISTIDO (no se
+  // deriva en lectura — una futura acción de "extender" lo va a mover).
+  // Formato "YYYY-MM" en ambos, igual que startMonth en Recurring/InstallmentGroup.
+  startMonth String
+  endMonth   String
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

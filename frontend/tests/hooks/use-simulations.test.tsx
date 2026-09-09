@@ -39,6 +39,9 @@ const mockSimulation: SimulationDto = {
   category: { id: "cat-1", name: "Suscripciones", color: "#3B7DE0", scope: "BOTH" },
   monthsWithData: 5,
   paused: false,
+  startMonth: "2026-06",
+  effectiveStartMonth: "2026-06",
+  endMonth: "2026-12",
   createdAt: "2026-06-02T17:30:00.000Z",
 };
 
@@ -65,7 +68,7 @@ describe("useSimulations", () => {
   });
 
   it("carga la lista desde GET /simulations con today=YYYY-MM-DD", async () => {
-    const response: SimulationsListResponse = { horizonEndMonth: "2026-12", simulations: [mockSimulation] };
+    const response: SimulationsListResponse = { simulations: [mockSimulation] };
     mockApiGet.mockResolvedValue(response);
     const { Wrapper } = createWrapper();
 
@@ -93,7 +96,7 @@ describe("useSimulations", () => {
   });
 
   it("manda el today con la fecha LOCAL (no la UTC) cerca de medianoche en UTC-3 (RN-028)", async () => {
-    const response: SimulationsListResponse = { horizonEndMonth: "2026-12", simulations: [] };
+    const response: SimulationsListResponse = { simulations: [] };
     mockApiGet.mockResolvedValue(response);
 
     const originalTZ = process.env.TZ;
@@ -137,30 +140,31 @@ describe("useSimulationCandidates", () => {
 
   it("no dispara la query mientras el modal está cerrado (enabled=false)", () => {
     const { Wrapper } = createWrapper();
-    renderHook(() => useSimulationCandidates(false), { wrapper: Wrapper });
+    renderHook(() => useSimulationCandidates(false, "2026-06"), { wrapper: Wrapper });
     expect(mockApiGet).not.toHaveBeenCalled();
   });
 
-  it("dispara GET /simulations/candidates con today=YYYY-MM-DD cuando enabled=true", async () => {
+  it("dispara GET /simulations/candidates con today=YYYY-MM-DD y el startMonth del mes visualizado cuando enabled=true", async () => {
     const response: SimulationCandidatesResponse = {
-      horizonEndMonth: "2026-12",
+      startMonth: "2026-06",
+      endMonth: "2026-12",
       categories: [{ categoryId: "cat-1", name: "Suscripciones", color: "#3B7DE0", monthsWithData: 5, alreadySimulated: false }],
     };
     mockApiGet.mockResolvedValue(response);
     const { Wrapper } = createWrapper();
 
-    const { result } = renderHook(() => useSimulationCandidates(true), { wrapper: Wrapper });
+    const { result } = renderHook(() => useSimulationCandidates(true, "2026-06"), { wrapper: Wrapper });
 
     await waitFor(() => {
       expect(result.current.data).toEqual(response);
     });
     expect(mockApiGet).toHaveBeenCalledWith(
-      expect.stringMatching(/^\/simulations\/candidates\?today=\d{4}-\d{2}-\d{2}$/)
+      expect.stringMatching(/^\/simulations\/candidates\?today=\d{4}-\d{2}-\d{2}&startMonth=2026-06$/)
     );
   });
 
   it("manda el today con la fecha LOCAL (no la UTC) cerca de medianoche en UTC-3 (RN-028)", async () => {
-    const response: SimulationCandidatesResponse = { horizonEndMonth: "2026-12", categories: [] };
+    const response: SimulationCandidatesResponse = { startMonth: "2026-08", endMonth: "2027-02", categories: [] };
     mockApiGet.mockResolvedValue(response);
 
     const originalTZ = process.env.TZ;
@@ -172,7 +176,7 @@ describe("useSimulationCandidates", () => {
 
     try {
       const { Wrapper } = createWrapper();
-      const { result } = renderHook(() => useSimulationCandidates(true), { wrapper: Wrapper });
+      const { result } = renderHook(() => useSimulationCandidates(true, "2026-08"), { wrapper: Wrapper });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -200,7 +204,7 @@ describe("useCreateSimulation", () => {
     });
   });
 
-  it("éxito total: llama POST /simulations con { categoryIds } y devuelve { created, failed: [] }", async () => {
+  it("éxito total: llama POST /simulations con { categoryIds, startMonth } y devuelve { created, failed: [] }", async () => {
     mockApiPost.mockResolvedValue({ created: [mockSimulation], failed: [] });
     const { Wrapper } = createWrapper();
 
@@ -208,14 +212,30 @@ describe("useCreateSimulation", () => {
 
     let createResult: Awaited<ReturnType<typeof result.current.createSimulation>>;
     await act(async () => {
-      createResult = await result.current.createSimulation(["cat-1"]);
+      createResult = await result.current.createSimulation(["cat-1"], "2026-06");
     });
 
     expect(createResult!.created).toEqual([mockSimulation]);
     expect(createResult!.failed).toEqual([]);
     expect(mockApiPost).toHaveBeenCalledWith(
       expect.stringMatching(/^\/simulations\?today=\d{4}-\d{2}-\d{2}$/),
-      { categoryIds: ["cat-1"] }
+      { categoryIds: ["cat-1"], startMonth: "2026-06" }
+    );
+  });
+
+  it("manda el startMonth del mes visualizado, distinto del mes en curso (§0, cambio 1)", async () => {
+    mockApiPost.mockResolvedValue({ created: [mockSimulation], failed: [] });
+    const { Wrapper } = createWrapper();
+
+    const { result } = renderHook(() => useCreateSimulation(), { wrapper: Wrapper });
+
+    await act(async () => {
+      await result.current.createSimulation(["cat-1"], "2026-10");
+    });
+
+    expect(mockApiPost).toHaveBeenCalledWith(
+      expect.any(String),
+      { categoryIds: ["cat-1"], startMonth: "2026-10" }
     );
   });
 
@@ -230,7 +250,7 @@ describe("useCreateSimulation", () => {
 
     let createResult: Awaited<ReturnType<typeof result.current.createSimulation>>;
     await act(async () => {
-      createResult = await result.current.createSimulation(["cat-1", "cat-2"]);
+      createResult = await result.current.createSimulation(["cat-1", "cat-2"], "2026-06");
     });
 
     expect(createResult!.created).toEqual([mockSimulation]);
@@ -239,7 +259,7 @@ describe("useCreateSimulation", () => {
     ]);
     expect(mockApiPost).toHaveBeenCalledWith(
       expect.stringMatching(/^\/simulations\?today=\d{4}-\d{2}-\d{2}$/),
-      { categoryIds: ["cat-1", "cat-2"] }
+      { categoryIds: ["cat-1", "cat-2"], startMonth: "2026-06" }
     );
   });
 
@@ -258,7 +278,7 @@ describe("useCreateSimulation", () => {
       const { result } = renderHook(() => useCreateSimulation(), { wrapper: Wrapper });
 
       await act(async () => {
-        await result.current.createSimulation(["cat-1"]);
+        await result.current.createSimulation(["cat-1"], "2026-08");
       });
 
       const callUrl = mockApiPost.mock.calls[0]?.[0] as string;
@@ -278,7 +298,7 @@ describe("useCreateSimulation", () => {
     const { result } = renderHook(() => useCreateSimulation(), { wrapper: Wrapper });
 
     await act(async () => {
-      await result.current.createSimulation(["cat-1"]);
+      await result.current.createSimulation(["cat-1"], "2026-06");
     });
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
@@ -302,7 +322,7 @@ describe("useCreateSimulation", () => {
 
     let createResult: Awaited<ReturnType<typeof result.current.createSimulation>>;
     await act(async () => {
-      createResult = await result.current.createSimulation(["cat-1", "cat-2"]);
+      createResult = await result.current.createSimulation(["cat-1", "cat-2"], "2026-06");
     });
 
     expect(createResult!.created).toEqual([]);
@@ -320,7 +340,7 @@ describe("useCreateSimulation", () => {
 
     let createResult: Awaited<ReturnType<typeof result.current.createSimulation>>;
     await act(async () => {
-      createResult = await result.current.createSimulation(["cat-1"]);
+      createResult = await result.current.createSimulation(["cat-1"], "2026-06");
     });
 
     expect(createResult!.created).toEqual([]);
@@ -336,7 +356,7 @@ describe("useCreateSimulation", () => {
     const { result } = renderHook(() => useCreateSimulation(), { wrapper: Wrapper });
 
     act(() => {
-      void result.current.createSimulation(["cat-1"]);
+      void result.current.createSimulation(["cat-1"], "2026-06");
     });
 
     await waitFor(() => {

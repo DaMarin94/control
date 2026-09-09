@@ -64,7 +64,6 @@ vi.mock("@/hooks/use-limits", () => ({
 vi.mock("@/hooks/use-simulations", () => ({
   useSimulations: vi.fn(() => ({
     data: {
-      horizonEndMonth: "2027-02",
       simulations: [
         {
           id: "sim-1",

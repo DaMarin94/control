@@ -2,27 +2,33 @@
  * Helpers puros de la Simulación de categoría (docs/design.md "Simulación de
  * categoría (`/mes`)", RF-SIM-001..004, RN-028/029). Copy sensible al conteo
  * (singular/plural con frase propia, nunca "1 movimientos") y el chequeo de
- * horizonte — el resto del copy vive inline en los componentes.
+ * pertenencia al tramo — el resto del copy vive inline en los componentes.
  */
 
 import { formatMonthLabel } from "@/lib/format";
+import type { SimulationCandidate } from "@/types/simulation";
 
 /**
- * `true` si `month` cae dentro del horizonte vigente: el MES EN CURSO
- * INCLUIDO (`>= currentMonth`) hasta `horizonEndMonth` (RN-028). El horizonte
- * arranca en el mes en curso, no en `A+1` — meses pasados siguen sin
- * simularse. Formato `YYYY-MM` en los tres parámetros — la comparación
- * lexicográfica alcanza.
+ * `true` si `month` cae dentro del TRAMO de ESA simulación: desde su arranque
+ * EFECTIVO (`effectiveStartMonth`, ya clampeado contra el mes en curso por el
+ * backend) hasta su `endMonth`, ambos inclusive. Reemplaza a
+ * `isMonthWithinHorizon`: con el ancla por simulación (§0, cambio 1) dejó de
+ * existir un horizonte único — la pertenencia se evalúa simulación por
+ * simulación, nunca contra un `horizonEndMonth` global. Formato `YYYY-MM` —
+ * la comparación lexicográfica alcanza.
  */
-export function isMonthWithinHorizon(
+export function isMonthWithinSimulationSpan(
   month: string,
-  currentMonth: string,
-  horizonEndMonth: string,
+  simulation: { effectiveStartMonth: string; endMonth: string },
 ): boolean {
-  return month >= currentMonth && month <= horizonEndMonth;
+  return month >= simulation.effectiveStartMonth && month <= simulation.endMonth;
 }
 
-/** "Necesita 3 meses con datos (tiene {N})" — motivo de deshabilitado del selector (§3) y de la simulación pausada (§6.1). */
+/**
+ * "Necesita 3 meses con datos (tiene {N})" — motivo de la simulación pausada
+ * (§6.1). Ya NO se usa en el selector del modal (§3): las no elegibles se
+ * ocultan en vez de mostrarse deshabilitadas con motivo.
+ */
 export function formatMinDataMotive(monthsWithData: number): string {
   return `Necesita 3 meses con datos (tiene ${monthsWithData})`;
 }
@@ -48,14 +54,99 @@ export function formatPausedListNote(count: number): string {
     : `${count} simulaciones no están proyectando: les faltan meses con datos.`;
 }
 
-/** "Se proyecta desde este mes hasta {mes} {año}." — nota de horizonte al pie de la banda (§2). */
-export function formatHorizonBandNote(horizonEndMonth: string): string {
-  return `Se proyecta desde este mes hasta ${formatMonthLabel(horizonEndMonth)}.`;
+/**
+ * "Cada simulación proyecta desde el mes en que la creaste." — nota general
+ * de la banda (§2), constante: con anclas por simulación dejó de haber un
+ * tramo único que enunciar; el tramo concreto vive por fila (§4,
+ * `formatSimulationSpan`).
+ */
+export function formatHorizonBandNote(): string {
+  return "Cada simulación proyecta desde el mes en que la creaste.";
 }
 
-/** "Alcanza desde este mes hasta {Mes AAAA}." — oración 2 de la bajada del modal "Simular categoría" (§3.1). */
-export function formatHorizonReach(horizonEndMonth: string): string {
-  return `Alcanza desde este mes hasta ${formatMonthLabel(horizonEndMonth)}.`;
+/**
+ * "Alcanza desde {Mes inicio} hasta {Mes fin}." — oración 2 de la bajada del
+ * modal "Simular categoría" (§3.1). `startMonth`/`endMonth` vienen de
+ * `SimulationCandidatesResponse` (ya resueltos por el backend contra el mes
+ * visualizado, clampeados a `max(mes visualizado, mes en curso)`).
+ */
+export function formatHorizonReach(startMonth: string, endMonth: string): string {
+  return `Alcanza desde ${formatMonthLabel(startMonth)} hasta ${formatMonthLabel(endMonth)}.`;
+}
+
+/**
+ * Tramo por fila de la lista de simulaciones activas (§4). `startMonth` es el
+ * ancla CRUDA (no la efectiva) de la simulación: si ya es `<= currentMonth`
+ * la simulación ya arrancó y alcanza con nombrar el fin; si no, todavía no
+ * arrancó y hay que nombrar los dos extremos.
+ */
+export function formatSimulationSpan(
+  startMonth: string,
+  endMonth: string,
+  currentMonth: string,
+): string {
+  if (startMonth <= currentMonth) {
+    return `Proyecta hasta ${formatMonthLabel(endMonth)}.`;
+  }
+  return `Proyecta de ${formatMonthLabel(startMonth)} a ${formatMonthLabel(endMonth)}.`;
+}
+
+/** Mensaje único de elegibilidad al pie de la lista del selector (§3.1b) — constante. */
+export function formatEligibilityNote(): string {
+  return "Solo aparecen las categorías con 3 o más meses de datos que todavía no estás simulando.";
+}
+
+/** `true` si la candidata es SIMULABLE (§3): al menos 3 meses con datos y sin simulación activa. */
+export function isEligibleCandidate(candidate: SimulationCandidate): boolean {
+  return candidate.monthsWithData >= 3 && !candidate.alreadySimulated;
+}
+
+/** Causa por la que la lista de elegibles del selector quedó vacía (§3.8). */
+export type CandidatesEmptyCause = "no-active-categories" | "no-eligible-data" | "all-simulated" | "mixed";
+
+/**
+ * Causa del vacío cuando ninguna candidata del catálogo es simulable (§3.8).
+ * `null` si hay al menos una elegible (no corresponde mostrar el empty).
+ */
+export function getCandidatesEmptyCause(
+  categories: SimulationCandidate[],
+): CandidatesEmptyCause | null {
+  if (categories.some(isEligibleCandidate)) return null;
+  if (categories.length === 0) return "no-active-categories";
+  const anyWithEnoughData = categories.some((c) => c.monthsWithData >= 3);
+  const anyWithoutEnoughData = categories.some((c) => c.monthsWithData < 3);
+  if (!anyWithEnoughData) return "no-eligible-data";
+  if (!anyWithoutEnoughData) return "all-simulated";
+  return "mixed";
+}
+
+export interface CandidatesEmptyCopy {
+  line1: string;
+  line2: string | null;
+}
+
+/** Los cuatro copys del vacío del selector, por causa (§3.8) — el frontend no arma ninguno concatenando fragmentos. */
+export function formatCandidatesEmpty(cause: CandidatesEmptyCause): CandidatesEmptyCopy {
+  switch (cause) {
+    case "no-active-categories":
+      return { line1: "No tenés categorías activas.", line2: null };
+    case "no-eligible-data":
+      return {
+        line1: "Ninguna categoría llega a 3 meses con datos.",
+        line2: "Cuando alguna los acumule, va a aparecer acá.",
+      };
+    case "all-simulated":
+      return {
+        line1: "Ya estás simulando todas las categorías que se pueden simular.",
+        line2: "Podés verlas y eliminarlas en el filtro de Únicos.",
+      };
+    case "mixed":
+      return {
+        line1: "No queda ninguna categoría para simular.",
+        line2:
+          "Las que tienen 3 o más meses de datos ya las estás simulando; al resto todavía le faltan meses.",
+      };
+  }
 }
 
 /**

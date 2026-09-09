@@ -78,7 +78,6 @@ vi.mock("@/hooks/use-limits", () => ({
 vi.mock("@/hooks/use-simulations", () => ({
   useSimulations: vi.fn(() => ({
     data: {
-      horizonEndMonth: "2027-02",
       simulations: [{ id: "sim-1", categoryId: "cat-1", category: { id: "cat-1", name: "Alimentación", color: "#4F86C6", scope: "EXPENSE" }, monthsWithData: 6, paused: false, createdAt: "2026-01-01T00:00:00.000Z" }],
     },
     isLoading: false,
@@ -927,7 +926,6 @@ describe("ReportCard — chip 'Simulados' (RF-REP-017)", () => {
     mockUseReports.mockReturnValue(makeSuccessReturn(mockDataWithSimulated));
     mockUseSimulations.mockReturnValue({
       data: {
-        horizonEndMonth: "2027-02",
         simulations: [
           {
             id: "sim-1",
@@ -1001,7 +999,7 @@ describe("ReportCard — chip 'Simulados' (RF-REP-017)", () => {
 
   it("sin ninguna simulación: aria-disabled=true, sigue enfocable (sin `disabled` nativo) y expone el motivo", () => {
     mockUseSimulations.mockReturnValue({
-      data: { horizonEndMonth: "2027-02", simulations: [] },
+      data: { simulations: [] },
       isLoading: false,
     } as unknown as ReturnType<typeof useSimulations>);
     renderCard({ type: "by-category", onIncludeSimulatedChange: vi.fn() });
@@ -1023,7 +1021,7 @@ describe("ReportCard — chip 'Simulados' (RF-REP-017)", () => {
 
   it("clickear el chip deshabilitado (sin simulaciones) NO llama onIncludeSimulatedChange", () => {
     mockUseSimulations.mockReturnValue({
-      data: { horizonEndMonth: "2027-02", simulations: [] },
+      data: { simulations: [] },
       isLoading: false,
     } as unknown as ReturnType<typeof useSimulations>);
     const onChange = vi.fn();
@@ -1032,13 +1030,13 @@ describe("ReportCard — chip 'Simulados' (RF-REP-017)", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("año pasado (con simulaciones existentes): motivo '{Año} ya pasó. La simulación solo alcanza desde este mes en adelante.'", () => {
+  it("año pasado (con simulaciones existentes): motivo '{Año} ya pasó. Las simulaciones no alcanzan meses pasados.'", () => {
     renderCard({ type: "by-category", year: 2020, onIncludeSimulatedChange: vi.fn() });
     const chip = screen.getByRole("button", { name: /incluir movimientos simulados/i });
     expect(chip).toHaveAttribute("aria-disabled", "true");
     expect(chip).toHaveAttribute(
       "title",
-      "2020 ya pasó. La simulación solo alcanza desde este mes en adelante.",
+      "2020 ya pasó. Las simulaciones no alcanzan meses pasados.",
     );
   });
 
@@ -1074,7 +1072,7 @@ describe("ReportCard — chip 'Simulados' (RF-REP-017)", () => {
 
   it("precedencia: sin simulaciones Y año pasado → gana el motivo de 'sin simulaciones'", () => {
     mockUseSimulations.mockReturnValue({
-      data: { horizonEndMonth: "2027-02", simulations: [] },
+      data: { simulations: [] },
       isLoading: false,
     } as unknown as ReturnType<typeof useSimulations>);
     renderCard({ type: "by-category", year: 2020, onIncludeSimulatedChange: vi.fn() });

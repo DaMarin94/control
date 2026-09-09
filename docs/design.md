@@ -4278,10 +4278,12 @@ Elementos que esta spec introduce y que **no** estaban en `screens.md` §11 ni e
 
 Implementa **RF-SIM-001..004** (RN-028, RN-029). Toda la feature vive en **una sola pantalla** (`/mes`) y en **un solo punto de entrada** (el disparador de filtro de la sección **Únicos**). Nada de esto aparece en `/reportes` ni en el dashboard.
 
-**Dos cambios de alcance vigentes (decisión del usuario) que atraviesan toda la spec:**
+**Tres cambios de alcance vigentes (decisión del usuario) que atraviesan toda la spec:**
 
-1. **El horizonte arranca en el MES EN CURSO** (antes arrancaba en `A+1`). El fin no cambia. Los meses **pasados** siguen sin simularse. Todo lo que esta spec decía de "meses futuros" ahora dice **"desde este mes en adelante"** — fila simulada, nota de pausa, copy de horizonte y consecuencia de borrado incluidos.
+1. **El horizonte es POR SIMULACIÓN y se ancla al mes desde el que se la crea.** Simular parado en octubre crea una simulación que arranca en **octubre**, no en el mes en curso. Dos simulaciones pueden tener **tramos distintos**, así que **deja de existir "el horizonte" en singular**: cada simulación declara el suyo (§4) y la nota única de la banda se reformula (§2). El **arranque efectivo nunca es un mes pasado**: si el ancla quedó atrás, la simulación arranca en el **mes en curso**; los meses **pasados no se simulan nunca**. *(Deroga el cambio anterior "el horizonte arranca en el mes en curso, igual para todas": el mes en curso sigue pudiendo llevar fila simulada, pero por ser el arranque efectivo de esa simulación, no por una regla global. Todo lo que esta spec decía de "meses futuros" sigue derogado.)*
 2. **El monto simulado de cada mes es un REMANENTE:** `proyección − únicos reales ya cargados de esa categoría en ese mes`. La simulación significa **"lo que falta para llegar a lo proyectado"**, en **cualquier** mes del horizonte. Si el remanente da 0 o se da vuelta de signo, **ese mes no lleva fila simulada** (misma condición de montaje "valor ≠ 0" que ya regía).
+
+3. **El selector del modal ofrece SOLO las categorías simulables** (§3). Las que tienen **menos de 3 meses con datos** y las que **ya están simuladas** **no se listan**. Deroga *"se ofrece deshabilitada con el motivo visible — nunca oculta"* y, con ella, **el slot de motivo por fila, su precedencia declarada y el motivo en `--expense-ink`**. En su lugar hay **un mensaje único** al pie de la lista (§3.1b) y **estados vacíos por causa** (§3.8). **Sobrevive una sola excepción:** el **error por categoría** del fallo parcial, que sigue viviendo **dentro de la fila** — ahora en un *slot de desenlace* con un único inquilino posible (§3.4).
 
 **Consecuencia de diseño de (2): el fenómeno a explicar no es "mes en curso", es "hubo descuento".** Un mes futuro con un único adelantado de esa categoría muestra exactamente el mismo remanente parcial que el mes en curso. Cualquier señal atada al mes en curso estaría modelando el problema con una proxy equivocada. **Decisión del usuario (cerrada): no se agrega ninguna señal por fila — ni cromo ni variante de copy.** El remanente se explica **una sola vez**, en la bajada del modal (§3.1), que es donde el usuario opta por la feature. La fila del mes en curso es **idéntica** a la de un mes futuro (§1) y su sublínea **no tiene variantes**.
 
@@ -4294,7 +4296,7 @@ Implementa **RF-SIM-001..004** (RN-028, RN-029). Toda la feature vive en **una s
 | Naturaleza | Superficie | Condición de montaje |
 |---|---|---|
 | **Configurar** (crear / eliminar / ver activas) | banda "Simulación" del popover de Únicos | el botón, siempre; la lista, con ≥1 activa |
-| **Ver el resultado** | fila simulada en la sección Únicos | mes **dentro del horizonte** (mes en curso incluido, pasados nunca), remanente ≠ 0 |
+| **Ver el resultado** | fila simulada en la sección Únicos | mes **dentro del horizonte de esa simulación** (de su arranque efectivo a su fin; pasados nunca), remanente ≠ 0 |
 | **Entender la composición** | glifo en el subtotal + línea bajo los totales | ≥1 fila simulada **visible tras los filtros** |
 
 **Los popovers de Fijos y Cuotas no cambian en nada.** La banda de simulación se monta **solo** en el popover de Únicos (RN-029: la simulación alcanza solo movimientos únicos).
@@ -4303,7 +4305,7 @@ Implementa **RF-SIM-001..004** (RN-028, RN-029). Toda la feature vive en **una s
 
 ### 1. Fila del movimiento simulado
 
-Vive en la sección **Únicos** de un mes dentro del horizonte —**el mes en curso incluido**—, mezclada con las filas reales. **Debe ser inequívocamente distinguible de un único real de un vistazo, sin leer texto** (RF-SIM-003).
+Vive en la sección **Únicos** de un mes dentro del horizonte **de su simulación** —**el mes en curso incluido**, cuando es el arranque efectivo—, mezclada con las filas reales. **Debe ser inequívocamente distinguible de un único real de un vistazo, sin leer texto** (RF-SIM-003).
 
 **En el mes en curso la fila es idéntica a la de un mes futuro: mismo tratamiento, mismas señales, mismo copy base.** No lleva chip propio, ni color propio, ni nota propia. *Alternativas evaluadas y descartadas:* **(a)** un segundo chip tipo "Parcial" o "Este mes" junto a "Simulado" — agrega un quinto vocabulario a una fila que ya tiene cuatro señales, para una distinción que **no cambia nada de lo que el usuario puede hacer** (la fila no es interactiva) y que además sería **falsa**: un mes futuro con un único adelantado tiene el mismo remanente parcial. **(b)** Una nota al pie del listado tipo §6.2 — es un estado **normal y frecuente**, no una anomalía; convertirlo en pie permanente le come fuerza a §6.2, que sí informa algo roto (mismo criterio que §7). **(c)** cambiar el último segmento de la sublínea a *"resto de la tendencia de 12 meses"* cuando hubo descuento — **descartada por decisión del usuario**: exige un dato nuevo por fila simulada (un flag "hubo descuento" en el DTO) para una distinción que el usuario **no puede accionar**, y el remanente ya queda explicado en la bajada del modal, donde se opta por la feature. **Nada cambia en la fila: la sublínea siempre termina en `· tendencia de 12 meses`, sin variantes.**
 
@@ -4376,30 +4378,49 @@ El popover de sección tiene hoy dos bloques (**tipo** y **categorías**). La si
 - **Superficie:** `bg-panel-2`, `px-3 py-[10px]`, `flex flex-col gap-[8px]`. `shrink-0` (nunca scrollea fuera de alcance).
 - **Eyebrow:** 11px/600 uppercase `.08em` `--muted` — **"Simulación"**.
 - **Botón "Simular categoría"** — **siempre presente**, ancho completo: molde outline del DS (`bg-panel border border-line rounded-[var(--r-ctl)]`), `min-h-[34px]`, `justify-center gap-[6px]`, texto 12.5/600 `--ink-2`, glifo **`ChartSpline` 15px**. Hover: `bg-panel-3` + texto `--ink`. Focus: ring `--accent-soft` 3px. Abre el **modal** de §3 y **cierra el popover** (un solo overlay a la vez — regla del DS ya vigente en la fila de movimiento).
-- **Sin simulaciones activas:** debajo del botón, una línea 11.5px `--muted`: *"Proyecta categorías desde este mes en adelante."* Nada más — sin caja dashed, sin ilustración: es un bloque de 3 líneas dentro de un popover, no una pantalla vacía.
-  - **Cambió respecto de lo vigente** (*"Proyecta una categoría a los meses futuros."*) por los dos motivos del encabezado: el selector es múltiple (plural) y el horizonte arranca en el mes en curso ("desde este mes", no "futuros").
-- **Con ≥1 activa:** la **lista** (§4) debajo del botón, y al pie una nota 11.5px `--muted`: *"Se proyecta desde este mes hasta {mes} {año}."*
-  - **Se declara el inicio, no solo el fin.** El fin no cambió y el usuario ya lo conocía; **lo que cambió es el arranque**, y es exactamente lo que no puede adivinar mirando el mes. Una nota que solo dice el fin lo deja creyendo que el mes en curso sigue afuera. *(Feedback.)*
+- **Sin simulaciones activas:** debajo del botón, una línea 11.5px `--muted`: *"Proyecta categorías desde el mes que estás viendo."* Nada más — sin caja dashed, sin ilustración: es un bloque de 3 líneas dentro de un popover, no una pantalla vacía.
+  - **Cambió dos veces.** Primero dejó de decir *"a los meses futuros"* (el selector es múltiple y el mes en curso entró al horizonte); ahora deja de decir *"desde este mes"*: con el ancla por simulación, **"este mes" es el mes que el usuario está viendo**, y nombrarlo así lo dice sin deixis ambigua. Es además el enunciado exacto de lo que el botón va a hacer si lo aprieta ahora.
+- **Con ≥1 activa:** la **lista** (§4) debajo del botón, y al pie una nota 11.5px `--muted`: *"Cada simulación proyecta desde el mes en que la creaste."*
+  - **La nota general pasa de declarar un tramo a declarar la REGLA.** Antes había un solo horizonte y la nota podía enunciarlo entero (*"Se proyecta desde este mes hasta marzo 2027."*); con anclas distintas ese enunciado sería **falso para al menos una** de las filas de arriba. El tramo concreto pasa a la fila de cada simulación (§4); la banda se queda con lo único que sigue siendo común a todas —**de dónde sale el arranque**— que es justamente lo que explica por qué dos filas dicen meses distintos. *(Feedback + carga cognitiva: la regla una vez, el dato en cada fila.)*
+  - *Alternativas evaluadas:* **(a)** una nota de alcance máximo (*"Se proyecta hasta marzo 2027 como máximo."*) — descartada: es verdadera pero no permite saber hasta cuándo llega **cada una**, que es el dato que el usuario necesita; **(b)** sacar la nota general y dejar solo el tramo por fila — descartada: sin la regla, dos fechas distintas en dos filas se leen como un defecto, no como una consecuencia de cuándo las creó.
 
 **El botón va arriba y la lista abajo** para que su posición sea **estable** sea cual sea la cantidad de simulaciones: es el control que se busca, y un target que se mueve según cuántos ítems haya es un target peor.
 
 **El punto indicador `--accent` del disparador NO cambia de significado.** Sigue queriendo decir **"esta sección está filtrada"** (tipo ≠ Ambos u orden/categoría ≠ default). Una simulación activa **no** lo enciende: no recorta lo que ves. Sobrecargarlo destruiría la única lectura que hoy es inequívoca en la cabecera. Que haya simulaciones activas se ve donde importa —en el mes— vía §1 y §5.
 
-### 3. Modal "Simular categoría" — selector MÚLTIPLE con motivo visible
+### 3. Modal "Simular categoría" — selector MÚLTIPLE, solo categorías simulables
 
-**Por qué modal y no un sub-panel dentro del popover.** Un popover dentro de un popover es frágil (los dos cierran por click-fuera y por scroll) y, sobre todo, los **motivos de deshabilitado necesitan ancho de texto** que 260px no dan sin truncar — y el motivo **nunca se oculta ni se trunca** (RF-SIM-001 A2/A3). Además es una operación de decisión con confirmar/cancelar, que en el DS es `ModalShell variant="dialog"`.
+**Por qué modal y no un sub-panel dentro del popover.** Un popover dentro de un popover es frágil (los dos cierran por click-fuera y por scroll); es una operación de **decisión con confirmar/cancelar** y **selección múltiple con contador**, que en el DS es `ModalShell variant="dialog"`; y el **mensaje de error por categoría** del fallo parcial (§3.4) necesita ancho de texto que 260px no dan sin truncar. *(El argumento original —"los motivos de deshabilitado necesitan ancho"— **caducó** con la reversión del punto 3 del encabezado: ya no hay motivos por fila. Los tres restantes sostienen la decisión por sí solos.)*
+
+**La lista muestra únicamente lo que se puede simular.** Quedan fuera **las dos** clases de no elegibles: **menos de 3 meses con datos** y **ya simulada**. *(Decisión del usuario, revierte lo anterior.)* Dos consecuencias que el spec fija para que no queden a criterio de implementación:
+
+- **El filtro es de presentación, no de contrato:** el frontend sigue recibiendo el **catálogo activo completo con sus flags** (`monthsWithData`, `alreadySimulated`) y oculta las no elegibles. Los flags no son decorativos: son lo que permite decir **cuál** de las causas dejó la lista vacía (§3.8).
+- **El universo se congela al abrir.** La lista se calcula **una vez, con el payload de apertura**, y **ninguna fila desaparece mientras el modal está abierto** — en particular, las que se crean en un intento con fallo parcial **se quedan en su lugar** (§3.7 c). La lista, mientras el modal vive, es el **registro del intento**; volver a ser un catálogo vigente es tarea de la próxima apertura. Sin esta regla, media lista se evapora bajo el cursor justo mientras el usuario lee cuáles fallaron. *(Prevención de error.)*
 
 - **Contenedor:** `ModalShell variant="dialog"` (`max-w-[440px]`). Cierra con **✕ y `Esc`**; el clic en el scrim **no** cierra (modal de decisión).
 - **Título** (18/700): **"Simular categoría"** — **no cambia** aunque el selector sea múltiple. Es el nombre de la feature y el rótulo del botón que abre el modal (§2); cambiarlo a "Simular categorías" desalinearía el par disparador↔destino, que es la única pista de continuidad que tiene el usuario al abrir un overlay. La pluralidad se comunica donde importa —los checkboxes y el rótulo del botón de confirmación—, no en el título.
 
 **3.1 Bajada** — 13px `--muted`, `max-w-[46ch]`, un solo `<p>` de tres oraciones:
 
-> *"Se proyecta cada categoría elegida a partir de sus últimos 12 meses. Alcanza desde este mes hasta {Mes AAAA}. En cada mes se simula solo lo que falta para llegar a lo proyectado."*
+> *"Se proyecta cada categoría elegida a partir de sus últimos 12 meses. Alcanza desde {Mes inicio} hasta {Mes fin}. En cada mes se simula solo lo que falta para llegar a lo proyectado."*
 
 - **Oración 1** — plural ("cada categoría elegida"): el selector ahora es múltiple y la bajada tiene que anticiparlo antes de que el usuario vea los checkboxes.
-- **Oración 2** — declara **inicio y fin** del horizonte. Sigue siendo el único lugar donde el horizonte se explica (§7), pero ahora el inicio es información nueva y no adivinable.
+- **Oración 2** — declara **inicio y fin** del tramo, **con los dos meses nombrados**: *"Alcanza desde octubre 2026 hasta marzo 2027."* Sigue siendo una sola frase para toda la tanda —**todas las de este batch comparten ancla**, la del mes visualizado— pero **cae el deíctico "este mes"**: con el ancla por simulación, parado en octubre "este mes" es ambiguo entre *el mes en curso* y *el mes que estoy mirando*, y la respuesta correcta es la segunda. Nombrar el mes elimina la ambigüedad sin agregar una palabra. **`{Mes inicio}` es el arranque efectivo** = `max(mes visualizado, mes en curso)`: parado en un mes pasado la bajada nombra el **mes en curso**, nunca un mes que ya pasó. *(Feedback + prevención de error: el usuario confirma sabiendo exactamente qué tramo va a crear.)*
+  - *Alternativa evaluada:* mantener *"desde este mes"* y agregar el mes entre paréntesis. **Descartada:** dice lo mismo dos veces y deja el deíctico —que es lo que falla— como sujeto de la frase.
 - **Oración 3** — **es la explicación del remanente**, y va acá por una razón: este es el momento en que el usuario **opta** por la feature, el único en que va a leer tres oraciones seguidas sobre ella. Puesta acá, la fila simulada del mes en curso no necesita justificarse a sí misma con cromo (§1). *(Carga cognitiva: se explica una vez, donde se decide, no N veces donde se mira.)*
-  - **Es el ÚNICO portador de la explicación del remanente** (la variante de sublínea quedó descartada, §1.2). Esto **no cambia** ninguna decisión de §3: la oración ya estaba redactada para bancar sola el peso —enuncia la regla completa (*"En cada mes se simula solo lo que falta para llegar a lo proyectado"*), no un caso particular— y por eso mismo **no se acorta, no se mueve y no se vuelve opcional**. Si algún día se recorta la bajada, esta oración es la última que se toca.
+  - **Es el ÚNICO portador de la explicación del remanente** (la variante de sublínea quedó descartada, §1.2). Esto **no cambia** ninguna decisión de §3: la oración ya estaba redactada para bancar sola el peso —enuncia la regla completa (*"En cada mes se simula solo lo que falta para llegar a lo proyectado"*), no un caso particular— y por eso mismo **no se acorta, no se mueve y no se vuelve opcional**. Si algún día se recorta la bajada, esta oración es la última que se toca. **La bajada se queda en TRES oraciones:** el mensaje de elegibilidad (§3.1b) **no** entra acá — ver el porqué abajo.
+
+**3.1b Mensaje de elegibilidad — una línea al pie de la lista, no una cuarta oración**
+
+Reemplaza a los motivos por fila. Es el único lugar donde se explica **por qué una categoría no está en la lista**.
+
+- **Copy:** *"Solo aparecen las categorías con 3 o más meses de datos que todavía no estás simulando."*
+- **Ubicación:** **debajo de la lista**, último elemento del cuerpo del modal, `mt-[10px]`. **No** se monta con la lista vacía (§3.8 ya lo dice con más precisión) ni sobre el estado de carga o de error.
+- **Forma:** `<p>` 12px `--muted`, ancho completo del cuerpo, **sin glifo, sin caja, sin borde**. Envuelve libremente a dos líneas; nunca trunca.
+- **Por qué al pie de la lista y no en la bajada.** La bajada se lee **antes** de ver la lista y responde *"¿qué hace esto?"*; el mensaje de elegibilidad responde *"¿por qué no está la mía?"*, una pregunta que **solo aparece después de recorrer la lista y no encontrarla**. Puesto arriba se lee como una condición abstracta y se olvida; puesto al pie, está donde y cuando se pregunta. Además **protege la bajada**: sumarle una cuarta oración empujaría la explicación del remanente —única en toda la app, §3.1— al medio de un párrafo más largo, que es exactamente donde deja de leerse. *(Jerarquía visual + carga cognitiva.)*
+- **Por qué sin glifo.** Un `Info` le daría el peso de una anomalía y lo pondría a competir con la nota `Info` de §6.2, que sí informa algo roto. Esto es una **nota al pie sobre el universo de una lista**, y su registro correcto es el más callado del modal. *(Consistencia.)*
+- **Por qué nombra las DOS causas y no solo los 3 meses.** Al abrir el modal **el popover ya está cerrado** (§2), así que la lista de simulaciones activas **no está a la vista**: un mensaje que solo hablara de los 3 meses dejaría al usuario cuya categoría falta *por estar ya simulada* concluyendo —correctamente según el texto, falsamente según el sistema— que le faltan datos. La segunda cláusula cuesta seis palabras y evita un diagnóstico equivocado. *(Prevención de error.)*
+- **Scrollea con el cuerpo, no queda pineado.** El cuerpo del modal es la región que scrollea (§8.3) y la nota es su último elemento: con una lista larga queda bajo el pliegue **al abrir**, y aparece exactamente al terminar de recorrerla — que es cuando la pregunta existe. Pinearla costaría cromo permanente para una respuesta que solo se necesita al final.
 
 **3.2 El control de selección — checkbox 16px, no radio**
 
@@ -4413,9 +4434,10 @@ La lista pasa de `role="radiogroup"` a **`role="group"`** `aria-label="Categorí
 |---|---|---|
 | **Vacío** (habilitado, sin tildar) | `border-line-strong bg-panel`, sin tick | nombre `--ink`; `hover:bg-panel-2`; `cursor-pointer` |
 | **Tildado** | `border-accent bg-accent` + tick blanco | fondo `bg-panel-2` persistente (la fila elegida se lee como bloque, no solo por el tilde) |
-| **Deshabilitado** | `border-faint`, **sin relleno y sin tick** — nunca puede estar tildado | `aria-disabled="true"`, `tabIndex={-1}`, `cursor-not-allowed`, nombre `--muted` |
+| **Deshabilitado** — **única causa vigente: la fila se creó en este intento** (§3.7 c) | `border-faint`, **sin relleno y sin tick** — nunca puede estar tildado | `aria-disabled="true"`, `tabIndex={-1}`, `cursor-not-allowed`, nombre `--muted` |
 | **Foco** | la caja **no** cambia | el **ring va en la fila entera**: `focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]` (ya vigente) — el target real es la fila, no el cuadradito de 16px |
 
+- **El estado deshabilitado no desaparece del DS, cambia de causa.** Al abrir el modal **ninguna fila está deshabilitada** (todas las listadas son simulables); el estado solo aparece **después** de un intento con fallo parcial, sobre las que se acaban de crear. La forma es la misma: no se inventa un tratamiento nuevo para el mismo significado ("acá no hay nada que tildar"). *(Consistencia.)*
 - **Navegación por teclado:** con `role="checkbox"` cada fila **habilitada** es `tabIndex={0}` y se tildea con **Espacio** o **Enter**; las deshabilitadas siguen fuera del orden de `Tab`. Es el mismo contrato de teclado que hoy y el mismo que el filtro de categorías. (Con `radiogroup` la lista entera era **una** parada de `Tab` con navegación por flechas; ese contrato **desaparece** — es correcto, porque ya no hay una elección excluyente que recorrer.)
 - **El punto de color de categoría (10px, `rounded-[3px]`) no cambia** y sigue **sin atenuarse nunca**.
 
@@ -4423,26 +4445,27 @@ La lista pasa de `role="radiogroup"` a **`role="group"`** `aria-label="Categorí
 
 `flex flex-wrap items-center gap-[10px] px-[10px] py-[8px] rounded-[var(--r-ctl)]`, `min-h-[38px]`:
 
-`[checkbox 16px] [● color 10px] [nombre 13px] ····· [motivo/error, derecha]`
+`[checkbox 16px] [● color 10px] [nombre 13px] ····· [desenlace, derecha — solo tras un intento]`
 
-- **Orden: el del catálogo, sin reagrupar.** Las deshabilitadas **no** se mandan al fondo: el usuario busca *su* categoría por nombre y una lista que se reordena según un estado que él no ve es impredecible. Lo que evita el "cementerio" no es esconderlas, es que cada una diga por qué. **Esto vale también después de un intento con fallo parcial:** las que se crearon **no se sacan de la lista ni se mueven** — cambian de estado en su lugar (§3.7 c). *(Consistencia + prevención de error.)*
+- **Orden: el del catálogo, sin reagrupar.** El usuario busca *su* categoría por nombre y una lista que se reordena según un estado que él no ve es impredecible. **Esto vale sobre todo después de un intento con fallo parcial:** las que se crearon **no se sacan de la lista ni se mueven** — cambian de estado en su lugar (§3.7 c). *(Consistencia + prevención de error.)*
+- **En reposo la fila es solo `[checkbox] [● color] [nombre]`.** Sin texto a la derecha: todas las listadas son simulables, así que **no hay nada que justificar por fila**. La lista queda pareja y escaneable, que es exactamente lo que la reversión compra.
 - **El punto de color NO se atenúa** aunque la fila esté deshabilitada: es la identidad, y el usuario la usa para encontrar la categoría. Lo que está condicionado es la **selección**, no la lectura.
-- **Contención del motivo:** la fila es `flex-wrap`; si el motivo no entra al lado del nombre, **baja entero a una segunda línea** de la misma fila. **Nunca** trunca ni se esconde.
+- **Contención del desenlace:** la fila es `flex-wrap`; si el texto no entra al lado del nombre, **baja entero a una segunda línea** de la misma fila. **Nunca** trunca ni se esconde.
 
-**3.4 El slot de motivo — uno solo por fila, siempre visible, con precedencia declarada**
+**3.4 El slot de desenlace — vacío en reposo, un solo inquilino después de un intento**
 
-La fila tiene **un** slot de texto a la derecha. Ahora puede llenarlo un error, así que el orden de precedencia se fija acá para que no quede a criterio de implementación:
+La fila conserva **un** slot de texto a la derecha, pero deja de ser un "slot de motivo": ya no hay motivos de exclusión que mostrar (los no elegibles no se listan, §3). Se llena **solo después de un intento** y sus dos contenidos posibles son **excluyentes por construcción** — una fila o se creó o falló, nunca las dos cosas. **Por eso la tabla de precedencia se da de baja: no hay competencia que arbitrar.**
 
-| Prec. | Contenido | Color | Cuándo |
-|---|---|---|---|
-| 1 | **Mensaje de error del último intento** (texto del backend, tal cual) | **`--expense-ink`** 12px | la fila participó del último batch y **falló** |
-| 2 | **"Ya la estás simulando"** | `--muted` 12px | simulación ya existente |
-| 3 | **"Necesita 3 meses con datos (tiene {N})"** — sin `{N}`: *"Necesita 3 meses con datos"* | `--muted` 12px | menos de 3 meses con datos |
+| Contenido | Color | Cuándo |
+|---|---|---|
+| **Mensaje de error del último intento** (texto del backend, tal cual) | **`--expense-ink`** 12px | la fila participó del último batch y **falló** |
+| **"Simulación creada."** | `--muted` 12px | la fila se **creó** en un intento con fallo parcial (§3.7 c) |
 
-- **El error gana** aunque la fila haya quedado deshabilitada por la misma causa (carrera: falló *porque* ya estaba simulada). No se pierde información: el mensaje del backend para ese caso **es** esa explicación, y viene del evento que el usuario acaba de provocar — que es lo que está tratando de entender en ese segundo. *(Feedback.)*
-- **El error es el único motivo tintado.** Los motivos 2 y 3 son **estados de configuración** (neutros, `--muted`); el 1 es un **fallo de la acción que el usuario acaba de ejecutar**. Tintarlos a todos igual borraría esa diferencia, que es justamente la que hace escaneable la lista después de un intento mixto. *(Jerarquía visual.)*
-- Todos se asocian por **`aria-describedby`**, igual que hoy. El error **no** usa `role="alert"`: el anuncio del resultado lo hace el toast (§3.7), y duplicarlo en N filas sería un aluvión para lector de pantalla.
-- **Ciclo de vida del error de fila:** persiste hasta que **(a)** el usuario **destilda** esa fila (ya no forma parte del pedido → el error deja de aplicar), o **(b)** se dispara un **nuevo intento** (se recalculan todos), o **(c)** se cierra el modal.
+- **El error sigue vivo, y sigue en la fila.** Es la única pieza del régimen anterior que **no** se cae: una categoría tildada que falló **queda en la lista** y tiene que decir **por qué**, en el mismo lugar donde el usuario la tildó. Ningún resumen ni toast puede reemplazarlo, porque el motivo es **por categoría** y el toast se evapora. *(Feedback.)*
+- **El rojo es ahora inequívoco.** Antes el slot mezclaba tres tenants y hacía falta declarar que solo uno se tintaba; ahora **todo lo rojo del slot es un fallo del intento que el usuario acaba de ejecutar**, sin excepción. La regla se simplifica en vez de complicarse. *(Jerarquía visual.)*
+- **La fila creada dice qué PASÓ, no por qué está excluida.** Se descarta reusar *"Ya la estás simulando"*: en este contexto sería el motivo de una exclusión que ya no existe, y leído justo después de apretar el botón suena a reproche por algo que el usuario acaba de hacer bien. *"Simulación creada."* es el mismo enunciado del toast de éxito (§3.7 a) — un solo idioma para el mismo hecho. *(Consistencia.)*
+- Los dos se asocian por **`aria-describedby`**, igual que hoy. El error **no** usa `role="alert"`: el anuncio del resultado lo hace el toast (§3.7), y duplicarlo en N filas sería un aluvión para lector de pantalla.
+- **Ciclo de vida del error de fila:** persiste hasta que **(a)** el usuario **destilda** esa fila (ya no forma parte del pedido → el error deja de aplicar), o **(b)** se dispara un **nuevo intento** (se recalculan todos), o **(c)** se cierra el modal. **El "Simulación creada." de una fila creada NO se limpia con los intentos siguientes:** el hecho no se desvirtúa, y borrarlo dejaría una fila deshabilitada sin ninguna explicación.
 
 **3.5 Footer — el contador vive dentro del botón**
 
@@ -4465,11 +4488,10 @@ La fila tiene **un** slot de texto a la derecha. Ahora puede llenarlo un error, 
 
 **3.6 "Seleccionar todas" — NO se agrega (decisión explícita)**
 
-**No hay control de "Todas / Ninguna" en este modal.** Tres razones, en orden de peso:
+**No hay control de "Todas / Ninguna" en este modal.** **La decisión se mantiene, pero se le cayó una pata:** con la lista filtrada a puras elegibles, el argumento *"el rótulo mentiría — el usuario ve 12 filas, aprieta Todas y se tildan 7"* **ya no aplica** (ahora "Todas" tildaría exactamente lo que se ve). **Se da de baja ese argumento y no se agrega el control**, porque las **dos razones restantes son independientes de la visibilidad y siguen intactas** — y son las de más peso:
 
-1. **El rótulo mentiría.** El universo visible incluye filas deshabilitadas; un "Todas" solo puede tildar las **elegibles**. El usuario ve 12 filas, aprieta "Todas" y se tildan 7. Un control cuyo efecto no coincide con su nombre es peor que su ausencia. *(Affordance.)*
-2. **No es un filtro, es una creación.** Cada tilde crea un objeto **persistente** que agrega filas simuladas a **todo el horizonte** y mueve los totales de cada mes; y el borrado de una simulación es **físico y no deshacible** (§4). Un atajo de un clic hacia N objetos no deshacibles es prevención de error en negativo. *(Prevención de error.)*
-3. **"Simular todo" no es un caso de uso.** La simulación existe para **mirar algunas** categorías; proyectarlas todas devuelve un mes cuyos totales son enteramente estimados, que es exactamente lo que la feature evita al ser opt-in y explícita.
+1. **No es un filtro, es una creación.** Cada tilde crea un objeto **persistente** que agrega filas simuladas a **todo su horizonte** y mueve los totales de cada mes; y el borrado de una simulación es **físico y no deshacible** (§4). Un atajo de un clic hacia N objetos no deshacibles es prevención de error en negativo. *(Prevención de error.)*
+2. **"Simular todo" no es un caso de uso.** La simulación existe para **mirar algunas** categorías; proyectarlas todas devuelve un mes cuyos totales son enteramente estimados, que es exactamente lo que la feature evita al ser opt-in y explícita.
 
 **Por qué el filtro de categorías sí lo tiene y acá no se reusa:** allá "todas" es el **estado por defecto**, la acción es **reversible e instantánea** y no persiste nada. Acá no se cumple ninguna de las tres. *(Un patrón existente se reusa cuando el problema es el mismo; este no lo es.)*
 
@@ -4481,19 +4503,21 @@ El batch tolera fallo parcial: por cada `categoryId` pedido vuelve la simulació
 - N = 1 → *"Simulación creada."* (**el copy vigente, textual** — continuidad para el caso más común).
 - N ≥ 2 → *"{N} simulaciones creadas."*
 
-El mes visualizado se recarga. Si está **dentro del horizonte** (mes en curso incluido) y el remanente da ≠ 0, la fila simulada aparece y los totales cambian en el acto; si es un mes pasado o fuera del horizonte, **no se ve nada cambiar** — por eso el toast es obligatorio: es la única confirmación posible en ese caso. *(Feedback.)*
+El mes visualizado se recarga. Como el ancla **es** el mes visualizado, el caso normal es que la fila simulada aparezca **en el acto, en el mes que el usuario está mirando** —es el arranque del tramo que acaba de crear— y los totales cambien con ella. **Si es un mes pasado** (el ancla se corre al mes en curso) o si el remanente da 0, **no se ve nada cambiar**: por eso el toast es obligatorio, es la única confirmación posible en ese caso. *(Feedback.)*
 
 **(b) Fallo total — 0 de {N}.** **Nada cambia respecto de lo vigente (RNF-008):** el modal **queda abierto con la selección intacta**, el botón vuelve a reposo con su contador. `toast.error` — con el mensaje del backend si el pedido era de una sola categoría; con **"No se pudo crear ninguna simulación."** si eran varias (N mensajes distintos no entran en un toast, y ya están, uno por uno, en su fila). Los errores por fila se pintan según §3.4. **No se monta la caja de resumen** de (c): un "0 de N" no tiene nada que resumir y sería una caja para decir lo que el toast ya dijo.
 
 **(c) Fallo parcial — {K} de {N}, con 1 ≤ K < N. El modal QUEDA ABIERTO.**
 
-**Por qué abierto.** El invariante vigente es *"hay error → el modal queda abierto con la selección intacta"* (RNF-008). Un desenlace mixto **contiene un error**, así que el invariante aplica sin excepción. *Alternativa evaluada:* cerrar y resumir todo en un toast *"Se crearon 3 de 5."* — **descartada** por dos motivos: (i) haría que el **mismo evento** (un fallo) tenga dos comportamientos distintos según un factor que el usuario no controla ni anticipa (cuántas de las otras zafaron) → impredecible; (ii) el toast se evapora en 5s llevándose **cuál** falló y **por qué**, y los dos motivos de fallo del batch —*ya simulada* y *cayó bajo los 3 meses*— son exactamente los dos que la fila ya sabe mostrar en su slot de motivo. **El error no necesita superficie nueva: necesita la que ya existe.** *(Consistencia + feedback.)*
+**Por qué abierto.** El invariante vigente es *"hay error → el modal queda abierto con la selección intacta"* (RNF-008). Un desenlace mixto **contiene un error**, así que el invariante aplica sin excepción. *Alternativa evaluada:* cerrar y resumir todo en un toast *"Se crearon 3 de 5."* — **descartada** por dos motivos: (i) haría que el **mismo evento** (un fallo) tenga dos comportamientos distintos según un factor que el usuario no controla ni anticipa (cuántas de las otras zafaron) → impredecible; (ii) el toast se evapora en 5s llevándose **cuál** falló y **por qué**, y ese "por qué" es **por categoría** — la fila es la única superficie que puede sostenerlo. **El error no necesita superficie nueva: necesita la que ya existe.** *(Consistencia + feedback.)* *(Nota: el argumento original citaba los dos motivos de fallo típicos —ya simulada, cayó bajo los 3 meses— como "los que la fila ya sabe mostrar". Con el filtrado del selector, esas dos causas se volvieron **carreras** —el estado cambió entre el fetch y el POST— y siguen llegando como texto del backend; la conclusión no cambia.)*
+
+**Y el error por fila sigue siendo la pieza que sostiene este desenlace.** Es la excepción explícita a la reversión del punto 3 del encabezado: la lista dejó de mostrar motivos de exclusión, pero **una categoría tildada que falló sigue en la lista y sigue diciendo por qué, en su fila** (§3.4). Sin eso, el fallo parcial se quedaría sin superficie.
 
 Al volver el resultado mixto, el modal se **reconcilia** con el estado real, **sin reordenar ni sacar ninguna fila**:
 
 1. **Toast** — tipo **`warning`**: *"Se crearon {K} de {N} simulaciones."* (K = 1 → *"Se creó 1 de {N} simulaciones."*). Es el resumen numérico y el anuncio accesible del desenlace. `warning` y no `success`/`error` porque el desenlace no es ninguno de los dos, y el DS ya tiene ese tipo con su tick ámbar. **Esto no erosiona la reserva del ámbar:** esa reserva rige sobre **datos del mes** (cifras, filas, marcas de límite); el tick del toast es un vocabulario cerrado de cuatro tipos de sistema, ortogonal a los datos.
-2. **Filas creadas (K)** — pasan a **deshabilitadas** con motivo **"Ya la estás simulando"** (`--muted`), **tilde quitada**. Es su estado real después de la operación: la lista queda diciendo la verdad sin que el usuario tenga que cerrar y reabrir. **Sin animación de salida, sin reordenar** — la fila cambia de estado **en su lugar**, en el orden del catálogo.
-3. **Filas fallidas (N−K)** — **conservan el tilde** y muestran su **mensaje de error** en el slot de motivo, `--expense-ink` (§3.4 prec. 1). Quedan tildadas a propósito: son exactamente el pedido pendiente, y el botón ya dice **"Simular {N−K} categorías"**, listo para reintentar de un clic. *(Prevención de error: el usuario no tiene que reconstruir su selección.)*
+2. **Filas creadas (K)** — pasan a **deshabilitadas** con el desenlace **"Simulación creada."** (`--muted`), **tilde quitada**. **No se ocultan** aunque ya no sean simulables: la lista es el registro del intento mientras el modal vive (§3), y hacer desaparecer K filas del medio de la lista reflowea todo justo cuando el usuario está leyendo cuáles fallaron. **Sin animación de salida, sin reordenar** — la fila cambia de estado **en su lugar**, en el orden del catálogo. Desaparecen solas la próxima vez que se abre el modal, que es cuando la lista vuelve a ser un catálogo vigente.
+3. **Filas fallidas (N−K)** — **conservan el tilde** y muestran su **mensaje de error** en el slot de desenlace, `--expense-ink` (§3.4). Quedan tildadas a propósito: son exactamente el pedido pendiente, y el botón ya dice **"Simular {N−K} categorías"**, listo para reintentar de un clic. *(Prevención de error: el usuario no tiene que reconstruir su selección.)*
 4. **Caja de resumen** — **solo en este desenlace**, entre la bajada y la lista, `mb-[10px]`:
    - **Forma:** `rounded-[var(--r-ctl)] border border-line bg-panel-2 px-3 py-[8px]`, texto **12.5px `--ink-2`**. Molde de caja recesada ya vigente en el DS (caja de identidad de los diálogos de borrado).
    - **Copy:** *"Se crearon {K} de {N}. Las que siguen tildadas no se pudieron crear — el motivo está en cada fila."* (K = 1 → *"Se creó 1 de {N}. …"*).
@@ -4501,21 +4525,51 @@ Al volver el resultado mixto, el modal se **reconcilia** con el estado real, **s
    - **Persiste** hasta el próximo intento de confirmar o hasta cerrar el modal. **No** desaparece al primer tilde/destilde: eso sería un salto de layout bajo el cursor, justo mientras el usuario reacomoda su selección.
 5. **`Cancelar` sigue siendo salida limpia:** cierra el modal. Las K creadas **ya están creadas** (la operación no se revierte, y el toast ya lo dijo).
 
-**3.8 Estados de la lista — sin cambios**
+**3.8 Estados de la lista — el vacío ahora tiene CAUSAS y hay que decir cuál tocó**
 
-*Carga* → 4 filas fantasma (`SkeletonCircle` 16 + `SkeletonBlock` 10 + `SkeletonLine` 13px ~40%), contenedor `role="status" aria-label="Cargando categorías"`. **El skeleton del control sigue siendo `SkeletonCircle`**: es un placeholder de 16px, y cambiarlo a cuadrado por fidelidad de forma no aporta nada a un fantasma que dura milisegundos. *Error de carga* → texto inline 13px `--expense-ink`: *"No se pudieron cargar las categorías. Cerrá y volvé a intentar."* *Todas deshabilitadas* → la lista se muestra **igual, completa, con sus motivos** (no hay empty especial: el motivo por categoría **es** la explicación). *Sin categorías activas* (borde teórico) → caja dashed con la línea *"No tenés categorías activas."*
+*Carga* → 4 filas fantasma (`SkeletonCircle` 16 + `SkeletonBlock` 10 + `SkeletonLine` 13px ~40%), contenedor `role="status" aria-label="Cargando categorías"`. **El skeleton del control sigue siendo `SkeletonCircle`**: es un placeholder de 16px, y cambiarlo a cuadrado por fidelidad de forma no aporta nada a un fantasma que dura milisegundos. *Error de carga* → texto inline 13px `--expense-ink`: *"No se pudieron cargar las categorías. Cerrá y volvé a intentar."*
+
+**Vacío — cuatro causas, cuatro copys.** Con la lista filtrada, "no hay nada" dejó de ser un borde teórico y pasó a ser un desenlace **frecuente y esperable** (el usuario que ya simuló todo lo que le servía lo va a ver siempre). Antes no hacía falta empty porque el motivo por fila era la explicación; ahora **el empty es el único portador de la explicación**, y un texto genérico dejaría al usuario sin saber **si le falta historia o si ya está todo simulado** — dos situaciones con salidas opuestas (esperar vs. ir a eliminar una).
+
+- **Forma (las cuatro):** la **misma caja dashed ya vigente** — `rounded-ctl border border-dashed border-line bg-panel-2 px-4 py-6 text-center` — con **una línea de hecho** 12.5px `--ink-2` y, cuando aporta, **una segunda línea** 12px `--muted` `mt-[4px]`. Nunca más de dos líneas, nunca un ícono, nunca un botón: es un empty **dentro de un modal de 440px**, no una pantalla vacía. *(Consistencia con el empty vigente; carga cognitiva.)*
+- **El mensaje de elegibilidad (§3.1b) NO se monta con el empty.** El empty ya dice la causa con más precisión; las dos cosas juntas dirían lo mismo dos veces.
+
+| Causa | Línea 1 (12.5px `--ink-2`) | Línea 2 (12px `--muted`) |
+|---|---|---|
+| **Sin categorías activas** (el catálogo viene vacío) | *"No tenés categorías activas."* | — |
+| **Ninguna llega a 3 meses con datos** | *"Ninguna categoría llega a 3 meses con datos."* | *"Cuando alguna los acumule, va a aparecer acá."* |
+| **Todas las elegibles ya están simuladas** | *"Ya estás simulando todas las categorías que se pueden simular."* | *"Podés verlas y eliminarlas en el filtro de Únicos."* |
+| **Mixta** (unas sin datos, el resto ya simuladas) | *"No queda ninguna categoría para simular."* | *"Las que tienen 3 o más meses de datos ya las estás simulando; al resto todavía le faltan meses."* |
+
+- **Las cuatro son distinguibles con el dato que ya llega:** el frontend recibe el catálogo completo con `monthsWithData` y `alreadySimulated` (§3) y clasifica por lo que excluyó. **No hace falta ningún dato nuevo.**
+- **Solo el caso "todas simuladas" señala una salida**, y sin link: el arreglo (eliminar una) vive en la banda del popover que acaba de cerrarse, a un clic — nombrarla alcanza. Un link duplicaría un punto de entrada que la feature define como **único** (mismo criterio que §6.2).
+- **El caso "ninguna llega a 3 meses" no ofrece salida porque no la hay:** la única es cargar movimientos y esperar. La segunda línea dice **cuándo se resuelve**, que es lo accionable que existe. *(Feedback.)*
+- **El botón "Simular categoría" de la banda NO se deshabilita** para evitar estos vacíos. Saberlo de antemano exigiría resolver la elegibilidad **antes** de abrir (un fetch para un botón que está siempre montado, §0), y un control apagado sin explicación es peor que un modal que explica. El empty **es** la explicación. *(Affordance.)*
 
 ### 4. Lista de simulaciones activas y eliminar
 
 Dentro de la banda (§2), debajo del botón. **Es la única superficie donde se ve el conjunto de simulaciones del usuario.**
 
-- **Fila:** `flex items-center gap-[8px] py-[6px]`, `min-h-[30px]`.
-  `[● color 8px] [nombre categoría 12.5px --ink, truncate] ····· [chip de estado, si aplica] [botón eliminar]`
+- **Fila:** `flex flex-wrap items-center gap-[8px] py-[6px]`, dos líneas.
+  - **Línea 1 — identidad y acción, sin cambios:** `[● color 8px] [nombre categoría 12.5px --ink, truncate] ····· [chip de estado, si aplica] [botón eliminar]`.
+  - **Línea 2 — el tramo de ESA simulación** (`w-full`, 11.5px `--muted`), en toda simulación que **proyecta**. Es el mismo carril que ya usaba la nota de pausa (§6.1), reusado: **una simulación pausada muestra la nota de pausa y NO el tramo** (no proyecta; decir hasta cuándo llegaría es ruido sobre un dato que no se está aplicando).
+
+**El tramo por fila es la respuesta al horizonte por simulación (cambio 1 del encabezado).** Con anclas distintas, *"hasta cuándo llega esto"* pasó a ser un dato **por objeto**, y la lista de activas es la única superficie donde el conjunto se ve entero. **Copy, dos variantes:**
+
+| Caso | Copy |
+|---|---|
+| Ya arrancó (arranque efectivo = mes en curso) | *"Proyecta hasta {mes} {año}."* |
+| Todavía no arrancó (se creó parado en un mes futuro) | *"Proyecta de {mes} {año} a {mes} {año}."* |
+
+- **La variante corta es la regla, no la excepción:** en el caso normal el arranque es el mes en curso y nombrarlo sería repetir lo que la nota general de la banda ya dijo (§2). La variante larga aparece **solo cuando el arranque no es adivinable**, que es exactamente el caso que la nota general no cubre: una simulación creada desde un mes futuro **todavía no muestra nada** y sin esta línea su silencio sería inexplicable. *(Feedback — se gasta ancho solo donde hay información.)*
+- **Meses con el mismo formato que el resto de la feature** (`formatMonthLabel`: "marzo 2027"), no abreviados: la línea tiene el ancho completo de la banda y no necesita comprimir.
+- *Alternativas evaluadas:* **(a)** el tramo **inline** en la línea 1, como último segmento antes del botón de eliminar — descartada: en 260px de popover obliga a truncar el nombre de la categoría, que es la identidad de lo que se va a eliminar, y colisiona con el chip "Sin datos" cuando ambos están; **(b)** el tramo en el `title` de la fila — descartada: un dato que solo existe en tooltip no existe en táctil ni para lector de pantalla (misma regla que ya rige para los motivos).
+- **Costo asumido:** las filas pasan de ~30px a ~44px. El tope de alto se ajusta a **`max-h-[176px]`** para que se sigan viendo **4 filas** antes de scrollear (la regla de §4 no cambia, cambia el número que la implementa).
 - **Botón eliminar:** icon-only 28×28 `rounded-[8px]`, glifo **`Trash2` 14px** `--muted`. Hover: `bg-expense-soft` + `--expense-ink` (mismo molde que el ítem `danger` del `KebabMenu`; el rojo acá es **cromo de una acción destructiva**, no un monto teñido). Focus: ring `--accent-soft`. `aria-label="Eliminar la simulación de {Categoría}"`.
-- **Tope de alto:** con más de 4 activas la lista scrollea dentro de sí (`max-h-[132px] overflow-y-auto`), sin que el botón ni la nota de horizonte salgan de vista.
+- **Tope de alto:** con más de 4 activas la lista scrollea dentro de sí (`max-h-[176px] overflow-y-auto`), sin que el botón ni la nota general salgan de vista.
 - **Confirmación (RF-SIM-004)** — `ModalShell variant="dialog"` (`max-w-[440px]`), **cierra el popover al abrirse**:
   - **Título:** "Eliminar simulación".
-  - **Cuerpo** (`space-y-[14px]`): frase 14px `--ink` *"Se va a eliminar la simulación de **{Categoría}**."* → **caja de identidad** (`rounded-ctl border border-line bg-panel-2 px-4 py-3`, molde exacto del diálogo de eliminar movimiento) con `● {Categoría}` → **nota de consecuencia** 12.5px `--muted`: *"Sus movimientos simulados dejan de aparecer en este mes y en los siguientes, y los totales se recalculan sin ellos."* — **cambió** respecto de *"…en los meses futuros…"*: con el horizonte arrancando en el mes en curso, la nota vieja subestima la consecuencia justo en el mes que el usuario está mirando, en el paso donde se le pide confirmar algo **no deshacible**. *(Prevención de error.)*
+  - **Cuerpo** (`space-y-[14px]`): frase 14px `--ink` *"Se va a eliminar la simulación de **{Categoría}**."* → **caja de identidad** (`rounded-ctl border border-line bg-panel-2 px-4 py-3`, molde exacto del diálogo de eliminar movimiento) con `● {Categoría}` → **nota de consecuencia** 12.5px `--muted`: *"Sus movimientos simulados dejan de aparecer en los meses que alcanza, y los totales se recalculan sin ellos."* — **cambió dos veces**: primero dejó de decir *"en los meses futuros"* (subestimaba la consecuencia en el mes en curso); ahora deja de decir *"en este mes y en los siguientes"*, que con el ancla por simulación es **falso** para una simulación que todavía no arrancó (creada desde un mes futuro): prometería un cambio en el mes visualizado que no va a ocurrir. *"Los meses que alcanza"* es verdadero en los tres casos y remite al tramo que la fila acaba de mostrar. *(Prevención de error — es el paso donde se confirma algo no deshacible.)*
   - **Footer:** `Cancelar` (ghost sm) + **`Eliminar`** (`variant="destructive" size="sm"`; en carga "Eliminando…").
   - **Éxito:** cierra, `toast` *"Simulación eliminada."*, el mes se recarga sin sus filas simuladas. **Error:** `toast.error` y el modal queda abierto.
 
@@ -4560,18 +4614,18 @@ Una simulación activa cuya categoría cayó por debajo de los 3 meses **deja de
 - **Ubicación:** última fila de la tarjeta-lista de Únicos, después de todos los ítems, separada por el mismo hairline. Si la sección está **vacía**, va debajo del empty inline dashed, `mt-[8px]`.
 - **Forma:** no interactiva, `px-[18px] py-[12px]`, `inline-flex items-start gap-[6px]`, glifo **`Info` 14px `--muted`** + texto **12px `--muted`**.
 - **Copy:** *"{N} simulaciones no están proyectando: les faltan meses con datos."* — singular: *"Una simulación no está proyectando: le faltan meses con datos."*
-- **Condición:** mes **dentro del horizonte, mes en curso incluido** + ≥1 simulación pausada. **Independiente de los filtros de la sección** (es un estado de configuración, no un ítem filtrable).
-  - **Cambió con el nuevo horizonte.** Si la nota siguiera limitada a meses futuros, en el **mes en curso** —donde el usuario pasa casi todo su tiempo y donde ahora sí espera ver una fila simulada— la ausencia volvería a ser **completamente silenciosa**, que es justo el problema que §6 existe para resolver. *(Feedback.)*
+- **Condición:** ≥1 simulación pausada **cuyo horizonte alcanza el mes visualizado** (mes en curso incluido), y el `{N}` cuenta **solo esas**. **Independiente de los filtros de la sección** (es un estado de configuración, no un ítem filtrable).
+  - **Cambió dos veces.** Primero dejó de estar limitada a meses futuros: en el **mes en curso** —donde el usuario pasa casi todo su tiempo y donde ahora sí espera ver una fila simulada— la ausencia volvería a ser **completamente silenciosa**, que es justo el problema que §6 existe para resolver. Ahora, con el horizonte por simulación, la condición se evalúa **simulación por simulación**: una pausada que ni siquiera alcanza este mes **no explica ninguna ausencia acá**, y contarla infla un `{N}` que el usuario no puede verificar. *(Feedback.)*
 - **Sin acción ni link.** El arreglo (eliminarla) está a un clic, en el disparador que está justo encima, en la misma cabecera. Un link acá duplicaría un punto de entrada que la feature define como **único**.
 - *(Elemento no previsto en `screens.md` §4 — ver §9.)*
 
 ### 7. Meses fuera del horizonte — sin señal (decisión)
 
-Un mes futuro más allá del horizonte **no lleva ninguna señal**: se ve exactamente igual que sin la feature.
+Un mes que **ninguna simulación alcanza** —más allá del fin de todas, o **anterior al arranque** de las que se crearon desde un mes futuro— **no lleva ninguna señal**: se ve exactamente igual que sin la feature. Con horizontes por simulación esto se evalúa **por simulación**: un mes muestra las filas de las que lo alcanzan y **nada** por las que no.
 
 - **Es lo que ya está cerrado funcionalmente** (`screens.md` §4: *"Un mes futuro fuera del horizonte, o sin simulaciones activas, se ve exactamente igual que sin la feature"*). Una señal ahí rompería la restricción de cero-impacto.
-- **Sería cromo permanente para explicar una nada.** El horizonte llega como mínimo hasta `A+6`: los meses afectados son los que el usuario visita de forma excepcional. Poner en cada uno una línea que diga "acá no se simula" es ruido en el 99% de las visitas para el 1% que se lo pregunta. *(Carga cognitiva.)*
-- **La regla se explica donde el usuario opta:** la bajada del modal de §3 (*"Alcanza hasta {Mes AAAA}"*) y la nota al pie de la banda (*"Se proyecta hasta {mes} {año}"*). Ahí el dato es accionable; en un mes lejano es una excusa.
+- **Sería cromo permanente para explicar una nada.** Cada tramo cubre varios meses hacia adelante: los meses afectados son los que el usuario visita de forma excepcional. Poner en cada uno una línea que diga "acá no se simula" es ruido en el 99% de las visitas para el 1% que se lo pregunta. *(Carga cognitiva.)*
+- **La regla se explica donde el usuario opta, y ahora el tramo se puede consultar por simulación:** la bajada del modal de §3 (*"Alcanza desde {Mes inicio} hasta {Mes fin}"*), la nota general de la banda (*"Cada simulación proyecta desde el mes en que la creaste."*) y **la línea de tramo de cada fila de la lista de activas** (§4). Ahí el dato es accionable; en un mes lejano es una excusa. **El caso "todavía no arrancó" —el único nuevo— tiene su explicación en la fila de la simulación**, no en el mes vacío.
 
 *Alternativa evaluada:* nota al pie del listado como en §6.2, con copy *"La simulación no alcanza este mes."* **Descartada** por lo anterior — y porque compite con §6.2, que sí informa una anomalía real y perdería fuerza si comparte forma con un estado normal.
 
@@ -4583,7 +4637,8 @@ Un mes futuro más allá del horizonte **no lleva ninguna señal**: se ve exacta
 
 - `max-height: min(560px, calc(100dvh - 24px))`, `display:flex; flex-direction:column`.
 - **Bloque tipo** y **banda Simulación**: `shrink-0` — nunca se comprimen ni scrollean fuera de alcance.
-- **Bloque categorías**: única región flexible — `flex-1 min-h-0 overflow-y-auto`, `min-height: 120px` (nunca colapsa a nada).
+- **Bloque categorías**: única región flexible del popover — `flex-1 min-h-0 overflow-y-auto`, `min-height: 120px` (nunca colapsa a nada).
+- **La lista de activas es la segunda región compresible, y su `max-h-[176px]` es TECHO, no piso.** Con la fila de dos líneas (§4) la banda creció ~44px; si el alto disponible no alcanza, **lo primero que cede es esa lista** (se achica y scrollea dentro de sí) antes de que la banda empuje al bloque de categorías por debajo de sus 120px. El botón "Simular categoría" y la nota general **nunca** entran en ese carril de scroll: son los que tienen que quedar a la vista.
 - **Anclaje:** si bajo el disparador no hay alto suficiente, el popover **abre hacia arriba** (mismo mecanismo `openUpward` del `KebabMenu`). Hoy `SectionFilterPanel` solo abre hacia abajo; con la banda esto pasa a ser requisito.
 - Ancho **260px** sin cambios; anclado a la derecha del disparador, que está pegado al borde derecho del contenido — no se sale por ningún costado a 640px.
 
@@ -4593,17 +4648,18 @@ Un mes futuro más allá del horizonte **no lleva ninguna señal**: se ve exacta
 
 - **Botón contador del footer:** `whitespace-nowrap` + `min-w-[164px]`. **Nunca trunca ni envuelve el rótulo** — un botón que dice "Simular 12 categor…" es peor que uno sin número. A **392px de contenido** (640px con el sidebar abierto) el par `Cancelar` + `Simular {N} categorías` entra en una sola fila del footer `justify-end`; si un `{N}` de tres dígitos lo apretara (borde teórico: el catálogo del usuario no llega ahí), el footer **envuelve a dos filas** con el primario abajo a la derecha — nunca comprime el botón.
 - **Caja de resumen del fallo parcial:** ancho completo del cuerpo, texto que **envuelve** libremente a 2–3 líneas. Sin ancho mínimo rígido, sin truncado, sin `nowrap`.
-- **Mensaje de error por fila:** obedece la misma contención que el motivo (§3.3) — la fila es `flex-wrap` y el error **baja entero a una segunda línea**. **Nunca** trunca ni se esconde, exactamente como los motivos neutros. Es el punto más apretado del modal, porque el texto viene del backend y puede ser largo: la segunda línea es la salida, no la elipsis.
+- **Mensaje de error por fila:** la fila es `flex-wrap` y el error **baja entero a una segunda línea** (§3.3). **Nunca** trunca ni se esconde. Es el punto más apretado del modal, porque el texto viene del backend y puede ser largo: la segunda línea es la salida, no la elipsis. Vale igual para el *"Simulación creada."* de una fila creada, que es corto y entra siempre.
+- **Mensaje de elegibilidad (§3.1b) y empty por causa (§3.8):** ancho completo del cuerpo, texto que **envuelve** libremente (la nota a 2 líneas, la línea 2 del empty a 2–3). Sin ancho mínimo, sin truncado, sin `nowrap`. El empty conserva su caja dashed en todo ancho.
 - **Checkbox:** 16px fijo, `shrink-0`, en todo ancho. El **target real sigue siendo la fila entera** (`min-h-[38px]`, ancho completo), muy por encima del piso tocable en el eje que manda.
 
 **8.3.2 Los cuatro invariantes en los elementos nuevos.**
 
-1. *Sin scroll horizontal del `body`:* el modal es `max-w-[440px]` capeado al viewport; los tres elementos nuevos (checkbox, caja de resumen, error de fila) **no aportan ancho mínimo** — el checkbox es de tamaño fijo y los otros dos son texto que envuelve. El único con ancho mínimo es el botón del footer (`164px`), holgadamente por debajo del ancho útil del modal en el piso del régimen.
+1. *Sin scroll horizontal del `body`:* el modal es `max-w-[440px]` capeado al viewport; los elementos nuevos (checkbox, caja de resumen, error de fila, nota de elegibilidad, caja de empty) **no aportan ancho mínimo** — el checkbox es de tamaño fijo y los otros dos son texto que envuelve. El único con ancho mínimo es el botón del footer (`164px`), holgadamente por debajo del ancho útil del modal en el piso del régimen.
 2. *Modales completos y scrolleables:* con la caja de resumen montada el cuerpo crece, y es exactamente el caso a verificar en viewport bajo — el cuerpo scrollea, **el footer con el botón contador queda pineado** y el resumen se alcanza scrolleando hacia arriba.
 3. *Ninguna acción inalcanzable:* confirmar y cancelar viven en el footer pineado, así que son alcanzables con la lista de cualquier largo. Las filas fallidas quedan **tildadas** tras un intento mixto, de modo que reintentar **no exige volver a encontrarlas** en una lista scrolleada.
 4. *Superficies anchas scrollean dentro de sí:* la lista de categorías es la única región flexible del cuerpo; el resto es texto que envuelve.
 
-**8.4 Línea de composición (§5.2) y nota (§6.2).** Texto normal que **envuelve** a dos líneas; ninguna trunca, ninguna tiene ancho mínimo rígido.
+**8.4 Línea de composición (§5.2), nota (§6.2) y líneas de la banda (§2, §4).** Texto normal que **envuelve** a dos líneas; ninguna trunca, ninguna tiene ancho mínimo rígido. La **línea de tramo** de cada simulación activa ocupa el ancho completo de la banda (236px útiles a 260px de popover) y envuelve a dos líneas en su variante larga; el **nombre de la categoría** sigue siendo lo único que trunca en la línea 1.
 
 **Los cuatro invariantes en estos elementos:**
 
@@ -4623,48 +4679,64 @@ Un mes futuro más allá del horizonte **no lleva ninguna señal**: se ve exacta
 7. **Caja de resumen del fallo parcial (§3.7 c)** — respuesta directa al desenlace mixto que el brief pide resolver. Es copy sobre un resultado que ya existe: no agrega dato persistido ni acción. **Nueva — a implementar.**
 8. **Contador dentro del rótulo del botón de confirmación (§3.5)** — respuesta directa a la pregunta del brief sobre si hace falta un contador. No es un elemento nuevo: es el rótulo del botón que ya existe. **Nueva — a implementar.**
 9. **Condición y copy del chip "Simulados" de `/reportes` (§1.3 de *Movimientos simulados en cards de reporte*)** — corrección del ripple del punto 1 (horizonte desde el mes en curso). **Aprobada por el usuario y resuelta dentro de este cambio**, no elevada. **Nueva — a implementar.**
+10. **Mensaje único de elegibilidad al pie de la lista (§3.1b)** — sustituto directo de los motivos por fila que el usuario mandó eliminar. Es copy, no agrega dato ni acción. **Nueva — a implementar.** *Nota de alcance:* el brief pedía el sentido *"solo se pueden simular las categorías con 3 o más meses de datos"*; el copy final **agrega la segunda causa** (*"que todavía no estás simulando"*) porque con el popover cerrado el usuario no tiene forma de saberlo, y sin esa cláusula se lleva un diagnóstico falso. Es una decisión de redacción dentro del encargo ("redactá el texto final vos"), no un elemento nuevo — pero se declara acá.
+11. **Estados vacíos por causa (§3.8)** — pedidos explícitamente ("conviene que el usuario entienda cuál le tocó"). Cuatro copys sobre un estado que ya existía como borde teórico. **Nueva — a implementar.**
+12. **Línea de tramo por simulación en la lista de activas (§4)** — respuesta directa a *"que el usuario pueda saber hasta cuándo llega cada una"*. Muestra un dato que la simulación ya tiene; **no agrega acción**. **Nueva — a implementar.** *Requiere que el dato viaje por el contrato (ver 9.1).*
+13. **Desenlace "Simulación creada." por fila (§3.4)** — reemplaza al motivo *"Ya la estás simulando"* de las K filas creadas, que quedó derogado junto con el resto de los motivos. Es copy sobre un resultado que ya se mostraba. **Nueva — a implementar.**
 
 **9.1 Señales de documentación (no son de este doc — van al analista):**
 
 - **Contrato del batch y su reflejo en el frontend:** `screens.md` §4 y `requirements.md` (RF-SIM-001) describen un selector de **una** categoría. Hay que espejar: selección múltiple, batch con fallo parcial y los tres desenlaces de §3.7.
-- **Horizonte desde el mes en curso:** RN-028 y todo texto funcional que diga "meses futuros" respecto de esta feature. Incluye el helper `isFutureMonthWithinHorizon` de `frontend/src/lib/simulations.ts`, cuyo **nombre pasa a ser falso**: debe renombrarse a `isMonthWithinHorizon` con `month >= currentMonth && month <= horizonEndMonth`. Un helper que se llama `isFuture…` y devuelve `true` para el mes en curso es una trampa para el próximo que lo lea.
+- **REVERSIÓN — la categoría no elegible ya NO se ofrece deshabilitada, se oculta.** `requirements.md` RF-SIM-001 (flujo principal paso 2, **A2**, **A3** y el CA *"se ofrece deshabilitada con el motivo visible — nunca oculta"*) y `screens.md` §4 sostienen el régimen viejo y quedan **falsos**. Hay que espejar: el selector ofrece **solo** categorías elegibles (≥3 meses con datos y sin simulación activa), con **un mensaje único** de elegibilidad y **estados vacíos por causa**; el motivo por categoría sobrevive **únicamente** como **error del intento** en el fallo parcial (A4, que no cambia).
+- **HORIZONTE POR SIMULACIÓN — cambio funcional de fondo.** RN-028 / RF-SIM-002 definen **un** horizonte anclado al mes en curso (*"desde el mes en curso `A` hasta diciembre del año en curso; si el tramo tiene menos de 6 meses, se extiende hasta `A+6`"*). Con el ancla por simulación hay que fijar funcionalmente: **(a)** que el ancla es el **mes desde el que se crea** la simulación y se **persiste**; **(b)** cómo se deriva el **fin** a partir del ancla (la regla de "diciembre del año del ancla / mínimo 6 meses" es una **suposición razonable pero NO está decidida** — `control-design` no la decide); **(c)** que el **arranque efectivo** es `max(ancla, mes en curso)` y que los meses pasados nunca se simulan. **Ripple de contrato** (`data-model.md`, `backend.md`, `frontend.md`): `SimulationsListResponse.horizonEndMonth` es hoy **global** y está documentado como *"igual para todas las simulaciones"* — debe pasar a **por simulación** (arranque efectivo + fin en cada `SimulationDto`); y `GET /simulations/candidates` necesita el **mes visualizado** para devolver el tramo que la bajada del modal enuncia (§3.1). **Sin ese dato, §4 y §3.1 no son implementables.**
+- **`isMonthWithinHorizon` deja de ser suficiente:** el helper compara contra `currentMonth` + un `horizonEndMonth` único. Con tramos por simulación la pertenencia se evalúa **contra el tramo de cada simulación**. Renombre/firma quedan en manos del analista + frontend; lo que este doc fija es que **ninguna superficie puede seguir asumiendo un horizonte único**.
+- *(Histórico, ya aplicado)* **Horizonte desde el mes en curso:** el helper `isFutureMonthWithinHorizon` se renombró a `isMonthWithinHorizon`. Un helper que se llama `isFuture…` y devuelve `true` para el mes en curso es una trampa para el próximo que lo lea.
 - **Remanente:** la semántica "proyección − únicos reales del mes" y la regla "remanente 0 o de signo invertido → sin fila" pertenecen a `requirements.md` / `data-model.md`.
 - **Ripple a RF-REP-017 — RESUELTO dentro de este cambio (aprobado por el usuario).** El chip "Simulados" de `/reportes` se deshabilitaba por año cuando *"cualquier año anterior al en curso, **y el año en curso en diciembre**"*, con el copy *"{Año} no tiene meses futuros."* Con el horizonte arrancando en el mes en curso, la rama de diciembre pasa a ser falsa y el criterio "meses futuros" deja de describir el corte. **La condición y el copy nuevos están en §1.3 de *Movimientos simulados en cards de reporte*.** Señal para el analista: **espejar en `requirements.md` (RF-REP-017)** la condición de deshabilitado por año (**`year < currentYear`**, sin caso de diciembre) y el copy nuevo.
 
-**9.2 Inventario de copy a reemplazar (todo el que dice "futuros"):**
+**9.2 Inventario de copy — estado vigente (incluye el barrido de "futuros", ya aplicado, y los cambios de esta tanda):**
 
-| Dónde | Vigente | Nuevo |
+| Dónde | Anterior | **Vigente** |
 |---|---|---|
-| Bajada del modal (§3.1) | "Se proyecta una categoría a los meses futuros a partir de sus últimos 12 meses. Alcanza hasta {Mes AAAA}." | "Se proyecta cada categoría elegida a partir de sus últimos 12 meses. Alcanza desde este mes hasta {Mes AAAA}. En cada mes se simula solo lo que falta para llegar a lo proyectado." |
-| Banda sin activas (§2) | "Proyecta una categoría a los meses futuros." | "Proyecta categorías desde este mes en adelante." |
-| Nota de horizonte de la banda (§2) | "Se proyecta hasta {mes} {año}." | "Se proyecta desde este mes hasta {mes} {año}." |
-| Consecuencia del borrado (§4) | "…dejan de aparecer en los meses futuros y los totales…" | "…dejan de aparecer en este mes y en los siguientes, y los totales…" |
+| Bajada del modal, oración 2 (§3.1) | "Alcanza desde este mes hasta {Mes AAAA}." | **"Alcanza desde {Mes inicio} hasta {Mes fin}."** — sin deícticos; `{Mes inicio}` = `max(mes visualizado, mes en curso)` |
+| Bajada del modal, oraciones 1 y 3 (§3.1) | — | **sin cambios** (la 3ª, la del remanente, es intocable) |
+| Banda sin activas (§2) | "Proyecta categorías desde este mes en adelante." | **"Proyecta categorías desde el mes que estás viendo."** |
+| Nota general de la banda (§2) | "Se proyecta desde este mes hasta {mes} {año}." | **"Cada simulación proyecta desde el mes en que la creaste."** — deja de enunciar un tramo |
+| Tramo por fila de la lista de activas (§4) | *(no existía)* | **"Proyecta hasta {mes} {año}."** · si todavía no arrancó: **"Proyecta de {mes} {año} a {mes} {año}."** |
+| Mensaje de elegibilidad del modal (§3.1b) | *(motivos por fila — derogados)* | **"Solo aparecen las categorías con 3 o más meses de datos que todavía no estás simulando."** |
+| Empty del modal (§3.8) | "No tenés categorías activas." (única) | **cuatro copys por causa** — ver la tabla de §3.8 |
+| Desenlace de fila creada (§3.4) | "Ya la estás simulando" | **"Simulación creada."** |
+| Motivos de fila por no elegible (§3.4) | "Ya la estás simulando" · "Necesita 3 meses con datos (tiene {N})" | **DEROGADOS en el modal** — esas categorías ya no se listan. *(El texto de `formatMinDataMotive` sigue vivo en §6.1, la simulación pausada.)* |
+| Consecuencia del borrado (§4) | "…dejan de aparecer en este mes y en los siguientes, y los totales…" | **"…dejan de aparecer en los meses que alcanza, y los totales…"** |
 | Sublínea de la fila (§1.2) | "tendencia de 12 meses" | **sin cambios** — texto único, sin variante (decisión del usuario) |
-| Motivo de año del chip "Simulados" de `/reportes` (§1.3 de la spec de reportes) | "{Año} no tiene meses futuros." | "{Año} ya pasó. La simulación solo alcanza desde este mes en adelante." |
+| Motivo de año del chip "Simulados" de `/reportes` (§1.3 de la spec de reportes) | "{Año} ya pasó. La simulación solo alcanza desde este mes en adelante." | **"{Año} ya pasó. Las simulaciones no alcanzan meses pasados."** — la frase vieja citaba la regla del horizonte único, que ya no existe |
 
 **Helpers de copy** (`frontend/src/lib/simulations.ts` — el frontend no inventa ninguna de estas cadenas):
 
-- `formatHorizonReach(endMonth)` → *"Alcanza desde este mes hasta {Mes AAAA}."* (reescrito)
-- `formatHorizonBandNote(endMonth)` → *"Se proyecta desde este mes hasta {mes} {año}."* (reescrito)
+- `formatHorizonReach(startMonth, endMonth)` → *"Alcanza desde {Mes inicio} hasta {Mes fin}."* **(reescrito — ahora toma dos meses)**
+- `formatHorizonBandNote()` → *"Cada simulación proyecta desde el mes en que la creaste."* **(reescrito — ya no toma parámetros; constante)**
+- `formatSimulationSpan(startMonth, endMonth, currentMonth)` → si `startMonth <= currentMonth`: *"Proyecta hasta {mes} {año}."*; si no: *"Proyecta de {mes} {año} a {mes} {año}."* **(nuevo — §4)**
+- `formatEligibilityNote()` → *"Solo aparecen las categorías con 3 o más meses de datos que todavía no estás simulando."* **(nuevo — §3.1b; constante)**
+- Empty del selector (§3.8): **cuatro pares de líneas**, resueltos por causa. Pueden vivir como constantes o como un `formatCandidatesEmpty(cause)`; lo que **no** puede pasar es que el frontend arme el texto concatenando fragmentos.
 - `formatSimulateCta(n)` → `0` → *"Simular"* · `1` → *"Simular 1 categoría"* · `n` → *"Simular {n} categorías"*
 - `formatBatchSuccessToast(n)` → `1` → *"Simulación creada."* · `n` → *"{n} simulaciones creadas."*
 - `formatBatchPartialToast(k, n)` → `k=1` → *"Se creó 1 de {n} simulaciones."* · `k>1` → *"Se crearon {k} de {n} simulaciones."*
 - `formatBatchPartialSummary(k, n)` → `k=1` → *"Se creó 1 de {n}. Las que siguen tildadas no se pudieron crear — el motivo está en cada fila."* · `k>1` → *"Se crearon {k} de {n}. …"*
-- **Sin helper de segmento de tendencia:** el texto *"tendencia de 12 meses"* es una constante, no una función de estado. (Se había previsto `formatTrendSegment(discounted)` — **se da de baja**.)
-- `isMonthWithinHorizon(month, currentMonth, endMonth)` (reemplaza `isFutureMonthWithinHorizon`)
-- Sin cambios: `formatMinDataMotive`, `formatSubtotalSimulatedLabel`, `formatTotalsSimulatedLine`, `formatPausedListNote`.
+- **Sin helper de segmento de tendencia:** el texto *"tendencia de 12 meses"* es una constante, no una función de estado.
+- **Pertenencia al horizonte:** ya no se resuelve con un `endMonth` único (ver 9.1); se evalúa contra el tramo de **cada** simulación.
+- Sin cambios: `formatMinDataMotive` (ahora **solo** para §6.1), `formatSubtotalSimulatedLabel`, `formatTotalsSimulatedLine`, `formatPausedListNote`.
 
 ### 10. Reglas duras reafirmadas
 
 - **Regla dura 1 (verde = ingreso · rojo = gasto):** el simulado usa los semánticos **exactamente** para lo mismo que un real — dirección del ícono y color del monto según su **tipo derivado** (RN-028). El borde punteado de la caja usa el token semántico pleno (`--expense`/`--income`) porque comunica **ese mismo tipo**, no decoración. El chip "Simulado", el chip "Sin datos" y las notas son **neutros**. El rojo del botón de eliminar es cromo de acción destructiva (molde `danger` ya vigente), no una cifra teñida.
 - **Regla dura 2 (índigo solo marca):** aparece en el **checkbox tildado** del selector múltiple, en el botón primario de confirmación, en los focus rings y en el punto indicador del disparador de filtro (que **no** cambia de significado). Ninguna cifra se tiñe de acento — y el **contador de seleccionadas del botón** es un número **dentro del texto blanco del botón**, no una cifra teñida.
-- **Regla dura 1, extensión al fallo parcial:** el **rojo** aparece únicamente en los **mensajes de error por fila** (`--expense-ink`) — cromo de error de sistema, mismo uso que el error de carga de la lista ya vigente, nunca sobre un monto. El **ámbar** aparece únicamente en el **tick del toast `warning`** del desenlace mixto: vocabulario cerrado de tipos de sistema, ortogonal a los datos del mes, donde el ámbar sigue reservado a límites cruzados. La **caja de resumen es neutra** (`--panel-2` / `--ink-2`): resume éxitos y fallos juntos.
+- **Regla dura 1, extensión al fallo parcial:** el **rojo** aparece únicamente en los **mensajes de error por fila** (`--expense-ink`) —el único inquilino tintado del slot de desenlace, §3.4; el *"Simulación creada."* es neutro— — cromo de error de sistema, mismo uso que el error de carga de la lista ya vigente, nunca sobre un monto. El **ámbar** aparece únicamente en el **tick del toast `warning`** del desenlace mixto: vocabulario cerrado de tipos de sistema, ortogonal a los datos del mes, donde el ámbar sigue reservado a límites cruzados. La **caja de resumen es neutra** (`--panel-2` / `--ink-2`): resume éxitos y fallos juntos.
 - **Regla dura 3 (dinero en mono tabular):** el monto simulado va en mono tabular con `tnum`, mismo tamaño y peso que el real, con el `≈` **dentro** del mismo span mono para no romper la alineación de la columna. Ninguna cifra trunca nunca.
 - **Regla dura 4 (claro y oscuro):** todos los tokens usados son theme-aware (`--panel`, `--panel-2`, `--panel-3`, `--hair`, `--line`, `--ink`, `--ink-2`, `--muted`, `--faint`, `--expense`/`-soft`/`-ink`, `--income`/`-soft`/`-ink`, `--accent`/`-soft`). El **borde punteado** es el punto a verificar en oscuro: `--expense`/`--income` están recalibrados y el contorno debe leerse claramente sobre `--panel` en los dos modos.
 
 ### Checklist de aceptación visual — Simulación de categoría
 
-*Fila simulada (mes dentro del horizonte — mes en curso o futuro —, sección Únicos):*
+*Fila simulada (mes dentro del horizonte DE SU SIMULACIÓN — el mes en curso incluido cuando es su arranque efectivo —, sección Únicos):*
 - [ ] La caja de la col 1 es **hueca con borde punteado** del color del tipo (rojo gasto / verde ingreso), con la **misma flecha** ↓/↑ que una fila real. Comparada con la fila real de arriba o abajo, se distingue **sin leer nada**.
 - [ ] La sublínea arranca con el chip neutro **"Simulado"** (mismo molde que "Anulado"), seguido del punto de color y el nombre de la categoría.
 - [ ] Con un **límite cruzado** cuya marca es `badge`: el chip ámbar aparece **inmediatamente a la derecha del chip "Simulado"** y antes del punto de categoría (`[Simulado] [badge] ● Categoría · tendencia…`), nunca antes de "Simulado" ni al final de la sublínea. Con efecto `glyph`, el `AlertTriangle` va al **cluster derecho**; con `fill`, la fila toma el fondo ámbar; con `bold`, **solo la cifra** engorda y el `≈` queda igual.
@@ -4676,10 +4748,10 @@ Un mes futuro más allá del horizonte **no lleva ninguna señal**: se ve exacta
 - [ ] La fila está a **opacidad plena** (no atenuada como un ítem anulado).
 - [ ] En orden **por monto** la fila aparece intercalada por magnitud; en orden **por fecha** aparece **al final** de la sección. En ningún caso hay un separador, encabezado o bloque aparte.
 - [ ] Los **filtros de la sección** la alcanzan: filtrar por Gasto/Ingreso o destildar su categoría la saca de la lista, y el subtotal y el contador bajan en consecuencia.
-- [ ] **Meses pasados: ninguna fila simulada, nunca.** Meses **fuera** del horizonte: tampoco.
+- [ ] **Meses pasados: ninguna fila simulada, nunca.** Meses **fuera del horizonte de esa simulación**: tampoco — ni después de su fin, ni **antes de su arranque** (simulación creada parada en un mes futuro: el mes en curso **no** muestra su fila).
 
 *Fila simulada en el MES EN CURSO y remanente (horizonte nuevo):*
-- [ ] Parado en el **mes en curso**, con una simulación activa de una categoría **sin** únicos reales cargados ese mes: aparece la fila simulada, **idéntica en tratamiento** a la de un mes futuro (caja punteada, chip "Simulado", `≈`, sin kebab, sin hover) y la sublínea termina en **"· tendencia de 12 meses"**.
+- [ ] Parado en el **mes en curso**, con una simulación **creada desde ese mismo mes** sobre una categoría **sin** únicos reales cargados: aparece la fila simulada, **idéntica en tratamiento** a la de un mes futuro (caja punteada, chip "Simulado", `≈`, sin kebab, sin hover) y la sublínea termina en **"· tendencia de 12 meses"**.
 - [ ] Misma categoría, **con** un único real ya cargado ese mes: el monto simulado es **menor** (es el remanente) y la sublínea termina **igual, en "· tendencia de 12 meses"**. Los dos ítems —el real y el simulado— conviven en Únicos.
 - [ ] Cargar un nuevo único real de esa categoría **baja** el monto simulado; cargar hasta alcanzar o pasar la proyección hace **desaparecer** la fila simulada (remanente 0 o invertido), sin dejar hueco ni fila en `$0`.
 - [ ] **La sublínea NO tiene variantes:** en ningún mes, con o sin descuento, aparece el texto "resto de la tendencia…" ni ninguna otra formulación distinta de **"· tendencia de 12 meses"**.
@@ -4690,24 +4762,29 @@ Un mes futuro más allá del horizonte **no lleva ninguna señal**: se ve exacta
 *Popover de Únicos:*
 - [ ] La banda **"Simulación"** está al pie, con **fondo recesado** (`--panel-2`) y separada del bloque de categorías por un divisor **más fuerte** que el interno.
 - [ ] La banda es visible **al abrir el popover, sin scrollear**; scrollear la lista de categorías **no** la mueve.
-- [ ] El botón **"Simular categoría"** (glifo `ChartSpline`) ocupa el ancho de la banda y está presente **aunque no haya ninguna simulación** (con la línea **"Proyecta categorías desde este mes en adelante."** debajo — **plural** y **sin** la palabra "futuros").
-- [ ] Con simulaciones activas: lista debajo del botón con `● color + nombre` y botón de basura por fila, y al pie **"Se proyecta desde este mes hasta {mes} {año}."** (declara **inicio y fin**).
+- [ ] El botón **"Simular categoría"** (glifo `ChartSpline`) ocupa el ancho de la banda y está presente **aunque no haya ninguna simulación** (con la línea **"Proyecta categorías desde el mes que estás viendo."** debajo — **plural**, **sin** "futuros" y **sin** "este mes"). El botón **nunca se deshabilita**, tampoco cuando no queda nada para simular.
+- [ ] Con simulaciones activas: lista debajo del botón con `● color + nombre` y botón de basura por fila, y al pie la nota general **"Cada simulación proyecta desde el mes en que la creaste."** — que **ya no nombra ningún mes**.
+- [ ] **Cada fila de la lista lleva su propio tramo** en una segunda línea 11.5px `--muted`: **"Proyecta hasta {mes} {año}."**. Con **dos simulaciones creadas desde meses distintos**, las dos filas muestran **fechas distintas** y ninguna nota general las contradice.
+- [ ] Una simulación **creada parada en un mes futuro** muestra la variante larga: **"Proyecta de {mes} {año} a {mes} {año}."**, con el mes de arranque **posterior** al mes en curso.
+- [ ] Una simulación **pausada** muestra la nota de pausa (§6.1) **y no** la línea de tramo (nunca las dos).
+- [ ] Con **más de 4 activas** la lista scrollea dentro de sí y el botón y la nota general siguen a la vista.
 - [ ] Los popovers de **Fijos** y **Cuotas** **no tienen banda de simulación** ni ningún cambio respecto de hoy.
 - [ ] Tener una simulación activa **no** enciende el punto `--accent` del disparador (ese punto sigue significando solo "sección filtrada").
 - [ ] Abrir el modal (crear o eliminar) **cierra el popover**; nunca quedan los dos overlays a la vez.
 
 *Modal "Simular categoría" — selección múltiple:*
 - [ ] Título **"Simular categoría"** (en singular, sin cambios); cierra con **✕ y `Esc`**, el clic en el scrim **no** cierra.
-- [ ] La **bajada** tiene **tres oraciones** y dice: proyección desde los últimos 12 meses · **"Alcanza desde este mes hasta {Mes AAAA}."** · **"En cada mes se simula solo lo que falta para llegar a lo proyectado."** Ninguna dice "meses futuros". Esta bajada es el **único** lugar de la app donde se explica el remanente: no debe faltar la tercera oración.
+- [ ] La **bajada** tiene **tres oraciones** (ni una más) y dice: proyección desde los últimos 12 meses · **"Alcanza desde {Mes inicio} hasta {Mes fin}."** con **los dos meses nombrados** · **"En cada mes se simula solo lo que falta para llegar a lo proyectado."** Ninguna dice "meses futuros" **ni "este mes"**. Esta bajada es el **único** lugar de la app donde se explica el remanente: no debe faltar la tercera oración.
+- [ ] Abriendo el modal parado en un **mes futuro** (ej. octubre estando en septiembre), la bajada dice **"desde octubre …"**; parado en un **mes pasado**, dice **desde el mes en curso** — nunca un mes que ya pasó.
 - [ ] El control de cada fila es un **cuadrado ~16px con esquinas apenas redondeadas**, **no** un círculo. Tildado: **relleno índigo con tick blanco**. Vacío: contorno gris sobre fondo de panel.
 - [ ] **Se pueden tildar varias a la vez:** tildar la segunda **no destilda** la primera. La fila tildada queda además con **fondo recesado** (`--panel-2`).
 - [ ] **No existe ningún control "Todas" / "Ninguna" / "Seleccionar todas"** en este modal.
 - [ ] **Teclado:** `Tab` recorre **una fila habilitada por vez** (no es una sola parada con flechas); **Espacio** y **Enter** tildean/destildan; el **anillo de foco índigo rodea la fila entera**, no el cuadradito.
-- [ ] Lista en **orden de catálogo**, con las deshabilitadas **en su lugar** (no agrupadas al final) y **nunca ocultas**.
-- [ ] Categoría con **menos de 3 meses**: fila no seleccionable, checkbox **gris tenue sin relleno ni tick**, motivo **visible en la propia fila** ("Necesita 3 meses con datos (tiene {N})"). El **punto de color no se atenúa**.
-- [ ] Categoría **ya simulada**: fila no seleccionable con el motivo **"Ya la estás simulando"** visible.
-- [ ] **Ningún motivo depende de un tooltip** ni se corta con elipsis: si no entra al lado del nombre, **baja entero a una segunda línea**.
-- [ ] Clic en una fila deshabilitada **no tilda nada** y `Tab` la saltea.
+- [ ] **La lista muestra SOLO categorías simulables:** una categoría con **menos de 3 meses con datos** y una **ya simulada** **no aparecen** (ni tildables, ni deshabilitadas, ni en gris — no están). Al abrir, **ninguna fila está deshabilitada** y **ninguna fila tiene texto a la derecha**.
+- [ ] Lista en **orden de catálogo** (las que quedan, en su orden relativo original).
+- [ ] Debajo de la lista, la línea 12px `--muted` **"Solo aparecen las categorías con 3 o más meses de datos que todavía no estás simulando."** — sin glifo, sin caja, y **no** aparece cuando la lista está vacía.
+- [ ] **Vacío por causa:** sin categorías activas → *"No tenés categorías activas."*; ninguna con 3 meses → *"Ninguna categoría llega a 3 meses con datos."* + *"Cuando alguna los acumule, va a aparecer acá."*; todas las elegibles ya simuladas → *"Ya estás simulando todas las categorías que se pueden simular."* + *"Podés verlas y eliminarlas en el filtro de Únicos."*; mixto → *"No queda ninguna categoría para simular."* + su segunda línea. **Siempre en la caja dashed**, nunca un texto pelado y nunca el copy genérico en un caso que tiene el suyo.
+- [ ] Con la lista vacía, el botón primario está **deshabilitado** y dice **"Simular"**.
 - [ ] **Rótulo del botón primario:** con 0 seleccionadas dice **"Simular"** y está **deshabilitado**; con 1, **"Simular 1 categoría"** (nunca "1 categorías"); con N, **"Simular {N} categorías"**; en vuelo, **"Simulando…"** deshabilitado (y `Cancelar` también).
 - [ ] El botón **no cambia de ancho** al tildar/destildar dentro del rango normal (reserva de ancho mínimo) y su rótulo **nunca trunca ni envuelve**.
 - [ ] El número del botón está en la **misma fuente del botón** (no monoespaciado).
@@ -4720,24 +4797,25 @@ Un mes futuro más allá del horizonte **no lleva ninguna señal**: se ve exacta
 - [ ] **Fallo parcial (K de N, 1 ≤ K < N): el modal QUEDA ABIERTO.**
   - [ ] Toast **ámbar (warning)**: **"Se crearon {K} de {N} simulaciones."** (con K = 1: **"Se creó 1 de {N} simulaciones."**).
   - [ ] Aparece una **caja recesada neutra** (fondo `--panel-2`, borde, **sin rojo**) entre la bajada y la lista: *"Se crearon {K} de {N}. Las que siguen tildadas no se pudieron crear — el motivo está en cada fila."*
-  - [ ] Las **K creadas** quedan en **su misma posición** (no se van al fondo, no desaparecen), **destildadas** y **deshabilitadas** con el motivo gris **"Ya la estás simulando"**.
-  - [ ] Las **(N−K) fallidas** **siguen tildadas** y muestran su **mensaje de error en rojo** en el slot de motivo de la fila.
+  - [ ] Las **K creadas** quedan en **su misma posición** (no se van al fondo, **no desaparecen** aunque ya no sean simulables), **destildadas** y **deshabilitadas**, con el texto gris **"Simulación creada."** — **nunca** "Ya la estás simulando".
+  - [ ] Las **(N−K) fallidas** **siguen tildadas** y muestran su **mensaje de error en rojo** en el slot de desenlace de la fila.
+  - [ ] **Ninguna fila desaparece de la lista mientras el modal está abierto.** Al cerrar y volver a abrir, las K creadas **ya no están** (la lista se recalcula).
   - [ ] El botón dice ahora **"Simular {N−K} categorías"** y **reintentar funciona de un clic**, sin volver a tildar nada.
-  - [ ] La caja de resumen y los errores de fila **no desaparecen** al tildar o destildar otra fila (sin salto de layout); el error de **una fila que se destilda** sí se va con ella.
-  - [ ] Una fila que falló **y además** quedó deshabilitada muestra **el mensaje de error (rojo)**, no el motivo gris.
-  - [ ] `Cancelar` cierra el modal; **las K creadas siguen creadas** (aparecen en la banda del popover).
-- [ ] **Ningún motivo neutro** ("Ya la estás simulando" / "Necesita 3 meses…") se pinta de rojo: el rojo es exclusivo de los errores del último intento.
+  - [ ] La caja de resumen y los errores de fila **no desaparecen** al tildar o destildar otra fila (sin salto de layout); el error de **una fila que se destilda** sí se va con ella. El **"Simulación creada."** de una fila creada **no se limpia** en los intentos siguientes.
+  - [ ] `Cancelar` cierra el modal; **las K creadas siguen creadas** (aparecen en la banda del popover, con su tramo).
+- [ ] **El rojo del slot es exclusivo del error del último intento**; el desenlace neutro ("Simulación creada.") nunca se pinta de rojo. **Ninguna fila muestra un motivo de exclusión** ("Ya la estás simulando" / "Necesita 3 meses…"): esos textos ya no existen en este modal.
 
 *Modal — contención en pantalla chica:*
 - [ ] A **640px** de viewport (≈392px de contenido con el sidebar abierto): sin scroll horizontal del `body`; `Cancelar` + botón contador entran en el footer; un **mensaje de error largo** de una fila **baja entero a segunda línea** en vez de truncar.
-- [ ] En **viewport bajo**, con la caja de resumen montada y la lista larga: el cuerpo **scrollea**, el **footer queda pineado** y la caja de resumen se alcanza scrolleando hacia arriba.
+- [ ] En **viewport bajo**, con la caja de resumen montada y la lista larga: el cuerpo **scrollea**, el **footer queda pineado**, la caja de resumen se alcanza scrolleando hacia arriba y la **nota de elegibilidad** scrolleando hacia abajo (queda **debajo** de la última fila, nunca pineada ni cortada).
+- [ ] La **segunda línea del empty** envuelve entera a 2–3 líneas dentro de la caja dashed, sin truncar.
 - [ ] Todo lo anterior se verifica igual en **modo claro y oscuro**.
 
 *Eliminar simulación:*
 - [ ] El botón de basura de la fila pasa a **rojo sobre fondo rojo suave** en hover, y tiene `aria-label` con el nombre de la categoría.
 - [ ] La confirmación es un diálogo con **caja de identidad** y nota de consecuencia, footer `Cancelar` + **`Eliminar` rojo**.
-- [ ] La nota de consecuencia dice **"…dejan de aparecer en este mes y en los siguientes…"** (ya **no** "en los meses futuros").
-- [ ] Al confirmar: toast, la fila desaparece de la banda y **las filas simuladas de esa categoría desaparecen del mes en curso y de los siguientes**, con totales recalculados.
+- [ ] La nota de consecuencia dice **"…dejan de aparecer en los meses que alcanza…"** (ya **no** "en los meses futuros" ni "en este mes y en los siguientes").
+- [ ] Al confirmar: toast, la fila desaparece de la banda y **las filas simuladas de esa categoría desaparecen de todos los meses de su tramo**, con totales recalculados.
 
 *Composición de totales:*
 - [ ] Con ≥1 fila simulada visible, la cabecera de **Únicos** muestra el glifo `ChartSpline` `--muted` **pegado a la izquierda del subtotal** (y a la derecha de una marca de límite, si la hubiera), con `title` explicando el conteo.
@@ -4748,17 +4826,17 @@ Un mes futuro más allá del horizonte **no lleva ninguna señal**: se ve exacta
 *Simulación pausada:*
 - [ ] En la banda, la simulación sin datos suficientes muestra el chip neutro **"Sin datos"**, el nombre en `--muted` y la línea **"Necesita 3 meses con datos (tiene {N}). No proyecta."** — **sin ámbar y sin rojo**.
 - [ ] Su **botón de eliminar sigue disponible**.
-- [ ] La **nota al pie del listado de Únicos** ("{N} simulaciones no están proyectando…") aparece **también parado en el mes en curso**, no solo en meses futuros. En un mes **pasado** o **fuera del horizonte** no aparece.
+- [ ] La **nota al pie del listado de Únicos** ("{N} simulaciones no están proyectando…") aparece **también parado en el mes en curso**, no solo en meses futuros. En un mes **pasado**, o en un mes **que el tramo de esa simulación no alcanza**, no aparece — y el `{N}` **cuenta solo las pausadas cuyo tramo alcanza el mes visualizado**.
 - [ ] En un mes futuro dentro del horizonte, al pie del listado de Únicos aparece la nota `Info` **"Una simulación no está proyectando: le faltan meses con datos."** (plural con `{N}` si son varias), también cuando la sección está **vacía** (debajo del empty dashed).
 - [ ] La nota **no es clickeable** y no ofrece link.
 
 *Fuera del horizonte:*
-- [ ] Un mes futuro más allá del horizonte se ve **exactamente igual que sin la feature**: sin filas simuladas, **sin nota, sin glifo, sin línea de composición**.
+- [ ] Un mes que **ninguna simulación alcanza** —más allá del fin de todas, o **anterior al arranque** de una creada desde un mes futuro— se ve **exactamente igual que sin la feature**: sin filas simuladas, **sin nota, sin glifo, sin línea de composición**. Nada explica en el mes por qué no hay nada: la explicación vive en la fila de la simulación (§4).
 
 *Contención:*
 - [ ] A **640px** (y ~392px de contenido con el sidebar abierto): sin scroll horizontal del `body`; en la fila simulada trunca la identidad y **el monto se lee entero, con su `≈`**.
 - [ ] En viewport **bajo** (ej. 700px de alto), el popover de Únicos **no se corta**: se acota al viewport, la lista de categorías scrollea y la **banda de simulación sigue visible y accionable**; si no entra hacia abajo, **abre hacia arriba**.
-- [ ] Con **más de 4 simulaciones activas**, la lista de la banda scrollea dentro de sí y el botón "Simular categoría" y la nota de horizonte siguen a la vista.
+- [ ] Con **más de 4 simulaciones activas** (filas de dos líneas), la lista de la banda scrollea dentro de sí y el botón "Simular categoría" y la nota general siguen a la vista. Con el popover muy apretado de alto, **lo que se achica es la lista de activas**, y el bloque de categorías **nunca** baja de sus 120px.
 - [ ] El modal del selector, con **muchas categorías**, muestra el footer **pineado** y scrollea solo la lista.
 - [ ] Todo lo anterior se verifica igual en **modo claro y oscuro** — con atención al **borde punteado** de la caja del ícono, que debe leerse con claridad en los dos.
 
@@ -5140,7 +5218,7 @@ Régimen **único**: el modal se comporta igual en todo el régimen de app (`≥
 
 ### 0. Encuadre — una sola idea, tres geometrías
 
-**El tramo que dibuja la capa se llama *tramo alcanzado*, y arranca en el MES EN CURSO.** No en `A+1`. Es el mismo horizonte que `/mes` (*Simulación de categoría* §0): mes en curso incluido, meses pasados nunca. **En toda esta spec "tramo alcanzado" reemplaza a "tramo futuro"** — la palabra "futuro" dejó de nombrar el corte y no se usa más para esto. *(Decisión funcional cerrada por el usuario; el endpoint de reportes ya devuelve el aporte del mes en curso.)*
+**El tramo que dibuja la capa se llama *tramo alcanzado*, y arranca como mínimo en el MES EN CURSO.** No en `A+1`. Es la **unión** de los horizontes de las simulaciones activas (*Simulación de categoría* §0): cada simulación se ancla al mes desde el que se la creó, su arranque efectivo nunca es un mes pasado, y **meses pasados nunca**. Un mes del tramo puede recibir el aporte de **algunas** simulaciones y no de otras —las que todavía no arrancaron no aportan— sin que eso cambie nada del dibujo: la capa es la suma de lo que ese mes efectivamente tiene. **En toda esta spec "tramo alcanzado" reemplaza a "tramo futuro"** — la palabra "futuro" dejó de nombrar el corte y no se usa más para esto. *(Decisión funcional cerrada por el usuario; el endpoint de reportes ya devuelve el aporte del mes en curso.)*
 
 **El mes en curso es un mes MIXTO, y esa es toda la novedad:** su parte real es lo que ya ocurrió a la fecha (únicos cargados) más los fijos y cuotas del mes (RN-006), y su parte simulada es el **remanente** de cada simulación activa —*lo que falta para llegar a lo proyectado*—, exactamente la misma cifra que `/mes` muestra en su fila simulada de ese mes. Los meses siguientes del tramo son mixtos por la misma regla; lo único que cambia mes a mes es cuánto ya ocurrió.
 
@@ -5213,9 +5291,10 @@ El chip está **siempre presente** y **nunca se oculta**. Se deshabilita en dos 
 - **Por qué la condición es esa y por qué cambió.** El horizonte de simulación arranca en el **mes en curso** (*Simulación de categoría* §0), así que **el año en curso siempre tiene al menos un mes simulable: el actual** — incluido diciembre. La rama vieja *"el año en curso en diciembre"* nacía de un horizonte que arrancaba en `A+1` y hoy **deshabilitaría el chip en un año que sí tiene tramo simulable**: un control apagado sin causa real, justo en el mes de cierre, que es cuando más se miran los reportes. Los **años futuros** ya estaban habilitados y no cambian. Quedan solo los **años pasados**, donde no hay ni un mes dentro del horizonte. *(Feedback y prevención de error: un deshabilitado solo se justifica si de verdad no hay nada que mostrar.)*
 - **Copys (uno por causa, sin numerales ni condicionales):**
   - Sin ninguna simulación: **"No tenés ninguna simulación. Se crean desde la sección Únicos de la vista del mes."**
-  - Año pasado (`year < currentYear`): **"{Año} ya pasó. La simulación solo alcanza desde este mes en adelante."**
-    - **Por qué se reemplaza "{Año} no tiene meses futuros."** Ese copy nombraba el criterio viejo. Con el horizonte incluyendo el presente, "meses futuros" **ya no es el corte** —el año en curso se habilita por un mes que no es futuro— y el usuario que lo leyera en 2023 podría concluir, correctamente según el texto pero falsamente según el sistema, que el año en curso en diciembre tampoco califica. El copy nuevo enuncia **la regla real** (*"desde este mes en adelante"*), no un síntoma.
-    - **Reusa literalmente la frase de la banda de `/mes`** (*"Proyecta categorías desde este mes en adelante."*): un solo enunciado del horizonte en las dos superficies, en las mismas palabras. *(Consistencia.)*
+  - Año pasado (`year < currentYear`): **"{Año} ya pasó. Las simulaciones no alcanzan meses pasados."**
+    - **Por qué se reemplaza "{Año} no tiene meses futuros."** Ese copy nombraba el criterio viejo. Con el horizonte incluyendo el presente, "meses futuros" **ya no es el corte** —el año en curso se habilita por un mes que no es futuro— y el usuario que lo leyera en diciembre podría concluir, correctamente según el texto pero falsamente según el sistema, que el año en curso tampoco califica.
+    - **Y por qué se reemplaza también "…solo alcanza desde este mes en adelante."** Esa frase enunciaba **el horizonte único**, que dejó de existir: ahora cada simulación arranca en el mes desde el que se la creó (*Simulación de categoría* §0), así que "desde este mes" ya no describe a ninguna en particular. El copy vigente enuncia **lo único que sigue siendo cierto para todas y que es exactamente la causa del deshabilitado**: los meses pasados no se simulan nunca. *(Feedback: el motivo tiene que explicar la condición que lo dispara, no una regla lateral.)*
+    - *Copys descartados en esta vuelta:* **"{Año} ya pasó. Cada simulación arranca en el mes en que la creaste."** — cierto pero irrelevante acá: el usuario no está preguntando de dónde arranca una simulación, está preguntando por qué el chip está apagado en 2024.
     - *Copys descartados:* **"{Año} no tiene meses simulables."** (dice el hecho pero no la regla, así que el usuario se lo vuelve a preguntar en cada año pasado); **"La simulación no alcanza años pasados."** (pierde el `{Año}`, que es lo que ancla el motivo al estado actual del `YearStepper`).
   - **Precedencia si aplican las dos:** gana **"No tenés ninguna simulación…"**. **Se mantiene sin cambios.** Es la causa de fondo: navegar a otro año no la resuelve, y explicarle el horizonte a alguien que además no tiene ninguna simulación lo manda a una gestión inútil. *(Prevención de error.)*
 - **El valor persistido no se toca.** Un chip deshabilitado con el valor guardado en "encendido" se muestra **en su estado apagado visual** (plano) mientras dura la condición —no hay dato simulado que mostrar, mostrarlo elevado mentiría— y **recupera el estado elevado** al volver a un año alcanzado por el horizonte (el en curso o posterior). El toggle no reescribe la preferencia al deshabilitarse.
@@ -5384,7 +5463,7 @@ Umbral `--bp-wide` **941px**, evaluado sobre el **ancho de contenido** (`<main>`
 
 *Deshabilitado con motivo:*
 - [ ] Con **cero simulaciones**: el chip está presente (nunca oculto), atenuado (`opacity-45`), cursor por defecto, sin hover, y su `title`/`aria-describedby` dice **"No tenés ninguna simulación. Se crean desde la sección Únicos de la vista del mes."**
-- [ ] Navegando a un **año pasado** (con simulaciones existentes): el chip se atenúa y el motivo es **"{Año} ya pasó. La simulación solo alcanza desde este mes en adelante."** — **en ningún lado aparece el copy viejo "no tiene meses futuros"**.
+- [ ] Navegando a un **año pasado** (con simulaciones existentes): el chip se atenúa y el motivo es **"{Año} ya pasó. Las simulaciones no alcanzan meses pasados."** — **en ningún lado aparecen los copys viejos "no tiene meses futuros" ni "solo alcanza desde este mes en adelante"**.
 - [ ] **El año en curso NUNCA se deshabilita por el año** (habiendo ≥1 simulación): el chip está **activo y accionable** parado en el año en curso, **incluso en diciembre** (verificable moviendo el reloj del sistema a diciembre, o revisando que la condición sea solo `year < currentYear`).
 - [ ] Un **año futuro** con simulaciones sigue **habilitado**, igual que hoy.
 - [ ] El chip deshabilitado **recibe foco con `Tab`** (no tiene el atributo `disabled`) y el motivo se anuncia; clickearlo **no hace nada**.

@@ -2214,15 +2214,24 @@ describe("MonthViewClient — Simulación de categoría", () => {
     category: { id: "cat-1", name: "Alimentación", color: "#FF5733", scope: "BOTH" as const },
     monthsWithData: 6,
     paused: false,
+    startMonth: "2026-06",
+    effectiveStartMonth: "2026-06",
+    endMonth: "2026-12",
     createdAt: "2026-06-01T12:00:00.000Z",
   };
 
+  // Tramo 2026-06..2026-12 (mismo que activeSimulation): el ancla (startMonth)
+  // ya quedó atrás del mes en curso (getCurrentMonth() mockeado a "2026-06"),
+  // así que el arranque EFECTIVO clampea a "2026-06".
   const pausedSimulation = {
     id: "sim-2",
     categoryId: "cat-2",
     category: { id: "cat-2", name: "Sueldo", color: "#33FF57", scope: "INCOME" as const },
     monthsWithData: 1,
     paused: true,
+    startMonth: "2026-05",
+    effectiveStartMonth: "2026-06",
+    endMonth: "2026-12",
     createdAt: "2026-05-01T12:00:00.000Z",
   };
 
@@ -2239,7 +2248,7 @@ describe("MonthViewClient — Simulación de categoría", () => {
     mockSetPreferences.mockResolvedValue({ success: true });
     // Default: sin simulaciones activas (cero-impacto).
     mockUseSimulations.mockReturnValue({
-      data: { horizonEndMonth: "2026-12", simulations: [] },
+      data: { simulations: [] },
       isLoading: false,
       isError: false,
     } as unknown as ReturnType<typeof useSimulations>);
@@ -2327,7 +2336,7 @@ describe("MonthViewClient — Simulación de categoría", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /simular categoría/i })).toBeInTheDocument();
     });
-    expect(screen.getByText("Proyecta categorías desde este mes en adelante.")).toBeInTheDocument();
+    expect(screen.getByText("Proyecta categorías desde el mes que estás viendo.")).toBeInTheDocument();
   });
 
   it("abrir el modal 'Simular categoría' cierra el popover (un solo overlay a la vez)", async () => {
@@ -2350,7 +2359,7 @@ describe("MonthViewClient — Simulación de categoría", () => {
 
   it("mes futuro MÁS ALLÁ del horizonte: sin filas simuladas, sin nota, sin glifo, sin línea (se ve igual que sin la feature)", () => {
     mockUseSimulations.mockReturnValue({
-      data: { horizonEndMonth: "2026-12", simulations: [pausedSimulation] },
+      data: { simulations: [pausedSimulation] },
       isLoading: false,
       isError: false,
     } as unknown as ReturnType<typeof useSimulations>);
@@ -2365,6 +2374,45 @@ describe("MonthViewClient — Simulación de categoría", () => {
     expect(screen.queryByText(/no está proyectando/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/el subtotal incluye/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/los totales incluyen/i)).not.toBeInTheDocument();
+  });
+
+  it("simulación creada parada en un MES FUTURO (todavía no arrancó): el mes en curso no muestra su fila, y la banda usa la variante larga del tramo (§4/§7)", async () => {
+    // Ancla en octubre — todavía no llegó, así que el arranque EFECTIVO
+    // también es octubre (no clampea al mes en curso).
+    const notYetStartedSimulation = {
+      id: "sim-3",
+      categoryId: "cat-3",
+      category: { id: "cat-3", name: "Regalos", color: "#7A5FD1", scope: "EXPENSE" as const },
+      monthsWithData: 5,
+      paused: false,
+      startMonth: "2026-10",
+      effectiveStartMonth: "2026-10",
+      endMonth: "2027-04",
+      createdAt: "2026-06-15T12:00:00.000Z",
+    };
+    mockUseSimulations.mockReturnValue({
+      data: { simulations: [notYetStartedSimulation] },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useSimulations>);
+    mockLoaded({
+      // Parado en el mes en curso ("2026-06") — anterior al arranque (octubre): sin fila, RN-028.
+      month: "2026-06",
+      totals: { expenseCents: 0, incomeCents: 0, balanceCents: 0 },
+      movements: { unicos: [], fijos: [], cuotas: [] },
+    });
+    renderMonthView();
+
+    // Sin señal alguna por la ausencia (§7 — un mes anterior al arranque no lleva ninguna marca).
+    expect(screen.queryByLabelText(/el subtotal incluye/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/los totales incluyen/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no está proyectando/i)).not.toBeInTheDocument();
+
+    // La única explicación vive en la fila de la simulación, dentro de la banda (§4).
+    fireEvent.click(screen.getByRole("button", { name: /filtrar únicos/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Proyecta de octubre 2026 a abril 2027.")).toBeInTheDocument();
+    });
   });
 
   it("los popovers de Fijos y Cuotas NO tienen banda de simulación", async () => {
@@ -2391,9 +2439,9 @@ describe("MonthViewClient — Simulación de categoría", () => {
     expect(screen.queryByRole("button", { name: /simular categoría/i })).not.toBeInTheDocument();
   });
 
-  it("con ≥1 simulación activa: la banda lista la simulación y la nota de horizonte", async () => {
+  it("con ≥1 simulación activa: la banda lista la simulación, la nota general y el TRAMO de esa fila", async () => {
     mockUseSimulations.mockReturnValue({
-      data: { horizonEndMonth: "2026-12", simulations: [activeSimulation] },
+      data: { simulations: [activeSimulation] },
       isLoading: false,
       isError: false,
     } as unknown as ReturnType<typeof useSimulations>);
@@ -2406,13 +2454,16 @@ describe("MonthViewClient — Simulación de categoría", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /filtrar únicos/i }));
     await waitFor(() => {
-      expect(screen.getByText("Se proyecta desde este mes hasta diciembre 2026.")).toBeInTheDocument();
+      expect(
+        screen.getByText("Cada simulación proyecta desde el mes en que la creaste."),
+      ).toBeInTheDocument();
     });
+    expect(screen.getByText("Proyecta hasta diciembre 2026.")).toBeInTheDocument();
   });
 
   it("mes futuro dentro del horizonte con una simulación pausada: nota 'Info' al pie del listado", () => {
     mockUseSimulations.mockReturnValue({
-      data: { horizonEndMonth: "2026-12", simulations: [pausedSimulation] },
+      data: { simulations: [pausedSimulation] },
       isLoading: false,
       isError: false,
     } as unknown as ReturnType<typeof useSimulations>);
@@ -2430,7 +2481,7 @@ describe("MonthViewClient — Simulación de categoría", () => {
 
   it("mes en curso con una simulación pausada: SÍ aparece la nota (el horizonte arranca en el mes en curso)", () => {
     mockUseSimulations.mockReturnValue({
-      data: { horizonEndMonth: "2026-12", simulations: [pausedSimulation] },
+      data: { simulations: [pausedSimulation] },
       isLoading: false,
       isError: false,
     } as unknown as ReturnType<typeof useSimulations>);
@@ -2448,7 +2499,7 @@ describe("MonthViewClient — Simulación de categoría", () => {
 
   it("mes PASADO con una simulación pausada: SIN nota (el horizonte nunca alcanza meses pasados)", () => {
     mockUseSimulations.mockReturnValue({
-      data: { horizonEndMonth: "2026-12", simulations: [pausedSimulation] },
+      data: { simulations: [pausedSimulation] },
       isLoading: false,
       isError: false,
     } as unknown as ReturnType<typeof useSimulations>);

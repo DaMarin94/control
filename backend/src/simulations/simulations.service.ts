@@ -14,8 +14,10 @@ import {
 } from './simulations.repository';
 import {
   axisPositionFor,
+  buildMonthRange,
   buildWindowMonths,
   computeHorizonEndMonth,
+  effectiveStartMonth,
   MIN_MONTHS_WITH_DATA,
   resolveTodayMonthKey,
 } from './simulation-window.helper';
@@ -35,6 +37,15 @@ export interface SimulationDto {
   monthsWithData: number;
   /** true ⇔ cayó por debajo del mínimo de 3 meses (RF-SIM-002) — dejó de derivar movimientos sin eliminarse. */
   paused: boolean;
+  /** "YYYY-MM" — mes desde el que se CREÓ la simulación. Crudo, ya clampeado (nunca un mes pasado a la fecha de creación); no cambia nunca. */
+  startMonth: string;
+  /**
+   * "YYYY-MM" — arranque EFECTIVO del tramo en esta lectura: `max(startMonth, mes en curso)`.
+   * `startMonth` no revive meses pasados si el mes en curso ya lo dejó atrás.
+   */
+  effectiveStartMonth: string;
+  /** "YYYY-MM" — fin del tramo (PERSISTIDO al crear, no derivado en lectura). */
+  endMonth: string;
   createdAt: string;
 }
 
@@ -47,13 +58,14 @@ export interface SimulationCandidateDto {
 }
 
 export interface SimulationsListResponse {
-  /** "YYYY-MM" — último mes del horizonte vigente (RN-028), igual para todas las simulaciones. */
-  horizonEndMonth: string;
   simulations: SimulationDto[];
 }
 
 export interface SimulationCandidatesResponse {
-  horizonEndMonth: string;
+  /** "YYYY-MM" — tramo que TENDRÍA una simulación creada desde `startMonth` (query param), ya clampeado. */
+  startMonth: string;
+  /** "YYYY-MM" — fin de ese tramo hipotético (para la nota "Alcanza hasta {Mes}"). */
+  endMonth: string;
   categories: SimulationCandidateDto[];
 }
 
@@ -113,7 +125,12 @@ export class SimulationsService {
   // POST /simulations — RF-SIM-001
   // ---------------------------------------------------------------------------
 
-  async create(userId: string, categoryId: string, today?: string): Promise<SimulationDto> {
+  async create(
+    userId: string,
+    categoryId: string,
+    today?: string,
+    startMonthInput?: string,
+  ): Promise<SimulationDto> {
     // Categoría propia, activa (existe/ajena/eliminada → 400, mismo criterio no
     // revelador que el resto de los movimientos — RN-010-like). skipScopeCheck=true:
     // la simulación no tiene un `type` fijo, su dirección la decide el cálculo
@@ -127,6 +144,11 @@ export class SimulationsService {
 
     const userSettings = await this.settingsService.getSettings(userId);
     const todayMonthKey = resolveTodayMonthKey(today);
+    // Tramo propio de esta simulación: nunca un mes pasado (clamp contra el
+    // mes en curso) y persistido de una — la ventana histórica de abajo sigue
+    // ancladas a "hoy", no al startMonth (no cambia con esta feature).
+    const startMonth = effectiveStartMonth(startMonthInput ?? todayMonthKey, todayMonthKey);
+    const endMonth = computeHorizonEndMonth(startMonth);
     const windowMonths = buildWindowMonths(todayMonthKey);
     const data = await this.loadCategoryMonthlyData(userId, windowMonths, userSettings.defaultCurrency);
     const monthsWithData = data.get(categoryId)?.monthsWithData.size ?? 0;
@@ -139,7 +161,7 @@ export class SimulationsService {
 
     let simulation;
     try {
-      simulation = await this.repo.create(userId, categoryId);
+      simulation = await this.repo.create(userId, categoryId, startMonth, endMonth);
     } catch (err) {
       // Red de seguridad contra el índice único PARCIAL de la DB (RF-SIM-001):
       // el chequeo `findByCategory` de arriba ya cubre el caso normal;
@@ -153,7 +175,7 @@ export class SimulationsService {
     const [category] = await this.repo.findCategoriesByIds([categoryId]);
 
     this.logger.log(
-      { userId, simulationId: simulation.id, categoryId },
+      { userId, simulationId: simulation.id, categoryId, startMonth, endMonth },
       'Simulación de categoría creada',
     );
 
@@ -163,6 +185,11 @@ export class SimulationsService {
       category,
       monthsWithData,
       paused: false,
+      startMonth,
+      // Recién creada: el arranque efectivo coincide siempre con el startMonth
+      // persistido (ya viene clampeado contra "hoy").
+      effectiveStartMonth: startMonth,
+      endMonth,
       createdAt: simulation.createdAt.toISOString(),
     };
   }
@@ -182,13 +209,14 @@ export class SimulationsService {
     userId: string,
     categoryIds: string[],
     today?: string,
+    startMonth?: string,
   ): Promise<CreateSimulationsResponse> {
     const created: SimulationDto[] = [];
     const failed: SimulationCreationFailure[] = [];
 
     for (const categoryId of categoryIds) {
       try {
-        created.push(await this.create(userId, categoryId, today));
+        created.push(await this.create(userId, categoryId, today, startMonth));
       } catch (err) {
         failed.push({ categoryId, message: this.extractErrorMessage(err) });
       }
@@ -222,7 +250,6 @@ export class SimulationsService {
 
   async findAll(userId: string, today?: string): Promise<SimulationsListResponse> {
     const todayMonthKey = resolveTodayMonthKey(today);
-    const horizonEndMonth = computeHorizonEndMonth(todayMonthKey);
 
     const [userSimulations, userSettings] = await Promise.all([
       this.repo.findAllForUser(userId),
@@ -230,7 +257,7 @@ export class SimulationsService {
     ]);
 
     if (userSimulations.length === 0) {
-      return { horizonEndMonth, simulations: [] };
+      return { simulations: [] };
     }
 
     const windowMonths = buildWindowMonths(todayMonthKey);
@@ -248,20 +275,30 @@ export class SimulationsService {
         category: categoryById.get(sim.categoryId) ?? this.fallbackCategory(sim.categoryId),
         monthsWithData,
         paused: monthsWithData < MIN_MONTHS_WITH_DATA,
+        startMonth: sim.startMonth,
+        effectiveStartMonth: effectiveStartMonth(sim.startMonth, todayMonthKey),
+        endMonth: sim.endMonth,
         createdAt: sim.createdAt.toISOString(),
       };
     });
 
-    return { horizonEndMonth, simulations };
+    return { simulations };
   }
 
   // ---------------------------------------------------------------------------
   // GET /simulations/candidates — universo con motivos (RF-SIM-001, contrato de control-design)
   // ---------------------------------------------------------------------------
 
-  async findCandidates(userId: string, today?: string): Promise<SimulationCandidatesResponse> {
+  async findCandidates(
+    userId: string,
+    today?: string,
+    startMonthInput?: string,
+  ): Promise<SimulationCandidatesResponse> {
     const todayMonthKey = resolveTodayMonthKey(today);
-    const horizonEndMonth = computeHorizonEndMonth(todayMonthKey);
+    // Tramo HIPOTÉTICO: el que resultaría de crear desde `startMonthInput`
+    // (mismo clamp/fórmula que `create()`, sin persistir nada).
+    const startMonth = effectiveStartMonth(startMonthInput ?? todayMonthKey, todayMonthKey);
+    const endMonth = computeHorizonEndMonth(startMonth);
     const windowMonths = buildWindowMonths(todayMonthKey);
 
     const [activeCategories, userSimulations, userSettings] = await Promise.all([
@@ -284,7 +321,7 @@ export class SimulationsService {
       alreadySimulated: simulatedCategoryIds.has(cat.id),
     }));
 
-    return { horizonEndMonth, categories };
+    return { startMonth, endMonth, categories };
   }
 
   // ---------------------------------------------------------------------------
@@ -293,11 +330,12 @@ export class SimulationsService {
 
   /**
    * Movimientos simulados a embeber en la sección Únicos de `GET /movements`
-   * para el `month` pedido. `[]` si el mes es PASADO, cae fuera del horizonte,
+   * para el `month` pedido. `[]` si el mes es PASADO, cae fuera del tramo de
+   * TODAS las simulaciones del usuario (cada una tiene el suyo — RN-028/RN-029),
    * o no hay ninguna simulación activa/elegible que aporte ese mes
-   * (RF-SIM-002/003). El mes EN CURSO sí puede llevar simulado (arranca el
-   * horizonte, ver `getSimulatedItemsForMonths`). Nunca genera filas: todo se
-   * calcula al vuelo.
+   * (RF-SIM-002/003). El mes EN CURSO sí puede llevar simulado si cae dentro
+   * del tramo de alguna (ver `getSimulatedItemsForMonths`). Nunca genera
+   * filas: todo se calcula al vuelo.
    *
    * Wrapper de un solo mes sobre `getSimulatedItemsForMonths` (ver ahí el
    * detalle del cálculo). `displayCurrencyOverride` — RF-REP-017: moneda de
@@ -325,9 +363,13 @@ export class SimulationsService {
    * evalúa la regresión de cada simulación en cada mes pedido, en vez de
    * repetir la carga por mes (evita N round-trips redundantes al recorrer un
    * año completo). Misma semántica que la variante de un solo mes: un mes
-   * PASADO o fuera del horizonte (RN-028) no se evalúa (queda `[]` en el mapa
-   * de salida); una simulación pausada (RN-028) no aporta. El mes EN CURSO
-   * arranca el horizonte y sí se evalúa (ver más abajo — remanente).
+   * PASADO nunca se evalúa (queda `[]` en el mapa de salida) para NINGUNA
+   * simulación; un mes que cae fuera del TRAMO PROPIO de una simulación
+   * (`[arranque efectivo..endMonth]`, RN-028/RN-029 — cada simulación tiene el
+   * suyo, ya no hay un horizonte único) no la incluye a ELLA, pero sí puede
+   * incluir a otra simulación cuyo tramo sí la cubra. Una simulación pausada
+   * (RN-028) no aporta a ningún mes. El mes EN CURSO arranca el tramo (nunca
+   * antes) y sí se evalúa si cae dentro (ver más abajo — remanente).
    *
    * El monto de CADA mes del horizonte (incluido el en curso) es un
    * REMANENTE, no el valor crudo de la regresión: `remanente = proyección(mes)
@@ -355,14 +397,12 @@ export class SimulationsService {
     for (const m of months) result.set(m, []);
 
     const todayMonthKey = resolveTodayMonthKey(today);
-    const horizonEndMonth = computeHorizonEndMonth(todayMonthKey);
 
-    // El horizonte arranca en A (mes en curso, inclusive) y llega hasta
-    // horizonEndMonth. Los meses PASADOS nunca se simulan; se descartan antes
-    // de cualquier acceso a datos.
-    const targetMonths = months.filter(
-      (m) => m >= todayMonthKey && m <= horizonEndMonth,
-    );
+    // Los meses PASADOS nunca se simulan (RN-028, no cambia) — se descartan
+    // antes de cualquier acceso a datos. El límite superior YA NO es global:
+    // cada simulación tiene su propio tramo (`[arranque efectivo..endMonth]`),
+    // filtrado más abajo por simulación.
+    const targetMonths = months.filter((m) => m >= todayMonthKey);
     if (targetMonths.length === 0) return result;
 
     const userSimulations = await this.repo.findAllForUser(userId);
@@ -372,16 +412,37 @@ export class SimulationsService {
     const displayCurrency = displayCurrencyOverride ?? userSettings.defaultCurrency;
     const windowMonths = buildWindowMonths(todayMonthKey);
 
+    // Rango de datos reales a cargar = la UNIÓN de los tramos vigentes de
+    // todas las simulaciones, intersecada con `targetMonths` — se reduce a un
+    // min/max porque `loadCategoryMonthlyData` solo usa los extremos para
+    // acotar su query (rango contiguo, UNA sola consulta; cargar de más entre
+    // medio es inofensivo, cargar por simulación o por mes no lo sería —
+    // dejaría de ser O(1) por llamada).
+    let realRangeMin: string | null = null;
+    let realRangeMax: string | null = null;
+    for (const sim of userSimulations) {
+      const simEffectiveStart = effectiveStartMonth(sim.startMonth, todayMonthKey);
+      for (const m of targetMonths) {
+        if (m < simEffectiveStart || m > sim.endMonth) continue;
+        if (realRangeMin === null || m < realRangeMin) realRangeMin = m;
+        if (realRangeMax === null || m > realRangeMax) realRangeMax = m;
+      }
+    }
+    // Ninguna simulación aporta a ninguno de los meses pedidos (todas
+    // vencidas, o sus tramos no cubren `targetMonths`).
+    if (realRangeMin === null || realRangeMax === null) return result;
+
     // Dos cargas separadas, cada una UNA sola query: la ventana histórica
     // [A-12..A-1] (serie de ajuste de la regresión + monthsWithData/paused) y
-    // el rango del horizonte pedido (reales a descontar del remanente). No se
+    // el rango de la unión de tramos (reales a descontar del remanente). No se
     // fusionan en una sola llamada porque `loadCategoryMonthlyData` acumula
     // TODO lo que devuelve la query en `monthsWithData`/`totalsByMonth` —
     // mezclar rangos inflaría el conteo de "meses con dato" de la ventana
     // histórica con meses del horizonte.
+    const realDataMonths = buildMonthRange(realRangeMin, realRangeMax);
     const [historyData, realData, categories] = await Promise.all([
       this.loadCategoryMonthlyData(userId, windowMonths, displayCurrency),
-      this.loadCategoryMonthlyData(userId, targetMonths, displayCurrency),
+      this.loadCategoryMonthlyData(userId, realDataMonths, displayCurrency),
       this.repo.findCategoriesByIds(userSimulations.map((s) => s.categoryId)),
     ]);
     const categoryById = new Map(categories.map((c) => [c.id, c]));
@@ -396,8 +457,14 @@ export class SimulationsService {
       const fit = fitCategoryRegression(monthlyTotals);
       const category = categoryById.get(sim.categoryId) ?? this.fallbackCategory(sim.categoryId);
       const realTotalsByMonth = realData.get(sim.categoryId)?.totalsByMonth;
+      const simEffectiveStart = effectiveStartMonth(sim.startMonth, todayMonthKey);
 
       for (const month of targetMonths) {
+        // Pertenencia POR SIMULACIÓN (RN-028/RN-029): fuera de su propio tramo
+        // (arranque efectivo..endMonth), esta simulación no aporta a este mes
+        // — pero otra simulación con un tramo distinto sí puede.
+        if (month < simEffectiveStart || month > sim.endMonth) continue;
+
         const position = axisPositionFor(todayMonthKey, month);
         const projectedRaw = evaluateRegressionAt(fit, position);
         const realSigned = realTotalsByMonth?.get(month) ?? 0;

@@ -30,25 +30,58 @@ export function buildWindowMonths(todayMonthKey: string): string[] {
 }
 
 /**
- * Fin del horizonte de la simulación (RN-028): diciembre del año en curso,
- * extendido a `A+6` cuando el tramo `A+1..diciembre` queda por debajo de 6
- * meses (el tramo simulado NUNCA es menor a 6 meses contados desde `A+1`).
- * Devuelve el ÚLTIMO mes del horizonte (inclusive), "YYYY-MM". El cálculo en
- * sí no cambió con la extensión del arranque a `A` (ver `simulations.service.ts`,
- * `getSimulatedItemsForMonths`): el umbral de extensión sigue midiéndose sobre
- * el tramo posterior a `A`, solo cambió qué tan atrás arranca el horizonte
- * simulable (ahora incluye `A`, antes empezaba en `A+1`).
+ * Fin del tramo de UNA simulación (RN-028/RN-029): diciembre del año de
+ * `baseMonthKey`, extendido a `baseMonthKey + 6` cuando el tramo posterior a
+ * `baseMonthKey` queda por debajo de 6 meses. Devuelve el ÚLTIMO mes del
+ * tramo (inclusive), "YYYY-MM".
  *
- * Ejemplo: A = 2026-07 → tramo `A+1..dic` ([08..12]) = 5 meses (< 6) →
- * extendido a A+6 = 2027-01. El horizonte simulable resultante es jul..ene
- * (incluye el mes en curso). A = 2026-06 → tramo `A+1..dic` ([07..12]) = 6
- * meses (no extiende) → horizonte jun..dic.
+ * `baseMonthKey` es el `startMonth` (YA CLAMPEADO — nunca un mes pasado) con
+ * el que se crea la simulación, NO "hoy": el tramo es propio de cada
+ * simulación, ancladas cada una a su propio mes de arranque (antes era un
+ * único horizonte igual para todas, anclado siempre a "hoy" — ver
+ * `docs/backend.md`, §Simulación de categoría).
+ *
+ * Ejemplo: baseMonthKey = 2026-07 → tramo `base+1..dic` ([08..12]) = 5 meses
+ * (< 6) → extendido a base+6 = 2027-01. baseMonthKey = 2026-06 → tramo
+ * `base+1..dic` ([07..12]) = 6 meses (no extiende) → dic = 2026-12.
  */
-export function computeHorizonEndMonth(todayMonthKey: string): string {
-  const year = todayMonthKey.slice(0, 4);
+export function computeHorizonEndMonth(baseMonthKey: string): string {
+  const year = baseMonthKey.slice(0, 4);
   const decemberOfYear = `${year}-12`;
-  const naturalSpanMonths = monthDiff(todayMonthKey, decemberOfYear);
-  return naturalSpanMonths < 6 ? addMonths(todayMonthKey, 6) : decemberOfYear;
+  const naturalSpanMonths = monthDiff(baseMonthKey, decemberOfYear);
+  return naturalSpanMonths < 6 ? addMonths(baseMonthKey, 6) : decemberOfYear;
+}
+
+/**
+ * Arranque EFECTIVO de un tramo (RN-028/RN-029): el `startMonth` persistido
+ * de una simulación no cambia nunca, pero un tramo que ya arrancó no revive
+ * meses pasados. Se reusa tanto al crear (clamp del mes recibido en el
+ * request contra el mes en curso) como al leer (clamp del `startMonth`
+ * guardado contra el mes en curso VIGENTE en cada lectura, que puede haber
+ * avanzado desde que se creó).
+ *
+ * Comparación lexicográfica: válida porque "YYYY-MM" es zero-padded de largo
+ * fijo (mismo criterio que el resto del backend para este formato).
+ */
+export function effectiveStartMonth(startMonth: string, todayMonthKey: string): string {
+  return startMonth > todayMonthKey ? startMonth : todayMonthKey;
+}
+
+/**
+ * Rango CONTIGUO de meses `[fromMonthKey..toMonthKey]`, en orden cronológico
+ * ascendente (inclusive ambos extremos). Usado para materializar la UNIÓN de
+ * tramos de `getSimulatedItemsForMonths` en una lista explícita de meses (no
+ * solo sus extremos): `loadCategoryMonthlyData` necesita el mes exacto de
+ * CADA fila para resolver su cotización de referencia (RF-CUR-005), no solo
+ * los bordes del rango.
+ */
+export function buildMonthRange(fromMonthKey: string, toMonthKey: string): string[] {
+  const span = monthDiff(fromMonthKey, toMonthKey);
+  const months: string[] = [];
+  for (let i = 0; i <= span; i++) {
+    months.push(addMonths(fromMonthKey, i));
+  }
+  return months;
 }
 
 /**

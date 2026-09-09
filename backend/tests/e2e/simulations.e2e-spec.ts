@@ -303,6 +303,51 @@ describe('Simulations (e2e)', () => {
         .expect(400);
     });
 
+    it('201 con el tramo persistido según el "startMonth" del body (extendido a +6)', async () => {
+      mockPrisma.category.findUnique.mockResolvedValue({
+        id: CAT_ID,
+        userId: USER_A_ID,
+        scope: 'BOTH',
+        deletedAt: null,
+      });
+      mockPrisma.$queryRaw.mockResolvedValue([
+        makeSqlRow('2026-04', 10000),
+        makeSqlRow('2026-05', 10000),
+        makeSqlRow('2026-06', 10000),
+      ]);
+      mockPrisma.simulation.create.mockResolvedValue({
+        id: 'sim-e2e-startmonth',
+        userId: USER_A_ID,
+        categoryId: CAT_ID,
+        startMonth: '2026-10',
+        endMonth: '2027-04',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      mockPrisma.category.findMany.mockResolvedValue([makeDbCategory()]);
+
+      const res = await request(app.getHttpServer())
+        .post('/simulations?today=2026-07-15')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ categoryIds: [CAT_ID], startMonth: '2026-10' })
+        .expect(201);
+
+      expect(res.body.data.created[0].startMonth).toBe('2026-10');
+      expect(res.body.data.created[0].effectiveStartMonth).toBe('2026-10');
+      expect(res.body.data.created[0].endMonth).toBe('2027-04');
+      expect(mockPrisma.simulation.create).toHaveBeenCalledWith({
+        data: { userId: USER_A_ID, categoryId: CAT_ID, startMonth: '2026-10', endMonth: '2027-04' },
+      });
+    });
+
+    it('400 si el "startMonth" del body tiene formato inválido', async () => {
+      await request(app.getHttpServer())
+        .post('/simulations')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ categoryIds: [CAT_ID], startMonth: '2026/10' })
+        .expect(400);
+    });
+
     it('400 si "today" tiene formato inválido (mismo contrato que los GET)', async () => {
       await request(app.getHttpServer())
         .post('/simulations?today=15-07-2026')
@@ -365,7 +410,7 @@ describe('Simulations (e2e)', () => {
   // ---------------------------------------------------------------------------
 
   describe('GET /simulations', () => {
-    it('200 + horizonEndMonth y lista vacía sin simulaciones activas', async () => {
+    it('200 + lista vacía sin simulaciones activas (sin horizonEndMonth a nivel respuesta — el tramo es por simulación)', async () => {
       const res = await request(app.getHttpServer())
         .get('/simulations?today=2026-07-15')
         .set('Authorization', `Bearer ${tokenA}`)
@@ -373,7 +418,7 @@ describe('Simulations (e2e)', () => {
 
       expect(res.body.success).toBe(true);
       expect(res.body.data.simulations).toEqual([]);
-      expect(res.body.data.horizonEndMonth).toBe('2027-01');
+      expect(res.body.data).not.toHaveProperty('horizonEndMonth');
     });
 
     it('400 si "today" tiene formato inválido', async () => {
@@ -415,7 +460,29 @@ describe('Simulations (e2e)', () => {
           alreadySimulated: false,
         },
       ]);
-      expect(res.body.data.horizonEndMonth).toBe('2027-01');
+      // Tramo HIPOTÉTICO que resultaría de crear desde el mes en curso (sin
+      // `startMonth` en la query): reemplaza al `horizonEndMonth` único de antes.
+      expect(res.body.data.startMonth).toBe('2026-07');
+      expect(res.body.data.endMonth).toBe('2027-01');
+    });
+
+    it('200 + tramo derivado del "startMonth" pedido en la query (extendido a +6)', async () => {
+      mockPrisma.category.findMany.mockResolvedValue([makeDbCategory()]);
+
+      const res = await request(app.getHttpServer())
+        .get('/simulations/candidates?today=2026-07-15&startMonth=2026-10')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.startMonth).toBe('2026-10');
+      expect(res.body.data.endMonth).toBe('2027-04');
+    });
+
+    it('400 si "startMonth" tiene formato inválido', async () => {
+      await request(app.getHttpServer())
+        .get('/simulations/candidates?startMonth=2026/10')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
     });
   });
 

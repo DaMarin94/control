@@ -118,7 +118,7 @@ import {
 } from "@/lib/format";
 import { sumMovementTotals, groupSubtotalCents, sortUnicosBySort } from "@/lib/movements";
 import {
-  isMonthWithinHorizon,
+  isMonthWithinSimulationSpan,
   formatSubtotalSimulatedLabel,
   formatTotalsSimulatedLine,
   formatPausedListNote,
@@ -624,17 +624,15 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   // Composición de subtotal/totales: cuenta de filas simuladas VISIBLES tras
   // los filtros de la sección (§5.1/§5.2) — si el filtro las excluye, ya no
   // "incluyen" nada. Nota de pausa (§6.2): independiente de los filtros (es un
-  // estado de configuración, no un ítem filtrable) — cuenta sobre la lista
-  // CRUDA de simulaciones activas, no sobre lo que la sección Únicos filtró.
+  // estado de configuración, no un ítem filtrable) — cuenta, sobre la lista
+  // CRUDA de simulaciones activas, solo las pausadas cuyo TRAMO PROPIO
+  // (arranque efectivo..fin) alcanza el mes visualizado. Ya no hay un
+  // horizonte único contra el que comparar (§0, cambio 1).
   const visibleSimulatedCount = unicos.filter((m) => m.simulated).length;
-  const horizonEndMonth = simulationsQuery.data?.horizonEndMonth ?? null;
   const pausedSimulationsCount = (simulationsQuery.data?.simulations ?? []).filter(
-    (s) => s.paused,
+    (s) => s.paused && isMonthWithinSimulationSpan(month, s),
   ).length;
-  const showPausedSimulationNote =
-    horizonEndMonth !== null &&
-    pausedSimulationsCount > 0 &&
-    isMonthWithinHorizon(month, currentMonth, horizonEndMonth);
+  const showPausedSimulationNote = pausedSimulationsCount > 0;
 
   // ── P2 — Fase 1: marca visual pasiva de límites ───────────────────────────
   // Anclajes de nivel-mes: mes.total.gasto / mes.total.ingreso / mes.balance.
@@ -1393,7 +1391,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                                 key === "unicos"
                                   ? (closePopover) => (
                                       <SimulationBand
-                                        horizonEndMonth={horizonEndMonth}
+                                        currentMonth={currentMonth}
                                         simulations={simulationsQuery.data?.simulations ?? []}
                                         onOpenCreate={() => {
                                           closePopover();
@@ -1573,7 +1571,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
 
       {/* ── Modal "Simular categoría" (docs/design.md §3, RF-SIM-001) ── */}
       {isSimulateModalOpen && (
-        <SimulateCategoryModal onClose={() => setIsSimulateModalOpen(false)} />
+        <SimulateCategoryModal startMonth={month} onClose={() => setIsSimulateModalOpen(false)} />
       )}
 
       {/* ── Confirmación "Eliminar simulación" (docs/design.md §4, RF-SIM-004) ── */}

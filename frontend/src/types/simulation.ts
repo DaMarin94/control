@@ -18,7 +18,11 @@ export interface SimulationCategory {
   scope: CategoryScope;
 }
 
-/** Simulación de categoría activa — GET /simulations, POST /simulations. */
+/**
+ * Simulación de categoría activa — GET /simulations, POST /simulations. El
+ * tramo es PROPIO de cada simulación (docs/design.md §0, cambio 1): ya no
+ * existe un `horizonEndMonth` único a nivel respuesta.
+ */
 export interface SimulationDto {
   id: string;
   categoryId: string;
@@ -31,13 +35,17 @@ export interface SimulationDto {
    * derivar movimientos simulados hasta que vuelva a alcanzar el mínimo.
    */
   paused: boolean;
+  /** "YYYY-MM" — mes desde el que se CREÓ la simulación. Ya clampeado a la fecha de creación (nunca un mes pasado en ese momento); no cambia nunca. */
+  startMonth: string;
+  /** "YYYY-MM" — arranque EFECTIVO del tramo en esta lectura: `max(startMonth, mes en curso)`. */
+  effectiveStartMonth: string;
+  /** "YYYY-MM" — fin del tramo (persistido al crear, no derivado en lectura). */
+  endMonth: string;
   createdAt: string;
 }
 
-/** GET /simulations — solo simulaciones ACTIVAS del usuario + horizonte vigente. */
+/** GET /simulations — solo simulaciones ACTIVAS del usuario. El tramo va por simulación (ver `SimulationDto`). */
 export interface SimulationsListResponse {
-  /** "YYYY-MM" — último mes del horizonte vigente (RN-028), igual para todas las simulaciones. */
-  horizonEndMonth: string;
   simulations: SimulationDto[];
 }
 
@@ -52,15 +60,27 @@ export interface SimulationCandidate {
   alreadySimulated: boolean;
 }
 
-/** GET /simulations/candidates — universo = catálogo de categorías ACTIVAS del usuario. */
+/**
+ * GET /simulations/candidates — universo = catálogo de categorías ACTIVAS del
+ * usuario. `startMonth`/`endMonth`: el tramo que TENDRÍA un lote creado desde
+ * el `startMonth` pedido por query (ya clampeado) — reemplaza al
+ * `horizonEndMonth` único de antes.
+ */
 export interface SimulationCandidatesResponse {
-  horizonEndMonth: string;
+  startMonth: string;
+  endMonth: string;
   categories: SimulationCandidate[];
 }
 
-/** Body de POST /simulations — batch: 1 o más categorías, sin ids duplicados (400 si vacío o con duplicados). */
+/**
+ * Body de POST /simulations — batch: 1 o más categorías, sin ids duplicados
+ * (400 si vacío o con duplicados). `startMonth` (opcional, "YYYY-MM"): mes
+ * desde el que se crea el LOTE — se aplica a todas las categorías del batch;
+ * ausente = mes en curso. Nunca revive un mes pasado (el backend clampea).
+ */
 export interface CreateSimulationRequest {
   categoryIds: string[];
+  startMonth?: string;
 }
 
 /** Fallo de una categoría puntual dentro del batch — `message` ya viene legible del backend (mismo texto que hoy en 400/409). */
