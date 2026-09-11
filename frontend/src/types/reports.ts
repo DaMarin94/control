@@ -155,7 +155,7 @@ export interface ReportsMovementsResponse {
  * - "installment-gantt": Ola 3 P2, gantt anual de barras horizontales de Cuotas
  * - "inflation-income": Ola 4 P5, gráfico de líneas Inflación vs Ingresos
  */
-export type ReportCardType = "income-expense" | "by-category" | "unique-grid" | "installment-gantt" | "inflation-income";
+export type ReportCardType = "income-expense" | "by-category" | "unique-grid" | "installment-gantt" | "inflation-income" | "fixed-evolution";
 
 // ─── Tipos del endpoint de reporte anual de Únicos (Ola 3, P2) ───────────────
 
@@ -345,6 +345,29 @@ export interface ReportCardConfig {
    * `unique-grid` (el backend no valida esta clave). Ignorado en los demás tipos.
    */
   includeSimulated?: boolean;
+  /**
+   * Modo de visualización de la card `fixed-evolution` (Ola 5, P6 — RF-REP-013).
+   * "amounts" (default / ausente) = montos en la moneda de display.
+   * "variation" = variación % (nominal, o ajustada por inflación si `fixedAdjusted` está encendido).
+   * Solo aplica cuando type === "fixed-evolution". Ignorado en otros tipos.
+   */
+  fixedMode?: "amounts" | "variation";
+  /**
+   * Chip "Ajustada por inflación" de la card `fixed-evolution` (Ola 5, P6).
+   * Ausente/false (default) = variación nominal. true = variación ajustada por IPC.
+   * Solo tiene efecto visual cuando `fixedMode === "variation"`; el valor se conserva
+   * al volver a "amounts" (el chip se deshabilita mostrando el mismo valor persistido).
+   * Solo aplica cuando type === "fixed-evolution". Ignorado en otros tipos.
+   */
+  fixedAdjusted?: boolean;
+  /**
+   * Selección de gastos fijos (por `chainId`) de la card `fixed-evolution` (Ola 5, P6).
+   * null = todos los fijos con aparición en el año (default al crear — RF-REP-013).
+   * lista = subconjunto explícito de chainIds tildados (puede ser [] = ninguno).
+   * Reemplaza al filtro de categorías (esta card no lo tiene). Universo estable:
+   * no se achica al destildar. Solo aplica cuando type === "fixed-evolution".
+   */
+  fixedSelectedIds?: string[] | null;
 }
 
 // ─── Tipos del endpoint de reporte anual de Cuotas (Ola 3, P2) ───────────────
@@ -493,6 +516,103 @@ export interface AnnualInflationIncomeResponse {
    * El front lo usa como universo del filtro de chips de categoría.
    */
   availableCategories: Array<{ categoryId: string; name: string; color: string }>;
+}
+
+// ─── Tipos del reporte "Detalle histórico de gastos fijos" (Ola 5, P6) ───────
+
+/**
+ * Motivo de un mes sin punto (hueco) de una línea de `fixed-evolution`.
+ * null = mes CON punto (incluye 0 real — RN-018).
+ * Fuente de verdad: docs/design.md §"Detalle histórico de gastos fijos" §4.
+ */
+export type FixedEvolutionGapReason =
+  | "frequency"
+  | "skipped"
+  | "beforeStart"
+  | "afterEnd"
+  | "resultedIncome";
+
+/**
+ * Un mes de una línea de `fixed-evolution`. Siempre 12 por línea, índice 0 = enero.
+ * `amountCents: 0` con `reason: null` es un punto REAL (RN-018) — DISTINTO de un
+ * hueco (`amountCents: null` + `reason` no-null). No colapsar ambos casos.
+ */
+export interface FixedEvolutionMonthPoint {
+  /** Monto en centavos de la moneda de display, ya convertido con la cotización de ESE mes. null = hueco. */
+  amountCents: number | null;
+  /** Variación % nominal respecto del mes anterior de esta línea. null = sin punto/no computable. */
+  nominalPct: number | null;
+  /** Variación % ajustada por IPC. null = sin punto/no computable (falta IPC o monto anterior). */
+  adjustedPct: number | null;
+  /** Motivo del hueco cuando amountCents es null. null cuando el mes tiene punto (incluido 0 real). */
+  reason: FixedEvolutionGapReason | null;
+}
+
+/**
+ * Una línea (cadena de fijo) del reporte `fixed-evolution`.
+ * La unidad es el fijo lógico (`chainId`), no la fila `Recurring`: los splits
+ * de edición (RN-005) ya vienen recompuestos en una sola línea por el backend.
+ */
+export interface FixedEvolutionLine {
+  chainId: string;
+  /**
+   * Orden estable de la cadena en el universo completo del usuario (NO cambia
+   * entre años). USAR PARA EL COLOR (nunca el índice del array — ver docs/design.md
+   * §3 y §14): el índice de `lines` varía con el año (orden por gasto anual DESC),
+   * el ordinal no.
+   */
+  ordinal: number;
+  /** true si es un calculado derivado de un fijo (RF-MCALC-001); false = fijo normal. */
+  isCalculated: boolean;
+  description: string | null;
+  categoryId: string;
+  categoryName: string;
+  /** Hex de la matriz de 40 colores de categoría — el front deriva el hue de acá (docs/design.md §3). */
+  categoryColor: string;
+  /** "YYYY-MM" — mes de alta del fijo. */
+  startMonth: string;
+  /** "YYYY-MM" — mes de baja programada. null = sin fin programado. */
+  endMonth: string | null;
+  /** Entero 1..12, compartido por toda la cadena. Alimenta la fila "Frecuencia" del tooltip y el copy del hueco. */
+  frequency: number;
+  /** Solo calculados: descripción del fijo de origen. null en líneas normales; nunca null en un calculado visible. */
+  originDescription: string | null;
+  /** Solo calculados: chainId del fijo de origen. null en líneas normales. */
+  originChainId: string | null;
+  /** Siempre 12 entradas, índice 0 = enero. */
+  months: FixedEvolutionMonthPoint[];
+}
+
+/**
+ * Respuesta de GET /movements/reports/annual-fijos?year=YYYY[&currency=XXX][&today=YYYY-MM-DD]
+ * (dentro del sobre { success, statusCode, data }). NO acepta `categories` — esta
+ * card no filtra por categoría (RF-REP-013).
+ *
+ * Fuente de verdad: contrato del backend (Ola 5, P6).
+ */
+export interface AnnualFijosResponse {
+  /** El año pedido. */
+  year: number;
+  /** Moneda de display usada (la pedida por ?currency= o la default del usuario). */
+  currency: "ARS" | "USD" | "EUR" | "BRL";
+  /**
+   * Líneas con al menos un punto en el año pedido. Orden: gasto anual DESC,
+   * desempate chainId ASC — es el orden canónico de leyenda, pintado y tooltip
+   * modo mes (docs/design.md §3/§8). NO usar este orden para el color (ver `ordinal`).
+   */
+  lines: FixedEvolutionLine[];
+  /**
+   * Primer año con alguna aparición de un gasto fijo del usuario. Tope propio
+   * de esta card (RF-REP-013) — NO el `earliestYear` global de RF-REP-002.
+   * null si el usuario no tiene ningún gasto fijo.
+   */
+  earliestYear: number | null;
+  /**
+   * Mayor entre el año en curso y el año del hecho futuro datado más lejano
+   * (`deletedFrom` de una baja programada o `startMonth` de un alta futura).
+   * Tope hacia adelante del `YearStepper` de esta card.
+   */
+  latestYear: number;
 }
 
 // Re-export para conveniencia de los consumidores de este módulo

@@ -19,11 +19,12 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, AreaChart, BarChart3, CalendarDays, CalendarRange, TrendingUp } from "lucide-react";
+import { GripVertical, AreaChart, BarChart3, CalendarDays, CalendarRange, TrendingUp, Repeat } from "lucide-react";
 import { ReportCard } from "@/components/charts/report-card";
 import { UniqueGridCard } from "@/components/charts/unique-grid-card";
 import { CuotasGanttCard } from "@/components/charts/cuotas-gantt-card";
 import { InflationIncomeCard } from "@/components/charts/inflation-income-card";
+import { FixedEvolutionCard } from "@/components/charts/fixed-evolution-card";
 import type { ReportCardConfig, ReportCardType } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
 
@@ -49,13 +50,15 @@ function ReportCardMini({
     : type === "by-category" ? BarChart3
     : type === "unique-grid" ? CalendarDays
     : type === "installment-gantt" ? CalendarRange
-    : TrendingUp;
+    : type === "inflation-income" ? TrendingUp
+    : Repeat;
   const typeLabel =
     type === "income-expense" ? "Ingresos vs Gastos"
     : type === "by-category" ? "Gastos por categoría"
     : type === "unique-grid" ? "Gastos Únicos"
     : type === "installment-gantt" ? "Gastos en Cuotas"
-    : "Inflación vs Ingresos";
+    : type === "inflation-income" ? "Inflación vs Ingresos"
+    : "Detalle histórico de gastos fijos";
 
   const hasTitle = Boolean(title);
 
@@ -126,6 +129,12 @@ interface SortableReportCardProps {
   onAnchorChange: (usdCents: number) => void;
   /** RF-REP-017: toggle "incluir movimientos simulados" (income-expense y by-category, solo en /reportes). */
   onIncludeSimulatedChange: (v: boolean) => void;
+  /** Ola 5, P6: modo de visualización de `fixed-evolution` (Montos / Variación). */
+  onFixedModeChange: (mode: "amounts" | "variation") => void;
+  /** Ola 5, P6: chip "Ajustada por inflación" de `fixed-evolution`. */
+  onFixedAdjustedChange: (adjusted: boolean) => void;
+  /** Ola 5, P6: selección de gastos fijos (por chainId) de `fixed-evolution`. */
+  onFixedSelectedIdsChange: (ids: string[] | null) => void;
 }
 
 export function SortableReportCard({
@@ -143,6 +152,9 @@ export function SortableReportCard({
   onDirectionChange,
   onAnchorChange,
   onIncludeSimulatedChange,
+  onFixedModeChange,
+  onFixedAdjustedChange,
+  onFixedSelectedIdsChange,
 }: SortableReportCardProps) {
   const {
     attributes,
@@ -227,6 +239,24 @@ export function SortableReportCard({
           onCurrencyChange={onCurrencyChange}
           onRemove={onRemove}
           onTitleChange={onTitleChange}
+        />
+      ) : config.type === "fixed-evolution" ? (
+        <FixedEvolutionCard
+          year={config.year}
+          currency={config.currency}
+          title={config.title}
+          titlePlaceholder={titlePlaceholder}
+          removable={true}
+          mode={config.fixedMode ?? "amounts"}
+          adjusted={config.fixedAdjusted ?? false}
+          selectedIds={config.fixedSelectedIds ?? null}
+          onYearChange={onYearChange}
+          onCurrencyChange={onCurrencyChange}
+          onRemove={onRemove}
+          onTitleChange={onTitleChange}
+          onModeChange={onFixedModeChange}
+          onAdjustedChange={onFixedAdjustedChange}
+          onSelectedIdsChange={onFixedSelectedIdsChange}
         />
       ) : (
         <ReportCard

@@ -101,7 +101,7 @@ Un registro de movimiento con `deletedAt != null` **no debe aparecer en ninguna 
 
 | Módulo | Ruta base | Descripción |
 |--------|-----------|-------------|
-| `movements` | `GET /movements`, `GET /movements/reports`, `GET /movements/reports/annual-unicos`, `GET /movements/reports/annual-cuotas`, `GET /movements/reports/annual-inflation-income` | Lista unificada del mes + serie de reportes agregada + grilla anual de Únicos + gantt anual de Cuotas + series anuales de Inflación vs Ingresos (transacciones + recurrentes + cuotas) |
+| `movements` | `GET /movements`, `GET /movements/reports`, `GET /movements/reports/annual-unicos`, `GET /movements/reports/annual-cuotas`, `GET /movements/reports/annual-inflation-income`, `GET /movements/reports/annual-fijos` | Lista unificada del mes + serie de reportes agregada + grilla anual de Únicos + gantt anual de Cuotas + series anuales de Inflación vs Ingresos + series anuales por gasto fijo (transacciones + recurrentes + cuotas) |
 | `transactions` | `/transactions` | Movimientos únicos (CRUD) |
 | `recurring` | `/recurring` | Movimientos fijos (crear, editar, eliminar) |
 | `installments` | `/installments` | Grupos de cuotas (crear, editar, eliminar) |
@@ -140,6 +140,9 @@ Devuelve el **gantt anual de gastos en Cuotas** (una barra por compra en cuotas 
 
 ### `GET /movements/reports/annual-inflation-income?year=YYYY&categories=&currency=&today=`
 Devuelve las **series anuales de Inflación vs Ingresos** (12 meses: inflación IPC, variación % del ingreso y variación ajustada por inflación) más las **dos rectas de tendencia OLS** para la card `inflation-income` (RF-REP-012). Solo agrega movimientos de tipo **ingreso (`INCOME`)**. Contrato (params y shape) en `docs/data-model.md`, §Contrato de reporte anual de Inflación vs Ingresos; reglas de cálculo en la sección **Movimientos del mes (MovementsModule)** → Reporte anual de Inflación vs Ingresos.
+
+### `GET /movements/reports/annual-fijos?year=YYYY&currency=&today=`
+Devuelve **una serie de 12 meses por gasto fijo** (monto + variación nominal + variación ajustada por inflación) para la card `fixed-evolution` (RF-REP-013). Solo agrega movimientos de tipo **Fijo** y dirección **gasto (`EXPENSE`)**. **No acepta `categories`** (la card no filtra por categoría). Contrato (params y shape) en `docs/data-model.md`, §Contrato de reporte anual de Fijos; reglas de cálculo en la sección **Movimientos del mes (MovementsModule)** → Reporte anual de Fijos.
 
 ### `POST /transactions` · `PATCH /transactions/:id` · `DELETE /transactions/:id`
 CRUD de movimientos únicos. El monto siempre en centavos (entero > 0). El instante se guarda en UTC más la zona original del registro (ver fechas/timezone en `docs/technical.md`).
@@ -352,6 +355,22 @@ Series anuales en **puntos porcentuales** para la card `inflation-income` (RF-RE
 - **`inflationPct`.** `InflationRate.monthlyVariation` (puntos %, unidad canónica del sistema; ver Reporte anual de Únicos para la conversión ×100 en la ingesta) del mes; `null` si no hay fila de IPC.
 - **Tendencias OLS (`incomeTrend` / `incomeAdjTrend`).** Recta de mínimos cuadrados ajustada sobre los **puntos no nulos** de `incomePct` e `incomePctAdj` respectivamente (x = índice de mes 0–11). Emite `{ slope, intercept, points }`; `points` = la recta evaluada en los 12 meses, **`null` si la serie madre tiene < 2 puntos no nulos**. El helper **`computeLinearTrend`** (exportado) encapsula el ajuste; reusarlo, no reimplementar.
 - **`earliestYear` y `availableCategories` ignoran el filtro `categories`** (superconjunto estable, mismo criterio que la serie de reportes). `availableCategories` es el universo de categorías con **ingreso (`INCOME`)** del año (no de gasto, a diferencia de los otros reportes). El filtro `categories` sí restringe qué ingresos cuentan en las series.
+
+### Reporte anual de Fijos (`GET /movements/reports/annual-fijos`)
+
+Una serie de 12 meses **por gasto fijo** para la card `fixed-evolution` (RF-REP-013), scopeado por `userId` del JWT. Contrato (params, shape `AnnualFijosResponse` / `FixedEvolutionLine` / `FixedEvolutionMonthPoint`) en `docs/data-model.md`, §Contrato de reporte anual de Fijos. Reglas de negocio:
+
+- **Alcance: tipo Fijo + dirección `EXPENSE`, excluyendo `deletedAt`.** No entran únicos, cuotas ni fijos de ingreso. Un fijo eliminado (RN-026) queda fuera.
+- **La unidad de la serie es la CADENA (`chainId`), no la fila `Recurring`.** Los splits de edición (RN-005) se recomponen en **una sola serie**: cada mes toma el monto de la fila que lo cubre, y el cambio de monto entre splits es el **escalón** que la card grafica. La aparición de cada mes se decide con el criterio único de §Cálculo de aparición de fijos por mes (frecuencia anclada a la fila que cubre el mes + skips).
+- **Huecos con causa.** Un mes sin aparición emite `amountCents: null` + `reason` (`frequency`, `skipped`, `beforeStart`, `afterEnd`, `resultedIncome`). Un monto **`0` con `reason: null` es un punto real** (un calculado puede valer 0, RN-018): la ausencia nunca se emite como cero.
+- **Calculados de fijo como series propias.** Un calculado con `sourceChainId` no-null entra como **línea propia** (`isCalculated: true`). Grafica **solo los meses en que su monto resulta `EXPENSE`** (RN-018) y por su **magnitud** (RN-019); un mes que resulta `INCOME` va como hueco con `reason: 'resultedIncome'`. Los calculados de **único** (`sourceMovementId`) y de **cuota** (`sourceInstallmentGroupId`) **no** entran: su origen no es un fijo.
+- **Resolución del origen de un calculado — sin queries adicionales.** `originDescription` / `originChainId` se resuelven contra el **universo completo de `Recurring` del usuario** ya cargado, no contra `lines`. Es obligatorio que sea así: el `sourceChainId` puede apuntar a una cadena **ausente de `lines`** —un fijo de **ingreso**, o un fijo sin apariciones en el año pedido—, y buscarlo solo entre las líneas emitidas lo dejaría irresuelto.
+  - **Gotcha estructural — un origen totalmente irresoluble borra la línea.** Si el `sourceChainId` no se resuelve en ningún lado (su cadena de origen fue eliminada por completo), el fallback vigente deja al calculado **sin presencia en ningún mes**, con lo cual la línea entera **desaparece del reporte** en vez de mostrarse con huecos. Consecuencia observable: **una línea visible nunca tiene `originDescription: null`**.
+- **Conversión de moneda — cada aparición con el TC de SU propio mes.** Los montos se convierten a la moneda de display (`currency` del param o la default del usuario) con el mismo re-ruteo por pivote USD del resto de los reportes, mes a mes. **Las dos variaciones se calculan sobre los montos YA convertidos**, no sobre el monto en la moneda original del fijo.
+- **Mes base de enero — diciembre del año anterior.** La variación de enero compara contra diciembre del año previo, convertido con **la cotización de ese mes**: el endpoint carga las cotizaciones pivote de `year-1` además de las de `year`.
+- **Las variaciones NO se anulan a futuro** (asimetría deliberada con `annual-inflation-income`, que sí las anula). Un fijo es **determinístico** (RN-016): su monto de un mes futuro ya es conocido —no es una medición incompleta como el total de ingreso de un mes en curso—, así que participa de la variación igual que un mes pasado. `nominalPct` / `adjustedPct` solo son `null` por falta de monto anterior (o de IPC, en la ajustada), nunca por ser futuro.
+- **`adjustedPct`** — la variación nominal descontando la variación IPC del mes (`InflationRate.monthlyVariation`, puntos %, unidad canónica; ver Reporte anual de Únicos). `null` si falta el IPC del mes.
+- **`ordinal`, `earliestYear` y `latestYear` se computan sobre el universo COMPLETO del usuario**, no sobre el año pedido (que solo determina qué cadenas entran en `lines`). `ordinal` es el rank por la fila más antigua de cada cadena: **tiene que ser estable entre años** porque es la identidad con la que el front asigna color; si dependiera del año mostrado, un fijo cambiaría de color al navegar. `latestYear` lo corre solo un **hecho futuro datado** (`deletedFrom` programado o `startMonth` de una cadena futura): una cadena **sin `endMonth` no lo corre**, porque su horizonte abierto dejaría el stepper de año sin final.
 
 ## Movimientos fijos (RecurringModule)
 

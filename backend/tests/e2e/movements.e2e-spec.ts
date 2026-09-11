@@ -1469,4 +1469,253 @@ describe('Movements (e2e)', () => {
       expect(data.availableCategories).toEqual([]);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // GET /movements/reports/annual-fijos (RF-REP-013 — Detalle histórico de
+  // gastos fijos / card "fixed-evolution")
+  //
+  // Estrategia de mock:
+  //   - recurring.findMany → getAllFijosForAnnual (vía ORM, no $queryRaw)
+  //   - recurringSkip.findMany → skips de esos fijos (vacío por defecto)
+  //   - referenceRate.findMany → loadPivotRatesForYear (llamado 2 veces: año
+  //     pedido y año previo)
+  //   - inflationRate.findMany → loadInflationRatesForYear
+  //
+  // La cobertura profunda de reglas de dominio (recomposición de cadena,
+  // motivos de ausencia, variación, topes de año) vive en el unit test
+  // movements-annual-fijos.spec.ts; acá se cubre shape, validaciones,
+  // autenticación y aislamiento — mismo criterio que el resto de la familia
+  // de reportes anuales.
+  // -------------------------------------------------------------------------
+
+  describe('GET /movements/reports/annual-fijos (RF-REP-013)', () => {
+    /** Fila raw de Recurring devuelta por recurring.findMany (shape del select de getAllFijosForAnnual). */
+    function makeRawRecurringRow(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'rec-1',
+        type: 'EXPENSE',
+        description: 'Alquiler',
+        createdAt: new Date('2025-01-01T00:00:00Z'),
+        amountCents: 100000,
+        currency: 'ARS',
+        exchangeRate: 1,
+        anchorCurrency: 'ARS',
+        startMonth: '2026-01',
+        deletedFrom: null,
+        frequency: 1,
+        chainId: 'chain-e2e-1',
+        sourceChainId: null,
+        sourceMovementId: null,
+        sourceInstallmentGroupId: null,
+        formulaOperator: null,
+        formulaOperand: null,
+        formulaSign: null,
+        categoryId: CAT_ID,
+        category: { name: 'Vivienda', color: '#4F86C6', scope: 'EXPENSE' },
+        ...overrides,
+      };
+    }
+
+    beforeEach(() => {
+      mockPrisma.recurring.findMany.mockResolvedValue([]);
+      mockPrisma.recurringSkip.findMany.mockResolvedValue([]);
+      mockPrisma.referenceRate.findMany.mockResolvedValue([]);
+      mockPrisma.inflationRate.findMany.mockResolvedValue([]);
+    });
+
+    it('200 + shape completo de AnnualFijosResponse (universo vacío)', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-fijos?year=2026&today=2026-06-25')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.statusCode).toBe(200);
+
+      const data = res.body.data;
+      expect(data).toHaveProperty('year', 2026);
+      expect(data).toHaveProperty('currency', 'ARS');
+      expect(data).toHaveProperty('lines');
+      expect(data.lines).toEqual([]);
+      expect(data).toHaveProperty('earliestYear', null);
+      expect(data).toHaveProperty('latestYear', 2026);
+    });
+
+    it('200 + una línea con fijo EXPENSE vigente todo el año', async () => {
+      mockPrisma.recurring.findMany.mockResolvedValue([makeRawRecurringRow()]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-fijos?year=2026&today=2026-06-25')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const data = res.body.data;
+      expect(data.lines).toHaveLength(1);
+      const line = data.lines[0];
+      expect(line.chainId).toBe('chain-e2e-1');
+      expect(line.isCalculated).toBe(false);
+      expect(line.description).toBe('Alquiler');
+      expect(line.categoryId).toBe(CAT_ID);
+      expect(line.startMonth).toBe('2026-01');
+      expect(line.endMonth).toBeNull();
+      expect(line.frequency).toBe(1);
+      expect(line.originDescription).toBeNull();
+      expect(line.originChainId).toBeNull();
+      expect(line.months).toHaveLength(12);
+      line.months.forEach((m: Record<string, unknown>) => {
+        expect(m.amountCents).toBe(100000);
+        expect(m.reason).toBeNull();
+      });
+      expect(typeof line.ordinal).toBe('number');
+    });
+
+    it('200 + calculado de fijo: frequency propia y originDescription/originChainId resueltos desde el fijo de origen', async () => {
+      mockPrisma.recurring.findMany.mockResolvedValue([
+        makeRawRecurringRow({
+          id: 'rec-origin',
+          chainId: 'chain-e2e-origin',
+          description: 'Tarjeta',
+          amountCents: 200000,
+        }),
+        makeRawRecurringRow({
+          id: 'rec-calc',
+          chainId: 'chain-e2e-calc',
+          description: 'Comisión',
+          amountCents: 0,
+          frequency: 2,
+          sourceChainId: 'chain-e2e-origin',
+          formulaOperator: 'PCT',
+          formulaOperand: 1000, // 10%
+          formulaSign: -1, // negativo → EXPENSE
+        }),
+      ]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-fijos?year=2026&today=2026-06-25')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const data = res.body.data;
+      const calcLine = data.lines.find(
+        (l: Record<string, unknown>) => l.chainId === 'chain-e2e-calc',
+      );
+      expect(calcLine).toBeDefined();
+      expect(calcLine.isCalculated).toBe(true);
+      expect(calcLine.frequency).toBe(2);
+      expect(calcLine.originDescription).toBe('Tarjeta');
+      expect(calcLine.originChainId).toBe('chain-e2e-origin');
+    });
+
+    it('fijo INCOME no entra (alcance exclusivo Fijo + EXPENSE)', async () => {
+      mockPrisma.recurring.findMany.mockResolvedValue([
+        makeRawRecurringRow({ type: 'INCOME' }),
+      ]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-fijos?year=2026&today=2026-06-25')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.lines).toEqual([]);
+    });
+
+    it('override de currency: currency=USD refleja en la respuesta', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-fijos?year=2026&currency=USD')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.currency).toBe('USD');
+    });
+
+    it('aislamiento por userId: fijo de userA no aparece si el token es de userB', async () => {
+      mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+        if (args?.where?.userId === USER_A_ID) {
+          return Promise.resolve([makeRawRecurringRow()]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-fijos?year=2026&today=2026-06-25')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .expect(200);
+
+      expect(res.body.data.lines).toEqual([]);
+    });
+
+    it('400 si falta year', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-fijos')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(400);
+    });
+
+    it('400 si year no tiene formato de 4 dígitos', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-fijos?year=26')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(400);
+    });
+
+    it('400 si currency es inválido', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-fijos?year=2026&currency=GBP')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(400);
+    });
+
+    it('400 si today tiene formato inválido', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-fijos?year=2026&today=25-06-2026')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(400);
+    });
+
+    it('400 si year está fuera de rango', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-fijos?year=1800')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(400);
+    });
+
+    it('401 sin JWT', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-fijos?year=2026')
+        .expect(401);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(401);
+    });
+
+    it('ignora el parámetro "categories" si se envía (esta card no filtra por categoría)', async () => {
+      mockPrisma.recurring.findMany.mockResolvedValue([makeRawRecurringRow()]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-fijos?year=2026&categories=algun-id&today=2026-06-25')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      // El endpoint no declara "categories" como query param propio (whitelist de
+      // ValidationPipe): al no ser un DTO de body, un query param extra no
+      // reconocido no rompe el request (no hay @Body() con whitelist acá).
+      // La línea sigue apareciendo completa, sin filtrar.
+      expect(res.body.data.lines).toHaveLength(1);
+    });
+  });
 });

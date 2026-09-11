@@ -52,6 +52,10 @@ pnpm dev
 
 ## TODO
 
+Pendientes abiertos, agrupados por naturaleza.
+
+### Tipografía
+
 Divergencias abiertas entre la escala de texto de [`docs/design.md`](docs/design.md) (§ Tipografía → *Escala de texto (roles)*) y el código.
 
 - **Eyebrow del login fuera de escala.** El rol *Eyebrow / labels* es **12px / .1em**, pero el eyebrow "Bienvenido" usa **13px** en `frontend/src/app/login/page.tsx:31` y en `frontend/src/app/registro/page.tsx`. El dashboard sí cumple los 12px (`frontend/src/components/dashboard/dashboard-client.tsx:131`); falta alinear login y registro.
@@ -59,6 +63,11 @@ Divergencias abiertas entre la escala de texto de [`docs/design.md`](docs/design
 - **Peso del rol *Meta / subtítulos*.** La escala pide **12.5px / peso 500**; el código usa 12.5px con **peso 400** en las metas de las stat-cards del dashboard (`frontend/src/components/dashboard/dashboard-client.tsx:195` y `:222`) y en la tercera columna de la fila de movimiento (`frontend/src/components/movements/movement-item-row.tsx:396`).
 
 - **Rol de facto sin definir en la escala** (hay que decidirlo, no solo corregir una cifra). Las etiquetas de las stat-cards usan **11.5px / .08em en `/mes`** (`frontend/src/components/movements/month-view-client.tsx:1202` y `:1227`) y **12.5px / .08em en el dashboard** (`frontend/src/components/dashboard/dashboard-client.tsx:179`, `:207`, `:251`). Ninguno de los dos cae en un rol existente —ni *Eyebrow / labels* (12px / .1em) ni *Meta / subtítulos* (12.5px / 500)—: es un rol tipográfico en uso que la escala nunca definió, y encima con dos tamaños distintos para el mismo propósito. Resolverlo implica definir el rol en la escala y unificar el código.
+
+### Reportes
+
+- **Navegación de año hacia el futuro.** El stepper de año de las cards de reporte topa en `earliestYear` hacia atrás y en el **año en curso** hacia adelante (RF-REP-002, `docs/requirements.md:1825`). Los fijos activos y las cuotas en tramo sí proyectan datos a meses de años futuros (RN-006), pero esos años no son navegables. A evaluar: correr los límites **según haya datos** —hacia adelante y hacia atrás— y decidir si el cambio aplica a las cards que topan así, es decir todas salvo `fixed-evolution` (esa ya navega sobre un universo de años propio, acotado por sus datos en ambos sentidos — RF-REP-013).
+- **Moneda de cálculo elegible en los modos de variación.** Los modos de variación de la card "Detalle histórico de gastos fijos" se calculan sobre los montos **convertidos a la moneda de display** de la card (RF-REP-013, `docs/requirements.md:2136`), así que un fijo en moneda extranjera mezcla dos efectos: lo que le aumentó el proveedor y lo que se movió el tipo de cambio. Son dos lecturas legítimas y distintas —*"cuánto más plata me salió"* vs. *"cuánto me aumentaron el servicio"*—. A evaluar: ofrecerlas como opción explícita del usuario. Antes de decidir hay que analizar el alcance: si aplica solo a esta card o también a `inflation-income` (RF-REP-012, `docs/requirements.md:2076`) y a cualquier otra lectura porcentual, y qué implica en el contrato del endpoint.
 
 ## Tests
 

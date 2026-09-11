@@ -738,6 +738,25 @@ Quinto tipo de card (`ReportCardType = "inflation-income"`). Componente **`compo
 - **Línea cortada en meses futuros.** Las series usan `connectNulls={false}`: la línea no conecta a través de meses `null`.
 - **Color de la línea de inflación = token `--rate`** (ver §Design system → token `--rate`).
 
+### Card `fixed-evolution` — Detalle histórico de gastos fijos (RF-REP-013)
+
+Sexto tipo de card (`ReportCardType = "fixed-evolution"`). Componente **`components/charts/fixed-evolution-card.tsx`**; datos vía el hook **`useFixedEvolution`** (`hooks/use-reports.ts`) sobre `GET /movements/reports/annual-fijos` (contrato en `docs/data-model.md`, §Contrato de reporte anual de Fijos). Tipos en `types/reports.ts`. Spec visual en `docs/design.md`. Lo no obvio:
+
+- **Solo en `/reportes`, no en el dashboard** (el dashboard monta solo `IncomeExpenseCard`).
+- **Recharts (gráfico de líneas)**, una línea por cadena de fijo. Convive con las otras formas de render de `/reportes`.
+- **Sin filtro de categorías.** La cabecera **no** monta el control de categorías de las demás cards anuales: la **selección por fijo** (`fixedSelectedIds`, por `chainId`) lo reemplaza y se aplica **client-side** sobre `data.lines` — el endpoint no acepta `categories`.
+- **Sin chip de simulados** (RF-REP-017 no aplica) y **sin marcas ni popover de límites** (RF-LIM-005 no aplica a esta card).
+- **Los tres valores de cada punto llegan calculados** (monto, `nominalPct`, `adjustedPct`): el front elige cuál grafica según `fixedMode`/`fixedAdjusted`, **no** deriva porcentajes.
+- **El color de línea se ancla en `ordinal`, no en el índice del array**: `lines` se reordena por gasto anual de cada año (ver contrato). Regla de color y comportamiento de animación en `docs/design.md`.
+- **El param `today`** se manda con la fecha local del usuario (`YYYY-MM-DD`), como en las demás cards que lo aceptan.
+
+### Gotchas de testing de las cards de gráficos
+
+Valen para **cualquier** card, no solo para la que los destapó:
+
+- **`ChartResponsiveArea` monta DOS canvas en paralelo** (300 px y 220 px; uno queda oculto por **container query**). **jsdom no evalúa container queries**, así que en los tests **todos los `data-testid` de adentro del gráfico aparecen DUPLICADOS**: hay que tomar el **primero** (`getAllBy*()[0]`), nunca `getBy*` (falla por ambigüedad). Aplica a toda card montada dentro de ese contenedor.
+- **Recharts está mockeado en la suite de charts.** El comportamiento real de render y animación de Recharts **no se ejercita** en los tests: un test verde no dice nada sobre cómo se ve o se anima el gráfico. Los defectos de esa capa solo aparecen en el navegador — se detectan en el **QA visual** (`docs/qa-visual.md`), no en la suite.
+
 ## Simulación de categoría (`/mes` — RF-SIM-001..005)
 
 Toda la feature vive en `/mes`: el punto de entrada es el **popover de filtro de la sección Únicos** y la salida son filas simuladas mezcladas en esa misma sección. El spec visual está en `docs/design.md`; el contrato de la API, en `docs/data-model.md` §Simulación de categoría.

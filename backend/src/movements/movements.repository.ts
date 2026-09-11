@@ -69,6 +69,18 @@ export interface RecurringForAnnual {
   id: string;
   type: MovementType;
   /**
+   * Descripción propia de la fila (puede diferir entre splits de la misma cadena).
+   * Opcional en el tipo (no en la implementación real del repo, que siempre la
+   * puebla) para no romper fixtures de otros reportes que construyen este shape
+   * a mano sin necesitarla (RF-REP-013 es el único consumidor hoy).
+   */
+  description?: string | null;
+  /**
+   * Fecha de creación de la fila — usada para el orden estable por cadena (RF-REP-013).
+   * Opcional en el tipo por el mismo motivo que `description`.
+   */
+  createdAt?: Date;
+  /**
    * Para fijos normales: el monto real.
    * Para calculados: 0 (placeholder; el monto real se deriva on-the-fly).
    */
@@ -1829,6 +1841,8 @@ export class MovementsRepository {
         select: {
           id: true,
           type: true,
+          description: true,
+          createdAt: true,
           amountCents: true,
           currency: true,
           exchangeRate: true,
@@ -1870,6 +1884,8 @@ export class MovementsRepository {
     return rows.map((r) => ({
       id: r.id,
       type: r.type,
+      description: r.description,
+      createdAt: r.createdAt,
       amountCents: r.amountCents,
       currency: r.currency,
       exchangeRate: Number(r.exchangeRate),

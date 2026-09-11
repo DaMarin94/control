@@ -1281,7 +1281,7 @@ Unidad que `/reportes` apila y que el Dashboard monta una vez. Es la **tarjeta `
 
 **Recuadro "[+]" para agregar card:** recuadro **placeholder dashed** (`--panel-2`, borde dashed `--line`, `--r-card`, sin sombra), ícono `Plus` en círculo `--panel-3`, label "Agregar reporte". Compacto cuando hay cards (~120px); en versión grande preside el **estado vacío inicial** (~280px alto, ~480px ancho, centrado, "Armá tu primer reporte"). Al activarlo, **popover-menú de opciones** ancla la elección de tipo; la card nace en el año en curso con todas las categorías.
 
-> **Nombres de tipo y íconos en el `AddCardMenu` (nomenclatura vigente).** Cada opción del menú es `[ícono de tipo 16px --muted] · [nombre]`, y el ícono es **el mismo glifo** que el mini de reorden usa para ese tipo (ícono ↔ tipo consistente). Los nombres son **descriptivos**: **"Ingresos vs Gastos"** (`income-expense`, ícono `AreaChart`), **"Gastos por categoría"** (`by-category`, ícono `BarChart3`), **"Gastos Únicos"** (`unique-grid`, ícono `CalendarDays`), **"Gastos en Cuotas"** (`installment-gantt`, ícono `CalendarRange`), **"Inflación vs Ingresos"** (`inflation-vs-income`, ícono `TrendingUp`, ver *Reporte anual "Inflación vs Ingresos"*). El renombre de los dos primeros (antes "Ingresos y gastos" / "Por categoría") es de palabra solamente: no cambia ícono, color ni layout del menú. Esta nomenclatura es la **fuente única** del nombre de tipo en todo el producto (menú `[+]` y etiqueta de tipo del mini de reorden, §modo orden).
+> **Nombres de tipo y íconos en el `AddCardMenu` (nomenclatura vigente).** Cada opción del menú es `[ícono de tipo 16px --muted] · [nombre]`, y el ícono es **el mismo glifo** que el mini de reorden usa para ese tipo (ícono ↔ tipo consistente). Los nombres son **descriptivos**: **"Ingresos vs Gastos"** (`income-expense`, ícono `AreaChart`), **"Gastos por categoría"** (`by-category`, ícono `BarChart3`), **"Gastos Únicos"** (`unique-grid`, ícono `CalendarDays`), **"Gastos en Cuotas"** (`installment-gantt`, ícono `CalendarRange`), **"Inflación vs Ingresos"** (`inflation-vs-income`, ícono `TrendingUp`, ver *Reporte anual "Inflación vs Ingresos"*), **"Detalle histórico de gastos fijos"** (`fixed-evolution`, ícono `Repeat`, ver *Reporte "Detalle histórico de gastos fijos"*). El renombre de los dos primeros (antes "Ingresos y gastos" / "Por categoría") es de palabra solamente: no cambia ícono, color ni layout del menú. Esta nomenclatura es la **fuente única** del nombre de tipo en todo el producto (menú `[+]` y etiqueta de tipo del mini de reorden, §modo orden).
 
 **Dashboard:** monta una card `income-expense` efímera con navegación de año activa, junto al resumen mensual (que es fijo en el mes en curso). La distinción la dan: bloques de forma distinta (resumen sin `.card` de gráfico vs. card de gráfico), distinto grano temporal (mes-rótulo fijo vs. año-stepper navegable) y el stepper scoped a la card.
 
@@ -1471,7 +1471,7 @@ La card del Dashboard usa el **mismo `ReportCard`** pero **NO** renderiza el `Ca
 
 ### Botón de refrescar por reporte — utilidad per-card (P5)
 
-Cada card de reporte lleva **su propio botón de refrescar**, en la barra de controles de la cabecera. Refetchea **solo esa card** (reusa el `refetch` del hook de la card). Aplica a los **5 tipos de card** (`income-expense`, `by-category`, únicos, cuotas-gantt, inflación-vs-ingresos) **+ el widget `income-expense` del Dashboard**. En **modo orden** la card colapsa a mini y no se renderiza → el botón tampoco existe ahí (no aplica).
+Cada card de reporte lleva **su propio botón de refrescar**, en la barra de controles de la cabecera. Refetchea **solo esa card** (reusa el `refetch` del hook de la card). Aplica a los **6 tipos de card** (`income-expense`, `by-category`, únicos, cuotas-gantt, inflación-vs-ingresos, `fixed-evolution`) **+ el widget `income-expense` del Dashboard**. En **modo orden** la card colapsa a mini y no se renderiza → el botón tampoco existe ahí (no aplica).
 
 **No inventa cromo nuevo:** es un icon-button ghost del mismo lenguaje que el botón `X` (quitar) — mismo hit-area, mismos colores de estado, mismo focus ring. La única pieza nueva es el ícono y su estado de carga.
 
@@ -1994,6 +1994,303 @@ Quinta opción del `AddCardMenu`, siguiendo la nomenclatura única (§Card de re
 - **Toda cifra del chart va en mono tabular** (regla dura 3): los ticks del eje Y (% con signo) y los 3 valores del tooltip, todos en IBM Plex Mono `tnum`, separador coma es-AR. (Son puntos porcentuales, no montos; el mono aplica por ser cifra, el color semántico income/expense NO aplica por no ser dinero.)
 - **El título** de la card es Space Grotesk neutro (`--ink`/`--faint`), nunca mono ni semántico ni índigo (igual que las otras cards, P4).
 - **`--rate` es un token nuevo** (graphite neutro hue ~270, semántico propio de tasas): no toma valor de `--ink`/`--muted` (necesita su propio croma 0.03 para leerse como línea de dato), no es income/expense ni índigo. Identidad visual en ambos modos (regla dura 4): tiene su stop claro/oscuro; verificar las 5 líneas + baseline en claro y oscuro (el verde income y el graphite deben mantener separación en ambos modos).
+
+### Reporte "Detalle histórico de gastos fijos" — gráfico de líneas por fijo (`fixed-evolution`)
+
+Sexto tipo de card de reporte (`fixed-evolution`). Misma familia que las otras cinco (panel, `--line`, `--r-card` 14px, `--shadow-sm`, `--card-pad` 22px; título editable P4; `CardControls` a la derecha; canvas 300px en `/reportes` / 220px en `< --bp-wide`; widget autónomo con año, selección, modo y moneda propios). El canvas es un **gráfico de líneas anual** (Recharts `LineChart`, eje X = 12 meses ene–dic) con **una línea por gasto fijo** — sin total, sin suma, sin agregación de ningún tipo (RF-REP-013). **Solo en `/reportes`.**
+
+Lo que esta card aporta al lenguaje visual, y que no existía: (1) una **clave de color por fijo** derivada de la categoría sin colisionar dentro de ella; (2) el **hueco como dato** (la ausencia no se grafica en cero) con su motivo alcanzable; (3) el **destacado por hover** como respuesta a un canvas de 20–30 líneas; (4) la **leyenda-selector de fijos**, que es el filtro y reemplaza al filtro por categoría.
+
+> **Reglas duras reafirmadas para esta card.** (1) Acá **todo es gasto** (`EXPENSE`): las líneas **no** se tiñen de `--expense` ni el monto se pinta de rojo por ser gasto — el color de la línea es un **identificador de fijo derivado del color de su categoría** (regla dura 1 intacta: el rojo/verde semántico no aparece en el canvas). (2) **Toda cifra** —eje Y de montos, montos del tooltip, ticks y valores % de los modos de variación— va en **IBM Plex Mono `tnum`** (regla dura 3); en los modos de variación son **puntos porcentuales**, que llevan mono por ser cifra pero **nunca** color income/expense por no ser dinero (mismo criterio ya cerrado en *Inflación vs Ingresos*). (3) El **índigo** aparece **solo** como cromo de interacción (focus ring); nunca tiñe líneas ni cifras (regla dura 2). (4) Identidad visual en **ambos modos de color** (regla dura 4): la escala de tonalidades de trazo se elige justamente para funcionar en claro y en oscuro (§3).
+
+#### 1. Librería — Recharts `LineChart` (sí, a diferencia de `unique-grid` y del gantt)
+
+Esta card **sí** usa Recharts: es un trazo de series continuas sobre ejes (12 puntos por serie), exactamente el primitivo que Recharts modela bien, y es el mismo motor que ya monta *Inflación vs Ingresos* (`LineChart`, `connectNulls`, `activeDot`, `ReferenceLine`, tick custom). **No** se agrega dependencia ni se inventa motor: se reusa el andamiaje de `inflation-income-card` (tooltip portaled, tick mono del eje Y), con las líneas **sin animación de dibujado** (`isAnimationActive={false}`, §10). La excepción de `unique-grid`/`installment-gantt` (layout CSS nativo) no aplica: aquellas eran una planilla y un layout de rectángulos; esta es un chart de series.
+
+#### 2. Ejes, gridlines y unidad — cambian con el modo
+
+El **eje X** es fijo e idéntico en los tres modos: los 12 meses del año, nombre corto es-AR (`Ene … Dic`), UI 12px/500 `--muted`, sin rotación, `axisLine`/`tickLine` ocultos. **Los 12 meses se dibujan siempre**, aunque una línea no los ocupe todos.
+
+El **eje Y cambia de unidad con el modo** (§5), y ese cambio es la señal más fuerte de que el usuario está leyendo otra cosa:
+
+| Modo | Eje Y | Dominio | Baseline |
+|---|---|---|---|
+| **Montos** | moneda de display, **mono `tnum`** 11.5px `--muted`, **formato abreviado** (`$0`, `$50k`, `$120k`, `$2,5M`, coma es-AR) — mismo formato del eje Y de la Forma 1 | `[0, dataMax + pad]`; el piso es **cero real** (un calculado puede valer 0, RN-018) | ninguna especial: el cero es el piso del eje |
+| **Variación % (nominal o ajustada)** | **puntos porcentuales con signo**, mono `tnum` 11.5px `--muted` (`+10%`, `0%`, `−5%`; menos `U+2212`), 4–6 ticks "lindos" simétricos | `[dataMin − pad, dataMax + pad]`, **cruza el cero** | **baseline `y=0` obligatoria y marcada**: `ReferenceLine` `--line` 1px sólida, un escalón sobre los gridlines; reemplaza al gridline de su altura |
+
+- **Lo que cambia con el modo es la unidad del eje, no el alcance de la moneda:** la moneda de display incide en los **tres** modos (§9). En Montos define la unidad del eje Y; en los modos de variación el eje se expresa en puntos porcentuales, pero los valores salen de montos ya convertidos a esa moneda.
+- **Gridlines:** solo horizontales, `--hair` 1px sólidas. Sin gridlines verticales (con 20–30 líneas, una retícula vertical duplicaría el ruido de trazos).
+- **El cambio de unidad no anima:** al cambiar de modo el eje Y se reescribe de una (sin morph de ticks) y las líneas aparecen enteras en la nueva unidad, sin trazado progresivo (§10).
+
+#### 3. La clave de color — el color lo da la categoría, la tonalidad desempata
+
+**El problema:** 25–30 líneas simultáneas. Si el color saliera de la categoría tal cual, dos fijos de la misma categoría serían **exactamente el mismo trazo** y la card perdería su razón de ser (ver cada fijo por separado). Si saliera de una paleta propia por fijo, un trazo pintado con un hex que **no** es el de su categoría mentiría en un producto donde el color **es** el identificador de categoría en todas las demás superficies.
+
+**Regla — el color de la categoría, re-anclado a la banda de trazo legible; la tonalidad desempata entre fijos de la misma categoría.** La línea se calcula desde `category.color` en OKLCH: **conserva su hue y su croma** (es *ese* color, el mismo que el usuario ve en `by-category`, en la lista de categorías y en el swatch del picker) y **sustituye su claridad** por un peldaño de la escala de trazo. No se consulta la matriz de 40 ni ninguna tabla de hexes: la regla opera sobre **cualquier** hex que venga en `categoryColor`, pertenezca o no al set elegible del momento.
+
+**1. Banda de trazo legible — tres peldaños de claridad.** Un trazo de 2px no tiene la superficie de un swatch: necesita separarse del panel en **los dos modos de color** (regla dura 4). `--panel` vale L 1.0 en claro y L 0.215 en oscuro, así que la banda utilizable es **L ∈ [0.46, 0.74]**, y dentro de ella caben exactamente tres peldaños separados ~0.14 L — la misma distancia que ya separa las filas de la matriz, suficiente para que dos tonos del mismo color se lean distintos de un vistazo:
+
+| Peldaño | L (OKLCH) | Equivalencia en la matriz |
+|---|---|---|
+| **T-claro** | **0.74** | fila L2 |
+| **T-medio** | **0.60** | fila L3 (la vívida) |
+| **T-oscuro** | **0.46** | fila L4 |
+
+> Esto **generaliza** —no reemplaza— la regla dura de no usar L1 ni L5: L1 (pastel, ej. `#F7C8C8`) desaparece sobre el panel claro y L5 (ej. `#6C1C1C`) sobre el oscuro. La prohibición pasa de ser "estas dos filas no" a ser una **banda numérica**, que es lo que la hace aplicable a un hex cualquiera: una categoría pintada pastel o casi negra queda igualmente traída a la banda.
+
+**2. Ancla — el peldaño más cercano al color propio de la categoría.** Se toma la claridad del `category.color` y se elige el peldaño más próximo: **L ≥ 0.67 → T-claro; 0.53 ≤ L < 0.67 → T-medio; L < 0.53 → T-oscuro.** Así una categoría celeste sigue leyéndose celeste clara y una violeta profunda sigue leyéndose profunda; el corrimiento máximo para un color ya dentro de la banda es 0.07 L — el mismo color, el mismo nombre.
+
+**3. Croma — se conserva, con piso de legibilidad.** El croma es el de la categoría, con **piso `0.07`** para los colores que tienen hue definido (croma de origen `≥ 0.015`): por debajo de ese piso un trazo de 2px se lee como cromo neutro (gridline, texto `--muted`) y deja de identificar nada. Los colores **deliberadamente neutros** (croma `< 0.015`) **no reciben hue inventado**: conservan su croma y se distinguen por el peldaño de claridad. El croma resultante se **mapea al gamut sRGB** para el par L/H pedido (un magenta vívido en T-claro no existe en sRGB a croma pleno); el color se emite como `oklch()`, que ya hace ese mapeo en el navegador.
+
+**4. Desempate — por `ordinal` ASC dentro del mismo color de categoría.** Los fijos que comparten color de categoría se ordenan por su `ordinal` (estable entre años — **nunca** el índice del array, que sigue el gasto anual del año mostrado) y recorren la escalera **desde el ancla hacia abajo, cíclicamente**: `ancla → siguiente peldaño más oscuro → el que queda` (de T-oscuro se vuelve a T-claro). Con ancla T-medio la secuencia es `medio → oscuro → claro`; con ancla T-claro, `claro → medio → oscuro`; con ancla T-oscuro, `oscuro → claro → medio`. A partir del **4º fijo de esa categoría** recicla desde el ancla.
+
+- **Por qué la categoría aporta el color exacto y no una "familia":** el color **es** el identificador de categoría en todo el producto. Si la línea de Alquiler (rosa) se dibujara con el magenta canónico de una columna, la card sería la única superficie donde la categoría cambia de color — y con 19 categorías repartidas en 8 familias, categorías distintas compartirían **el mismo trazo exacto**, que es precisamente lo que esta card existe para evitar. Con la regla vigente el techo de separación es el de la paleta de categorías completa, no el de 8 cubetas.
+- **Beneficio de lectura:** todas las líneas de una misma categoría comparten color y difieren solo en claridad, así que el ojo agrupa "esto es Servicios" sin necesidad de un filtro por categoría (que esta card no tiene, por RF), y aun así distingue un fijo de otro.
+- **Continuidad con la matriz:** para una categoría pintada con un color de la matriz, los tres peldaños caen sobre L2/L3/L4 de su propia columna. La regla **contiene** el comportamiento de la matriz como caso particular y funciona igual con cualquier otro hex.
+- **Límites honestos y asumidos.** (a) Con **4 o más fijos en una misma categoría**, el 4º repite el trazo del 1º. (b) Dos **categorías** con colores casi idénticos dan líneas casi idénticas — es la misma condición que ya tiene `by-category` y no se corrige acá inventando color. (c) El peldaño de un fijo **puede cambiar al navegar de año**, porque el desempate se resuelve entre los fijos de esa categoría **presentes en el año mostrado**; se prioriza la garantía fuerte ("en el año que estás mirando, dos fijos de la misma categoría nunca comparten trazo") sobre la estabilidad interanual. En los tres casos el desempate lo dan el **destacado por hover** (§6), el **swatch de la leyenda** y el **tooltip**, que nombran el fijo sin depender del color.
+- **Opciones evaluadas y descartadas:** (a) "color = `category.color` tal cual, sin escalera" — colisión total dentro de la categoría; (b) "paleta propia por fijo" — máxima separación, pero el color deja de significar categoría en la única card donde el usuario mira fijos y categorías juntos; (c) "mapear el hue al más cercano de las 8 columnas C1–C8" — robusto ante cualquier hex, pero colapsa categorías distintas en una misma columna (ahí las tres tonalidades se reparten entre **categorías**, no entre fijos de una misma) y además pinta la categoría con un color que no es el suyo.
+- **El swatch de la leyenda es el color de la LÍNEA.** Es la clave de color del canvas; en el caso común —un solo fijo de esa categoría, color ya dentro de la banda— coincide con el `category.color`, y cuando no, difiere solo en claridad respecto del color que el usuario conoce. La identidad de la categoría se nombra además en palabras en el tooltip.
+
+**Estilo del trazo:**
+
+| Línea | Stroke | Estilo | Dots en reposo |
+|---|---|---|---|
+| **Gasto fijo normal** | **2px**, opacidad 1 | **sólida** | sí (§4) |
+| **Calculado derivado de un fijo** | **2px**, opacidad 1, **mismo color** que le toque por su propia categoría | **dasheada `6 4`** | sí (§4) |
+
+- **Por qué dash para el calculado y no otro color:** el dash `6 4` ya significa en el DS **"esta serie es una versión derivada/procesada de otra"** (la serie de ingresos ajustada de *Inflación vs Ingresos*). Reusarlo acá es coherencia literal, y —crítico— **no compite con el color**: el calculado conserva la clave de color de su categoría, así que "de qué categoría es" y "es derivado" son dos canales independientes. Alternativa evaluada y descartada: un color propio (gris/graphite) para todos los calculados — los agruparía visualmente entre sí, que es exactamente lo contrario del propósito de la card.
+- **Curva: `linear`. No `monotone`, no `step`.** El RF pide que un aumento se lea como **escalón**: `monotone` suaviza el salto e inventa valores intermedios, mintiendo sobre **cuándo** aumentó (que es la pregunta de la card). `step` fue evaluado y descartado: con 20–30 líneas la escalera duplica los quiebres y satura el canvas, y además sugiere que el precio cambió a mitad de camino, dato que no existe. `linear` deja el salto como una diagonal empinada entre dos meses reales.
+- **Orden de pintado:** el orden canónico de la leyenda (mayor gasto anual primero) se pinta **primero**, de modo que las líneas de fijos chicos queden **encima** y no se pierdan bajo las grandes. La línea **destacada** (§6) se repinta por encima de todas.
+
+#### 4. Huecos — la ausencia es dato, y por eso los puntos se ven
+
+**Los puntos son visibles en reposo.** Excepción explícita al patrón de dots del DS (*Gráficos — Forma 1 y Forma 2*: "ocultos en reposo"), y está justificada: en esta card **la presencia o ausencia del punto ES el dato** (RF-REP-013 — la ausencia es hueco, nunca cero). Sin puntos visibles, un mes sin aparición sería indistinguible de un tramo recto.
+
+| Punto | Geometría |
+|---|---|
+| **Mes con aparición** (reposo) | círculo **r 2**, relleno del color de la línea, **sin borde** |
+| **Primer y último punto con dato de cada línea** (extremos de vigencia) | círculo **r 3**, relleno del color, **anillo `--panel` 1.5px** — lee como "acá empieza / acá termina" |
+| **Punto de la línea destacada** (§6) | **r 3**, anillo `--panel` 2px |
+| **`activeDot`** (mes bajo el cursor) | **r 4**, relleno del color, borde `--panel` 2px |
+
+**Hueco interno vs. extremo — la diferencia es visible sin leer nada:**
+
+- **Hueco interno** (frecuencia > 1, mes anulado, mes en que un calculado resulta `INCOME`): **no hay punto**, y la línea **cruza el hueco sin partirse** — `connectNulls={true}` en el modo Montos. Se ve como un **tramo largo sin puntos** entre dos puntos: la línea sigue existiendo, ese mes no tuvo aparición.
+- **Extremo** (antes del alta, después de la baja): la línea **simplemente no existe ahí**. Empieza en su primera aparición y termina en la última, **ambos con el punto terminal anillado**. Nunca se prolonga en cero, nunca se dibuja un tramo fantasma.
+- **`connectNulls` en los modos de variación: `false`.** Acá el hueco no significa "no apareció" sino "no se pudo computar" (falta el monto del mes anterior, falta el IPC, el mes es futuro). Puentear ese hueco dibujaría una tendencia de variación sobre un tramo desconocido. Es el mismo criterio ya cerrado en *Inflación vs Ingresos* §6 (cero ≠ ausencia para una tasa).
+- **Nunca se dibuja un cero que no existe.** Es la excepción explícita a "mes sin datos = cero" de RF-REP-001, y no se "corrige": una línea de esta card **puede** valer 0 de verdad, y ese 0 **sí** lleva punto, sobre el piso del eje.
+
+**El motivo del hueco es alcanzable**, y vive en el **tooltip en modo línea** (§7): con una línea destacada, pasar por un mes sin punto muestra la fila de motivo en lugar de la cifra. Copys (uno por causa, sin condicionales):
+
+| Causa | Copy |
+|---|---|
+| Frecuencia > 1 | **"No corresponde este mes — {frecuencia}."** (`bimestral`, `cada 5 meses`, `anual` — etiquetas de *Frecuencia del fijo*, columna sublínea) |
+| Mes anulado (`RecurringSkip`) | **"Mes anulado."** |
+| Antes del alta | **"Todavía no arrancaba — desde {Mmm AAAA}."** |
+| Después de la baja | **"Dado de baja — hasta {Mmm AAAA}."** |
+| Calculado que ese mes resulta `INCOME` | **"Este mes resultó ingreso."** |
+| Variación sin monto anterior | **"Sin variación computable — falta el monto del mes anterior."** |
+| Variación ajustada sin IPC | **"Sin IPC para {Mmm}."** |
+
+#### 5. Modo de visualización — dos tabs + un chip modificador (no tres opciones planas)
+
+El RF deja la forma en manos de diseño. **Se elige "Montos / Variación" con sub-toggle de ajuste**, no tres opciones planas:
+
+- Las tres lecturas **no son tres pares**: el ajuste por inflación es un **modificador de la variación** (nunca aplica a montos, por RF). Tres tabs planas ("Montos", "Variación %", "Variación % ajustada") mienten sobre esa estructura, obligan a leer tres etiquetas largas y ponen dos de ellas casi idénticas una al lado de la otra — carga cognitiva por simetría falsa.
+- Dos tabs + un chip **modelan la verdad** y reusan **dos patrones ya vigentes** sin inventar nada: los `ViewTabs` underline neutras de `by-category` y el chip-toggle neutro de *Tipo de movimiento* / *Simulados*.
+
+**Forma exacta:**
+
+- **`ViewTabs` "Montos" / "Variación"** — patrón underline neutro tal cual (*Toggle Barra ↔ Línea* §1): texto 13px/600, `py-[6px]`, `gap-[18px]`; activa `--ink` + underline 2px `--ink` deslizante (0.18s; instantáneo con `prefers-reduced-motion`); inactiva `--muted`, hover `--ink-2` + underline `--line-strong`. Default **"Montos"**. `role="tablist"` `aria-label="Modo de visualización"`, tabs con `aria-selected`, canvas como `tabpanel`.
+- **Chip "Ajustada por inflación"** — chip-toggle neutro (*Filtros … RF-REP-014* §3): `px-[10px] py-[5px]`, `--r-chip` 7px, 12.5px/600. **Encendido** = elevado (`--panel`, borde `--line-strong`, `--shadow-sm`, texto `--ink`); **apagado** = plano (`--panel-2`, borde `--line`, sin sombra, texto `--muted`). `aria-pressed`. **Sin glifo** y **sin color semántico** (no es dirección ni tipo).
+- **En modo Montos el chip NO se oculta: se deshabilita con motivo.** `aria-disabled="true"` (nunca el `disabled` nativo, que dejaría el motivo inalcanzable para teclado y táctil), `opacity-45`, `cursor-default`, sin hover, click sin efecto; portador del motivo `title` + `aria-describedby`: **"El ajuste por inflación solo aplica a la variación."** Es el mecanismo ya cerrado en *Movimientos simulados en cards de reporte* §1.3. **Ocultarlo fue evaluado y descartado:** aparecer/desaparecer salta el layout de la cabecera y esconde una capacidad de la card.
+- **El valor persistido del chip no se toca al deshabilitarse:** una card guardada en "ajustada" que se pasa a Montos muestra el chip plano y deshabilitado, y **recupera su estado encendido** al volver a Variación.
+- **Ubicación:** cluster izquierdo de la **línea 2** de la cabecera (§9), `[ Montos | Variación ] |hair| [ Ajustada por inflación ]`, con el mini-divisor vertical vigente (`h-[16px] w-px bg-hair`, `self-center`). El chip vive **fuera** del `role="tablist"` (no es una tab, no entra al recorrido por flechas, y **el underline activo nunca se extiende bajo él**) — misma regla que el chip de Simulados en `by-category`.
+
+#### 6. Destacado por hover — la respuesta al canvas de 30 líneas
+
+Con todos los fijos seleccionados (el estado en que la card **nace**), el canvas es legítimamente denso. La salida **no** es agrupar (el RF lo prohíbe) ni bajar el default: es **poder aislar una línea sin cambiar la selección**.
+
+- **Qué lo dispara:** puntero sobre una línea o su `activeDot`; puntero sobre su **ítem de leyenda**; y **foco de teclado** sobre el ítem de leyenda (la ruta accesible — el destacado no depende del mouse).
+- **Efecto:** la línea destacada pasa a **2.5px, opacidad 1**, con sus puntos a r 3 y anillo `--panel` 2px, y **se repinta por encima de todas**. El resto de las líneas baja a **opacidad 0.18** y **pierde sus puntos** (quedan como contexto de fondo, no como ruido). El ítem de leyenda correspondiente toma fondo `--panel-2`.
+- **Es efímero y no toca la selección.** No se persiste, no destilda nada, se apaga al salir. Transición 0.14s sobre opacidad/grosor; **instantánea con `prefers-reduced-motion`**.
+- **Aislar de verdad son dos clics, con chrome que ya existe:** `LegendAllChip` → **"Ninguna"**, y después clic en el fijo que se quiere ver. No se inventa un botón "Solo este" ni un doble-clic oculto: el camino barato ya está en la leyenda y es descubrible.
+
+#### 7. Tooltip — un solo tooltip, dos contenidos
+
+Caja estándar del DS: portaled a `body`, `--panel`, borde `--line`, `--r-ctl` 10px, `--shadow-lg`, padding `10px 12px`, `pointer-events-none`, `role="tooltip"`, `min-width` 220px / `max-width` 320px. **Cursor de hover:** guía vertical `--hair` 1px (es chart de líneas). El contenido depende de si hay una línea destacada:
+
+**A. Modo mes (sin línea destacada) — la lectura comparativa.**
+- **Encabezado:** mes y año, UI 12.5px/600 `--ink` ("Marzo 2026").
+- **Filas:** una por línea visible **con punto ese mes**, ordenadas por valor desc. Cada fila: swatch **8px `rounded-[3px]`** del color de la línea (o **mini-línea dasheada 14px** si es calculado) + descripción UI 12.5px `--ink-2` `truncate` + valor **mono `tnum`** a la derecha, `--ink` neutro, sin abreviar (`$1.234,56` en Montos; `+8,3%` / `−2,1%` / `0%` en variación).
+- **Tope de 8 filas + `+N más`** (11.5px `--faint`, sin swatch): con 30 líneas un tooltip completo taparía el gráfico y sería ilegible. El detalle de una línea concreta se obtiene destacándola (modo B).
+- **Sin fila de total.** No existe total en esta card, en ningún modo.
+
+**B. Modo línea (con línea destacada) — la ficha del fijo-mes.** Es la que cumple el contenido pedido por el RF (descripción, categoría, mes, monto, frecuencia, marca de calculado):
+- **Encabezado:** swatch/mini-línea + **descripción completa** UI 12px/600 `--ink` (o `Sin descripción` en `--muted`); debajo, **nombre de la categoría** UI 11.5px/500 `--ink-2`, y si es calculado, a continuación `· ` + glifo **`CornerDownRight` 12px `--muted`** + `desde {Origen}` — el mismo segmento "↳ desde {Origen}" que ya marca al calculado en la sublínea de `/mes` (vocabulario único).
+- **Cifra dominante:** el valor del mes bajo el cursor, **mono `tnum` 13px/600 `--ink`**, con micro-rótulo del mes (`Mar 2026`) en `--faint` 9px uppercase tracking. Sin color semántico (es gasto, pero va neutro: el color lo da el swatch).
+- **Fila `Frecuencia`:** label izquierda UI 11.5px/500 `--ink-2` ⟷ valor = glifo `Repeat` 12px `--muted` + etiqueta en minúscula de *Frecuencia del fijo* (`mensual`, `bimestral`, `cada 5 meses`, `anual`).
+- **Mes sin punto:** en lugar de la cifra dominante va **`—`** (`--faint`, mono) y, debajo del divisor `--hair`, la **fila de motivo**: UI 11.5px/500 `--ink-2` con el copy de la tabla de §4. Es el lugar donde el motivo del hueco es alcanzable.
+
+#### 8. La leyenda-selector de fijos — es el filtro, y es el riesgo principal de la card
+
+Reemplaza al filtro por categoría (RF): la selección es **por fijo individual**, un ítem por fijo, **sin agrupar ni colapsar en "Otros"**, universo **estable** (no se achica al destildar), y la card **nace con todos seleccionados**. Reusa **literal** el stack de dos partes de *Escalado de la leyenda con muchas categorías* — región scrolleable arriba + carril fijo del comando abajo —, con tres ajustes propios de este universo:
+
+- **Alto máximo: 4 renglones ≈ `112px`** (en vez de los 3 renglones / 84px de las leyendas de categoría). Motivo: esta card tiene **un solo bloque bajo el canvas** (no lleva un segundo carril de filtro de categorías, como sí hace *Inflación vs Ingresos*), y este bloque **es el control principal de la card** — no un refinamiento. Un renglón más de ventana es un reparto de alto proporcional a su peso, y sigue acotando el peor caso (30+ fijos) a una ventana fija. Igual que allá: el umbral es **por alto, no por conteo**; con pocos fijos la región no llega al tope y se ve como una leyenda normal (sin scroll, sin fade).
+- **Etiqueta truncada** — `max-width: 180px` + `truncate` + `title` con el texto completo. **Diferencia deliberada** con la leyenda de categorías (que no trunca): los nombres de categoría son cortos y curados; la descripción de un fijo es **texto libre del usuario** ("Expensas Edificio Av. Rivadavia 1234") y sin tope haría chips de un renglón entero cada uno, matando la densidad justo donde más ítems hay.
+- **Orden canónico: gasto anual del fijo, mayor → menor** (mismo criterio que el apilado de `by-category`). Es el orden de la leyenda, el de pintado (§3) y el de las filas del tooltip modo mes. **Estable dentro del año** y **no se reordena al destildar**. **No** es el orden que asigna la tonalidad: esa se resuelve por `ordinal` (§3), que no depende del año mostrado.
+
+**Anatomía del ítem** (`<button type="button">` con `aria-pressed`, caja `inline-flex items-center gap-[6px] px-[6px] py-[4px]`, `--r-chip` 7px — la del DS, sin cambios):
+
+- **Fijo normal:** swatch cuadrado **10px `rounded-[3px]`** del color de la línea.
+- **Calculado:** **mini-línea dasheada de 14px** (`stroke` 2px, `dasharray 6 4`) en el color de la línea + glifo **`CornerDownRight` 11px `--muted`** inmediatamente antes de la etiqueta. Dos señales, porque a 14px el dash solo es sutil; ninguna de las dos es color, así que no compiten con la clave de categoría.
+
+**Tres estados de ítem, visualmente inconfundibles:**
+
+| Estado | Swatch | Etiqueta | Conjunto |
+|---|---|---|---|
+| **Seleccionado** (default de todos) | pleno / dash pleno | `--ink-2` | opacidad 1 |
+| **Destildado** | **hueco**: borde 1.5px del color, interior `--panel` (el dash baja a opacidad 0.45 conservando su patrón) | `--muted` + **`line-through`** | opacidad **0.7** |
+| **Sin trazo en el modo actual** (seleccionado, pero su línea no tiene ningún punto computable — típico de un fijo con frecuencia > 1 en modo Variación) | **pleno** (sigue seleccionado) | **`--muted`, sin tachado** | opacidad 1, `title` con el motivo: **"Sin variación computable en {año} — este fijo no tiene dos meses seguidos con monto."** |
+
+- **Hover:** fondo `--panel-2`, etiqueta sube un escalón (`--ink` / `--ink-2`), **y destaca su línea en el canvas** (§6). **Pressed:** `--panel-3`. **Focus:** ring `--accent-soft` 3px, `--r-chip` 7px — y también destaca la línea.
+- **Carril fijo del comando** (fuera del scroll, siempre alcanzable): divisor horizontal `--hair` 1px a lo ancho (`my-[8px]`) + `LegendAllChip` "Todas / Ninguna" a la izquierda (ícono `Eye`/`EyeOff` 13px, rótulo 12px/600, fondo `--panel-2`→`--panel-3`, sin `aria-pressed`, fuera del `role="group"`), y **a la derecha del carril un contador `N / M`** en mono `tnum` 11.5px `--muted` (`aria-label`/`title`: "N de M gastos fijos seleccionados"). El contador existe porque con la ventana de 4 renglones el usuario **no ve** cuántos quedaron tildados fuera de la vista; es la única forma de que el estado del filtro no sea invisible.
+- **`role="group"` `aria-label="Elegir gastos fijos"`**, envolviendo **solo** los chips (dentro de la región scrolleable); el `LegendAllChip`, el divisor y el contador quedan hermanos del group, en el carril fijo.
+- **Fade inferior** de 16px vía `mask-image`, atado a `data-overflow="true"` en la región, exactamente como el spec de categorías. Sin caja, sin borde, sin fondo propio: "la misma leyenda, con tope de alto".
+
+#### 9. Cabecera — molde de dos líneas
+
+Reusa el molde de `by-category` / `income-expense` con filtros (identidad arriba, controles debajo), porque el control de modo es el de **mayor jerarquía de interacción** de la card y no debe competir con el título:
+
+- **Línea 1** (ancho completo, `mb-[8px]`): **título editable P4**, sin cambios (16px/600 `--ink`, placeholder "Reporte N" en `--faint`, lápiz on-hover, truncado).
+- **Línea 2** (`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-[18px]`):
+  - **Cluster izquierdo:** `[ Montos | Variación ] |hair| [ Ajustada por inflación ]` (§5).
+  - **Cluster derecho — `CardControls`:** `[ YearStepper ] |hair| [ CardCurrencySelect ] |hair| [ RefreshCw ] [ X ]`, idéntico al resto de las cards.
+- **`YearStepper`:** mismo control y mismo tratamiento de deshabilitado (`opacity-45 cursor-default`), pero con **los topes propios de esta card** (RF-REP-013): hacia atrás el primer año con alguna aparición de gasto fijo (**no** el `earliestYear` global); hacia adelante el mayor entre el año en curso y el año del hecho futuro datado más lejano. Visualmente no cambia nada — cambia de dónde salen los límites.
+- **Selector de moneda:** presente y **siempre habilitado**, con su anatomía y posición de siempre. **La moneda de display incide en los tres modos** (RF-REP-013): los valores se calculan sobre los montos **ya convertidos** a esa moneda, cada aparición con la cotización de **su propio mes** — mismo criterio que *Inflación vs Ingresos*. Por eso el control **nunca queda sin efecto**: cambiarlo redibuja tanto los montos como las curvas de variación (las líneas se repintan completas de inmediato, §10), y no existe ningún modo en que se deshabilite.
+- **Lo que esta cabecera NO lleva** (y no se puede agregar sin decisión): **chip de Simulados** (RF-REP-017 la excluye), **`LimitsInfoPopover` ni marcas de límite** de ningún tipo (las cinco cards con límites siguen siendo las de hoy), **filtro de categorías** (la selección por fijo lo reemplaza).
+
+#### 10. Estados
+
+- **Loading (skeleton):** cabecera presente e inerte; canvas reemplazado por bloque del alto del canvas (`bg-panel-3 rounded-ctl animate-pulse`) + **5 chips fantasma repartidos en 2 renglones** + un chip fantasma corto en el carril del comando (la leyenda de esta card es notoriamente más larga que la de las otras; 2–3 chips fantasma subestimarían el alto y harían saltar el layout al llegar el dato). Sin spinner.
+- **Año sin gastos fijos (empty):** se dibujan **los 12 meses del eje X y el eje Y en su unidad** (con la baseline en cero visible si el modo es de variación) y un **overlay centrado** "Sin gastos fijos en {año}." (UI 14px `--muted`). El **bloque de leyenda no se renderiza** (universo vacío): no queda un carril de comando huérfano.
+- **Ningún fijo seleccionado (`[]`):** ejes completos, **canvas sin líneas**, overlay centrado en dos líneas: "Ningún gasto fijo seleccionado." (UI 14px `--muted`) + "Elegí uno en la lista de abajo." (UI 12.5px `--faint`). La leyenda sigue completa y **no se bloquea**; el usuario reactiva clickeando cualquier ítem o con "Todas".
+- **Modo Variación sin ninguna línea computable:** mismo molde de overlay: "Sin variación computable en {año}." + "Cada línea necesita el monto de su mes anterior." Es un estado real (una canasta de fijos no mensuales) y sin este copy el canvas vacío parecería un error.
+- **Error:** idéntico a las otras cards — `AlertTriangle` 20px `--warning-ink` + "No se pudo cargar el reporte." + botón ghost "Reintentar", centrado, sin tinte de error.
+- **Modo orden (P1):** la card colapsa al **mismo mini-ítem** (`[grip] · [ícono tipo] · [título] · ——— · [etiqueta tipo]`) y **no renderiza ningún control interno**: ni tabs, ni chip de ajuste, ni stepper, ni moneda, ni refrescar, ni `X`, ni leyenda. **Ícono de tipo: `Repeat`** (§12). **Etiqueta de tipo: "Detalle histórico de gastos fijos"** (12px/600 `--muted`, sentence-case) — es la etiqueta más larga del set, así que el **título es el que trunca** (comportamiento ya vigente del mini), nunca la etiqueta.
+- **Render de las líneas — completo e inmediato, sin animación de entrada (`isAnimationActive={false}`):** cada línea se dibuja entera desde el primer frame, sin trazado progresivo. Vale para **todo** render de la card: al montar, al cambiar de año, al cambiar de moneda, al cambiar de modo (Montos ⇄ Variación ⇄ Ajustada) y al tildar/destildar un fijo en la leyenda. Entre dos renders lo que cambia es **qué líneas hay y dónde están**, nunca un estado intermedio de dibujo: en ningún momento una línea seleccionada queda a medio trazar o invisible. La ausencia de esta animación **no** afecta al resto del movimiento de la card, que sigue vigente: el underline deslizante de las tabs, la transición del destacado por hover (§6) y la aparición del tooltip.
+- **`prefers-reduced-motion`:** el underline de las tabs no se desliza; el destacado por hover es instantáneo; el tooltip aparece sin transición. Las líneas no cambian de comportamiento: ya se renderizan completas de entrada en cualquier caso.
+
+#### 11. Contención responsive (obligatoria)
+
+Régimen de app (`≥ 600px` en los dos ejes), en **los dos estados del sidebar**. La disposición sigue al **ancho de contenido**, no al viewport.
+
+- **`< --bp-wide` (compacto):** canvas baja a **220px** (regla vigente de todas las cards). La **línea 2 de la cabecera envuelve** por su `flex-wrap`: el cluster izquierdo (tabs + chip) queda arriba y `CardControls` baja a otro renglón, exactamente como ya hace `by-category`. Las **tabs nunca colapsan** a menú ni cambian a segmented; el chip de ajuste **nunca se oculta** (sigue deshabilitado con motivo cuando corresponde).
+- **La leyenda no cambia de forma:** con menos ancho entran menos chips por renglón, pero el `max-h` de 4 renglones la acota igual y aparece el scroll con su fade. El `LegendAllChip` y el contador siguen en el carril fijo, **alcanzables sin scrollear**. La etiqueta de 180px no crece ni se estira.
+- **Los cuatro invariantes:**
+  1. **Sin scroll horizontal del `body`:** el canvas es `ResponsiveContainer` (no tiene ancho mínimo); a anchos apretados los 12 rótulos del eje X pueden rozarse — condición ya vigente y aceptada en las demás cards de Recharts —, pero **nada empuja el layout**.
+  2. **Overlays completos:** esta card no abre modales; su único overlay es el **popover de confirmación de "Quitar"**, ya cubierto por el patrón vigente (portaled, con flip si no hay lugar abajo). El **tooltip** va portaled a `body` y **flipea** para no salirse del viewport.
+  3. **Ninguna acción inalcanzable:** tabs, chip de ajuste, stepper, moneda, refrescar, `X`, `LegendAllChip` y contador quedan visibles en todos los checkpoints; el único scroll es el **vertical interno de la región de chips**.
+  4. **Superficies anchas scrollean dentro de sí:** la región de leyenda scrollea en su propio eje; el canvas **se comprime**, no scrollea (no es una planilla con ancho mínimo como `unique-grid` o el gantt).
+- **Checkpoints a verificar:** **600px sidebar cerrado** (600 de contenido), **600px sidebar abierto** (352 de contenido — el más apretado: el chip de leyenda de 180px + swatch entra con holgura en los ~228px útiles), **941px** y **1288px**. Ningún monto ni valor % del tooltip se trunca en ningún checkpoint (la cifra es el dato; lo que trunca es la **descripción**).
+
+#### 12. Menú "[+]" (6ª entrada) y nomenclatura del tipo
+
+Sexta opción del `AddCardMenu`, con la nomenclatura única (`[ícono de tipo 16px --muted] · [nombre]`, mismo glifo que el mini de reorden):
+
+- **Nombre de display:** **"Detalle histórico de gastos fijos"**. Es el rótulo único del tipo: el mismo texto en el `AddCardMenu` y en la etiqueta de tipo del mini de reorden.
+- **Ícono: `Repeat`** (lucide, 16px `--muted`). Es **el glifo con el que el producto ya nombra al fijo** (frecuencia en el form, sublínea del ítem de `/mes`), así que el ícono no se aprende: ya significa "recurrente". Se distingue nítido de los cinco existentes (`AreaChart`, `BarChart3`, `CalendarDays`, `CalendarRange`, `TrendingUp`), ninguno de los cuales comunica recurrencia. Neutro, nunca semántico ni índigo.
+- **Sub-descripción:** **"Cada gasto fijo por separado, mes a mes: cuánto pagabas y cuándo aumentó."** UI 12px `--muted`.
+
+#### 13. Agregados más allá del brief — estado
+
+Piezas que **no** venían en el brief y que introduce este spec. Se listan explícitas para que se confirmen o se den de baja sin arqueología:
+
+- **Contador `N / M` en el carril del comando de la leyenda** — *agregado no solicitado, confirmar*. Se propone porque la ventana de 4 renglones deja parte de la selección fuera de la vista y, sin él, el estado del filtro es invisible.
+- **Tercer estado de ítem "sin trazo en el modo actual"** (`--muted` sin tachado + `title` con motivo) — *agregado no solicitado, confirmar*. Resuelve el caso real de un fijo con frecuencia > 1 que en modo Variación no tiene ningún punto: sin esta señal, el ítem se ve encendido y no dibuja nada.
+- **Tope de 8 filas + `+N más` en el tooltip de modo mes** — *agregado no solicitado, confirmar*. Sin tope, con 30 líneas el tooltip tapa el gráfico.
+- **Segunda línea de copy en los overlays de "ningún fijo seleccionado" y "sin variación computable"** — *agregado no solicitado, confirmar*. Los demás empties del producto son de una línea; acá el estado es un callejón sin salida si no se dice cómo salir.
+- **Puntos visibles en reposo** — no es un agregado sino una **excepción declarada** al patrón de dots del DS, exigida por el RF (la ausencia es dato). Queda acotada a esta card.
+
+#### 14. Señales para análisis y contrato (no las cierra diseño)
+
+- El contrato necesita, **por línea (cadena)**: `chainId`, `description`, `categoryId` (el front resuelve color y nombre desde el catálogo, una sola fuente de paleta), `frequency`, flag `isCalculated` + `originDescription`, la serie de 12 valores con `null` en los meses sin aparición, y —para que el motivo del hueco sea alcanzable— un **motivo por mes vacío** (`frequency` / `skipped` / `beforeStart` / `afterEnd` / `resultedIncome`), más `startMonth`/`endMonth` para los copys con fecha. Sin ese motivo, §4 no se puede cumplir.
+- **Orden y estabilidad del color:** la tonalidad se asigna por el **`ordinal` estable por cadena** que entrega el contrato (§3), no por el orden de lectura de la leyenda (gasto anual desc), que varía con el año. El resto del universo por año sigue siendo del contrato.
+- **Topes del `YearStepper`:** los dos topes de esta card son propios (§9) y necesitan sus campos en la respuesta; el `earliestYear` global no sirve.
+
+#### Restricciones duras reafirmadas
+
+- **Verde = ingreso, rojo = gasto:** ninguno de los dos aparece en el canvas. Todo es gasto y las líneas van por **clave de color de fijo** (color de la categoría + tonalidad de desempate): el color es **identificador de categoría**, exactamente el mismo rol que ya cumple en la lista de categorías y en `by-category`, y **nunca** comunica dirección — la clave no distingue ingreso de gasto porque acá no hay ingresos. Los semánticos `--income`/`--expense` no se usan para teñir ninguna línea. Ningún valor se recolorea por su signo: una variación de `−12%` va en `--ink` neutro, nunca en rojo.
+- **Índigo solo marca / cromo de interacción:** aparece **únicamente** como focus ring (tabs, chip, ítems de leyenda, `LegendAllChip`, controles de cabecera). El underline de la tab activa es `--ink` (neutro), la baseline en cero es `--line`, los gridlines `--hair`.
+- **Mono tabular:** eje Y (montos abreviados y % con signo), cifra dominante y valores del tooltip, año del stepper, código de moneda y el contador `N / M` — todos en IBM Plex Mono `tnum`, separador coma es-AR. La **descripción del fijo, la categoría, la frecuencia y los copys de motivo** son texto UI (Space Grotesk), nunca mono.
+- **Ambos modos de color (regla dura 4):** la escala de trazo se limita a la **banda L 0.46–0.74** (§3) justamente para que ninguna línea se funda con el panel en claro ni en oscuro, venga el color de la categoría de donde venga; ejes, gridlines, baseline, tooltip y overlays son cromo neutro y se adaptan solos por token. Verificar el canvas con ≥10 líneas en claro y en oscuro.
+- **Nada de totales, nada de agregación, en ningún modo.** No hay línea suma, no hay fila "Total" en el tooltip, no hay banda "Otros" en la leyenda. Cambiar la selección **agrega o quita líneas**, no recalcula nada.
+
+### Checklist de aceptación visual — Detalle histórico de gastos fijos (`fixed-evolution`)
+
+> Insumo directo del QA visual per-feature (`docs/qa-visual.md`). Escenario recomendado: usuario con **al menos 12 gastos fijos** repartidos en **5+ categorías de colores distintos** —incluyendo al menos una de color **muy claro** y una de color **muy oscuro**—, entre ellos **dos o más de la misma categoría**, **uno con frecuencia > 1**, **uno con un mes anulado**, **uno dado de baja a mitad de año**, **uno con alta a mitad de año**, **uno con un aumento de monto** y **un calculado derivado de un fijo**.
+
+*Identidad y cabecera:*
+- [ ] El menú `[+]` ofrece **"Detalle histórico de gastos fijos"** con ícono **`Repeat`** y la sub-descripción "Cada gasto fijo por separado, mes a mes: cuánto pagabas y cuándo aumentó."
+- [ ] La cabecera es de **dos líneas**: título editable arriba; debajo `[ Montos | Variación ] · divisor --hair · chip "Ajustada por inflación"` a la izquierda ⟷ `[ YearStepper ] · hair · [ moneda ] · hair · [ refrescar ][ X ]` a la derecha.
+- [ ] La card **no** muestra chip de **Simulados**, **ni** ícono/popover de **límites**, **ni** filtro de categorías, en ninguna parte.
+- [ ] La card **no** aparece como widget del Dashboard.
+
+*Las líneas:*
+- [ ] Hay **una línea por gasto fijo seleccionado** y **ninguna línea total, suma ni promedio** en ningún modo.
+- [ ] **Cada categoría aporta su propio color:** con fijos de ≥5 categorías distintas, el canvas y la leyenda muestran **tantos colores distinguibles como categorías** — no hay un color dominante repetido, y en particular **no** son todas variantes de un mismo tono.
+- [ ] El color de cada línea es **reconociblemente el de su categoría**: cotejar contra el swatch de esa categoría en `/categorias` o contra la card `by-category` (misma familia; a lo sumo un escalón de claridad de diferencia).
+- [ ] Una categoría con color **muy claro (pastel)** y otra con color **muy oscuro (casi negro)** se ven **ambas nítidas** sobre el panel, en claro **y** en oscuro: ninguna línea se funde con el fondo ni queda como una sombra.
+- [ ] Una categoría de color **casi gris** da una línea **neutra legible** (no se la repinta de un color inventado) y se distingue del gridline.
+- [ ] Dos fijos de **la misma categoría** se dibujan en el **mismo color** con **tonalidades (claridad) distintas** — no son el mismo trazo; con tres fijos, las tres claridades son distintas entre sí.
+- [ ] El **calculado** se dibuja **dasheado `6 4`** en el color de su propia categoría, y su ítem de leyenda lleva **mini-línea dasheada + glifo `↳`**.
+- [ ] El fijo con **aumento de monto** se ve como **escalón** (diagonal empinada entre dos meses), **no** como curva suavizada.
+- [ ] En reposo **se ven los puntos** de cada mes con aparición; el **primer y último punto** de cada línea llevan **anillo `--panel`**.
+- [ ] Las líneas se ven **completas y de inmediato**, sin trazado progresivo: al montar la card y al cambiar de **año**, **moneda**, **modo** (Montos ⇄ Variación ⇄ Ajustada) o **selección de la leyenda**, **ninguna** línea seleccionada queda a medio dibujar ni invisible — ni en el primer frame ni después.
+
+*Huecos:*
+- [ ] El fijo con **frecuencia > 1** se dibuja como **una sola línea continua** con **puntos salteados** — la línea **no se parte** en los meses sin aparición, y esos meses **no tienen punto** (no hay ningún punto apoyado en cero).
+- [ ] El fijo con **mes anulado** deja **hueco** ese mes, con la línea continua.
+- [ ] El fijo con **alta a mitad de año** **empieza** en su primera aparición (no hay tramo en cero antes) y el **dado de baja** **termina** en la última (no continúa en cero).
+- [ ] Con una línea **destacada**, pasar por un mes sin punto muestra la **fila de motivo** en el tooltip, con el copy correcto: "No corresponde este mes — {frecuencia}." / "Mes anulado." / "Todavía no arrancaba — desde {Mmm AAAA}." / "Dado de baja — hasta {Mmm AAAA}."
+
+*Modos:*
+- [ ] La tab **"Montos"** es el default; el eje Y está en **moneda abreviada mono tabular** y su piso es **cero**.
+- [ ] En **"Variación"** el eje Y pasa a **puntos porcentuales con signo** (`+10%` / `0%` / `−5%`, menos `U+2212`), **cruza el cero** y la **baseline `y=0` está marcada** (más fuerte que los gridlines).
+- [ ] En **Montos** el chip "Ajustada por inflación" está **presente y atenuado** (`opacity-45`), **recibe foco con `Tab`**, clickearlo no hace nada, y su `title` dice **"El ajuste por inflación solo aplica a la variación."**
+- [ ] Pasar a **Variación** habilita el chip; encenderlo lo deja **elevado** (`--panel`, `--line-strong`, `--shadow-sm`); volver a **Montos** lo deshabilita **sin perder** el valor guardado (al volver a Variación sigue encendido).
+- [ ] En los modos de variación, un mes **sin valor computable** no tiene punto **y la línea no lo puentea**; en **Montos** los huecos internos **sí** se puentean.
+- [ ] Ningún valor % lleva color verde ni rojo: los valores del tooltip van en **`--ink`** y los ticks en **`--muted`**.
+- [ ] Cambiar la **moneda** redibuja el canvas **en los tres modos**: en Montos cambia la unidad del eje Y; en **Variación** (nominal y ajustada) los valores % **también cambian**, porque salen de montos ya convertidos con la cotización de cada mes. El selector **nunca** aparece deshabilitado.
+
+*Leyenda-selector:*
+- [ ] La card **nace con todos los fijos seleccionados** y hay **un ítem por fijo**, sin agrupar y **sin ningún ítem "Otros"**.
+- [ ] Con **más de ~15 fijos** la región de chips se recorta a **4 renglones** con **scroll interno** y **fade inferior**; la card **no crece a lo alto** sin límite.
+- [ ] El **`LegendAllChip` "Todas / Ninguna"** y el **contador `N / M`** quedan **siempre visibles** en su carril, **sin scrollear**, y son alcanzables con `Tab` desde el último chip.
+- [ ] Destildar un fijo lo deja **tachado, con swatch hueco y opacidad 0.7**, y **quita su línea** del canvas; el ítem **sigue en la lista** (el universo no se achica).
+- [ ] Aislar un fijo se logra con **"Ninguna" + un clic** en su ítem.
+- [ ] Una descripción larga **trunca con elipsis** en el chip y su texto completo aparece en el `title`.
+
+*Destacado por hover:*
+- [ ] Pasar el puntero por un **ítem de leyenda** (o por una línea) **destaca esa línea** (más gruesa, opacidad plena, por encima) y **atenúa el resto a ~0.18**; salir lo revierte y **la selección no cambia**.
+- [ ] El destacado también se dispara con **foco de teclado** sobre el ítem.
+- [ ] Con `prefers-reduced-motion` el destacado es **instantáneo**.
+
+*Tooltip:*
+- [ ] **Sin línea destacada**, el tooltip del mes lista las líneas con punto ese mes (swatch + descripción + cifra mono), ordenadas de mayor a menor, **con tope de 8 filas + "+N más"**, y **sin fila de total**.
+- [ ] **Con línea destacada**, el tooltip muestra **descripción, categoría, mes, monto y frecuencia**, y en un calculado además **`↳ desde {Origen}`**.
+
+*Estados:*
+- [ ] **Año sin gastos fijos:** se ven los 12 meses del eje X y el overlay "Sin gastos fijos en {año}."; **no** queda un carril de leyenda huérfano.
+- [ ] **Ningún fijo seleccionado:** ejes completos, sin líneas, overlay "Ningún gasto fijo seleccionado." + "Elegí uno en la lista de abajo."; la leyenda **no se bloquea**.
+- [ ] **Carga:** skeleton de canvas + **5 chips fantasma en 2 renglones**; al llegar el dato el layout **no salta**.
+- [ ] **Error:** `AlertTriangle` ámbar + "No se pudo cargar el reporte." + "Reintentar".
+- [ ] **Modo orden:** la card colapsa al mini con ícono **`Repeat`** y etiqueta **"Detalle histórico de gastos fijos"**; **no** se renderiza ningún control interno (ni tabs, ni chip, ni stepper, ni leyenda).
+
+*Contención y modos de color:*
+- [ ] **600px con sidebar cerrado y abierto:** sin **scroll horizontal del `body`**; la línea 2 de la cabecera envuelve; el `LegendAllChip` y el contador siguen visibles; ninguna cifra del tooltip se trunca.
+- [ ] **941px y 1288px:** canvas a 300px, cabecera en su forma amplia, sin banda muerta al costado.
+- [ ] **Claro y oscuro:** con ≥10 líneas visibles, **ninguna se funde con el fondo** en ninguno de los dos modos; ejes, gridlines, baseline y tooltip cambian con sus tokens.
 
 ### Sidebar de navegación global — padding superior del logo
 
@@ -5396,7 +5693,7 @@ El toggle es un control de **alcance del cómputo** (cambia qué dato entra), no
 - **Va último**, después de todo lo demás del cluster. Racional de orden: se toca **menos** que la Dirección/el Tipo/la representación (es un interruptor que se prende una vez), y ser el último lo convierte en **el primero en envolver** en pantalla angosta, que es la prioridad correcta (§4).
 - **`by-category` — el chip vive FUERA del `role="tablist"`.** No es una tab: no debe entrar al `tablist`, no debe recibir el recorrido por flechas de las tabs, y **el underline deslizante de la tab activa nunca se extiende bajo el chip** (el indicador está posicionado dentro del contenedor de tabs; el chip queda afuera, tras el divisor). El chip se alinea **verticalmente al centro del texto de las tabs**; la fila 2 conserva su `items-start` para que `CardControls` siga pegado al tope.
 - **Solo en `/reportes`.** El **Dashboard nunca monta el chip** (RF-REP-017), bajo la misma condición que ya lo deja sin filtros ni selector de moneda: card efímera y despojada. En **modo orden** la card colapsa a mini y no se renderiza ningún control interno — el chip tampoco (regla vigente, sin excepción).
-- **Las otras cuatro cards (`unique-grid`, `installment-gantt`, `fixed-evolution`, `inflation-income`) no lo exponen** y su cabecera no cambia en nada.
+- **Las otras cuatro cards (`unique-grid` "Gastos Únicos", `installment-gantt` "Gastos en Cuotas", `fixed-evolution` "Detalle histórico de gastos fijos", `inflation-income` "Inflación vs Ingresos") no lo exponen** y su cabecera no cambia en nada.
 
 #### 1.3 Deshabilitado con motivo — `aria-disabled`, no `disabled`
 
@@ -5579,7 +5876,7 @@ Umbral `--bp-wide` **941px**, evaluado sobre el **ancho de contenido** (`<main>`
 - [ ] Focus por teclado: ring `--accent-soft` 3px. El chip **no** usa verde, rojo, ámbar ni índigo en ningún estado (salvo el ring).
 - [ ] **Dashboard:** el widget `income-expense` **no** tiene chip de Simulados en ninguna parte de su cabecera.
 - [ ] **Modo orden** ("Ordenar reportes"): las cards colapsan a mini y **no hay chip** en ningún mini.
-- [ ] Las cards `unique-grid`, `installment-gantt`, `fixed-evolution` e `inflation-income` **no** exponen el chip.
+- [ ] Las cards `unique-grid` ("Gastos Únicos"), `installment-gantt` ("Gastos en Cuotas"), `fixed-evolution` ("Detalle histórico de gastos fijos") e `inflation-income` ("Inflación vs Ingresos") **no** exponen el chip.
 
 *Deshabilitado con motivo:*
 - [ ] Con **cero simulaciones**: el chip está presente (nunca oculto), atenuado (`opacity-45`), cursor por defecto, sin hover, y su `title`/`aria-describedby` dice **"No tenés ninguna simulación. Se crean desde la sección Únicos de la vista del mes."**

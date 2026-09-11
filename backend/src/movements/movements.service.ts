@@ -359,6 +359,103 @@ export interface AnnualInflationIncomeResponse {
   availableCategories: AvailableCategory[];
 }
 
+// ---------------------------------------------------------------------------
+// Shapes para el reporte de Detalle histórico de gastos fijos — RF-REP-013
+// ---------------------------------------------------------------------------
+
+/**
+ * Motivo por el que un mes de una línea de fixed-evolution NO tiene punto.
+ * - frequency      — el mes no corresponde según la frecuencia del fijo (RN-016).
+ * - skipped        — mes anulado (RecurringSkip, RN-016/RN-020). Para un calculado
+ *                     de fijo cubre tanto su propio skip como el heredado del origen.
+ * - beforeStart     — anterior al startMonth de la cadena (arranque del fijo lógico).
+ * - afterEnd       — posterior a la baja (deletedFrom de la última fila de la cadena).
+ * - resultedIncome — solo calculados: ese mes el monto derivado dio INCOME (RN-018).
+ */
+export type FixedEvolutionAbsenceReason =
+  | 'frequency'
+  | 'skipped'
+  | 'beforeStart'
+  | 'afterEnd'
+  | 'resultedIncome';
+
+/**
+ * Punto de un mes de una línea de fixed-evolution.
+ *
+ * amountCents — monto convertido a la moneda de display con el TC oficial del
+ *   mes de la instancia (RF-REP-007, gotcha de fijos/calculados). null = ausencia
+ *   (hueco); puede ser 0 real si la línea es un calculado (RN-018).
+ * nominalPct — variación % nominal respecto del mes anterior de ESTA línea.
+ *   null si no aplica (mes actual ausente, mes anterior ausente, o monto anterior 0).
+ * adjustedPct — igual, descontando el IPC nacional del mes (RF-IPC-001). null si
+ *   además falta el dato de IPC del mes.
+ * reason — motivo de la ausencia cuando amountCents es null; null cuando hay punto.
+ */
+export interface FixedEvolutionMonthPoint {
+  amountCents: number | null;
+  nominalPct: number | null;
+  adjustedPct: number | null;
+  reason: FixedEvolutionAbsenceReason | null;
+}
+
+/**
+ * Una línea del reporte (un gasto fijo lógico = una cadena `chainId`, o un
+ * calculado derivado de un fijo con su propia cadena).
+ *
+ * ordinal — orden estable POR CADENA, independiente del año pedido (rank por
+ *   createdAt de la fila más antigua del universo completo del usuario, ASC).
+ *   El front lo usa para no reasignar colores al navegar de año.
+ * startMonth / endMonth — arranque/fin del fijo LÓGICO (resuelto por cadena,
+ *   igual criterio que el detalle de movimiento — ver P4 en `movements.repository.ts`).
+ *   endMonth null = sin fin programado.
+ * frequency — periodicidad del fijo lógico, entero 1..12 (RF-MF-006). Inmutable
+ *   tras crearse: toda la cadena (todos sus splits) comparte el mismo valor.
+ * originDescription / originChainId — solo en calculados (`isCalculated: true`):
+ *   descripción y chainId del fijo del que deriva. En líneas normales, ambos
+ *   `null`. En un calculado también pueden ser `null` si el origen no se puede
+ *   resolver (p.ej. la cadena de origen fue eliminada); el origen puede ser un
+ *   fijo de INCOME o uno sin ninguna aparición en el año pedido — ninguno de
+ *   esos dos casos produce `null` (se resuelven igual).
+ */
+export interface FixedEvolutionLine {
+  chainId: string;
+  ordinal: number;
+  isCalculated: boolean;
+  description: string | null;
+  categoryId: string;
+  categoryName: string;
+  categoryColor: string;
+  startMonth: string;
+  endMonth: string | null;
+  frequency: number;
+  originDescription: string | null;
+  originChainId: string | null;
+  /** Siempre 12 puntos, índice = mes-1 (0 = enero). */
+  months: FixedEvolutionMonthPoint[];
+}
+
+/**
+ * Shape completo de la respuesta de GET /movements/reports/annual-fijos.
+ *
+ * lines — ordenadas por gasto anual DESC (suma de amountCents no-null del año),
+ *   desempate por chainId ASC. Solo incluye cadenas con al menos una aparición
+ *   en el año pedido (universo "con aparición en el año", RF-REP-013).
+ * earliestYear — primer año con alguna aparición de un gasto fijo EXPENSE del
+ *   usuario (universo propio de la card; año del startMonth de la cadena más
+ *   antigua). null si el usuario no tiene ningún fijo EXPENSE ni calculado de fijo.
+ * latestYear — tope de navegación hacia adelante: el mayor entre el año en curso
+ *   (o el de `today`) y el año del hecho futuro datado más lejano (deletedFrom de
+ *   una baja programada, o startMonth de una cadena que arranca en el futuro).
+ *   Un fijo sin fin programado no corre este tope.
+ */
+export interface AnnualFijosResponse {
+  year: number;
+  currency: Currency;
+  lines: FixedEvolutionLine[];
+  earliestYear: number | null;
+  latestYear: number;
+}
+
 @Injectable()
 export class MovementsService {
   constructor(
@@ -2625,6 +2722,472 @@ export class MovementsService {
       incomeAdjTrend,
       earliestYear,
       availableCategories,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Reporte de Detalle histórico de gastos fijos — RF-REP-013
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Devuelve el Detalle histórico de gastos fijos: una serie de 12 meses por
+   * cada gasto fijo lógico (cadena `chainId`) del usuario — únicamente Fijo +
+   * EXPENSE, y los calculados derivados de un fijo (RF-REP-013). No hay
+   * agregación de ningún tipo.
+   *
+   * No expone filtro de categorías: la card sustituye ese filtro por la
+   * selección de fijos individuales (front-only, sobre el universo devuelto).
+   *
+   * Decisión: el backend entrega los 3 modos ya calculados (monto, variación %
+   * nominal, variación % ajustada por IPC) por punto — mismo criterio que
+   * getAnnualInflationIncomeReport, que ya resuelve variaciones server-side.
+   * Mantiene la lógica de negocio (incluida la ventana IPC y el "mes anterior
+   * de esta línea") centralizada en un solo lugar.
+   *
+   * A diferencia de annual-inflation-income, las variaciones de fijos NO se
+   * anulan para meses futuros: un fijo es determinístico (RN-016), así que un
+   * mes futuro ya conocido participa de la variación igual que uno pasado.
+   */
+  async getAnnualFijosReport(
+    userId: string,
+    year: number,
+    currencyOverride?: Currency | null,
+    today?: string,
+  ): Promise<AnnualFijosResponse> {
+    const todayDate = today ? new Date(today + 'T00:00:00Z') : new Date();
+    const todayYear = todayDate.getUTCFullYear();
+    const todayMonth = todayDate.getUTCMonth() + 1;
+    const todayKey = `${String(todayYear).padStart(4, '0')}-${String(todayMonth).padStart(2, '0')}`;
+
+    const yearStr = String(year).padStart(4, '0');
+    const prevYearStr = String(year - 1).padStart(4, '0');
+    const prevDecKey = `${prevYearStr}-12`;
+    // 13 meses: [0]=diciembre del año previo (base de la variación de enero), [1..12]=el año pedido.
+    const monthKeys: string[] = [
+      prevDecKey,
+      ...Array.from({ length: 12 }, (_, i) => `${yearStr}-${String(i + 1).padStart(2, '0')}`),
+    ];
+
+    const [userSettings, pivotRatesYear, pivotRatesPrevYear, inflationRates, allFijos] =
+      await Promise.all([
+        this.settingsService.getSettings(userId),
+        this.repo.loadPivotRatesForYear(year),
+        this.repo.loadPivotRatesForYear(year - 1),
+        this.repo.loadInflationRatesForYear(year),
+        this.repo.getAllFijosForAnnual(userId),
+      ]);
+
+    const displayCurrency: Currency =
+      currencyOverride != null ? currencyOverride : userSettings.defaultCurrency;
+
+    const pivotRatesFor = (mes: string): PivotRates | Partial<PivotRates> | null =>
+      mes === prevDecKey
+        ? (pivotRatesPrevYear.get(prevDecKey) ?? null)
+        : (pivotRatesYear.get(mes) ?? null);
+
+    // -------------------------------------------------------------------------
+    // Universo: normales (cualquier tipo, para resolver orígenes de calculados)
+    // y calculados de fijo (cualquier tipo de origen — su dirección se deriva
+    // por mes, RN-018). Los calculados de único/cuota no entran (su origen no
+    // es un fijo).
+    // -------------------------------------------------------------------------
+    const normalesAnyType = allFijos.filter(
+      (f) =>
+        f.sourceChainId === null &&
+        f.sourceMovementId === null &&
+        f.sourceInstallmentGroupId === null,
+    );
+    const calculadosDeFijo = allFijos.filter((f) => f.sourceChainId !== null);
+
+    const normalesAnyByChain = new Map<string, RecurringForAnnual[]>();
+    for (const f of normalesAnyType) {
+      if (!normalesAnyByChain.has(f.chainId)) normalesAnyByChain.set(f.chainId, []);
+      normalesAnyByChain.get(f.chainId)!.push(f);
+    }
+
+    const normalesExpenseByChain = new Map<string, RecurringForAnnual[]>();
+    for (const f of normalesAnyType) {
+      if (f.type !== MovementType.EXPENSE) continue;
+      if (!normalesExpenseByChain.has(f.chainId)) normalesExpenseByChain.set(f.chainId, []);
+      normalesExpenseByChain.get(f.chainId)!.push(f);
+    }
+
+    const calcByChain = new Map<string, RecurringForAnnual[]>();
+    for (const c of calculadosDeFijo) {
+      if (!calcByChain.has(c.chainId)) calcByChain.set(c.chainId, []);
+      calcByChain.get(c.chainId)!.push(c);
+    }
+
+    // -------------------------------------------------------------------------
+    // Resuelve, para una cadena (todas sus filas/splits) y un mes dado, si hay
+    // fila activa o el motivo de ausencia. La cadena es contigua por
+    // construcción (RN-005): cada split cierra al anterior exactamente donde
+    // empieza, así que a lo sumo una fila cubre cada mes dentro de los bordes.
+    // -------------------------------------------------------------------------
+    type ChainResolution =
+      | { chainStart: string; chainEnd: string | null; present: true; row: RecurringForAnnual }
+      | {
+          chainStart: string;
+          chainEnd: string | null;
+          present: false;
+          reason: 'beforeStart' | 'afterEnd' | 'frequency' | 'skipped';
+        };
+
+    // Fallback defensivo: createdAt/description son opcionales en el tipo
+    // RecurringForAnnual (por compatibilidad con fixtures de otros reportes que
+    // no los necesitan); la implementación real del repo siempre los completa.
+    const rowCreatedAt = (r: RecurringForAnnual): Date => r.createdAt ?? new Date(0);
+
+    const resolveChain = (rows: RecurringForAnnual[], mes: string): ChainResolution => {
+      const sorted = [...rows].sort((a, b) =>
+        a.startMonth < b.startMonth ? -1 : a.startMonth > b.startMonth ? 1 : 0,
+      );
+      const chainStart = sorted[0].startMonth;
+      const lastRow = sorted[sorted.length - 1]; // mayor startMonth = fila vigente
+      const chainEnd = lastRow.deletedFrom;
+
+      if (mes < chainStart) {
+        return { chainStart, chainEnd, present: false, reason: 'beforeStart' };
+      }
+      if (chainEnd !== null && mes >= chainEnd) {
+        return { chainStart, chainEnd, present: false, reason: 'afterEnd' };
+      }
+
+      let active: RecurringForAnnual | undefined;
+      for (const r of sorted) {
+        const inRange = r.startMonth <= mes && (r.deletedFrom === null || r.deletedFrom > mes);
+        if (inRange && (!active || r.startMonth > active.startMonth)) active = r;
+      }
+      if (!active) {
+        // Defensivo: no debería ocurrir dado que la cadena es contigua entre sus bordes.
+        return { chainStart, chainEnd, present: false, reason: 'beforeStart' };
+      }
+      if (!isOnFrequency(active.startMonth, active.frequency, mes)) {
+        return { chainStart, chainEnd, present: false, reason: 'frequency' };
+      }
+      if (active.skippedMonths.has(mes)) {
+        return { chainStart, chainEnd, present: false, reason: 'skipped' };
+      }
+      return { chainStart, chainEnd, present: true, row: active };
+    };
+
+    interface LineBuild {
+      chainId: string;
+      isCalculated: boolean;
+      description: string | null;
+      categoryId: string;
+      categoryName: string;
+      categoryColor: string;
+      startMonth: string;
+      endMonth: string | null;
+      /** Frecuencia del fijo lógico (RF-MF-006, inmutable — compartida por toda la cadena). */
+      frequency: number;
+      /** Descripción del fijo de origen (solo calculados); null en líneas normales o si el
+       * origen no se puede resolver (p.ej. cadena de origen eliminada). */
+      originDescription: string | null;
+      /** chainId del fijo de origen (solo calculados); null en líneas normales o si no se
+       * puede resolver. */
+      originChainId: string | null;
+      /** 13 posiciones, índice 0 = diciembre del año previo. */
+      rawAmounts: (number | null)[];
+      reasons: (FixedEvolutionAbsenceReason | null)[];
+      earliestCreatedAt: Date;
+    }
+
+    // Descripción "vigente" (última fila de la cadena por startMonth) de un fijo
+    // NORMAL de cualquier tipo, usada para resolver `originDescription` de un
+    // calculado. Reutiliza `normalesAnyByChain` (ya trae TODO el historial del
+    // usuario, sin filtro de año ni de tipo) — sin query adicional.
+    const originDescriptionByChain = (originChainId: string): string | null => {
+      const originRows = normalesAnyByChain.get(originChainId);
+      if (!originRows || originRows.length === 0) return null;
+      const originSorted = [...originRows].sort((a, b) =>
+        a.startMonth < b.startMonth ? -1 : a.startMonth > b.startMonth ? 1 : 0,
+      );
+      return originSorted[originSorted.length - 1].description ?? null;
+    };
+
+    const buildNormalLine = (chainId: string, rows: RecurringForAnnual[]): LineBuild => {
+      const sorted = [...rows].sort((a, b) =>
+        a.startMonth < b.startMonth ? -1 : a.startMonth > b.startMonth ? 1 : 0,
+      );
+      const lastRow = sorted[sorted.length - 1];
+      const rawAmounts: (number | null)[] = [];
+      const reasons: (FixedEvolutionAbsenceReason | null)[] = [];
+
+      for (const mes of monthKeys) {
+        const resolved = resolveChain(rows, mes);
+        if (resolved.present) {
+          const amount = convertToDisplayCurrencyByMonth(
+            resolved.row.amountCents,
+            resolved.row.currency,
+            displayCurrency,
+            pivotRatesFor(mes),
+            resolved.row.exchangeRate,
+            resolved.row.anchorCurrency,
+          );
+          rawAmounts.push(amount);
+          reasons.push(null);
+        } else {
+          rawAmounts.push(null);
+          reasons.push(resolved.reason);
+        }
+      }
+
+      const earliestCreatedAt = sorted.reduce(
+        (min, r) => (rowCreatedAt(r) < min ? rowCreatedAt(r) : min),
+        rowCreatedAt(sorted[0]),
+      );
+
+      return {
+        chainId,
+        isCalculated: false,
+        description: lastRow.description ?? null,
+        categoryId: lastRow.categoryId,
+        categoryName: lastRow.categoryName,
+        categoryColor: lastRow.categoryColor,
+        startMonth: sorted[0].startMonth,
+        endMonth: lastRow.deletedFrom,
+        frequency: sorted[0].frequency,
+        originDescription: null,
+        originChainId: null,
+        rawAmounts,
+        reasons,
+        earliestCreatedAt,
+      };
+    };
+
+    const buildCalcLine = (chainId: string, rows: RecurringForAnnual[]): LineBuild => {
+      const sorted = [...rows].sort((a, b) =>
+        a.startMonth < b.startMonth ? -1 : a.startMonth > b.startMonth ? 1 : 0,
+      );
+      const lastRow = sorted[sorted.length - 1];
+      const rawAmounts: (number | null)[] = [];
+      const reasons: (FixedEvolutionAbsenceReason | null)[] = [];
+
+      for (const mes of monthKeys) {
+        const resolvedCalc = resolveChain(rows, mes);
+        if (!resolvedCalc.present) {
+          rawAmounts.push(null);
+          reasons.push(resolvedCalc.reason);
+          continue;
+        }
+
+        const calcRow = resolvedCalc.row;
+        const originRows = calcRow.sourceChainId
+          ? normalesAnyByChain.get(calcRow.sourceChainId)
+          : undefined;
+        if (!originRows || originRows.length === 0) {
+          // Defensivo: el origen debería existir siempre (FK lógica); si no está
+          // disponible, se trata como ausencia por frecuencia.
+          rawAmounts.push(null);
+          reasons.push('frequency');
+          continue;
+        }
+
+        const resolvedOrigin = resolveChain(originRows, mes);
+        if (!resolvedOrigin.present) {
+          // El motivo del origen (frequency/skipped/beforeStart/afterEnd) explica
+          // igual de bien por qué el calculado no tiene punto este mes.
+          rawAmounts.push(null);
+          reasons.push(resolvedOrigin.reason);
+          continue;
+        }
+
+        const originRow = resolvedOrigin.row;
+        const derivedAmount = applyFormula(
+          originRow.amountCents,
+          calcRow.formulaOperator as FormulaOperator,
+          calcRow.formulaOperand!,
+          calcRow.formulaSign!,
+        );
+        const derivedType: MovementType =
+          derivedAmount > 0 ? MovementType.INCOME : MovementType.EXPENSE;
+
+        if (derivedType === MovementType.INCOME) {
+          rawAmounts.push(null);
+          reasons.push('resultedIncome');
+          continue;
+        }
+
+        const magnitude = convertToDisplayCurrencyByMonth(
+          Math.abs(derivedAmount),
+          originRow.currency,
+          displayCurrency,
+          pivotRatesFor(mes),
+          originRow.exchangeRate,
+          originRow.anchorCurrency,
+        );
+        rawAmounts.push(magnitude);
+        reasons.push(null);
+      }
+
+      const earliestCreatedAt = sorted.reduce(
+        (min, r) => (rowCreatedAt(r) < min ? rowCreatedAt(r) : min),
+        rowCreatedAt(sorted[0]),
+      );
+
+      // sourceChainId es inmutable dentro de la cadena del calculado (se hereda en
+      // cada split, ver `PATCH /recurring/:id/calculated`), así que cualquier fila
+      // de `sorted` lo trae igual.
+      const originChainId = sorted[0].sourceChainId;
+
+      return {
+        chainId,
+        isCalculated: true,
+        description: lastRow.description ?? null,
+        categoryId: lastRow.categoryId,
+        categoryName: lastRow.categoryName,
+        categoryColor: lastRow.categoryColor,
+        startMonth: sorted[0].startMonth,
+        endMonth: lastRow.deletedFrom,
+        frequency: sorted[0].frequency,
+        originDescription: originChainId ? originDescriptionByChain(originChainId) : null,
+        originChainId,
+        rawAmounts,
+        reasons,
+        earliestCreatedAt,
+      };
+    };
+
+    interface Candidate {
+      chainId: string;
+      isCalculated: boolean;
+      build: LineBuild;
+    }
+
+    const candidates: Candidate[] = [];
+    for (const [chainId, rows] of normalesExpenseByChain) {
+      candidates.push({ chainId, isCalculated: false, build: buildNormalLine(chainId, rows) });
+    }
+    for (const [chainId, rows] of calcByChain) {
+      candidates.push({ chainId, isCalculated: true, build: buildCalcLine(chainId, rows) });
+    }
+
+    // -------------------------------------------------------------------------
+    // Ordinal estable por cadena, independiente del año pedido: rank por
+    // createdAt de la fila más antigua del universo COMPLETO (no solo el año
+    // pedido), para que un fijo no cambie de posición/color al navegar de año.
+    // -------------------------------------------------------------------------
+    const ordinalSorted = [...candidates].sort((a, b) => {
+      const ta = a.build.earliestCreatedAt.getTime();
+      const tb = b.build.earliestCreatedAt.getTime();
+      if (ta !== tb) return ta - tb;
+      return a.chainId.localeCompare(b.chainId);
+    });
+    const ordinalMap = new Map<string, number>();
+    ordinalSorted.forEach((c, idx) => ordinalMap.set(c.chainId, idx));
+
+    // -------------------------------------------------------------------------
+    // Topes de navegación de año (universo propio de la card — RF-REP-013),
+    // sobre TODA la cadena (no solo el año pedido).
+    // -------------------------------------------------------------------------
+    let earliestYear: number | null = null;
+    let latestYear = todayYear;
+    for (const c of candidates) {
+      const y = parseInt(c.build.startMonth.slice(0, 4), 10);
+      if (earliestYear === null || y < earliestYear) earliestYear = y;
+
+      if (c.build.startMonth > todayKey) {
+        const futureAltaYear = parseInt(c.build.startMonth.slice(0, 4), 10);
+        if (futureAltaYear > latestYear) latestYear = futureAltaYear;
+      }
+      if (c.build.endMonth !== null && c.build.endMonth > todayKey) {
+        const futureBajaYear = parseInt(c.build.endMonth.slice(0, 4), 10);
+        if (futureBajaYear > latestYear) latestYear = futureBajaYear;
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Variaciones (nominal / ajustada por IPC) sobre los montos ya convertidos.
+    // -------------------------------------------------------------------------
+    const computeVariations = (
+      rawAmounts: (number | null)[],
+    ): { nominal: (number | null)[]; adjusted: (number | null)[] } => {
+      const nominal: (number | null)[] = new Array(rawAmounts.length).fill(null);
+      const adjusted: (number | null)[] = new Array(rawAmounts.length).fill(null);
+      for (let i = 1; i < rawAmounts.length; i++) {
+        const cur = rawAmounts[i];
+        const prev = rawAmounts[i - 1];
+        if (cur === null || prev === null || prev <= 0) continue;
+
+        nominal[i] = roundDown((cur * 100) / prev - 100, 2);
+
+        const ipc = inflationRates.get(monthKeys[i]) ?? null;
+        if (ipc !== null) {
+          const prevInflated = prev * (1 + ipc / 100);
+          if (prevInflated > 0) {
+            adjusted[i] = roundDown((cur * 100) / prevInflated - 100, 2);
+          }
+        }
+      }
+      return { nominal, adjusted };
+    };
+
+    // -------------------------------------------------------------------------
+    // Universo del año pedido: solo cadenas con al menos una aparición en los
+    // 12 meses pedidos (RF-REP-013 — "con aparición en el año").
+    // Orden: gasto anual DESC, desempate chainId ASC.
+    // -------------------------------------------------------------------------
+    const lines: FixedEvolutionLine[] = candidates
+      .filter((c) => c.build.rawAmounts.slice(1).some((v) => v !== null))
+      .map((c) => {
+        const { nominal, adjusted } = computeVariations(c.build.rawAmounts);
+        const months: FixedEvolutionMonthPoint[] = [];
+        for (let i = 1; i < monthKeys.length; i++) {
+          months.push({
+            amountCents: c.build.rawAmounts[i],
+            nominalPct: nominal[i],
+            adjustedPct: adjusted[i],
+            reason: c.build.reasons[i],
+          });
+        }
+        const annualTotal = c.build.rawAmounts
+          .slice(1)
+          .reduce((sum: number, v) => sum + (v ?? 0), 0);
+        return {
+          chainId: c.chainId,
+          ordinal: ordinalMap.get(c.chainId)!,
+          isCalculated: c.isCalculated,
+          description: c.build.description,
+          categoryId: c.build.categoryId,
+          categoryName: c.build.categoryName,
+          categoryColor: c.build.categoryColor,
+          startMonth: c.build.startMonth,
+          endMonth: c.build.endMonth,
+          frequency: c.build.frequency,
+          originDescription: c.build.originDescription,
+          originChainId: c.build.originChainId,
+          months,
+          annualTotal,
+        };
+      })
+      .sort((a, b) =>
+        b.annualTotal !== a.annualTotal
+          ? b.annualTotal - a.annualTotal
+          : a.chainId.localeCompare(b.chainId),
+      )
+      .map(({ annualTotal: _annualTotal, ...rest }) => rest);
+
+    this.logger.debug(
+      {
+        userId,
+        year,
+        displayCurrency,
+        candidateCount: candidates.length,
+        lineCount: lines.length,
+        earliestYear,
+        latestYear,
+      },
+      'Reporte de detalle histórico de gastos fijos calculado',
+    );
+
+    return {
+      year,
+      currency: displayCurrency,
+      lines,
+      earliestYear,
+      latestYear,
     };
   }
 

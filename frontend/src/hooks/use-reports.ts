@@ -60,7 +60,7 @@
 
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useApi } from "@/hooks/use-api";
-import type { ReportsMovementsResponse, UnicoGridResponse, CuotasGanttResponse, AnnualInflationIncomeResponse } from "@/types/reports";
+import type { ReportsMovementsResponse, UnicoGridResponse, CuotasGanttResponse, AnnualInflationIncomeResponse, AnnualFijosResponse } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
 import { createLogger } from "@/lib/logger";
 
@@ -380,6 +380,55 @@ export function useInflationIncome(
       const url = `/movements/reports/annual-inflation-income?year=${year}${urlParam}${currencyParam}${todayParam}`;
       logger.debug("Cargando reporte Inflación vs Ingresos", { year, categoriesKey, currency, today });
       return api.get<AnnualInflationIncomeResponse>(url);
+    },
+    enabled: Boolean(year) && isAuthenticated,
+    placeholderData: keepPreviousData,
+  });
+
+  return query;
+}
+
+// ─── Hook para el reporte Detalle histórico de gastos fijos (Ola 5, P6) ──────
+
+/**
+ * Query key para el reporte anual de Detalle histórico de gastos fijos.
+ * Varía por año, moneda y fecha de hoy. Sin filtro de categorías (esta card no lo tiene).
+ */
+export const FIXED_EVOLUTION_QUERY_KEY = (
+  year: number,
+  currency?: CurrencyCode,
+  today?: string,
+) => ["reports-fixed-evolution", year, currency ?? null, today ?? null] as const;
+
+/**
+ * Hook para obtener el reporte anual de Detalle histórico de gastos fijos (RF-REP-013).
+ *
+ * GET /movements/reports/annual-fijos?year=YYYY[&currency=XXX][&today=YYYY-MM-DD]
+ *
+ * No acepta `categories`: la card no filtra por categoría (la selección de fijos
+ * es puramente client-side sobre `data.lines`).
+ *
+ * @param year     El año a consultar.
+ * @param currency undefined = default del usuario; presente = override de moneda.
+ * @param today    Fecha local del usuario (YYYY-MM-DD). Se manda para que el backend
+ *                 determine qué meses son futuros en la zona del usuario.
+ */
+export function useFixedEvolution(
+  year: number,
+  currency?: CurrencyCode,
+  today?: string,
+) {
+  const { api, isAuthenticated } = useApi();
+
+  const currencyParam = currency ? `&currency=${currency}` : "";
+  const todayParam = today ? `&today=${today}` : "";
+
+  const query = useQuery<AnnualFijosResponse>({
+    queryKey: FIXED_EVOLUTION_QUERY_KEY(year, currency, today),
+    queryFn: () => {
+      const url = `/movements/reports/annual-fijos?year=${year}${currencyParam}${todayParam}`;
+      logger.debug("Cargando reporte Detalle histórico de gastos fijos", { year, currency, today });
+      return api.get<AnnualFijosResponse>(url);
     },
     enabled: Boolean(year) && isAuthenticated,
     placeholderData: keepPreviousData,

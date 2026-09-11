@@ -23,7 +23,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Plus, AreaChart, BarChart3, CalendarDays, CalendarRange, TrendingUp, ArrowUpDown, Check } from "lucide-react";
+import { Plus, AreaChart, BarChart3, CalendarDays, CalendarRange, TrendingUp, Repeat, ArrowUpDown, Check } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -82,8 +82,8 @@ const POPOVER_WIDTH = 240;
 const VIEWPORT_MARGIN = 12;
 /** Gap entre anchor y popover (ambas direcciones). */
 const POPOVER_GAP = 6;
-/** Alto estimado para el primer frame antes de medir el DOM real (5 opciones). */
-const POPOVER_HEIGHT_ESTIMATE = 330;
+/** Alto estimado para el primer frame antes de medir el DOM real (6 opciones). */
+const POPOVER_HEIGHT_ESTIMATE = 396;
 
 function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -247,6 +247,20 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
         <div>
           <p className="text-[13px] font-semibold text-ink">Inflación vs Ingresos</p>
           <p className="text-[11.5px] text-muted mt-[1px]">Variación de tus ingresos frente a la inflación, mes a mes.</p>
+        </div>
+      </button>
+
+      {/* Opción 6: Detalle histórico de gastos fijos (líneas por fijo) */}
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => onSelect("fixed-evolution")}
+        className="flex w-full items-center gap-[10px] rounded-ctl px-3 py-[10px] text-left transition-colors duration-[140ms] hover:bg-panel-2 focus-visible:outline-none focus-visible:bg-panel-2"
+      >
+        <Repeat size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
+        <div>
+          <p className="text-[13px] font-semibold text-ink">Detalle histórico de gastos fijos</p>
+          <p className="text-[11.5px] text-muted mt-[1px]">Cada gasto fijo por separado, mes a mes: cuánto pagabas y cuándo aumentó.</p>
         </div>
       </button>
     </div>
@@ -555,6 +569,56 @@ function ReportesPageContent() {
     });
   }
 
+  // Ola 5, P6: modo de visualización de `fixed-evolution` (Montos / Variación).
+  // "amounts" (= default) se omite para back-compat, igual patrón que direction/movementTypes.
+  function handleFixedModeChange(id: string, mode: "amounts" | "variation") {
+    const newCards = cards.map((c) => {
+      if (c.id !== id) return c;
+      if (mode === "amounts") {
+        const updated = { ...c };
+        delete updated.fixedMode;
+        return updated;
+      }
+      return { ...c, fixedMode: mode };
+    });
+    void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
+      logger.error("Error al persistir modo de card fixed-evolution", { error: err, cardId: id });
+    });
+  }
+
+  // Ola 5, P6: chip "Ajustada por inflación" de `fixed-evolution`. false (= default) se omite.
+  function handleFixedAdjustedChange(id: string, adjusted: boolean) {
+    const newCards = cards.map((c) => {
+      if (c.id !== id) return c;
+      if (!adjusted) {
+        const updated = { ...c };
+        delete updated.fixedAdjusted;
+        return updated;
+      }
+      return { ...c, fixedAdjusted: true };
+    });
+    void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
+      logger.error("Error al persistir ajuste por inflación de card fixed-evolution", { error: err, cardId: id });
+    });
+  }
+
+  // Ola 5, P6: selección de gastos fijos (por chainId) de `fixed-evolution`.
+  // null (= todos, default) se omite para back-compat; [] (ninguno) se persiste tal cual.
+  function handleFixedSelectedIdsChange(id: string, ids: string[] | null) {
+    const newCards = cards.map((c) => {
+      if (c.id !== id) return c;
+      if (ids === null) {
+        const updated = { ...c };
+        delete updated.fixedSelectedIds;
+        return updated;
+      }
+      return { ...c, fixedSelectedIds: ids };
+    });
+    void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
+      logger.error("Error al persistir selección de card fixed-evolution", { error: err, cardId: id });
+    });
+  }
+
   const hasCards = cards.length > 0;
 
   return (
@@ -661,6 +725,9 @@ function ReportesPageContent() {
                   onDirectionChange={(dir) => handleDirectionChange(card.id, dir)}
                   onAnchorChange={(usdCents) => handleAnchorChange(card.id, usdCents)}
                   onIncludeSimulatedChange={(v) => handleIncludeSimulatedChange(card.id, v)}
+                  onFixedModeChange={(mode) => handleFixedModeChange(card.id, mode)}
+                  onFixedAdjustedChange={(adjusted) => handleFixedAdjustedChange(card.id, adjusted)}
+                  onFixedSelectedIdsChange={(ids) => handleFixedSelectedIdsChange(card.id, ids)}
                 />
               ))}
 
