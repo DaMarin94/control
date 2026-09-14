@@ -740,13 +740,13 @@ Quinto tipo de card (`ReportCardType = "inflation-income"`). Componente **`compo
 
 ### Card `fixed-evolution` — Detalle histórico de gastos fijos (RF-REP-013)
 
-Sexto tipo de card (`ReportCardType = "fixed-evolution"`). Componente **`components/charts/fixed-evolution-card.tsx`**; datos vía el hook **`useFixedEvolution`** (`hooks/use-reports.ts`) sobre `GET /movements/reports/annual-fijos` (contrato en `docs/data-model.md`, §Contrato de reporte anual de Fijos). Tipos en `types/reports.ts`. Spec visual en `docs/design.md`. Lo no obvio:
+Sexto tipo de card (`ReportCardType = "fixed-evolution"`). Componente **`components/charts/fixed-evolution-card.tsx`**; datos vía el hook **`useFixedEvolution`** (`hooks/use-reports.ts`) sobre `GET /movements/reports/fijos-historico` (contrato en `docs/data-model.md`, §Contrato del detalle histórico de Fijos). Tipos en `types/reports.ts`. Spec visual en `docs/design.md`. Lo no obvio:
 
 - **Solo en `/reportes`, no en el dashboard** (el dashboard monta solo `IncomeExpenseCard`).
 - **Recharts (gráfico de líneas)**, una línea por cadena de fijo. Convive con las otras formas de render de `/reportes`.
 - **Sin filtro de categorías.** La cabecera **no** monta el control de categorías de las demás cards anuales: la **selección por fijo** (`fixedSelectedIds`, por `chainId`) lo reemplaza y se aplica **client-side** sobre `data.lines` — el endpoint no acepta `categories`.
 - **Sin chip de simulados** (RF-REP-017 no aplica) y **sin marcas ni popover de límites** (RF-LIM-005 no aplica a esta card).
-- **Los tres valores de cada punto llegan calculados** (monto, `nominalPct`, `adjustedPct`): el front elige cuál grafica según `fixedMode`/`fixedAdjusted`, **no** deriva porcentajes.
+- **Los tres valores de cada punto llegan calculados** (monto, `nominalPct`, `adjustedPct`): el front elige cuál grafica según `fixedMode`/`fixedAdjusted`, **no** deriva porcentajes. Las dos variaciones vienen medidas **contra el pago anterior de la línea** (ver contrato); el front **no** sabe de qué mes es ese pago ni —cuando `adjustedPct` es `null`— de qué mes falta el IPC, así que los copys de esos huecos no pueden nombrar un mes.
 - **El color de línea se ancla en `ordinal`, no en el índice del array**: `lines` se reordena por gasto del rango (ver contrato). Regla de color y comportamiento de animación en `docs/design.md`.
 - **Select de rango en lugar del stepper de año.** Ocho opciones (3/6/9 meses y 1 a 5 años), **default 3 años**, persistidas por card en **`fixedRangeMonths`** de la clave `reports` (ausente = `36`; ver `docs/data-model.md`, §`reports`). La card **no monta `YearStepper`** ni ninguna navegación de período, y el campo `year` de su config es inerte.
 - **`rangeMonths` de la respuesta es el EFECTIVO y nunca se escribe de vuelta en la preferencia.** Si el backend recorta el rango contra el historial del usuario, eso rotula el eje y los estados, pero el valor persistido sigue siendo el **pedido**: lo contrario iría degradando la preferencia sola cada vez que se pide más rango del que hay historia.

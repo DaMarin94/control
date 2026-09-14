@@ -314,7 +314,7 @@ export class MovementsController {
   }
 
   /**
-   * GET /movements/reports/annual-fijos?rangeMonths=<3|6|9|12|24|36|48|60>[&currency=<ARS|USD|EUR|BRL>][&today=YYYY-MM-DD]
+   * GET /movements/reports/fijos-historico?rangeMonths=<3|6|9|12|24|36|48|60>[&currency=<ARS|USD|EUR|BRL>][&today=YYYY-MM-DD]
    *
    * Devuelve el Detalle histórico de gastos fijos (RF-REP-013): una serie POR
    * CADA gasto fijo lógico (cadena `chainId`) del usuario, alcance exclusivo
@@ -324,7 +324,7 @@ export class MovementsController {
    * El rango es de MESES CORRIDOS anclado al presente, no un año calendario:
    * el borde derecho siempre es el mes en curso (resuelto con `today`) y el
    * izquierdo es el mes en curso menos el rango pedido, recortado contra la
-   * historia real del usuario (ver AnnualFijosResponse.startMonth/endMonth/
+   * historia real del usuario (ver FijosHistoricoResponse.startMonth/endMonth/
    * rangeMonths en la respuesta, que reflejan el rango EFECTIVO, no el pedido).
    *
    * Esta card NO expone filtro de categorías (la selección de fijos individuales
@@ -339,11 +339,11 @@ export class MovementsController {
    *   resolver el mes en curso (borde derecho del rango). Ausente → fecha UTC
    *   del sistema.
    *
-   * Respuesta: AnnualFijosResponse dentro del sobre { success, statusCode, data }.
+   * Respuesta: FijosHistoricoResponse dentro del sobre { success, statusCode, data }.
    * 400 si rangeMonths, currency o today tienen formato/valor inválido.
    */
-  @Get('reports/annual-fijos')
-  getAnnualFijosReport(
+  @Get('reports/fijos-historico')
+  getFijosHistoricoReport(
     @Request() req: AuthRequest,
     @Query('rangeMonths') rangeMonthsParam: string | undefined,
     @Query('currency') currencyParam: string | undefined,
@@ -384,7 +384,7 @@ export class MovementsController {
       todayStr = todayParam;
     }
 
-    return this.movementsService.getAnnualFijosReport(
+    return this.movementsService.getFijosHistoricoReport(
       req.user.userId,
       rangeMonths,
       currencyOverride,

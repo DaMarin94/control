@@ -387,10 +387,19 @@ export type FixedEvolutionAbsenceReason =
  * amountCents — monto convertido a la moneda de display con el TC oficial del
  *   mes de la instancia (RF-REP-007, gotcha de fijos/calculados). null = ausencia
  *   (hueco); puede ser 0 real si la línea es un calculado (RN-018).
- * nominalPct — variación % nominal respecto del mes anterior de ESTA línea.
- *   null si no aplica (mes actual ausente, mes anterior ausente, o monto anterior 0).
- * adjustedPct — igual, descontando el IPC nacional del mes (RF-IPC-001). null si
- *   además falta el dato de IPC del mes.
+ * nominalPct — variación % nominal respecto de la APARICIÓN ANTERIOR de ESTA
+ *   línea (no el mes calendario anterior): la comparación salta huecos por
+ *   frecuencia > 1 o por anulación, y compara siempre contra el último mes
+ *   con `amountCents` no nulo, aunque haya quedado varios meses atrás — incluso
+ *   antes del primer mes del rango efectivo, si el dato existe (ver
+ *   `getFijosHistoricoReport` para el detalle de la ventana de "colchón" hacia
+ *   atrás usada para resolverlo). null si no hay aparición anterior en absoluto
+ *   (primera aparición de la vida del fijo) o si esa aparición tiene monto 0.
+ * adjustedPct — igual, descontando el IPC ACUMULADO (compuesto) entre la
+ *   aparición anterior (exclusive) y esta (inclusive) — para un fijo mensual
+ *   es un solo mes de IPC (idéntico a nominalPct ajustado por un mes); para uno
+ *   de frecuencia > 1 es la inflación compuesta de todos los meses del tramo.
+ *   null si además falta el dato de IPC de alguno de esos meses.
  * reason — motivo de la ausencia cuando amountCents es null; null cuando hay punto.
  */
 export interface FixedEvolutionMonthPoint {
@@ -425,7 +434,7 @@ export const FIXED_EVOLUTION_DEFAULT_RANGE_MONTHS: FixedEvolutionRangeMonths = 3
  *   resolver (p.ej. la cadena de origen fue eliminada); el origen puede ser un
  *   fijo de INCOME o uno sin ninguna aparición en el rango pedido — ninguno de
  *   esos dos casos produce `null` (se resuelven igual).
- * months — largo VARIABLE, igual al rango efectivo (`AnnualFijosResponse.rangeMonths`);
+ * months — largo VARIABLE, igual al rango efectivo (`FijosHistoricoResponse.rangeMonths`);
  *   cada punto lleva su propio `month` ("YYYY-MM"), el índice ya no alcanza para
  *   ubicarlo. Nunca incluye el mes ancla de la variación (queda fuera de la serie).
  */
@@ -469,7 +478,7 @@ export interface FixedEvolutionExcludedLine {
 }
 
 /**
- * Shape completo de la respuesta de GET /movements/reports/annual-fijos.
+ * Shape completo de la respuesta de GET /movements/reports/fijos-historico.
  *
  * rangeMonths / startMonth / endMonth — el rango EFECTIVO (post-recorte), no
  * el pedido: `endMonth` es siempre el mes en curso (resuelto con `today`);
@@ -491,7 +500,7 @@ export interface FixedEvolutionExcludedLine {
  *   no está en pantalla que más sirve saber que existe y desde cuándo. Ver
  *   `FixedEvolutionExcludedLine`.
  */
-export interface AnnualFijosResponse {
+export interface FijosHistoricoResponse {
   currency: Currency;
   rangeMonths: number;
   startMonth: string;
@@ -2796,29 +2805,48 @@ export class MovementsService {
    * fijo del usuario (normales EXPENSE + calculados de fijo que resultan
    * gasto) entra a `lines` si tiene 2 o más apariciones graficables en el
    * rango efectivo; con 0 o 1, va a `excluded` (decisión "opción B" — el caso
-   * de 0 apariciones es deliberado, ver doc de `AnnualFijosResponse.excluded`).
+   * de 0 apariciones es deliberado, ver doc de `FijosHistoricoResponse.excluded`).
    *
    * Decisión: el backend entrega los 3 modos ya calculados (monto, variación %
    * nominal, variación % ajustada por IPC) por punto — mismo criterio que
    * getAnnualInflationIncomeReport, que ya resuelve variaciones server-side.
-   * Mantiene la lógica de negocio (incluida la ventana IPC y el "mes anterior
-   * de esta línea") centralizada en un solo lugar.
+   * Mantiene la lógica de negocio (incluida la ventana IPC y la aparición
+   * anterior de esta línea) centralizada en un solo lugar.
    *
    * A diferencia de annual-inflation-income, las variaciones de fijos NO se
    * anulan para meses futuros: un fijo es determinístico (RN-016). Como el
    * rango nunca incluye meses futuros (borde derecho = mes en curso), esto no
    * cambia nada en la práctica, pero la variación en sí sigue sin anularse.
    *
-   * FUERA DE ALCANCE (fase 2, deliberado): el cálculo de la variación sigue
-   * siendo "contra el mes calendario anterior", no "contra la aparición
-   * anterior de la misma línea" — no se toca en esta migración.
+   * Variación ENTRE APARICIONES CONSECUTIVAS (fase 2), no contra el mes
+   * calendario anterior: para un fijo de frecuencia > 1 (ej. anual), el "mes
+   * anterior" casi nunca tiene monto, así que comparar contra el calendario
+   * dejaba el modo Variación vacío para todo fijo no mensual. En cambio, cada
+   * punto se compara contra la ÚLTIMA aparición real previa de la MISMA línea
+   * (mes con `amountCents` no nulo, saltando huecos por frecuencia o
+   * anulación — un mes anulado no corta la cadena). Para un fijo mensual sin
+   * anulaciones esto coincide exactamente con "el mes anterior" (cambio
+   * aditivo, sin regresión). `adjustedPct` descuenta el IPC ACUMULADO
+   * (compuesto) de todos los meses entre las dos apariciones, no solo el del
+   * mes actual — para un fijo anual es la inflación de los ~12 meses del
+   * tramo.
+   *
+   * La aparición anterior puede caer ANTES del rango efectivo pedido (ej. un
+   * fijo anual con rango de 12 meses: su aparición previa está 12 meses antes
+   * del primer mes visible). Se calcula igual si el dato existe: se carga un
+   * "colchón" de `VARIATION_LOOKBACK_MONTHS` meses de cotizaciones/IPC hacia
+   * atrás del borde izquierdo efectivo (no expuesto en la respuesta, solo
+   * para resolver la variación del primer tramo visible). Si ni así se
+   * encuentra una aparición anterior (la línea nació dentro de esa ventana, o
+   * más atrás), `nominalPct`/`adjustedPct` del primer punto quedan en `null`
+   * (misma semántica que "primera aparición de la vida del fijo").
    */
-  async getAnnualFijosReport(
+  async getFijosHistoricoReport(
     userId: string,
     rangeMonths: FixedEvolutionRangeMonths,
     currencyOverride?: Currency | null,
     today?: string,
-  ): Promise<AnnualFijosResponse> {
+  ): Promise<FijosHistoricoResponse> {
     const todayDate = today ? new Date(today + 'T00:00:00Z') : new Date();
     const todayYear = todayDate.getUTCFullYear();
     const todayMonth = todayDate.getUTCMonth() + 1;
@@ -2893,14 +2921,25 @@ export class MovementsService {
     const effectiveEndMonth = todayKey;
     const effectiveRangeMonths = monthDiff(effectiveStartMonth, effectiveEndMonth) + 1;
 
-    // Mes ancla (base de la variación del primer mes del rango efectivo) —
-    // queda FUERA de la serie devuelta, solo se usa para computar variaciones.
-    const anchorMonth = addMonths(effectiveStartMonth, -1);
+    // Colchón hacia atrás del borde izquierdo efectivo — queda FUERA de la
+    // serie devuelta, solo se usa para resolver la variación entre apariciones
+    // consecutivas (fase 2) contra una aparición previa que puede caer antes
+    // del rango pedido (ej. un fijo anual con rango de 12 meses). 24 = el
+    // doble de la frecuencia máxima soportada (12, RF-MF-006): alcanza para
+    // encontrar la aparición anterior de cualquier fijo aun si la
+    // inmediatamente anterior fue anulada (un salto extra de frecuencia).
+    const VARIATION_LOOKBACK_MONTHS = 24;
+    const prefixMonthKeys: string[] = Array.from(
+      { length: VARIATION_LOOKBACK_MONTHS },
+      (_, i) => addMonths(effectiveStartMonth, i - VARIATION_LOOKBACK_MONTHS),
+    );
     const rangeMonthKeys: string[] = Array.from({ length: effectiveRangeMonths }, (_, i) =>
       addMonths(effectiveStartMonth, i),
     );
-    // [0] = mes ancla, [1..] = rango efectivo (largo variable, 3..60 o menos si se recortó).
-    const monthKeys: string[] = [anchorMonth, ...rangeMonthKeys];
+    // [0..prefixLen-1] = colchón hacia atrás (no expuesto), [prefixLen..] =
+    // rango efectivo visible (largo variable, 3..60 o menos si se recortó).
+    const monthKeys: string[] = [...prefixMonthKeys, ...rangeMonthKeys];
+    const prefixLen = prefixMonthKeys.length;
 
     const [pivotRatesMap, inflationRates] = await Promise.all([
       this.repo.loadPivotRatesForMonths(monthKeys),
@@ -3171,27 +3210,57 @@ export class MovementsService {
     ordinalSorted.forEach((c, idx) => ordinalMap.set(c.chainId, idx));
 
     // -------------------------------------------------------------------------
-    // Variaciones (nominal / ajustada por IPC) sobre los montos ya convertidos.
+    // Variaciones (nominal / ajustada por IPC) — ENTRE APARICIONES CONSECUTIVAS
+    // de la MISMA línea (fase 2), no contra el mes calendario anterior. Recorre
+    // el array completo (colchón + rango visible) buscando, para cada mes con
+    // monto, la última aparición previa (mes con `amountCents` no nulo) —
+    // saltando huecos por frecuencia/anulación, que NO cortan la cadena. Para
+    // un fijo mensual sin anulaciones esa aparición previa ES el índice
+    // anterior, así que el resultado es idéntico al cálculo "contra el mes
+    // anterior" (sin regresión).
+    //
+    // adjustedPct descuenta el IPC ACUMULADO (compuesto) de TODOS los meses
+    // entre la aparición anterior (exclusive) y la actual (inclusive) — para
+    // un fijo mensual es un solo mes; para uno de frecuencia > 1, la
+    // inflación compuesta de todo el tramo. Si falta el dato de IPC de
+    // cualquiera de esos meses, adjustedPct queda en null (no se puede
+    // descontar una inflación parcial).
     // -------------------------------------------------------------------------
     const computeVariations = (
       rawAmounts: (number | null)[],
     ): { nominal: (number | null)[]; adjusted: (number | null)[] } => {
       const nominal: (number | null)[] = new Array(rawAmounts.length).fill(null);
       const adjusted: (number | null)[] = new Array(rawAmounts.length).fill(null);
-      for (let i = 1; i < rawAmounts.length; i++) {
+
+      let lastAppearanceIdx: number | null = null;
+      for (let i = 0; i < rawAmounts.length; i++) {
         const cur = rawAmounts[i];
-        const prev = rawAmounts[i - 1];
-        if (cur === null || prev === null || prev <= 0) continue;
+        if (cur === null) continue;
 
-        nominal[i] = roundDown((cur * 100) / prev - 100, 2);
+        if (lastAppearanceIdx !== null) {
+          const prev = rawAmounts[lastAppearanceIdx];
+          if (prev !== null && prev > 0) {
+            nominal[i] = roundDown((cur * 100) / prev - 100, 2);
 
-        const ipc = inflationRates.get(monthKeys[i]) ?? null;
-        if (ipc !== null) {
-          const prevInflated = prev * (1 + ipc / 100);
-          if (prevInflated > 0) {
-            adjusted[i] = roundDown((cur * 100) / prevInflated - 100, 2);
+            let compoundFactor = 1;
+            let missingIpc = false;
+            for (let k = lastAppearanceIdx + 1; k <= i; k++) {
+              const ipc = inflationRates.get(monthKeys[k]) ?? null;
+              if (ipc === null) {
+                missingIpc = true;
+                break;
+              }
+              compoundFactor *= 1 + ipc / 100;
+            }
+            if (!missingIpc) {
+              const prevInflated = prev * compoundFactor;
+              if (prevInflated > 0) {
+                adjusted[i] = roundDown((cur * 100) / prevInflated - 100, 2);
+              }
+            }
           }
         }
+        lastAppearanceIdx = i;
       }
       return { nominal, adjusted };
     };
@@ -3200,7 +3269,7 @@ export class MovementsService {
     // Universo del rango efectivo: cada candidata (= toda cadena de gasto fijo
     // del usuario, RN de la card — decisión "opción B") se clasifica por su
     // cantidad de apariciones graficables DENTRO del rango efectivo (excluye el
-    // mes ancla, que no es parte del rango visible):
+    // colchón hacia atrás, que no es parte del rango visible):
     //   0 o 1 aparición → excluded (identidad + startMonth, sin más cálculo).
     //     Incluye cadenas sin NINGUNA aparición en el rango (p.ej. un fijo
     //     anual que se paga fuera del rango pedido): el propósito de `excluded`
@@ -3209,7 +3278,7 @@ export class MovementsService {
     //   ≥2 apariciones → lines, ordenadas por gasto TOTAL del rango efectivo DESC.
     // -------------------------------------------------------------------------
     const rangePortion = (c: (typeof candidates)[number]): (number | null)[] =>
-      c.build.rawAmounts.slice(1);
+      c.build.rawAmounts.slice(prefixLen);
     const appearanceCount = (c: (typeof candidates)[number]): number =>
       rangePortion(c).filter((v) => v !== null).length;
 
@@ -3218,7 +3287,7 @@ export class MovementsService {
       .map((c) => {
         const { nominal, adjusted } = computeVariations(c.build.rawAmounts);
         const months: FixedEvolutionMonthPoint[] = [];
-        for (let i = 1; i < monthKeys.length; i++) {
+        for (let i = prefixLen; i < monthKeys.length; i++) {
           months.push({
             month: monthKeys[i],
             amountCents: c.build.rawAmounts[i],

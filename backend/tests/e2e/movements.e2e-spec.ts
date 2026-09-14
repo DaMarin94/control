@@ -1471,7 +1471,7 @@ describe('Movements (e2e)', () => {
   });
 
   // -------------------------------------------------------------------------
-  // GET /movements/reports/annual-fijos (RF-REP-013 — Detalle histórico de
+  // GET /movements/reports/fijos-historico (RF-REP-013 — Detalle histórico de
   // gastos fijos / card "fixed-evolution")
   //
   // Migración de año calendario a RANGO DE MESES CORRIDOS anclado al presente:
@@ -1488,13 +1488,14 @@ describe('Movements (e2e)', () => {
   //   - inflationRate.findMany → loadInflationRatesForMonths
   //
   // La cobertura profunda de reglas de dominio (recomposición de cadena,
-  // motivos de ausencia, variación, rango efectivo, universo de ≥2 apariciones)
-  // vive en el unit test movements-annual-fijos.spec.ts; acá se cubre shape,
-  // validaciones, autenticación y aislamiento — mismo criterio que el resto de
-  // la familia de reportes anuales.
+  // motivos de ausencia, variación entre apariciones consecutivas, rango
+  // efectivo, universo de ≥2 apariciones) vive en el unit test
+  // movements-fijos-historico.spec.ts; acá se cubre shape, validaciones,
+  // autenticación y aislamiento — mismo criterio que el resto de la familia
+  // de reportes anuales.
   // -------------------------------------------------------------------------
 
-  describe('GET /movements/reports/annual-fijos (RF-REP-013)', () => {
+  describe('GET /movements/reports/fijos-historico (RF-REP-013)', () => {
     /** Fila raw de Recurring devuelta por recurring.findMany (shape del select de getAllFijosForAnnual). */
     function makeRawRecurringRow(overrides: Record<string, unknown> = {}) {
       return {
@@ -1529,9 +1530,9 @@ describe('Movements (e2e)', () => {
       mockPrisma.inflationRate.findMany.mockResolvedValue([]);
     });
 
-    it('200 + shape completo de AnnualFijosResponse (universo vacío)', async () => {
+    it('200 + shape completo de FijosHistoricoResponse (universo vacío)', async () => {
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?rangeMonths=6&today=2026-06-25')
+        .get('/movements/reports/fijos-historico?rangeMonths=6&today=2026-06-25')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(200);
 
@@ -1554,7 +1555,7 @@ describe('Movements (e2e)', () => {
       mockPrisma.recurring.findMany.mockResolvedValue([makeRawRecurringRow()]);
 
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?rangeMonths=6&today=2026-06-25')
+        .get('/movements/reports/fijos-historico?rangeMonths=6&today=2026-06-25')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(200);
 
@@ -1603,7 +1604,7 @@ describe('Movements (e2e)', () => {
       ]);
 
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?rangeMonths=6&today=2026-06-25')
+        .get('/movements/reports/fijos-historico?rangeMonths=6&today=2026-06-25')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(200);
 
@@ -1624,7 +1625,7 @@ describe('Movements (e2e)', () => {
       ]);
 
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?rangeMonths=6&today=2026-06-25')
+        .get('/movements/reports/fijos-historico?rangeMonths=6&today=2026-06-25')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(200);
 
@@ -1637,7 +1638,7 @@ describe('Movements (e2e)', () => {
       ]);
 
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?rangeMonths=6&today=2026-06-25')
+        .get('/movements/reports/fijos-historico?rangeMonths=6&today=2026-06-25')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(200);
 
@@ -1652,7 +1653,7 @@ describe('Movements (e2e)', () => {
 
     it('override de currency: currency=USD refleja en la respuesta', async () => {
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?currency=USD')
+        .get('/movements/reports/fijos-historico?currency=USD')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(200);
 
@@ -1668,7 +1669,7 @@ describe('Movements (e2e)', () => {
       });
 
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?rangeMonths=6&today=2026-06-25')
+        .get('/movements/reports/fijos-historico?rangeMonths=6&today=2026-06-25')
         .set('Authorization', `Bearer ${tokenB}`)
         .expect(200);
 
@@ -1677,7 +1678,7 @@ describe('Movements (e2e)', () => {
 
     it('sin rangeMonths → default 36', async () => {
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?today=2026-06-25')
+        .get('/movements/reports/fijos-historico?today=2026-06-25')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(200);
 
@@ -1687,7 +1688,7 @@ describe('Movements (e2e)', () => {
 
     it('400 si rangeMonths no es uno de los 8 valores aceptados', async () => {
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?rangeMonths=7')
+        .get('/movements/reports/fijos-historico?rangeMonths=7')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(400);
 
@@ -1697,7 +1698,7 @@ describe('Movements (e2e)', () => {
 
     it('400 si rangeMonths no es numérico', async () => {
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?rangeMonths=abc')
+        .get('/movements/reports/fijos-historico?rangeMonths=abc')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(400);
 
@@ -1707,7 +1708,7 @@ describe('Movements (e2e)', () => {
 
     it('400 si currency es inválido', async () => {
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?rangeMonths=6&currency=GBP')
+        .get('/movements/reports/fijos-historico?rangeMonths=6&currency=GBP')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(400);
 
@@ -1717,7 +1718,7 @@ describe('Movements (e2e)', () => {
 
     it('400 si today tiene formato inválido', async () => {
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?rangeMonths=6&today=25-06-2026')
+        .get('/movements/reports/fijos-historico?rangeMonths=6&today=25-06-2026')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(400);
 
@@ -1727,7 +1728,7 @@ describe('Movements (e2e)', () => {
 
     it('401 sin JWT', async () => {
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?rangeMonths=6')
+        .get('/movements/reports/fijos-historico?rangeMonths=6')
         .expect(401);
 
       expect(res.body.success).toBe(false);
@@ -1738,7 +1739,7 @@ describe('Movements (e2e)', () => {
       mockPrisma.recurring.findMany.mockResolvedValue([makeRawRecurringRow()]);
 
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?rangeMonths=6&categories=algun-id&today=2026-06-25')
+        .get('/movements/reports/fijos-historico?rangeMonths=6&categories=algun-id&today=2026-06-25')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(200);
 

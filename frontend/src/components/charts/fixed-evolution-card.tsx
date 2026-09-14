@@ -125,7 +125,7 @@ const MONTH_LABELS_FULL = [
 const CHART_PANEL_ID = "fixed-evolution-chart-panel";
 
 type FixedMode = "amounts" | "variation";
-type EffectiveMode = "amounts" | "nominal" | "adjusted";
+export type EffectiveMode = "amounts" | "nominal" | "adjusted";
 
 function getEffectiveMode(mode: FixedMode, adjusted: boolean): EffectiveMode {
   if (mode === "amounts") return "amounts";
@@ -390,11 +390,10 @@ function makeAmountTickFormatter(currency: string): (valueCents: number) => stri
 }
 
 /** Motivo del hueco (docs/design.md §4) — copy único por causa, sin condicionales. */
-function getGapMotive(
+export function getGapMotive(
   point: FixedEvolutionMonthPoint,
   mode: EffectiveMode,
   line: FixedEvolutionLine,
-  monthShortLabelStr: string,
 ): string {
   if (point.reason === "frequency") {
     return `No corresponde este mes — ${FREQUENCY_LABEL[line.frequency] ?? "mensual"}.`;
@@ -410,10 +409,10 @@ function getGapMotive(
   }
   if (point.reason === "resultedIncome") return "Este mes resultó ingreso.";
   // reason === null: en modos de variación, puede faltar el cómputo aunque hubo monto.
-  if (mode === "nominal") return "Sin variación computable — falta el monto del mes anterior.";
+  if (mode === "nominal") return "Sin variación computable — no hay un pago anterior con el que comparar.";
   if (mode === "adjusted") {
-    if (point.nominalPct === null) return "Sin variación computable — falta el monto del mes anterior.";
-    return `Sin IPC para ${monthShortLabelStr}.`;
+    if (point.nominalPct === null) return "Sin variación computable — no hay un pago anterior con el que comparar.";
+    return "Sin ajuste por inflación — falta el dato de algún mes desde el pago anterior.";
   }
   return "Sin dato este mes.";
 }
@@ -1260,7 +1259,7 @@ function CustomTooltip({
         {value === null && point && (
           <>
             <div className="my-[7px]" style={{ borderTop: "1px solid var(--hair)" }} />
-            <p className="text-[11.5px] font-medium text-ink-2">{getGapMotive(point, mode, line, monthShort)}</p>
+            <p className="text-[11.5px] font-medium text-ink-2">{getGapMotive(point, mode, line)}</p>
           </>
         )}
       </div>
@@ -1463,11 +1462,13 @@ interface FixedLegendProps {
   excludedTriggerRef: React.RefObject<HTMLButtonElement | null>;
   excludedOpen: boolean;
   onToggleExcluded: () => void;
+  /** Title del ítem "sin trazo en el modo actual" — dos variantes según el chip de ajuste (docs/design.md §8). */
+  noTraceTitle: string;
 }
 
 function FixedLegend({
   lines, colorByChain, selectedSet, valuesByChain, highlightedId, onToggle, onAllNone, onHighlight,
-  excludedCount, excludedTriggerRef, excludedOpen, onToggleExcluded,
+  excludedCount, excludedTriggerRef, excludedOpen, onToggleExcluded, noTraceTitle,
 }: FixedLegendProps) {
   const scrollRegionRef = useRef<HTMLDivElement>(null);
   const [hasOverflow, setHasOverflow] = useState(false);
@@ -1511,11 +1512,7 @@ function FixedLegend({
                 key={line.chainId}
                 type="button"
                 aria-pressed={isSelected}
-                title={
-                  state === "no-trace"
-                    ? "Sin variación computable en el rango — este fijo no tiene dos meses seguidos con monto."
-                    : label
-                }
+                title={state === "no-trace" ? noTraceTitle : label}
                 onClick={() => onToggle(line.chainId)}
                 onMouseEnter={() => onHighlight(line.chainId)}
                 onMouseLeave={() => onHighlight(null)}
@@ -1724,6 +1721,10 @@ export function FixedEvolutionCard({
 
   const effectiveMode = getEffectiveMode(mode, adjusted);
   const isAmounts = effectiveMode === "amounts";
+  const noTraceTitle =
+    effectiveMode === "adjusted"
+      ? "Sin variación ajustada en el rango — falta el dato de inflación entre sus pagos."
+      : "Sin variación computable en el rango — ningún pago de este fijo se pudo comparar con el anterior.";
 
   const colorByChain = useMemo(
     () => assignFixedEvolutionColors(lines.map((l) => ({ chainId: l.chainId, ordinal: l.ordinal, categoryColor: l.categoryColor }))),
@@ -2031,8 +2032,17 @@ export function FixedEvolutionCard({
             )}
             {!isRangeEmpty && !isNoneSelected && isVariationEmpty && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 z-10 pointer-events-none text-center px-4" aria-live="polite">
-                <p className="text-[14px] text-muted">Sin variación computable en el rango.</p>
-                <p className="text-[12.5px] text-faint">Cada línea necesita el monto de su mes anterior.</p>
+                {adjusted ? (
+                  <>
+                    <p className="text-[14px] text-muted">Sin variación ajustada en el rango.</p>
+                    <p className="text-[12.5px] text-faint">Probá sin el ajuste por inflación.</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[14px] text-muted">Sin variación computable en el rango.</p>
+                    <p className="text-[12.5px] text-faint">Faltan datos para comparar cada pago con el anterior.</p>
+                  </>
+                )}
               </div>
             )}
             <ChartResponsiveArea desktopHeight={chartHeight}>{(height, wide) => renderCanvas(height, wide)}</ChartResponsiveArea>
@@ -2052,6 +2062,7 @@ export function FixedEvolutionCard({
               excludedTriggerRef={excludedTriggerRef}
               excludedOpen={excludedOpen}
               onToggleExcluded={() => setExcludedOpen((o) => !o)}
+              noTraceTitle={noTraceTitle}
             />
           )}
 

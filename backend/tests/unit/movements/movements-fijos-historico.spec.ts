@@ -1,17 +1,17 @@
 /**
- * Tests unitarios de MovementsService — método getAnnualFijosReport (RF-REP-013,
+ * Tests unitarios de MovementsService — método getFijosHistoricoReport (RF-REP-013,
  * card "fixed-evolution" / Detalle histórico de gastos fijos).
  *
- * Migración de año calendario a RANGO DE MESES CORRIDOS anclado al presente
- * (ver docs/requirements.md RF-REP-013 reescrito). El endpoint deja de aceptar
- * `year`; ahora acepta `rangeMonths` (3|6|9|12|24|36|48|60, default 36) y el
- * borde derecho SIEMPRE es el mes en curso (resuelto con `today`).
+ * Endpoint: GET /movements/reports/fijos-historico. Rango de MESES CORRIDOS
+ * anclado al presente (no año calendario): acepta `rangeMonths`
+ * (3|6|9|12|24|36|48|60, default 36); el borde derecho SIEMPRE es el mes en
+ * curso (resuelto con `today`).
  *
  * Estrategia de la mayoría de los tests de dominio: usar rangeMonths=12 y
- * today='2026-12-25', que reproduce EXACTAMENTE el rango "año 2026" del
- * contrato anterior (startMonth efectivo '2026-01', endMonth '2026-12', mes
- * ancla '2025-12') — así la casuística de dominio (splits, huecos, calculados,
- * moneda, variación) se reutiliza sin cambiar los datos de los fixtures.
+ * today='2026-12-25', que da un rango efectivo "año 2026" (startMonth efectivo
+ * '2026-01', endMonth '2026-12') — así la casuística de dominio (splits,
+ * huecos, calculados, moneda, variación) se reutiliza sin cambiar los datos
+ * de los fixtures.
  *
  * Cobertura:
  * - Estructura de la respuesta (rangeMonths, startMonth, endMonth, currency,
@@ -26,8 +26,12 @@
  * - Calculado de fijo: línea propia, solo meses EXPENSE, 'resultedIncome' si INCOME
  * - Calculado con monto derivado 0 → punto presente con amountCents=0 (no hueco)
  * - Moneda: TC oficial del mes de la instancia (no el exchangeRate guardado)
- * - Variación nominal y ajustada por IPC, incluido el mes ancla (anterior al
- *   primer mes del rango efectivo)
+ * - Variación ENTRE APARICIONES CONSECUTIVAS (fase 2, no contra el mes
+ *   calendario anterior): fijo mensual (mismo resultado que antes — garantía
+ *   de no regresión), fijo bimestral, fijo anual con la aparición previa
+ *   fuera del rango visible (usa el colchón de meses hacia atrás), fijo con
+ *   un mes anulado en el medio (no corta la cadena), y adjustedPct con IPC
+ *   acumulado (compuesto) de varios meses.
  * - Rango efectivo: recorte a la izquierda contra el primer mes con historia,
  *   sin recorte cuando hay más historia que la pedida, sin historia en absoluto,
  *   borde derecho siempre el mes en curso (nunca futuro).
@@ -172,7 +176,7 @@ function findExcluded(
   return line;
 }
 
-describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses corridos)', () => {
+describe('MovementsService — getFijosHistoricoReport (RF-REP-013, GET /movements/reports/fijos-historico)', () => {
   let service: MovementsService;
 
   beforeEach(async () => {
@@ -198,7 +202,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
 
   describe('estructura de la respuesta', () => {
     it('sin fijos → lines/excluded vacíos, rango efectivo = el pedido (sin historia que recorte)', async () => {
-      const result = await service.getAnnualFijosReport(
+      const result = await service.getFijosHistoricoReport(
         USER_A,
         STANDARD_RANGE,
         undefined,
@@ -213,7 +217,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
     });
 
     it('default de rangeMonths es 36 cuando no se pasa', async () => {
-      const result = await service.getAnnualFijosReport(
+      const result = await service.getFijosHistoricoReport(
         USER_A,
         36,
         undefined,
@@ -227,10 +231,10 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
 
     it('currency refleja la defaultCurrency del usuario; override la sobrescribe', async () => {
       mockSettingsService.getSettings.mockResolvedValue({ defaultCurrency: Currency.USD });
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE);
       expect(result.currency).toBe(Currency.USD);
 
-      const result2 = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, Currency.EUR);
+      const result2 = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, Currency.EUR);
       expect(result2.currency).toBe(Currency.EUR);
     });
   });
@@ -244,14 +248,14 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
       mockRepo.getAllFijosForAnnual.mockResolvedValue([
         makeFijo({ chainId: 'chain-income', type: MovementType.INCOME }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       expect(result.lines).toEqual([]);
       expect(result.excluded).toEqual([]);
     });
 
     it('fijo mensual vigente todo el rango → un punto por mes, todos presentes, con `month` YYYY-MM', async () => {
       mockRepo.getAllFijosForAnnual.mockResolvedValue([makeFijo()]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       const line = findLine(result.lines, 'chain-1');
       expect(line.months).toHaveLength(12);
       line.months.forEach((m) => {
@@ -277,7 +281,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
       mockRepo.getAllFijosForAnnual.mockResolvedValue([
         makeFijo({ frequency: 3, startMonth: '2026-01' }), // aparece en ene, abr, jul, oct
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       const line = findLine(result.lines, 'chain-1');
 
       [0, 3, 6, 9].forEach((idx) => {
@@ -294,7 +298,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
       mockRepo.getAllFijosForAnnual.mockResolvedValue([
         makeFijo({ skippedMonths: new Set(['2026-03']) }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       const line = findLine(result.lines, 'chain-1');
       expect(line.months[2].amountCents).toBeNull();
       expect(line.months[2].reason).toBe('skipped');
@@ -312,7 +316,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
         makeFijo({ chainId: 'chain-old-anchor', startMonth: '2020-01' }),
         makeFijo({ startMonth: '2026-07' }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       expect(result.startMonth).toBe('2026-01');
       const line = findLine(result.lines, 'chain-1');
       for (let i = 0; i < 6; i++) {
@@ -329,7 +333,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
       mockRepo.getAllFijosForAnnual.mockResolvedValue([
         makeFijo({ deletedFrom: '2026-09' }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       const line = findLine(result.lines, 'chain-1');
       for (let i = 0; i < 8; i++) {
         expect(line.months[i].amountCents).toBe(100000);
@@ -362,7 +366,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
           amountCents: 150000,
         }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       expect(result.lines).toHaveLength(1);
       const line = findLine(result.lines, 'chain-1');
       for (let i = 0; i < 5; i++) {
@@ -393,7 +397,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
           formulaSign: -1,
         }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       const calcLine = findLine(result.lines, 'calc-chain-1');
       expect(calcLine.isCalculated).toBe(true);
       calcLine.months.forEach((m) => {
@@ -414,7 +418,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
           formulaSign: 1,
         }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       const calcLine = findLine(result.lines, 'calc-chain-1');
       // ene..jun: origen=50000 → -50000 → EXPENSE, magnitud 50000 (6 apariciones ⇒ entra a lines)
       for (let i = 0; i < 6; i++) {
@@ -439,7 +443,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
           formulaSign: 1,
         }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       const calcLine = findLine(result.lines, 'calc-chain-1');
       expect(calcLine.months[0].amountCents).toBe(0);
       expect(calcLine.months[0].reason).toBeNull();
@@ -450,7 +454,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
         makeCalc({ chainId: 'calc-unico', sourceChainId: null, sourceMovementId: 'tx-1' }),
         makeCalc({ chainId: 'calc-cuota', sourceChainId: null, sourceInstallmentGroupId: 'group-1' }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       expect(result.lines).toEqual([]);
       expect(result.excluded).toEqual([]);
     });
@@ -460,7 +464,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
         makeFijo({ chainId: 'chain-1', skippedMonths: new Set(['2026-04']) }),
         makeCalc({ chainId: 'calc-chain-1', sourceChainId: 'chain-1', formulaSign: -1 }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       const calcLine = findLine(result.lines, 'calc-chain-1');
       expect(calcLine.months[3].amountCents).toBeNull();
       expect(calcLine.months[3].reason).toBe('skipped');
@@ -477,14 +481,14 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
         makeFijo({ id: 'row-1', startMonth: '2026-01', deletedFrom: '2026-06', amountCents: 100000, frequency: 3 }),
         makeFijo({ id: 'row-2', startMonth: '2026-06', deletedFrom: null, amountCents: 150000, frequency: 3 }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       const line = findLine(result.lines, 'chain-1');
       expect(line.frequency).toBe(3);
     });
 
     it('línea normal (no calculada): originDescription y originChainId son null', async () => {
       mockRepo.getAllFijosForAnnual.mockResolvedValue([makeFijo()]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       const line = findLine(result.lines, 'chain-1');
       expect(line.isCalculated).toBe(false);
       expect(line.originDescription).toBeNull();
@@ -502,7 +506,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
           formulaSign: -1,
         }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       expect(result.lines.find((l) => l.chainId === 'chain-income')).toBeUndefined();
 
       const calcLine = findLine(result.lines, 'calc-chain-1');
@@ -515,7 +519,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
       mockRepo.getAllFijosForAnnual.mockResolvedValue([
         makeCalc({ chainId: 'calc-orphan', sourceChainId: 'chain-does-not-exist' }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       expect(result.lines.find((l) => l.chainId === 'calc-orphan')).toBeUndefined();
       const excludedLine = findExcluded(result.excluded, 'calc-orphan');
       expect(excludedLine.isCalculated).toBe(true);
@@ -543,7 +547,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
       }
       mockRepo.loadPivotRatesForMonths.mockResolvedValue(pivotMap);
 
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       const line = findLine(result.lines, 'chain-1');
       expect(line.months[0].amountCents).toBe(10000 * 1200);
       expect(line.months[1].amountCents).toBe(10000 * 1500);
@@ -555,22 +559,23 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
   // -------------------------------------------------------------------------
 
   describe('variación', () => {
-    it('sin cambio de monto → nominalPct = 0 en todos los meses con mes anterior', async () => {
+    it('sin cambio de monto → nominalPct = 0 en todos los meses con aparición anterior', async () => {
       mockRepo.getAllFijosForAnnual.mockResolvedValue([makeFijo({ amountCents: 50000 })]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       const line = findLine(result.lines, 'chain-1');
-      // Sin dato del mes ancla (2025-12, fuera del rango pedido y sin historia) → primer mes null
+      // Sin aparición anterior en absoluto (el fijo arranca justo en el primer
+      // mes del rango, y no hay historia en el colchón hacia atrás) → null.
       expect(line.months[0].nominalPct).toBeNull();
       for (let i = 1; i < 12; i++) {
         expect(line.months[i].nominalPct).toBe(0);
       }
     });
 
-    it('el primer mes del rango efectivo usa el mes anterior (mes ancla) como base de la variación', async () => {
+    it('el primer mes del rango efectivo usa la aparición anterior (dentro del colchón hacia atrás) como base', async () => {
       mockRepo.getAllFijosForAnnual.mockResolvedValue([
-        makeFijo({ startMonth: '2025-01', amountCents: 40000 }), // activo desde antes del rango, incluye el mes ancla
+        makeFijo({ startMonth: '2025-01', amountCents: 40000 }), // activo desde antes del rango
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       const line = findLine(result.lines, 'chain-1');
       expect(line.months[0].nominalPct).toBe(0);
     });
@@ -583,11 +588,138 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
       const ipcMap = new Map<string, number>([['2026-03', 10]]);
       mockRepo.loadInflationRatesForMonths.mockResolvedValue(ipcMap);
 
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       const line = findLine(result.lines, 'chain-1');
       expect(line.months[2].nominalPct).toBe(10);
       expect(line.months[2].adjustedPct).toBeCloseTo(0, 2);
       expect(line.months[1].adjustedPct).toBeNull();
+    });
+
+    // -----------------------------------------------------------------------
+    // Fase 2 — variación ENTRE APARICIONES CONSECUTIVAS de la línea (RF-REP-013
+    // reescrito): ya no se compara contra el mes calendario anterior, sino
+    // contra la última aparición real previa de la MISMA línea, aunque haya
+    // huecos (frecuencia > 1, anulaciones) o esa aparición caiga fuera del
+    // rango pedido.
+    // -----------------------------------------------------------------------
+
+    it('fijo mensual: el resultado es IDÉNTICO al cálculo contra el mes calendario anterior (no regresión, cambio aditivo)', async () => {
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ id: 'row-1', chainId: 'chain-monthly-noreg', startMonth: '2026-01', deletedFrom: '2026-04', amountCents: 100000 }),
+        makeFijo({ id: 'row-2', chainId: 'chain-monthly-noreg', startMonth: '2026-04', deletedFrom: '2026-07', amountCents: 110000 }),
+        makeFijo({ id: 'row-3', chainId: 'chain-monthly-noreg', startMonth: '2026-07', deletedFrom: null, amountCents: 99000 }),
+      ]);
+      const ipcMap = new Map<string, number>([
+        ['2026-04', 8],
+        ['2026-07', 2],
+      ]);
+      mockRepo.loadInflationRatesForMonths.mockResolvedValue(ipcMap);
+
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const line = findLine(result.lines, 'chain-monthly-noreg');
+
+      // Para un fijo mensual sin anulaciones, la aparición anterior ES el mes
+      // calendario anterior — sin ningún cambio respecto del comportamiento
+      // previo a la fase 2.
+      expect(line.months[2].month).toBe('2026-03');
+      expect(line.months[2].nominalPct).toBe(0); // feb→mar sin cambio
+      expect(line.months[3].month).toBe('2026-04');
+      expect(line.months[3].nominalPct).toBe(10); // (110000/100000 - 1) * 100
+      expect(line.months[3].adjustedPct).toBeCloseTo(1.85, 2); // 110000/(100000*1.08) - 1
+      expect(line.months[6].month).toBe('2026-07');
+      expect(line.months[6].nominalPct).toBe(-10); // (99000/110000 - 1) * 100
+      expect(line.months[6].adjustedPct).toBeCloseTo(-11.76, 2); // 99000/(110000*1.02) - 1
+    });
+
+    it('fijo bimestral: compara contra la aparición anterior (2 meses atrás), ya no queda vacío como con "mes calendario anterior"', async () => {
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ chainId: 'chain-bimestral-flat', startMonth: '2026-01', frequency: 2, amountCents: 80000 }),
+      ]);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const line = findLine(result.lines, 'chain-bimestral-flat');
+      // Enero: primera aparición de la vida del fijo → sin base de comparación.
+      expect(line.months[0].nominalPct).toBeNull();
+      // Meses sin aparición (huecos por frecuencia) siguen en null.
+      expect(line.months[1].nominalPct).toBeNull();
+      // Marzo y mayo comparan contra su aparición anterior real (enero y marzo
+      // respectivamente), NO contra el mes calendario anterior (que siempre
+      // daría null bajo la regla vieja).
+      expect(line.months[2].nominalPct).toBe(0);
+      expect(line.months[4].nominalPct).toBe(0);
+    });
+
+    it('adjustedPct usa el IPC ACUMULADO (compuesto) de TODOS los meses entre dos apariciones, no solo el último', async () => {
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ id: 'row-1', chainId: 'chain-bimestral-ipc', startMonth: '2026-01', deletedFrom: '2026-05', amountCents: 100000, frequency: 2 }),
+        makeFijo({ id: 'row-2', chainId: 'chain-bimestral-ipc', startMonth: '2026-05', deletedFrom: null, amountCents: 121000, frequency: 2 }),
+      ]);
+      const ipcMap = new Map<string, number>([
+        ['2026-04', 5],
+        ['2026-05', 5],
+      ]);
+      mockRepo.loadInflationRatesForMonths.mockResolvedValue(ipcMap);
+
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const line = findLine(result.lines, 'chain-bimestral-ipc');
+      expect(line.months[4].month).toBe('2026-05');
+      expect(line.months[4].amountCents).toBe(121000);
+      expect(line.months[4].nominalPct).toBe(21); // (121000/100000 - 1) * 100
+      // IPC compuesto de abril (5%) y mayo (5%), NO solo el de mayo:
+      // 100000 * 1.05 * 1.05 = 110250 → (121000/110250 - 1) * 100 ≈ 9.75
+      expect(line.months[4].adjustedPct).toBeCloseTo(9.75, 2);
+    });
+
+    it('mes anulado en el medio NO corta la cadena: la siguiente aparición compara contra la última aparición REAL previa (salta el hueco)', async () => {
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({
+          id: 'row-1',
+          chainId: 'chain-skip-var',
+          startMonth: '2026-01',
+          deletedFrom: '2026-04',
+          amountCents: 100000,
+          skippedMonths: new Set(['2026-03']),
+        }),
+        makeFijo({ id: 'row-2', chainId: 'chain-skip-var', startMonth: '2026-04', deletedFrom: null, amountCents: 115000 }),
+      ]);
+      const ipcMap = new Map<string, number>([
+        ['2026-03', 4],
+        ['2026-04', 4],
+      ]);
+      mockRepo.loadInflationRatesForMonths.mockResolvedValue(ipcMap);
+
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const line = findLine(result.lines, 'chain-skip-var');
+      expect(line.months[2].amountCents).toBeNull();
+      expect(line.months[2].reason).toBe('skipped');
+      expect(line.months[3].amountCents).toBe(115000);
+      // Compara contra febrero (última aparición real), no contra marzo (anulado → null)
+      expect(line.months[3].nominalPct).toBe(15); // (115000/100000 - 1) * 100
+      // IPC acumulado del tramo completo entre las dos apariciones reales (marzo + abril)
+      expect(line.months[3].adjustedPct).toBeCloseTo(6.32, 2); // 115000/(100000*1.04*1.04) - 1
+    });
+
+    it('fijo anual: la aparición previa a la primera visible cae ANTES del rango pedido y se usa igual (colchón hacia atrás)', async () => {
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ id: 'row-1', chainId: 'chain-annual-var', startMonth: '2020-06', deletedFrom: '2025-06', amountCents: 100000, frequency: 12 }),
+        makeFijo({ id: 'row-2', chainId: 'chain-annual-var', startMonth: '2025-06', deletedFrom: null, amountCents: 130000, frequency: 12 }),
+      ]);
+      // rangeMonths=24 con today=2026-12-25 → rango efectivo 2025-01..2026-12,
+      // con solo 2 apariciones visibles (junio 2025 y junio 2026): alcanza el
+      // umbral de ≥2 para entrar en `lines`.
+      const result = await service.getFijosHistoricoReport(USER_A, 24, undefined, STANDARD_TODAY);
+      expect(result.startMonth).toBe('2025-01');
+      expect(result.endMonth).toBe('2026-12');
+      const line = findLine(result.lines, 'chain-annual-var');
+      expect(line.months[5].month).toBe('2025-06');
+      expect(line.months[5].amountCents).toBe(130000);
+      // La aparición anterior (junio 2024, 100000) cae ANTES del rango pedido
+      // (2025-01..2026-12) — con la regla vieja ("mes calendario anterior")
+      // esto daba SIEMPRE null para un fijo anual. Ahora se resuelve vía el
+      // colchón de meses hacia atrás.
+      expect(line.months[5].nominalPct).toBe(30); // (130000/100000 - 1) * 100
+      expect(line.months[17].month).toBe('2026-06');
+      expect(line.months[17].amountCents).toBe(130000);
+      expect(line.months[17].nominalPct).toBe(0); // igual a la aparición anterior (jun 2025)
     });
   });
 
@@ -600,7 +732,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
       mockRepo.getAllFijosForAnnual.mockResolvedValue([
         makeFijo({ chainId: 'chain-1', startMonth: '2026-10' }), // solo 3 meses de historia (oct/nov/dic)
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, 36, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, 36, undefined, STANDARD_TODAY);
       // Pedido: 36 meses (arrancaría en 2024-01). Recortado a partir de 2026-10.
       expect(result.startMonth).toBe('2026-10');
       expect(result.endMonth).toBe('2026-12');
@@ -613,7 +745,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
       mockRepo.getAllFijosForAnnual.mockResolvedValue([
         makeFijo({ chainId: 'chain-1', startMonth: '2020-01' }), // mucha historia
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, 6, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, 6, undefined, STANDARD_TODAY);
       expect(result.rangeMonths).toBe(6);
       expect(result.startMonth).toBe('2026-07');
       expect(result.endMonth).toBe('2026-12');
@@ -621,7 +753,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
 
     it('sin ningún fijo (sin historia) → el rango efectivo es el pedido (nada que recortar)', async () => {
       mockRepo.getAllFijosForAnnual.mockResolvedValue([]);
-      const result = await service.getAnnualFijosReport(USER_A, 9, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, 9, undefined, STANDARD_TODAY);
       expect(result.rangeMonths).toBe(9);
       expect(result.startMonth).toBe('2026-04');
       expect(result.endMonth).toBe('2026-12');
@@ -631,7 +763,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
       mockRepo.getAllFijosForAnnual.mockResolvedValue([
         makeFijo({ chainId: 'chain-future', startMonth: '2027-05' }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, 6, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, 6, undefined, STANDARD_TODAY);
       // Sin historia pasada → sin recorte, rango efectivo = el pedido.
       expect(result.rangeMonths).toBe(6);
       expect(result.startMonth).toBe('2026-07');
@@ -644,7 +776,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
 
     it('el borde derecho es siempre el mes en curso: ningún punto posterior, aunque el fijo siga activo indefinidamente', async () => {
       mockRepo.getAllFijosForAnnual.mockResolvedValue([makeFijo({ deletedFrom: null })]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       expect(result.endMonth).toBe('2026-12');
       const line = findLine(result.lines, 'chain-1');
       expect(line.months[line.months.length - 1].month).toBe('2026-12');
@@ -660,7 +792,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
       mockRepo.getAllFijosForAnnual.mockResolvedValue([
         makeFijo({ startMonth: '2024-01', deletedFrom: '2024-06' }), // vivió y murió mucho antes del rango
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       expect(result.lines).toEqual([]);
       const excludedLine = findExcluded(result.excluded, 'chain-1');
       expect(excludedLine.startMonth).toBe('2024-01');
@@ -673,7 +805,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
         // '2026-09-25' cubre abril..septiembre → marzo queda afuera.
         makeFijo({ chainId: 'chain-annual-march', startMonth: '2020-03', frequency: 12 }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, 6, undefined, '2026-09-25');
+      const result = await service.getFijosHistoricoReport(USER_A, 6, undefined, '2026-09-25');
       expect(result.startMonth).toBe('2026-04');
       expect(result.endMonth).toBe('2026-09');
       expect(result.lines).toEqual([]);
@@ -685,7 +817,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
       mockRepo.getAllFijosForAnnual.mockResolvedValue([
         makeFijo({ chainId: 'chain-single', startMonth: '2026-12', description: 'Seguro anual' }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       expect(result.lines.find((l) => l.chainId === 'chain-single')).toBeUndefined();
       const excludedLine = findExcluded(result.excluded, 'chain-single');
       expect(excludedLine.startMonth).toBe('2026-12');
@@ -700,7 +832,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
       ]);
       // Rango efectivo 2026-01..2026-12 (12 meses): la única aparición dentro
       // de ese tramo es junio 2026 (monthDiff('2025-06','2026-06')=12, 12%12=0).
-      const result = await service.getAnnualFijosReport(USER_A, 12, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, 12, undefined, STANDARD_TODAY);
       expect(result.lines.find((l) => l.chainId === 'chain-annual')).toBeUndefined();
       const excludedLine = findExcluded(result.excluded, 'chain-annual');
       expect(excludedLine.startMonth).toBe('2025-06');
@@ -730,7 +862,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
           formulaSign: 1,
         }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       expect(result.lines.find((l) => l.chainId === 'calc-chain-1')).toBeUndefined();
       const excludedLine = findExcluded(result.excluded, 'calc-chain-1');
       expect(excludedLine.isCalculated).toBe(true);
@@ -741,7 +873,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
       mockRepo.getAllFijosForAnnual.mockResolvedValue([
         makeFijo({ chainId: 'chain-two', startMonth: '2026-11' }), // nov + dic = 2 apariciones
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       const line = findLine(result.lines, 'chain-two');
       expect(line.months.filter((m) => m.amountCents !== null)).toHaveLength(2);
     });
@@ -757,7 +889,7 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
         makeFijo({ chainId: 'chain-small', amountCents: 10000, categoryId: CAT_A }),
         makeFijo({ chainId: 'chain-big', amountCents: 90000, categoryId: CAT_A }),
       ]);
-      const result = await service.getAnnualFijosReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       expect(result.lines.map((l) => l.chainId)).toEqual(['chain-big', 'chain-small']);
     });
   });
@@ -779,8 +911,8 @@ describe('MovementsService — getAnnualFijosReport (RF-REP-013, rango de meses 
       ];
       mockRepo.getAllFijosForAnnual.mockResolvedValue(fijos);
 
-      const resultA = await service.getAnnualFijosReport(USER_A, 12, undefined, '2025-12-25');
-      const resultB = await service.getAnnualFijosReport(USER_A, 24, undefined, STANDARD_TODAY);
+      const resultA = await service.getFijosHistoricoReport(USER_A, 12, undefined, '2025-12-25');
+      const resultB = await service.getFijosHistoricoReport(USER_A, 24, undefined, STANDARD_TODAY);
 
       const ordinalOldA = findLine(resultA.lines, 'chain-old').ordinal;
       const ordinalNewA = findLine(resultA.lines, 'chain-new').ordinal;

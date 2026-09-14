@@ -25,7 +25,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import type { AnnualFijosResponse, FixedEvolutionLine, FixedEvolutionMonthPoint, FixedEvolutionExcludedLine } from "@/types/reports";
+import type { FijosHistoricoResponse, FixedEvolutionLine, FixedEvolutionMonthPoint, FixedEvolutionExcludedLine } from "@/types/reports";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -103,7 +103,7 @@ vi.mock("recharts", () => {
 });
 
 import { useFixedEvolution } from "@/hooks/use-reports";
-import { FixedEvolutionCard, computePlotSlot } from "@/components/charts/fixed-evolution-card";
+import { FixedEvolutionCard, computePlotSlot, getGapMotive } from "@/components/charts/fixed-evolution-card";
 import { CHART_END_LABEL_MARGIN } from "@/components/ui/chart";
 import { mockQuerySuccess, mockQueryLoading, mockQueryError } from "../../utils/query-result";
 
@@ -208,7 +208,7 @@ const excludedItem: FixedEvolutionExcludedLine = {
   startMonth: "2026-04",
 };
 
-const mockData: AnnualFijosResponse = {
+const mockData: FijosHistoricoResponse = {
   currency: "ARS",
   rangeMonths: RANGE_MONTHS,
   startMonth: "2025-11",
@@ -217,13 +217,13 @@ const mockData: AnnualFijosResponse = {
   excluded: [excludedItem],
 };
 
-const mockDataEmpty: AnnualFijosResponse = {
+const mockDataEmpty: FijosHistoricoResponse = {
   ...mockData,
   lines: [],
   excluded: [],
 };
 
-const mockDataEmptyWithExcluded: AnnualFijosResponse = {
+const mockDataEmptyWithExcluded: FijosHistoricoResponse = {
   ...mockData,
   lines: [],
   excluded: [excludedItem],
@@ -241,7 +241,7 @@ function createWrapper() {
   return Wrapper;
 }
 
-function mockHookWithData(data: AnnualFijosResponse) {
+function mockHookWithData(data: FijosHistoricoResponse) {
   mockUseFixedEvolution.mockReturnValue(mockQuerySuccess(data));
 }
 
@@ -524,6 +524,69 @@ describe("FixedEvolutionCard — modo de visualización", () => {
   });
 });
 
+// ─── Tests: copys de motivo de hueco en variación (docs/design.md §4) ─────────
+//
+// La variación se compara contra el PAGO ANTERIOR de la línea (nunca "el mes
+// anterior"), y el ajuste por inflación es un estado PARCIAL: se distingue
+// `nominalPct: null` (sin pago anterior — no hay nada que comparar, ni
+// siquiera nominal) de `nominalPct` con valor + `adjustedPct: null` (el mes
+// SÍ dibuja en Variación nominal; solo se cae el ajuste por falta de IPC).
+
+describe("FixedEvolutionCard — getGapMotive (copys de variación)", () => {
+  it("Variación nominal sin pago anterior: no nombra 'mes anterior'", () => {
+    const point = buildPoint("2026-02", 10000, null);
+    expect(getGapMotive(point, "nominal", lineAlquiler)).toBe(
+      "Sin variación computable — no hay un pago anterior con el que comparar.",
+    );
+  });
+
+  it("Ajustada sin pago anterior (nominalPct null): mismo copy que la nominal", () => {
+    const point = { ...buildPoint("2026-02", 10000, null), nominalPct: null };
+    expect(getGapMotive(point, "adjusted", lineAlquiler)).toBe(
+      "Sin variación computable — no hay un pago anterior con el que comparar.",
+    );
+  });
+
+  it("Ajustada CON pago anterior pero sin dato de inflación (adjustedPct null): copy de ajuste, sin nombrar ningún mes", () => {
+    const point = { ...buildPoint("2026-02", 10000, null), nominalPct: 8.3, adjustedPct: null };
+    const motive = getGapMotive(point, "adjusted", lineAlquiler);
+    expect(motive).toBe("Sin ajuste por inflación — falta el dato de algún mes desde el pago anterior.");
+    expect(motive).not.toMatch(/\d{4}/); // sin año/mes concreto: el contrato no lo identifica
+  });
+});
+
+// ─── Tests: overlay "Variación sin nada computable" — dos variantes (§10) ─────
+//
+// `mockData` fija `nominalPct`/`adjustedPct` en null para todos los meses de
+// todas las líneas, así que en Variación el estado "nada computable" se
+// dispara con los fixtures de siempre: sirve para cubrir el copy exacto y las
+// DOS variantes según el chip de ajuste, sin fixtures nuevos.
+
+describe("FixedEvolutionCard — overlay 'Variación sin nada computable'", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockHookWithData(mockData);
+  });
+
+  it("chip de ajuste APAGADO: 'Sin variación computable en el rango.' + 'Faltan datos para comparar cada pago con el anterior.'", () => {
+    renderCard({ mode: "variation", adjusted: false });
+    expect(screen.getByText("Sin variación computable en el rango.")).toBeInTheDocument();
+    expect(screen.getByText("Faltan datos para comparar cada pago con el anterior.")).toBeInTheDocument();
+  });
+
+  it("chip de ajuste ENCENDIDO: 'Sin variación ajustada en el rango.' + 'Probá sin el ajuste por inflación.'", () => {
+    renderCard({ mode: "variation", adjusted: true });
+    expect(screen.getByText("Sin variación ajustada en el rango.")).toBeInTheDocument();
+    expect(screen.getByText("Probá sin el ajuste por inflación.")).toBeInTheDocument();
+  });
+
+  it("en Montos (modo 'amounts') el overlay de variación NO aparece", () => {
+    renderCard({ mode: "amounts" });
+    expect(screen.queryByText("Sin variación computable en el rango.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sin variación ajustada en el rango.")).not.toBeInTheDocument();
+  });
+});
+
 // ─── Tests: leyenda-selector de fijos ─────────────────────────────────────────
 
 describe("FixedEvolutionCard — leyenda-selector de fijos", () => {
@@ -579,14 +642,32 @@ describe("FixedEvolutionCard — leyenda-selector de fijos", () => {
     expect(screen.getByText("Alquiler")).toHaveClass("line-through");
   });
 
-  it("el título del ítem 'sin trazo' habla del rango, no de un año", () => {
-    renderCard({ mode: "variation" });
-    // Ninguna línea del fixture queda sin trazo en variación en este set, pero
-    // el copy en sí (sin depender de {year}) se congela vía el helper de la card:
-    // se verifica indirectamente con el fixture de "sin trazo" sería redundante
-    // acá; el contrato del copy está cubierto por el estado "ningún fijo con
-    // evolución" (usa el mismo vocabulario "en el rango").
-    expect(screen.queryByText(/en 20\d\d/)).not.toBeInTheDocument();
+  // `mockData` fija `nominalPct` en null para todos los meses de todas las
+  // líneas, así que en Variación TODAS quedan "sin trazo en el modo actual" —
+  // útil para congelar las dos variantes del `title` según el chip de ajuste
+  // (docs/design.md §8), sin nombrar nunca un año.
+  it("ítem 'sin trazo' con el chip de ajuste APAGADO: title habla de 'ningún pago... con el anterior'", () => {
+    renderCard({ mode: "variation", adjusted: false });
+    const alquilerBtn = screen.getByText("Alquiler").closest("button")!;
+    expect(alquilerBtn).toHaveAttribute(
+      "title",
+      "Sin variación computable en el rango — ningún pago de este fijo se pudo comparar con el anterior.",
+    );
+  });
+
+  it("ítem 'sin trazo' con el chip de ajuste ENCENDIDO: title distinto, sin nombrar ningún año", () => {
+    renderCard({ mode: "variation", adjusted: true });
+    const alquilerBtn = screen.getByText("Alquiler").closest("button")!;
+    expect(alquilerBtn).toHaveAttribute(
+      "title",
+      "Sin variación ajustada en el rango — falta el dato de inflación entre sus pagos.",
+    );
+    expect(alquilerBtn.title).not.toMatch(/en 20\d\d/);
+  });
+
+  it("un fijo 'sin trazo' NO queda tachado (se distingue del destildado)", () => {
+    renderCard({ mode: "variation", adjusted: false });
+    expect(screen.getByText("Alquiler")).not.toHaveClass("line-through");
   });
 });
 

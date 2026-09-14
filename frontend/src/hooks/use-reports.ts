@@ -60,7 +60,7 @@
 
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useApi } from "@/hooks/use-api";
-import type { ReportsMovementsResponse, UnicoGridResponse, CuotasGanttResponse, AnnualInflationIncomeResponse, AnnualFijosResponse } from "@/types/reports";
+import type { ReportsMovementsResponse, UnicoGridResponse, CuotasGanttResponse, AnnualInflationIncomeResponse, FijosHistoricoResponse } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
 import { createLogger } from "@/lib/logger";
 
@@ -405,7 +405,7 @@ export const FIXED_EVOLUTION_QUERY_KEY = (
 /**
  * Hook para obtener el reporte de Detalle histórico de gastos fijos (RF-REP-013).
  *
- * GET /movements/reports/annual-fijos?rangeMonths=<3|6|9|12|24|36|48|60>[&currency=XXX][&today=YYYY-MM-DD]
+ * GET /movements/reports/fijos-historico?rangeMonths=<3|6|9|12|24|36|48|60>[&currency=XXX][&today=YYYY-MM-DD]
  *
  * No acepta `categories`: la card no filtra por categoría (la selección de fijos
  * es puramente client-side sobre `data.lines`). Tampoco acepta `year`: el rango
@@ -414,7 +414,7 @@ export const FIXED_EVOLUTION_QUERY_KEY = (
  * @param rangeMonths El largo de rango PEDIDO (persistido por card, uno de
  *                    3|6|9|12|24|36|48|60). El backend puede devolver un
  *                    `rangeMonths` EFECTIVO menor si recorta contra la
- *                    historia real del usuario (ver `AnnualFijosResponse`).
+ *                    historia real del usuario (ver `FijosHistoricoResponse`).
  * @param currency    undefined = default del usuario; presente = override de moneda.
  * @param today       Fecha local del usuario (YYYY-MM-DD). Se manda para que el backend
  *                    resuelva el mes en curso (borde derecho del rango) en la zona del usuario.
@@ -429,12 +429,12 @@ export function useFixedEvolution(
   const currencyParam = currency ? `&currency=${currency}` : "";
   const todayParam = today ? `&today=${today}` : "";
 
-  const query = useQuery<AnnualFijosResponse>({
+  const query = useQuery<FijosHistoricoResponse>({
     queryKey: FIXED_EVOLUTION_QUERY_KEY(rangeMonths, currency, today),
     queryFn: () => {
-      const url = `/movements/reports/annual-fijos?rangeMonths=${rangeMonths}${currencyParam}${todayParam}`;
+      const url = `/movements/reports/fijos-historico?rangeMonths=${rangeMonths}${currencyParam}${todayParam}`;
       logger.debug("Cargando reporte Detalle histórico de gastos fijos", { rangeMonths, currency, today });
-      return api.get<AnnualFijosResponse>(url);
+      return api.get<FijosHistoricoResponse>(url);
     },
     enabled: Boolean(rangeMonths) && isAuthenticated,
     placeholderData: keepPreviousData,

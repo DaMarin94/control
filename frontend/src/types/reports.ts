@@ -560,9 +560,19 @@ export interface FixedEvolutionMonthPoint {
   month: string;
   /** Monto en centavos de la moneda de display, ya convertido con la cotización de ESE mes. null = hueco. */
   amountCents: number | null;
-  /** Variación % nominal respecto del mes anterior de esta línea. null = sin punto/no computable. */
+  /**
+   * Variación % nominal respecto de la APARICIÓN anterior de esta misma línea
+   * — no necesariamente el mes calendario anterior: salta huecos de
+   * frecuencia y meses anulados sin cortar la cadena. Para un fijo mensual
+   * coincide con "mes anterior"; para uno bimestral/anual, no.
+   * null = sin punto/no computable.
+   */
   nominalPct: number | null;
-  /** Variación % ajustada por IPC. null = sin punto/no computable (falta IPC o monto anterior). */
+  /**
+   * Variación % ajustada por el IPC ACUMULADO del tramo entre esta aparición
+   * y la anterior de la misma línea. null = sin punto/no computable
+   * (falta IPC o monto de la aparición anterior).
+   */
   adjustedPct: number | null;
   /** Motivo del hueco cuando amountCents es null. null cuando el mes tiene punto (incluido 0 real). */
   reason: FixedEvolutionGapReason | null;
@@ -599,7 +609,7 @@ export interface FixedEvolutionLine {
   originDescription: string | null;
   /** Solo calculados: chainId del fijo de origen. null en líneas normales. */
   originChainId: string | null;
-  /** Largo VARIABLE, igual al rango efectivo (`AnnualFijosResponse.rangeMonths`). */
+  /** Largo VARIABLE, igual al rango efectivo (`FijosHistoricoResponse.rangeMonths`). */
   months: FixedEvolutionMonthPoint[];
 }
 
@@ -622,13 +632,13 @@ export interface FixedEvolutionExcludedLine {
 }
 
 /**
- * Respuesta de GET /movements/reports/annual-fijos?rangeMonths=<3|6|9|12|24|36|48|60>[&currency=XXX][&today=YYYY-MM-DD]
+ * Respuesta de GET /movements/reports/fijos-historico?rangeMonths=<3|6|9|12|24|36|48|60>[&currency=XXX][&today=YYYY-MM-DD]
  * (dentro del sobre { success, statusCode, data }). NO acepta `categories` — esta
  * card no filtra por categoría (RF-REP-013).
  *
  * Fuente de verdad: contrato del backend (Ola 6 — rango de meses corridos).
  */
-export interface AnnualFijosResponse {
+export interface FijosHistoricoResponse {
   /** Moneda de display usada (la pedida por ?currency= o la default del usuario). */
   currency: "ARS" | "USD" | "EUR" | "BRL";
   /**
