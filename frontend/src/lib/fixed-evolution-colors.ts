@@ -147,3 +147,20 @@ export function assignFixedEvolutionColors(
   }
   return result;
 }
+
+/**
+ * Color de un fijo EXCLUIDO (superficie de excluidos, docs/design.md §8.1):
+ * el peldaño ANCLA de su categoría, SIN desempate por `ordinal`. Un excluido
+ * no dibuja línea, así que no compite con nadie por tonalidad (el contrato de
+ * `excluded` ni siquiera trae `ordinal` — docs/design.md §14).
+ *
+ * Se apoya en `assignFixedEvolutionColors` con un universo de un solo
+ * elemento: al no haber otro fijo con el mismo hex de categoría en ese
+ * llamado, la escalera de desempate siempre resuelve al ancla.
+ */
+export function anchorFixedEvolutionColor(categoryColor: string): string {
+  const colors = assignFixedEvolutionColors([
+    { chainId: "__anchor__", ordinal: 0, categoryColor },
+  ]);
+  return colors.get("__anchor__")!;
+}

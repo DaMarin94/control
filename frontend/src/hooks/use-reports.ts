@@ -388,33 +388,39 @@ export function useInflationIncome(
   return query;
 }
 
-// ─── Hook para el reporte Detalle histórico de gastos fijos (Ola 5, P6) ──────
+// ─── Hook para el reporte Detalle histórico de gastos fijos (Ola 5-6) ────────
 
 /**
- * Query key para el reporte anual de Detalle histórico de gastos fijos.
- * Varía por año, moneda y fecha de hoy. Sin filtro de categorías (esta card no lo tiene).
+ * Query key para el reporte de Detalle histórico de gastos fijos.
+ * Varía por rango (meses), moneda y fecha de hoy. Sin filtro de categorías
+ * (esta card no lo tiene) ni de año (Ola 6: rango de meses corridos anclado
+ * al presente, ya no año calendario).
  */
 export const FIXED_EVOLUTION_QUERY_KEY = (
-  year: number,
+  rangeMonths: number,
   currency?: CurrencyCode,
   today?: string,
-) => ["reports-fixed-evolution", year, currency ?? null, today ?? null] as const;
+) => ["reports-fixed-evolution", rangeMonths, currency ?? null, today ?? null] as const;
 
 /**
- * Hook para obtener el reporte anual de Detalle histórico de gastos fijos (RF-REP-013).
+ * Hook para obtener el reporte de Detalle histórico de gastos fijos (RF-REP-013).
  *
- * GET /movements/reports/annual-fijos?year=YYYY[&currency=XXX][&today=YYYY-MM-DD]
+ * GET /movements/reports/annual-fijos?rangeMonths=<3|6|9|12|24|36|48|60>[&currency=XXX][&today=YYYY-MM-DD]
  *
  * No acepta `categories`: la card no filtra por categoría (la selección de fijos
- * es puramente client-side sobre `data.lines`).
+ * es puramente client-side sobre `data.lines`). Tampoco acepta `year`: el rango
+ * es de meses corridos anclado al mes en curso (Ola 6), no un año calendario.
  *
- * @param year     El año a consultar.
- * @param currency undefined = default del usuario; presente = override de moneda.
- * @param today    Fecha local del usuario (YYYY-MM-DD). Se manda para que el backend
- *                 determine qué meses son futuros en la zona del usuario.
+ * @param rangeMonths El largo de rango PEDIDO (persistido por card, uno de
+ *                    3|6|9|12|24|36|48|60). El backend puede devolver un
+ *                    `rangeMonths` EFECTIVO menor si recorta contra la
+ *                    historia real del usuario (ver `AnnualFijosResponse`).
+ * @param currency    undefined = default del usuario; presente = override de moneda.
+ * @param today       Fecha local del usuario (YYYY-MM-DD). Se manda para que el backend
+ *                    resuelva el mes en curso (borde derecho del rango) en la zona del usuario.
  */
 export function useFixedEvolution(
-  year: number,
+  rangeMonths: number,
   currency?: CurrencyCode,
   today?: string,
 ) {
@@ -424,13 +430,13 @@ export function useFixedEvolution(
   const todayParam = today ? `&today=${today}` : "";
 
   const query = useQuery<AnnualFijosResponse>({
-    queryKey: FIXED_EVOLUTION_QUERY_KEY(year, currency, today),
+    queryKey: FIXED_EVOLUTION_QUERY_KEY(rangeMonths, currency, today),
     queryFn: () => {
-      const url = `/movements/reports/annual-fijos?year=${year}${currencyParam}${todayParam}`;
-      logger.debug("Cargando reporte Detalle histórico de gastos fijos", { year, currency, today });
+      const url = `/movements/reports/annual-fijos?rangeMonths=${rangeMonths}${currencyParam}${todayParam}`;
+      logger.debug("Cargando reporte Detalle histórico de gastos fijos", { rangeMonths, currency, today });
       return api.get<AnnualFijosResponse>(url);
     },
-    enabled: Boolean(year) && isAuthenticated,
+    enabled: Boolean(rangeMonths) && isAuthenticated,
     placeholderData: keepPreviousData,
   });
 

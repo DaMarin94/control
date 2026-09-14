@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { assignFixedEvolutionColors, hexToOklch } from "@/lib/fixed-evolution-colors";
+import { assignFixedEvolutionColors, hexToOklch, anchorFixedEvolutionColor } from "@/lib/fixed-evolution-colors";
 
 /** Parsea un string `oklch(L C H)` a sus tres componentes numéricos. */
 function parseOklch(value: string): { l: number; c: number; h: number } {
@@ -199,6 +199,34 @@ describe("assignFixedEvolutionColors — desempate por ordinal, escalera cíclic
     // Ambos son ordinal más bajo de su propio grupo → ambos anclan en su propio peldaño medio.
     expect(parseOklch(colors.get("fx-rojo")!).l).toBe(0.6);
     expect(parseOklch(colors.get("fx-teal")!).l).toBe(0.6);
+  });
+});
+
+describe("anchorFixedEvolutionColor — color de un excluido (§8.1), sin desempate", () => {
+  it("devuelve el peldaño ancla del color de categoría", () => {
+    const color = anchorFixedEvolutionColor("#E23B3B");
+    expect(parseOklch(color).l).toBe(0.6); // ancla medio para #E23B3B
+  });
+
+  it("dos excluidos con el MISMO hex de categoría reciben el MISMO color (sin desempate)", () => {
+    const a = anchorFixedEvolutionColor("#E23B3B");
+    const b = anchorFixedEvolutionColor("#E23B3B");
+    expect(a).toBe(b);
+  });
+
+  it("coincide con el ancla que tomaría el primer fijo (ordinal más bajo) de esa categoría en la leyenda", () => {
+    const legendColors = assignFixedEvolutionColors([
+      { chainId: "fx-1", ordinal: 1, categoryColor: "#E23B3B" },
+    ]);
+    expect(anchorFixedEvolutionColor("#E23B3B")).toBe(legendColors.get("fx-1"));
+  });
+
+  it("respeta un color muy claro (pastel) → ancla claro", () => {
+    expect(parseOklch(anchorFixedEvolutionColor("#F7C8C8")).l).toBe(0.74);
+  });
+
+  it("respeta un color muy oscuro → ancla oscuro", () => {
+    expect(parseOklch(anchorFixedEvolutionColor("#6C1C1C")).l).toBe(0.46);
   });
 });
 

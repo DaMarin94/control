@@ -25,7 +25,7 @@ import { UniqueGridCard } from "@/components/charts/unique-grid-card";
 import { CuotasGanttCard } from "@/components/charts/cuotas-gantt-card";
 import { InflationIncomeCard } from "@/components/charts/inflation-income-card";
 import { FixedEvolutionCard } from "@/components/charts/fixed-evolution-card";
-import type { ReportCardConfig, ReportCardType } from "@/types/reports";
+import type { ReportCardConfig, ReportCardType, FixedEvolutionRangeMonths } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
 
 // ─── Mini-ítem ────────────────────────────────────────────────────────────────
@@ -135,6 +135,8 @@ interface SortableReportCardProps {
   onFixedAdjustedChange: (adjusted: boolean) => void;
   /** Ola 5, P6: selección de gastos fijos (por chainId) de `fixed-evolution`. */
   onFixedSelectedIdsChange: (ids: string[] | null) => void;
+  /** Ola 6: rango de meses corridos de `fixed-evolution` (RF-REP-013). */
+  onFixedRangeMonthsChange: (rangeMonths: FixedEvolutionRangeMonths) => void;
 }
 
 export function SortableReportCard({
@@ -155,6 +157,7 @@ export function SortableReportCard({
   onFixedModeChange,
   onFixedAdjustedChange,
   onFixedSelectedIdsChange,
+  onFixedRangeMonthsChange,
 }: SortableReportCardProps) {
   const {
     attributes,
@@ -242,7 +245,7 @@ export function SortableReportCard({
         />
       ) : config.type === "fixed-evolution" ? (
         <FixedEvolutionCard
-          year={config.year}
+          rangeMonths={config.fixedRangeMonths ?? 36}
           currency={config.currency}
           title={config.title}
           titlePlaceholder={titlePlaceholder}
@@ -250,7 +253,7 @@ export function SortableReportCard({
           mode={config.fixedMode ?? "amounts"}
           adjusted={config.fixedAdjusted ?? false}
           selectedIds={config.fixedSelectedIds ?? null}
-          onYearChange={onYearChange}
+          onRangeMonthsChange={onFixedRangeMonthsChange}
           onCurrencyChange={onCurrencyChange}
           onRemove={onRemove}
           onTitleChange={onTitleChange}

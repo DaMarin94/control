@@ -44,7 +44,7 @@ import {
 import { usePreferences } from "@/hooks/use-preferences";
 import { useSettings } from "@/hooks/use-settings";
 import { SortableReportCard } from "@/components/charts/sortable-report-card";
-import type { ReportCardConfig, ReportCardType } from "@/types/reports";
+import type { ReportCardConfig, ReportCardType, FixedEvolutionRangeMonths } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
 import { cn } from "@/lib/utils";
 import { getCurrentMonth } from "@/lib/format";
@@ -619,6 +619,23 @@ function ReportesPageContent() {
     });
   }
 
+  // Ola 6: rango de meses corridos de `fixed-evolution` (RF-REP-013).
+  // 36 (= 3 años, default) se omite para back-compat, igual patrón que el resto.
+  function handleFixedRangeMonthsChange(id: string, months: FixedEvolutionRangeMonths) {
+    const newCards = cards.map((c) => {
+      if (c.id !== id) return c;
+      if (months === 36) {
+        const updated = { ...c };
+        delete updated.fixedRangeMonths;
+        return updated;
+      }
+      return { ...c, fixedRangeMonths: months };
+    });
+    void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
+      logger.error("Error al persistir rango de card fixed-evolution", { error: err, cardId: id });
+    });
+  }
+
   const hasCards = cards.length > 0;
 
   return (
@@ -728,6 +745,7 @@ function ReportesPageContent() {
                   onFixedModeChange={(mode) => handleFixedModeChange(card.id, mode)}
                   onFixedAdjustedChange={(adjusted) => handleFixedAdjustedChange(card.id, adjusted)}
                   onFixedSelectedIdsChange={(ids) => handleFixedSelectedIdsChange(card.id, ids)}
+                  onFixedRangeMonthsChange={(months) => handleFixedRangeMonthsChange(card.id, months)}
                 />
               ))}
 

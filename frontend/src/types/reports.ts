@@ -368,6 +368,16 @@ export interface ReportCardConfig {
    * no se achica al destildar. Solo aplica cuando type === "fixed-evolution".
    */
   fixedSelectedIds?: string[] | null;
+  /**
+   * Largo del rango de meses corridos de la card `fixed-evolution` (Ola 6 —
+   * RF-REP-013), anclado al mes en curso (el borde derecho nunca se mueve).
+   * Uno de `FixedEvolutionRangeMonths` (3/6/9 meses, 1/2/3/4/5 años).
+   * Ausente = 36 (3 años, default), también para cards ya persistidas sin el
+   * campo (el blob no se migra). El campo `year` de la card queda INERTE para
+   * este tipo: no hay stepper ni año final, solo este selector de rango.
+   * Solo aplica cuando type === "fixed-evolution".
+   */
+  fixedRangeMonths?: FixedEvolutionRangeMonths;
 }
 
 // ─── Tipos del endpoint de reporte anual de Cuotas (Ola 3, P2) ───────────────
@@ -518,7 +528,13 @@ export interface AnnualInflationIncomeResponse {
   availableCategories: Array<{ categoryId: string; name: string; color: string }>;
 }
 
-// ─── Tipos del reporte "Detalle histórico de gastos fijos" (Ola 5, P6) ───────
+// ─── Tipos del reporte "Detalle histórico de gastos fijos" (Ola 5, P6 / Ola 6) ─
+
+/**
+ * Largos de rango aceptados por el selector único de la card (RF-REP-013):
+ * 3/6/9 meses, 1/2/3/4/5 años. Default 36 (3 años).
+ */
+export type FixedEvolutionRangeMonths = 3 | 6 | 9 | 12 | 24 | 36 | 48 | 60;
 
 /**
  * Motivo de un mes sin punto (hueco) de una línea de `fixed-evolution`.
@@ -533,11 +549,15 @@ export type FixedEvolutionGapReason =
   | "resultedIncome";
 
 /**
- * Un mes de una línea de `fixed-evolution`. Siempre 12 por línea, índice 0 = enero.
+ * Un mes de una línea de `fixed-evolution`. Con el rango de largo variable
+ * (Ola 6, 3..60 meses) el índice del array ya no ubica el punto: cada uno
+ * trae su propio `month`.
  * `amountCents: 0` con `reason: null` es un punto REAL (RN-018) — DISTINTO de un
  * hueco (`amountCents: null` + `reason` no-null). No colapsar ambos casos.
  */
 export interface FixedEvolutionMonthPoint {
+  /** "YYYY-MM" del punto. */
+  month: string;
   /** Monto en centavos de la moneda de display, ya convertido con la cotización de ESE mes. null = hueco. */
   amountCents: number | null;
   /** Variación % nominal respecto del mes anterior de esta línea. null = sin punto/no computable. */
@@ -557,9 +577,9 @@ export interface FixedEvolutionLine {
   chainId: string;
   /**
    * Orden estable de la cadena en el universo completo del usuario (NO cambia
-   * entre años). USAR PARA EL COLOR (nunca el índice del array — ver docs/design.md
-   * §3 y §14): el índice de `lines` varía con el año (orden por gasto anual DESC),
-   * el ordinal no.
+   * al cambiar el rango). USAR PARA EL COLOR (nunca el índice del array — ver
+   * docs/design.md §3 y §14): el índice de `lines` varía con el rango (orden
+   * por gasto total del rango DESC), el ordinal no.
    */
   ordinal: number;
   /** true si es un calculado derivado de un fijo (RF-MCALC-001); false = fijo normal. */
@@ -579,40 +599,62 @@ export interface FixedEvolutionLine {
   originDescription: string | null;
   /** Solo calculados: chainId del fijo de origen. null en líneas normales. */
   originChainId: string | null;
-  /** Siempre 12 entradas, índice 0 = enero. */
+  /** Largo VARIABLE, igual al rango efectivo (`AnnualFijosResponse.rangeMonths`). */
   months: FixedEvolutionMonthPoint[];
 }
 
 /**
- * Respuesta de GET /movements/reports/annual-fijos?year=YYYY[&currency=XXX][&today=YYYY-MM-DD]
+ * Fijo excluido del gráfico y de la leyenda activa por el criterio de ≥2
+ * apariciones graficables (RF-REP-013, docs/design.md §8.1). Viaja fuera de
+ * `lines`, solo con lo necesario para identificarlo y su mes de inicio — sin
+ * `ordinal` (un excluido no dibuja línea, no compite por tonalidad) ni
+ * `originDescription`/`originChainId` (no hace falta para esta superficie).
+ */
+export interface FixedEvolutionExcludedLine {
+  chainId: string;
+  isCalculated: boolean;
+  description: string | null;
+  categoryId: string;
+  categoryName: string;
+  categoryColor: string;
+  /** Arranque de la cadena — puede caer fuera del rango visible. */
+  startMonth: string;
+}
+
+/**
+ * Respuesta de GET /movements/reports/annual-fijos?rangeMonths=<3|6|9|12|24|36|48|60>[&currency=XXX][&today=YYYY-MM-DD]
  * (dentro del sobre { success, statusCode, data }). NO acepta `categories` — esta
  * card no filtra por categoría (RF-REP-013).
  *
- * Fuente de verdad: contrato del backend (Ola 5, P6).
+ * Fuente de verdad: contrato del backend (Ola 6 — rango de meses corridos).
  */
 export interface AnnualFijosResponse {
-  /** El año pedido. */
-  year: number;
   /** Moneda de display usada (la pedida por ?currency= o la default del usuario). */
   currency: "ARS" | "USD" | "EUR" | "BRL";
   /**
-   * Líneas con al menos un punto en el año pedido. Orden: gasto anual DESC,
-   * desempate chainId ASC — es el orden canónico de leyenda, pintado y tooltip
-   * modo mes (docs/design.md §3/§8). NO usar este orden para el color (ver `ordinal`).
+   * Rango EFECTIVO (post-recorte) en meses — puede ser MENOR al pedido si el
+   * historial del usuario es más corto. Comparar contra el `fixedRangeMonths`
+   * persistido para decidir si mostrar la nota de recorte; NUNCA sobreescribir
+   * el persistido con este valor.
+   */
+  rangeMonths: number;
+  /** "YYYY-MM" — primer mes del rango efectivo (después del recorte). */
+  startMonth: string;
+  /** "YYYY-MM" — SIEMPRE el mes en curso (resuelto con `today`). */
+  endMonth: string;
+  /**
+   * Líneas con ≥2 apariciones graficables en el rango efectivo. Orden: gasto
+   * TOTAL del rango DESC, desempate chainId ASC — es el orden canónico de
+   * leyenda, pintado y tooltip modo mes (docs/design.md §3/§8). NO usar este
+   * orden para el color (ver `ordinal`).
    */
   lines: FixedEvolutionLine[];
   /**
-   * Primer año con alguna aparición de un gasto fijo del usuario. Tope propio
-   * de esta card (RF-REP-013) — NO el `earliestYear` global de RF-REP-002.
-   * null si el usuario no tiene ningún gasto fijo.
+   * Fijos con 0 o 1 apariciones graficables en el rango efectivo (superficie
+   * de excluidos, docs/design.md §8.1). El caso de 0 apariciones es
+   * deliberado (p.ej. un fijo anual pagado fuera del rango pedido).
    */
-  earliestYear: number | null;
-  /**
-   * Mayor entre el año en curso y el año del hecho futuro datado más lejano
-   * (`deletedFrom` de una baja programada o `startMonth` de un alta futura).
-   * Tope hacia adelante del `YearStepper` de esta card.
-   */
-  latestYear: number;
+  excluded: FixedEvolutionExcludedLine[];
 }
 
 // Re-export para conveniencia de los consumidores de este módulo

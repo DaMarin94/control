@@ -30,6 +30,35 @@ import { ResponsiveContainer } from "recharts";
 import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// ─── Margen compartido del eje X ───────────────────────────────────────────────
+
+/**
+ * Margen derecho reservado en el `margin` de todo chart de Recharts (Line/Area/
+ * Bar) de Reportes cuyo eje X sea de categorías con `interval={0}` (un tick por
+ * posición, rótulo final SIEMPRE presente — no se puede suprimir, docs/design.md
+ * §2 para `fixed-evolution`).
+ *
+ * Causa raíz (bug de QA visual, Ola 6): en un eje de categorías, Recharts
+ * posiciona el ÚLTIMO tick exactamente en el borde derecho del área de trazado
+ * (`innerWidth`, es decir a `margin.right` px del borde del SVG). El tick de
+ * texto se dibuja con `textAnchor="middle"`, así que necesita como mínimo la
+ * MITAD de su ancho de rótulo libre a la derecha de esa posición para no
+ * cortarse contra el borde del SVG. El `margin.right` anterior (4px) alcanzaba
+ * para muy poco: medido en el navegador, "Dic" (UI 12px) ya desborda 5px y la
+ * segunda línea con año de `fixed-evolution` ("2026", mono 10.5px) desborda 9px
+ * — la mitad real de esos rótulos ronda 9–13px.
+ *
+ * Un `margin.right` más chico en un chart particular (banda/`scaleBand`, como
+ * el `BarChart` de "Gastos por categoría") no lo necesita para no desbordar,
+ * pero usar el mismo valor en todos evita parchear card por card y deja margen
+ * de sobra ante cambios de fuente/rótulo futuros.
+ *
+ * Si algún chart cambia su `margin.left`, actualizar junto con este valor
+ * cualquier cálculo derivado del ancho útil del plot (ver `slot` en
+ * `fixed-evolution-card.tsx`).
+ */
+export const CHART_END_LABEL_MARGIN = 20;
+
 // ─── ChartContainer ────────────────────────────────────────────────────────────
 
 interface ChartContainerProps {

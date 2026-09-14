@@ -6,7 +6,12 @@ import {
   Request,
 } from '@nestjs/common';
 import { Currency } from '@prisma/client';
-import { MovementsService } from './movements.service';
+import {
+  MovementsService,
+  FIXED_EVOLUTION_RANGE_OPTIONS,
+  FIXED_EVOLUTION_DEFAULT_RANGE_MONTHS,
+  FixedEvolutionRangeMonths,
+} from './movements.service';
 
 interface AuthRequest extends Request {
   user: { userId: string };
@@ -309,47 +314,53 @@ export class MovementsController {
   }
 
   /**
-   * GET /movements/reports/annual-fijos?year=YYYY[&currency=<ARS|USD|EUR|BRL>][&today=YYYY-MM-DD]
+   * GET /movements/reports/annual-fijos?rangeMonths=<3|6|9|12|24|36|48|60>[&currency=<ARS|USD|EUR|BRL>][&today=YYYY-MM-DD]
    *
-   * Devuelve el Detalle histórico de gastos fijos (RF-REP-013): una serie de 12
-   * meses POR CADA gasto fijo lógico (cadena `chainId`) del usuario, alcance
-   * exclusivo Fijo + EXPENSE, más los calculados derivados de un fijo (con su
-   * propia cadena). Sin agregación de ningún tipo.
+   * Devuelve el Detalle histórico de gastos fijos (RF-REP-013): una serie POR
+   * CADA gasto fijo lógico (cadena `chainId`) del usuario, alcance exclusivo
+   * Fijo + EXPENSE, más los calculados derivados de un fijo (con su propia
+   * cadena). Sin agregación de ningún tipo.
+   *
+   * El rango es de MESES CORRIDOS anclado al presente, no un año calendario:
+   * el borde derecho siempre es el mes en curso (resuelto con `today`) y el
+   * izquierdo es el mes en curso menos el rango pedido, recortado contra la
+   * historia real del usuario (ver AnnualFijosResponse.startMonth/endMonth/
+   * rangeMonths en la respuesta, que reflejan el rango EFECTIVO, no el pedido).
    *
    * Esta card NO expone filtro de categorías (la selección de fijos individuales
    * lo sustituye — RF-REP-013), por eso el endpoint no acepta "categories".
    *
    * Parámetros:
-   * - year (obligatorio): año en formato YYYY.
+   * - rangeMonths (opcional): largo del rango en meses, uno de
+   *   3|6|9|12|24|36|48|60. Ausente → default 36 (3 años).
    * - currency (opcional): override de moneda de display (ARS|USD|EUR|BRL).
    *   Ausente → usa la default del usuario.
-   * - today (opcional): fecha local del usuario YYYY-MM-DD, usada SOLO para
-   *   resolver el tope de navegación hacia adelante (latestYear). Ausente →
-   *   fecha UTC del sistema.
+   * - today (opcional): fecha local del usuario YYYY-MM-DD, usada para
+   *   resolver el mes en curso (borde derecho del rango). Ausente → fecha UTC
+   *   del sistema.
    *
    * Respuesta: AnnualFijosResponse dentro del sobre { success, statusCode, data }.
-   * 400 si year falta, formato inválido, fuera de rango, currency inválido, o
-   * today con formato inválido.
+   * 400 si rangeMonths, currency o today tienen formato/valor inválido.
    */
   @Get('reports/annual-fijos')
   getAnnualFijosReport(
     @Request() req: AuthRequest,
-    @Query('year') yearParam: string | undefined,
+    @Query('rangeMonths') rangeMonthsParam: string | undefined,
     @Query('currency') currencyParam: string | undefined,
     @Query('today') todayParam: string | undefined,
   ) {
-    if (!yearParam || !/^\d{4}$/.test(yearParam)) {
-      throw new BadRequestException(
-        'El parámetro "year" es obligatorio y debe tener exactamente 4 dígitos (ej: 2026)',
-      );
-    }
-
-    const year = parseInt(yearParam, 10);
-
-    if (year < YEAR_MIN || year > YEAR_MAX) {
-      throw new BadRequestException(
-        `El año debe estar entre ${YEAR_MIN} y ${YEAR_MAX}`,
-      );
+    let rangeMonths: FixedEvolutionRangeMonths = FIXED_EVOLUTION_DEFAULT_RANGE_MONTHS;
+    if (rangeMonthsParam !== undefined) {
+      const parsed = Number(rangeMonthsParam);
+      if (
+        !/^\d+$/.test(rangeMonthsParam) ||
+        !(FIXED_EVOLUTION_RANGE_OPTIONS as readonly number[]).includes(parsed)
+      ) {
+        throw new BadRequestException(
+          `El parámetro "rangeMonths" debe ser uno de: ${FIXED_EVOLUTION_RANGE_OPTIONS.join(', ')}`,
+        );
+      }
+      rangeMonths = parsed as FixedEvolutionRangeMonths;
     }
 
     let currencyOverride: Currency | undefined;
@@ -375,7 +386,7 @@ export class MovementsController {
 
     return this.movementsService.getAnnualFijosReport(
       req.user.userId,
-      year,
+      rangeMonths,
       currencyOverride,
       todayStr,
     );

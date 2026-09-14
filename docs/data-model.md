@@ -151,7 +151,8 @@ ReportCardConfig = {
   anchorUsdCents?: number,                       // solo unique-grid: techo de la escala de color en centavos de USD (RF-REP-010); ausente = default 15 USD (1500)
   fixedMode?: "amounts" | "variation",           // solo fixed-evolution: modo de visualización (RF-REP-013); ausente = "amounts"
   fixedAdjusted?: boolean,                       // solo fixed-evolution: ajuste por inflación de la variación; ausente = false
-  fixedSelectedIds?: string[] | null             // solo fixed-evolution: selección de fijos por chainId; null = todos
+  fixedSelectedIds?: string[] | null,            // solo fixed-evolution: selección de fijos por chainId; null = todos
+  fixedRangeMonths?: 3 | 6 | 9 | 12 | 24 | 36 | 48 | 60  // solo fixed-evolution: largo del rango en meses (RF-REP-013); ausente = 36
 }
 
 ReportCardType = "income-expense" | "by-category" | "unique-grid" | "installment-gantt" | "inflation-income" | "fixed-evolution"
@@ -160,9 +161,9 @@ ReportCardType = "income-expense" | "by-category" | "unique-grid" | "installment
 Nombres de display de cada tipo (menú "[+]" y mini de reorden): `income-expense` = **"Ingresos vs Gastos"**, `by-category` = **"Gastos por categoría"**, `unique-grid` = **"Gastos Únicos"**, `installment-gantt` = **"Gastos en Cuotas"**, `inflation-income` = **"Inflación vs Ingresos"**, `fixed-evolution` = **"Detalle histórico de gastos fijos"**.
 
 - **`title`** (RF-REP-008) — título de la card, máx. 60 caracteres, trimmeado al confirmar. Aplica a ambos `type`. **Ausente o vacío** → la card muestra el placeholder **"Reporte N"** (N = posición 1-based de la card en la columna, contando todas las cards; **display puro, no se persiste** y se recalcula en vivo al quitar/reordenar). Si el usuario confirma un título vacío, el campo se **omite** del objeto (back-compat: cards sin `title` muestran el placeholder).
-- **`type`** (`ReportCardType`) — `"income-expense"` (Ingresos vs Gastos, RF-REP-001), `"by-category"` (Gastos por categoría, RF-REP-001), `"unique-grid"` (grilla anual de gastos Únicos día × mes, RF-REP-010), `"installment-gantt"` (gantt anual de gastos en Cuotas, RF-REP-011) o `"inflation-income"` (líneas de Inflación vs Ingresos del año, RF-REP-012). La card `income-expense` es **Total-only**: muestra únicamente las dos series agregadas (ingresos vs gastos), sin sub-vista por categoría ni tabs. Las cards `unique-grid`, `installment-gantt` e `inflation-income` persisten los mismos campos base que las otras (`year`, `categoryIds`, `currency`, `title`) y **no** usan `categoryChartMode` ni `hiddenSeries`. La `unique-grid` **sí agrega un campo propio**, `anchorUsdCents` (techo de su escala de color, RF-REP-010); las demás cards anuales lo ignoran. Su fuente de datos es un endpoint propio (`GET /movements/reports/annual-unicos`, `GET /movements/reports/annual-cuotas` y `GET /movements/reports/annual-inflation-income` respectivamente; ver §Contrato de reporte anual de Únicos, §Contrato de reporte anual de Cuotas y §Contrato de reporte anual de Inflación vs Ingresos), distinto de `GET /movements/reports`. La card **`fixed-evolution`** (RF-REP-013) sigue el mismo patrón —endpoint propio `GET /movements/reports/annual-fijos` (§Contrato de reporte anual de Fijos)— pero **no usa `categoryIds`**: su selección va por `fixedSelectedIds`, y suma además `fixedMode` y `fixedAdjusted`.
+- **`type`** (`ReportCardType`) — `"income-expense"` (Ingresos vs Gastos, RF-REP-001), `"by-category"` (Gastos por categoría, RF-REP-001), `"unique-grid"` (grilla anual de gastos Únicos día × mes, RF-REP-010), `"installment-gantt"` (gantt anual de gastos en Cuotas, RF-REP-011) o `"inflation-income"` (líneas de Inflación vs Ingresos del año, RF-REP-012). La card `income-expense` es **Total-only**: muestra únicamente las dos series agregadas (ingresos vs gastos), sin sub-vista por categoría ni tabs. Las cards `unique-grid`, `installment-gantt` e `inflation-income` persisten los mismos campos base que las otras (`year`, `categoryIds`, `currency`, `title`) y **no** usan `categoryChartMode` ni `hiddenSeries`. La `unique-grid` **sí agrega un campo propio**, `anchorUsdCents` (techo de su escala de color, RF-REP-010); las demás cards anuales lo ignoran. Su fuente de datos es un endpoint propio (`GET /movements/reports/annual-unicos`, `GET /movements/reports/annual-cuotas` y `GET /movements/reports/annual-inflation-income` respectivamente; ver §Contrato de reporte anual de Únicos, §Contrato de reporte anual de Cuotas y §Contrato de reporte anual de Inflación vs Ingresos), distinto de `GET /movements/reports`. La card **`fixed-evolution`** (RF-REP-013) sigue el mismo patrón —endpoint propio `GET /movements/reports/annual-fijos` (§Contrato de reporte anual de Fijos)— pero **no usa `categoryIds`**: su selección va por `fixedSelectedIds`, y suma además `fixedMode`, `fixedAdjusted` y `fixedRangeMonths`.
   - **`inflation-income` — toggle de series efímero.** La card grafica tres series (inflación, variación % de ingreso, ingreso ajustado) cuya **visibilidad se togglea por la leyenda**, pero ese toggle es **estado local efímero de la card**: **no** se persiste en el blob (default = las tres visibles; al recargar vuelven todas). Lo que sí se persiste (como en las demás cards anuales) es el filtro de categorías (`categoryIds`) y la moneda (`currency`).
-- **`year`** — el año que la card grafica; lo cambia la navegación de año embebida del widget.
+- **`year`** — el año que la card grafica; lo cambia la navegación de año embebida del widget. En **`fixed-evolution`** es **inerte**: esa card no navega años, su rango se ancla al **mes en curso** (ver `fixedRangeMonths` y RF-REP-013). El campo se escribe al crear la card por el shape base y la card **no lo lee**.
 - **`categoryIds`** — filtro de categorías de la card. **`null` = todas** (default al crear); una **lista** = subconjunto explícito de `categoryId`s seleccionados. Aplica a ambos tipos (en `income-expense` restringe qué categorías cuentan en los totales; en `by-category`, qué bandas se apilan). Lo que el front manda al endpoint como `categories` deriva de este campo (ver contrato `GET /movements/reports`).
 - **`categoryChartMode`** (RF-REP-006) — representación **solo de las cards `by-category`**: `"bar"` = barras apiladas por categoría (default); `"line"` = áreas apiladas por categoría (mismo dato, geometría continua, con línea de contorno = total de gasto). **Ausente = `"bar"`** (back-compat: cards existentes mantienen barras). Irrelevante para los demás tipos. En el dashboard solo se monta `income-expense`, que no usa este campo.
 - **`categoryBreakdown`** — **DEPRECADO.** Sigue declarado en el tipo porque la normalización en lectura lo lee para migrar (ver Back-compat). Código nuevo **no** lo escribe ni lo lee; ninguna card nueva lo persiste.
@@ -176,7 +177,8 @@ Nombres de display de cada tipo (menú "[+]" y mini de reorden): `income-expense
 - **`anchorUsdCents`** (RF-REP-010) — **solo `unique-grid`**: techo (ancla) de la escala de color de la grilla, entero, **centavos de USD**, persistido por card. **Ausente/`undefined` = default 15 USD (`1500`)** = comportamiento estándar (back-compat: el blob **no se migra**). Se guarda en USD para ser constante en términos reales; el backend lo reconvierte a la moneda de display con el TC del año de la card (ver §Contrato de reporte anual de Únicos y RF-REP-010). Las demás cards anuales lo ignoran.
 - **`fixedMode`** (RF-REP-013) — **solo `fixed-evolution`**: modo de visualización de la card. `"amounts"` = montos en la moneda de display; `"variation"` = variación % por línea. **Ausente = `"amounts"`.** Persistido por card.
 - **`fixedAdjusted`** (RF-REP-013) — **solo `fixed-evolution`**: ajuste por inflación de la variación. **Ausente/`false` = variación nominal.** Solo tiene efecto con `fixedMode: "variation"`; el valor se **conserva** al volver a `"amounts"` (el control queda deshabilitado mostrando lo persistido). Persistido por card.
-- **`fixedSelectedIds`** (RF-REP-013) — **solo `fixed-evolution`**: selección de gastos fijos por **`chainId`**. **`null` = todos** los fijos con aparición en el año (default al crear); una **lista** = subconjunto explícito (puede ser `[]` = ninguno). **Reemplaza al filtro de categorías** (esta card no lo tiene) y se aplica **client-side** sobre las `lines` del response — no viaja al endpoint. Persistido por card.
+- **`fixedSelectedIds`** (RF-REP-013) — **solo `fixed-evolution`**: selección de gastos fijos por **`chainId`**. **`null` = todos** los fijos del universo de la leyenda del rango (default al crear); una **lista** = subconjunto explícito (puede ser `[]` = ninguno). **Reemplaza al filtro de categorías** (esta card no lo tiene) y se aplica **client-side** sobre las `lines` del response — no viaja al endpoint. **Sobrevive a los cambios de rango**: un `chainId` que sale del universo se conserva en la lista (no se dibuja, y vuelve a dibujarse si el rango lo reincorpora); la navegación **nunca reescribe** el campo. Persistido por card.
+- **`fixedRangeMonths`** (RF-REP-013) — **solo `fixed-evolution`**: **largo del rango visible en meses**, uno de `3 | 6 | 9 | 12 | 24 | 36 | 48 | 60` (las ocho opciones del select: 3/6/9 meses y 1/2/3/4/5 años). **Ausente = `36`** (3 años), también para las cards ya persistidas (el blob **no se migra**). El rango pedido es el que **termina en el mes en curso** y cubre `fixedRangeMonths` meses corridos hacia atrás, antes del recorte del backend contra el primer mes con gasto fijo. Las demás cards ignoran el campo. Persistido por card.
 - **Orden del array = orden de despliegue** de las cards en pantalla.
 - **Ausente / vacío = pantalla vacía.** Clave ausente o `reports: []` → `/reportes` muestra solo el recuadro "[+]" (estado vacío inicial, RF-REP-003).
 - **Back-compat / normalización.** Un blob previo **sin** `reports` se interpreta como `[]` (pantalla vacía). La normalización (entradas malformadas, `type` desconocido, `categoryIds` que apunten a categorías inexistentes/eliminadas) es responsabilidad del front (en la **lectura** del blob); un blob viejo o parcial nunca rompe la pantalla. La migración del `categoryBreakdown` deprecado corre acá:
@@ -184,7 +186,7 @@ Nombres de display de cada tipo (menú "[+]" y mini de reorden): `income-expense
   - `income-expense` + `categoryBreakdown` `false`/ausente → queda `income-expense` sin el campo.
   - `income-expense` con `hiddenSeries` → se **strip** el campo (deprecado; la dirección gobierna las líneas).
   - `by-category` sin `categoryChartMode` → se trata como `"bar"`.
-- **El back NO valida ni conoce esta clave** (igual que `monthSections`): `PUT /preferences` guarda el blob tal cual. La normalización y los defaults son del frontend consumidor. Es lo que permite que cada tipo de card sume **campos propios** (`anchorUsdCents`, `fixedMode`, `fixedAdjusted`, `fixedSelectedIds`) sin tocar el servidor ni migrar blobs existentes.
+- **El back NO valida ni conoce esta clave** (igual que `monthSections`): `PUT /preferences` guarda el blob tal cual. La normalización y los defaults son del frontend consumidor. Es lo que permite que cada tipo de card sume **campos propios** (`anchorUsdCents`, `fixedMode`, `fixedAdjusted`, `fixedSelectedIds`, `fixedRangeMonths`) sin tocar el servidor ni migrar blobs existentes.
 
 #### `monthListFilters` — filtros por listado de la Vista del mes (RF-VM-006)
 
@@ -935,27 +937,28 @@ donde `AvailableCategory = { categoryId, name, color }` (mismo shape que en §Co
 
 ## Contrato de reporte anual de Fijos (respuesta de `GET /movements/reports/annual-fijos`)
 
-`GET /movements/reports/annual-fijos?year=YYYY[&currency=XXX][&today=YYYY-MM-DD]` devuelve, dentro del sobre `{ success, statusCode, data }`, **una serie de 12 meses por cada gasto fijo** (cadena) del año, con su monto y sus dos variaciones ya calculados. Alimenta la card `fixed-evolution` (RF-REP-013). Solo agrega movimientos de tipo **Fijo** y dirección **gasto (`EXPENSE`)**. Es un endpoint **distinto** de los otros reportes anuales (no comparte shape). Reglas de cálculo (qué entra, recomposición de splits, conversión, variaciones) en `docs/backend.md`, §Reporte anual de Fijos.
+`GET /movements/reports/annual-fijos?rangeMonths=N[&currency=XXX][&today=YYYY-MM-DD]` devuelve, dentro del sobre `{ success, statusCode, data }`, **una serie de meses corridos por cada gasto fijo** (cadena) del rango, con su monto y sus dos variaciones ya calculados. Alimenta la card `fixed-evolution` (RF-REP-013). Solo agrega movimientos de tipo **Fijo** y dirección **gasto (`EXPENSE`)**. Es un endpoint **distinto** de los otros reportes anuales (no comparte shape). Reglas de cálculo (qué entra, recorte del rango, recomposición de splits, conversión, variaciones) en `docs/backend.md`, §Reporte anual de Fijos.
 
 **Query params:**
 
-- **`year`** (`YYYY`, requerido) — el año a graficar.
+- **`rangeMonths`** (opcional) — largo del rango **pedido**, en meses: una de las **8 opciones** `3 | 6 | 9 | 12 | 24 | 36 | 48 | 60`. **Ausente → `36`**; cualquier otro valor → **`400`**. No hay año ni mes final que pedir: el **borde derecho es siempre el mes en curso**, que el backend resuelve con `today`. El pedido es **previo al recorte** del borde izquierdo.
 - **`currency`** (opcional) — override de la moneda de display (RF-REP-007), una de las 4 monedas, **case-sensitive**. **Ausente → la default global del usuario**; **presente y válido → esa moneda**; **vacío o fuera del set → `400`**.
 - **`today`** (opcional, `YYYY-MM-DD`) — la **fecha local del usuario**. Si falta, el backend cae a `new Date()` (UTC).
 - **NO acepta `categories`.** Esta card no filtra por categoría: la selección por fijo la reemplaza (RF-REP-013) y es **client-side** sobre `lines`.
 
 ```ts
 AnnualFijosResponse {
-  year: number;
   currency: Currency;                 // moneda de display efectiva
-  lines: FixedEvolutionLine[];        // orden: gasto anual DESC, desempate chainId ASC
-  earliestYear: number | null;        // tope de navegación hacia atrás, propio de la card
-  latestYear: number;                 // tope de navegación hacia adelante
+  rangeMonths: number;                // largo EFECTIVO del rango (post-recorte); puede ser < al pedido
+  startMonth: string;                 // "YYYY-MM" — primer mes del rango efectivo
+  endMonth: string;                   // "YYYY-MM" — SIEMPRE el mes en curso
+  lines: FixedEvolutionLine[];        // ≥2 apariciones graficables; orden: gasto del rango DESC, desempate chainId ASC
+  excluded: FixedEvolutionExcludedLine[]; // cadenas con 0 o 1 apariciones en el rango
 }
 
 FixedEvolutionLine {
   chainId: string;
-  ordinal: number;                    // rank estable entre años (ver abajo)
+  ordinal: number;                    // rank estable (ver abajo)
   isCalculated: boolean;
   description: string | null;
   categoryId: string;
@@ -966,23 +969,36 @@ FixedEvolutionLine {
   frequency: number;                  // entero 1..12, compartido por toda la cadena
   originDescription: string | null;   // solo calculados; null en líneas normales
   originChainId: string | null;       // ídem
-  months: FixedEvolutionMonthPoint[]; // SIEMPRE 12; índice 0 = enero
+  months: FixedEvolutionMonthPoint[]; // largo VARIABLE = rangeMonths efectivo (3..60)
 }
 
 FixedEvolutionMonthPoint {
+  month: string;                      // "YYYY-MM" — el punto se ubica por acá, no por su índice
   amountCents: number | null;         // centavos de `currency`; null = hueco
   nominalPct: number | null;          // variación % vs. el mes anterior de ESTA línea
   adjustedPct: number | null;         // la misma variación descontando el IPC del mes
   reason: 'frequency' | 'skipped' | 'beforeStart' | 'afterEnd' | 'resultedIncome' | null;
 }
+
+FixedEvolutionExcludedLine {
+  chainId: string;
+  isCalculated: boolean;
+  description: string | null;
+  categoryId: string;
+  categoryName: string;
+  categoryColor: string;              // "#rrggbb"
+  startMonth: string;                 // "YYYY-MM" — único dato adicional del excluido
+}
 ```
 
+- **El rango viaja resuelto: `startMonth`, `endMonth` y `rangeMonths` describen lo que la respuesta REALMENTE cubre.** `rangeMonths` es el largo **efectivo**, después de recortar el borde izquierdo contra el primer mes con gasto fijo del usuario, y puede ser menor al pedido; el borde derecho nunca se corre para compensar. El front rotula el eje y los estados con el rango efectivo, no con lo que pidió. No hay topes de navegación que transportar: hacia adelante no hay nada que topar (`endMonth` es el mes en curso) y el límite hacia atrás ya está expresado en `startMonth`, con granularidad de mes.
+- **`months` es de largo variable y cada punto se identifica por su `month`.** El índice del array no dice de qué mes es un punto. **Ningún punto es posterior a `endMonth`.**
 - **Los tres valores del punto vienen calculados del backend** (monto convertido + las dos variaciones, en puntos porcentuales). El front **no** deriva porcentajes ni reconvierte montos.
 - **`amountCents: 0` con `reason: null` es un punto REAL, no un hueco.** Un calculado puede dar 0 legítimamente (RN-018). El hueco es **`amountCents: null` + `reason` no-null**; `reason` dice por qué (mes fuera de frecuencia, anulado, previo al alta, posterior a la baja, o mes en que un calculado resulta `INCOME`).
-- **`ordinal` — rank ESTABLE entre años.** Se calcula por la fila más antigua de cada cadena sobre el **universo completo** de fijos del usuario, no sobre el año pedido. Es lo que permite que un fijo conserve su identidad (y su color) al navegar de año. **El índice del array NO sirve para eso**: `lines` viene ordenado por gasto anual del año mostrado, así que la misma cadena cambia de posición de un año a otro.
-- **Universo de `lines` vs. universo de los topes.** `lines` trae las cadenas con **al menos un punto en el año pedido**; `earliestYear`, `latestYear` y `ordinal` se computan sobre el **universo completo** del usuario.
-- **`earliestYear`** — primer año con alguna aparición de gasto fijo; `null` si el usuario no tiene ninguno. Es el tope **propio de la card** (RF-REP-013), no el `earliestYear` global de `GET /movements/reports`.
-- **`latestYear`** — mayor entre el año en curso y el año del **hecho futuro datado** más lejano: el `deletedFrom` de una baja programada o el `startMonth` de una cadena que arranca a futuro. Una cadena **sin `endMonth` no lo corre**: su horizonte es abierto y el stepper de año quedaría sin final.
+- **`ordinal` — rank ESTABLE entre rangos.** Se calcula por la fila más antigua de cada cadena sobre el **universo completo** de fijos del usuario, no sobre el rango pedido. Es lo que permite que un fijo conserve su identidad (y su color) al cambiar lo que la card muestra. **El índice del array NO sirve para eso**: `lines` viene ordenado por gasto del tramo mostrado, así que la misma cadena cambia de posición cuando ese tramo cambia.
+- **Universo de `lines`** — las cadenas con **≥2 apariciones graficables** en el rango efectivo (criterio en RF-REP-013): son las que dibujan evolución. `ordinal` se computa sobre el universo completo del usuario.
+- **`excluded` — los fijos que no dibujan evolución, emitidos igual.** Toda cadena de gasto fijo del usuario con **0 o 1** apariciones en el rango viaja acá, con su identidad y su `startMonth`: la card las expone fuera de la leyenda activa para que el usuario vea desde cuándo existe el fijo (RF-REP-013). Omitirlas las volvería inalcanzables.
+- **Mes base de la variación** — la variación del **primer mes del rango efectivo** (`startMonth`) se calcula contra el **mes anterior a ese mes**, que queda fuera de la serie devuelta.
 
 ---
 

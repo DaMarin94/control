@@ -54,7 +54,7 @@ import { computeInflationIncomeMarks } from "@/lib/limits/apply-reports";
 import { describeLimitMark, mergeLimitMarks, type EvaluatedLimitMark } from "@/lib/limits/evaluate";
 import { renderSeriesPointMark } from "@/components/limits/limit-mark";
 import { LimitsInfoPopover } from "@/components/limits/limits-info-popover";
-import { ChartContainer, ChartLegend } from "@/components/ui/chart";
+import { ChartContainer, ChartLegend, CHART_END_LABEL_MARGIN } from "@/components/ui/chart";
 import { CardCurrencySelect } from "@/components/ui/card-currency-select";
 import type { AnnualInflationIncomeResponse } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
@@ -634,7 +634,7 @@ function InflationIncomeCanvas({
       <ChartContainer height={chartHeight}>
         <LineChart
           data={data}
-          margin={{ top: 8, right: 4, bottom: 0, left: 4 }}
+          margin={{ top: 8, right: CHART_END_LABEL_MARGIN, bottom: 0, left: 4 }}
         >
           <CartesianGrid
             strokeDasharray="0"

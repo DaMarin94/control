@@ -1783,6 +1783,57 @@ export class MovementsRepository {
   }
 
   /**
+   * Carga cotizaciones de pivote USD para una lista ARBITRARIA de meses
+   * ("YYYY-MM"), sin asumir que forman un año calendario. Usado por el reporte
+   * de Detalle histórico de gastos fijos (RF-REP-013), cuyo rango es de largo
+   * variable (3 a 60 meses) y puede cruzar varios años.
+   *
+   * Mismo CLAMP que loadPivotRatesForYear: cada mes pedido que no tenga filas
+   * se resuelve al disponible más cercano (resolveNearestYearMonth).
+   */
+  async loadPivotRatesForMonths(
+    monthKeys: string[],
+  ): Promise<Map<string, Partial<PivotRates>>> {
+    const allRates = await this.loadAllPivotRates();
+    const availableMonths = Array.from(allRates.keys());
+
+    const result = new Map<string, Partial<PivotRates>>();
+    for (const monthKey of monthKeys) {
+      const resolved = resolveNearestYearMonth(monthKey, availableMonths);
+      if (resolved !== null) {
+        const rates = allRates.get(resolved);
+        if (rates) {
+          result.set(monthKey, rates);
+        }
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Carga los registros de InflationRate para una lista ARBITRARIA de meses
+   * ("YYYY-MM"), sin asumir año calendario. Espejo de loadInflationRatesForYear
+   * para el reporte de Detalle histórico de gastos fijos (RF-REP-013).
+   *
+   * Devuelve un Map<"YYYY-MM", number> donde el valor es monthlyVariation (puntos %).
+   */
+  async loadInflationRatesForMonths(
+    monthKeys: string[],
+  ): Promise<Map<string, number>> {
+    if (monthKeys.length === 0) return new Map();
+    const rows = await this.prisma.inflationRate.findMany({
+      where: { yearMonth: { in: monthKeys } },
+      select: { yearMonth: true, monthlyVariation: true },
+    });
+    const map = new Map<string, number>();
+    for (const r of rows) {
+      // monthlyVariation ya está en PUNTOS PORCENTUALES (ver loadInflationRatesForYear).
+      map.set(r.yearMonth, Number(r.monthlyVariation));
+    }
+    return map;
+  }
+
+  /**
    * Devuelve la agregación de movimientos únicos del año.
    */
   async getAnnualUnicosAggregated(

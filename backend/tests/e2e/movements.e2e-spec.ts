@@ -1474,18 +1474,24 @@ describe('Movements (e2e)', () => {
   // GET /movements/reports/annual-fijos (RF-REP-013 — Detalle histórico de
   // gastos fijos / card "fixed-evolution")
   //
+  // Migración de año calendario a RANGO DE MESES CORRIDOS anclado al presente:
+  // el endpoint ya no acepta "year"; acepta "rangeMonths" (3|6|9|12|24|36|48|60,
+  // default 36) y el borde derecho siempre es el mes en curso (resuelto con
+  // "today"). Se usa rangeMonths=6 & today=2026-06-25 en la mayoría de los
+  // tests: con el único fijo de fixture (startMonth 2026-01) esto da un rango
+  // efectivo EXACTO de 2026-01..2026-06 (sin recorte, matemática simple).
+  //
   // Estrategia de mock:
   //   - recurring.findMany → getAllFijosForAnnual (vía ORM, no $queryRaw)
   //   - recurringSkip.findMany → skips de esos fijos (vacío por defecto)
-  //   - referenceRate.findMany → loadPivotRatesForYear (llamado 2 veces: año
-  //     pedido y año previo)
-  //   - inflationRate.findMany → loadInflationRatesForYear
+  //   - referenceRate.findMany → loadPivotRatesForMonths (loadAllPivotRates)
+  //   - inflationRate.findMany → loadInflationRatesForMonths
   //
   // La cobertura profunda de reglas de dominio (recomposición de cadena,
-  // motivos de ausencia, variación, topes de año) vive en el unit test
-  // movements-annual-fijos.spec.ts; acá se cubre shape, validaciones,
-  // autenticación y aislamiento — mismo criterio que el resto de la familia
-  // de reportes anuales.
+  // motivos de ausencia, variación, rango efectivo, universo de ≥2 apariciones)
+  // vive en el unit test movements-annual-fijos.spec.ts; acá se cubre shape,
+  // validaciones, autenticación y aislamiento — mismo criterio que el resto de
+  // la familia de reportes anuales.
   // -------------------------------------------------------------------------
 
   describe('GET /movements/reports/annual-fijos (RF-REP-013)', () => {
@@ -1525,7 +1531,7 @@ describe('Movements (e2e)', () => {
 
     it('200 + shape completo de AnnualFijosResponse (universo vacío)', async () => {
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?year=2026&today=2026-06-25')
+        .get('/movements/reports/annual-fijos?rangeMonths=6&today=2026-06-25')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(200);
 
@@ -1533,19 +1539,22 @@ describe('Movements (e2e)', () => {
       expect(res.body.statusCode).toBe(200);
 
       const data = res.body.data;
-      expect(data).toHaveProperty('year', 2026);
       expect(data).toHaveProperty('currency', 'ARS');
       expect(data).toHaveProperty('lines');
       expect(data.lines).toEqual([]);
-      expect(data).toHaveProperty('earliestYear', null);
-      expect(data).toHaveProperty('latestYear', 2026);
+      expect(data).toHaveProperty('excluded');
+      expect(data.excluded).toEqual([]);
+      // Sin historia → el rango efectivo es el pedido, sin recorte.
+      expect(data.rangeMonths).toBe(6);
+      expect(data.startMonth).toBe('2026-01');
+      expect(data.endMonth).toBe('2026-06');
     });
 
-    it('200 + una línea con fijo EXPENSE vigente todo el año', async () => {
+    it('200 + una línea con fijo EXPENSE vigente todo el rango', async () => {
       mockPrisma.recurring.findMany.mockResolvedValue([makeRawRecurringRow()]);
 
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?year=2026&today=2026-06-25')
+        .get('/movements/reports/annual-fijos?rangeMonths=6&today=2026-06-25')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(200);
 
@@ -1561,11 +1570,14 @@ describe('Movements (e2e)', () => {
       expect(line.frequency).toBe(1);
       expect(line.originDescription).toBeNull();
       expect(line.originChainId).toBeNull();
-      expect(line.months).toHaveLength(12);
+      expect(line.months).toHaveLength(6);
       line.months.forEach((m: Record<string, unknown>) => {
         expect(m.amountCents).toBe(100000);
         expect(m.reason).toBeNull();
+        expect(typeof m.month).toBe('string');
       });
+      expect(line.months[0].month).toBe('2026-01');
+      expect(line.months[5].month).toBe('2026-06');
       expect(typeof line.ordinal).toBe('number');
     });
 
@@ -1591,7 +1603,7 @@ describe('Movements (e2e)', () => {
       ]);
 
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?year=2026&today=2026-06-25')
+        .get('/movements/reports/annual-fijos?rangeMonths=6&today=2026-06-25')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(200);
 
@@ -1612,16 +1624,35 @@ describe('Movements (e2e)', () => {
       ]);
 
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?year=2026&today=2026-06-25')
+        .get('/movements/reports/annual-fijos?rangeMonths=6&today=2026-06-25')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(200);
 
       expect(res.body.data.lines).toEqual([]);
     });
 
+    it('un fijo con exactamente 1 aparición en el rango efectivo viaja en "excluded", no en "lines"', async () => {
+      mockPrisma.recurring.findMany.mockResolvedValue([
+        makeRawRecurringRow({ startMonth: '2026-06' }), // única aparición: junio (fin del rango de 6 meses)
+      ]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-fijos?rangeMonths=6&today=2026-06-25')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const data = res.body.data;
+      expect(data.lines).toEqual([]);
+      expect(data.excluded).toHaveLength(1);
+      expect(data.excluded[0].chainId).toBe('chain-e2e-1');
+      expect(data.excluded[0].startMonth).toBe('2026-06');
+      expect(data.excluded[0]).not.toHaveProperty('months');
+      expect(data.excluded[0]).not.toHaveProperty('frequency');
+    });
+
     it('override de currency: currency=USD refleja en la respuesta', async () => {
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?year=2026&currency=USD')
+        .get('/movements/reports/annual-fijos?currency=USD')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(200);
 
@@ -1637,16 +1668,26 @@ describe('Movements (e2e)', () => {
       });
 
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?year=2026&today=2026-06-25')
+        .get('/movements/reports/annual-fijos?rangeMonths=6&today=2026-06-25')
         .set('Authorization', `Bearer ${tokenB}`)
         .expect(200);
 
       expect(res.body.data.lines).toEqual([]);
     });
 
-    it('400 si falta year', async () => {
+    it('sin rangeMonths → default 36', async () => {
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos')
+        .get('/movements/reports/annual-fijos?today=2026-06-25')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.rangeMonths).toBe(36);
+      expect(res.body.data.endMonth).toBe('2026-06');
+    });
+
+    it('400 si rangeMonths no es uno de los 8 valores aceptados', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-fijos?rangeMonths=7')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(400);
 
@@ -1654,9 +1695,9 @@ describe('Movements (e2e)', () => {
       expect(res.body.statusCode).toBe(400);
     });
 
-    it('400 si year no tiene formato de 4 dígitos', async () => {
+    it('400 si rangeMonths no es numérico', async () => {
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?year=26')
+        .get('/movements/reports/annual-fijos?rangeMonths=abc')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(400);
 
@@ -1666,7 +1707,7 @@ describe('Movements (e2e)', () => {
 
     it('400 si currency es inválido', async () => {
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?year=2026&currency=GBP')
+        .get('/movements/reports/annual-fijos?rangeMonths=6&currency=GBP')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(400);
 
@@ -1676,17 +1717,7 @@ describe('Movements (e2e)', () => {
 
     it('400 si today tiene formato inválido', async () => {
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?year=2026&today=25-06-2026')
-        .set('Authorization', `Bearer ${tokenA}`)
-        .expect(400);
-
-      expect(res.body.success).toBe(false);
-      expect(res.body.statusCode).toBe(400);
-    });
-
-    it('400 si year está fuera de rango', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?year=1800')
+        .get('/movements/reports/annual-fijos?rangeMonths=6&today=25-06-2026')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(400);
 
@@ -1696,7 +1727,7 @@ describe('Movements (e2e)', () => {
 
     it('401 sin JWT', async () => {
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?year=2026')
+        .get('/movements/reports/annual-fijos?rangeMonths=6')
         .expect(401);
 
       expect(res.body.success).toBe(false);
@@ -1707,7 +1738,7 @@ describe('Movements (e2e)', () => {
       mockPrisma.recurring.findMany.mockResolvedValue([makeRawRecurringRow()]);
 
       const res = await request(app.getHttpServer())
-        .get('/movements/reports/annual-fijos?year=2026&categories=algun-id&today=2026-06-25')
+        .get('/movements/reports/annual-fijos?rangeMonths=6&categories=algun-id&today=2026-06-25')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(200);
 

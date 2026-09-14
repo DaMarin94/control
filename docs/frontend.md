@@ -747,13 +747,17 @@ Sexto tipo de card (`ReportCardType = "fixed-evolution"`). Componente **`compone
 - **Sin filtro de categorías.** La cabecera **no** monta el control de categorías de las demás cards anuales: la **selección por fijo** (`fixedSelectedIds`, por `chainId`) lo reemplaza y se aplica **client-side** sobre `data.lines` — el endpoint no acepta `categories`.
 - **Sin chip de simulados** (RF-REP-017 no aplica) y **sin marcas ni popover de límites** (RF-LIM-005 no aplica a esta card).
 - **Los tres valores de cada punto llegan calculados** (monto, `nominalPct`, `adjustedPct`): el front elige cuál grafica según `fixedMode`/`fixedAdjusted`, **no** deriva porcentajes.
-- **El color de línea se ancla en `ordinal`, no en el índice del array**: `lines` se reordena por gasto anual de cada año (ver contrato). Regla de color y comportamiento de animación en `docs/design.md`.
+- **El color de línea se ancla en `ordinal`, no en el índice del array**: `lines` se reordena por gasto del rango (ver contrato). Regla de color y comportamiento de animación en `docs/design.md`.
+- **Select de rango en lugar del stepper de año.** Ocho opciones (3/6/9 meses y 1 a 5 años), **default 3 años**, persistidas por card en **`fixedRangeMonths`** de la clave `reports` (ausente = `36`; ver `docs/data-model.md`, §`reports`). La card **no monta `YearStepper`** ni ninguna navegación de período, y el campo `year` de su config es inerte.
+- **`rangeMonths` de la respuesta es el EFECTIVO y nunca se escribe de vuelta en la preferencia.** Si el backend recorta el rango contra el historial del usuario, eso rotula el eje y los estados, pero el valor persistido sigue siendo el **pedido**: lo contrario iría degradando la preferencia sola cada vez que se pide más rango del que hay historia.
+- **Eje X de largo variable (3 a 60 posiciones).** Cada punto se ubica por su `month` (`YYYY-MM`) del contrato, no por su índice; la serie nunca llega más allá del mes en curso.
 - **El param `today`** se manda con la fecha local del usuario (`YYYY-MM-DD`), como en las demás cards que lo aceptan.
 
-### Gotchas de testing de las cards de gráficos
+### Gotchas de las cards de gráficos
 
 Valen para **cualquier** card, no solo para la que los destapó:
 
+- **Rótulo final del eje de categorías — `margin.right` mínimo, vía `CHART_END_LABEL_MARGIN`.** En Recharts, un eje de categorías con `interval={0}` ubica el **último tick exactamente en el borde del área de trazado**; como los ticks se dibujan con `textAnchor="middle"`, la mitad derecha de ese rótulo cae fuera y se corta. Hay que reservar en `margin.right` **al menos la mitad del rótulo más ancho**. En el proyecto el valor es la constante compartida **`CHART_END_LABEL_MARGIN`** (`components/ui/chart.tsx`), que usan los **5 charts Recharts** de `/reportes`; un chart nuevo la usa a ella, **no** un `margin.right` ad-hoc.
 - **`ChartResponsiveArea` monta DOS canvas en paralelo** (300 px y 220 px; uno queda oculto por **container query**). **jsdom no evalúa container queries**, así que en los tests **todos los `data-testid` de adentro del gráfico aparecen DUPLICADOS**: hay que tomar el **primero** (`getAllBy*()[0]`), nunca `getBy*` (falla por ambigüedad). Aplica a toda card montada dentro de ese contenedor.
 - **Recharts está mockeado en la suite de charts.** El comportamiento real de render y animación de Recharts **no se ejercita** en los tests: un test verde no dice nada sobre cómo se ve o se anima el gráfico. Los defectos de esa capa solo aparecen en el navegador — se detectan en el **QA visual** (`docs/qa-visual.md`), no en la suite.
 

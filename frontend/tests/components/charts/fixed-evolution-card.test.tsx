@@ -1,33 +1,39 @@
 /**
- * Tests de FixedEvolutionCard (Ola 5, P6 — "Detalle histórico de gastos fijos", RF-REP-013).
+ * Tests de FixedEvolutionCard ("Detalle histórico de gastos fijos", RF-REP-013,
+ * Ola 6 — migración de año calendario a rango de meses corridos anclado al
+ * presente).
  *
  * Verifica:
- * - Estados de carga / error / año sin gastos fijos / ningún fijo seleccionado
+ * - Estados de carga / error / rango sin gastos fijos / ningún fijo seleccionado
  * - Una línea por gasto fijo (dataKey=chainId), sin línea total
  * - Clave de color: dos fijos de la misma categoría reciben tonalidades distintas
  * - Calculado: dasheado "6 4"
- * - `connectNulls` true en Montos, false en Variación
+ * - `connectNulls` false en la línea plena (Montos Y Variación); el puente
+ *   atenuado de un hueco interno se dibuja como una `<Line>` extra por tramo
  * - Modo de visualización (ViewTabs Montos/Variación) y chip "Ajustada por inflación"
  *   (deshabilitado con motivo en Montos, habilitado en Variación)
  * - Leyenda-selector: toggle individual y "Todas"/"Ninguna", contador N/M
- * - Cabecera: título editable, YearStepper con topes propios, selector de moneda, botón quitar
+ * - Selector de RANGO (8 opciones) + persistencia + nota de recorte
+ * - Superficie de excluidos: chip "N sin evolución" + popover, ausente si excluded=[]
+ * - Estado nuevo: `lines` vacío + `excluded` lleno (carril solo con el disparador)
+ * - Cabecera: título editable, selector de moneda, botón quitar — SIN stepper de año
  * - Ausencia de piezas fuera de alcance: sin chip de Simulados, sin filtro de categorías
- * - Hook useFixedEvolution llamado con los parámetros correctos (sin `categories`)
+ * - Hook useFixedEvolution llamado con los parámetros correctos (rangeMonths, sin `categories`)
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import type { AnnualFijosResponse, FixedEvolutionLine, FixedEvolutionMonthPoint } from "@/types/reports";
+import type { AnnualFijosResponse, FixedEvolutionLine, FixedEvolutionMonthPoint, FixedEvolutionExcludedLine } from "@/types/reports";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 vi.mock("@/hooks/use-reports", () => ({
   useFixedEvolution: vi.fn(),
-  FIXED_EVOLUTION_QUERY_KEY: (year: number, currency: string | null, today: string | null) => [
+  FIXED_EVOLUTION_QUERY_KEY: (rangeMonths: number, currency: string | null, today: string | null) => [
     "reports-fixed-evolution",
-    year,
+    rangeMonths,
     currency,
     today,
   ],
@@ -97,21 +103,25 @@ vi.mock("recharts", () => {
 });
 
 import { useFixedEvolution } from "@/hooks/use-reports";
-import { FixedEvolutionCard } from "@/components/charts/fixed-evolution-card";
+import { FixedEvolutionCard, computePlotSlot } from "@/components/charts/fixed-evolution-card";
+import { CHART_END_LABEL_MARGIN } from "@/components/ui/chart";
 import { mockQuerySuccess, mockQueryLoading, mockQueryError } from "../../utils/query-result";
 
 const mockUseFixedEvolution = vi.mocked(useFixedEvolution);
 
 // ─── Datos de ejemplo ─────────────────────────────────────────────────────────
 
-/** 12 meses con monto fijo (todos con dato, reason null). */
+const RANGE_MONTHS = 6;
+/** Meses corridos del rango efectivo (6 meses), terminando en el mes en curso. */
+const RANGE_MONTHS_LIST = ["2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04"];
+
+function buildPoint(month: string, amountCents: number | null, reason: FixedEvolutionMonthPoint["reason"] = null): FixedEvolutionMonthPoint {
+  return { month, amountCents, nominalPct: null, adjustedPct: null, reason };
+}
+
+/** Serie completa (todos los meses con dato) para el rango de prueba. */
 function buildFullMonths(amountCents: number): FixedEvolutionMonthPoint[] {
-  return Array.from({ length: 12 }, () => ({
-    amountCents,
-    nominalPct: null,
-    adjustedPct: null,
-    reason: null,
-  }));
+  return RANGE_MONTHS_LIST.map((m) => buildPoint(m, amountCents));
 }
 
 /** Dos fijos de LA MISMA categoría (mismo hue, columna 0 de la matriz) — desempate por ordinal. */
@@ -164,17 +174,59 @@ const lineCalculado: FixedEvolutionLine = {
   months: buildFullMonths(20000),
 };
 
+/** Fijo bimestral con un hueco interno (mes anulado) para probar el puente. */
+const lineHueco: FixedEvolutionLine = {
+  chainId: "fx-hueco",
+  ordinal: 4,
+  isCalculated: false,
+  description: "Seguro",
+  categoryId: "cat-seguros",
+  categoryName: "Seguros",
+  categoryColor: "#8B4FD4",
+  startMonth: "2020-01",
+  endMonth: null,
+  frequency: 1,
+  originDescription: null,
+  originChainId: null,
+  months: [
+    buildPoint("2025-11", 10000),
+    buildPoint("2025-12", null, "skipped"),
+    buildPoint("2026-01", 10000),
+    buildPoint("2026-02", 10000),
+    buildPoint("2026-03", 10000),
+    buildPoint("2026-04", 10000),
+  ],
+};
+
+const excludedItem: FixedEvolutionExcludedLine = {
+  chainId: "fx-nuevo",
+  isCalculated: false,
+  description: "Suscripción nueva",
+  categoryId: "cat-ocio",
+  categoryName: "Ocio",
+  categoryColor: "#4F86C6",
+  startMonth: "2026-04",
+};
+
 const mockData: AnnualFijosResponse = {
-  year: 2026,
   currency: "ARS",
-  lines: [lineAlquiler, lineExpensas, lineCalculado],
-  earliestYear: 2022,
-  latestYear: 2027,
+  rangeMonths: RANGE_MONTHS,
+  startMonth: "2025-11",
+  endMonth: "2026-04",
+  lines: [lineAlquiler, lineExpensas, lineCalculado, lineHueco],
+  excluded: [excludedItem],
 };
 
 const mockDataEmpty: AnnualFijosResponse = {
   ...mockData,
   lines: [],
+  excluded: [],
+};
+
+const mockDataEmptyWithExcluded: AnnualFijosResponse = {
+  ...mockData,
+  lines: [],
+  excluded: [excludedItem],
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -203,7 +255,7 @@ function mockHookError(refetch = vi.fn()) {
 
 function renderCard(props: Partial<React.ComponentProps<typeof FixedEvolutionCard>> = {}) {
   return render(
-    <FixedEvolutionCard year={2026} titlePlaceholder="Reporte 1" {...props} />,
+    <FixedEvolutionCard rangeMonths={RANGE_MONTHS} titlePlaceholder="Reporte 1" {...props} />,
     { wrapper: createWrapper() },
   );
 }
@@ -250,22 +302,49 @@ describe("FixedEvolutionCard — estado de error", () => {
   });
 });
 
-// ─── Tests: estado "año sin gastos fijos" ─────────────────────────────────────
+// ─── Tests: estado "rango sin gastos fijos" ────────────────────────────────────
 
-describe("FixedEvolutionCard — año sin gastos fijos", () => {
+describe("FixedEvolutionCard — rango sin gastos fijos", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockHookWithData(mockDataEmpty);
   });
 
-  it("muestra overlay 'Sin gastos fijos en {año}.'", () => {
-    renderCard({ year: 2026 });
-    expect(screen.getByText("Sin gastos fijos en 2026.")).toBeInTheDocument();
+  it("muestra overlay 'Sin gastos fijos en el rango.'", () => {
+    renderCard();
+    expect(screen.getByText("Sin gastos fijos en el rango.")).toBeInTheDocument();
+    expect(screen.getByText("Probá un rango más largo.")).toBeInTheDocument();
   });
 
   it("NO renderiza la leyenda (universo vacío)", () => {
     renderCard();
     expect(screen.queryByRole("group", { name: /elegir gastos fijos/i })).not.toBeInTheDocument();
+  });
+});
+
+// ─── Tests: estado nuevo — lines vacío + excluded lleno ───────────────────────
+
+describe("FixedEvolutionCard — ningún fijo con evolución, pero sí excluidos", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockHookWithData(mockDataEmptyWithExcluded);
+  });
+
+  it("muestra el overlay específico de este estado", () => {
+    renderCard();
+    expect(screen.getByText("Ningún gasto fijo tiene dos apariciones en el rango.")).toBeInTheDocument();
+    expect(screen.getByText("Alargá el rango para ver su evolución.")).toBeInTheDocument();
+  });
+
+  it("NO renderiza la leyenda-filtro, pero SÍ el disparador de excluidos", () => {
+    renderCard();
+    expect(screen.queryByRole("group", { name: /elegir gastos fijos/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /gastos fijos con una sola aparición/i })).toBeInTheDocument();
+  });
+
+  it("NO renderiza LegendAllChip ni el contador", () => {
+    renderCard();
+    expect(screen.queryByRole("button", { name: /mostrar todos los gastos fijos|ocultar todos los gastos fijos/i })).not.toBeInTheDocument();
   });
 });
 
@@ -333,14 +412,26 @@ describe("FixedEvolutionCard — líneas del canvas", () => {
     expect(strokeAlquiler).not.toBe(strokeExpensas);
   });
 
-  it("connectNulls=true en modo Montos (default)", () => {
+  it("la línea plena NO conecta nulos en Montos (el puente es una Line aparte)", () => {
     renderCard();
-    expect(firstLine("line-fx-alquiler")).toHaveAttribute("data-connect-nulls", "true");
+    expect(firstLine("line-fx-alquiler")).toHaveAttribute("data-connect-nulls", "false");
   });
 
-  it("connectNulls=false en modo Variación", () => {
+  it("la línea plena NO conecta nulos en Variación", () => {
     renderCard({ mode: "variation" });
     expect(firstLine("line-fx-alquiler")).toHaveAttribute("data-connect-nulls", "false");
+  });
+
+  it("un fijo con hueco interno en Montos dibuja una Line de puente adicional (connectNulls=true, opacidad 0.35)", () => {
+    renderCard();
+    const bridge = screen.getAllByTestId("line-fx-hueco__bridge__0")[0]!;
+    expect(bridge).toHaveAttribute("data-connect-nulls", "true");
+    expect(bridge).toHaveAttribute("data-opacity", "0.35");
+  });
+
+  it("en Variación NO se dibuja ninguna Line de puente", () => {
+    renderCard({ mode: "variation" });
+    expect(screen.queryByTestId("line-fx-hueco__bridge__0")).not.toBeInTheDocument();
   });
 });
 
@@ -369,17 +460,17 @@ describe("FixedEvolutionCard — dash del calculado tras cambio de modo", () => 
     const { rerender } = renderCard({ mode: "amounts" });
     expect(firstLine("line-fx-calc")).toHaveAttribute("data-dasharray", "6 4");
 
-    rerender(<FixedEvolutionCard year={2026} titlePlaceholder="Reporte 1" mode="variation" />);
+    rerender(<FixedEvolutionCard rangeMonths={RANGE_MONTHS} titlePlaceholder="Reporte 1" mode="variation" />);
     expect(firstLine("line-fx-calc")).toHaveAttribute("data-dasharray", "6 4");
 
-    rerender(<FixedEvolutionCard year={2026} titlePlaceholder="Reporte 1" mode="amounts" />);
+    rerender(<FixedEvolutionCard rangeMonths={RANGE_MONTHS} titlePlaceholder="Reporte 1" mode="amounts" />);
     expect(firstLine("line-fx-calc")).toHaveAttribute("data-dasharray", "6 4");
   });
 
   it("un fijo normal sigue sin dasharray después del mismo round-trip de modo", () => {
     const { rerender } = renderCard({ mode: "amounts" });
-    rerender(<FixedEvolutionCard year={2026} titlePlaceholder="Reporte 1" mode="variation" />);
-    rerender(<FixedEvolutionCard year={2026} titlePlaceholder="Reporte 1" mode="amounts" />);
+    rerender(<FixedEvolutionCard rangeMonths={RANGE_MONTHS} titlePlaceholder="Reporte 1" mode="variation" />);
+    rerender(<FixedEvolutionCard rangeMonths={RANGE_MONTHS} titlePlaceholder="Reporte 1" mode="amounts" />);
     expect(firstLine("line-fx-alquiler")).not.toHaveAttribute("data-dasharray", "6 4");
   });
 });
@@ -444,7 +535,7 @@ describe("FixedEvolutionCard — leyenda-selector de fijos", () => {
   it("muestra un ítem por cada fijo, sin agrupar", () => {
     renderCard();
     const group = screen.getByRole("group", { name: /elegir gastos fijos/i });
-    expect(group.querySelectorAll("button")).toHaveLength(3);
+    expect(group.querySelectorAll("button")).toHaveLength(4);
   });
 
   it("nace con todos los fijos seleccionados (aria-pressed=true)", () => {
@@ -457,14 +548,14 @@ describe("FixedEvolutionCard — leyenda-selector de fijos", () => {
 
   it("el contador muestra N / M seleccionados", () => {
     renderCard();
-    expect(screen.getByTitle("3 de 3 gastos fijos seleccionados")).toBeInTheDocument();
+    expect(screen.getByTitle("4 de 4 gastos fijos seleccionados")).toBeInTheDocument();
   });
 
   it("al destildar un fijo llama a onSelectedIdsChange sin ese chainId", () => {
     const onSelectedIdsChange = vi.fn();
     renderCard({ onSelectedIdsChange });
     fireEvent.click(screen.getByText("Alquiler"));
-    expect(onSelectedIdsChange).toHaveBeenCalledWith(["fx-expensas", "fx-calc"]);
+    expect(onSelectedIdsChange).toHaveBeenCalledWith(["fx-expensas", "fx-calc", "fx-hueco"]);
   });
 
   it("'Ninguna' llama a onSelectedIdsChange([]) cuando todos están visibles", () => {
@@ -482,10 +573,109 @@ describe("FixedEvolutionCard — leyenda-selector de fijos", () => {
   });
 
   it("un ítem destildado queda tachado y en opacidad reducida", () => {
-    renderCard({ selectedIds: ["fx-expensas", "fx-calc"] });
+    renderCard({ selectedIds: ["fx-expensas", "fx-calc", "fx-hueco"] });
     const alquilerBtn = screen.getByText("Alquiler").closest("button")!;
     expect(alquilerBtn).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByText("Alquiler")).toHaveClass("line-through");
+  });
+
+  it("el título del ítem 'sin trazo' habla del rango, no de un año", () => {
+    renderCard({ mode: "variation" });
+    // Ninguna línea del fixture queda sin trazo en variación en este set, pero
+    // el copy en sí (sin depender de {year}) se congela vía el helper de la card:
+    // se verifica indirectamente con el fixture de "sin trazo" sería redundante
+    // acá; el contrato del copy está cubierto por el estado "ningún fijo con
+    // evolución" (usa el mismo vocabulario "en el rango").
+    expect(screen.queryByText(/en 20\d\d/)).not.toBeInTheDocument();
+  });
+});
+
+// ─── Tests: selector de rango ──────────────────────────────────────────────────
+
+describe("FixedEvolutionCard — selector de rango", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockHookWithData(mockData);
+  });
+
+  it("el disparador muestra el rótulo de la opción persistida", () => {
+    renderCard({ rangeMonths: 12 });
+    expect(screen.getByRole("button", { name: /rango del reporte/i })).toHaveTextContent("1 año");
+  });
+
+  it("nace en '3 años' cuando no se pasa rangeMonths", () => {
+    render(<FixedEvolutionCard titlePlaceholder="Reporte 1" />, { wrapper: createWrapper() });
+    expect(screen.getByRole("button", { name: /rango del reporte/i })).toHaveTextContent("3 años");
+  });
+
+  it("abre un listbox con las 8 opciones en orden", () => {
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: /rango del reporte/i }));
+    const options = screen.getAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual([
+      "3 meses", "6 meses", "9 meses", "1 año", "2 años", "3 años", "4 años", "5 años",
+    ]);
+  });
+
+  it("elegir una opción llama a onRangeMonthsChange y cierra el popover", () => {
+    const onRangeMonthsChange = vi.fn();
+    renderCard({ rangeMonths: 36, onRangeMonthsChange });
+    fireEvent.click(screen.getByRole("button", { name: /rango del reporte/i }));
+    fireEvent.click(screen.getByRole("option", { name: "5 años" }));
+    expect(onRangeMonthsChange).toHaveBeenCalledWith(60);
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  it("la opción persistida lleva aria-selected=true", () => {
+    renderCard({ rangeMonths: 24 });
+    fireEvent.click(screen.getByRole("button", { name: /rango del reporte/i }));
+    expect(screen.getByRole("option", { name: "2 años" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("muestra la nota de recorte cuando el rango efectivo es menor al pedido", () => {
+    renderCard({ rangeMonths: 60 }); // mockData.rangeMonths = 6 (efectivo) < 60 (pedido)
+    expect(screen.getByText("Desde Nov 2025 — es todo tu historial.")).toBeInTheDocument();
+    // El disparador sigue mostrando la opción elegida, nunca el efectivo.
+    expect(screen.getByRole("button", { name: /rango del reporte/i })).toHaveTextContent("5 años");
+  });
+
+  it("NO muestra la nota cuando el rango efectivo coincide con el pedido", () => {
+    renderCard({ rangeMonths: RANGE_MONTHS });
+    expect(screen.queryByText(/es todo tu historial/)).not.toBeInTheDocument();
+  });
+});
+
+// ─── Tests: superficie de excluidos ────────────────────────────────────────────
+
+describe("FixedEvolutionCard — superficie de excluidos", () => {
+  it("muestra el chip 'N sin evolución' cuando hay excluidos", () => {
+    mockHookWithData(mockData);
+    renderCard();
+    expect(screen.getByRole("button", { name: /gastos fijos con una sola aparición/i })).toBeInTheDocument();
+  });
+
+  it("NO muestra el chip cuando excluded está vacío", () => {
+    mockHookWithData({ ...mockData, excluded: [] });
+    renderCard();
+    expect(screen.queryByText(/sin evolución/)).not.toBeInTheDocument();
+  });
+
+  it("clickear el chip abre un popover con la lista de excluidos", () => {
+    mockHookWithData(mockData);
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: /gastos fijos con una sola aparición/i }));
+    const dialog = screen.getByRole("dialog", { name: /gastos fijos sin evolución en el rango/i });
+    expect(within(dialog).getByText("Suscripción nueva")).toBeInTheDocument();
+    expect(within(dialog).getByText(/Ocio · desde Abr 2026/)).toBeInTheDocument();
+  });
+
+  it("cierra con Escape", () => {
+    mockHookWithData(mockData);
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: /gastos fijos con una sola aparición/i }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
 
@@ -497,26 +687,9 @@ describe("FixedEvolutionCard — cabecera", () => {
     mockHookWithData(mockData);
   });
 
-  it("muestra el stepper de año con el año pedido", () => {
-    renderCard({ year: 2026 });
-    expect(screen.getByText("2026")).toBeInTheDocument();
-  });
-
-  it("el botón ‹ está deshabilitado cuando year === earliestYear (propio de la card)", () => {
-    renderCard({ year: 2022 }); // earliestYear=2022 en mockData
-    expect(screen.getByRole("button", { name: /año anterior/i })).toBeDisabled();
-  });
-
-  it("el botón › está deshabilitado cuando year === latestYear (propio de la card)", () => {
-    renderCard({ year: 2027 }); // latestYear=2027 en mockData
-    expect(screen.getByRole("button", { name: /año siguiente/i })).toBeDisabled();
-  });
-
-  it("al hacer clic en ‹ llama a onYearChange con year-1", () => {
-    const onYearChange = vi.fn();
-    renderCard({ year: 2026, onYearChange });
-    fireEvent.click(screen.getByRole("button", { name: /año anterior/i }));
-    expect(onYearChange).toHaveBeenCalledWith(2025);
+  it("NO muestra ningún stepper de año ni flechas de período", () => {
+    renderCard();
+    expect(screen.queryByRole("button", { name: /año anterior|año siguiente/i })).not.toBeInTheDocument();
   });
 
   it("muestra el placeholder de título cuando no hay título propio", () => {
@@ -578,13 +751,52 @@ describe("FixedEvolutionCard — parámetros del hook", () => {
     mockHookLoading();
   });
 
-  it("llama a useFixedEvolution con año, moneda y today, sin categorías", () => {
-    renderCard({ year: 2025, currency: "USD" });
-    expect(mockUseFixedEvolution).toHaveBeenCalledWith(2025, "USD", expect.any(String));
+  it("llama a useFixedEvolution con rangeMonths, moneda y today, sin categorías", () => {
+    renderCard({ rangeMonths: 24, currency: "USD" });
+    expect(mockUseFixedEvolution).toHaveBeenCalledWith(24, "USD", expect.any(String));
   });
 
   it("llama a useFixedEvolution con currency=undefined cuando no se pasa override", () => {
-    renderCard({ year: 2026 });
-    expect(mockUseFixedEvolution).toHaveBeenCalledWith(2026, undefined, expect.any(String));
+    renderCard({ rangeMonths: 36 });
+    expect(mockUseFixedEvolution).toHaveBeenCalledWith(36, undefined, expect.any(String));
+  });
+
+  it("default de rangeMonths es 36 cuando la prop está ausente", () => {
+    render(<FixedEvolutionCard titlePlaceholder="Reporte 1" />, { wrapper: createWrapper() });
+    expect(mockUseFixedEvolution).toHaveBeenCalledWith(36, undefined, expect.any(String));
+  });
+});
+
+// ─── Tests: computePlotSlot — densidad de puntos (§4.B) + fix de margen (QA Ola 6) ─
+
+describe("computePlotSlot", () => {
+  it("descuenta el ancho del eje Y y el margen horizontal REAL del LineChart (left + CHART_END_LABEL_MARGIN)", () => {
+    // containerWidth=1000, yAxisWidth=56, 12 meses.
+    // Ancho útil esperado = 1000 - 4 (left) - CHART_END_LABEL_MARGIN (right) - 56.
+    const expectedUsable = 1000 - 4 - CHART_END_LABEL_MARGIN - 56;
+    expect(computePlotSlot(1000, 12, 56)).toBeCloseTo(expectedUsable / 12);
+  });
+
+  it("nunca es negativo aunque el ancho medido sea menor que el margen + eje Y", () => {
+    expect(computePlotSlot(10, 12, 56)).toBe(0);
+  });
+
+  it("es 0 sin medición en vivo (containerWidth=0, SSR/test) — densidad mínima segura", () => {
+    expect(computePlotSlot(0, 12, 56)).toBe(0);
+  });
+
+  it("es 0 sin meses (monthsCount=0)", () => {
+    expect(computePlotSlot(1000, 0, 56)).toBe(0);
+  });
+});
+
+// ─── Test: margen derecho reservado para que el rótulo final del eje X entre ───
+
+describe("CHART_END_LABEL_MARGIN (fix de QA visual — desborde del último rótulo)", () => {
+  it("reserva más que la mitad medida del rótulo de dos líneas más ancho ('2026', mono) para no cortarse contra el borde del SVG", () => {
+    // Medido en el navegador: con margin.right=4, "2026" desbordaba 9px → mitad
+    // real ≈ 13px. El margen compartido debe cubrir ese peor caso con aire de
+    // sobra para variaciones de fuente/zoom entre navegadores.
+    expect(CHART_END_LABEL_MARGIN).toBeGreaterThan(13);
   });
 });

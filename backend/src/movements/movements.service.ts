@@ -382,6 +382,8 @@ export type FixedEvolutionAbsenceReason =
 /**
  * Punto de un mes de una línea de fixed-evolution.
  *
+ * month — "YYYY-MM" del punto. Con el rango de largo variable (3..60 meses,
+ *   RF-REP-013) el índice del array ya no alcanza para ubicarlo.
  * amountCents — monto convertido a la moneda de display con el TC oficial del
  *   mes de la instancia (RF-REP-007, gotcha de fijos/calculados). null = ausencia
  *   (hueco); puede ser 0 real si la línea es un calculado (RN-018).
@@ -392,19 +394,26 @@ export type FixedEvolutionAbsenceReason =
  * reason — motivo de la ausencia cuando amountCents es null; null cuando hay punto.
  */
 export interface FixedEvolutionMonthPoint {
+  month: string;
   amountCents: number | null;
   nominalPct: number | null;
   adjustedPct: number | null;
   reason: FixedEvolutionAbsenceReason | null;
 }
 
+/** Largos de rango aceptados por el selector único de la card (RF-REP-013). */
+export const FIXED_EVOLUTION_RANGE_OPTIONS = [3, 6, 9, 12, 24, 36, 48, 60] as const;
+export type FixedEvolutionRangeMonths = (typeof FIXED_EVOLUTION_RANGE_OPTIONS)[number];
+/** Default del selector de rango: 3 años. */
+export const FIXED_EVOLUTION_DEFAULT_RANGE_MONTHS: FixedEvolutionRangeMonths = 36;
+
 /**
  * Una línea del reporte (un gasto fijo lógico = una cadena `chainId`, o un
  * calculado derivado de un fijo con su propia cadena).
  *
- * ordinal — orden estable POR CADENA, independiente del año pedido (rank por
+ * ordinal — orden estable POR CADENA, independiente del rango pedido (rank por
  *   createdAt de la fila más antigua del universo completo del usuario, ASC).
- *   El front lo usa para no reasignar colores al navegar de año.
+ *   El front lo usa para no reasignar colores al cambiar el rango.
  * startMonth / endMonth — arranque/fin del fijo LÓGICO (resuelto por cadena,
  *   igual criterio que el detalle de movimiento — ver P4 en `movements.repository.ts`).
  *   endMonth null = sin fin programado.
@@ -414,8 +423,11 @@ export interface FixedEvolutionMonthPoint {
  *   descripción y chainId del fijo del que deriva. En líneas normales, ambos
  *   `null`. En un calculado también pueden ser `null` si el origen no se puede
  *   resolver (p.ej. la cadena de origen fue eliminada); el origen puede ser un
- *   fijo de INCOME o uno sin ninguna aparición en el año pedido — ninguno de
+ *   fijo de INCOME o uno sin ninguna aparición en el rango pedido — ninguno de
  *   esos dos casos produce `null` (se resuelven igual).
+ * months — largo VARIABLE, igual al rango efectivo (`AnnualFijosResponse.rangeMonths`);
+ *   cada punto lleva su propio `month` ("YYYY-MM"), el índice ya no alcanza para
+ *   ubicarlo. Nunca incluye el mes ancla de la variación (queda fuera de la serie).
  */
 export interface FixedEvolutionLine {
   chainId: string;
@@ -430,30 +442,62 @@ export interface FixedEvolutionLine {
   frequency: number;
   originDescription: string | null;
   originChainId: string | null;
-  /** Siempre 12 puntos, índice = mes-1 (0 = enero). */
   months: FixedEvolutionMonthPoint[];
+}
+
+/**
+ * Fijo excluido del gráfico y de la leyenda activa por el criterio de ≥2
+ * apariciones graficables (RF-REP-013). Incluye toda cadena de gasto fijo del
+ * usuario (mismo universo que `lines`) con 0 o 1 apariciones en el rango
+ * efectivo — el caso de 0 es deliberado (opción B): un fijo anual que se paga
+ * fuera del rango pedido no tiene ningún punto en el gráfico, y es justo ahí
+ * donde más sirve que el usuario vea que existe y desde cuándo. Viaja fuera de
+ * `lines`, con lo necesario para identificarlo y su `startMonth` — no requiere
+ * más cálculo (ni resolución de origen, ni frecuencia, ni proyección de "en
+ * qué rango se vería"): el usuario ya decidió que alcanza con saber desde
+ * cuándo existe.
+ */
+export interface FixedEvolutionExcludedLine {
+  chainId: string;
+  isCalculated: boolean;
+  description: string | null;
+  categoryId: string;
+  categoryName: string;
+  categoryColor: string;
+  /** Arranque de la cadena — puede caer fuera del rango visible. */
+  startMonth: string;
 }
 
 /**
  * Shape completo de la respuesta de GET /movements/reports/annual-fijos.
  *
- * lines — ordenadas por gasto anual DESC (suma de amountCents no-null del año),
- *   desempate por chainId ASC. Solo incluye cadenas con al menos una aparición
- *   en el año pedido (universo "con aparición en el año", RF-REP-013).
- * earliestYear — primer año con alguna aparición de un gasto fijo EXPENSE del
- *   usuario (universo propio de la card; año del startMonth de la cadena más
- *   antigua). null si el usuario no tiene ningún fijo EXPENSE ni calculado de fijo.
- * latestYear — tope de navegación hacia adelante: el mayor entre el año en curso
- *   (o el de `today`) y el año del hecho futuro datado más lejano (deletedFrom de
- *   una baja programada, o startMonth de una cadena que arranca en el futuro).
- *   Un fijo sin fin programado no corre este tope.
+ * rangeMonths / startMonth / endMonth — el rango EFECTIVO (post-recorte), no
+ * el pedido: `endMonth` es siempre el mes en curso (resuelto con `today`);
+ * `startMonth` es el mes pedido (mes en curso − (rangeMonths pedido − 1)),
+ * recortado hacia adelante contra el primer mes con alguna aparición de un
+ * gasto fijo del usuario si se pidió más rango del que hay historia — en ese
+ * caso `rangeMonths` (el efectivo) es MENOR al pedido; el borde derecho nunca
+ * se corre para compensar. El front rotula el eje y los estados con estos tres
+ * campos, no con lo que pidió.
+ *
+ * lines — ordenadas por gasto TOTAL del rango efectivo DESC (suma de
+ *   amountCents no-null), desempate por chainId ASC. Solo cadenas con ≥2
+ *   apariciones graficables en el rango efectivo (RF-REP-013).
+ * excluded — TODA cadena de gasto fijo del usuario (mismo universo que
+ *   `lines`: fijos EXPENSE normales + calculados de fijo que resultan gasto,
+ *   sin `deletedAt`) con 0 o 1 apariciones graficables en el rango efectivo —
+ *   decisión "opción B": el caso de 0 apariciones viaja acá también (p.ej. un
+ *   fijo anual pagado fuera del rango pedido), porque es justo cuando el fijo
+ *   no está en pantalla que más sirve saber que existe y desde cuándo. Ver
+ *   `FixedEvolutionExcludedLine`.
  */
 export interface AnnualFijosResponse {
-  year: number;
   currency: Currency;
+  rangeMonths: number;
+  startMonth: string;
+  endMonth: string;
   lines: FixedEvolutionLine[];
-  earliestYear: number | null;
-  latestYear: number;
+  excluded: FixedEvolutionExcludedLine[];
 }
 
 @Injectable()
@@ -2730,13 +2774,29 @@ export class MovementsService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Devuelve el Detalle histórico de gastos fijos: una serie de 12 meses por
-   * cada gasto fijo lógico (cadena `chainId`) del usuario — únicamente Fijo +
-   * EXPENSE, y los calculados derivados de un fijo (RF-REP-013). No hay
-   * agregación de ningún tipo.
+   * Devuelve el Detalle histórico de gastos fijos: una serie por cada gasto
+   * fijo lógico (cadena `chainId`) del usuario — únicamente Fijo + EXPENSE, y
+   * los calculados derivados de un fijo (RF-REP-013). No hay agregación de
+   * ningún tipo.
+   *
+   * Rango de meses corridos anclado al presente (no año calendario):
+   * - Borde derecho SIEMPRE el mes en curso (resuelto con `today`); nunca se
+   *   grafica un mes futuro, aunque el fijo tenga monto conocido o proyectable.
+   * - Borde izquierdo = mes en curso − (rangeMonths pedido − 1), recortado
+   *   hacia adelante contra el primer mes con alguna aparición de un gasto
+   *   fijo del usuario si se pidió más rango del que hay historia (el rango
+   *   efectivo sale más corto; el borde derecho no se corre para compensar).
+   * - `rangeMonths` es SIEMPRE uno de FIXED_EVOLUTION_RANGE_OPTIONS (validado
+   *   por el controller); no hay year ni mes final que pedir.
    *
    * No expone filtro de categorías: la card sustituye ese filtro por la
    * selección de fijos individuales (front-only, sobre el universo devuelto).
+   *
+   * Universo de la leyenda (≥2 apariciones, RF-REP-013): toda cadena de gasto
+   * fijo del usuario (normales EXPENSE + calculados de fijo que resultan
+   * gasto) entra a `lines` si tiene 2 o más apariciones graficables en el
+   * rango efectivo; con 0 o 1, va a `excluded` (decisión "opción B" — el caso
+   * de 0 apariciones es deliberado, ver doc de `AnnualFijosResponse.excluded`).
    *
    * Decisión: el backend entrega los 3 modos ya calculados (monto, variación %
    * nominal, variación % ajustada por IPC) por punto — mismo criterio que
@@ -2745,12 +2805,17 @@ export class MovementsService {
    * de esta línea") centralizada en un solo lugar.
    *
    * A diferencia de annual-inflation-income, las variaciones de fijos NO se
-   * anulan para meses futuros: un fijo es determinístico (RN-016), así que un
-   * mes futuro ya conocido participa de la variación igual que uno pasado.
+   * anulan para meses futuros: un fijo es determinístico (RN-016). Como el
+   * rango nunca incluye meses futuros (borde derecho = mes en curso), esto no
+   * cambia nada en la práctica, pero la variación en sí sigue sin anularse.
+   *
+   * FUERA DE ALCANCE (fase 2, deliberado): el cálculo de la variación sigue
+   * siendo "contra el mes calendario anterior", no "contra la aparición
+   * anterior de la misma línea" — no se toca en esta migración.
    */
   async getAnnualFijosReport(
     userId: string,
-    year: number,
+    rangeMonths: FixedEvolutionRangeMonths,
     currencyOverride?: Currency | null,
     today?: string,
   ): Promise<AnnualFijosResponse> {
@@ -2759,31 +2824,13 @@ export class MovementsService {
     const todayMonth = todayDate.getUTCMonth() + 1;
     const todayKey = `${String(todayYear).padStart(4, '0')}-${String(todayMonth).padStart(2, '0')}`;
 
-    const yearStr = String(year).padStart(4, '0');
-    const prevYearStr = String(year - 1).padStart(4, '0');
-    const prevDecKey = `${prevYearStr}-12`;
-    // 13 meses: [0]=diciembre del año previo (base de la variación de enero), [1..12]=el año pedido.
-    const monthKeys: string[] = [
-      prevDecKey,
-      ...Array.from({ length: 12 }, (_, i) => `${yearStr}-${String(i + 1).padStart(2, '0')}`),
-    ];
-
-    const [userSettings, pivotRatesYear, pivotRatesPrevYear, inflationRates, allFijos] =
-      await Promise.all([
-        this.settingsService.getSettings(userId),
-        this.repo.loadPivotRatesForYear(year),
-        this.repo.loadPivotRatesForYear(year - 1),
-        this.repo.loadInflationRatesForYear(year),
-        this.repo.getAllFijosForAnnual(userId),
-      ]);
+    const [userSettings, allFijos] = await Promise.all([
+      this.settingsService.getSettings(userId),
+      this.repo.getAllFijosForAnnual(userId),
+    ]);
 
     const displayCurrency: Currency =
       currencyOverride != null ? currencyOverride : userSettings.defaultCurrency;
-
-    const pivotRatesFor = (mes: string): PivotRates | Partial<PivotRates> | null =>
-      mes === prevDecKey
-        ? (pivotRatesPrevYear.get(prevDecKey) ?? null)
-        : (pivotRatesYear.get(mes) ?? null);
 
     // -------------------------------------------------------------------------
     // Universo: normales (cualquier tipo, para resolver orígenes de calculados)
@@ -2817,6 +2864,51 @@ export class MovementsService {
       if (!calcByChain.has(c.chainId)) calcByChain.set(c.chainId, []);
       calcByChain.get(c.chainId)!.push(c);
     }
+
+    // -------------------------------------------------------------------------
+    // Rango efectivo: borde derecho siempre `todayKey`; borde izquierdo pedido
+    // = todayKey − (rangeMonths − 1), recortado hacia adelante contra el
+    // primer mes con alguna aparición de un gasto fijo del usuario (universo
+    // propio de la card: fijos EXPENSE normales + calculados de fijo). Un
+    // fijo que arranca en el futuro (startMonth > todayKey) no tiene ninguna
+    // aparición todavía, así que no participa de este cálculo.
+    // -------------------------------------------------------------------------
+    const chainStartMonth = (rows: RecurringForAnnual[]): string =>
+      rows.reduce((min, r) => (r.startMonth < min ? r.startMonth : min), rows[0].startMonth);
+
+    let universeEarliestMonth: string | null = null;
+    for (const rows of [...normalesExpenseByChain.values(), ...calcByChain.values()]) {
+      const start = chainStartMonth(rows);
+      if (start > todayKey) continue; // todavía no tuvo ninguna aparición
+      if (universeEarliestMonth === null || start < universeEarliestMonth) {
+        universeEarliestMonth = start;
+      }
+    }
+
+    const requestedStartMonth = addMonths(todayKey, -(rangeMonths - 1));
+    const effectiveStartMonth =
+      universeEarliestMonth !== null && universeEarliestMonth > requestedStartMonth
+        ? universeEarliestMonth
+        : requestedStartMonth;
+    const effectiveEndMonth = todayKey;
+    const effectiveRangeMonths = monthDiff(effectiveStartMonth, effectiveEndMonth) + 1;
+
+    // Mes ancla (base de la variación del primer mes del rango efectivo) —
+    // queda FUERA de la serie devuelta, solo se usa para computar variaciones.
+    const anchorMonth = addMonths(effectiveStartMonth, -1);
+    const rangeMonthKeys: string[] = Array.from({ length: effectiveRangeMonths }, (_, i) =>
+      addMonths(effectiveStartMonth, i),
+    );
+    // [0] = mes ancla, [1..] = rango efectivo (largo variable, 3..60 o menos si se recortó).
+    const monthKeys: string[] = [anchorMonth, ...rangeMonthKeys];
+
+    const [pivotRatesMap, inflationRates] = await Promise.all([
+      this.repo.loadPivotRatesForMonths(monthKeys),
+      this.repo.loadInflationRatesForMonths(monthKeys),
+    ]);
+
+    const pivotRatesFor = (mes: string): PivotRates | Partial<PivotRates> | null =>
+      pivotRatesMap.get(mes) ?? null;
 
     // -------------------------------------------------------------------------
     // Resuelve, para una cadena (todas sus filas/splits) y un mes dado, si hay
@@ -2888,7 +2980,7 @@ export class MovementsService {
       /** chainId del fijo de origen (solo calculados); null en líneas normales o si no se
        * puede resolver. */
       originChainId: string | null;
-      /** 13 posiciones, índice 0 = diciembre del año previo. */
+      /** N+1 posiciones (N = rango efectivo), índice 0 = mes ancla (fuera del rango visible). */
       rawAmounts: (number | null)[];
       reasons: (FixedEvolutionAbsenceReason | null)[];
       earliestCreatedAt: Date;
@@ -3065,9 +3157,9 @@ export class MovementsService {
     }
 
     // -------------------------------------------------------------------------
-    // Ordinal estable por cadena, independiente del año pedido: rank por
-    // createdAt de la fila más antigua del universo COMPLETO (no solo el año
-    // pedido), para que un fijo no cambie de posición/color al navegar de año.
+    // Ordinal estable por cadena, independiente del rango pedido: rank por
+    // createdAt de la fila más antigua del universo COMPLETO (no solo el rango
+    // pedido), para que un fijo no cambie de posición/color al cambiar el rango.
     // -------------------------------------------------------------------------
     const ordinalSorted = [...candidates].sort((a, b) => {
       const ta = a.build.earliestCreatedAt.getTime();
@@ -3077,26 +3169,6 @@ export class MovementsService {
     });
     const ordinalMap = new Map<string, number>();
     ordinalSorted.forEach((c, idx) => ordinalMap.set(c.chainId, idx));
-
-    // -------------------------------------------------------------------------
-    // Topes de navegación de año (universo propio de la card — RF-REP-013),
-    // sobre TODA la cadena (no solo el año pedido).
-    // -------------------------------------------------------------------------
-    let earliestYear: number | null = null;
-    let latestYear = todayYear;
-    for (const c of candidates) {
-      const y = parseInt(c.build.startMonth.slice(0, 4), 10);
-      if (earliestYear === null || y < earliestYear) earliestYear = y;
-
-      if (c.build.startMonth > todayKey) {
-        const futureAltaYear = parseInt(c.build.startMonth.slice(0, 4), 10);
-        if (futureAltaYear > latestYear) latestYear = futureAltaYear;
-      }
-      if (c.build.endMonth !== null && c.build.endMonth > todayKey) {
-        const futureBajaYear = parseInt(c.build.endMonth.slice(0, 4), 10);
-        if (futureBajaYear > latestYear) latestYear = futureBajaYear;
-      }
-    }
 
     // -------------------------------------------------------------------------
     // Variaciones (nominal / ajustada por IPC) sobre los montos ya convertidos.
@@ -3125,26 +3197,37 @@ export class MovementsService {
     };
 
     // -------------------------------------------------------------------------
-    // Universo del año pedido: solo cadenas con al menos una aparición en los
-    // 12 meses pedidos (RF-REP-013 — "con aparición en el año").
-    // Orden: gasto anual DESC, desempate chainId ASC.
+    // Universo del rango efectivo: cada candidata (= toda cadena de gasto fijo
+    // del usuario, RN de la card — decisión "opción B") se clasifica por su
+    // cantidad de apariciones graficables DENTRO del rango efectivo (excluye el
+    // mes ancla, que no es parte del rango visible):
+    //   0 o 1 aparición → excluded (identidad + startMonth, sin más cálculo).
+    //     Incluye cadenas sin NINGUNA aparición en el rango (p.ej. un fijo
+    //     anual que se paga fuera del rango pedido): el propósito de `excluded`
+    //     es justamente avisar que el fijo existe y desde cuándo, aun cuando no
+    //     tiene ningún punto graficable en pantalla.
+    //   ≥2 apariciones → lines, ordenadas por gasto TOTAL del rango efectivo DESC.
     // -------------------------------------------------------------------------
+    const rangePortion = (c: (typeof candidates)[number]): (number | null)[] =>
+      c.build.rawAmounts.slice(1);
+    const appearanceCount = (c: (typeof candidates)[number]): number =>
+      rangePortion(c).filter((v) => v !== null).length;
+
     const lines: FixedEvolutionLine[] = candidates
-      .filter((c) => c.build.rawAmounts.slice(1).some((v) => v !== null))
+      .filter((c) => appearanceCount(c) >= 2)
       .map((c) => {
         const { nominal, adjusted } = computeVariations(c.build.rawAmounts);
         const months: FixedEvolutionMonthPoint[] = [];
         for (let i = 1; i < monthKeys.length; i++) {
           months.push({
+            month: monthKeys[i],
             amountCents: c.build.rawAmounts[i],
             nominalPct: nominal[i],
             adjustedPct: adjusted[i],
             reason: c.build.reasons[i],
           });
         }
-        const annualTotal = c.build.rawAmounts
-          .slice(1)
-          .reduce((sum: number, v) => sum + (v ?? 0), 0);
+        const rangeTotal = rangePortion(c).reduce((sum: number, v) => sum + (v ?? 0), 0);
         return {
           chainId: c.chainId,
           ordinal: ordinalMap.get(c.chainId)!,
@@ -3159,35 +3242,54 @@ export class MovementsService {
           originDescription: c.build.originDescription,
           originChainId: c.build.originChainId,
           months,
-          annualTotal,
+          rangeTotal,
         };
       })
       .sort((a, b) =>
-        b.annualTotal !== a.annualTotal
-          ? b.annualTotal - a.annualTotal
+        b.rangeTotal !== a.rangeTotal
+          ? b.rangeTotal - a.rangeTotal
           : a.chainId.localeCompare(b.chainId),
       )
-      .map(({ annualTotal: _annualTotal, ...rest }) => rest);
+      .map(({ rangeTotal: _rangeTotal, ...rest }) => rest);
+
+    const excluded: FixedEvolutionExcludedLine[] = candidates
+      .filter((c) => appearanceCount(c) <= 1)
+      .map((c) => ({
+        chainId: c.chainId,
+        isCalculated: c.isCalculated,
+        description: c.build.description,
+        categoryId: c.build.categoryId,
+        categoryName: c.build.categoryName,
+        categoryColor: c.build.categoryColor,
+        startMonth: c.build.startMonth,
+      }))
+      .sort((a, b) =>
+        a.startMonth !== b.startMonth
+          ? a.startMonth.localeCompare(b.startMonth)
+          : a.chainId.localeCompare(b.chainId),
+      );
 
     this.logger.debug(
       {
         userId,
-        year,
+        rangeMonths: effectiveRangeMonths,
+        startMonth: effectiveStartMonth,
+        endMonth: effectiveEndMonth,
         displayCurrency,
         candidateCount: candidates.length,
         lineCount: lines.length,
-        earliestYear,
-        latestYear,
+        excludedCount: excluded.length,
       },
       'Reporte de detalle histórico de gastos fijos calculado',
     );
 
     return {
-      year,
       currency: displayCurrency,
+      rangeMonths: effectiveRangeMonths,
+      startMonth: effectiveStartMonth,
+      endMonth: effectiveEndMonth,
       lines,
-      earliestYear,
-      latestYear,
+      excluded,
     };
   }
 

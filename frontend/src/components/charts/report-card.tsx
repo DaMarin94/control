@@ -70,6 +70,7 @@ import { LimitsInfoPopover } from "@/components/limits/limits-info-popover";
 import { formatCurrency, CURRENCY_SYMBOLS } from "@/lib/format";
 import { ChartTooltipContent } from "@/components/ui/chart";
 import { ChartLegend } from "@/components/ui/chart";
+import { CHART_END_LABEL_MARGIN } from "@/components/ui/chart";
 import { CardCurrencySelect } from "@/components/ui/card-currency-select";
 import type { ReportsMovementsResponse, ReportCardType, SimulatedReportCategory } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
@@ -861,7 +862,7 @@ function Form1ChartInner({
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={chartData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
+      <AreaChart data={chartData} margin={{ top: 8, right: CHART_END_LABEL_MARGIN, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="areaIncomeRep" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--income)" stopOpacity={0.18} />
@@ -1019,7 +1020,7 @@ function Form2ChartInner({
   const isLastCategory = (idx: number) => idx === mergedCategories.length - 1;
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={chartData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }} barCategoryGap="27%">
+      <BarChart data={chartData} margin={{ top: 8, right: CHART_END_LABEL_MARGIN, left: 0, bottom: 0 }} barCategoryGap="27%">
         <CartesianGrid horizontal vertical={false} stroke="var(--hair)" strokeWidth={1} />
         <XAxis
           dataKey="shortLabel"
@@ -1203,7 +1204,7 @@ function FormBChartInner({
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={chartData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
+      <AreaChart data={chartData} margin={{ top: 8, right: CHART_END_LABEL_MARGIN, left: 0, bottom: 0 }}>
         <defs>
           {/* Gradientes de gasto REAL: fill con color de categoría a opacidad 0.55 (uniforme) */}
           {mergedCategories.map((cat) => (
