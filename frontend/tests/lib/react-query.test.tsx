@@ -8,8 +8,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
-import { QueryClientProvider, focusManager } from "@tanstack/react-query";
+import { render, renderHook, screen, act, fireEvent, waitFor } from "@testing-library/react";
+import {
+  QueryClientProvider,
+  focusManager,
+  useMutation,
+  useQuery,
+} from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
@@ -28,6 +33,13 @@ vi.mock("next-auth/react", () => ({
 vi.mock("@/components/ui/toast", () => ({
   emitToast: vi.fn(),
 }));
+
+// Gate de arranque del backend: se espía la señal, el resto del módulo (sonda,
+// constantes) queda real.
+vi.mock("@/lib/backend-gate", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/backend-gate")>();
+  return { ...actual, notifyBackendUnreachable: vi.fn() };
+});
 
 describe("react-query — manejo centralizado de 401", () => {
   beforeEach(() => {
@@ -328,5 +340,201 @@ describe("react-query — manejo centralizado de 401", () => {
       // El backend nunca fue llamado una segunda vez: el 401 no reintenta.
       expect(global.fetch).toHaveBeenCalledTimes(1);
     }, 5000);
+  });
+
+  // ── Gate de arranque del backend: 503 de red → señal al gate ───────────────
+  //
+  // Caso real: la pestaña queda abierta, el backend se duerme a los ~15 min
+  // (plan free de Render), el usuario vuelve y hace click. El fallo de red
+  // llega como ApiError 503 (lib/api.ts, bloque `catch (networkError)`) y se
+  // engancha en el MISMO punto único que el 401 — sin repetir el chequeo en
+  // cada hook.
+  describe("503 (backend inalcanzable) → avisa al gate de arranque", () => {
+    it("un 503 en una query notifica al gate y NO desloguea", async () => {
+      const { createQueryClient } = await import("@/lib/react-query");
+      const { ApiError } = await import("@/types/api");
+      const { notifyBackendUnreachable } = await import("@/lib/backend-gate");
+      const { signOut } = await import("next-auth/react");
+      const { emitToast } = await import("@/components/ui/toast");
+
+      const queryClient = createQueryClient();
+
+      await expect(
+        queryClient.fetchQuery({
+          queryKey: ["test-503"],
+          queryFn: () =>
+            Promise.reject(new ApiError("No se pudo conectar con el servidor: failed", 503)),
+          retry: false,
+        }),
+      ).rejects.toThrow();
+
+      expect(notifyBackendUnreachable).toHaveBeenCalled();
+      expect(signOut).not.toHaveBeenCalled();
+      expect(emitToast).not.toHaveBeenCalled();
+    });
+
+    it("un 503 en una mutation también notifica al gate", async () => {
+      const { createQueryClient } = await import("@/lib/react-query");
+      const { ApiError } = await import("@/types/api");
+      const { notifyBackendUnreachable } = await import("@/lib/backend-gate");
+
+      const queryClient = createQueryClient();
+
+      const mutation = queryClient.getMutationCache().build(queryClient, {
+        mutationFn: () => Promise.reject(new ApiError("No se pudo conectar", 503)),
+      });
+
+      await expect(mutation.execute({})).rejects.toThrow();
+
+      expect(notifyBackendUnreachable).toHaveBeenCalled();
+    });
+
+    it("un 401 o un 500 NO notifican al gate", async () => {
+      const { createQueryClient } = await import("@/lib/react-query");
+      const { ApiError } = await import("@/types/api");
+      const { notifyBackendUnreachable } = await import("@/lib/backend-gate");
+
+      const queryClient = createQueryClient();
+
+      await expect(
+        queryClient.fetchQuery({
+          queryKey: ["test-401-no-gate"],
+          queryFn: () => Promise.reject(new ApiError("Unauthorized", 401)),
+          retry: false,
+        }),
+      ).rejects.toThrow();
+
+      await expect(
+        queryClient.fetchQuery({
+          queryKey: ["test-500-no-gate"],
+          queryFn: () => Promise.reject(new ApiError("Internal Server Error", 500)),
+          retry: false,
+        }),
+      ).rejects.toThrow();
+
+      expect(notifyBackendUnreachable).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Recuperación del backend → rescate de las queries que fallaron ─────────
+  //
+  // Defecto que cierra (QA visual): con el backend dormido, las queries de la
+  // pantalla fallaban por red y quedaban en `error` DEBAJO del gate. Al
+  // despertar el backend el gate se retiraba prolijo… y abajo quedaba "No se
+  // pudieron cargar los totales del mes. Intentá recargar la página." — el
+  // usuario tenía que recargar igual, así que la espera no servía de nada.
+  //
+  // Contracara crítica: una MUTACIÓN que falló con el backend dormido NO se
+  // re-ejecuta jamás sola (reintentar a ciegas podría duplicar un gasto).
+  describe("recuperación del backend → refetch de las queries en error", () => {
+    /** Panel mínimo con una query (se muestra) y una mutación (se dispara a mano). */
+    function Panel({
+      queryFn,
+      mutationFn,
+    }: {
+      queryFn: () => Promise<{ total: number }>;
+      mutationFn: () => Promise<void>;
+    }) {
+      const totals = useQuery({ queryKey: ["totales-del-mes"], queryFn, retry: false });
+      const save = useMutation({ mutationFn });
+
+      return (
+        <div>
+          <span data-testid="totals">
+            {totals.isError ? "error" : totals.data ? `ok:${totals.data.total}` : "cargando"}
+          </span>
+          <span data-testid="save">{save.status}</span>
+          <button type="button" onClick={() => save.mutate()}>
+            guardar
+          </button>
+        </div>
+      );
+    }
+
+    it("al volver el backend, la query que falló se vuelve a pedir sola y la mutación fallida NO", async () => {
+      const { ReactQueryProvider } = await import("@/lib/react-query");
+      const { notifyBackendRecovered } = await import("@/lib/backend-gate");
+      const { ApiError } = await import("@/types/api");
+
+      const networkError = () => new ApiError("No se pudo conectar con el servidor", 503);
+      // Primera pasada (backend dormido) falla; la segunda —ya despierto— trae datos.
+      const queryFn = vi
+        .fn<() => Promise<{ total: number }>>()
+        .mockRejectedValueOnce(networkError())
+        .mockResolvedValue({ total: 42 });
+      const mutationFn = vi.fn<() => Promise<void>>().mockRejectedValue(networkError());
+
+      render(
+        <ReactQueryProvider>
+          <Panel queryFn={queryFn} mutationFn={mutationFn} />
+        </ReactQueryProvider>,
+      );
+
+      // Backend dormido: la query muere y el usuario ve el cartel de error.
+      await waitFor(() => expect(screen.getByTestId("totals")).toHaveTextContent("error"));
+
+      // El usuario intentó guardar durante la espera: la mutación también falla.
+      fireEvent.click(screen.getByRole("button", { name: "guardar" }));
+      await waitFor(() => expect(screen.getByTestId("save")).toHaveTextContent("error"));
+
+      expect(queryFn).toHaveBeenCalledTimes(1);
+      expect(mutationFn).toHaveBeenCalledTimes(1);
+
+      // El gate detecta que el backend volvió (un solo disparo por recuperación).
+      act(() => {
+        notifyBackendRecovered();
+      });
+
+      // La query se rescata sola: el usuario ve sus datos sin tocar nada.
+      await waitFor(() => expect(screen.getByTestId("totals")).toHaveTextContent("ok:42"));
+      expect(queryFn).toHaveBeenCalledTimes(2);
+
+      // La mutación queda exactamente como estaba: NUNCA se re-ejecuta.
+      expect(mutationFn).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("save")).toHaveTextContent("error");
+    });
+
+    it("no arma una tormenta: las queries que SÍ tienen datos no se vuelven a pedir", async () => {
+      const { ReactQueryProvider } = await import("@/lib/react-query");
+      const { notifyBackendRecovered } = await import("@/lib/backend-gate");
+
+      const queryFn = vi.fn<() => Promise<{ total: number }>>().mockResolvedValue({ total: 7 });
+      const mutationFn = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+
+      render(
+        <ReactQueryProvider>
+          <Panel queryFn={queryFn} mutationFn={mutationFn} />
+        </ReactQueryProvider>,
+      );
+
+      await waitFor(() => expect(screen.getByTestId("totals")).toHaveTextContent("ok:7"));
+      expect(queryFn).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        notifyBackendRecovered();
+      });
+
+      // Backend recién arrancado y frío: solo se rescata lo que falló.
+      await Promise.resolve();
+      expect(queryFn).toHaveBeenCalledTimes(1);
+    });
+
+    it("sin suscriptor activo (provider desmontado) la señal no revienta", async () => {
+      const { ReactQueryProvider } = await import("@/lib/react-query");
+      const { notifyBackendRecovered } = await import("@/lib/backend-gate");
+
+      const queryFn = vi.fn<() => Promise<{ total: number }>>().mockResolvedValue({ total: 1 });
+      const mutationFn = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+
+      const { unmount } = render(
+        <ReactQueryProvider>
+          <Panel queryFn={queryFn} mutationFn={mutationFn} />
+        </ReactQueryProvider>,
+      );
+      await waitFor(() => expect(screen.getByTestId("totals")).toHaveTextContent("ok:1"));
+      unmount();
+
+      expect(() => notifyBackendRecovered()).not.toThrow();
+    });
   });
 });

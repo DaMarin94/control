@@ -532,3 +532,222 @@
     }
   }
 }
+
+/* ============================================================
+   Gate de arranque del backend — pantalla de espera a pantalla completa
+   (docs/design.md §"Gate de arranque del backend").
+
+   Superficie PRE-APP: tapa toda la app (incluido /login) mientras el backend
+   despierta. Vive entera acá —tokens, tipografía, animaciones y contención—
+   para que el negro literal no se repita suelto en ningún .tsx.
+
+   Excepción declarada a la regla dura 4 (dos modos): el fondo es NEGRO PURO
+   fijo en claro y en oscuro. Mismo caso que el panel de marca de auth
+   (.auth-grid-bg / .auth-glow): superficie de marca con fondo propio, no
+   superficie de contenido. Por eso los tokens --gate-* viven solo en :root y
+   NO se overridean bajo [data-theme="dark"] — no pueden quedar descalibrados
+   en ningún modo porque son idénticos en los dos, a propósito.
+   ============================================================ */
+:root {
+  --gate-bg:           oklch(0 0 0);        /* #000 exacto, borde a borde */
+  --gate-ink:          oklch(0.95 0.006 270); /* = --ink dark */
+  --gate-ink-2:        oklch(0.78 0.008 270); /* = --ink-2 dark */
+  --gate-warning:      oklch(0.78 0.15 75);   /* = --warning dark */
+  --gate-accent:       oklch(0.66 0.17 264);  /* = --accent dark */
+  --gate-accent-hover: oklch(0.72 0.17 264);
+  --gate-accent-press: oklch(0.58 0.17 264);
+  --gate-focus:        oklch(1 0 0 / 0.55);
+
+  /* Encuadre del GIF — caja CUADRADA de lado fijo. Tres límites y un piso:
+     el ancho manda en viewports angostos (56vw), el alto en viewports bajos
+     (44dvh), y el cap de 320px evita que un GIF chico se pixele en desktop.
+     Adaptación continua: no agrega ningún breakpoint al sistema. */
+  --gate-gif-side: max(96px, min(56vw, 44dvh, 320px));
+}
+
+@keyframes gate-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes gate-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* Pop del bloque interior — scale .98→1 + fade (sin traslación: el telón no
+   se desliza, se enciende). Delay de 60ms para que el negro llegue ANTES que
+   el contenido y el GIF no aparezca sobre la app a medio tapar. */
+@keyframes gate-pop {
+  from { opacity: 0; transform: scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+.gate-surface {
+  position: fixed;
+  inset: 0;
+  /* dvh, nunca vh: la barra de URL móvil no debe dejar asomar la app. */
+  height: 100dvh;
+  z-index: 200; /* la capa más alta: por encima de modales (z-40/50) y toasts (z-90) */
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gate-bg);
+  /* El negro pinta hasta el borde físico; el CONTENIDO respeta los insets. */
+  padding-top:    max(24px, env(safe-area-inset-top));
+  padding-right:  max(24px, env(safe-area-inset-right));
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+  padding-left:   max(24px, env(safe-area-inset-left));
+  animation: gate-fade-in 160ms ease-out both;
+}
+
+/* Salida: más lenta que la entrada (la app aparece debajo ya pintada y el
+   negro se disuelve encima). `pointer-events: none` apenas empieza: ningún
+   clic se pierde contra un telón que ya es invisible. */
+.gate-surface[data-phase="leaving"] {
+  animation: gate-fade-out 220ms ease-in both;
+  pointer-events: none;
+}
+
+.gate-block {
+  width: min(100%, 420px);
+  animation: gate-pop 220ms cubic-bezier(0.2, 0.9, 0.3, 1.1) 60ms both;
+}
+
+/* Cruce despertando ↔ error: fade-out 120ms → el bloque cambia de alto →
+   fade-in 160ms. El recentrado ocurre mientras no hay nada visible, así que
+   el bloque nunca se ve saltar. Nodo separado de .gate-block porque el pop
+   usa animation-fill-mode: both y pisaría esta opacidad. */
+.gate-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  opacity: 1;
+  transition: opacity 160ms ease;
+}
+
+.gate-content[data-visible="false"] {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.gate-gif-box {
+  width: var(--gate-gif-side);
+  height: var(--gate-gif-side);
+}
+
+/* contain, NUNCA cover: recortaría una animación cuya zona segura no
+   conocemos. El sobrante queda en negro sobre negro — invisible. */
+.gate-gif {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+.gate-waking-text {
+  margin-top: 24px;
+  font-family: var(--ui);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  /* Pie de foto, no protagonista: el GIF manda. */
+  color: var(--gate-ink-2);
+}
+
+.gate-error-glyph {
+  /* Ámbar, no rojo: no falló nada del usuario ni se perdió nada (el rojo
+     --expense está reservado a gasto, regla dura 1). */
+  color: var(--gate-warning);
+}
+
+.gate-error-title {
+  margin-top: 20px;
+  font-family: var(--ui);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--gate-ink);
+}
+
+.gate-error-sub {
+  margin-top: 8px;
+  max-width: 40ch;
+  font-family: var(--ui);
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--gate-ink-2);
+  text-wrap: balance;
+}
+
+.gate-retry {
+  margin-top: 24px;
+  height: 44px;              /* piso de target tocable en régimen de app */
+  padding-inline: 20px;
+  border-radius: var(--r-ctl);
+  background: var(--gate-accent);
+  color: oklch(0.99 0 0);
+  font-family: var(--ui);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.12);
+  transition: background-color 140ms ease;
+}
+
+/* Hover aclara un escalón; pressed oscurece. Sin desplazamiento (el primario
+   del DS levanta 1px; acá no hay superficie contra la cual leerlo). */
+.gate-retry:hover:not(:disabled) { background: var(--gate-accent-hover); }
+.gate-retry:active:not(:disabled) { background: var(--gate-accent-press); }
+
+.gate-retry:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Foco propio (desvío justificado): el anillo del DS (3px --accent-soft) se
+   calibró contra --paper y sobre el propio botón índigo desaparece. Acá se
+   conserva la GEOMETRÍA (3px) y cambia el VALOR: blanco translúcido con 2px
+   de aire en --gate-bg, el contraste máximo disponible sobre negro. */
+.gate-surface :focus-visible {
+  outline: 3px solid var(--gate-focus);
+  outline-offset: 2px;
+}
+
+/* Único ajuste por umbral — --bp-short (alto < 480px), el mismo que ya usa la
+   disposición corta de la superficie de captura. */
+@media (max-height: 480px) {
+  .gate-waking-text { margin-top: 16px; }
+  .gate-retry { height: 48px; }
+}
+
+/* Régimen de captura (min(ancho, alto) < 600px): el botón crece a target
+   táctil y toma el ancho del bloque, capeado. El anidado con max-height
+   preserva el 48px de la disposición corta sin depender del orden de
+   utilidades de Tailwind. */
+@media (width < 600px), (height < 600px) {
+  .gate-retry {
+    height: 52px;
+    font-size: 16px;
+    width: 100%;
+    max-width: 280px;
+  }
+
+  @media (max-height: 480px) {
+    .gate-retry { height: 48px; }
+  }
+}
+
+/* Se cae el pop (sin escala) y los fades se acortan a 100ms. El cross-fade de
+   opacidad se CONSERVA deliberadamente —mismo criterio que la transición de
+   color del cambio de modo—: un salto instantáneo a pantalla negra completa
+   es más agresivo que el movimiento que la preferencia quiere evitar. */
+@media (prefers-reduced-motion: reduce) {
+  .gate-surface,
+  .gate-surface[data-phase="leaving"] { animation-duration: 100ms; }
+  .gate-block { animation: none; }
+  .gate-content,
+  .gate-content[data-visible="false"] { transition: none; }
+}

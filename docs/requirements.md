@@ -2500,7 +2500,7 @@ El alcance es un **set curado de 4 monedas (ARS / USD / EUR / BRL)**, sin alta d
 
 > El usuario elige el **modo de color** de la app (Sistema / Claro / Oscuro) desde un control en el **chrome global** (sidebar, RF-NAV-001). Persiste por usuario en el blob de preferencias (`theme`); modelo de datos en `data-model.md`, §Claves del blob → `theme`. Arquitectura de aplicación (override de tokens, anti-flash) en `docs/frontend.md`, §Modo de color (theming).
 >
-> El módulo define además **qué superficie corresponde a cada tamaño de viewport**: en **régimen de captura** (criterio canónico en RF-APP-003), la única superficie es la **captura de movimiento** (RF-APP-003) y, sin sesión, su **acceso** (RF-APP-004); en **régimen de app**, la app completa.
+> El módulo define además **qué superficie corresponde a cada tamaño de viewport**: en **régimen de captura** (criterio canónico en RF-APP-003), la única superficie es la **captura de movimiento** (RF-APP-003) y, sin sesión, su **acceso** (RF-APP-004); en **régimen de app**, la app completa. Y define la **pantalla de espera de arranque del backend** (RF-APP-005), que tapa cualquiera de esas superficies mientras el backend no responde.
 
 ---
 
@@ -2567,6 +2567,28 @@ El criterio mira **el tamaño del viewport y nada más**: qué aparato sea (tel�
 - [ ] Tras iniciar sesión con éxito, el usuario llega a la **superficie de captura** (RF-APP-003), no al dashboard.
 - [ ] Los errores y validaciones son los de cada método: RF-AUTH-005 (A1 credenciales inválidas con mensaje genérico, A2 validación, A3 error del backend) y RF-AUTH-001 (A1 cancelación, A2 error del flujo OAuth).
 - [ ] La sesión resultante es **la misma** en cualquier régimen: persiste entre visitas (RF-AUTH-003) y sirve para entrar a la app completa en régimen de app, sin volver a autenticarse.
+
+---
+
+#### RF-APP-005 — Pantalla de espera de arranque del backend
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | Mientras el backend no responde, la app entera queda cubierta por una **pantalla de espera a pantalla completa**. La espera **se resuelve sola** cuando el backend vuelve; si se estira demasiado, ofrece **Reintentar**. |
+| **Actor** | Cualquier usuario, con o sin sesión |
+| **Prioridad** | Alta |
+| **Precondiciones** | Ninguna. |
+
+**Criterios de aceptación:**
+- [ ] **Cobertura total:** mientras la pantalla de espera está visible, **nada del fondo es alcanzable ni scrolleable**. Cubre todas las superficies de la app en cualquier régimen (RF-APP-003), **incluida la pantalla de acceso** (`screens.md`, §1; RF-APP-004): sin backend, iniciar sesión tampoco es posible.
+- [ ] **Umbral de aparición:** la pantalla aparece recién tras **~800 ms** sin respuesta del backend. Si el backend responde antes, **no se muestra nunca** — una demora corta no genera una pantalla intermedia.
+- [ ] **Permanencia mínima:** una vez visible, permanece **~1 s como mínimo**, de modo que nunca aparezca y desaparezca en un parpadeo.
+- [ ] **Estado de error a los 3 minutos:** si a los **3 minutos** el backend sigue sin responder, la espera pasa a un **estado de error** con un botón **Reintentar**.
+- [ ] **Reintentar** devuelve la pantalla al **estado de espera** y **reinicia el reloj de los 3 minutos**.
+- [ ] **Resolución automática:** si el backend vuelve, la pantalla desaparece **sin que el usuario toque nada**. Reintentar es un atajo, no la única salida.
+- [ ] **Recuperación de datos:** al recuperarse el backend, **los datos que no habían podido cargarse se vuelven a pedir solos**. El usuario nunca tiene que recargar la página a mano para ver la pantalla en la que estaba.
+- [ ] **La recuperación solo reintenta lecturas:** una operación de guardado que falló por backend caído **no se re-ejecuta sola** (reintentarla es del usuario), para que la recuperación no pueda duplicar un movimiento. Sustento estructural en `docs/frontend.md`, §Gate de arranque del backend.
+- [ ] El tratamiento visual de la pantalla (fondo, pieza gráfica, texto, estado de error) lo define `control-design` (`docs/design.md`).
 
 ---
 

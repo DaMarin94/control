@@ -350,6 +350,7 @@ Recuperación de contraseña, verificación de email y account linking (mismo em
 - **Variables requeridas en Render:** `DATABASE_URL` (Internal URL de la base; obligatoria para bootear por la validación fail-fast aunque Prisma llegue en Fase 1), `JWT_SECRET` (≥32 chars; secreto compartido HS256 con el frontend), `NODE_ENV=production`.
 - **Blueprint (`render.yaml`):** hay un `render.yaml` en la raíz que versiona el web service + la base Postgres. Notas: `region` debe coincidir entre base y servicio; `JWT_SECRET` va con `sync: false` (se carga a mano en el dashboard, no se versiona); `DATABASE_URL` se enlaza desde la base con `fromDatabase`; `PORT` no se declara.
 - **Health check:** `healthCheckPath: /health`.
+- **Cold start del plan free:** Render **suspende el web service tras ~15 minutos sin tráfico**; el primer request posterior tarda **~50 segundos** en levantar el contenedor. Es la razón estructural por la que el frontend tiene un gate de arranque (RF-APP-005; implementación en `docs/frontend.md`, §Gate de arranque del backend). La base Postgres free **no** se suspende por inactividad: el cold start es del web service, no de la base.
 
 ---
 

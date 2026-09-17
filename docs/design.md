@@ -6250,6 +6250,186 @@ Umbral `--bp-wide` **941px**, evaluado sobre el **ancho de contenido** (`<main>`
 
 ---
 
+## Gate de arranque del backend — pantalla de espera a pantalla completa
+
+> Superficie que **tapa toda la app** mientras el backend está despertando (plan free de Render: suspende tras ~15 min de inactividad, el primer request tarda ~50s). Sin ella, la app se lee como colgada. Es una superficie **pre-app**: no es una pantalla del producto, es el telón que se corre antes de que el producto exista.
+>
+> **Timing (insumo, no se decide acá):** aparece recién a los **~800ms** sin respuesta de `GET /health`; una vez visible permanece un **mínimo de ~1s**; a los **3 minutos** sin respuesta pasa al **estado de error** con botón *Reintentar*.
+
+### 0. Encuadre — qué es y qué no
+
+- **Dos estados, uno a la vez:** `despertando` (default) y `error` (a los 3 min). No hay tercer estado visual: `oculto` es la ausencia de la superficie, no un estado de ella.
+- **Tapa absolutamente todo:** `position: fixed; inset: 0`, alto `100dvh` (nunca `vh`), la **capa más alta de la app** — por encima de modales, popovers, toasts y del sidebar. Nada de abajo se ve ni se toca, **incluida la pantalla de login**.
+- **Un solo control en toda la superficie** (y solo en `error`): *Reintentar*. No hay cerrar, no hay "seguir igual", no hay salida. El gate no se descarta: se resuelve.
+- **Cero-impacto con el backend despierto.** Si `/health` responde antes de los 800ms, el gate **no se pinta nunca**: no reserva layout, no hace flash, no intercepta un solo clic. Es invariante verificable.
+- **Sin progreso falso.** No hay barra, ni porcentaje, ni cuenta regresiva, ni spinner adicional: no conocemos el tiempo restante y fabricarlo sería mentirle al usuario. El GIF es el único portador de "esto sigue pasando".
+
+### 1. Fondo negro fijo — excepción declarada a la regla dura 4
+
+- **`--gate-bg` = `oklch(0 0 0)` (#000 exacto), en los dos modos de color.** No consume ningún token neutro del DS y **no reacciona a `[data-theme]`**.
+- **Por qué no viola la regla dura 4:** es el mismo caso que el **panel de marca de auth** (§Modo de color → *Panel de marca de auth en oscuro*), que tampoco cambia entre modos. Es una **superficie de marca con fondo propio**, no una superficie de contenido: el modo de color describe cómo se ve *el producto*, y acá el producto todavía no está montado.
+- **Negro puro, no casi-negro.** Si el GIF viene con fondo `#000` (lo esperable), cualquier casi-negro dibujaría un rectángulo visible alrededor de la animación. El valor es literal y **se materializa como token `--gate-bg`** para que el `#000` no se repita suelto en ningún `.tsx`.
+- **Tokens propios de la superficie** (fijos en ambos modos, porque el fondo es fijo):
+
+| Token | Valor | Uso |
+|---|---|---|
+| `--gate-bg` | `oklch(0 0 0)` | fondo de la superficie, borde a borde |
+| `--gate-ink` | `oklch(0.95 0.006 270)` | texto fuerte (título del error) — mismo valor que `--ink` dark |
+| `--gate-ink-2` | `oklch(0.78 0.008 270)` | texto de espera y sublínea — mismo valor que `--ink-2` dark |
+| `--gate-warning` | `oklch(0.78 0.15 75)` | glifo del estado de error — `--warning` dark |
+| `--gate-accent` | `oklch(0.66 0.17 264)` | fondo del botón primario — `--accent` dark |
+| `--gate-accent-hover` | `oklch(0.72 0.17 264)` | hover del primario (un escalón más luminoso) |
+| `--gate-accent-press` | `oklch(0.58 0.17 264)` | pressed — `--accent-press` dark |
+| `--gate-focus` | `oklch(1 0 0 / 0.55)` | anillo de foco de la superficie |
+
+- **Focus ring propio (desvío justificado).** El anillo del DS es 3px `--accent-soft`; ese valor está calibrado contra `--paper` y sobre negro pierde separación — y sobre el **propio botón índigo** desaparece del todo. Acá el anillo conserva **geometría** (3px) y cambia **valor**: `3px --gate-focus` + **2px de offset en `--gate-bg`**, el contraste máximo disponible sobre negro. Aplica a **todo** elemento focusable del gate.
+
+### 2. Estado `despertando` — composición
+
+**Bloque central único**, en columna, centrado en los dos ejes (centrado **geométrico**, sin sesgo óptico: el bloque cambia de alto entre estados y un sesgo porcentual lo movería distinto en cada uno). Ancho del bloque: `min(100% − 2×padding, 420px)`.
+
+**El encuadre del GIF — caja cuadrada de lado fijo (el asset todavía no existe):**
+
+- **Lado `L` = `max(96px, min(56vw, 44dvh, 320px))`.** Tres límites y un piso: el ancho manda en viewports angostos (56vw), el alto manda en viewports bajos (44dvh), y el cap de **320px** evita que un GIF chico se escale hasta pixelarse en desktop.
+- **La caja es cuadrada y de lado fijo, no se ajusta al asset.** Reserva el layout **antes** de que el GIF cargue: el texto de abajo nunca se mueve al llegar la imagen (mismo principio que §Skeletons: el fantasma imita la medida real para que no haya reflow).
+- **`object-fit: contain` + `object-position: center`.** **Nunca `cover`:** recortaría una animación cuya zona segura no conocemos.
+- **Si la proporción no es 1:1 no pasa nada malo:** el GIF entra completo dentro del cuadrado y el sobrante queda en negro — invisible, porque el fondo del gate ya es negro. Un GIF 16:9 se renderiza `L × 0.56L` (se ve más chico); un GIF vertical se renderiza `0.56L × L`.
+- **Sin borde y sin radio** si el asset tiene fondo negro o transparente (lo recomendado). **Si el asset trae fondo claro/opaco**, el encuadre lleva `--r-card` (14px) + `overflow: hidden`, para que el rectángulo brillante no quede con esquinas vivas sobre negro.
+- **Decorativo a nivel a11y:** `alt=""` + `aria-hidden="true"`. El significado lo carga el texto.
+
+**Proporción y peso ideales del asset (guía para elegir el archivo):**
+
+| Criterio | Recomendado | Por qué |
+|---|---|---|
+| **Proporción** | **1:1** (aceptable hasta 4:3 / 3:4) | Es la que llena el encuadre entero; cuanto más se aleja del cuadrado, más chico se ve el GIF a igual `L`. |
+| **Resolución nativa** | **640 × 640 px** | 2× del cap de 320px CSS: nítido en pantallas retina sin peso de más. |
+| **Fondo** | **transparente o `#000` puro** | Cualquier otro fondo dibuja un rectángulo sobre el negro. Sin halos ni bordes blancos: sobre negro se ve el recorte. |
+| **Loop** | continuo, **1–3s**, sin corte visible | Un loop con salto se lee como "se trabó" — justo lo contrario de lo que la pantalla comunica. |
+| **Peso** | **≤ 1.2 MB** | Se descarga en el peor momento posible (backend caído, red desconocida): un GIF pesado llegaría después del gate. |
+| **Texto embebido** | **ninguno** | No se traduce, no escala y compite con la línea de texto real. |
+
+**Texto acompañante:**
+
+- **Copy exacto: `Despertando el servidor…`** — con **puntos suspensivos reales (`…`, U+2026)**, la convención ya vigente del DS para acción en curso (`Iniciando sesión…`, §Superficie de captura 13). Gerundio, sin signos de admiración, sin disculpas: describe lo que pasa, no pide perdón por ello.
+- **Tipografía:** `--ui` (Space Grotesk) **16px / 500**, `letter-spacing: .01em`, centrado. Sube un punto sobre el body base (15px) porque es **el único texto de la pantalla** y se lee a la distancia del GIF, no dentro de un párrafo. **No va en mono:** no es una cifra ni una fecha (regla dura 3 no aplica).
+- **Color `--gate-ink-2`**, no `--gate-ink`: la jerarquía es **GIF protagonista → texto pie de foto**. Un blanco pleno los pondría a competir.
+- **Separación GIF → texto: 24px** (16px bajo `--bp-short`). Más que un gap intra-bloque (16) y menos que un corte de sección (40): se lee como un par, con el GIF mandando.
+- **Una sola línea.** No hay sublínea ni explicación del porqué técnico: el usuario no necesita saber qué es Render.
+
+**Accesibilidad del estado:**
+
+- Contenedor con **`role="status"` + `aria-live="polite"` + `aria-label="Despertando el servidor"`**.
+- **El fondo queda inerte:** mientras el gate está montado, la rama de app y la superficie de captura van `inert` (o `aria-hidden` + bloqueo de foco), y el `body` bloquea scroll. Es el mismo contrato de bloqueo de fondo que ya rige para modales (§Overflow de modales y bloqueo del fondo). Sin esto, el tab entra en un login que no se ve.
+- **`Escape` no hace nada.** No hay salida que ofrecer.
+
+### 3. Entrada y salida — nunca un corte ni un flash
+
+- **Entrada (a los 800ms):** el fondo hace **fade de opacidad 0 → 1 en 160ms ease-out**, sin traslación (un telón negro que se desliza se leería como un panel, no como una capa). El **bloque interior** entra con el `pop` ya vigente del DS (**scale .98 → 1 + fade, 220ms**) y **60ms de delay**, para que el negro llegue antes que el contenido y el GIF no aparezca sobre la app a medio tapar.
+- **Salida (backend respondió, cumplido el mínimo de 1s):** **fade-out de 220ms ease-in** de toda la superficie, sin escala. Sale más lento de lo que entra: la app aparece debajo ya pintada y el negro se disuelve encima, en vez de cortarse.
+- **`pointer-events: none` apenas empieza la salida**, y desmontaje al terminar la transición: ningún clic del usuario se pierde contra un telón que ya es invisible.
+- **El mínimo de ~1s se cuenta desde que arranca el fade de entrada.** Evita el titileo de un gate que aparece y desaparece en 200ms.
+- **La app de abajo no se anima.** Una sola transición a la vez; el gate se va, el producto ya estaba ahí.
+- **`prefers-reduced-motion`:** se cae el **`pop`** (sin escala) y el fade se acorta a **100ms** en entrada y salida. El cross-fade de opacidad se conserva deliberadamente —mismo criterio que la transición de color del cambio de modo—: un salto instantáneo a pantalla negra completa es más agresivo que el movimiento que la preferencia quiere evitar.
+- **Trade-off aceptado (deriva del timing acordado):** entre los 0 y los 800ms el usuario ve el login/shell y después se lo tapa. El fade de 160ms es lo que lo convierte en "algo se puso encima" en vez de "la pantalla se apagó".
+
+### 4. Estado `error` (a los 3 minutos)
+
+Misma superficie negra, mismo bloque centrado, misma composición en columna. **Cambia el contenido, no el encuadre.**
+
+- **El GIF se retira del DOM.** No se atenúa ni se pone en gris: un GIF sigue animando aunque esté al 35% de opacidad, y movimiento = "esto está pasando", que es exactamente lo contrario del mensaje. Se va.
+- **En su lugar, glifo estático:** `TriangleAlert` (lucide), **40px**, color **`--gate-warning`**. Ámbar y no rojo: **no falló nada del usuario ni se perdió nada** — el servidor tarda y hay un camino de salida. Rojo `--expense` está reservado a gasto (regla dura 1) y aquí sería, además, una sobreactuación.
+- **Transición entre estados (sin salto visible):** el contenido de espera hace **fade-out 120ms** → recién ahí el bloque cambia de alto → el contenido de error hace **fade-in 160ms**. El recentrado ocurre mientras no hay nada visible, así que el usuario nunca ve el bloque saltar. Con reduced-motion, cambio directo.
+- **Copy:**
+  - **Título:** `El servidor está tardando más de lo normal` — rol *Título de diálogo* del DS: **18px / 700 / `-.01em`**, `--gate-ink`, centrado.
+  - **Sublínea:** `Puede estar arrancando todavía. Probá de nuevo en unos segundos.` — **13.5px / 400**, `--gate-ink-2`, centrado, `max-width: 40ch`, `text-wrap: balance`. Dice qué hacer y que no se rompió nada. Sin jerga, sin código de error, sin "contactá al administrador" (el administrador es el usuario).
+- **Ritmo vertical:** glifo → **20px** → título → **8px** → sublínea → **24px** → botón.
+
+**Botón `Reintentar` — primario del DS sobre negro:**
+
+| Aspecto | Valor |
+|---|---|
+| Fondo / texto | `--gate-accent` / `oklch(0.99 0 0)`, con el **inset highlight** `white/0.12` del primario en oscuro |
+| Radio | `--r-ctl` (10px) |
+| Tipografía | 15px / 600 (**16px / 600** en régimen de captura) |
+| Alto | **44px** en régimen de app (piso de target tocable) · **52px** en régimen de captura |
+| Ancho | `auto` con `padding` horizontal **20px**; en captura **`w-full`** con cap **280px** |
+| **Hover** | fondo `--gate-accent-hover`, 140ms (el hover del DS) |
+| **Pressed** | fondo `--gate-accent-press`, sin desplazamiento |
+| **Focus visible** | anillo **3px `--gate-focus` + 2px de offset en `--gate-bg`** (§1) |
+| **Disabled** | `opacity: .55`, `cursor: not-allowed`, sin hover ni pressed |
+
+- **Es el primario, sin dudar:** es la única acción de toda la pantalla. Un botón fantasma sobre negro sería tímido justo en el momento en que el usuario necesita que algo se vea claramente clickeable.
+- **Al presionar, el gate vuelve al estado `despertando`** (GIF + texto) y el reloj de 3 minutos **se reinicia**. Esa es la respuesta visual al clic: no hay spinner dentro del botón ni rótulo `Reintentando…`, porque el estado siguiente ya comunica la espera. El `disabled` existe solo para el instante entre el clic y el swap (y para blindar el doble clic).
+- **A11y del estado:** contenedor pasa a **`role="alert"`**; el **foco se mueve al botón** al entrar en `error` (es la única acción, y el usuario puede haber dejado la pantalla hace tres minutos). El estado **no depende solo del color**: hay glifo + título + sublínea.
+
+### 5. Régimen de captura y contención responsive (obligatoria)
+
+**El gate es indiferente al régimen: es una sola superficie para los dos.** No hay versión de app y versión de captura — el régimen decide qué producto hay *debajo*, y debajo del gate no hay producto visible.
+
+- **Montaje:** el gate se monta **fuera** de la rama `capture:hidden` y **fuera** de `CaptureSurfaceRoot` (`src/app/layout.tsx`), como hermano de ambos y por encima de los dos. **No lleva variante `capture:` ni `max-wide:` de visibilidad:** si se ocultara en un régimen, ese régimen quedaría sin gate.
+- **La adaptación es continua, no por breakpoint.** La fórmula `L = max(96px, min(56vw, 44dvh, 320px))` ya resuelve todos los tamaños sin un solo umbral nuevo: 320px en desktop, ~218px en un viewport de 390px de ancho, ~189px en un `932 × 430` apaisado. **No se agrega breakpoint al sistema.**
+- **Único ajuste por umbral — `--bp-short` (alto < 480px):** gap GIF→texto baja de **24 → 16px**; el botón del estado de error baja a **48px** de alto (espeja el footer corto de §Superficie de captura 12).
+- **Safe areas:** padding del bloque `max(24px, env(safe-area-inset-*))` en los cuatro lados. **El negro pinta hasta el borde físico** (incluidos los insets); el contenido respeta el inset. Mismo contrato que §Superficie de captura 2.
+- **Alto:** `100dvh`, nunca `vh`. `overflow: hidden` en la superficie; el `body` bloqueado.
+
+**Los cuatro invariantes, leídos en esta superficie:**
+
+1. **Sin scroll del `body`** — ni horizontal ni vertical, en ningún tamaño: la superficie es `fixed inset-0` y su contenido cabe siempre por construcción (el encuadre se dimensiona contra `vw`/`dvh`).
+2. **Nada cortado ni atrapante** — el bloque entero (GIF, texto, título, sublínea, botón) entra siempre; el gate no es un modal del que haya que escapar: se resuelve solo o con *Reintentar*.
+3. **Ninguna acción inalcanzable** — el único control (*Reintentar*) está centrado, con ≥44px de target en todo régimen y ≥52px en captura.
+4. **Superficies anchas scrollean dentro de sí** — no aplica: no hay tabla, gráfico ni fila ancha. El GIF se contiene por `object-fit: contain` dentro de una caja que nunca excede el viewport.
+
+### 6. Reglas duras reafirmadas
+
+- **Regla 1 (verde/rojo):** no se usa **ningún** semántico income/expense en esta superficie. El error va en **ámbar `--warning`**, que es aviso, no gasto.
+- **Regla 2 (índigo solo marca):** el índigo aparece **solo** en el botón primario. No hay cifras en esta pantalla, así que no hay nada que pudiera teñir.
+- **Regla 3 (mono tabular):** no hay ninguna cifra de dinero en el gate. Todo el texto va en `--ui`.
+- **Regla 4 (dos modos):** **excepción declarada y acotada** — fondo negro fijo en ambos modos, con el precedente del panel de marca de auth (§1). La superficie no consume ningún token neutro del DS, por lo que **no puede** quedar mal calibrada en un modo: es idéntica en los dos, a propósito.
+
+### Checklist de aceptación visual — Gate de arranque
+
+**Cero-impacto (backend despierto)**
+
+1. Con el backend ya despierto (recarga inmediata tras una navegación), **no se ve ningún destello negro**: la app pinta directo, sin gate.
+2. La página es interactiva de inmediato: ningún clic queda "comido" por una capa invisible.
+
+**Estado `despertando`**
+
+3. A los ~800ms sin respuesta aparece una superficie **negra a pantalla completa** que tapa todo: sidebar, contenido, toasts y modales. Nada de la app se ve por ningún borde.
+4. El mismo negro se ve **idéntico en tema claro y en tema oscuro** (togglear el tema no cambia el gate).
+5. El **GIF está centrado** en los dos ejes, completo (no recortado), y el texto queda **24px debajo**.
+6. Copy exacto: **`Despertando el servidor…`**, con puntos suspensivos de un solo carácter, en Space Grotesk, **no** en mono, color gris claro (no blanco pleno).
+7. El GIF **no supera 320px** de lado en desktop y no está pixelado.
+8. El texto **no se mueve** cuando el GIF termina de cargar (el encuadre reservó el espacio).
+9. Con el gate arriba, **Tab no alcanza nada de abajo** y el fondo no scrollea.
+
+**Entrada y salida**
+
+10. La aparición es un **fade**, no un corte: no hay parpadeo blanco ni salto de layout.
+11. Cuando el backend responde, el gate **se disuelve** (~220ms) y la app queda debajo ya pintada; no hay flash blanco entre medio.
+12. El gate **nunca dura menos de ~1s** visible (no titila).
+13. Con `prefers-reduced-motion` activo: sin escala/`pop`, fades muy cortos, sin salto instantáneo a negro.
+
+**Estado `error` (a los 3 min)**
+
+14. El **GIF desaparece** (no queda animando atenuado) y en su lugar hay un **triángulo ámbar de 40px**.
+15. Título `El servidor está tardando más de lo normal` (18px/700, blanco) + sublínea `Puede estar arrancando todavía. Probá de nuevo en unos segundos.` (gris, centrada, máximo ~40 caracteres por línea).
+16. El paso de `despertando` a `error` **no se ve saltar**: el contenido cruza con fade y el bloque queda recentrado.
+17. **`Reintentar`** es un botón índigo sólido, radio 10px, de **44px** de alto (52px en pantalla chica), claramente clickeable sobre el negro.
+18. **Hover** aclara el índigo; **pressed** lo oscurece; **Tab** muestra un **anillo blanco de 3px con 2px de aire negro** perfectamente visible (no un halo índigo que se funde con el botón).
+19. Al entrar en `error`, el **foco ya está en el botón** (Enter lo dispara sin tocar Tab).
+20. Al presionar `Reintentar`, la pantalla **vuelve al GIF + `Despertando el servidor…`**.
+
+**Régimen de captura y tamaños**
+
+21. En un viewport `< 600px` (ancho u alto) el gate se ve **igual de completo**: GIF centrado, texto legible, nada cortado.
+22. En `932 × 430` (apaisado bajo): el GIF **achica** y todo el bloque entra sin scroll.
+23. Con alto `< 480px`: gap GIF↔texto más corto y botón de error de 48px; nada se superpone.
+24. Con notch / barra de gestos: **el negro llega al borde físico** de la pantalla y ningún texto ni el botón quedan bajo un inset del sistema.
+25. En **ningún** tamaño aparece scroll del `body`, horizontal o vertical, con el gate arriba.
+
+---
+
 ## Specs de fase
 
 El lenguaje visual vigente y reutilizable que salió de cada fase de implementación está consolidado en las secciones de arriba. Las decisiones puntuales de cada fase, una vez implementadas, dejan de tener documento propio: lo que sobrevive es la regla en presente; el "cuándo/por qué cambió" vive en el historial de git.

@@ -10,7 +10,11 @@
  * NextAuth queda "viva" pero cada llamada al backend falla. QueryCache y
  * MutationCache interceptan CUALQUIER error de CUALQUIER query/mutation acá,
  * en un único punto — evita repetir el chequeo en cada hook de datos.
- * Ante un 401: toast + signOut → /login. Guardado con un flag a nivel de
+ * Ante un 401: toast + signOut → /login. Ante un 503 (fallo de red): se avisa
+ * al gate de arranque del backend (ver más abajo y docs/design.md §"Gate de
+ * arranque del backend"), y cuando ese gate confirma que el backend volvió,
+ * acá se rescatan las queries que quedaron en `error` (ver
+ * `refetchFailedQueries` — nunca las mutations). Guardado con un flag a nivel de
  * módulo porque el token expirado hace fallar varias queries en simultáneo
  * y solo debe dispararse una vez (un toast, un signOut, no un loop).
  *
@@ -28,10 +32,11 @@
  */
 
 import { QueryCache, QueryClient, QueryClientProvider, MutationCache } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { signOut } from "next-auth/react";
 import { ApiError } from "@/types/api";
 import { emitToast } from "@/components/ui/toast";
+import { notifyBackendUnreachable, subscribeBackendRecovered } from "@/lib/backend-gate";
 
 /** Guard a nivel de módulo: el 401 solo se maneja una vez por sesión de página. */
 let sessionExpiredHandled = false;
@@ -50,8 +55,22 @@ function handleUnauthorized(): void {
 }
 
 function handleQueryOrMutationError(error: unknown): void {
-  if (error instanceof ApiError && error.statusCode === 401) {
+  if (!(error instanceof ApiError)) return;
+
+  if (error.statusCode === 401) {
     handleUnauthorized();
+    return;
+  }
+
+  // Backend inalcanzable (fallo de red → ApiError 503 desde el bloque
+  // `catch (networkError)` de lib/api.ts). Caso real: la pestaña queda
+  // abierta, el backend se duerme a los ~15 min (plan free de Render), el
+  // usuario vuelve y hace click. Se avisa al gate de arranque, que vuelve a
+  // sondear /health y se levanta si el backend efectivamente está durmiendo
+  // (si responde antes de 800ms, el gate no se pinta). Mismo criterio que el
+  // 401: un único punto, sin repetir el chequeo en cada hook.
+  if (error.statusCode === 503) {
+    notifyBackendUnreachable();
   }
 }
 
@@ -82,6 +101,40 @@ export function createQueryClient(): QueryClient {
   });
 }
 
+/**
+ * Rescate de las queries que murieron mientras el backend estaba dormido.
+ *
+ * Lo dispara el gate de arranque UNA SOLA VEZ por recuperación (ver
+ * `notifyBackendRecovered` en lib/backend-gate.ts), apenas la sonda confirma
+ * que el backend responde y antes de que la superficie negra termine de salir.
+ * Sin esto, al retirarse el gate el usuario se quedaba mirando "No se pudieron
+ * cargar…" y tenía que recargar a mano — justo lo que el gate venía a evitar.
+ *
+ * Por qué `refetchQueries` con `predicate` y no otra cosa:
+ *   - `refetchQueries` opera SOLO sobre la QueryCache. Las mutations viven en
+ *     la MutationCache y son inalcanzables desde acá: una mutación que falló
+ *     con el backend dormido NUNCA se re-ejecuta sola (reintentarla a ciegas
+ *     podría duplicar un movimiento). La garantía es estructural, no un filtro
+ *     que alguien pueda aflojar.
+ *   - `predicate: status === "error"` acota el rescate a las que efectivamente
+ *     fallaron: nada de re-pedir lo que ya está en caché y sano contra un
+ *     backend que recién arranca y está frío.
+ *   - `type: "active"` deja afuera las queries sin observador montado: esas no
+ *     se están mostrando y, cuando su pantalla vuelva a montarse, TanStack ya
+ *     las refetchea sola (`retryOnMount`, default true en una query en error).
+ *
+ * Descartados: `invalidateQueries()` sin filtro (marca stale TODO y dispara una
+ * tormenta de requests contra el backend frío) y `resetQueries` (vacía la data
+ * cacheada, así que las queries sanas volverían a skeleton sin necesidad).
+ */
+function refetchFailedQueries(queryClient: QueryClient): void {
+  queryClient
+    .refetchQueries({ type: "active", predicate: (query) => query.state.status === "error" })
+    // Si el backend vuelve a fallar, el error de cada query lo maneja el
+    // QueryCache.onError de arriba (incluido un nuevo aviso al gate).
+    .catch(() => {});
+}
+
 interface ReactQueryProviderProps {
   children: ReactNode;
 }
@@ -89,6 +142,8 @@ interface ReactQueryProviderProps {
 export function ReactQueryProvider({ children }: ReactQueryProviderProps) {
   // useState garantiza que cada request del servidor tenga su propio QueryClient
   const [queryClient] = useState(createQueryClient);
+
+  useEffect(() => subscribeBackendRecovered(() => refetchFailedQueries(queryClient)), [queryClient]);
 
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }

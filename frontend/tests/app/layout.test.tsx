@@ -54,6 +54,27 @@ describe("Root layout — superficie de captura (RF-APP-003/004)", () => {
     expect(layoutSource).toMatch(/interactiveWidget:\s*"overlays-content"/);
   });
 
+  it("monta el gate de arranque del backend como TERCER hermano, fuera de la rama de app y de CaptureSurfaceRoot", () => {
+    expect(layoutSource).toMatch(
+      /import\s*\{\s*BackendGate\s*\}\s*from\s*"@\/components\/backend-gate\/backend-gate"/,
+    );
+    expect(layoutSource).toMatch(/<BackendGate\s*\/>/);
+
+    // Orden estructural: la rama de app, la superficie de captura y recién
+    // después el gate — hermanos los tres, el gate por encima de los dos.
+    const appBranch = layoutSource.indexOf('className="capture:hidden">{children}</div>');
+    const captureRoot = layoutSource.indexOf("<CaptureSurfaceRoot");
+    const gate = layoutSource.indexOf("<BackendGate");
+    expect(appBranch).toBeGreaterThan(-1);
+    expect(captureRoot).toBeGreaterThan(appBranch);
+    expect(gate).toBeGreaterThan(captureRoot);
+
+    // Una sola superficie para los dos regímenes: el gate NO lleva variante
+    // de visibilidad por régimen (ocultarlo en uno lo dejaría sin gate).
+    const gateTag = layoutSource.slice(gate, layoutSource.indexOf("/>", gate) + 2);
+    expect(gateTag).not.toMatch(/capture:|max-wide:|app-regime:/);
+  });
+
   it("no monta ningún gate por debajo del ancho mínimo soportado (RF-APP-002, retirado)", () => {
     expect(layoutSource).not.toMatch(/ViewportGate/);
     expect(layoutSource).not.toMatch(/max-floor/);

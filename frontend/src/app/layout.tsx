@@ -20,6 +20,7 @@ import { ToastProvider } from "@/components/ui/toast";
 import { AuthSessionProvider } from "@/lib/session-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { CaptureSurfaceRoot } from "@/components/capture/capture-surface-root";
+import { BackendGate } from "@/components/backend-gate/backend-gate";
 import { auth } from "@/auth";
 import "./globals.css";
 
@@ -122,6 +123,15 @@ export default async function RootLayout({
                   email={email}
                   isGoogleConfigured={isGoogleConfigured}
                 />
+                {/* Gate de arranque del backend (docs/design.md §"Gate de
+                    arranque del backend") — tercer hermano: FUERA de
+                    `capture:hidden` y FUERA de `CaptureSurfaceRoot`, por
+                    encima de los dos. Una sola superficie sirve a los dos
+                    regímenes y tapa también /login: deliberadamente SIN
+                    variante `capture:` de visibilidad (ocultarlo en un
+                    régimen lo dejaría sin gate). Con el backend despierto no
+                    se monta nada. */}
+                <BackendGate />
               </ToastProvider>
             </ThemeProvider>
           </ReactQueryProvider>
