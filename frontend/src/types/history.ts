@@ -56,6 +56,13 @@ export interface HistoryFormulaValue {
   operand: number;
   sign: number;
   currency: CurrencyCode;
+  /**
+   * Mes de referencia (offset, entero 0..12) — "Mes del monto base del
+   * calculado" (docs/design.md). `0` = mismo mes. Siempre presente (nunca
+   * `undefined`); una edición que cambia solo este valor debe verse como
+   * cambio en la fila `formula` del historial.
+   */
+  sourceMonthOffset: number;
 }
 
 /** Valor del campo `Categoría` — id, nombre y color (punto de 6px). */

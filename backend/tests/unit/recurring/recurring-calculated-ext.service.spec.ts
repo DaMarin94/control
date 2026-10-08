@@ -136,6 +136,7 @@ function makeCalculadoWithCategory(overrides: Partial<RecurringWithCategory> = {
     formulaOperator: FormulaOperator.PCT,
     formulaOperand: 1000,
     formulaSign: 1,
+    sourceMonthOffset: 0,
     createdAt: new Date(),
     updatedAt: new Date(),
     category: {

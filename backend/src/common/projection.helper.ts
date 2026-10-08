@@ -59,6 +59,12 @@ export interface FixedBasketCalcRow {
   formulaOperand: number | null;
   formulaSign: number | null;
   categoryId: string;
+  /**
+   * Mes de referencia (offset, entero 0..12): cuántos meses hacia atrás mirar
+   * para la BASE de la fórmula. Opcional (mismo criterio de back-compat que
+   * `RecurringForAnnual.sourceMonthOffset` — leer siempre con `?? 0`).
+   */
+  sourceMonthOffset?: number;
 }
 
 export interface FixedBasketProjectionParams {
@@ -190,10 +196,24 @@ export function computeFixedBasketProjection(
         ? activeByChain.get(calc.sourceChainId)
         : undefined;
       if (!originData) continue;
+      // Skip: SIEMPRE sobre M (mes consultado), nunca sobre R (mes de referencia).
       if (originData.skipped || calc.skippedMonths.has(mes)) continue;
 
+      // Mes de referencia (sourceMonthOffset > 0): la BASE de la fórmula sale
+      // del origen activo en R = M - offset (mismo criterio de "fila viva de
+      // la cadena" que activeByChainAt usa para M). Moneda/cotización siguen
+      // viniendo del origen de M (originData) — solo el monto cambia.
+      let baseAmountCents = originData.amountCents;
+      const sourceMonthOffset = calc.sourceMonthOffset ?? 0;
+      if (sourceMonthOffset > 0 && calc.sourceChainId) {
+        const refMonth = addMonths(mes, -sourceMonthOffset);
+        const refData = activeByChainAt(refMonth).activeByChain.get(calc.sourceChainId);
+        if (!refData) continue; // origen no resuelve en R -> no aporta a la canasta
+        baseAmountCents = refData.amountCents;
+      }
+
       const derivedAmount = applyFormula(
-        originData.amountCents,
+        baseAmountCents,
         calc.formulaOperator as FormulaOperator,
         calc.formulaOperand!,
         calc.formulaSign!,

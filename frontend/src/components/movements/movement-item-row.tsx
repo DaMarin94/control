@@ -66,8 +66,9 @@
 
 import { useState } from "react";
 import { type MovementItem } from "@/types/movement";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatMonthShort } from "@/lib/format";
 import { formatConvertedAmountDisplay, FREQUENCY_LABEL } from "@/lib/movements";
+import { addMonthsToKey } from "@/lib/recurring-skip-range";
 import {
   ArrowDown,
   ArrowUp,
@@ -146,6 +147,13 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onSkipS
   // La marca padre aplica a cualquier origen (fijo, único o cuota) — Fase 1.1.8
   // Un calculado nunca puede ser padre (RF-MCALC-001), por eso !isCalculated
   const isParent = !isCalculated && movement.hasCalculated;
+
+  // "Mes del monto base" (docs/design.md) — cola "de {Mmm AAAA}" del segmento
+  // "↳ desde {Origen}", solo si el desfasaje es > 0 (invariante de cero impacto
+  // con 0: la fila queda idéntica a hoy). Mes de referencia = viewMonth − offset.
+  const sourceMonthOffset = movement.calculated?.sourceMonthOffset ?? 0;
+  const sourceBaseMonthLabel =
+    sourceMonthOffset > 0 ? formatMonthShort(addMonthsToKey(viewMonth, -sourceMonthOffset)) : null;
 
   // P2 — Fase 1: marca visual pasiva de límites (mes.item.monto / mes.categoria.gastoMes).
   // limitMark es undefined/null cuando ningún límite cruza — cero impacto (restricción rectora).
@@ -352,8 +360,10 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onSkipS
               </>
             )}
 
-            {/* "↳ desde {Origen}" — fusiona la marca de "es calculado" y la referencia a su
-                origen en un único segmento; último segmento de identidad. Sin chip "Calculado" separado. */}
+            {/* "↳ desde {Origen}[ de {Mmm AAAA}]" — fusiona la marca de "es calculado" y la
+                referencia a su origen en un único segmento; último segmento de identidad.
+                Sin chip "Calculado" separado. La cola de mes (solo desfasaje > 0) es
+                shrink-0/whitespace-nowrap y nunca trunca — el nombre del origen cede primero. */}
             {isCalculated && movement.calculated?.sourceDescription && (
               <>
                 <IdentitySeparator />
@@ -363,6 +373,12 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onSkipS
                     <span className="text-muted">desde </span>
                     <span className="text-ink-2">{movement.calculated.sourceDescription}</span>
                   </span>
+                  {sourceBaseMonthLabel && (
+                    <span className="shrink-0 whitespace-nowrap">
+                      <span className="text-muted"> de </span>
+                      <span className="text-ink-2">{sourceBaseMonthLabel}</span>
+                    </span>
+                  )}
                 </span>
               </>
             )}
@@ -426,7 +442,9 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onSkipS
       />
 
       {/* Card de detalle de movimiento — read-only, cierra con ✕/Esc/clic en el scrim */}
-      {isDetailOpen && <MovementDetailCard movement={movement} onClose={() => setIsDetailOpen(false)} />}
+      {isDetailOpen && (
+        <MovementDetailCard movement={movement} onClose={() => setIsDetailOpen(false)} viewMonth={viewMonth} />
+      )}
     </div>
   );
 }

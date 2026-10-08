@@ -112,6 +112,15 @@ export interface RecurringForAnnual {
   formulaOperator: FormulaOperator | null;
   formulaOperand: number | null;
   formulaSign: number | null;
+  /**
+   * Mes de referencia (offset, entero 0..12): cuántos meses hacia atrás mirar
+   * para la BASE de la fórmula de un calculado de fijo. 0 en fijos normales.
+   * Opcional en el tipo (no en la implementación real del repo, que siempre lo
+   * puebla) — mismo motivo que `description`/`createdAt`: no romper fixtures
+   * de otros reportes que construyen este shape a mano. Leer siempre con
+   * `?? 0` (equivalente al comportamiento previo a este campo).
+   */
+  sourceMonthOffset?: number;
 }
 
 /**
@@ -262,7 +271,13 @@ export interface CalculatedInfo {
    * null si el origen es un único o cuota.
    */
   sourceChainId: string | null;
-  /** Descripción del origen en ese mes (para el preview del formulario) */
+  /**
+   * Descripción del origen en ese mes (para el preview del formulario).
+   * Nunca queda vacío en la práctica: si el origen no tiene `description`,
+   * se completa con el nombre de su categoría (mismo criterio que la fila
+   * de /mes usa para titular un movimiento sin descripción). El tipo se
+   * mantiene nullable por compatibilidad defensiva.
+   */
   sourceDescription: string | null;
   formulaOperator: FormulaOperator;
   /**
@@ -273,14 +288,23 @@ export interface CalculatedInfo {
   /** 1 (positivo) o -1 (negativo) */
   formulaSign: number;
   /**
-   * Monto del origen en el mes consultado (en centavos).
-   * - Fijo: monto de la fila activa del fijo en ese mes.
+   * Monto del origen (en centavos) sobre el que se aplica la fórmula para derivar el
+   * amountCents del calculado.
+   * - Fijo con sourceMonthOffset = 0: monto de la fila activa del fijo en el mes consultado (M).
+   * - Fijo con sourceMonthOffset > 0: monto de la fila activa del fijo en el mes de
+   *   referencia R = M - offset (no en M; ver `sourceMonthOffset`).
    * - Único: amountCents del Transaction.
    * - Cuota: amountCents por cuota del InstallmentGroup.
-   * Es el monto base sobre el que se aplica la fórmula para derivar el amountCents del calculado.
    * Usado por el front para mostrar el preview del resultado al editar la fórmula.
    */
   sourceAmountCents: number;
+  /**
+   * Mes de referencia (offset, entero 0..12): cuántos meses hacia atrás del mes consultado
+   * se toma la base de la fórmula (`sourceAmountCents`). `0` = mismo mes = comportamiento
+   * de siempre. Solo aplica a calculados de fijo (`sourceType='fijo'`); en únicos y cuotas
+   * siempre es `0` (no aceptan offset).
+   */
+  sourceMonthOffset: number;
 }
 
 /**
@@ -753,6 +777,7 @@ export class MovementsRepository {
       select: {
         id: true, amountCents: true, description: true, occurredAt: true, timezone: true,
         currency: true, exchangeRate: true, anchorCurrency: true, skipped: true,
+        category: { select: { name: true } },
         paymentMethod: {
           select: { id: true, name: true, icon: true, type: true, closingDay: true, paymentDay: true },
         },
@@ -762,6 +787,7 @@ export class MovementsRepository {
     const txOriginMap = new Map<string, {
       amountCents: number;
       description: string | null;
+      categoryName: string | undefined;
       occurredAt: Date;
       timezone: string;
       currency: Currency;
@@ -775,6 +801,7 @@ export class MovementsRepository {
       txOriginMap.set(tx.id, {
         amountCents: tx.amountCents,
         description: tx.description,
+        categoryName: tx.category?.name,
         occurredAt: tx.occurredAt,
         timezone: tx.timezone,
         currency: tx.currency,
@@ -858,11 +885,12 @@ export class MovementsRepository {
           sourceType: 'unico',
           sourceId: calc.sourceMovementId!,
           sourceChainId: null,
-          sourceDescription: txData.description,
+          sourceDescription: txData.description || txData.categoryName || null,
           formulaOperator: calc.formulaOperator as FormulaOperator,
           formulaOperand: calc.formulaOperand!,
           formulaSign: calc.formulaSign!,
           sourceAmountCents: txData.amountCents,
+          sourceMonthOffset: 0,
         },
         hasCalculated: false,
         calculatedChildren: [],
@@ -955,7 +983,64 @@ export class MovementsRepository {
       ...normales.map((r) => r.chainId),
       ...calculadosDeFijo.map((c) => c.chainId),
     ];
-    const chainBounds = await this.loadChainBounds(chainIds);
+
+    // Mes de referencia (sourceMonthOffset > 0): la fila del origen activa en
+    // R = mes - offset puede ser OTRA fila de la cadena (split del origen) y no
+    // está en `normales` (que solo trae las filas activas en M). Se resuelve con
+    // una consulta acotada a los sourceChainId de calculados con offset > 0 —
+    // NO se degrada el caso offset = 0 (sin query extra, sigue usando originMap).
+    const offsetChainIds = [...new Set(
+      calculadosDeFijo
+        .filter((c) => (c.sourceMonthOffset ?? 0) > 0 && c.sourceChainId !== null)
+        .map((c) => c.sourceChainId!),
+    )];
+
+    const [chainBounds, offsetOriginRows] = await Promise.all([
+      this.loadChainBounds(chainIds),
+      offsetChainIds.length > 0
+        ? this.prisma.recurring.findMany({
+            where: {
+              userId,
+              chainId: { in: offsetChainIds },
+              sourceChainId: null,
+              ...NOT_DELETED,
+            },
+            select: { chainId: true, startMonth: true, deletedFrom: true, frequency: true, amountCents: true },
+          })
+        : Promise.resolve([] as Array<{
+            chainId: string;
+            startMonth: string;
+            deletedFrom: string | null;
+            frequency: number;
+            amountCents: number;
+          }>),
+    ]);
+
+    const offsetOriginRowsByChain = new Map<string, typeof offsetOriginRows>();
+    for (const row of offsetOriginRows) {
+      if (!offsetOriginRowsByChain.has(row.chainId)) offsetOriginRowsByChain.set(row.chainId, []);
+      offsetOriginRowsByChain.get(row.chainId)!.push(row);
+    }
+
+    /**
+     * Resuelve el amountCents del origen ACTIVO en `targetMonth` (mismo criterio
+     * de "fila viva de la cadena" + isOnFrequency que hoy se usa para M), para
+     * la BASE de la fórmula de un calculado con sourceMonthOffset > 0 (mes de
+     * referencia R). `undefined` = el origen no resuelve en R → el calculado no
+     * aparece ese mes (mismo tratamiento que el gate de M).
+     */
+    const resolveOriginAmountAt = (chainId: string, targetMonth: string): number | undefined => {
+      const rows = offsetOriginRowsByChain.get(chainId);
+      if (!rows) return undefined;
+      let best: (typeof rows)[number] | undefined;
+      for (const row of rows) {
+        const inRange = row.startMonth <= targetMonth && (row.deletedFrom === null || row.deletedFrom > targetMonth);
+        if (!inRange) continue;
+        if (!isOnFrequency(row.startMonth, row.frequency, targetMonth)) continue;
+        if (!best || row.startMonth > best.startMonth) best = row;
+      }
+      return best?.amountCents;
+    };
 
     // Construir mapa chainId → datos del origen para los fijos normales activos en el mes.
     const originMap = new Map<string, {
@@ -963,6 +1048,7 @@ export class MovementsRepository {
       skipped: boolean;
       id: string;
       description: string | null;
+      categoryName: string;
       currency: Currency;
       exchangeRate: number;
       anchorCurrency: Currency;
@@ -976,6 +1062,7 @@ export class MovementsRepository {
         skipped: r.skips.length > 0,
         id: r.id,
         description: r.description,
+        categoryName: r.category.name,
         currency: r.currency,
         exchangeRate: Number(r.exchangeRate),
         anchorCurrency: r.anchorCurrency,
@@ -1046,9 +1133,23 @@ export class MovementsRepository {
       if (!originData) continue; // origen no activo en este mes
 
       // Skip propio del calculado de fijo OR skip heredado del origen (RF-MF-005)
+      // — SIEMPRE sobre M (el mes consultado), nunca sobre R (el mes de referencia).
       const skipped = originData.skipped || (calc.skips.length > 0);
+
+      // Mes de referencia (sourceMonthOffset > 0): la BASE de la fórmula sale del
+      // origen activo en R = M - offset, no en M. El gate de aparición de arriba
+      // (`if (!originData) continue`) sigue dependiendo SOLO de M, sin cambios.
+      let baseAmountCents = originData.amountCents;
+      const sourceMonthOffset = calc.sourceMonthOffset ?? 0;
+      if (sourceMonthOffset > 0 && calc.sourceChainId) {
+        const refMonth = addMonths(month, -sourceMonthOffset);
+        const refAmount = resolveOriginAmountAt(calc.sourceChainId, refMonth);
+        if (refAmount === undefined) continue; // origen no resuelve en R -> no aparece este mes
+        baseAmountCents = refAmount;
+      }
+
       const derivedAmount = applyFormula(
-        originData.amountCents,
+        baseAmountCents,
         calc.formulaOperator as FormulaOperator,
         calc.formulaOperand!,
         calc.formulaSign!,
@@ -1118,11 +1219,14 @@ export class MovementsRepository {
           sourceType: 'fijo',
           sourceId: calc.sourceChainId!,
           sourceChainId: calc.sourceChainId!,
-          sourceDescription: originData.description,
+          sourceDescription: originData.description || originData.categoryName,
           formulaOperator: calc.formulaOperator as FormulaOperator,
           formulaOperand: calc.formulaOperand!,
           formulaSign: calc.formulaSign!,
-          sourceAmountCents: originData.amountCents,
+          // Base REAL de la fórmula: el monto del origen en R (mes de referencia)
+          // cuando sourceMonthOffset > 0; el de M (mes consultado) cuando es 0.
+          sourceAmountCents: baseAmountCents,
+          sourceMonthOffset,
         },
         hasCalculated: false,
         calculatedChildren: [],
@@ -1286,6 +1390,7 @@ export class MovementsRepository {
           currency: true,
           exchangeRate: true,
           anchorCurrency: true,
+          category: { select: { name: true } },
           paymentMethod: {
             select: { id: true, name: true, icon: true, type: true, closingDay: true, paymentDay: true },
           },
@@ -1299,6 +1404,7 @@ export class MovementsRepository {
       const groupOriginMap = new Map<string, {
         amountCents: number;
         description: string | null;
+        categoryName: string | undefined;
         totalInstallments: number;
         startMonth: string;
         currency: Currency;
@@ -1312,6 +1418,7 @@ export class MovementsRepository {
         groupOriginMap.set(g.id, {
           amountCents: g.amountCents,
           description: g.description,
+          categoryName: g.category?.name,
           totalInstallments: g.totalInstallments,
           startMonth: g.startMonth,
           currency: g.currency,
@@ -1405,11 +1512,12 @@ export class MovementsRepository {
             sourceType: 'cuota',
             sourceId: calc.sourceInstallmentGroupId!,
             sourceChainId: null,
-            sourceDescription: groupData.description,
+            sourceDescription: groupData.description || groupData.categoryName || null,
             formulaOperator: calc.formulaOperator as FormulaOperator,
             formulaOperand: calc.formulaOperand!,
             formulaSign: calc.formulaSign!,
             sourceAmountCents: groupData.amountCents,
+            sourceMonthOffset: 0,
           },
           hasCalculated: false,
           calculatedChildren: [],
@@ -1491,6 +1599,7 @@ export class MovementsRepository {
         formulaOperator: true,
         formulaOperand: true,
         formulaSign: true,
+        sourceMonthOffset: true,
         skips: {
           where: { month },
           select: { month: true },
@@ -1510,6 +1619,39 @@ export class MovementsRepository {
         skipped: r.skips.length > 0,
       });
     }
+
+    // Mes de referencia (sourceMonthOffset > 0, calculado de fijo): la fila del
+    // origen activa en R puede ser OTRA fila de la cadena, no incluida arriba
+    // (que solo trae las activas en M) — se resuelve con una consulta acotada,
+    // mismo criterio que findFijosByMonth.
+    const offsetChainIds = [...new Set(
+      recurrings
+        .filter((r) => r.sourceChainId !== null && (r.sourceMonthOffset ?? 0) > 0)
+        .map((r) => r.sourceChainId!),
+    )];
+    const offsetOriginRows = offsetChainIds.length > 0
+      ? await this.prisma.recurring.findMany({
+          where: { userId, chainId: { in: offsetChainIds }, sourceChainId: null, ...NOT_DELETED },
+          select: { chainId: true, startMonth: true, deletedFrom: true, frequency: true, amountCents: true },
+        })
+      : [];
+    const offsetOriginRowsByChain = new Map<string, typeof offsetOriginRows>();
+    for (const row of offsetOriginRows) {
+      if (!offsetOriginRowsByChain.has(row.chainId)) offsetOriginRowsByChain.set(row.chainId, []);
+      offsetOriginRowsByChain.get(row.chainId)!.push(row);
+    }
+    const resolveOriginAmountAt = (chainId: string, targetMonth: string): number | undefined => {
+      const rows = offsetOriginRowsByChain.get(chainId);
+      if (!rows) return undefined;
+      let best: (typeof rows)[number] | undefined;
+      for (const row of rows) {
+        const inRange = row.startMonth <= targetMonth && (row.deletedFrom === null || row.deletedFrom > targetMonth);
+        if (!inRange) continue;
+        if (!isOnFrequency(row.startMonth, row.frequency, targetMonth)) continue;
+        if (!best || row.startMonth > best.startMonth) best = row;
+      }
+      return best?.amountCents;
+    };
 
     // Cargar Transactions de origen para calculados de único
     const calculadosDeUnico = recurrings.filter((r) => r.sourceMovementId !== null);
@@ -1554,8 +1696,20 @@ export class MovementsRepository {
         if (!originData) continue;
         // Skip heredado del origen OR skip propio del calculado en este mes (RF-MF-005)
         if (originData.skipped || r.skips.length > 0) continue;
+
+        // Mes de referencia: la BASE de la fórmula sale del origen activo en
+        // R = M - offset (no de M) cuando sourceMonthOffset > 0.
+        let baseAmountCents = originData.amountCents;
+        const sourceMonthOffset = r.sourceMonthOffset ?? 0;
+        if (sourceMonthOffset > 0) {
+          const refMonth = addMonths(month, -sourceMonthOffset);
+          const refAmount = resolveOriginAmountAt(r.sourceChainId, refMonth);
+          if (refAmount === undefined) continue; // origen no resuelve en R
+          baseAmountCents = refAmount;
+        }
+
         effectiveAmount = applyFormula(
-          originData.amountCents,
+          baseAmountCents,
           r.formulaOperator as FormulaOperator,
           r.formulaOperand!,
           r.formulaSign!,
@@ -1908,6 +2062,7 @@ export class MovementsRepository {
           formulaOperator: true,
           formulaOperand: true,
           formulaSign: true,
+          sourceMonthOffset: true,
           categoryId: true,
           category: {
             select: {
@@ -1956,6 +2111,7 @@ export class MovementsRepository {
       formulaOperator: r.formulaOperator,
       formulaOperand: r.formulaOperand,
       formulaSign: r.formulaSign,
+      sourceMonthOffset: r.sourceMonthOffset,
     }));
   }
 

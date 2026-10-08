@@ -526,6 +526,7 @@ export class HistoryService {
       formulaOperator: row.formulaOperator,
       formulaOperand: row.formulaOperand,
       formulaSign: row.formulaSign,
+      sourceMonthOffset: row.sourceMonthOffset,
     };
   }
 
@@ -696,6 +697,7 @@ export class HistoryService {
       formulaOperator: row.formulaOperator,
       formulaOperand: row.formulaOperand,
       formulaSign: row.formulaSign,
+      sourceMonthOffset: row.sourceMonthOffset,
       sourceChainId: row.sourceChainId,
       sourceMovementId: row.sourceMovementId,
       sourceInstallmentGroupId: row.sourceInstallmentGroupId,
@@ -763,6 +765,7 @@ export class HistoryService {
       formulaOperator: r.formulaOperator,
       formulaOperand: r.formulaOperand,
       formulaSign: r.formulaSign,
+      sourceMonthOffset: r.sourceMonthOffset,
       sourceChainId: r.sourceChainId,
       sourceMovementId: r.sourceMovementId,
       sourceInstallmentGroupId: r.sourceInstallmentGroupId,
@@ -803,6 +806,7 @@ export class HistoryService {
           operand: fields.formulaOperand,
           sign: fields.formulaSign,
           currency: originCurrency,
+          sourceMonthOffset: fields.sourceMonthOffset ?? 0,
         };
       }
       case 'currency':

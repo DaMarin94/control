@@ -57,6 +57,14 @@ vi.mock("@/hooks/use-active-limit-projection", () => ({
   useActiveLimitProjection: vi.fn(() => ({ evaluate: vi.fn(() => []) })),
 }));
 
+// "Mes del monto base" (docs/design.md) — con offset > 0 el form busca el
+// monto del origen en el mes de referencia vía useMovements. Mockeado para
+// no depender de useApi/useSession real; default sin dato (los tests del
+// preview con offset sobreescriben con mockUseMovements.mockReturnValue(...)).
+vi.mock("@/hooks/use-movements", () => ({
+  useMovements: vi.fn(),
+}));
+
 vi.mock("@/lib/format", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/format")>();
   return {
@@ -73,10 +81,13 @@ vi.mock("@/app/(app)/configuracion/categorias/category-form-modal", () => ({
 import { useCategories } from "@/hooks/use-categories";
 import { useCalculated } from "@/hooks/use-calculated";
 import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
+import { useMovements } from "@/hooks/use-movements";
+import type { MonthMovements } from "@/types/movement";
 
 const mockUseCategories = vi.mocked(useCategories);
 const mockUseCalculated = vi.mocked(useCalculated);
 const mockUseActiveLimitProjection = vi.mocked(useActiveLimitProjection);
+const mockUseMovements = vi.mocked(useMovements);
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -225,6 +236,7 @@ const calculadoExistente: MovementItem = {
     formulaOperand: 1000, // 10%
     formulaSign: -1,
     sourceAmountCents: 100000,
+    sourceMonthOffset: 0,
   },
   hasCalculated: false,
   currency: "ARS",
@@ -261,6 +273,7 @@ const calculadoUnicoExistente: MovementItem = {
     formulaOperand: 1000, // 10%
     formulaSign: 1,
     sourceAmountCents: 50000,
+    sourceMonthOffset: 0,
   },
   hasCalculated: false,
   currency: "ARS",
@@ -275,6 +288,24 @@ const calculadoSkippedExistente: MovementItem = {
   ...calculadoExistente,
   id: "calc-skip-1",
   skipped: true,
+};
+
+/**
+ * Ítem calculado (origen fijo) con offset GUARDADO > 0 — fixture del fix QA
+ * (bug: en edición, cambiar "Mes del monto base" no re-resolvía la base EN
+ * VIVO; el preview quedaba congelado en `sourceAmountCents`). `sourceAmountCents`
+ * es deliberadamente BOGUS (no coincide con ningún mes mockeado abajo): si
+ * algún test ve esta cifra en pantalla, es la señal inequívoca de que el
+ * preview volvió a usar el valor congelado en vez de resolver en vivo.
+ */
+const calculadoOffsetVivoExistente: MovementItem = {
+  ...calculadoExistente,
+  calculated: {
+    ...calculadoExistente.calculated!,
+    sourceMonthOffset: 1,
+    sourceAmountCents: 999999,
+    formulaSign: 1,
+  },
 };
 
 /** Ítem fijo de origen en USD (para el test de conversión canónica, D17) */
@@ -350,7 +381,39 @@ beforeEach(() => {
   // P2 — Fase 2 (extensión a calculado): por defecto sin cruces (cero fricción)
   // — los tests de la compuerta sobreescriben con mockUseActiveLimitProjection.mockReturnValue(...).
   mockUseActiveLimitProjection.mockReturnValue({ evaluate: vi.fn(() => []) });
+
+  // "Mes del monto base" — default: el mes visualizado por defecto en este
+  // archivo ("2026-06", el `viewMonth` que usan `renderCreate`/`renderEdit`)
+  // ya trae resuelto el origen de los fixtures de edición de offset 0
+  // (`calculadoExistente`/`calculadoSkippedExistente`, chainId "chain-orig")
+  // con el MISMO monto que su `sourceAmountCents` congelado (100000) — así
+  // los tests de edición existentes seguían viendo el mismo preview de
+  // siempre sin tener que mockear cada uno (en edición el fetch ahora se
+  // dispara para CUALQUIER offset, incluido 0 — ver `shouldFetchBaseMonth`
+  // en el componente). Cualquier otro mes (offset>0, o los fixtures de
+  // creación) sigue sin dato por default; los tests que necesitan otro mes
+  // resuelto lo sobreescriben con `mockUseMovements.mockReturnValue(...)` o
+  // `mockImplementation(...)`.
+  mockUseMovements.mockImplementation((month: string) =>
+    (month === "2026-06"
+      ? {
+          data: buildMonthMovements("2026-06", [
+            { ...origenFijo, chainId: "chain-orig", amountCents: 100000, convertedAmountCents: 100000 },
+          ]),
+          isLoading: false,
+        }
+      : { data: undefined, isLoading: false }) as ReturnType<typeof useMovements>,
+  );
 });
+
+/** Helper: MonthMovements mínimo con un solo fijo (para simular el mes de referencia). */
+function buildMonthMovements(month: string, fijos: MovementItem[]): MonthMovements {
+  return {
+    month,
+    totals: { expenseCents: 0, incomeCents: 0, balanceCents: 0 },
+    movements: { unicos: [], fijos, cuotas: [] },
+  };
+}
 
 // ─── Tests: estructura del formulario ─────────────────────────────────────────
 
@@ -507,7 +570,7 @@ describe("CalculatedForm — payload de create no incluye type (RF-MCALC-003)", 
     await user.type(operandoInput, "10");
 
     // Elegimos una categoría INCOME (tipo derivado será INCOME con signo positivo)
-    const select = screen.getByRole("combobox");
+    const select = screen.getByRole("combobox", { name: /categoría/i });
     await user.selectOptions(select, "cat-income");
 
     // Submit
@@ -545,7 +608,7 @@ describe("CalculatedForm — validación de descripción", () => {
     await user.clear(operandoInput);
     await user.type(operandoInput, "10");
 
-    const select = screen.getByRole("combobox");
+    const select = screen.getByRole("combobox", { name: /categoría/i });
     await user.selectOptions(select, "cat-income");
 
     const descriptionInput = screen.getByLabelText(/descripción/i);
@@ -613,7 +676,7 @@ describe("CalculatedForm — Fase 1.1.8: crear desde origen único (sin startMon
     await user.type(operandoInput, "10");
 
     // Signo default = positivo → resultado > 0 → INCOME → disponibles: cat-income, cat-both
-    const select = screen.getByRole("combobox");
+    const select = screen.getByRole("combobox", { name: /categoría/i });
     await user.selectOptions(select, "cat-income");
 
     await user.click(screen.getByRole("button", { name: /^guardar$/i }));
@@ -649,7 +712,7 @@ describe("CalculatedForm — Fase 1.1.8: crear desde origen cuota (sin startMont
     await user.type(operandoInput, "10");
 
     // Signo default = positivo → PCT 10% de 30000 = 3000 > 0 → INCOME → cat-income o cat-both
-    const select = screen.getByRole("combobox");
+    const select = screen.getByRole("combobox", { name: /categoría/i });
     await user.selectOptions(select, "cat-income");
 
     await user.click(screen.getByRole("button", { name: /^guardar$/i }));
@@ -729,7 +792,7 @@ describe("CalculatedForm — intercepción de límites activos (P2, Fase 2 — e
     const operandoInput = screen.getByPlaceholderText("10");
     await user.clear(operandoInput);
     await user.type(operandoInput, "10");
-    await user.selectOptions(screen.getByRole("combobox"), "cat-income");
+    await user.selectOptions(screen.getByRole("combobox", { name: /categoría/i }), "cat-income");
     await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => {
@@ -749,7 +812,7 @@ describe("CalculatedForm — intercepción de límites activos (P2, Fase 2 — e
     const operandoInput = screen.getByPlaceholderText("10");
     await user.clear(operandoInput);
     await user.type(operandoInput, "10");
-    await user.selectOptions(screen.getByRole("combobox"), "cat-income");
+    await user.selectOptions(screen.getByRole("combobox", { name: /categoría/i }), "cat-income");
     await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
@@ -767,7 +830,7 @@ describe("CalculatedForm — intercepción de límites activos (P2, Fase 2 — e
     const operandoInput = screen.getByPlaceholderText("10");
     await user.clear(operandoInput);
     await user.type(operandoInput, "10");
-    await user.selectOptions(screen.getByRole("combobox"), "cat-income");
+    await user.selectOptions(screen.getByRole("combobox", { name: /categoría/i }), "cat-income");
     await user.click(screen.getByRole("button", { name: /^guardar$/i }));
     const alertDialog = await screen.findByRole("alertdialog");
 
@@ -794,7 +857,7 @@ describe("CalculatedForm — intercepción de límites activos (P2, Fase 2 — e
     const operandoInput = screen.getByPlaceholderText("10");
     await user.clear(operandoInput);
     await user.type(operandoInput, "10");
-    await user.selectOptions(screen.getByRole("combobox"), "cat-income");
+    await user.selectOptions(screen.getByRole("combobox", { name: /categoría/i }), "cat-income");
     await user.click(screen.getByRole("button", { name: /^guardar$/i }));
     await screen.findByRole("alertdialog");
 
@@ -817,7 +880,7 @@ describe("CalculatedForm — intercepción de límites activos (P2, Fase 2 — e
     const operandoInput = screen.getByPlaceholderText("10");
     await user.clear(operandoInput);
     await user.type(operandoInput, "10");
-    await user.selectOptions(screen.getByRole("combobox"), "cat-income");
+    await user.selectOptions(screen.getByRole("combobox", { name: /categoría/i }), "cat-income");
     await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => expect(mockCreateCalculated).toHaveBeenCalled());
@@ -843,7 +906,7 @@ describe("CalculatedForm — intercepción de límites activos (P2, Fase 2 — e
     const operandoInput = screen.getByPlaceholderText("10");
     await user.clear(operandoInput);
     await user.type(operandoInput, "10");
-    await user.selectOptions(screen.getByRole("combobox"), "cat-income");
+    await user.selectOptions(screen.getByRole("combobox", { name: /categoría/i }), "cat-income");
     await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => expect(mockCreateCalculated).toHaveBeenCalled());
@@ -862,7 +925,7 @@ describe("CalculatedForm — intercepción de límites activos (P2, Fase 2 — e
     const operandoInput = screen.getByPlaceholderText("10");
     await user.clear(operandoInput);
     await user.type(operandoInput, "10");
-    await user.selectOptions(screen.getByRole("combobox"), "cat-income");
+    await user.selectOptions(screen.getByRole("combobox", { name: /categoría/i }), "cat-income");
     await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => expect(mockCreateCalculated).toHaveBeenCalled());
@@ -934,12 +997,359 @@ describe("CalculatedForm — intercepción de límites activos (P2, Fase 2 — e
     const operandoInput = screen.getByPlaceholderText("10");
     await user.clear(operandoInput);
     await user.type(operandoInput, "10");
-    await user.selectOptions(screen.getByRole("combobox"), "cat-income");
+    await user.selectOptions(screen.getByRole("combobox", { name: /categoría/i }), "cat-income");
     await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
     await waitFor(() => expect(mockCreateCalculated).toHaveBeenCalled());
     expect(evaluateSpy).toHaveBeenCalledWith(
       expect.objectContaining({ convertedAmountCents: 1_000_000 }),
     );
+  });
+});
+
+// ─── Tests: "Mes del monto base" (docs/design.md, desfasaje 0..12) ──────────
+
+describe("CalculatedForm — Mes del monto base: visibilidad (solo origen fijo)", () => {
+  it("NO se renderiza para origen único", () => {
+    renderCreate(origenUnico);
+    expect(screen.queryByText("Mes del monto base")).not.toBeInTheDocument();
+  });
+
+  it("NO se renderiza para origen cuota", () => {
+    renderCreate(origenCuota);
+    expect(screen.queryByText("Mes del monto base")).not.toBeInTheDocument();
+  });
+
+  it("NO se renderiza al editar un calculado de origen único", () => {
+    renderEdit(calculadoUnicoExistente);
+    expect(screen.queryByText("Mes del monto base")).not.toBeInTheDocument();
+  });
+
+  it("se renderiza para origen fijo, en crear y en editar", () => {
+    renderCreate(origenFijo);
+    expect(screen.getByText("Mes del monto base")).toBeInTheDocument();
+  });
+});
+
+describe("CalculatedForm — Mes del monto base: selector y ayuda", () => {
+  it("preselecciona 'El mismo mes' (offset 0) al crear", () => {
+    renderCreate(origenFijo);
+    const select = screen.getByRole("combobox", { name: "Mes del monto base" }) as HTMLSelectElement;
+    expect(select.value).toBe("0");
+  });
+
+  it("13 opciones en orden 0→12 con las etiquetas del spec", () => {
+    renderCreate(origenFijo);
+    const select = screen.getByRole("combobox", { name: "Mes del monto base" });
+    const optionTexts = within(select).getAllByRole("option").map((o) => o.textContent);
+    expect(optionTexts).toEqual([
+      "El mismo mes",
+      "El mes anterior",
+      "2 meses antes",
+      "3 meses antes",
+      "4 meses antes",
+      "5 meses antes",
+      "6 meses antes",
+      "7 meses antes",
+      "8 meses antes",
+      "9 meses antes",
+      "10 meses antes",
+      "11 meses antes",
+      "12 meses antes",
+    ]);
+  });
+
+  it("offset=0: ayuda 'Usa el monto del origen del mismo mes.' y NO dispara ningún fetch", () => {
+    renderCreate(origenFijo);
+    expect(screen.getByText("Usa el monto del origen del mismo mes.")).toBeInTheDocument();
+    expect(mockUseMovements).toHaveBeenCalledWith("");
+  });
+
+  it("offset=0: preview idéntico al de siempre — sin sublínea 'Monto base' (cero impacto)", () => {
+    renderCreate(origenFijo);
+    expect(screen.queryByText(/Monto base:/)).not.toBeInTheDocument();
+  });
+
+  it("al elegir 'El mes anterior' dispara el fetch del mes de referencia (viewMonth − 1) y actualiza la ayuda con meses reales", async () => {
+    const user = userEvent.setup();
+    renderCreate(origenFijo);
+    const select = screen.getByRole("combobox", { name: "Mes del monto base" });
+    await user.selectOptions(select, "1");
+
+    expect(mockUseMovements).toHaveBeenCalledWith("2026-05");
+    await waitFor(() => {
+      expect(screen.getByText(/En Jun 2026 usa el monto de/)).toBeInTheDocument();
+      expect(screen.getByText("May 2026")).toBeInTheDocument();
+    });
+  });
+
+  it("no repite el fetch para un offset ya resuelto en el mismo mes (misma query key)", async () => {
+    const user = userEvent.setup();
+    renderCreate(origenFijo);
+    const select = screen.getByRole("combobox", { name: "Mes del monto base" });
+    await user.selectOptions(select, "1");
+    const callsAfterFirst = mockUseMovements.mock.calls.filter((c) => c[0] === "2026-05").length;
+    await user.selectOptions(select, "0");
+    await user.selectOptions(select, "1");
+    // Vuelve a pedir "2026-05" (React Query dedupea/cachea por key — acá solo
+    // verificamos que el componente sigue pidiendo el mismo mes, no uno distinto).
+    const callsAfterSecond = mockUseMovements.mock.calls.filter((c) => c[0] === "2026-05").length;
+    expect(callsAfterSecond).toBeGreaterThanOrEqual(callsAfterFirst);
+  });
+});
+
+describe("CalculatedForm — Mes del monto base: preview honesto (no puede mentir)", () => {
+  it("con offset>0 y origen resuelto en el mes de referencia: sublínea 'Monto base' + cifra calculada sobre ESE monto (no el del mes en curso)", async () => {
+    const user = userEvent.setup();
+    mockUseMovements.mockReturnValue({
+      data: buildMonthMovements("2026-05", [
+        { ...origenFijo, chainId: "chain-origen-fijo", amountCents: 200000, convertedAmountCents: 200000 },
+      ]),
+      isLoading: false,
+    } as ReturnType<typeof useMovements>);
+    renderCreate(origenFijo);
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Mes del monto base" }), "1");
+    await waitFor(() => {
+      expect(screen.getByText("Monto base: May 2026")).toBeInTheDocument();
+    });
+
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+
+    // 10% de $2.000,00 (origen en Mayo 2026) = $200,00 — nunca 10% de $1.000,00 (mes en curso)
+    await waitFor(() => {
+      expect(screen.getByText("$200,00")).toBeInTheDocument();
+    });
+  });
+
+  it("con offset>0 y origen SIN resolver en el mes de referencia: cae a '—' y la expresión nombra el mes de referencia", async () => {
+    const user = userEvent.setup();
+    mockUseMovements.mockReturnValue({
+      data: buildMonthMovements("2026-05", []), // origen ausente ese mes (frecuencia / anterior al alta)
+      isLoading: false,
+    } as ReturnType<typeof useMovements>);
+    renderCreate(origenFijo);
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Mes del monto base" }), "1");
+
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+
+    await waitFor(() => {
+      expect(screen.getByText("—")).toBeInTheDocument();
+      expect(screen.getByText("10% del monto de May 2026")).toBeInTheDocument();
+    });
+  });
+
+  it("mientras el fetch está en curso (isLoading), NUNCA pinta una cifra calculada sobre el mes en curso", async () => {
+    const user = userEvent.setup();
+    mockUseMovements.mockReturnValue({ data: undefined, isLoading: true } as ReturnType<typeof useMovements>);
+    renderCreate(origenFijo);
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Mes del monto base" }), "1");
+
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+
+    // Origen del mes en curso: $1.000,00 → 10% = $100,00. Esa cifra NUNCA debe pintarse con offset>0.
+    await waitFor(() => {
+      expect(screen.queryByText("$100,00")).not.toBeInTheDocument();
+    });
+  });
+});
+
+describe("CalculatedForm — Mes del monto base: payload al guardar", () => {
+  it("create (fijo): el payload incluye sourceMonthOffset con el valor elegido", async () => {
+    const user = userEvent.setup();
+    mockCreateCalculated.mockResolvedValue({ success: true, id: "new-calc-offset" });
+    renderCreate(origenFijo);
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Mes del monto base" }), "3");
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+    // "cat-both" (scope BOTH): compatible sea cual sea el tipo derivado — el
+    // origen en el mes de referencia no está mockeado acá (fuera de foco de
+    // este test, que solo verifica el payload de offset).
+    await user.selectOptions(screen.getByRole("combobox", { name: /categoría/i }), "cat-both");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => expect(mockCreateCalculated).toHaveBeenCalled());
+    const [, callData] = mockCreateCalculated.mock.calls[0] as [string, Record<string, unknown>];
+    expect(callData.sourceMonthOffset).toBe(3);
+  });
+
+  it("create (fijo), sin tocar el selector: envía sourceMonthOffset=0 (default explícito, mismo efecto que omitirlo)", async () => {
+    const user = userEvent.setup();
+    mockCreateCalculated.mockResolvedValue({ success: true, id: "new-calc-default" });
+    renderCreate(origenFijo);
+
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+    await user.selectOptions(screen.getByRole("combobox", { name: /categoría/i }), "cat-income");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => expect(mockCreateCalculated).toHaveBeenCalled());
+    const [, callData] = mockCreateCalculated.mock.calls[0] as [string, Record<string, unknown>];
+    expect(callData.sourceMonthOffset).toBe(0);
+  });
+
+  it("create (único): el payload NUNCA incluye sourceMonthOffset", async () => {
+    const user = userEvent.setup();
+    mockCreateCalculated.mockResolvedValue({ success: true, id: "new-calc-unico-2" });
+    renderCreate(origenUnico);
+
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+    await user.selectOptions(screen.getByRole("combobox", { name: /categoría/i }), "cat-income");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => expect(mockCreateCalculated).toHaveBeenCalled());
+    const [, callData] = mockCreateCalculated.mock.calls[0] as [string, Record<string, unknown>];
+    expect(callData).not.toHaveProperty("sourceMonthOffset");
+  });
+
+  it("create (cuota): el payload NUNCA incluye sourceMonthOffset", async () => {
+    const user = userEvent.setup();
+    mockCreateCalculated.mockResolvedValue({ success: true, id: "new-calc-cuota-2" });
+    renderCreate(origenCuota);
+
+    const operandoInput = screen.getByPlaceholderText("10");
+    await user.clear(operandoInput);
+    await user.type(operandoInput, "10");
+    await user.selectOptions(screen.getByRole("combobox", { name: /categoría/i }), "cat-income");
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => expect(mockCreateCalculated).toHaveBeenCalled());
+    const [, callData] = mockCreateCalculated.mock.calls[0] as [string, Record<string, unknown>];
+    expect(callData).not.toHaveProperty("sourceMonthOffset");
+  });
+
+  it("edit (fijo): precarga el offset existente del calculado y lo reenvía al guardar", async () => {
+    const user = userEvent.setup();
+    mockUpdateCalculated.mockResolvedValue({ success: true, id: "calc-1" });
+    const calculadoConOffset: MovementItem = {
+      ...calculadoExistente,
+      calculated: { ...calculadoExistente.calculated!, sourceMonthOffset: 2 },
+    };
+    renderEdit(calculadoConOffset);
+
+    const select = screen.getByRole("combobox", { name: "Mes del monto base" }) as HTMLSelectElement;
+    expect(select.value).toBe("2");
+
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => expect(mockUpdateCalculated).toHaveBeenCalled());
+    const [, callData] = mockUpdateCalculated.mock.calls[0] as [string, Record<string, unknown>];
+    expect(callData.sourceMonthOffset).toBe(2);
+  });
+
+  it("edit (único): el payload NUNCA incluye sourceMonthOffset", async () => {
+    const user = userEvent.setup();
+    mockUpdateCalculated.mockResolvedValue({ success: true, id: "calc-unico-1" });
+    renderEdit(calculadoUnicoExistente);
+
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => expect(mockUpdateCalculated).toHaveBeenCalled());
+    const [, callData] = mockUpdateCalculated.mock.calls[0] as [string, Record<string, unknown>];
+    expect(callData).not.toHaveProperty("sourceMonthOffset");
+  });
+});
+
+// ─── Tests: fix QA — edición re-resuelve la base EN VIVO (bug offset congelado) ─
+//
+// Repro original: en el modal de edición, cambiar "Mes del monto base" no
+// re-resolvía el preview — quedaba congelado en `calc.sourceAmountCents` (el
+// monto que el backend resolvió para el offset GUARDADO al abrir el form).
+// Causa raíz: `baseAmountCents` solo disparaba el fetch del mes de referencia
+// con offset > 0 EN CREACIÓN; en edición, offset === 0 caía directo a
+// `originCents` (= `sourceAmountCents` congelado), sin importar qué offset
+// eligiera el usuario en vivo.
+
+describe("CalculatedForm — Mes del monto base: edición re-resuelve la base EN VIVO (fix QA)", () => {
+  it("al montar con el offset guardado > 0, resuelve la base contra el fetch del mes de referencia — nunca contra el `sourceAmountCents` congelado", async () => {
+    mockUseMovements.mockImplementation((month: string) =>
+      (month === "2026-05"
+        ? {
+            data: buildMonthMovements("2026-05", [
+              { ...origenFijo, chainId: "chain-orig", amountCents: 200000, convertedAmountCents: 200000 },
+            ]),
+            isLoading: false,
+          }
+        : { data: undefined, isLoading: false }) as ReturnType<typeof useMovements>,
+    );
+
+    renderEdit(calculadoOffsetVivoExistente);
+
+    // 10% de $2.000,00 (origen EN VIVO del mes de referencia, May 2026) = $200,00.
+    // Nunca 10% de $9.999,99 (el `sourceAmountCents` bogus/congelado del fixture
+    // — ese valor SÍ aparece en la caja "Origen" read-only de arriba, que no
+    // forma parte de este fix; lo que no puede pasar es que la caja
+    // "Resultado" calcule sobre él).
+    await waitFor(() => {
+      expect(screen.getByText("$200,00")).toBeInTheDocument();
+    });
+  });
+
+  it("cambiar el offset en vivo (de 1, guardado, a 0) re-resuelve la base contra el mes visualizado — la cifra deja de estar pegada al offset anterior", async () => {
+    const user = userEvent.setup();
+    mockUseMovements.mockImplementation((month: string) => {
+      if (month === "2026-05") {
+        return {
+          data: buildMonthMovements("2026-05", [
+            { ...origenFijo, chainId: "chain-orig", amountCents: 200000, convertedAmountCents: 200000 },
+          ]),
+          isLoading: false,
+        } as ReturnType<typeof useMovements>;
+      }
+      if (month === "2026-06") {
+        return {
+          data: buildMonthMovements("2026-06", [
+            { ...origenFijo, chainId: "chain-orig", amountCents: 900000, convertedAmountCents: 900000 },
+          ]),
+          isLoading: false,
+        } as ReturnType<typeof useMovements>;
+      }
+      return { data: undefined, isLoading: false } as ReturnType<typeof useMovements>;
+    });
+
+    renderEdit(calculadoOffsetVivoExistente);
+    await waitFor(() => {
+      expect(screen.getByText("$200,00")).toBeInTheDocument();
+    });
+
+    const select = screen.getByRole("combobox", { name: "Mes del monto base" });
+    await user.selectOptions(select, "0");
+
+    // 10% de $9.000,00 (origen EN VIVO del mes visualizado) = $900,00 — ya NO
+    // es 10% de $2.000,00 (el monto resuelto para el offset anterior).
+    await waitFor(() => {
+      expect(screen.getByText("$900,00")).toBeInTheDocument();
+      expect(screen.queryByText("$200,00")).not.toBeInTheDocument();
+    });
+    // offset 0 → sin sublínea "Monto base" (spec: solo se muestra con N ≥ 1).
+    expect(screen.queryByText(/Monto base:/)).not.toBeInTheDocument();
+  });
+
+  it("si la base del mes de referencia no está disponible, muestra '—' — nunca una cifra calculada sobre otro mes (preview honesto)", async () => {
+    mockUseMovements.mockImplementation((month: string) =>
+      (month === "2026-05"
+        ? { data: buildMonthMovements("2026-05", []), isLoading: false } // origen ausente ese mes
+        : { data: undefined, isLoading: false }) as ReturnType<typeof useMovements>,
+    );
+
+    renderEdit(calculadoOffsetVivoExistente);
+
+    await waitFor(() => {
+      expect(screen.getByText("—")).toBeInTheDocument();
+      expect(screen.getByText("10% del monto de May 2026")).toBeInTheDocument();
+    });
   });
 });

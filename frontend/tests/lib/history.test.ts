@@ -40,7 +40,7 @@ describe("formatHistoryAmount", () => {
 describe("formatHistoryFormula", () => {
   it("PCT con signo negativo — forma abstracta, sin cifra de origen", () => {
     // operand escalado: 10% → 1000 (×100, ver descaleOperand)
-    const text = formatHistoryFormula({ operator: "PCT", operand: 1000, sign: -1, currency: "ARS" });
+    const text = formatHistoryFormula({ operator: "PCT", operand: 1000, sign: -1, currency: "ARS", sourceMonthOffset: 0 });
     expect(text).toContain("−");
     expect(text).toContain("10");
     expect(text).not.toMatch(/\$/); // sin cifra de origen: nunca formatea un monto en PCT
@@ -48,9 +48,30 @@ describe("formatHistoryFormula", () => {
 
   it("ADD con signo positivo — usa la moneda PROPIA del calculado (value.currency) para el operando", () => {
     // operand escalado: $500 → 50000 centavos (÷100, ver descaleOperand)
-    const text = formatHistoryFormula({ operator: "ADD", operand: 50000, sign: 1, currency: "USD" });
+    const text = formatHistoryFormula({ operator: "ADD", operand: 50000, sign: 1, currency: "USD", sourceMonthOffset: 0 });
     expect(text.startsWith("+")).toBe(true);
     expect(text).toContain("US$500,00");
+  });
+
+  it("sourceMonthOffset=0 no agrega ninguna cola (cero impacto)", () => {
+    const text = formatHistoryFormula({ operator: "PCT", operand: 1000, sign: 1, currency: "ARS", sourceMonthOffset: 0 });
+    expect(text).not.toContain("·");
+  });
+
+  it("sourceMonthOffset=1 agrega la cola 'El mes anterior'", () => {
+    const text = formatHistoryFormula({ operator: "PCT", operand: 1000, sign: 1, currency: "ARS", sourceMonthOffset: 1 });
+    expect(text).toContain("· El mes anterior");
+  });
+
+  it("sourceMonthOffset=3 agrega la cola '3 meses antes'", () => {
+    const text = formatHistoryFormula({ operator: "PCT", operand: 1000, sign: 1, currency: "ARS", sourceMonthOffset: 3 });
+    expect(text).toContain("· 3 meses antes");
+  });
+
+  it("dos fórmulas idénticas salvo el sourceMonthOffset producen textos DISTINTOS (una edición que cambia solo el offset se ve como cambio)", () => {
+    const before = formatHistoryFormula({ operator: "PCT", operand: 1000, sign: 1, currency: "ARS", sourceMonthOffset: 0 });
+    const after = formatHistoryFormula({ operator: "PCT", operand: 1000, sign: 1, currency: "ARS", sourceMonthOffset: 2 });
+    expect(before).not.toBe(after);
   });
 });
 
@@ -204,8 +225,8 @@ describe("describeHistoryChange — campo `formula`", () => {
   it("ADD/SUB: el operando usa la moneda PROPIA del calculado (value.currency)", () => {
     const change: HistoryChangeDto = {
       field: "formula",
-      previous: { operator: "ADD", operand: 50000, sign: 1, currency: "ARS" },
-      next: { operator: "ADD", operand: 80000, sign: 1, currency: "ARS" },
+      previous: { operator: "ADD", operand: 50000, sign: 1, currency: "ARS", sourceMonthOffset: 0 },
+      next: { operator: "ADD", operand: 80000, sign: 1, currency: "ARS", sourceMonthOffset: 0 },
     };
     const d = describeHistoryChange(change, "list");
     expect(d.leftText).toBe("+origen + $500,00");
@@ -217,7 +238,7 @@ describe("describeHistoryChange — campo `formula`", () => {
     // el calculado está en USD — el operando tiene que salir con símbolo "US$", nunca con "$" a secas.
     const change: HistoryChangeDto = {
       field: "formula",
-      previous: { operator: "ADD", operand: 50000, sign: 1, currency: "USD" },
+      previous: { operator: "ADD", operand: 50000, sign: 1, currency: "USD", sourceMonthOffset: 0 },
     };
     const d = describeHistoryChange(change, "list");
     // Símbolo de USD ("US$"), nunca el de ARS a secas ("$") — confirma que usa
@@ -228,7 +249,7 @@ describe("describeHistoryChange — campo `formula`", () => {
   it("MUL/DIV/PCT: el operando nunca formatea moneda, sea cual sea `currency`", () => {
     const change: HistoryChangeDto = {
       field: "formula",
-      previous: { operator: "MUL", operand: 1_500_000, sign: 1, currency: "USD" },
+      previous: { operator: "MUL", operand: 1_500_000, sign: 1, currency: "USD", sourceMonthOffset: 0 },
     };
     const d = describeHistoryChange(change, "list");
     expect(d.rightText).not.toMatch(/\$/);
@@ -242,8 +263,8 @@ describe("describeHistoryChange — campos no-monto nunca se promueven", () => {
     { field: "installments", previous: 6, next: 12 },
     {
       field: "formula",
-      previous: { operator: "PCT", operand: 1000, sign: 1, currency: "ARS" },
-      next: { operator: "PCT", operand: 1500, sign: 1, currency: "ARS" },
+      previous: { operator: "PCT", operand: 1000, sign: 1, currency: "ARS", sourceMonthOffset: 0 },
+      next: { operator: "PCT", operand: 1500, sign: 1, currency: "ARS", sourceMonthOffset: 0 },
     },
   ])("field=%s → promoted=false", (change) => {
     expect(describeHistoryChange(change, "list").promoted).toBe(false);
@@ -290,8 +311,8 @@ describe("summarizeHistoryChange / pickSummaryChange (modal de cadena, §6.2)", 
       summarizeHistoryChange(
         {
           field: "formula",
-          previous: { operator: "PCT", operand: 1000, sign: 1, currency: "ARS" },
-          next: { operator: "PCT", operand: 1500, sign: -1, currency: "ARS" },
+          previous: { operator: "PCT", operand: 1000, sign: 1, currency: "ARS", sourceMonthOffset: 0 },
+          next: { operator: "PCT", operand: 1500, sign: -1, currency: "ARS", sourceMonthOffset: 0 },
         },
       ).nowrap,
     ).toBe(true);

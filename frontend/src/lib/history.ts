@@ -21,7 +21,7 @@ import type {
   HistoryDateValue,
   HistoryEntryResponseDto,
 } from "@/types/history";
-import { descaleOperand, buildFormulaExpression } from "@/lib/formula";
+import { descaleOperand, buildFormulaExpression, sourceMonthOffsetLabel } from "@/lib/formula";
 import {
   formatCurrency,
   formatExchangeRate,
@@ -95,11 +95,20 @@ export function formatHistoryAmount(value: HistoryAmountValue): { text: string; 
  * `value.currency` es la moneda PROPIA del calculado (la del `Recurring`) —
  * se usa para formatear el operando solo cuando el operador lo vuelve un
  * monto (ADD/SUB); el resto de los operadores no formatean moneda.
+ *
+ * `value.sourceMonthOffset` (0..12, "Mes del monto base del calculado",
+ * docs/design.md) se agrega como cola `· {etiqueta}` cuando es `> 0` — así
+ * una edición que cambia SOLO el desfasaje (misma fórmula, mismo signo) se
+ * lee como un cambio real en la fila `formula`, no como un no-op.
  */
 export function formatHistoryFormula(value: HistoryFormulaValue): string {
   const userOperand = descaleOperand(value.operand, value.operator);
   const expression = buildFormulaExpression(null, value.operator, userOperand, value.currency);
-  return `${value.sign < 0 ? "−" : "+"}${expression}`;
+  const base = `${value.sign < 0 ? "−" : "+"}${expression}`;
+  if (value.sourceMonthOffset > 0) {
+    return `${base} · ${sourceMonthOffsetLabel(value.sourceMonthOffset)}`;
+  }
+  return base;
 }
 
 /** `dd/mm/aaaa · HH:MM` — fecha y hora como un solo campo (§3.2.f). */

@@ -72,6 +72,14 @@ export interface CreateCalculatedFromFixedRequest {
   /** Signo del resultado: +1 o -1 */
   formulaSign: 1 | -1;
   description?: string;
+  /**
+   * Mes de referencia (offset, entero 0..12) — "Mes del monto base del
+   * calculado" (docs/design.md). Opcional; default 0 (mismo mes) en el
+   * backend si se omite. SOLO este endpoint (POST /recurring/:id/calculated)
+   * lo acepta — nunca se envía en el request de origen único/cuota (el
+   * backend rechaza cualquier propiedad no declarada en su DTO, 400).
+   */
+  sourceMonthOffset?: number;
 }
 
 /**
@@ -113,6 +121,14 @@ export interface UpdateCalculatedRequest {
   formulaOperator?: FormulaOperator;
   formulaOperand?: number;
   formulaSign?: 1 | -1;
+  /**
+   * Mes de referencia (offset, entero 0..12) — "Mes del monto base del
+   * calculado" (docs/design.md). SOLO honrado por PATCH
+   * /recurring/:id/calculated (sourceType 'fijo') — el consumidor NO debe
+   * incluir esta propiedad al editar un calculado de origen único/cuota (el
+   * backend rechaza cualquier propiedad no declarada en su DTO, 400).
+   */
+  sourceMonthOffset?: number;
 }
 
 /**

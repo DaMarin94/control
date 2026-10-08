@@ -458,6 +458,22 @@ model Recurring {
   // formulaSign: signo del resultado. 1 = positivo, -1 = negativo.
   formulaSign Int?
 
+  // sourceMonthOffset: "mes de referencia" — cuántos meses HACIA ATRÁS mirar
+  // para la BASE de la fórmula de un calculado de FIJO (sourceChainId != null).
+  // 0 (default) = comportamiento actual: la base es el monto del origen en el
+  // MISMO mes consultado. N > 0 = la base es el monto del origen activo en
+  // (mes consultado − N meses), resuelto con la misma regla de "fila viva de
+  // la cadena" que hoy se usa para el mes consultado. Rango válido 0..12
+  // (validado en el DTO, sin CHECK constraint en DB).
+  // Solo tiene sentido con sourceChainId != null (calculado de FIJO); en fijos
+  // normales y en calculados de único/cuota queda siempre en 0 — sus DTOs no
+  // lo aceptan. El @default(0) es deliberado: filas existentes quedan
+  // idénticas, sin backfill. Cambia SOLO la base de la fórmula: no afecta el
+  // gate de aparición (sigue dependiendo de que el origen aparezca en el mes
+  // consultado), el skip (sigue el skip de M, no de R), ni la herencia de
+  // moneda/método/autoDebit (siguen viniendo del origen de M).
+  sourceMonthOffset Int @default(0)
+
   // Borrado lógico (RF-HIST-006): != null → esta fila fue eliminada (fijo normal o
   // calculado, de cualquier origen). Ortogonal a deletedFrom: deletedFrom es el
   // boundary "por mes" de un fijo vivo (RF-MF-004); deletedAt es "esta fila entera

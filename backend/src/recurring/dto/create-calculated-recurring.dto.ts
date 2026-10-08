@@ -6,7 +6,9 @@ import {
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
+  Min,
   ValidateIf,
 } from 'class-validator';
 import { FormulaOperator } from '@prisma/client';
@@ -40,6 +42,12 @@ import { FormulaOperator } from '@prisma/client';
  * - formulaSign: 1 (positivo) o -1 (negativo) — signo del resultado (RN-018)
  * - description: descripción propia (opcional)
  * - frequency: NO se acepta. El calculado hereda la frequency del origen (gating).
+ * - sourceMonthOffset: "mes de referencia" (opcional, entero 0..12, default 0).
+ *   Cuántos meses HACIA ATRÁS mirar para la BASE de la fórmula (el monto del
+ *   origen). 0 = comportamiento actual (base = monto del origen en el mismo
+ *   mes consultado). Solo tiene sentido en calculados de FIJO (este DTO); los
+ *   de único/cuota no lo aceptan. Cambia SOLO la base de la fórmula: no toca
+ *   el gate de aparición (sigue el origen en el mes consultado) ni el skip.
  *
  * NOTA sobre operandos:
  * Para simplificar la API y mantener precisión entera, el front envía todos los
@@ -85,6 +93,16 @@ export class CreateCalculatedRecurringDto {
   @IsString()
   @MaxLength(200, { message: 'La descripción no puede superar los 200 caracteres' })
   description?: string;
+
+  /**
+   * Mes de referencia: cuántos meses hacia atrás mirar para la base de la
+   * fórmula (ver NOTA de clase arriba). Default 0 (aplicado en el service).
+   */
+  @IsOptional()
+  @IsInt({ message: 'sourceMonthOffset debe ser un entero' })
+  @Min(0, { message: 'sourceMonthOffset debe estar entre 0 y 12' })
+  @Max(12, { message: 'sourceMonthOffset debe estar entre 0 y 12' })
+  sourceMonthOffset?: number;
 }
 
 // Silenciar el warning de ValidateIf importado pero no usado tras la refactorización

@@ -72,6 +72,7 @@ export class RecurringService {
       formulaOperator: r.formulaOperator,
       formulaOperand: r.formulaOperand,
       formulaSign: r.formulaSign,
+      sourceMonthOffset: r.sourceMonthOffset,
     };
   }
 
@@ -102,6 +103,7 @@ export class RecurringService {
         formulaOperator: r.formulaOperator,
         formulaOperand: r.formulaOperand,
         formulaSign: r.formulaSign,
+        sourceMonthOffset: r.sourceMonthOffset,
       })),
     };
   }
@@ -274,6 +276,9 @@ export class RecurringService {
       formulaOperator: dto.formulaOperator,
       formulaOperand: dto.formulaOperand,
       formulaSign: dto.formulaSign,
+      // Mes de referencia (offset, 0..12): default 0 = comportamiento actual
+      // (base de la fórmula = monto del origen en el mismo mes consultado).
+      sourceMonthOffset: dto.sourceMonthOffset ?? 0,
     });
 
     this.logger.log(
@@ -547,6 +552,7 @@ export class RecurringService {
         formulaOperator: dto.formulaOperator ?? existing.formulaOperator!,
         formulaOperand: dto.formulaOperand ?? existing.formulaOperand!,
         formulaSign: dto.formulaSign ?? existing.formulaSign!,
+        sourceMonthOffset: dto.sourceMonthOffset ?? existing.sourceMonthOffset,
         description: dto.description !== undefined
           ? dto.description
           : existing.description,
@@ -575,6 +581,7 @@ export class RecurringService {
         ...(dto.formulaOperator !== undefined && { formulaOperator: dto.formulaOperator }),
         ...(dto.formulaOperand !== undefined && { formulaOperand: dto.formulaOperand }),
         ...(dto.formulaSign !== undefined && { formulaSign: dto.formulaSign }),
+        ...(dto.sourceMonthOffset !== undefined && { sourceMonthOffset: dto.sourceMonthOffset }),
       });
 
       this.logger.log(

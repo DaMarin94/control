@@ -58,6 +58,12 @@ export interface RecurringWithCategory {
   formulaOperand: number | null;
   /** 1 (positivo) o -1 (negativo) */
   formulaSign: number | null;
+  /**
+   * Mes de referencia (offset, entero 0..12): cuántos meses hacia atrás mirar
+   * para la BASE de la fórmula de un calculado de fijo. 0 en fijos normales y
+   * en calculados de único/cuota (sus DTOs no lo aceptan).
+   */
+  sourceMonthOffset: number;
   /** Moneda del fijo (Fase 1.2.3). Los calculados no usan este campo (heredan del origen). */
   currency: Currency;
   /** Cotización anchorCurrency/1 currency para este tramo de la cadena (Fase 1.2.3/1.2.4). */
@@ -147,6 +153,7 @@ function mapToRecurringWithCategory(
     formulaOperator: r.formulaOperator,
     formulaOperand: r.formulaOperand,
     formulaSign: r.formulaSign,
+    sourceMonthOffset: r.sourceMonthOffset,
     currency: r.currency,
     exchangeRate: Number(r.exchangeRate),
     anchorCurrency: r.anchorCurrency,
@@ -280,6 +287,7 @@ export class RecurringRepository {
       formulaOperator: FormulaOperator | null;
       formulaOperand: number | null;
       formulaSign: number | null;
+      sourceMonthOffset: number;
     }>
   > {
     return this.prisma.recurring.findMany({
@@ -306,6 +314,7 @@ export class RecurringRepository {
         formulaOperator: true,
         formulaOperand: true,
         formulaSign: true,
+        sourceMonthOffset: true,
       },
     });
   }

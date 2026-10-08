@@ -80,6 +80,12 @@ export interface RecurringRowSnapshot {
   formulaOperator: FormulaOperator | null;
   formulaOperand: number | null;
   formulaSign: number | null;
+  /**
+   * Mes de referencia (offset, entero 0..12): cuántos meses hacia atrás mirar
+   * para la BASE de la fórmula de un calculado de fijo. 0 en fijos normales y
+   * en calculados de único/cuota.
+   */
+  sourceMonthOffset: number;
 }
 
 /**
@@ -147,6 +153,11 @@ export interface ComparableFields {
   formulaOperator?: FormulaOperator | null;
   formulaOperand?: number | null;
   formulaSign?: number | null;
+  /**
+   * Mes de referencia (offset) del calculado — ver `RecurringRowSnapshot.sourceMonthOffset`.
+   * Solo relevante para el campo `formula` (viaja embebido en `HistoryFormulaValue`).
+   */
+  sourceMonthOffset?: number | null;
   /**
    * Origen del calculado (solo presentes/relevantes en filas Recurring calculadas —
    * ver invariante en el schema, Recurring). Usados EXCLUSIVAMENTE para resolver la
@@ -234,12 +245,20 @@ export interface HistoryAmountValue {
  * siempre se derivan del origen, en runtime, nunca de la fila propia — ver
  * docs/backend.md §Movimientos calculados). Es con la que el frontend debe
  * formatear `operand` cuando `operator` lo vuelve un monto (suma/resta).
+ *
+ * `sourceMonthOffset`: mes de referencia del calculado (entero 0..12) — ver
+ * `Recurring.sourceMonthOffset`. Se incluye en el valor del campo `formula`
+ * (en vez de sumar un `HistoryFieldId` propio) para que una edición que SOLO
+ * cambia el offset produzca una diferencia visible entre `previous`/`next` —
+ * de lo contrario la entrada de historial quedaría sin cambio visible
+ * (bug silencioso). Siempre presente (0 en calculados sin offset).
  */
 export interface HistoryFormulaValue {
   operator: FormulaOperator;
   operand: number;
   sign: number;
   currency: Currency;
+  sourceMonthOffset: number;
 }
 
 /** Valor del campo `Categoría` — id, nombre y color (punto de 6px). */

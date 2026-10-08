@@ -62,6 +62,13 @@ export interface Recurring {
   currency: CurrencyCode;
   /** Cotización ARS por 1 USD del fijo (Fase 1.2.3). 1 para fijos en ARS. */
   exchangeRate: number;
+  /**
+   * Mes de referencia (offset, entero 0..12) del calculado — "Mes del monto
+   * base del calculado" (docs/design.md). Solo relevante para un Recurring que
+   * ES un calculado de origen fijo; `0` (default) en cualquier otro caso
+   * (fijo normal, o calculado de único/cuota — que no aceptan offset).
+   */
+  sourceMonthOffset: number;
   createdAt: string;
   updatedAt: string;
   /** Categoría embebida en la respuesta */

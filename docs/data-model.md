@@ -593,11 +593,12 @@ CalculatedInfo = {                           // solo en ítems que son calculado
   sourceType: "fijo" | "unico" | "cuota",    // tipo del origen del calculado
   sourceId: string,                          // id del origen: chainId (fijo) / Transaction.id (único) / InstallmentGroup.id (cuota)
   sourceChainId: string | null,              // chainId del fijo de origen (fijo); null para único/cuota
-  sourceDescription: string | null,          // descripción del origen en el mes (para el preview / "desde {Origen}")
+  sourceDescription: string | null,          // rótulo del origen (para el preview / "desde {Origen}"): su descripción o, si no tiene, el NOMBRE DE SU CATEGORÍA
   formulaOperator: "ADD"|"SUB"|"MUL"|"DIV"|"PCT",
   formulaOperand: number,                    // operando ESCALADO (entero) — ver "Escalado del operando" abajo
   formulaSign: 1 | -1,                       // signo del resultado
-  sourceAmountCents: number                  // monto del origen en el mes (centavos, > 0); base de la fórmula. Para CUOTA = monto por cuota del grupo
+  sourceMonthOffset: number,                 // desfasaje del MES DE REFERENCIA (entero 0..12; 0 = mismo mes). Siempre presente: 0 en calculados de único y cuota
+  sourceAmountCents: number                  // monto del origen EN EL MES DE REFERENCIA (centavos, > 0); base real de la fórmula. Para CUOTA = monto por cuota del grupo
 }
 ```
 
@@ -631,8 +632,8 @@ Endpoints propios del calculado, en el `RecurringModule` (el calculado **es** un
 
 | Endpoint | Body | Éxito | Errores |
 |----------|------|-------|---------|
-| `POST /recurring/:id/calculated` | `{ categoryId, startMonth, formulaOperator, formulaOperand, formulaSign, description? }` | `201` · `data: Recurring` | `400` · `404` |
-| `PATCH /recurring/:id/calculated` | `{ currentMonth, categoryId?, description?, formulaOperator?, formulaOperand?, formulaSign? }` | `200` · `data: Recurring & { historyEntryId }` | `400` · `404` |
+| `POST /recurring/:id/calculated` | `{ categoryId, startMonth, formulaOperator, formulaOperand, formulaSign, description?, sourceMonthOffset? }` | `201` · `data: Recurring` | `400` · `404` |
+| `PATCH /recurring/:id/calculated` | `{ currentMonth, categoryId?, description?, formulaOperator?, formulaOperand?, formulaSign?, sourceMonthOffset? }` | `200` · `data: Recurring & { historyEntryId }` | `400` · `404` |
 | `POST /transactions/:id/calculated` | `{ categoryId, formulaOperator, formulaOperand, formulaSign, description? }` (sin `startMonth`) | `201` · `data: Recurring` | `400` · `404` |
 | `PATCH /transactions/:id/calculated` | `{ currentMonth, categoryId?, description?, formulaOperator?, formulaOperand?, formulaSign? }` | `200` · `data: Recurring & { historyEntryId }` | `400` · `404` |
 | `POST /installments/:id/calculated` | `{ categoryId, formulaOperator, formulaOperand, formulaSign, description? }` (sin `startMonth`) | `201` · `data: Recurring` | `400` · `404` |
@@ -642,9 +643,10 @@ Endpoints propios del calculado, en el `RecurringModule` (el calculado **es** un
 - **`startMonth` solo en el POST de fijo.** Para **único** y **cuota** el backend lo **deriva del origen**: único → `startMonth = mes del Transaction`; cuota → `startMonth = grupo.startMonth`. El body de único/cuota **no** lleva `startMonth`.
 - **El body NO acepta `type`** (en ninguno): el tipo se **deriva del signo** del monto al vuelo (RF-MCALC-003); si el front lo envía, la whitelist de class-validator lo descarta.
 - **`formulaOperator`** ∈ `{ ADD, SUB, MUL, DIV, PCT }`. **`formulaSign`** ∈ `{ 1, -1 }`. **`formulaOperand`** es un **entero escalado** (ver "Escalado del operando" abajo).
+- **`sourceMonthOffset` — solo en el par de fijo.** Entero **0..12**, opcional, **default `0`** (mismo mes): desplaza hacia atrás el **mes de referencia** del que sale la base de la fórmula (RF-MCALC-011). Un valor no entero o fuera de `0..12` → **`400`**. Los pares de **`/transactions/:id/calculated`** y **`/installments/:id/calculated`** **no** lo aceptan; si el front lo envía, la whitelist de class-validator lo descarta.
 - **Sin `currency` / `exchangeRate`.** Los `POST`/`PATCH .../calculated` **no** aceptan `currency` ni `exchangeRate`: el calculado **hereda** ambos del origen al vuelo (RF-CUR-004). Si el front los envía, la whitelist de class-validator los descarta. En cambio, los `create`/`edit` de **únicos, fijos y cuotas** sí los aceptan (`currency?: "ARS"|"USD"|"EUR"|"BRL"`, default `ARS`; `exchangeRate?: number > 0`, default `1`) — ver "Moneda explícita, set curado".
 - **`POST` — errores (los tres):** `400` si el origen es **a su vez un calculado** (sin encadenamiento — solo aplica al de fijo), si `formulaOperand = 0` con `DIV`/`PCT` (RN-017), o si la categoría es inválida (inexistente/ajena/eliminada). `404` si el origen no existe o no es del usuario. La categoría se valida con scope `BOTH` (`skipScopeCheck`) porque el tipo del calculado es derivado.
-- **`PATCH` — split y errores:** `currentMonth` (`YYYY-MM`) **requerido** en los tres; usa la **misma mecánica de split del pasado** que `PATCH /recurring/:id`. Editables: `categoryId`, `description`, `formulaOperator`, `formulaOperand`, `formulaSign`. **No** editable el vínculo al origen. `400` si el `:id` **no es un calculado** del tipo esperado, o `formulaOperand = 0` con `DIV`/`PCT`. `404` si no existe o no es del usuario.
+- **`PATCH` — split y errores:** `currentMonth` (`YYYY-MM`) **requerido** en los tres; usa la **misma mecánica de split del pasado** que `PATCH /recurring/:id`. Editables: `categoryId`, `description`, `formulaOperator`, `formulaOperand`, `formulaSign` y —solo en el de fijo— `sourceMonthOffset`. **No** editable el vínculo al origen. `400` si el `:id` **no es un calculado** del tipo esperado, `formulaOperand = 0` con `DIV`/`PCT`, o `sourceMonthOffset` fuera de `0..12`. `404` si no existe o no es del usuario.
 - **`PATCH /recurring/:id` (fijo normal) rechaza con `400` si el `:id` es un calculado** (y los `PATCH .../calculated` exigen que lo sea): cada tipo se edita por su endpoint.
 - **Acotamiento de cadencia.** Calculado de **único:** el backend fija `deletedFrom = nextMonth` para acotar la cadena a **un solo mes** (el del único). Calculado de **cuota:** `deletedFrom = null`; el rango lo determina **on-the-fly** el `totalInstallments` del grupo (`startMonth ≤ mes < startMonth + totalInstallments`).
 - **`DELETE /recurring/:id` — tres caminos.** El endpoint es **uniforme** (los query `currentMonth` y `fromCurrentMonth` son requeridos por contrato), pero el comportamiento depende del calculado:
@@ -674,6 +676,7 @@ El `Recurring` que devuelven los endpoints (y que el front recibe) incluye, adem
 - **`sourceInstallmentGroupId`** — FK nullable a `InstallmentGroup`, `onDelete: Cascade`. No-null **solo** en calculados de **cuota** (vínculo al grupo de origen).
 - **Invariante de origen:** en un **calculado**, exactamente **uno** de `{ sourceChainId, sourceMovementId, sourceInstallmentGroupId }` es no-null (el resto null). Los **tres null** = fijo normal. La exclusión mutua la valida el service. Borrar el `Transaction` / `InstallmentGroup` de origen **cascadea** (FK `onDelete: Cascade`) y borra entero el calculado.
 - **`formulaOperator` / `formulaOperand` / `formulaSign`** — `null` en fijos normales; la fórmula (con operando escalado) en calculados.
+- **`sourceMonthOffset`** — `Int @default(0)`, **no nullable** (presente en toda fila `Recurring`, incluidos fijos normales y calculados de único/cuota, donde vale `0`). Rango **0..12**: meses que se retrocede desde el mes de aparición para ubicar el **mes de referencia** del que sale la base de la fórmula (RF-MCALC-011). Solo tiene efecto en calculados de **fijo**.
 
 ### Columnas placeholder de un calculado (trampa del modelo)
 

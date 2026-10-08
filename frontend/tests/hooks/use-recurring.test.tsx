@@ -37,6 +37,7 @@ const mockRecurring: Recurring = {
   frequency: 1,
   currency: "ARS",
   exchangeRate: 1,
+  sourceMonthOffset: 0,
   createdAt: "2026-06-01T00:00:00.000Z",
   updatedAt: "2026-06-01T00:00:00.000Z",
   category: {

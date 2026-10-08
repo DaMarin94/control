@@ -112,6 +112,7 @@ const mockCalculatedUnicoMovement: MovementItem = {
     formulaOperand: 1000,
     formulaSign: 1,
     sourceAmountCents: 50000,
+    sourceMonthOffset: 0,
   },
   hasCalculated: false,
   currency: "ARS",

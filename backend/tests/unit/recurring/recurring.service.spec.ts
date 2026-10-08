@@ -112,6 +112,7 @@ function makeRecurring(
     formulaOperator: null,
     formulaOperand: null,
     formulaSign: null,
+    sourceMonthOffset: 0,
     createdAt: new Date(),
     updatedAt: new Date(),
     category: {
@@ -1431,6 +1432,143 @@ describe('RecurringService', () => {
 
       expect(mockRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({ frequency: 2 }),
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // createCalculated / updateCalculated — mes de referencia (sourceMonthOffset)
+  // -------------------------------------------------------------------------
+
+  describe('createCalculated / updateCalculated — sourceMonthOffset (mes de referencia)', () => {
+    it('createCalculated: sin sourceMonthOffset en el DTO → persiste 0 (default)', async () => {
+      const origin = makeRecurring({ id: 'origin-001', sourceChainId: null });
+      mockRepo.findById.mockResolvedValue(origin);
+      mockRepo.create.mockResolvedValue(makeRecurring({ id: 'calc-001', sourceChainId: origin.chainId }));
+
+      await service.createCalculated(USER_A, 'origin-001', {
+        categoryId: CAT_ID,
+        startMonth: '2026-06',
+        formulaOperator: 'PCT' as never,
+        formulaOperand: 1000,
+        formulaSign: 1,
+      });
+
+      expect(mockRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceMonthOffset: 0 }),
+      );
+    });
+
+    it('createCalculated: con sourceMonthOffset en el DTO → lo persiste tal cual', async () => {
+      const origin = makeRecurring({ id: 'origin-001', sourceChainId: null });
+      mockRepo.findById.mockResolvedValue(origin);
+      mockRepo.create.mockResolvedValue(makeRecurring({ id: 'calc-001', sourceChainId: origin.chainId }));
+
+      await service.createCalculated(USER_A, 'origin-001', {
+        categoryId: CAT_ID,
+        startMonth: '2026-06',
+        formulaOperator: 'PCT' as never,
+        formulaOperand: 1000,
+        formulaSign: 1,
+        sourceMonthOffset: 1,
+      });
+
+      expect(mockRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceMonthOffset: 1 }),
+      );
+    });
+
+    it('updateCalculated in-place: actualiza sourceMonthOffset cuando se pasa', async () => {
+      const existing = makeRecurring({
+        id: 'calc-001',
+        startMonth: '2026-01',
+        sourceChainId: 'chain-origin-001',
+        formulaOperator: 'PCT' as never,
+        formulaOperand: 1000,
+        formulaSign: 1,
+        sourceMonthOffset: 0,
+      });
+      mockRepo.findById.mockResolvedValue(existing);
+      mockRepo.update.mockResolvedValue({ ...existing, sourceMonthOffset: 1 });
+
+      await service.updateCalculated(USER_A, 'calc-001', {
+        currentMonth: '2026-01', // <= startMonth → in-place
+        sourceMonthOffset: 1,
+      });
+
+      expect(mockRepo.update).toHaveBeenCalledWith(
+        'calc-001',
+        expect.objectContaining({ sourceMonthOffset: 1 }),
+      );
+    });
+
+    it('updateCalculated in-place: sourceMonthOffset ausente en el DTO → NO lo toca', async () => {
+      const existing = makeRecurring({
+        id: 'calc-001',
+        startMonth: '2026-01',
+        sourceChainId: 'chain-origin-001',
+        formulaOperator: 'PCT' as never,
+        formulaOperand: 1000,
+        formulaSign: 1,
+        sourceMonthOffset: 3,
+      });
+      mockRepo.findById.mockResolvedValue(existing);
+      mockRepo.update.mockResolvedValue(existing);
+
+      await service.updateCalculated(USER_A, 'calc-001', {
+        currentMonth: '2026-01',
+        description: 'nueva descripción',
+      });
+
+      const updateCall = mockRepo.update.mock.calls[0][1];
+      expect('sourceMonthOffset' in updateCall).toBe(false);
+    });
+
+    it('updateCalculated split: R2 HEREDA sourceMonthOffset del original cuando el DTO no lo manda', async () => {
+      const existing = makeRecurring({
+        id: 'calc-001',
+        startMonth: '2026-01',
+        sourceChainId: 'chain-origin-001',
+        formulaOperator: 'PCT' as never,
+        formulaOperand: 1000,
+        formulaSign: 1,
+        sourceMonthOffset: 2, // offset ya configurado en el calculado original
+      });
+      mockRepo.findById.mockResolvedValue(existing);
+      mockRepo.update.mockResolvedValue({ ...existing, deletedFrom: '2026-06' });
+      mockRepo.create.mockResolvedValue(makeRecurring({ id: 'calc-002', sourceMonthOffset: 2 }));
+
+      await service.updateCalculated(USER_A, 'calc-001', {
+        currentMonth: '2026-06', // > startMonth → split
+        description: 'nueva descripción',
+      });
+
+      expect(mockRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceMonthOffset: 2 }),
+      );
+    });
+
+    it('updateCalculated split: el DTO SÍ manda sourceMonthOffset → R2 usa el nuevo valor (override)', async () => {
+      const existing = makeRecurring({
+        id: 'calc-001',
+        startMonth: '2026-01',
+        sourceChainId: 'chain-origin-001',
+        formulaOperator: 'PCT' as never,
+        formulaOperand: 1000,
+        formulaSign: 1,
+        sourceMonthOffset: 2,
+      });
+      mockRepo.findById.mockResolvedValue(existing);
+      mockRepo.update.mockResolvedValue({ ...existing, deletedFrom: '2026-06' });
+      mockRepo.create.mockResolvedValue(makeRecurring({ id: 'calc-002', sourceMonthOffset: 5 }));
+
+      await service.updateCalculated(USER_A, 'calc-001', {
+        currentMonth: '2026-06',
+        sourceMonthOffset: 5,
+      });
+
+      expect(mockRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceMonthOffset: 5 }),
       );
     });
   });

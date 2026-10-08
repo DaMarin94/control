@@ -71,13 +71,24 @@ export interface CalculatedInfo {
   formulaSign: 1 | -1;
   /**
    * Monto del origen en el mes consultado (entero positivo en centavos).
-   * - Para 'fijo': monto del fijo en ese mes.
+   * - Para 'fijo': monto del fijo en ese mes. Con `sourceMonthOffset > 0`, es el
+   *   monto del origen en el MES DE REFERENCIA (mes consultado − offset), no en
+   *   el mes consultado — ya es la base REAL de la fórmula, lista para mostrar.
    * - Para 'cuota': monto por cuota del grupo.
    * - Para 'unico': monto del movimiento único.
    * Presente en modo edición para habilitar el preview en vivo del resultado.
    * null/ausente para no-calculados o cuando no está disponible.
    */
   sourceAmountCents: number | null;
+  /**
+   * Mes de referencia (offset, entero 0..12) — "Mes del monto base del
+   * calculado" (docs/design.md). Cuántos meses hacia atrás del mes consultado
+   * se toma la base de la fórmula (`sourceAmountCents`). `0` = mismo mes
+   * (comportamiento de siempre). Solo aplica a calculados de origen `'fijo'`;
+   * en `'unico'` y `'cuota'` siempre es `0` (no aceptan offset). Siempre
+   * presente (nunca `undefined`).
+   */
+  sourceMonthOffset: number;
 }
 
 /** Tipo de movimiento */

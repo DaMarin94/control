@@ -423,6 +423,7 @@ const mockMovementCalculadoExpense = {
     formulaOperand: 2100,
     formulaSign: 1 as const,
     sourceAmountCents: 150000,
+    sourceMonthOffset: 0,
   },
   hasCalculated: false,
   currency: "ARS" as const,
@@ -449,6 +450,7 @@ const mockCalculatedDeFijo = {
     formulaOperand: 1000,
     formulaSign: 1 as const,
     sourceAmountCents: 150000,
+    sourceMonthOffset: 0,
   },
   hasCalculated: false,
 };
@@ -467,6 +469,7 @@ const mockCalculatedDeUnico = {
     formulaOperand: 1000,
     formulaSign: 1 as const,
     sourceAmountCents: 15000,
+    sourceMonthOffset: 0,
   },
   hasCalculated: false,
 };
@@ -485,6 +488,7 @@ const mockCalculatedDeCuota = {
     formulaOperand: 1000,
     formulaSign: 1 as const,
     sourceAmountCents: 50000,
+    sourceMonthOffset: 0,
   },
   hasCalculated: false,
 };

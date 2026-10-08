@@ -154,6 +154,8 @@ function makeDbRecurring(overrides: Record<string, unknown> = {}) {
     formulaOperator: null,
     formulaOperand: null,
     formulaSign: null,
+    // Mes de referencia (offset): 0 = comportamiento actual (base = mes consultado).
+    sourceMonthOffset: 0,
     // Fase 1.2.3: moneda y cotización
     currency: 'ARS',
     exchangeRate: 1,
@@ -929,6 +931,117 @@ describe('Recurring (e2e)', () => {
         .post('/recurring/rec-e2e-001/skip')
         .send({ from: '2026-01', to: '2026-02', action: 'skip' })
         .expect(401);
+      expect(res.body.success).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST|PATCH /recurring/:id/calculated — mes de referencia (sourceMonthOffset)
+  // -------------------------------------------------------------------------
+
+  describe('POST /recurring/:id/calculated — sourceMonthOffset', () => {
+    const VALID_CALC_BODY = {
+      categoryId: CAT_ID,
+      startMonth: '2026-06',
+      formulaOperator: 'PCT',
+      formulaOperand: 1000,
+      formulaSign: 1,
+    };
+
+    it('201 con sourceMonthOffset en rango — lo devuelve en el Recurring creado', async () => {
+      const cat = makeDbCategory();
+      mockPrisma.category.findUnique.mockResolvedValue(cat);
+      const origin = makeDbRecurring({ id: 'origin-e2e-001', sourceChainId: null });
+      mockPrisma.recurring.findUnique.mockResolvedValue(origin);
+      mockPrisma.recurring.create.mockResolvedValue(
+        makeDbRecurring({ id: 'calc-e2e-001', sourceChainId: origin.chainId, sourceMonthOffset: 1 }),
+      );
+
+      const res = await request(app.getHttpServer())
+        .post('/recurring/origin-e2e-001/calculated')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...VALID_CALC_BODY, sourceMonthOffset: 1 })
+        .expect(201);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toHaveProperty('sourceMonthOffset', 1);
+      expect(mockPrisma.recurring.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ sourceMonthOffset: 1 }) }),
+      );
+    });
+
+    it('201 sin sourceMonthOffset — persiste 0 (default)', async () => {
+      const cat = makeDbCategory();
+      mockPrisma.category.findUnique.mockResolvedValue(cat);
+      const origin = makeDbRecurring({ id: 'origin-e2e-001', sourceChainId: null });
+      mockPrisma.recurring.findUnique.mockResolvedValue(origin);
+      mockPrisma.recurring.create.mockResolvedValue(
+        makeDbRecurring({ id: 'calc-e2e-001', sourceChainId: origin.chainId, sourceMonthOffset: 0 }),
+      );
+
+      const res = await request(app.getHttpServer())
+        .post('/recurring/origin-e2e-001/calculated')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send(VALID_CALC_BODY)
+        .expect(201);
+
+      expect(res.body.data).toHaveProperty('sourceMonthOffset', 0);
+      expect(mockPrisma.recurring.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ sourceMonthOffset: 0 }) }),
+      );
+    });
+
+    it.each([-1, 13])('400 si sourceMonthOffset = %i (fuera de 0..12)', async (value) => {
+      const res = await request(app.getHttpServer())
+        .post('/recurring/origin-e2e-001/calculated')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...VALID_CALC_BODY, sourceMonthOffset: value })
+        .expect(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('400 si sourceMonthOffset no es un entero (1.5)', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/recurring/origin-e2e-001/calculated')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...VALID_CALC_BODY, sourceMonthOffset: 1.5 })
+        .expect(400);
+      expect(res.body.success).toBe(false);
+    });
+  });
+
+  describe('PATCH /recurring/:id/calculated — sourceMonthOffset', () => {
+    it('200 in-place: actualiza sourceMonthOffset y lo devuelve', async () => {
+      const existing = makeDbRecurring({
+        id: 'calc-e2e-001',
+        startMonth: '2026-01',
+        sourceChainId: 'chain-origin-e2e',
+        formulaOperator: 'PCT',
+        formulaOperand: 1000,
+        formulaSign: 1,
+        sourceMonthOffset: 0,
+      });
+      mockPrisma.recurring.findUnique.mockResolvedValue(existing);
+      mockPrisma.recurring.update.mockResolvedValue({ ...existing, sourceMonthOffset: 2 });
+
+      const res = await request(app.getHttpServer())
+        .patch('/recurring/calc-e2e-001/calculated')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ currentMonth: '2026-01', sourceMonthOffset: 2 })
+        .expect(200);
+
+      expect(res.body.data).toHaveProperty('sourceMonthOffset', 2);
+      expect(mockPrisma.recurring.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ sourceMonthOffset: 2 }) }),
+      );
+    });
+
+    it.each([-1, 13])('400 si sourceMonthOffset = %i (fuera de 0..12)', async (value) => {
+      const res = await request(app.getHttpServer())
+        .patch('/recurring/calc-e2e-001/calculated')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ currentMonth: '2026-01', sourceMonthOffset: value })
+        .expect(400);
       expect(res.body.success).toBe(false);
     });
   });

@@ -1095,10 +1095,23 @@ export class MovementsService {
           : undefined;
         if (!originData) continue;
         // Skip heredado del origen OR skip propio del calculado en este mes (RF-MF-005)
+        // — SIEMPRE sobre M (mes consultado), nunca sobre R (mes de referencia).
         if (originData.skipped || calc.skippedMonths.has(mes)) continue;
 
+        // Mes de referencia (sourceMonthOffset > 0): la BASE de la fórmula sale
+        // del origen activo en R = M - offset. El gate de arriba (originData
+        // resuelto en M) queda sin cambios.
+        let baseAmountCents = originData.amountCents;
+        const sourceMonthOffset = calc.sourceMonthOffset ?? 0;
+        if (sourceMonthOffset > 0 && calc.sourceChainId) {
+          const refMonth = addMonths(mes, -sourceMonthOffset);
+          const refAmount = resolveFijoNormalAmountAtMonth(normalesForAnnual, calc.sourceChainId, refMonth);
+          if (refAmount === undefined) continue; // origen no resuelve en R
+          baseAmountCents = refAmount;
+        }
+
         const derivedAmount = applyFormula(
-          originData.amountCents,
+          baseAmountCents,
           calc.formulaOperator as FormulaOperator,
           calc.formulaOperand!,
           calc.formulaSign!,
@@ -2434,10 +2447,23 @@ export class MovementsService {
           ? normalesActivosMes.get(calc.sourceChainId)
           : undefined;
         if (!originData) continue;
+        // Skip: SIEMPRE sobre M (mes consultado), nunca sobre R (mes de referencia).
         if (originData.skipped || calc.skippedMonths.has(mes)) continue;
 
+        // Mes de referencia (sourceMonthOffset > 0): la BASE de la fórmula sale
+        // del origen activo en R = M - offset. El gate de arriba (originData
+        // resuelto en M) queda sin cambios.
+        let baseAmountCents = originData.amountCents;
+        const sourceMonthOffset = calc.sourceMonthOffset ?? 0;
+        if (sourceMonthOffset > 0 && calc.sourceChainId) {
+          const refMonth = addMonths(mes, -sourceMonthOffset);
+          const refAmount = resolveFijoNormalAmountAtMonth(normalesForAnnual, calc.sourceChainId, refMonth);
+          if (refAmount === undefined) continue; // origen no resuelve en R
+          baseAmountCents = refAmount;
+        }
+
         const derivedAmount = applyFormula(
-          originData.amountCents,
+          baseAmountCents,
           calc.formulaOperator as FormulaOperator,
           calc.formulaOperand!,
           calc.formulaSign!,
@@ -3116,6 +3142,8 @@ export class MovementsService {
           continue;
         }
 
+        // Gate de aparición (SIN CAMBIOS): depende de que el origen aparezca en
+        // M (mes consultado), nunca en R (mes de referencia).
         const resolvedOrigin = resolveChain(originRows, mes);
         if (!resolvedOrigin.present) {
           // El motivo del origen (frequency/skipped/beforeStart/afterEnd) explica
@@ -3125,9 +3153,28 @@ export class MovementsService {
           continue;
         }
 
+        // Mes de referencia (sourceMonthOffset > 0): la BASE de la fórmula sale
+        // del origen activo en R = M - offset, resuelto con la MISMA regla que
+        // M (resolveChain). Moneda/cotización siguen viniendo del origen de M
+        // (resolvedOrigin.row) — solo el monto cambia.
         const originRow = resolvedOrigin.row;
+        const sourceMonthOffset = calcRow.sourceMonthOffset ?? 0;
+        let baseAmountCents = originRow.amountCents;
+        if (sourceMonthOffset > 0) {
+          const refMonth = addMonths(mes, -sourceMonthOffset);
+          const resolvedOriginAtRef = resolveChain(originRows, refMonth);
+          if (!resolvedOriginAtRef.present) {
+            // El origen no resuelve en R: el calculado no tiene punto este mes.
+            // El motivo del origen en R explica igual de bien la ausencia.
+            rawAmounts.push(null);
+            reasons.push(resolvedOriginAtRef.reason);
+            continue;
+          }
+          baseAmountCents = resolvedOriginAtRef.row.amountCents;
+        }
+
         const derivedAmount = applyFormula(
-          originRow.amountCents,
+          baseAmountCents,
           calcRow.formulaOperator as FormulaOperator,
           calcRow.formulaOperand!,
           calcRow.formulaSign!,
@@ -3393,6 +3440,35 @@ export class MovementsService {
 export function getDaysInMonth(year: number, month: number): number {
   // El día 0 del mes siguiente = último día del mes dado
   return new Date(year, month, 0).getDate();
+}
+
+/**
+ * Mes de referencia (sourceMonthOffset): resuelve el `amountCents` del fijo
+ * NORMAL (chainId dado) activo en `targetMonth`, con el MISMO criterio de
+ * "fila viva de la cadena" que se usa para resolver el mes consultado (M):
+ * `startMonth <= targetMonth`, `deletedFrom` nulo o posterior, y
+ * `isOnFrequency`. `undefined` = el origen no resuelve en `targetMonth` (el
+ * calculado que la use no aparece ese mes — RN de mes de referencia).
+ *
+ * `rows` es el universo COMPLETO de fijos normales del usuario (todo el
+ * historial, no acotado a un año) — el mismo `normalesForAnnual` que ya se
+ * carga para la serie real, filtrado a un solo chainId acá.
+ */
+export function resolveFijoNormalAmountAtMonth(
+  rows: RecurringForAnnual[],
+  chainId: string,
+  targetMonth: string,
+): number | undefined {
+  let best: RecurringForAnnual | undefined;
+  for (const row of rows) {
+    if (row.chainId !== chainId) continue;
+    const inRange =
+      row.startMonth <= targetMonth && (row.deletedFrom === null || row.deletedFrom > targetMonth);
+    if (!inRange) continue;
+    if (!isOnFrequency(row.startMonth, row.frequency, targetMonth)) continue;
+    if (!best || row.startMonth > best.startMonth) best = row;
+  }
+  return best?.amountCents;
 }
 
 /**

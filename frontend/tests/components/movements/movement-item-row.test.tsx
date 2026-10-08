@@ -219,6 +219,7 @@ const fijoCalculado: MovementItem = {
     formulaOperand: 1000, // 10% (10 × 100)
     formulaSign: 1,
     sourceAmountCents: 150000,
+    sourceMonthOffset: 0,
   },
   hasCalculated: false,
 };
@@ -284,6 +285,7 @@ const unicoCalculado: MovementItem = {
     formulaOperand: 1000,
     formulaSign: 1,
     sourceAmountCents: 10000,
+    sourceMonthOffset: 0,
   },
   hasCalculated: false,
 };
@@ -313,8 +315,19 @@ const cuotaCalculada: MovementItem = {
     formulaOperand: 1000,
     formulaSign: 1,
     sourceAmountCents: 50000,
+    sourceMonthOffset: 0,
   },
   hasCalculated: false,
+};
+
+/** Fijo calculado con "mes del monto base" desfasado (docs/design.md) */
+const fijoCalculadoConOffset: MovementItem = {
+  ...fijoCalculado,
+  id: "calc-offset-1",
+  calculated: {
+    ...fijoCalculado.calculated!,
+    sourceMonthOffset: 2, // "2 meses antes"
+  },
 };
 
 /** Cuota padre (tiene calculados derivados) — Fase 1.1.8 */
@@ -830,6 +843,19 @@ describe("MovementItemRow — Fase 1.1.7: indicadores calculado/padre", () => {
   it("ítem no calculado NO muestra el chip 'Calculado'", () => {
     renderRow(fijoActivo);
     expect(screen.queryByText("Calculado")).not.toBeInTheDocument();
+  });
+
+  it("desfasaje 0: la fila es idéntica a hoy — sin cola de mes tras 'desde Sueldo'", () => {
+    renderRow(fijoCalculado);
+    const origenNode = screen.getByText("Sueldo");
+    expect(origenNode.parentElement?.parentElement).not.toHaveTextContent(" de ");
+  });
+
+  it("desfasaje > 0: agrega la cola 'de {Mmm AAAA}' (con año) al segmento 'desde Origen'", () => {
+    // viewMonth 2026-06, offset=2 → mes de referencia Abr 2026
+    renderRow(fijoCalculadoConOffset, "2026-06");
+    const origenNode = screen.getByText("Sueldo");
+    expect(origenNode.parentElement?.parentElement).toHaveTextContent("desde Sueldo de Abr 2026");
   });
 
   it("ítem padre con hasCalculated=true no muestra chip 'Calculado'", () => {

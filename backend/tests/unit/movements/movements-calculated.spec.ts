@@ -217,6 +217,85 @@ describe('DTOs de calculado — type no aceptado (RF-MCALC-003)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Suite de DTOs — mes de referencia (sourceMonthOffset): rango 0..12
+// ---------------------------------------------------------------------------
+
+describe('DTOs de calculado — sourceMonthOffset (mes de referencia)', () => {
+  const basePayloadCreate = {
+    categoryId: 'cat-abc',
+    startMonth: '2026-06',
+    formulaOperator: FormulaOperator.PCT,
+    formulaOperand: 1000,
+    formulaSign: 1,
+  };
+  const basePayloadUpdate = {
+    categoryId: 'cat-abc',
+    currentMonth: '2026-06',
+  };
+
+  it('CreateCalculatedRecurringDto — ausente: válido, sin errores (default 0 lo aplica el service)', async () => {
+    const dto = plainToInstance(CreateCalculatedRecurringDto, basePayloadCreate);
+    const errors = await validate(dto);
+    expect(errors).toHaveLength(0);
+    expect(dto.sourceMonthOffset).toBeUndefined();
+  });
+
+  it.each([0, 1, 6, 12])(
+    'CreateCalculatedRecurringDto — %i dentro de 0..12: válido',
+    async (value) => {
+      const dto = plainToInstance(CreateCalculatedRecurringDto, {
+        ...basePayloadCreate,
+        sourceMonthOffset: value,
+      });
+      const errors = await validate(dto);
+      expect(errors).toHaveLength(0);
+      expect(dto.sourceMonthOffset).toBe(value);
+    },
+  );
+
+  it.each([-1, 13, 100])(
+    'CreateCalculatedRecurringDto — %i fuera de 0..12: 400 (error de validación)',
+    async (value) => {
+      const dto = plainToInstance(CreateCalculatedRecurringDto, {
+        ...basePayloadCreate,
+        sourceMonthOffset: value,
+      });
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors.some((e) => e.property === 'sourceMonthOffset')).toBe(true);
+    },
+  );
+
+  it('CreateCalculatedRecurringDto — no entero (1.5): 400 (error de validación)', async () => {
+    const dto = plainToInstance(CreateCalculatedRecurringDto, {
+      ...basePayloadCreate,
+      sourceMonthOffset: 1.5,
+    });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'sourceMonthOffset')).toBe(true);
+  });
+
+  it('UpdateCalculatedRecurringDto — ausente: válido (campo no editado)', async () => {
+    const dto = plainToInstance(UpdateCalculatedRecurringDto, basePayloadUpdate);
+    const errors = await validate(dto);
+    expect(errors).toHaveLength(0);
+    expect(dto.sourceMonthOffset).toBeUndefined();
+  });
+
+  it.each([-1, 13])(
+    'UpdateCalculatedRecurringDto — %i fuera de 0..12: 400 (error de validación)',
+    async (value) => {
+      const dto = plainToInstance(UpdateCalculatedRecurringDto, {
+        ...basePayloadUpdate,
+        sourceMonthOffset: value,
+      });
+      const errors = await validate(dto);
+      expect(errors.some((e) => e.property === 'sourceMonthOffset')).toBe(true);
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Suite
 // ---------------------------------------------------------------------------
 
@@ -547,6 +626,37 @@ describe('MovementsRepository — calculados (Fase 1.1.7)', () => {
   });
 
   // -------------------------------------------------------------------------
+  // sourceDescription nunca queda vacío: fallback al nombre de categoría del origen
+  // -------------------------------------------------------------------------
+
+  describe('campo sourceDescription — fallback al nombre de categoría del origen (fijo)', () => {
+    it('origen con description: sourceDescription usa la descripción del origen', async () => {
+      const origin = makeNormalRow({ description: 'Alquiler' });
+      const calc = makeCalcRow();
+      mockPrisma.recurring.findMany.mockResolvedValue([origin, calc]);
+
+      const result = await repo.findFijosByMonth(USER_A, '2026-06');
+
+      const calcItem = result.find((r) => r.id === 'calc-001');
+      expect(calcItem!.calculated!.sourceDescription).toBe('Alquiler');
+    });
+
+    it('origen sin description: sourceDescription cae al nombre de la categoría del origen', async () => {
+      const origin = makeNormalRow({
+        description: null,
+        category: { id: CAT_NORMAL, name: 'Vivienda', color: '#4F86C6', scope: CategoryScope.EXPENSE },
+      });
+      const calc = makeCalcRow();
+      mockPrisma.recurring.findMany.mockResolvedValue([origin, calc]);
+
+      const result = await repo.findFijosByMonth(USER_A, '2026-06');
+
+      const calcItem = result.find((r) => r.id === 'calc-001');
+      expect(calcItem!.calculated!.sourceDescription).toBe('Vivienda');
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Campos calculated y hasCalculated en MovementItem
   // -------------------------------------------------------------------------
 
@@ -568,6 +678,7 @@ describe('MovementsRepository — calculados (Fase 1.1.7)', () => {
       expect(calcItem!.calculated!.formulaOperator).toBe(FormulaOperator.PCT);
       expect(calcItem!.calculated!.formulaOperand).toBe(1000);
       expect(calcItem!.calculated!.formulaSign).toBe(1);
+      expect(calcItem!.calculated!.sourceMonthOffset).toBe(0);
       expect(calcItem!.hasCalculated).toBe(false);
     });
 

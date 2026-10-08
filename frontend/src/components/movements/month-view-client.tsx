@@ -293,6 +293,8 @@ function movementItemToRecurring(item: MovementItem): Recurring {
     frequency: item.frequency ?? 1,
     currency: item.currency,
     exchangeRate: item.exchangeRate,
+    // Esta función solo mapea fijos NORMALES (nunca calculados) — sin offset propio.
+    sourceMonthOffset: 0,
     createdAt: "",
     updatedAt: "",
     category: item.category,

@@ -21,7 +21,7 @@
 | Anulación de movimientos — extendida a únicos y cuotas (P3) | RF-MU-005, RF-MC-004, RN-020 | Implementado |
 | Movimiento en cuotas — crear, visualizar, editar, eliminar | RF-MC-001..003 | Implementado (solo Gasto en v1) |
 | Cuotas — total del plan derivado (card de detalle, tooltip del reporte de Cuotas, preview en el form) | RF-MC-005 | Implementado |
-| Movimientos calculados — fijo/único/cuota de origen | RF-MCALC-001..010, RN-017..019 | Implementado |
+| Movimientos calculados — fijo/único/cuota de origen | RF-MCALC-001..011, RN-017..019 | Implementado |
 | Categorías — defaults + CRUD + soft delete | RF-CAT-001..006 | Implementado |
 | Métodos de pago — entidad + CRUD (sección `/configuracion/metodos-pago` del hub) + selector opcional en el form + asociación por movimiento | RF-PM-001..006, RN-021 | Implementado |
 | Métodos de pago — predeterminado por estructura (único/fijo/cuota): config en el modal de crear/editar método (sección "Predeterminado para", exclusividad al guardar) + indicador de lectura en la fila + prefill editable al crear (egreso e ingreso), blob `defaultPaymentMethods` | RF-PM-007 | Implementado |

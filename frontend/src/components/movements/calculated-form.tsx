@@ -34,6 +34,7 @@ import {
   Check,
   Plus,
   Minus,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,7 @@ import { useCategories } from "@/hooks/use-categories";
 import { useCalculated } from "@/hooks/use-calculated";
 import { useSettings } from "@/hooks/use-settings";
 import { useActiveLimitProjection } from "@/hooks/use-active-limit-projection";
+import { useMovements } from "@/hooks/use-movements";
 import { useToast } from "@/hooks/use-toast";
 import { useUndoHistory } from "@/hooks/use-history";
 import { buildUndoAction } from "@/lib/toast-undo";
@@ -53,8 +55,14 @@ import type { FormulaOperator, MovementItem } from "@/types/movement";
 import { ActiveLimitDialog } from "@/components/limits/active-limit-dialog";
 import { toCanonicalAmountCents, type ProjectionSection } from "@/lib/limits/project";
 import type { LimitConfig } from "@/types/limit";
-import { formatCurrency, getCurrentMonth, MAX_DESCRIPTION_LENGTH } from "@/lib/format";
-import { descaleOperand, buildFormulaExpression } from "@/lib/formula";
+import { formatCurrency, formatMonthShort, getCurrentMonth, MAX_DESCRIPTION_LENGTH } from "@/lib/format";
+import {
+  descaleOperand,
+  buildFormulaExpression,
+  buildFormulaExpressionWithMonthPlaceholder,
+  sourceMonthOffsetLabel,
+} from "@/lib/formula";
+import { addMonthsToKey } from "@/lib/recurring-skip-range";
 import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/logger";
 
@@ -88,6 +96,14 @@ function getOriginTypeLabel(origin: "fijo" | "unico" | "cuota"): string {
 }
 
 const logger = createLogger("CalculatedForm");
+
+/**
+ * Valores del selector "Mes del monto base" (docs/design.md) — orden estricto
+ * 0→12, sin opción vacía: la posición ancla el conteo. Las etiquetas salen de
+ * `sourceMonthOffsetLabel` (lib/formula.ts), fuente única reutilizada por el
+ * historial de cambios.
+ */
+const SOURCE_MONTH_OFFSET_OPTIONS = Array.from({ length: 13 }, (_, i) => i);
 
 // ─── Tipos de operador (UI) ──────────────────────────────────────────────────
 
@@ -207,6 +223,12 @@ const calculatedSchema = z.object({
     }, "Ingresá un número válido."),
   /** Signo del resultado: "1" o "-1" (convertido a number al enviar) */
   sign: z.enum(["1", "-1"]),
+  /**
+   * "Mes del monto base" del calculado (docs/design.md) — string "0".."12",
+   * solo relevante en origen fijo (13 `<option>`, sin estado de error: el
+   * valor inválido es inconstruible con un `<select>` de opciones fijas).
+   */
+  sourceMonthOffset: z.string(),
   categoryId: z.string().min(1, "La categoría es requerida"),
   description: z
     .string()
@@ -273,6 +295,9 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
     ? (calc?.sourceType ?? "fijo")
     : (movement.origin as "fijo" | "unico" | "cuota");
 
+  // "Mes del monto base" (docs/design.md) — aplica SOLO a calculados de origen fijo.
+  const isFixedOrigin = sourceType === "fijo";
+
   // P2 — Fase 2 (extensión a calculado): mes de proyección de límites activos
   // (D13), mismo criterio ya aplicado por tipo en los otros 3 forms. Un
   // calculado de único imputa a su propio mes — como el único solo puede
@@ -309,6 +334,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
         operator: calc.formulaOperator,
         operandInput: String(descaleOperand(calc.formulaOperand, calc.formulaOperator)).replace(".", ","),
         sign: String(calc.formulaSign) as "1" | "-1",
+        sourceMonthOffset: String(calc.sourceMonthOffset ?? 0),
         categoryId: movement.category.id,
         description: movement.description ?? "",
       }
@@ -316,6 +342,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
         operator: "PCT",
         operandInput: "",
         sign: "1",
+        sourceMonthOffset: "0",
         categoryId: "",
         description: "",
       };
@@ -339,6 +366,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
         operator: calc.formulaOperator,
         operandInput: String(descaleOperand(calc.formulaOperand, calc.formulaOperator)).replace(".", ","),
         sign: String(calc.formulaSign) as "1" | "-1",
+        sourceMonthOffset: String(calc.sourceMonthOffset ?? 0),
         categoryId: movement.category.id,
         description: movement.description ?? "",
       });
@@ -349,6 +377,56 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
   const operandInput = watch("operandInput");
   const selectedSign = watch("sign");
   const selectedCategoryId = watch("categoryId");
+  const selectedSourceMonthOffsetInput = watch("sourceMonthOffset");
+  const selectedSourceMonthOffset = isFixedOrigin ? Number(selectedSourceMonthOffsetInput || "0") : 0;
+
+  // ── "Mes del monto base" — resolución del mes de referencia ───────────────
+  // Decisión del usuario (override del spec de design): el form VA A BUSCAR el
+  // monto del origen en el mes de referencia (GET /movements?month= ya
+  // existente) en vez de caer directo al estado "—". En creación, con
+  // offset === 0 no se dispara ningún fetch — cero impacto (invariante
+  // rector); en edición el fetch se dispara siempre, para no servir nunca una
+  // base congelada al offset guardado (ver `shouldFetchBaseMonth` más abajo).
+
+  // Mes visualizado (M) — mismo mes que usa el resto del form para startMonth/currentMonth.
+  const viewingMonth = viewMonth ?? getCurrentMonth();
+  // Mes de referencia (R = M − offset), solo tiene sentido con offset > 0.
+  const baseMonth =
+    selectedSourceMonthOffset > 0 ? addMonthsToKey(viewingMonth, -selectedSourceMonthOffset) : viewingMonth;
+
+  // chainId del fijo de ORIGEN (no del calculado) — el mismo en crear y en editar,
+  // usado para ubicar la fila del origen dentro de los movimientos del mes de referencia.
+  const originChainId: string | null = isFixedOrigin
+    ? (isEditing ? (calc?.sourceChainId ?? null) : movement.chainId)
+    : null;
+
+  // En EDICIÓN, el fetch se dispara para CUALQUIER offset (incluido 0): el
+  // preview tiene que resolver la base contra el mes de referencia elegido EN
+  // VIVO, nunca contra `calc.sourceAmountCents` (congelado al offset que
+  // estaba guardado cuando se abrió el form). Con offset === 0, `baseMonth`
+  // === `viewingMonth` → este fetch reusa la query ya cacheada por la propia
+  // vista de mes (mismo `month`/`categoryIds`/`today`), sin red adicional.
+  // En CREACIÓN, offset === 0 sigue sin fetch (cero impacto): `originCents`
+  // YA es el monto del origen en el mes visualizado (el ítem recién traído
+  // por `/mes`, sin desfasaje posible todavía).
+  const shouldFetchBaseMonth =
+    isFixedOrigin && originChainId !== null && (isEditing || selectedSourceMonthOffset > 0);
+  // Query key por mes — React Query dedupe/cachea: no repite el fetch para un
+  // mes ya resuelto ni dispara nada mientras offset === 0.
+  const { data: baseMonthMovements, isLoading: isLoadingBaseMonth } = useMovements(
+    shouldFetchBaseMonth ? baseMonth : "",
+  );
+
+  // Monto del origen (fijo) EN el mes de referencia — busca por chainId, no por id
+  // de fila (splitea entre meses). `undefined` mientras no se resolvió el fetch;
+  // `null` = resuelto y el origen NO aparece ese mes (frecuencia, anterior al
+  // alta, cadena finalizada) → caso real de "no hay dato" (el estado "—" del
+  // spec sigue vigente para ESTE caso, nunca para "todavía no fui a buscarlo").
+  const baseMonthOriginAmountCents: number | null | undefined = !shouldFetchBaseMonth
+    ? undefined
+    : isLoadingBaseMonth
+      ? undefined
+      : (baseMonthMovements?.movements.fijos.find((f) => f.chainId === originChainId)?.amountCents ?? null);
 
   // ── Preview en vivo ────────────────────────────────────────────────────────
 
@@ -358,10 +436,20 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
     return isNaN(parsed) ? null : parsed;
   }, [operandInput]);
 
+  // Base REAL de la fórmula: `shouldFetchBaseMonth` ya encierra cuándo hay que
+  // resolverla contra el mes de referencia en vivo (edición, cualquier offset;
+  // creación, solo offset > 0) vs. cuándo alcanza con `originCents` de siempre
+  // (creación con offset === 0 — cero impacto). Con fetch en curso o el origen
+  // sin resolver en ese mes, `null` — para no pintar NUNCA una cifra calculada
+  // sobre otro mes (spec "no puede mentir").
+  const baseAmountCents: number | null = shouldFetchBaseMonth
+    ? (baseMonthOriginAmountCents ?? null)
+    : originCents;
+
   const previewCents = useMemo(() => {
-    if (originCents === null || userOperand === null) return null;
-    return computePreview(originCents, selectedOperator, userOperand, selectedSign === "1" ? 1 : -1);
-  }, [originCents, selectedOperator, userOperand, selectedSign]);
+    if (baseAmountCents === null || userOperand === null) return null;
+    return computePreview(baseAmountCents, selectedOperator, userOperand, selectedSign === "1" ? 1 : -1);
+  }, [baseAmountCents, selectedOperator, userOperand, selectedSign]);
 
   // Tipo derivado en vivo del monto final (RF-MCALC-003)
   const derivedMovementType = derivedTypeFromCents(previewCents);
@@ -405,8 +493,18 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
   // movimiento reutiliza el mismo helper para su bloque "Fórmula" (read-only).
 
   function buildExpression(): string {
+    // Offset > 0 sin dato (spec "no puede mentir"): la expresión NO cae al
+    // placeholder genérico "origen" — nombra el mes de referencia.
+    if (selectedSourceMonthOffset > 0 && baseAmountCents === null) {
+      return buildFormulaExpressionWithMonthPlaceholder(
+        selectedOperator,
+        userOperand,
+        movementCurrency,
+        formatMonthShort(baseMonth),
+      );
+    }
     // Los montos del origen y del operando ADD/SUB van en la moneda del movimiento de origen
-    return buildFormulaExpression(originCents, selectedOperator, userOperand, movementCurrency);
+    return buildFormulaExpression(baseAmountCents, selectedOperator, userOperand, movementCurrency);
   }
 
   // ── Formato del resultado para el preview ─────────────────────────────────
@@ -438,6 +536,10 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
           formulaOperator: data.operator,
           formulaOperand: scaledOperand,
           formulaSign: sign,
+          // sourceMonthOffset SOLO se envía para sourceType "fijo" — el backend
+          // rechaza (400) cualquier propiedad no declarada en el DTO de
+          // único/cuota (whitelist + forbidNonWhitelisted).
+          ...(sourceType === "fijo" ? { sourceMonthOffset: Number(data.sourceMonthOffset) } : {}),
         },
         sourceType,
       );
@@ -486,6 +588,10 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
               formulaOperand: scaledOperand,
               formulaSign: sign,
               description: data.description || undefined,
+              // Siempre presente para origen fijo (default "0" si el usuario no
+              // tocó el selector) — 0 explícito es idéntico a omitirlo (default
+              // del backend), pero simplifica no tener que distinguir "tocado".
+              sourceMonthOffset: Number(data.sourceMonthOffset),
             }
           : {
               categoryId: data.categoryId,
@@ -519,12 +625,15 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
     // P2 — Fase 2 (extensión a calculado): compuerta de intercepción (D11).
     // Proyecta sobre el monto/tipo EFECTIVOS que se van a persistir — el
     // resultado derivado de la fórmula (RF-MCALC-003), no el monto del origen.
-    // Si el origen todavía no resolvió (originCents===null) no hay nada que
-    // proyectar client-side: se persiste directo, igual que antes de P2
-    // (cero fricción / falla abierto, mismo criterio que el hook de proyección).
+    // Usa `baseAmountCents` (la BASE real — con offset > 0, el monto del
+    // origen en el mes de referencia, no el del mes en curso; con offset ===
+    // 0 coincide con `originCents` de siempre, cero impacto). Si la base
+    // todavía no resolvió (baseAmountCents===null) no hay nada que proyectar
+    // client-side: se persiste directo, igual que antes de P2 (cero fricción
+    // / falla abierto, mismo criterio que el hook de proyección).
     const finalCents =
-      originCents !== null
-        ? computePreview(originCents, data.operator, userOpFloat, sign)
+      baseAmountCents !== null
+        ? computePreview(baseAmountCents, data.operator, userOpFloat, sign)
         : null;
 
     if (finalCents !== null) {
@@ -708,6 +817,51 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
             {!isZeroDivError && errors.operandInput && (
               <p className="text-[12px] text-expense-ink">{errors.operandInput.message}</p>
             )}
+
+            {/* ── Sub-fila "Mes del monto base" — solo origen fijo (docs/design.md) ──
+                Subordinada al bloque Fórmula: rótulo en registro Meta (--muted,
+                12.5px/500, más liviano que el Label de bloque) y selector
+                compacto de ancho intrínseco (no full-width) — la subordinación
+                se construye con el rótulo, no escondiendo el campo. */}
+            {isFixedOrigin && (
+              <div className="flex flex-col gap-[4px]">
+                <div className="flex flex-wrap items-center justify-between gap-x-[10px] gap-y-[6px]">
+                  <span className="text-[12.5px] font-medium text-muted min-w-0 truncate">
+                    Mes del monto base
+                  </span>
+                  <div className="relative ml-auto w-auto max-w-full shrink-0">
+                    <select
+                      id="calc-source-month-offset"
+                      aria-label="Mes del monto base"
+                      className="h-[36px] w-auto max-w-full appearance-none cursor-pointer rounded-ctl border-[1.5px] border-line-strong bg-panel pl-[11px] pr-[26px] text-[13px] font-medium text-ink transition-colors duration-[140ms] focus-visible:outline-none focus:outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]"
+                      {...register("sourceMonthOffset")}
+                    >
+                      {SOURCE_MONTH_OFFSET_OPTIONS.map((n) => (
+                        <option key={n} value={String(n)}>
+                          {sourceMonthOffsetLabel(n)}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-[8px] top-1/2 -translate-y-1/2 text-muted"
+                      size={14}
+                      aria-hidden="true"
+                    />
+                  </div>
+                </div>
+                {/* Ayuda — línea siempre presente, mismo alto en los dos estados (sin salto de layout) */}
+                <p className="text-[12px] leading-snug text-muted">
+                  {selectedSourceMonthOffset === 0 ? (
+                    "Usa el monto del origen del mismo mes."
+                  ) : (
+                    <>
+                      En {formatMonthShort(viewingMonth)} usa el monto de{" "}
+                      <span className="text-ink-2">{formatMonthShort(baseMonth)}</span>.
+                    </>
+                  )}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* ── 3. Signo del resultado (segmented Positivo / Negativo) ── */}
@@ -771,16 +925,23 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
               Resultado
             </Label>
             <div className="flex items-center justify-between rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px] gap-3">
-              {/* Expresión legible */}
-              <span className="text-[12.5px] text-muted mono truncate">
-                {isZeroDivError ? "Operando inválido" : buildExpression()}
-              </span>
+              {/* Celda izquierda: expresión + sublínea "Monto base" (solo offset > 0) */}
+              <div className="flex min-w-0 flex-col items-start gap-[2px]">
+                <span className="text-[12.5px] text-muted mono truncate w-full">
+                  {isZeroDivError ? "Operando inválido" : buildExpression()}
+                </span>
+                {!isZeroDivError && selectedSourceMonthOffset > 0 && (
+                  <span className="text-[11.5px] text-muted truncate w-full">
+                    Monto base: {formatMonthShort(baseMonth)}
+                  </span>
+                )}
+              </div>
               {/* Columna derecha: cifra + badge de tipo derivado */}
               {isZeroDivError ? (
                 <span className="text-[12.5px] text-expense-ink font-semibold mono shrink-0">
                   Operando inválido
                 </span>
-              ) : originCents === null ? (
+              ) : baseAmountCents === null ? (
                 <span className="text-[12.5px] text-muted mono shrink-0">—</span>
               ) : (
                 <div className="flex flex-col items-end gap-[5px] shrink-0">

@@ -389,6 +389,7 @@ describe('HistoryService', () => {
         formulaOperator: null,
         formulaOperand: null,
         formulaSign: null,
+        sourceMonthOffset: 0,
         ...overrides,
       };
     }
@@ -679,8 +680,8 @@ describe('HistoryService', () => {
       const formulaChange = item.changes.find((c) => c.field === 'formula');
       expect(formulaChange).toEqual({
         field: 'formula',
-        previous: { operator: 'PCT', operand: 1000, sign: 1, currency: 'USD' },
-        next: { operator: 'PCT', operand: 1500, sign: 1, currency: 'USD' },
+        previous: { operator: 'PCT', operand: 1000, sign: 1, currency: 'USD', sourceMonthOffset: 0 },
+        next: { operator: 'PCT', operand: 1500, sign: 1, currency: 'USD', sourceMonthOffset: 0 },
       });
       expect(item.changes.some((c) => c.field === 'amount')).toBe(false);
       // Un solo round-trip: previous y next comparten origen, se resuelve UNA vez (no N+1).
@@ -723,7 +724,7 @@ describe('HistoryService', () => {
       const formulaChange = item.changes.find((c) => c.field === 'formula');
       expect(formulaChange).toEqual({
         field: 'formula',
-        previous: { operator: 'ADD', operand: 20000, sign: 1, currency: 'USD' },
+        previous: { operator: 'ADD', operand: 20000, sign: 1, currency: 'USD', sourceMonthOffset: 0 },
       });
     });
 
@@ -763,7 +764,7 @@ describe('HistoryService', () => {
       const formulaChange = item.changes.find((c) => c.field === 'formula');
       expect(formulaChange).toEqual({
         field: 'formula',
-        previous: { operator: 'ADD', operand: 50000, sign: -1, currency: 'EUR' },
+        previous: { operator: 'ADD', operand: 50000, sign: -1, currency: 'EUR', sourceMonthOffset: 0 },
       });
       expect(prisma.recurring.findMany).toHaveBeenCalledWith({
         where: { userId: USER_ID, chainId: { in: ['chain-origen'] } },
@@ -798,7 +799,7 @@ describe('HistoryService', () => {
       const formulaChange = item.changes.find((c) => c.field === 'formula');
       expect(formulaChange).toEqual({
         field: 'formula',
-        previous: { operator: 'MUL', operand: 1500000, sign: 1, currency: 'BRL' },
+        previous: { operator: 'MUL', operand: 1500000, sign: 1, currency: 'BRL', sourceMonthOffset: 0 },
       });
       expect(prisma.installmentGroup.findMany).toHaveBeenCalledWith({
         where: { userId: USER_ID, id: { in: ['grupo-origen'] } },

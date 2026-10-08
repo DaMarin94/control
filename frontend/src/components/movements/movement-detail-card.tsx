@@ -32,6 +32,7 @@ import { PaymentMethodIcon } from "@/components/ui/payment-method-icon";
 import { useSettings } from "@/hooks/use-settings";
 import { formatConvertedAmountDisplay, FREQUENCY_LABEL } from "@/lib/movements";
 import { descaleOperand, buildFormulaExpression } from "@/lib/formula";
+import { addMonthsToKey } from "@/lib/recurring-skip-range";
 import {
   formatCurrency,
   formatDate,
@@ -48,6 +49,13 @@ import { cn } from "@/lib/utils";
 interface MovementDetailCardProps {
   movement: MovementItem;
   onClose: () => void;
+  /**
+   * Mes que se está visualizando en formato YYYY-MM — necesario para resolver
+   * el "mes del monto base" (docs/design.md) del bloque Fórmula: el mes de
+   * referencia real es `viewMonth − sourceMonthOffset`, y el backend solo
+   * expone el offset (entero), no el mes ya resuelto.
+   */
+  viewMonth: string;
 }
 
 /** Capitaliza la primera letra — para el registro de ficha (vs. la variante minúscula de la fila) */
@@ -94,7 +102,15 @@ function VigenciaValue({ startMonth, endMonth }: { startMonth: string; endMonth:
 }
 
 /** Bloque del calculado — Origen (read-only) + Fórmula legible con resultado y badge de tipo derivado */
-function CalculatedBlock({ movement, calc }: { movement: MovementItem; calc: CalculatedInfo }) {
+function CalculatedBlock({
+  movement,
+  calc,
+  viewMonth,
+}: {
+  movement: MovementItem;
+  calc: CalculatedInfo;
+  viewMonth: string;
+}) {
   const isExpense = movement.type === "EXPENSE";
   const userOperand = descaleOperand(calc.formulaOperand, calc.formulaOperator);
   const expression = buildFormulaExpression(
@@ -104,6 +120,12 @@ function CalculatedBlock({ movement, calc }: { movement: MovementItem; calc: Cal
     movement.currency,
   );
   const resultDisplay = formatSignedAmount(movement.amountCents, movement.currency);
+  // "Mes del monto base" (docs/design.md) — solo si el desfasaje es > 0. El
+  // backend ya resuelve `sourceAmountCents` sobre el mes de referencia; acá
+  // solo se calcula el MES en sí (viewMonth − offset) para la sublínea.
+  const sourceMonthOffset = calc.sourceMonthOffset ?? 0;
+  const baseMonthLabel =
+    sourceMonthOffset > 0 ? formatMonthShort(addMonthsToKey(viewMonth, -sourceMonthOffset)) : null;
 
   return (
     <div className="space-y-[14px]">
@@ -135,7 +157,14 @@ function CalculatedBlock({ movement, calc }: { movement: MovementItem; calc: Cal
       <div className="flex flex-col gap-[7px]">
         <span className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">Fórmula</span>
         <div className="flex items-center justify-between rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px] gap-3">
-          <span className="text-[12.5px] text-muted mono truncate">{expression}</span>
+          {/* Celda izquierda: expresión + sublínea "Monto base" (solo desfasaje > 0) — mismo
+              par expresión+sublínea que el preview del form de calculado */}
+          <div className="flex min-w-0 flex-col items-start gap-[2px]">
+            <span className="text-[12.5px] text-muted mono truncate w-full">{expression}</span>
+            {baseMonthLabel && (
+              <span className="text-[11.5px] text-muted truncate w-full">Monto base: {baseMonthLabel}</span>
+            )}
+          </div>
           <div className="flex flex-col items-end gap-[5px] shrink-0">
             <span className={cn("text-[16px] font-semibold mono", isExpense ? "text-ink" : "text-income-ink")}>
               {resultDisplay}
@@ -208,7 +237,7 @@ function CalculatedChildrenBlock({
   );
 }
 
-export function MovementDetailCard({ movement, onClose }: MovementDetailCardProps) {
+export function MovementDetailCard({ movement, onClose, viewMonth }: MovementDetailCardProps) {
   const { defaultCurrency } = useSettings();
 
   const isExpense = movement.type === "EXPENSE";
@@ -396,7 +425,7 @@ export function MovementDetailCard({ movement, onClose }: MovementDetailCardProp
         {movement.calculated && (
           <>
             <div className="h-px bg-hair" aria-hidden="true" />
-            <CalculatedBlock movement={movement} calc={movement.calculated} />
+            <CalculatedBlock movement={movement} calc={movement.calculated} viewMonth={viewMonth} />
           </>
         )}
 

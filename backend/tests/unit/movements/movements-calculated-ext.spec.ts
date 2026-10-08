@@ -214,6 +214,7 @@ const TX_DATA = {
   exchangeRate: '1',
   anchorCurrency: 'ARS',
   skipped: false,
+  category: { name: 'Turismo' },
 };
 const GROUP_DATA = {
   id: GROUP_ID,
@@ -225,6 +226,7 @@ const GROUP_DATA = {
   exchangeRate: '1',
   anchorCurrency: 'ARS',
   skips: [],
+  category: { name: 'Tecnología' },
 };
 
 // ---------------------------------------------------------------------------
@@ -319,6 +321,32 @@ describe('[REGRESIÓN] Calculados en su sección de origen — no en fijos', () 
       expect(item.calculated!.sourceId).toBe(TX_ID);
       expect(item.calculated!.sourceChainId).toBeNull();
       expect(item.calculated!.sourceAmountCents).toBe(10000);
+      // Único no acepta mes de referencia (offset) — siempre 0.
+      expect(item.calculated!.sourceMonthOffset).toBe(0);
+    });
+
+    it('sourceDescription usa la descripción del Transaction de origen cuando la tiene', async () => {
+      mockPrisma.$queryRaw.mockResolvedValue([]);
+      mockPrisma.recurring.findMany.mockResolvedValueOnce([makeCalcDeUnico()]);
+      mockPrisma.transaction.findMany.mockResolvedValue([TX_DATA]); // description: 'Viaje'
+
+      const unicos = await repo.findUnicosByMonth(USER_A, '2026-06');
+      const item = unicos.find((u) => u.id === CALC_TX_ID)!;
+
+      expect(item.calculated!.sourceDescription).toBe('Viaje');
+    });
+
+    it('sourceDescription cae al nombre de la categoría del origen cuando este no tiene descripción', async () => {
+      mockPrisma.$queryRaw.mockResolvedValue([]);
+      mockPrisma.recurring.findMany.mockResolvedValueOnce([makeCalcDeUnico()]);
+      mockPrisma.transaction.findMany.mockResolvedValue([
+        { ...TX_DATA, description: null },
+      ]);
+
+      const unicos = await repo.findUnicosByMonth(USER_A, '2026-06');
+      const item = unicos.find((u) => u.id === CALC_TX_ID)!;
+
+      expect(item.calculated!.sourceDescription).toBe('Turismo');
     });
 
     it('skipped=false, frequency=null (los únicos no tienen skip ni frecuencia)', async () => {
@@ -408,6 +436,32 @@ describe('[REGRESIÓN] Calculados en su sección de origen — no en fijos', () 
       expect(item.calculated!.sourceType).toBe('cuota');
       expect(item.calculated!.sourceId).toBe(GROUP_ID);
       expect(item.calculated!.sourceChainId).toBeNull();
+      // Cuota no acepta mes de referencia (offset) — siempre 0.
+      expect(item.calculated!.sourceMonthOffset).toBe(0);
+    });
+
+    it('sourceDescription usa la descripción del InstallmentGroup de origen cuando la tiene', async () => {
+      mockPrisma.installmentGroup.findMany
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([GROUP_DATA]); // description: 'Cuota laptop'
+      mockPrisma.recurring.findMany.mockResolvedValueOnce([makeCalcDeCuota()]);
+
+      const cuotas = await repo.findCuotasByMonth(USER_A, '2026-03');
+      const item = cuotas.find((c) => c.id === CALC_CUOTA_ID)!;
+
+      expect(item.calculated!.sourceDescription).toBe('Cuota laptop');
+    });
+
+    it('sourceDescription cae al nombre de la categoría del origen cuando este no tiene descripción', async () => {
+      mockPrisma.installmentGroup.findMany
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ ...GROUP_DATA, description: null }]);
+      mockPrisma.recurring.findMany.mockResolvedValueOnce([makeCalcDeCuota()]);
+
+      const cuotas = await repo.findCuotasByMonth(USER_A, '2026-03');
+      const item = cuotas.find((c) => c.id === CALC_CUOTA_ID)!;
+
+      expect(item.calculated!.sourceDescription).toBe('Tecnología');
     });
 
     it('aparece en el último mes del grupo (mes 6 de 6)', async () => {

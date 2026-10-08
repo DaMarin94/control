@@ -6,7 +6,9 @@ import {
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
+  Min,
 } from 'class-validator';
 import { FormulaOperator } from '@prisma/client';
 
@@ -23,6 +25,7 @@ import { FormulaOperator } from '@prisma/client';
  *   - formulaOperator
  *   - formulaOperand
  *   - formulaSign
+ *   - sourceMonthOffset (mes de referencia, entero 0..12 — ver create-calculated-recurring.dto.ts)
  *
  * NO editables:
  *   - type: se deriva del signo del resultado (RF-MCALC-003).
@@ -66,6 +69,17 @@ export class UpdateCalculatedRecurringDto {
   @IsOptional()
   @IsIn([1, -1], { message: 'El signo debe ser 1 (positivo) o -1 (negativo)' })
   formulaSign?: number;
+
+  /**
+   * Mes de referencia: cuántos meses hacia atrás mirar para la base de la
+   * fórmula (ver create-calculated-recurring.dto.ts). Sigue la misma mecánica
+   * de split del pasado que el resto de los campos editables.
+   */
+  @IsOptional()
+  @IsInt({ message: 'sourceMonthOffset debe ser un entero' })
+  @Min(0, { message: 'sourceMonthOffset debe estar entre 0 y 12' })
+  @Max(12, { message: 'sourceMonthOffset debe estar entre 0 y 12' })
+  sourceMonthOffset?: number;
 
   @IsString()
   @Matches(/^\d{4}-\d{2}$/, {

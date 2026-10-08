@@ -136,6 +136,18 @@ const fijoCalculado: MovementItem = {
     formulaOperand: 1000, // 10% (10 × 100)
     formulaSign: 1,
     sourceAmountCents: 150000,
+    sourceMonthOffset: 0,
+  },
+};
+
+/** Fijo calculado con "mes del monto base" desfasado (docs/design.md) */
+const fijoCalculadoConOffset: MovementItem = {
+  ...fijoCalculado,
+  id: "calc-offset-1",
+  calculated: {
+    ...fijoCalculado.calculated!,
+    sourceAmountCents: 200000, // monto del origen EN EL MES DE REFERENCIA (Nov 2026)
+    sourceMonthOffset: 1, // el mes anterior
   },
 };
 
@@ -166,8 +178,8 @@ const fijoConDerivados: MovementItem = {
   ],
 };
 
-function renderCard(movement: MovementItem, onClose = vi.fn()) {
-  return render(<MovementDetailCard movement={movement} onClose={onClose} />);
+function renderCard(movement: MovementItem, onClose = vi.fn(), viewMonth = "2026-06") {
+  return render(<MovementDetailCard movement={movement} onClose={onClose} viewMonth={viewMonth} />);
 }
 
 // ─── Tests: cierre ────────────────────────────────────────────────────────────
@@ -208,7 +220,7 @@ describe("MovementDetailCard — cierre (excepción: también por clic en el scr
       const [open, setOpen] = useState(true);
       return (
         <div onClick={() => setOpen(true)} data-testid="row">
-          {open && <MovementDetailCard movement={unico} onClose={() => setOpen(false)} />}
+          {open && <MovementDetailCard movement={unico} onClose={() => setOpen(false)} viewMonth="2026-06" />}
         </div>
       );
     }
@@ -452,6 +464,30 @@ describe("MovementDetailCard — calculado: bloque Origen + Fórmula", () => {
     renderCard(unico);
     expect(screen.queryByText("Origen")).not.toBeInTheDocument();
     expect(screen.queryByText("Fórmula")).not.toBeInTheDocument();
+  });
+});
+
+describe("MovementDetailCard — Mes del monto base (docs/design.md, sourceMonthOffset)", () => {
+  it("desfasaje 0: NO muestra la sublínea 'Monto base' (cero impacto)", () => {
+    renderCard(fijoCalculado);
+    expect(screen.queryByText(/Monto base:/)).not.toBeInTheDocument();
+  });
+
+  it("desfasaje > 0: muestra 'Monto base: {Mmm AAAA}' bajo la expresión, con el mes de referencia (viewMonth − offset)", () => {
+    renderCard(fijoCalculadoConOffset, vi.fn(), "2026-06");
+    // offset=1 sobre viewMonth 2026-06 → mes de referencia Mayo 2026
+    expect(screen.getByText("Monto base: May 2026")).toBeInTheDocument();
+  });
+
+  it("desfasaje > 0: la expresión usa sourceAmountCents (ya resuelto sobre el mes de referencia por el backend)", () => {
+    renderCard(fijoCalculadoConOffset);
+    // 10% de $2.000,00 (sourceAmountCents=200000 → $2.000,00, el monto de Nov... Mayo 2026)
+    expect(screen.getByText("10% de $2.000,00")).toBeInTheDocument();
+  });
+
+  it("desfasaje > 0: la caja Origen no cambia (no duplica el dato del desfasaje)", () => {
+    renderCard(fijoCalculadoConOffset);
+    expect(screen.getByText("Sueldo")).toBeInTheDocument();
   });
 });
 

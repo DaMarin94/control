@@ -105,6 +105,13 @@ vi.mock("@/hooks/use-active-limit-projection", () => ({
   useActiveLimitProjection: vi.fn(() => ({ evaluate: vi.fn(() => []) })),
 }));
 
+// "Mes del monto base" (docs/design.md) — CalculatedForm (sourceType "fijo")
+// llama a useMovements al montar (offset > 0 en este archivo no se ejercita,
+// pero el hook se invoca siempre). Mockeado para no depender de useSession real.
+vi.mock("@/hooks/use-movements", () => ({
+  useMovements: vi.fn(() => ({ data: undefined, isLoading: false })),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: vi.fn(() => ({ push: vi.fn() })),
 }));
@@ -169,6 +176,7 @@ const mockRecurring: Recurring = {
   frequency: 1,
   currency: "ARS",
   exchangeRate: 1,
+  sourceMonthOffset: 0,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
   category: { id: "cat-expense", name: "Servicios", color: "#FF5733", scope: "EXPENSE" },
@@ -231,6 +239,7 @@ const mockCalculadoFijoMovement: MovementItem = {
     formulaOperand: 1000,
     formulaSign: -1,
     sourceAmountCents: 150000,
+    sourceMonthOffset: 0,
   },
   hasCalculated: false,
   currency: "ARS",
@@ -267,6 +276,7 @@ const mockCalculadoUnicoMovement: MovementItem = {
     formulaOperand: 1000,
     formulaSign: 1,
     sourceAmountCents: 50000,
+    sourceMonthOffset: 0,
   },
   hasCalculated: false,
   currency: "ARS",
