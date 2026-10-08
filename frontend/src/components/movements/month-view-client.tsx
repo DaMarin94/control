@@ -1199,7 +1199,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                 )}
                 style={{ padding: "16px 18px" }}
               >
-                <div className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted">
+                <div className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
                   Gastos
                 </div>
                 <div className="inline-flex items-center gap-[7px]">
@@ -1224,7 +1224,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                 )}
                 style={{ padding: "16px 18px" }}
               >
-                <div className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted">
+                <div className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
                   Ingresos
                 </div>
                 <div className="inline-flex items-center gap-[7px]">
@@ -1251,7 +1251,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                   background: "linear-gradient(135deg, var(--accent-press), var(--accent))",
                 }}
               >
-                <div className="text-[12.5px] font-semibold uppercase tracking-[0.08em] text-white/70">
+                <div className="text-[12px] font-semibold uppercase tracking-[0.1em] text-white/70">
                   Balance
                 </div>
                 <div className="inline-flex items-center gap-[7px]">

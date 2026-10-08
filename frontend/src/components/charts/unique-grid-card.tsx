@@ -569,7 +569,7 @@ function ColorAnchorPopover({ anchorRef, year, cardCurrency, colorAnchorCents, o
     >
       <div className="flex flex-col gap-[10px]">
         {/* Caption */}
-        <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">
+        <div className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
           Techo de la escala de color
         </div>
 
@@ -861,7 +861,7 @@ function PctDifDisplay({ value, label, mark }: { value: number | null; label: st
   if (value === null) {
     return (
       <div className="flex flex-col gap-[1px]">
-        <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-faint leading-none">{label}</span>
+        <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-muted leading-none">{label}</span>
         <span className="mono text-[10.5px] font-semibold text-muted">—</span>
       </div>
     );
@@ -873,7 +873,7 @@ function PctDifDisplay({ value, label, mark }: { value: number | null; label: st
 
   return (
     <div className="flex flex-col gap-[1px]">
-      <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-faint leading-none">{label}</span>
+      <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-muted leading-none">{label}</span>
       <span className={cn("mono text-[10.5px] font-semibold text-ink-2 flex items-center gap-[2px]", valueClassName)}>
         {glyph}
         {/* La dirección ↑/↓ se conserva siempre (no la reemplaza el tint) */}
@@ -934,7 +934,7 @@ function FooterCell({ footer, currency, marks, onMouseEnter, onMouseLeave }: Foo
       {/* 2. Promedio diario — reporte.unicos.promedioDiario */}
       {avgAbbr !== null ? (
         <div className="flex flex-col gap-[1px] mb-[4px]">
-          <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-faint leading-none">prom</span>
+          <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-muted leading-none">prom</span>
           <span className={cn("mono text-[10.5px] font-medium text-ink-2 flex items-center gap-[3px]", avgAdorn.valueClassName)}>
             {avgAdorn.glyph}
             {avgAbbr}
@@ -942,7 +942,7 @@ function FooterCell({ footer, currency, marks, onMouseEnter, onMouseLeave }: Foo
         </div>
       ) : (
         <div className="flex flex-col gap-[1px] mb-[4px]">
-          <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-faint leading-none">prom</span>
+          <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-muted leading-none">prom</span>
           <span className="mono text-[10.5px] font-medium text-muted">—</span>
         </div>
       )}
@@ -956,7 +956,7 @@ function FooterCell({ footer, currency, marks, onMouseEnter, onMouseLeave }: Foo
       <div className="mb-[4px]">
         {footer.inflationPct !== null ? (
           <div className="flex flex-col gap-[1px]">
-            <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-faint leading-none">infl</span>
+            <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-muted leading-none">infl</span>
             <span className={cn("mono text-[10.5px] font-medium text-ink-2 flex items-center gap-[3px]", inflAdorn.valueClassName)}>
               {inflAdorn.glyph}
               {inflFmt}
@@ -964,7 +964,7 @@ function FooterCell({ footer, currency, marks, onMouseEnter, onMouseLeave }: Foo
           </div>
         ) : (
           <div className="flex flex-col gap-[1px]">
-            <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-faint leading-none">infl</span>
+            <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-muted leading-none">infl</span>
             <span className="mono text-[10.5px] font-medium text-muted">—</span>
           </div>
         )}

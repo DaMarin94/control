@@ -46,7 +46,7 @@ export default function ConfiguracionLayout({ children }: { children: React.Reac
         <h1 className="text-[32px] font-bold tracking-[-0.02em] text-ink leading-tight">
           Configuración
         </h1>
-        <p className="text-[14px] text-muted mt-2">
+        <p className="text-[14.5px] leading-[1.5] text-muted mt-2">
           Preferencias de tu cuenta.
         </p>
       </div>

@@ -121,6 +121,15 @@ Todo **popover / kebab / tooltip / confirmación** anclado dentro de una superfi
 - **`useListboxDismiss(open, close, triggerRef, panelRef)`** — cierra por clic-fuera / `Esc` (con **retorno de foco al disparador**) / **scroll externo en captura** / resize. El listener de scroll lleva un **guard que ignora el scroll originado dentro del panel** (`panelRef.contains(e.target)`): por eso la lista se puede scrollear sin que el popover se cierre.
 - **Constantes canónicas:** `POPOVER_GAP = 6` (separación disparador↔panel), `VIEWPORT_MARGIN = 12` (respiro mínimo a cualquier borde).
 
+### Overlay portaleado con posicionamiento en dos pasadas — dos trampas (gotcha)
+
+Todo overlay portaleado que posiciona su panel en **dos pasadas** (estimada antes de pintar → medición real una vez montado) tiene dos trampas estructurales:
+
+1. **El efecto de la segunda pasada depende del `mounted` del panel.** Si el componente del panel tiene su **propio guard SSR** (`if (!mounted) return null`) independiente del `open` del disparador, ese `mounted` va en las dependencias del efecto. Si el efecto depende solo de refs y callbacks —estables por identidad— nunca se re-ejecuta una vez que el nodo real existe, y la posición queda atada a la estimación.
+2. **La segunda pasada mide `scrollHeight`, no `getBoundingClientRect()` ni `offsetHeight`.** Cuando la primera pasada ya aplicó un `maxHeight` clampeado, la caja devuelve el alto **recortado**, no el del contenido: medir la caja hace concluir "entra", libera el clamp y el contenido real se desborda del viewport. `scrollHeight` es inmune al `maxHeight` vigente.
+
+Referencias que cumplen el punto 1: `month-jump-popover.tsx` y `limits-info-popover.tsx`. `section-filter-popover.tsx` cumple los dos.
+
 ### Breakpoint — variantes `wide:` / `max-wide:`
 
 La disposición responsive se decide con las variantes **`wide:`** (`width ≥ 941px`) y **`max-wide:`** (`width < 941px`), habilitadas por el token `--breakpoint-wide: 941px` declarado en `@theme` (Tailwind v4) en `frontend/src/app/globals.css`. **El número `941` no se repite en ningún `.tsx`** y no se escriben media queries a mano para la disposición general (ver `docs/design.md` § Contención responsive para la política del breakpoint y el piso del régimen de app).

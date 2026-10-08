@@ -65,7 +65,7 @@ export function UndoConfirmModal({ entry, isSubmitting, onConfirm, onClose }: Un
           heading={isEdit ? "Al deshacer queda así:" : "Vuelve a la app:"}
         />
 
-        <p className="text-[12.5px] text-muted">Esta entrada se borra del historial.</p>
+        <p className="text-[12.5px] leading-[1.5] text-muted">Esta entrada se borra del historial.</p>
       </ModalShellBody>
 
       <ModalShellFooter>

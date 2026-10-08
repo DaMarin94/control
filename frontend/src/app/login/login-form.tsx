@@ -265,7 +265,7 @@ export function LoginSeparator({ label }: { label: string }) {
         <span className="w-full border-t border-line" />
       </div>
       <div className="relative flex justify-center">
-        <span className="bg-paper px-3 text-[12px] uppercase tracking-[.08em] text-faint">
+        <span className="bg-paper px-3 text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
           {label}
         </span>
       </div>

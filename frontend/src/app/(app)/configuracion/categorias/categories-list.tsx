@@ -119,7 +119,7 @@ export function CategoriesList() {
       <div className="flex items-center justify-between gap-5 flex-wrap mb-4">
         <div>
           <h2 className="text-[18px] font-bold tracking-[-0.01em] text-ink">Categorías</h2>
-          <p className="text-[13px] font-medium text-muted mt-[3px]">
+          <p className="text-[14.5px] leading-[1.5] text-muted mt-[3px]">
             <span className="mono font-semibold text-ink">{count}</span>{" "}
             {count === 1 ? "categoría activa" : "categorías activas"}. El{" "}
             <b className="font-semibold text-ink">alcance</b> define en qué tipo de movimiento
@@ -136,7 +136,7 @@ export function CategoriesList() {
       {!categories || categories.length === 0 ? (
         <div className="rounded-card border border-dashed border-line bg-panel-2 py-12 text-center">
           <p className="text-[15px] font-semibold text-ink">No tenés categorías activas.</p>
-          <p className="mt-1 text-[13px] text-muted">
+          <p className="mt-1 text-[12.5px] leading-[1.5] text-muted">
             Creá una para empezar a organizar tus movimientos.
           </p>
           <Button

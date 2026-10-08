@@ -161,7 +161,7 @@ export function CaptureRecurringForm({ defaultMonth, onFooterStateChange, onCrea
             Mes de inicio
           </Label>
           <Input id={`${formId}-start-month`} type="month" error={errors.startMonth?.message} className={FIELD_INPUT_CLASS} {...register("startMonth")} />
-          <p className="text-[12.5px] text-muted">Mes a partir del cual aparece este gasto fijo</p>
+          <p className="text-[12.5px] leading-[1.5] text-muted">Mes a partir del cual aparece este gasto fijo</p>
         </div>
 
         {/* ── Frecuencia ── */}

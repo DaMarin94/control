@@ -155,7 +155,7 @@ export function HistoryClient() {
     <div className="px-10 py-[34px] pb-20 max-w-[1120px] mx-auto animate-screen-fade">
       <div className="mb-6">
         <h1 className="text-[32px] font-bold tracking-[-0.02em] leading-[1.05] text-ink m-0">Historial</h1>
-        <p className="text-[14px] text-muted mt-2">
+        <p className="text-[14.5px] leading-[1.5] text-muted mt-2">
           Se guardan los últimos 5 cambios de cada movimiento, durante 31 días.
         </p>
       </div>

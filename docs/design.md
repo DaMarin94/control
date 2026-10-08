@@ -93,10 +93,57 @@ Verde = ingreso, Rojo = gasto. Reservados estrictos.
 | Stat valor | 30px | 600 | -.02em |
 | Título de diálogo | 18px | 700 | -.01em |
 | Nombre de movimiento | 14.5px | 600 | -.01em |
+| Body secundario (bajada) | 14.5px | 400 | — |
+| Mensaje de diálogo | 14px | 400 | — |
 | Monto en fila | 15.5px | 600 | — |
-| Eyebrow / labels | 12px | 600 | .1em, uppercase |
+| Eyebrow / label | 12px | 600 | .1em, uppercase |
 | Group header (Únicos…) | 13px | 700 | .1em, uppercase |
 | Meta / subtítulos | 12.5px | 500 | — |
+| Nota / fine print | 12.5px | 400 | — |
+| Micro-label (visualización) | 9px | 600 | .08em, uppercase |
+
+**`Eyebrow / label` — un solo rol para todo label chico en mayúsculas.** Cubre los tres usos: el **eyebrow de página** (la línea sobre el título: "Bienvenido", "Reportes", "Configuración"), el **label de sección** (header de popover, de filtro, de columna) y la **etiqueta de stat-card** (el nombre que encabeza una cifra: "Gastos", "Ingresos", "Balance de junio"). Los tres resuelven el mismo problema —nombrar, en el rango tipográfico más bajo, la cifra o el bloque que viene a continuación— y por eso usan **el mismo valor: 12px / 600 / .1em / uppercase**. **No hay variante de tamaño por contexto:** la jerarquía entre un eyebrow de página y una etiqueta de card la da la **posición y el color**, no medio punto de tamaño — dos tamaños imperceptiblemente distintos para el mismo rol solo producen deriva. Un label en mayúsculas que difiera en size o tracking de esta fila está fuera de la escala.
+
+- **Color del rol:** `--muted` por defecto. Sobre una **superficie de acento rellena** (balance hero del dashboard, mini-balance de `/mes`) el rol se pinta como texto sobre acento (`white/70`): el color lo decide la **superficie**, no el rol. No es un rol aparte.
+- Los **micro-labels de gráficos** (ejes, leyendas y anotaciones de 9–11px dentro de las cards de reportes) **no** son este rol: viven en el espacio propio de la visualización y no tienen fila en esta escala.
+
+**`Mensaje de diálogo` — el texto que enuncia la decisión.** Es la frase principal de una superficie modal: la oración que dice **qué se va a hacer y sobre qué objeto** ("Se va a eliminar la categoría *Supermercado*", "Se deshace el movimiento…", "Este método existe pero está inactivo"). Valor: **14px / 400 / `--ink`**, Space Grotesk, `line-height 1.5`. Es el **único texto a 14px de la escala de página** y cubre las dos familias de modal: los diálogos de confirmación destructiva (categoría, método de pago, fijo, cuotas), la confirmación de deshacer y los prompts de reactivación.
+
+- **Por qué `--ink` y no `--muted`:** no es prosa de apoyo, es **el contenido de la pantalla**. En un diálogo el mensaje *es* la tarea —el usuario lee esa única frase para decidir— y por eso toma el color de texto principal, aunque mida menos que el body base. El título de 18px nombra la acción; el mensaje de 14px la enuncia con el objeto concreto. Esa es toda la jerarquía que el diálogo necesita.
+- **Por qué 14px y no 14.5px:** `Body secundario` (14.5/400) es apoyo de un título grande y vive en `--muted`; el mensaje de diálogo es contenido y vive en `--ink`. Separar medio punto mantiene los dos roles distinguibles por size **además** de por color, y evita que un mensaje de diálogo se escriba por error con la caja de una bajada.
+- **Variante `--muted` — frase líder de un estado vacío de card de reporte.** El mismo valor de size y weight (14px / 400) se usa para la **única frase** que ocupa el lugar del dibujo cuando una card de reporte no tiene datos ("Sin movimientos en {year}", "Ningún gasto fijo tiene dos apariciones en el rango"). Ahí el color es **`--muted`**: no hay decisión que tomar ni objeto sobre el que actuar —es la **ausencia** de contenido, no el contenido—, y el bloque entero es subordinado a la card que lo contiene. Es la misma fila con el color que le corresponde a su superficie, no un rol aparte. **El cuerpo** de un estado vacío (la frase que explica cómo salir del vacío, debajo de la líder) no es esta fila: baja a `Nota / fine print` por la regla de subordinación.
+- **Énfasis inline:** el nombre del objeto afectado dentro del mensaje puede subir a **600** (y a mono tabular si es una cifra o una fecha, por regla dura 3) sin cambiar el size de la fila. Es lo que hace que el usuario reconozca *cuál* objeto está por tocar.
+- **Disposición compacta:** el rol **no cambia de size ni de color** por debajo de `--bp-wide`. Un modal angosto contiene el mensaje haciéndolo **envolver en más líneas**, nunca reduciéndolo: a 14px ya está en el piso de lo legible para texto corrido, y bajarlo rompería accesibilidad justo en la frase que decide una acción destructiva. Las cuatro invariantes se mantienen: el mensaje sigue siendo el primer texto después del título (jerarquía), conserva `--ink` (contraste), no se trunca ni se recorta con ellipsis (ninguna parte de la decisión queda oculta) y las cifras que contenga siguen en mono tabular.
+
+**`Meta / subtítulos` — variante mono.** Cuando el texto de este rol es una **fecha, un contador o una cifra** (la fecha de la fila de movimiento, `Cuota 3/12`, el `12 movimientos` de una stat-card), va en **IBM Plex Mono tabular** por la regla de cifras de § Tipografía; **size (12.5px), weight (500) y color no cambian**. La variante mono no es un rol nuevo.
+
+### Prosa secundaria — dos filas y una regla de subordinación
+
+La escala tiene **dos filas para texto corrido que no es el contenido principal**. Las dos van en `--muted`, `line-height 1.5`, weight **400** (es prosa: no lleva peso) y sin tracking.
+
+| Fila | Valor | Qué es |
+|---|---|---|
+| **`Body secundario`** | 14.5px / 400 / `--muted` | La **bajada**: la frase de apoyo inmediatamente debajo de un **título de pantalla** (H1 32px) o de **sección** (H2 18px). Una o dos frases, nunca un párrafo largo. |
+| **`Nota / fine print`** | 12.5px / 400 / `--muted` | La **letra chica**: ayuda de campo, nota al pie de un form, descripción de una opción de menú o popover, cuerpo de un estado vacío, línea de consecuencia de una acción en un diálogo, pie de las pantallas de acceso. |
+
+**Regla de subordinación — el apoyo nunca iguala al texto que apoya.** `Body secundario` solo acompaña a un título de **18px o más**. Cuando el texto al que apoya mide **≤ 15.5px** —cuerpo de diálogo, frase líder de un estado vacío, título de card de 14.5px— el apoyo baja a `Nota / fine print`. Esto resuelve sin ambigüedad el caso que más deriva produce: un diálogo queda en 14px (mensaje) + 12.5px (consecuencia), y una bajada de pantalla en 32px + 14.5px.
+
+**El par del diálogo, explícito.** El mensaje del diálogo es uno de los textos que **reciben** apoyo, no uno de los que apoyan: su fila es `Mensaje de diálogo` (14px / 400 / `--ink`) y su apoyo —la **línea de consecuencia**, la que dice qué pasa con los datos asociados ("Los movimientos registrados con esta categoría no se eliminan", "Se recalculan las cuotas siguientes")— es `Nota / fine print` (12.5px / 400 / `--muted`). Nunca al revés y nunca iguales: la consecuencia no sube a 14px (competiría con la frase que enuncia la decisión) y el mensaje no baja a 12.5px (dejaría al diálogo sin texto principal). El mismo par rige el estado vacío de una card de reporte: frase líder en 14px / `--muted` + cuerpo en 12.5px / `--muted`, distinguidos por size porque comparten color.
+
+- **`Body secundario` y `Nombre de movimiento` comparten los 14.5px** y se distinguen por weight (400 prosa vs. 600 nombre de objeto), igual que `Nota / fine print` y `Meta / subtítulos` comparten los 12.5px y se distinguen por weight (400 prosa vs. 500 dato). La prosa y el dato nunca compiten: el dato lleva peso, la prosa no.
+- **Énfasis dentro de la prosa:** una palabra o una cifra pueden subir a `--ink` + 600 (y a mono si es cifra) dentro del párrafo. El énfasis inline **no cambia el size** de la fila.
+- **Qué no es prosa secundaria** (y por eso no entra en estas filas): el **texto de un control** (botón, opción, chip, tab) sigue la escala de controles; el **texto con color semántico** (error en `--expense-ink`, aviso en `--warning-ink`) es estado, no prosa; el **meta de un objeto** (fila, card) es `Meta / subtítulos`; el **interior de una visualización** tiene su propia escala (ver abajo).
+
+**`--faint` no es un color de prosa.** Ningún texto que el usuario deba leer va en `--faint`: su contraste no alcanza en los tamaños de estas dos filas. `--faint` queda reservado para **placeholder de input** y para la **marca de dato ausente** (el `—` de una celda sin valor). La letra chica legal también va en `--muted`: es texto que el usuario tiene derecho a poder leer. Cuando un enlace vive **dentro** de un párrafo de estas filas, se distingue en `--ink-2` + subrayado —más oscuro que el texto que lo rodea, y con una señal que no es color.
+
+**`Micro-label` — el único valor canónico del espacio de visualización.** El interior de una card de reporte (eje, leyenda, tooltip, anotación sobre el dibujo, pie de la grilla) **no lo gobierna la escala de página**: compite por píxeles con el dibujo y tiene su propia jerarquía, más densa. De esa jerarquía esta guía fija **un solo valor**: el **`Micro-label`** —el rótulo en mayúsculas que nombra una cifra dentro del dibujo, del tooltip o del pie de la grilla ("prom", "infl", "vs ant", "por cuota", el mes de un tooltip)— en **9px / 600 / .08em / uppercase / `--muted`**.
+
+- **Por qué 9px y no se unifica hacia arriba:** estos rótulos viven en celdas de una grilla de 12 columnas y en tooltips angostos. Subirlos desborda la celda o fuerza wrap en la leyenda, y el costo recae sobre la lectura del gráfico, que es la tarea. La contención se compra donde no cuesta: el **color canónico es `--muted`**, no `--faint`, y eso recupera legibilidad sin tocar un píxel de layout.
+- **El micro-label nunca es el único portador del dato.** Es una abreviatura; su nombre completo está disponible en el tooltip de la misma celda (`vs ant` → "Variación vs. mes anterior"). Si un rótulo de 9px fuera la única forma de saber qué significa una cifra, el problema es la composición, no el tamaño.
+- **Un rótulo en mayúsculas fuera del dibujo no es micro-label.** Header de popover, label de filtro, label de columna de un diálogo, rótulo de un separador: todos son **`Eyebrow / label`** (12px / 600 / .1em). El espacio de visualización empieza en el dibujo y sus piezas de lectura, no en la card que lo contiene.
+- **Qué queda fuera de la tabla, explícitamente:** la prosa y los pares etiqueta–valor del tooltip, la lista de la leyenda y las cifras mono de lectura interna de cada card. Siguen la jerarquía interna de su card y no tienen fila en esta escala. El `navlbl` del sidebar (10.5px / 600 / .12em / `--faint`) también queda fuera: es la escala comprimida propia del sidebar como chrome persistente, y **ese valor no se usa en ninguna otra superficie** — un label con ese valor dentro del contenido es deriva y se corrige a `Eyebrow / label`.
+
+**Contención (régimen de app).** Ninguna de estas tres filas cambia de size al angostar la ventana: la escala tipográfica **no tiene saltos por breakpoint**. La prosa secundaria se contiene por **wrap dentro de su contenedor** (y, cuando hace falta, por `max-w`), nunca por reducción de tamaño ni por truncado — un párrafo truncado pierde información y no es contención. El `Micro-label`, por ser el valor más chico de la app, no se reduce en ningún ancho; si su contenedor no entra, la superficie ancha scrollea dentro de sí misma (invariante 4), no se achica la letra.
 
 ---
 

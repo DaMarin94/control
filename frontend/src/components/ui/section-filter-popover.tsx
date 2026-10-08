@@ -177,7 +177,7 @@ function InlineCategoryBlock({
     <div className="flex flex-1 min-h-0 flex-col">
       {/* Header — shrink-0: nunca scrollea con la lista (§8.2, "categorías" es la única región flexible) */}
       <div className="shrink-0 flex items-center justify-between px-3 py-[10px] border-b border-hair">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+        <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
           Mostrar categorías
         </span>
         <button
@@ -262,17 +262,56 @@ function InlineCategoryBlock({
   );
 }
 
-// ─── Contención del panel (docs/design.md §8.2) ────────────────────────────────
+// ─── Contención del panel (docs/design.md §8.2 y §"Posicionamiento de
+// popovers/listbox por portal") ──────────────────────────────────────────────
 //
 // El popover pasa a ser una COLUMNA ACOTADA: `max-height: min(560px, 100dvh -
 // 24px)` y anclaje INVERTIBLE hacia arriba si no entra abajo — hoy solo abría
 // hacia abajo; con la banda "Simulación" (footerSlot, shrink-0) esto pasa a
 // ser requisito (antes solo corría riesgo la lista de categorías). Mismo
-// MECANISMO que `KebabMenu`/`use-listbox-popover.ts` (medir en dos pasadas:
+// MECANISMO que `reportes/page.tsx` (`calcPosition`, la referencia canónica
+// del contrato) / `KebabMenu`/`use-listbox-popover.ts` (medir en dos pasadas:
 // estimado antes de pintar, alto real una vez montado, para flip sin salto
 // visible) — no se reusa el hook `useListboxPosition` porque ese ancla por la
 // IZQUIERDA con ancho = ancho del trigger; este panel ancla por la DERECHA con
 // ancho fijo (260px), semántica distinta.
+//
+// Tres refuerzos sobre la versión anterior (bug de contención, viewport piso
+// 602×615 con simulaciones activas — las acciones "Eliminar la simulación de…"
+// quedaban fuera de pantalla):
+//   1. La 2da pasada (alto real) ahora depende de `mounted`, no solo de
+//      `calc`/`panelRef` (ambos estables por identidad y por lo tanto efectos
+//      que solo corren UNA vez). `SectionFilterPanel` devuelve `null` hasta
+//      que `mounted` es true (guard SSR) — en ESE primer commit
+//      `panelRef.current` es `null`, así que sin la dependencia `mounted` el
+//      efecto de la 2da pasada corría como no-op y jamás se reintentaba: la
+//      posición quedaba atada para siempre al ESTIMADO (560px), forzando el
+//      branch de clamp aunque el contenido real entrara sin problema.
+//   2. El panel usa `overflow-y-auto` (no `-hidden`) como red de seguridad: si
+//      ni el flip ni el clamp de `maxHeight` alcanzan (viewports muy bajos),
+//      el panel ENTERO scrollea en vez de recortar el footerSlot con
+//      `overflow-hidden` (que lo dejaría inalcanzable y sin aviso — invariante
+//      3, "ninguna acción inalcanzable"). En el caso normal no cambia nada
+//      visible (el contenido entra en `maxHeight`, no aparece barra).
+//   3. La 2da pasada mide `scrollHeight`, NO `getBoundingClientRect().height`.
+//      Causa raíz del bug que sobrevivió a (1): la 1ra pasada (estimado,
+//      `calc(PANEL_INTRINSIC_MAX_HEIGHT)`) puede concluir "no entra en ningún
+//      lado" y aplicar un `maxHeight` clampeado (p. ej. 277px) ANTES de que el
+//      panel llegue a pintar con `mounted=true` — ambas actualizaciones de
+//      estado (estimado + `setMounted(true)`) se baten en el mismo commit, así
+//      que el PRIMER render real del panel YA sale con ese `maxHeight`
+//      recortado aplicado. Medir `getBoundingClientRect().height` en la 2da
+//      pasada mide entonces la CAJA ya recortada por ese `maxHeight`
+//      (`overflow-y-auto` la clava en 277), no el contenido real (549px) — un
+//      número de entrada corrupto que hace que `calc` concluya erróneamente
+//      "entra abajo" (277 ≤ espacio) y libere el `maxHeight` de vuelta al cap
+//      (560), permitiendo que el contenido real (549, que SÍ excede el
+//      espacio disponible) se desborde del viewport. `scrollHeight` no tiene
+//      este problema: en un contenedor flex-columna con `overflow-y-auto`,
+//      reporta el alto LÓGICO total de los hijos (header `shrink-0` + bloque
+//      de categorías en su piso `min-h-0`/`minHeight:120` + footer
+//      `shrink-0`), incluida la porción que excede la caja ya clampeada — es
+//      inmune al `maxHeight` vigente en el momento de medir.
 
 const PANEL_INTRINSIC_MAX_HEIGHT = 560;
 const PANEL_VIEWPORT_MARGIN = 12;
@@ -287,6 +326,7 @@ interface PanelPosition {
 function usePanelPosition(
   anchorRef: React.RefObject<HTMLButtonElement | null>,
   panelRef: React.RefObject<HTMLDivElement | null>,
+  mounted: boolean,
 ) {
   const [position, setPosition] = useState<PanelPosition>({
     top: 0,
@@ -334,12 +374,28 @@ function usePanelPosition(
     calc(PANEL_INTRINSIC_MAX_HEIGHT);
   }, [calc]);
 
-  // Segunda pasada: alto real del panel, una vez montado.
+  // Segunda pasada: alto real del panel, una vez montado. Depende de
+  // `mounted` (no solo de `calc`/`panelRef`, estables por identidad) porque
+  // `SectionFilterPanel` devuelve `null` hasta que `mounted` es true (guard
+  // SSR) — en ESE primer commit `panelRef.current` todavía es `null`, así que
+  // sin esta dependencia el efecto corre una única vez como no-op y el alto
+  // REAL nunca llega a aplicarse (la posición queda atada para siempre al
+  // estimado de 560px, que fuerza el branch "no entra en ningún lado" incluso
+  // cuando el contenido real entra sin clamp). Mismo patrón que
+  // `reportes/page.tsx` (`AddCardMenu`, segundo efecto con dep `[mounted]`).
+  //
+  // `scrollHeight`, NO `getBoundingClientRect().height`: el primer render real
+  // (una vez `mounted`) ya puede salir con el `maxHeight` del ESTIMADO
+  // clampeado (si la 1ra pasada concluyó "no entra en ningún lado"); medir la
+  // caja (`getBoundingClientRect`) mediría ESE recorte, no el contenido real,
+  // y alimentaría a `calc` con un número corrupto (ver comentario arriba del
+  // hook). `scrollHeight` reporta el alto lógico total de los hijos aunque
+  // excedan la caja ya clampeada por `overflow-y-auto`.
   useEffect(() => {
     if (!panelRef.current) return;
-    const real = panelRef.current.getBoundingClientRect().height;
+    const real = panelRef.current.scrollHeight;
     if (real > 0) calc(real);
-  }, [calc, panelRef]);
+  }, [calc, panelRef, mounted]);
 
   return position;
 }
@@ -373,7 +429,7 @@ function SectionFilterPanel({
 }: SectionFilterPanelProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
-  const position = usePanelPosition(anchorRef, popoverRef);
+  const position = usePanelPosition(anchorRef, popoverRef, mounted);
 
   useEffect(() => {
     setMounted(true);
@@ -426,7 +482,13 @@ function SectionFilterPanel({
   const content = (
     <div
       ref={popoverRef}
-      className="fixed z-50 flex w-[260px] flex-col rounded-ctl border border-line bg-panel shadow-[var(--shadow-lg)] animate-modal-pop overflow-hidden"
+      // overflow-y-auto (no -hidden): red de seguridad cuando ni el flip ni el
+      // clamp de `maxHeight` alcanzan (viewports muy bajos, §8.2) — el panel
+      // ENTERO scrollea en vez de recortar el footerSlot (shrink-0) con
+      // `overflow-hidden`, que lo dejaría inalcanzable sin aviso. En el caso
+      // normal (contenido ≤ maxHeight) no aparece barra: mismo resultado
+      // visual que antes.
+      className="fixed z-50 flex w-[260px] flex-col rounded-ctl border border-line bg-panel shadow-[var(--shadow-lg)] animate-modal-pop overflow-y-auto"
       style={{
         top: position.top,
         right: position.right,
@@ -438,7 +500,7 @@ function SectionFilterPanel({
     >
       {/* Bloque 1: Triple switch de tipo — shrink-0, nunca scrollea (§8.2) */}
       <div className="shrink-0 px-3 py-[10px] border-b border-hair">
-        <span className="block mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+        <span className="block mb-2 text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
           Mostrar
         </span>
         <TypeSwitch selected={selectedType} onChange={onTypeChange} />

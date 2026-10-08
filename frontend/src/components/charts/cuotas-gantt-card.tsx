@@ -530,7 +530,7 @@ function BarTooltipPortal({
       {/* Monto dominante — por cuota */}
       <div className="flex items-baseline gap-[4px] mb-[6px]">
         <span className="mono text-[13px] font-semibold text-ink tabular-nums">{amountFmt}</span>
-        <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-faint">por cuota</span>
+        <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-muted">por cuota</span>
       </div>
 
       {/* Filas de detalle */}

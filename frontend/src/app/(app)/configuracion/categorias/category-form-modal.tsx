@@ -247,7 +247,7 @@ export function CategoryFormModal({
                 </div>
               )}
             />
-            <p className="text-[12.5px] text-muted">
+            <p className="text-[12.5px] leading-[1.5] text-muted">
               Define si esta categoría aplica a gastos, ingresos o ambos.
             </p>
           </div>

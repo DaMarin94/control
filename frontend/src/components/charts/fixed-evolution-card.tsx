@@ -1237,7 +1237,7 @@ function CustomTooltip({
         {/* Cifra dominante / hueco */}
         {value !== null ? (
           <div>
-            <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-faint">{monthShort} {year}</p>
+            <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-muted">{monthShort} {year}</p>
             <p className="mono text-[13px] font-semibold text-ink">{formatDominantValue(value, mode, currency)}</p>
           </div>
         ) : (
@@ -2015,19 +2015,19 @@ export function FixedEvolutionCard({
             {isRangeEmptyPure && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 z-10 pointer-events-none text-center px-4" aria-live="polite">
                 <p className="text-[14px] text-muted">Sin gastos fijos en el rango.</p>
-                <p className="text-[12.5px] text-faint">Probá un rango más largo.</p>
+                <p className="text-[12.5px] leading-[1.5] text-muted">Probá un rango más largo.</p>
               </div>
             )}
             {isRangeEmptyWithExcluded && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 z-10 pointer-events-none text-center px-4" aria-live="polite">
                 <p className="text-[14px] text-muted">Ningún gasto fijo tiene dos apariciones en el rango.</p>
-                <p className="text-[12.5px] text-faint">Alargá el rango para ver su evolución.</p>
+                <p className="text-[12.5px] leading-[1.5] text-muted">Alargá el rango para ver su evolución.</p>
               </div>
             )}
             {!isRangeEmpty && isNoneSelected && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 z-10 pointer-events-none text-center px-4" aria-live="polite">
                 <p className="text-[14px] text-muted">Ningún gasto fijo seleccionado.</p>
-                <p className="text-[12.5px] text-faint">Elegí uno en la lista de abajo.</p>
+                <p className="text-[12.5px] leading-[1.5] text-muted">Elegí uno en la lista de abajo.</p>
               </div>
             )}
             {!isRangeEmpty && !isNoneSelected && isVariationEmpty && (
@@ -2035,12 +2035,12 @@ export function FixedEvolutionCard({
                 {adjusted ? (
                   <>
                     <p className="text-[14px] text-muted">Sin variación ajustada en el rango.</p>
-                    <p className="text-[12.5px] text-faint">Probá sin el ajuste por inflación.</p>
+                    <p className="text-[12.5px] leading-[1.5] text-muted">Probá sin el ajuste por inflación.</p>
                   </>
                 ) : (
                   <>
                     <p className="text-[14px] text-muted">Sin variación computable en el rango.</p>
-                    <p className="text-[12.5px] text-faint">Faltan datos para comparar cada pago con el anterior.</p>
+                    <p className="text-[12.5px] leading-[1.5] text-muted">Faltan datos para comparar cada pago con el anterior.</p>
                   </>
                 )}
               </div>

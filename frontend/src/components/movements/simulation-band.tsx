@@ -130,7 +130,7 @@ export function SimulationBand({
 
   return (
     <div className="shrink-0 border-t border-line bg-panel-2 px-3 py-[10px] flex flex-col gap-[8px]">
-      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+      <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
         Simulación
       </span>
 
@@ -149,7 +149,7 @@ export function SimulationBand({
       </button>
 
       {!hasActive ? (
-        <p className="text-[11.5px] text-muted">Proyecta categorías desde el mes que estás viendo.</p>
+        <p className="text-[12.5px] leading-[1.5] text-muted">Proyecta categorías desde el mes que estás viendo.</p>
       ) : (
         <>
           <div className="flex flex-col max-h-[176px] overflow-y-auto">
@@ -172,7 +172,7 @@ export function SimulationBand({
               />
             ))}
           </div>
-          <p className="text-[11.5px] text-muted">{formatHorizonBandNote()}</p>
+          <p className="text-[12.5px] leading-[1.5] text-muted">{formatHorizonBandNote()}</p>
         </>
       )}
     </div>

@@ -145,7 +145,7 @@ export function LimitAnchorPicker({ id, value, onChange }: LimitAnchorPickerProp
                 <div key={group.surface}>
                   <div
                     role="presentation"
-                    className="px-3 pt-2 pb-1 text-[11px] font-bold uppercase tracking-[0.1em] text-muted"
+                    className="px-3 pt-2 pb-1 text-[12px] font-semibold uppercase tracking-[0.1em] text-muted"
                   >
                     {SURFACE_LABELS[group.surface]}
                   </div>

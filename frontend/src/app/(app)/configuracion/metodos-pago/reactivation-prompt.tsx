@@ -79,19 +79,19 @@ export function ReactivationPrompt({ reactivable, onCancel, onReactivated }: Rea
           </p>
           <ul className="space-y-1 text-muted">
             <li className="flex items-center gap-2">
-              <span className="w-16 shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">
+              <span className="w-16 shrink-0 text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
                 Nombre
               </span>
               <span className="font-semibold text-ink">{reactivable.name}</span>
             </li>
             <li className="flex items-center gap-2">
-              <span className="w-16 shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">
+              <span className="w-16 shrink-0 text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
                 Tipo
               </span>
               <span className="font-semibold text-ink">{typeLabel}</span>
             </li>
             <li className="flex items-center gap-2">
-              <span className="w-16 shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">
+              <span className="w-16 shrink-0 text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
                 Ícono
               </span>
               <span

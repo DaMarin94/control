@@ -40,7 +40,7 @@ export function ChainUndoModal({ entry, chainEntries, isSubmitting, onConfirm, o
       <ModalShellBody>
         <div className="flex items-start gap-[10px] rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px]">
           <Info size={16} className="text-ink-2 shrink-0 mt-[1px]" aria-hidden="true" />
-          <p className="text-[13px] text-ink-2">
+          <p className="text-[14px] text-ink">
             Este no es el cambio más reciente de <b className="font-semibold">{rowLabel}</b>. Para deshacerlo hay
             que deshacer antes{" "}
             {entry.blockingCount === 1 ? (
@@ -55,7 +55,7 @@ export function ChainUndoModal({ entry, chainEntries, isSubmitting, onConfirm, o
         </div>
 
         <div>
-          <p className="text-[12.5px] font-medium text-muted mb-[8px]">Se van a deshacer, en este orden:</p>
+          <p className="text-[12.5px] leading-[1.5] text-muted mb-[8px]">Se van a deshacer, en este orden:</p>
           <div className="rounded-ctl border border-line overflow-hidden">
             {chainEntries.map((chainEntry, index) => {
               const isThisEntry = chainEntry.id === entry.id;
@@ -107,7 +107,7 @@ export function ChainUndoModal({ entry, chainEntries, isSubmitting, onConfirm, o
           </div>
         </div>
 
-        <p className="text-[12.5px] text-muted">Todas se borran del historial.</p>
+        <p className="text-[12.5px] leading-[1.5] text-muted">Todas se borran del historial.</p>
       </ModalShellBody>
 
       <ModalShellFooter>

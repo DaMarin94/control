@@ -25,7 +25,7 @@ export default function RegistroPage() {
       <div className="flex items-center justify-center bg-paper px-10 py-10">
         <div className="flex w-full max-w-[360px] flex-col">
           {/* Eyebrow */}
-          <span className="text-[13px] font-semibold uppercase tracking-[.1em] text-muted">
+          <span className="text-[12px] font-semibold uppercase tracking-[.1em] text-muted">
             Empezá gratis
           </span>
 
@@ -45,18 +45,18 @@ export default function RegistroPage() {
           </Suspense>
 
           {/* Fine print */}
-          <p className="mt-[22px] text-center text-[12.5px] leading-[1.5] text-faint">
+          <p className="mt-[22px] text-center text-[12.5px] leading-[1.5] text-muted">
             Al registrarte aceptás los{" "}
             <a
               href="#"
-              className="text-muted underline underline-offset-[2px] hover:text-ink"
+              className="text-ink-2 underline underline-offset-[2px] hover:text-ink"
             >
               Términos
             </a>{" "}
             y la{" "}
             <a
               href="#"
-              className="text-muted underline underline-offset-[2px] hover:text-ink"
+              className="text-ink-2 underline underline-offset-[2px] hover:text-ink"
             >
               Política de privacidad
             </a>
@@ -64,7 +64,7 @@ export default function RegistroPage() {
           </p>
 
           {/* Link a login */}
-          <p className="mt-8 text-center text-[13px] text-muted">
+          <p className="mt-8 text-center text-[12.5px] leading-[1.5] text-muted">
             ¿Ya tenés cuenta?{" "}
             <a
               href="/login"

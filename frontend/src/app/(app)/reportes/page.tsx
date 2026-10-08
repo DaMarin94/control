@@ -190,7 +190,7 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
         <AreaChart size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
         <div>
           <p className="text-[13px] font-semibold text-ink">Ingresos vs Gastos</p>
-          <p className="text-[11.5px] text-muted mt-[1px]">Ingresos vs. gastos por mes</p>
+          <p className="text-[12.5px] leading-[1.5] text-muted mt-[1px]">Ingresos vs. gastos por mes</p>
         </div>
       </button>
 
@@ -204,7 +204,7 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
         <BarChart3 size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
         <div>
           <p className="text-[13px] font-semibold text-ink">Gastos por categoría</p>
-          <p className="text-[11.5px] text-muted mt-[1px]">Gastos por categoría, apilado</p>
+          <p className="text-[12.5px] leading-[1.5] text-muted mt-[1px]">Gastos por categoría, apilado</p>
         </div>
       </button>
 
@@ -218,7 +218,7 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
         <CalendarDays size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
         <div>
           <p className="text-[13px] font-semibold text-ink">Gastos Únicos</p>
-          <p className="text-[11.5px] text-muted mt-[1px]">Grilla día × mes de gastos únicos</p>
+          <p className="text-[12.5px] leading-[1.5] text-muted mt-[1px]">Grilla día × mes de gastos únicos</p>
         </div>
       </button>
 
@@ -232,7 +232,7 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
         <CalendarRange size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
         <div>
           <p className="text-[13px] font-semibold text-ink">Gastos en Cuotas</p>
-          <p className="text-[11.5px] text-muted mt-[1px]">Gantt anual de gastos en cuotas</p>
+          <p className="text-[12.5px] leading-[1.5] text-muted mt-[1px]">Gantt anual de gastos en cuotas</p>
         </div>
       </button>
 
@@ -246,7 +246,7 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
         <TrendingUp size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
         <div>
           <p className="text-[13px] font-semibold text-ink">Inflación vs Ingresos</p>
-          <p className="text-[11.5px] text-muted mt-[1px]">Variación de tus ingresos frente a la inflación, mes a mes.</p>
+          <p className="text-[12.5px] leading-[1.5] text-muted mt-[1px]">Variación de tus ingresos frente a la inflación, mes a mes.</p>
         </div>
       </button>
 
@@ -260,7 +260,7 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
         <Repeat size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
         <div>
           <p className="text-[13px] font-semibold text-ink">Detalle histórico de gastos fijos</p>
-          <p className="text-[11.5px] text-muted mt-[1px]">Cada gasto fijo por separado, mes a mes: cuánto pagabas y cuándo aumentó.</p>
+          <p className="text-[12.5px] leading-[1.5] text-muted mt-[1px]">Cada gasto fijo por separado, mes a mes: cuánto pagabas y cuándo aumentó.</p>
         </div>
       </button>
     </div>

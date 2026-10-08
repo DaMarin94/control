@@ -152,7 +152,7 @@ function LimitsGroup({
   return (
     <div>
       {withDividerBefore && <div aria-hidden="true" className="h-px bg-hair" />}
-      <div className="px-[10px] pt-[8px] pb-[3px] text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">
+      <div className="px-[10px] pt-[8px] pb-[3px] text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
         {title}
       </div>
       <div role="list">

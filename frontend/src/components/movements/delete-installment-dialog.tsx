@@ -93,7 +93,7 @@ export function DeleteInstallmentDialog({ movement, onClose }: DeleteInstallment
           </div>
         </div>
 
-        <p className="text-[12.5px] text-muted">Vas a poder deshacerlo desde el historial.</p>
+        <p className="text-[12.5px] leading-[1.5] text-muted">Vas a poder deshacerlo desde el historial.</p>
       </ModalShellBody>
 
       <ModalShellFooter>

@@ -176,7 +176,7 @@ export function DashboardClient() {
                 limitRingCardClass(expenseLimitMark?.effect),
               )}
             >
-              <div className="flex items-center gap-2 text-[12.5px] font-semibold uppercase tracking-[0.08em] text-muted">
+              <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
                 <span className="flex h-6 w-6 items-center justify-center rounded-[7px] bg-expense-soft text-expense-ink">
                   <ArrowDown size={14} aria-hidden="true" />
                 </span>
@@ -192,7 +192,7 @@ export function DashboardClient() {
               >
                 {formatCurrency(expenseCents, defaultCurrency)}
               </div>
-              <div className="text-[12.5px] text-muted">
+              <div className="text-[12.5px] font-medium text-muted">
                 <span className="mono">{expenseCount}</span> movimientos
               </div>
             </div>
@@ -204,7 +204,7 @@ export function DashboardClient() {
                 limitRingCardClass(incomeLimitMark?.effect),
               )}
             >
-              <div className="flex items-center gap-2 text-[12.5px] font-semibold uppercase tracking-[0.08em] text-muted">
+              <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
                 <span className="flex h-6 w-6 items-center justify-center rounded-[7px] bg-income-soft text-income-ink">
                   <ArrowUp size={14} aria-hidden="true" />
                 </span>
@@ -219,7 +219,7 @@ export function DashboardClient() {
               >
                 {formatCurrency(incomeCents, defaultCurrency)}
               </div>
-              <div className="text-[12.5px] text-muted">
+              <div className="text-[12.5px] font-medium text-muted">
                 <span className="mono">{incomeCount}</span> movimientos
               </div>
             </div>
@@ -248,7 +248,7 @@ export function DashboardClient() {
               style={{ border: "1px solid oklch(1 0 0 / 0.14)" }}
             />
 
-            <p className="text-[12.5px] font-semibold uppercase tracking-[0.08em] text-white/70 relative flex items-center gap-[7px]">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-white/70 relative flex items-center gap-[7px]">
               Balance de {mesName.toLowerCase()}
               <LimitMarkAdorner mark={balanceLimitMark} glyphSize={13} />
             </p>
@@ -302,7 +302,7 @@ export function DashboardClient() {
               <p className="text-[15px] font-semibold text-ink">
                 Todavía no hay movimientos este mes
               </p>
-              <p className="mt-1 text-[13px] text-muted">
+              <p className="mt-1 text-[12.5px] leading-[1.5] text-muted">
                 Registrá tu primer gasto o ingreso de {mesName.toLowerCase()}.
               </p>
               <button

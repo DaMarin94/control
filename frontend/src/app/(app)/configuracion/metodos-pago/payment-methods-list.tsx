@@ -110,7 +110,7 @@ export function PaymentMethodsList() {
       <div className="flex items-center justify-between gap-5 flex-wrap mb-4">
         <div>
           <h2 className="text-[18px] font-bold tracking-[-0.01em] text-ink">Métodos de pago</h2>
-          <p className="text-[13px] font-medium text-muted mt-[3px]">
+          <p className="text-[14.5px] leading-[1.5] text-muted mt-[3px]">
             <span className="mono font-semibold text-ink">{count}</span>{" "}
             {count === 1 ? "método de pago activo" : "métodos de pago activos"}. Asociá un
             método a tus movimientos para saber <b className="font-semibold text-ink">con qué</b>{" "}
@@ -127,7 +127,7 @@ export function PaymentMethodsList() {
       {!paymentMethods || paymentMethods.length === 0 ? (
         <div className="rounded-card border border-dashed border-line bg-panel-2 py-12 text-center">
           <p className="text-[15px] font-semibold text-ink">No tenés métodos de pago activos.</p>
-          <p className="mt-1 text-[13px] text-muted">
+          <p className="mt-1 text-[12.5px] leading-[1.5] text-muted">
             Creá uno para asociarlo a tus movimientos.
           </p>
           <Button

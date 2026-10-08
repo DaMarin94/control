@@ -409,7 +409,7 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onSkipS
 
       {/* Col 3: un solo discriminador — fecha (único, sin hora) / Cuota X/N / vacía (fijo) */}
       <div className={`text-right ${isSkipped ? "opacity-[0.55]" : ""}`}>
-        <span className="block text-[12.5px] text-muted mono whitespace-nowrap">
+        <span className="block text-[12.5px] font-medium text-muted mono whitespace-nowrap">
           {isFijo ? "" : isCuota ? (installmentLabel ?? "") : (dateFormatted ?? "")}
         </span>
       </div>

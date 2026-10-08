@@ -113,12 +113,12 @@ export function DeleteRecurringDialog({ movement, onClose, viewMonth, variant = 
           </p>
         </div>
         {isCalculatedSimple ? (
-          <p className="text-[12.5px] text-muted">
+          <p className="text-[12.5px] leading-[1.5] text-muted">
             Vas a poder deshacerlo desde el historial.
           </p>
         ) : (
           <>
-            <p className="text-[13px] text-muted">
+            <p className="text-[12.5px] leading-[1.5] text-muted">
               El fijo dejará de aparecer desde este mes en adelante. Los meses anteriores no se modifican.
             </p>
             {movement.hasCalculated && (

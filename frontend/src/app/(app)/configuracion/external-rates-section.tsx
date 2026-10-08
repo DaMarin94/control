@@ -104,7 +104,7 @@ function InflationCard({
       {/* Destacado — último dato */}
       <div className="flex items-center justify-between gap-6">
         <div>
-          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-faint">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
             Último dato
           </p>
           {isLoading ? (
@@ -144,7 +144,7 @@ function InflationCard({
             ))}
           </div>
         ) : historyRows.length === 0 ? (
-          <p className="text-[12.5px] font-medium text-muted text-center">
+          <p className="text-[12.5px] leading-[1.5] text-muted text-center">
             Todavía no hay más datos de {currentYear}.
           </p>
         ) : (
@@ -231,7 +231,7 @@ function QuotesCard({ snapshot, isLoading, isError }: QuotesCardProps) {
     >
       <div className="mb-4">
         <p className="text-[14.5px] font-semibold text-ink">Cotizaciones</p>
-        <p className="text-[12.5px] font-medium text-muted mt-[2px]">Valores del mes en curso.</p>
+        <p className="text-[12.5px] leading-[1.5] text-muted mt-[2px]">Valores del mes en curso.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -322,7 +322,7 @@ export function ExternalRatesSection() {
       <div className="flex items-center justify-between gap-5 flex-wrap mb-4">
         <div>
           <h2 className="text-[18px] font-bold tracking-[-0.01em] text-ink">Datos externos</h2>
-          <p className="text-[13px] font-medium text-muted mt-[3px]">
+          <p className="text-[14.5px] leading-[1.5] text-muted mt-[3px]">
             Inflación y cotizaciones que Control usa para convertir y ajustar tus montos.
           </p>
         </div>

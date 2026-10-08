@@ -47,13 +47,13 @@ export function DeleteCategoryDialog({ category, onClose }: DeleteCategoryDialog
           <span className="font-semibold">&ldquo;{category.name}&rdquo;</span>?
         </p>
         {category.movementCount > 0 && (
-          <p className="text-[13px] text-muted">
+          <p className="text-[12.5px] leading-[1.5] text-muted">
             Esta categoría tiene{" "}
             <span className="mono font-semibold text-ink">{category.movementCount}</span>{" "}
             {category.movementCount === 1 ? "movimiento asociado" : "movimientos asociados"}.
           </p>
         )}
-        <p className="text-[12.5px] text-muted">
+        <p className="text-[12.5px] leading-[1.5] text-muted">
           La categoría dejará de estar disponible para nuevos movimientos. Los movimientos que ya
           la usan la conservan, y podés reactivarla más adelante si creás otra con el mismo
           nombre.

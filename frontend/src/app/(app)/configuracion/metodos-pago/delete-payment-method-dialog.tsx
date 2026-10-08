@@ -45,14 +45,14 @@ export function DeletePaymentMethodDialog({ paymentMethod, onClose }: DeletePaym
           <span className="font-semibold">&ldquo;{paymentMethod.name}&rdquo;</span>?
         </p>
         {paymentMethod.movementCount > 0 && (
-          <p className="text-[13px] text-muted">
+          <p className="text-[12.5px] leading-[1.5] text-muted">
             Este método tiene{" "}
             <span className="mono font-semibold text-ink">{paymentMethod.movementCount}</span>{" "}
             {paymentMethod.movementCount === 1 ? "movimiento asociado" : "movimientos asociados"}.
             Conservarán la referencia.
           </p>
         )}
-        <p className="text-[12.5px] text-muted">
+        <p className="text-[12.5px] leading-[1.5] text-muted">
           Podés reactivarlo más adelante si creás otro con el mismo nombre.
         </p>
       </ModalShellBody>

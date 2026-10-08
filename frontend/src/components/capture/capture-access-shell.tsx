@@ -93,13 +93,13 @@ export function CaptureAccessShell({ isGoogleConfigured }: CaptureAccessShellPro
         />
 
         {/* Fine print — sin enlace a registro (RF-APP-004) */}
-        <p className="mt-[22px] text-center text-[12.5px] leading-[1.5] text-faint">
+        <p className="mt-[22px] text-center text-[12.5px] leading-[1.5] text-muted">
           Al continuar aceptás los{" "}
-          <a href="#" className="text-muted underline underline-offset-[2px] hover:text-ink">
+          <a href="#" className="text-ink-2 underline underline-offset-[2px] hover:text-ink">
             Términos
           </a>{" "}
           y la{" "}
-          <a href="#" className="text-muted underline underline-offset-[2px] hover:text-ink">
+          <a href="#" className="text-ink-2 underline underline-offset-[2px] hover:text-ink">
             Política de privacidad
           </a>
           .

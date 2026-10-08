@@ -64,7 +64,7 @@ export function SettingsClient() {
             <p className="text-[14.5px] font-semibold text-ink">
               Moneda por defecto
             </p>
-            <p className="text-[12.5px] font-medium text-muted mt-[2px]">
+            <p className="text-[12.5px] leading-[1.5] text-muted mt-[2px]">
               Los totales y reportes se muestran en esta moneda.
             </p>
           </div>

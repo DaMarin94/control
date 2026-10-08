@@ -54,15 +54,11 @@ pnpm dev
 
 Pendientes abiertos, agrupados por naturaleza.
 
-### Tipografía
+### Diálogos y overlays
 
-Divergencias abiertas entre la escala de texto de [`docs/design.md`](docs/design.md) (§ Tipografía → *Escala de texto (roles)*) y el código.
+- **Líneas de consecuencia y cajas de detalle fuera de la escala.** El rol *Nota / fine print* de [`docs/design.md`](docs/design.md) (§ Tipografía → *Escala de texto (roles)*) es **12.5px**, pero cinco lugares usan `text-[13px]`: `frontend/src/app/(app)/configuracion/categorias/reactivation-prompt.tsx:71`, `frontend/src/app/(app)/configuracion/metodos-pago/reactivation-prompt.tsx:76`, `frontend/src/components/history/undo-confirm-modal.tsx:46`, `frontend/src/components/movements/delete-installment-dialog.tsx:71` y `frontend/src/components/movements/delete-recurring-dialog.tsx:107`. No es un cambio de cifra: son **cajas que contienen dato, no prosa**, así que primero hay que decidir si pertenecen a *Nota / fine print* (12.5/400) o a *Meta / subtítulos* (12.5/500). Requiere relevamiento de `control-design` antes de implementar.
 
-- **Eyebrow del login fuera de escala.** El rol *Eyebrow / labels* es **12px / .1em**, pero el eyebrow "Bienvenido" usa **13px** en `frontend/src/app/login/page.tsx:31` y en `frontend/src/app/registro/page.tsx`. El dashboard sí cumple los 12px (`frontend/src/components/dashboard/dashboard-client.tsx:131`); falta alinear login y registro.
-
-- **Peso del rol *Meta / subtítulos*.** La escala pide **12.5px / peso 500**; el código usa 12.5px con **peso 400** en las metas de las stat-cards del dashboard (`frontend/src/components/dashboard/dashboard-client.tsx:195` y `:222`) y en la tercera columna de la fila de movimiento (`frontend/src/components/movements/movement-item-row.tsx:396`).
-
-- **Rol de facto sin definir en la escala** (hay que decidirlo, no solo corregir una cifra). Las etiquetas de las stat-cards usan **11.5px / .08em en `/mes`** (`frontend/src/components/movements/month-view-client.tsx:1202` y `:1227`) y **12.5px / .08em en el dashboard** (`frontend/src/components/dashboard/dashboard-client.tsx:179`, `:207`, `:251`). Ninguno de los dos cae en un rol existente —ni *Eyebrow / labels* (12px / .1em) ni *Meta / subtítulos* (12.5px / 500)—: es un rol tipográfico en uso que la escala nunca definió, y encima con dos tamaños distintos para el mismo propósito. Resolverlo implica definir el rol en la escala y unificar el código.
+- **Robustez del patrón de popover portaleado.** `frontend/src/components/ui/section-filter-popover.tsx` mide su panel con `scrollHeight`, inmune al `maxHeight` ya aplicado por la primera pasada (ver `docs/frontend.md` § *Overlay portaleado con posicionamiento en dos pasadas*). El hook compartido `frontend/src/hooks/use-listbox-popover.ts` —usado por `PaymentMethodSelect`, `LimitCategorySelect` y `LimitAnchorPicker`— mide con `getBoundingClientRect()`, que tiene la **misma fragilidad latente**: no se manifiesta porque esos paneles tienen contenido corto y nunca llegan al branch de clamp. A evaluar: unificar el hook compartido al mismo criterio.
 
 ### Reportes
 
