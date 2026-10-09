@@ -69,6 +69,7 @@ const mockReportsResponse: ReportsMovementsResponse = {
     { categoryId: "cat-2", name: "Transporte", color: "#E07B54", hasExpense: true, hasIncome: false },
   ],
   earliestYear: 2025,
+  yearRange: { minYear: 2000, maxYear: 2100 },
 };
 
 const mockEmptyReportsResponse: ReportsMovementsResponse = {
@@ -81,6 +82,7 @@ const mockEmptyReportsResponse: ReportsMovementsResponse = {
   categories: [],
   availableCategories: [],
   earliestYear: null,
+  yearRange: { minYear: 2000, maxYear: 2100 },
 };
 
 // ─── Wrapper con QueryClient ──────────────────────────────────────────────────
@@ -902,6 +904,7 @@ const mockUnicoGridResponse: UnicoGridResponse = {
     pctVsPrevAdj: null,
   })),
   availableCategories: [],
+  yearRange: { minYear: 2000, maxYear: 2100 },
 };
 
 describe("UNICO_GRID_QUERY_KEY", () => {

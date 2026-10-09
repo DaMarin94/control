@@ -39,6 +39,7 @@
 | Navegación global — sidebar mostrable/ocultable por el usuario en todos los anchos, estado persistido (blob `sidebarOpen`, default abierto) | RF-NAV-002 | Implementado |
 | Crear categoría desde el formulario de movimiento | RF-MU-004 | Implementado |
 | Reportes — pantalla configurable por cards + widget en dashboard | RF-REP-001..005 | Implementado |
+| Reportes — navegación de año acotada al rango de datos propio de cada card (respeta el filtro vigente, años futuros incluidos donde el dato existe) | RF-REP-002 | Implementado |
 | Reportes — toggle de representación Barra / Línea en la card Gastos por categoría | RF-REP-006 | Implementado |
 | Reportes — moneda de display por card (selector por card, nace con la default global) | RF-REP-007 | Implementado |
 | Reportes — título editable por card (placeholder "Reporte N" si vacío) | RF-REP-008 | Implementado |

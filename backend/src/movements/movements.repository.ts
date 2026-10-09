@@ -11,6 +11,21 @@ import {
 } from '../common/soft-delete.helper';
 import { isOnFrequency, addMonths, monthDiff } from '../common/month.helper';
 
+/**
+ * Año local (en la zona IANA dada) de un instante UTC. Mismo resultado que
+ * `EXTRACT(year FROM occurredAt AT TIME ZONE timezone)` en SQL, pero en JS
+ * (sin dependencias externas: `Intl.DateTimeFormat` ya resuelve IANA tz
+ * nativamente en Node) — ver gotcha en `getUnicoYearsByCategory`.
+ */
+function localYearInTimezone(occurredAt: Date, timezone: string): number {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+  });
+  const year = formatter.formatToParts(occurredAt).find((p) => p.type === 'year')?.value ?? '';
+  return parseInt(year, 10);
+}
+
 // ---------------------------------------------------------------------------
 // Interfaces para la agregación anual
 // ---------------------------------------------------------------------------
@@ -2400,6 +2415,48 @@ export class MovementsRepository {
     const raw = rows[0]?.earliestYear;
     if (raw === null || raw === undefined) return null;
     return Number(raw);
+  }
+
+  /**
+   * Devuelve, por cada único (Transaction) no eliminado del usuario, el año
+   * local (zona propia del registro, RN-015), su categoría y su `type`. SIN
+   * acotar por año (historia completa) — a diferencia de
+   * `getAnnualUnicosAggregated`/`getDailyUnicosExpenseForYear`, que son
+   * year-scoped.
+   *
+   * Usado por el rango de años navegable por card (`yearRange`): cada
+   * endpoint filtra estas filas en memoria por su propio `type` y el filtro
+   * de categorías/tipos/dirección vigente. Deduplicado (solo nos importa qué
+   * (año, categoría, tipo) existe, no cuánto).
+   *
+   * Gotcha deliberado: usa el ORM (`transaction.findMany`) + `Intl.DateTimeFormat`
+   * en JS para el año local, NO `$queryRaw` con `AT TIME ZONE` (a diferencia del
+   * resto de los agregados de este archivo). Evaluar `AT TIME ZONE` en SQL exige
+   * agregar esta consulta a la secuencia compartida de `$queryRaw` que mockean
+   * los tests e2e con `mockResolvedValueOnce` encadenados en orden de invocación
+   * — insertar una llamada más ahí desalinearía TODAS las secuencias existentes.
+   * El ORM tiene su propio mock por tabla, así que esta llamada nueva no
+   * perturba nada ya cableado. Mismo resultado (año en la zona del registro),
+   * motivado por infraestructura de test, no por una limitación real de SQL.
+   */
+  async getUnicoYearsByCategory(
+    userId: string,
+  ): Promise<Array<{ year: number; categoryId: string; type: MovementType }>> {
+    const rows = await this.prisma.transaction.findMany({
+      where: { userId, ...NOT_DELETED },
+      select: { occurredAt: true, timezone: true, categoryId: true, type: true },
+    });
+
+    const seen = new Set<string>();
+    const result: Array<{ year: number; categoryId: string; type: MovementType }> = [];
+    for (const row of rows) {
+      const year = localYearInTimezone(row.occurredAt, row.timezone);
+      const key = `${year}|${row.categoryId}|${row.type}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({ year, categoryId: row.categoryId, type: row.type });
+    }
+    return result;
   }
 
   // ---------------------------------------------------------------------------

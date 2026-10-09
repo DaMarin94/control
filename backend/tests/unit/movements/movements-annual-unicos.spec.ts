@@ -38,6 +38,7 @@ const mockRepo = {
   getCuotasTotalsByMonth: jest.fn(),
   getAnnualUnicosAggregated: jest.fn(),
   getAllFijosForAnnual: jest.fn(),
+  getUnicoYearsByCategory: jest.fn().mockResolvedValue([]),
   getAllCuotasForAnnual: jest.fn(),
   getEarliestYear: jest.fn(),
   findTransactionsByIds: jest.fn().mockResolvedValue([]),
@@ -106,6 +107,7 @@ function setupDefaults(): void {
   mockRepo.getDailyUnicosExpenseForPrevDecember.mockResolvedValue([]);
   mockRepo.loadInflationRatesForYear.mockResolvedValue(new Map());
   mockRepo.findCategoriesByIds.mockResolvedValue([]);
+  mockRepo.getUnicoYearsByCategory.mockResolvedValue([]);
   mockSettingsService.getSettings.mockResolvedValue({ defaultCurrency: Currency.ARS });
 }
 
@@ -1045,6 +1047,85 @@ describe('MovementsService — getAnnualUnicosReport', () => {
 
       // Sin pivotRates no se puede derivar la conversión → fallback defensivo al default (1500 USD cents)
       expect(result.anchorUsdCents).toBe(1500);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // yearRange — rango de años navegable de la card (unique-grid)
+  // -------------------------------------------------------------------------
+  describe('yearRange — rango de años navegable', () => {
+    it('sin dato → yearRange null', async () => {
+      mockRepo.getUnicoYearsByCategory.mockResolvedValue([]);
+
+      const result = await service.getAnnualUnicosReport(USER_A, 2026, null, undefined, '2026-06-24');
+
+      expect(result.yearRange).toBeNull();
+    });
+
+    it('categories=[] (ninguna) → yearRange null aunque haya datos', async () => {
+      mockRepo.getUnicoYearsByCategory.mockResolvedValue([
+        { year: 2020, categoryId: CAT_A, type: 'EXPENSE' },
+      ]);
+
+      const result = await service.getAnnualUnicosReport(USER_A, 2026, [], undefined, '2026-06-24');
+
+      expect(result.yearRange).toBeNull();
+    });
+
+    it('años huecos internos: gasto en 2020 y 2024 (sin dato 2021-2023) → rango continuo [2020,2024]', async () => {
+      mockRepo.getUnicoYearsByCategory.mockResolvedValue([
+        { year: 2020, categoryId: CAT_A, type: 'EXPENSE' },
+        { year: 2024, categoryId: CAT_A, type: 'EXPENSE' },
+      ]);
+
+      const result = await service.getAnnualUnicosReport(USER_A, 2026, null, undefined, '2026-06-24');
+
+      expect(result.yearRange).toEqual({ minYear: 2020, maxYear: 2024 });
+    });
+
+    it('filtro de categorías: excluye el año de la categoría destildada (rango con filtro vs. sin filtro)', async () => {
+      mockRepo.getUnicoYearsByCategory.mockResolvedValue([
+        { year: 2018, categoryId: CAT_A, type: 'EXPENSE' },
+        { year: 2024, categoryId: CAT_B, type: 'EXPENSE' },
+      ]);
+
+      const sinFiltro = await service.getAnnualUnicosReport(USER_A, 2026, null, undefined, '2026-06-24');
+      expect(sinFiltro.yearRange).toEqual({ minYear: 2018, maxYear: 2024 });
+
+      const conFiltro = await service.getAnnualUnicosReport(USER_A, 2026, [CAT_A], undefined, '2026-06-24');
+      expect(conFiltro.yearRange).toEqual({ minYear: 2018, maxYear: 2018 });
+    });
+
+    it('ignora filas INCOME (esta card solo agrega Únicos EXPENSE)', async () => {
+      mockRepo.getUnicoYearsByCategory.mockResolvedValue([
+        { year: 2019, categoryId: CAT_A, type: 'INCOME' },
+        { year: 2022, categoryId: CAT_A, type: 'EXPENSE' },
+      ]);
+
+      const result = await service.getAnnualUnicosReport(USER_A, 2026, null, undefined, '2026-06-24');
+
+      expect(result.yearRange).toEqual({ minYear: 2022, maxYear: 2022 });
+    });
+
+    it('recorte al año en curso: dato hasta 2030 con hoy=2026 → maxYear se acota a 2026 (los únicos no se repiten)', async () => {
+      mockRepo.getUnicoYearsByCategory.mockResolvedValue([
+        { year: 2020, categoryId: CAT_A, type: 'EXPENSE' },
+        { year: 2030, categoryId: CAT_A, type: 'EXPENSE' },
+      ]);
+
+      const result = await service.getAnnualUnicosReport(USER_A, 2026, null, undefined, '2026-06-24');
+
+      expect(result.yearRange).toEqual({ minYear: 2020, maxYear: 2026 });
+    });
+
+    it('todo el dato cae en un año futuro → tras el recorte minYear > maxYear → yearRange null', async () => {
+      mockRepo.getUnicoYearsByCategory.mockResolvedValue([
+        { year: 2030, categoryId: CAT_A, type: 'EXPENSE' },
+      ]);
+
+      const result = await service.getAnnualUnicosReport(USER_A, 2026, null, undefined, '2026-06-24');
+
+      expect(result.yearRange).toBeNull();
     });
   });
 });

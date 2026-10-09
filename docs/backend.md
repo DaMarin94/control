@@ -281,7 +281,7 @@ Endpoint **agregado** para los reportes (RF-REP-001/002/005), scopeado por `user
 #### Filtro de categorías (RF-REP-005)
 
 - **Afecta Forma 1 y Forma 2.** El filtro restringe qué movimientos cuentan: en `months[*]` (Forma 1: `incomeCents`/`expenseCents`) **y** en `categories[*]` (Forma 2: las bandas apiladas). Una categoría omitida no aparece en ninguna de las dos.
-- **`earliestYear` y `availableCategories` IGNORAN el filtro** — se calculan sobre **todos** los movimientos del usuario (del año, en el caso de `availableCategories`), para que ni los límites de navegación de año (RF-REP-002) ni la leyenda-filtro salten al cambiar el filtro.
+- **`earliestYear` y `availableCategories` IGNORAN el filtro** — se calculan sobre **todos** los movimientos del usuario (del año, en el caso de `availableCategories`), para que la leyenda-filtro no se achique al cambiar el filtro. **`yearRange` sí lo respeta** (ver §Rango de años navegable por card).
 - **Filtrado in-memory, NO en SQL/ORM:** se trae el universo de movimientos del año y se filtra en JS con un **`Set` de `categoryId`s** pedidos (omitido = sin filtrar). El invariante `SUM(bandas por categoría) == expenseCents del mes` **se mantiene con el filtro activo** (ambos lados se computan sobre el mismo conjunto filtrado).
 
 #### Filtros de tipo y dirección (RF-REP-014)
@@ -290,7 +290,7 @@ Sobre los **totales mensuales** (`incomeCents`/`expenseCents`), `getReportsMovem
 
 - **Tipo de movimiento** — `Set` de `["fijo","cuota","unico"]` (3 estados igual que categorías: `null` = todos, `Set` vacío = ninguno → totales en cero, subconjunto = los pedidos). Acota qué orígenes aportan a las series.
 - **Dirección** — `both` (default, sin filtro) / `expense` (suma solo gastos) / `income` (suma solo ingresos).
-- **Solo totales.** Los filtros de tipo/dirección afectan `months[*]`; `categories[*]`, `availableCategories` y `earliestYear` se calculan **ignorándolos** (superconjunto estable, igual que ante el filtro de categorías).
+- **Solo totales.** Los filtros de tipo/dirección afectan `months[*]`; `categories[*]`, `availableCategories` y `earliestYear` se calculan **ignorándolos** (superconjunto estable, igual que ante el filtro de categorías). **`yearRange` sí los respeta** (ver §Rango de años navegable por card).
 - **Gotcha — dirección y tipo de un calculado se resuelven al vuelo, no por la fila origen:**
   - La **dirección** (income/expense) de un movimiento **calculado** la fija su `derivedType` —el signo del monto tras aplicar `formulaSign`—, no el `type` de la fila origen: un calculado puede **invertir** el signo del origen (un calculado-de-fijo de gasto puede resultar `INCOME`, y viceversa). El filtro `direction` se aplica sobre ese `derivedType`.
   - El **tipo de movimiento** de un calculado se **hereda de su fuente**: un calculado-de-fijo cuenta como `fijo`, un calculado-de-cuota como `cuota`, un calculado-de-único como `unico`. El filtro `types` matchea por ese tipo heredado, no por una categoría propia del calculado.
@@ -315,6 +315,18 @@ El motor vive en `src/common/projection.helper.ts` (`computeFixedBasketProjectio
 - **Horizonte ilimitado.** La proyección no se corta a fin de año: un año **completamente futuro** ⇒ los 12 meses vienen proyectados.
 - **Respeta los filtros de RF-REP-014.** `direction` / `types` / `categories` acotan qué fijos entran tanto en el esqueleto como en el cómputo de la tasa, con el mismo criterio que aplican al tramo real (un `types` sin `fijo` deja el tramo futuro sin proyección de fijos; `direction=income` proyecta solo los fijos de ingreso, etc.).
 - **Gotcha — el desglose por categoría no incluye fijos futuros.** Con `projectFixed=true`, `categories[*]` **no** recibe contribución de fijos en los meses proyectados (la proyección solo alimenta los totales de línea `incomeCents`/`expenseCents`). Nota técnica sin efecto en producto: ninguna pantalla consume la proyección.
+
+### Rango de años navegable por card (`yearRange`)
+
+Compartido por los **4 endpoints de reportes con stepper de año** (`GET /movements/reports`, `annual-unicos`, `annual-cuotas`, `annual-inflation-income`). Regla funcional en `docs/requirements.md`, RF-REP-002; contrato y semántica del campo en `docs/data-model.md`, §Rango de años navegable. Acá, solo lo no obvio del cómputo:
+
+- **Se combinan INTERVALOS por fuente, no sets de años sueltos.** Cada fuente aporta un `[añoInicio, añoFin]`: un **único**, un intervalo de 1 año (su año **local**, por la zona propia del registro, RN-015); una **fila de fijo/calculado**, desde su `startMonth` hasta su cierre, **sin fin** si la fila sigue activa; un **grupo de cuotas**, un intervalo siempre acotado por su tramo. El rango final es la unión de punta a punta, clampeada a la cota técnica.
+- **No hace falta resolver bordes de cadena para los fijos.** El split al editar ya cierra la fila vieja, así que cada fila `Recurring` es un **tramo contiguo y no solapado** de su cadena: la fila sola ya es el intervalo correcto.
+- **Las anulaciones (skips) NO se descuentan.** Un mes anulado sigue dentro del intervalo estructural de su fuente. El rango mide **existencia de dato**, no si ese dato suma a los totales.
+- **El aporte simulado es una fuente más, solo en `GET /movements/reports`** (`includeSimulated=true`, RF-REP-017): cada simulación aporta el intervalo de su tramo, vía `SimulationsService` (ver §Simulación de categoría). **No aportan** las simulaciones **pausadas** (no derivan movimientos) ni las que el filtro vigente no deja pasar: categoría fuera de `categories`, o un `types` sin `unico` (el simulado es un único) que deja el aporte simulado en nada. El tramo se clampea al **mismo tope técnico** que el resto (relevante porque extender el tramo de una simulación no tiene tope propio).
+- **Criterio de dirección del aporte simulado — distinto según `direction`.** Con `both`, cada simulación aporta su **tramo completo**, sin resolver mes a mes. Con `expense` / `income` se derivan los simulados del tramo y aportan **solo los años de los meses cuya dirección derivada** (RN-019) coincide. **Consecuencia:** con `both` un año puede quedar navegable aunque el remanente simulado de esos meses dé **cero** — mismo espíritu que "el rango mide existencia de dato, no si suma a los totales".
+- **La dirección de un movimiento calculado se aproxima por el signo de su fórmula**, no por el signo real del monto mes a mes (resolverlo exigiría el origen mes a mes, el mismo costo que la agregación completa). Es deliberado para un cálculo de **límites de navegación**, no de totales; el caso borde no cubierto es una **resta cuyo operando cruza cero** a lo largo del tiempo.
+- **La query que trae la historia completa de años de únicos usa el ORM, NO SQL crudo.** Los e2e consumen las llamadas crudas como una **cola ordenada compartida**: una llamada cruda más desalinea las secuencias ya cableadas de los otros endpoints. El ORM tiene su propio mock por tabla, así que esta query no perturba nada. El año local se resuelve en JS, con el mismo resultado que `AT TIME ZONE`.
 
 ### Reporte anual de Únicos (`GET /movements/reports/annual-unicos`)
 
@@ -354,7 +366,7 @@ Series anuales en **puntos porcentuales** para la card `inflation-income` (RF-RE
 - **`incomePctAdj` — variación ajustada por inflación.** Igual que `incomePct`, pero el ingreso del mes previo se **infla por la variación IPC del mes en curso** (`incomePctAdj` usa `inflationPct/100`) antes de comparar — misma semántica que `pctVsPrevAdj` del reporte de Únicos. `null` si falta el IPC del mes, si `ingresoPrevio == 0` o si el mes es futuro.
 - **`inflationPct`.** `InflationRate.monthlyVariation` (puntos %, unidad canónica del sistema; ver Reporte anual de Únicos para la conversión ×100 en la ingesta) del mes; `null` si no hay fila de IPC.
 - **Tendencias OLS (`incomeTrend` / `incomeAdjTrend`).** Recta de mínimos cuadrados ajustada sobre los **puntos no nulos** de `incomePct` e `incomePctAdj` respectivamente (x = índice de mes 0–11). Emite `{ slope, intercept, points }`; `points` = la recta evaluada en los 12 meses, **`null` si la serie madre tiene < 2 puntos no nulos**. El helper **`computeLinearTrend`** (exportado) encapsula el ajuste; reusarlo, no reimplementar.
-- **`earliestYear` y `availableCategories` ignoran el filtro `categories`** (superconjunto estable, mismo criterio que la serie de reportes). `availableCategories` es el universo de categorías con **ingreso (`INCOME`)** del año (no de gasto, a diferencia de los otros reportes). El filtro `categories` sí restringe qué ingresos cuentan en las series.
+- **`earliestYear` y `availableCategories` ignoran el filtro `categories`** (superconjunto estable, mismo criterio que la serie de reportes). `availableCategories` es el universo de categorías con **ingreso (`INCOME`)** del año (no de gasto, a diferencia de los otros reportes). El filtro `categories` sí restringe qué ingresos cuentan en las series y en `yearRange` (ver §Rango de años navegable por card).
 
 ### Detalle histórico de Fijos (`GET /movements/reports/fijos-historico`)
 

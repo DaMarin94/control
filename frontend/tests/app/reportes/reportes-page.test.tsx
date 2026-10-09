@@ -362,7 +362,7 @@ describe("ReportesPage — navegación de año de card", () => {
 
   it("al navegar ‹ de una card, llama a setPreferences con el año actualizado", async () => {
     const setPreferences = vi.fn().mockResolvedValue({ success: true });
-    // earliestYear=2025 → ‹ habilitado en 2026
+    // Navegación de año libre hacia atrás (sin tope por earliestYear) — ‹ habilitado en 2026
     const { useReports } = await import("@/hooks/use-reports");
     vi.mocked(useReports).mockReturnValue({
       data: {
@@ -374,6 +374,7 @@ describe("ReportesPage — navegación de año de card", () => {
         })),
         categories: [],
         earliestYear: 2025,
+        yearRange: { minYear: 2000, maxYear: 2100 },
       },
       isLoading: false,
       isError: false,

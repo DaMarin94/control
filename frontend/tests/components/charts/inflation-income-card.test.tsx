@@ -11,7 +11,7 @@
  * - Las tendencias NO son ítems de leyenda
  * - Filtro de categorías: chips-toggle (ChartLegend scrollable)
  * - Hook useInflationIncome llamado con parámetros correctos
- * - Cabecera: título editable, YearStepper con earliestYear, selector de moneda, botón quitar
+ * - Cabecera: título editable, YearStepper con navegación libre (cota ±100), selector de moneda, botón quitar
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -131,6 +131,7 @@ const mockData: AnnualInflationIncomeResponse = {
     { categoryId: "cat-1", name: "Sueldo", color: "#4F86C6" },
     { categoryId: "cat-2", name: "Freelance", color: "#E07B54" },
   ],
+  yearRange: { minYear: 2000, maxYear: 2100 },
 };
 
 /** Datos con meses futuros: solo los primeros 6 tienen dato. */
@@ -485,23 +486,97 @@ describe("InflationIncomeCard — cabecera", () => {
     expect(screen.getByText("2026")).toBeInTheDocument();
   });
 
-  it("el botón ‹ está deshabilitado cuando year === earliestYear", () => {
-    renderCard({ year: 2024 }); // earliestYear=2024 en mockData
-    const prevBtn = screen.getByRole("button", { name: /año anterior/i });
-    expect(prevBtn).toBeDisabled();
-  });
-
-  it("el botón ‹ está habilitado cuando year > earliestYear", () => {
-    renderCard({ year: 2026 }); // earliestYear=2024
-    const prevBtn = screen.getByRole("button", { name: /año anterior/i });
-    expect(prevBtn).not.toBeDisabled();
-  });
-
-  it("al hacer clic en ‹ llama a onYearChange con year-1", () => {
+  // El stepper ya NO se gobierna por earliestYear ni por una cota ±100 relativa
+  // al año actual: ambas flechas se habilitan/deshabilitan según `yearRange`,
+  // el rango navegable que devuelve el propio endpoint (ya filtrado).
+  it("al hacer clic en ‹ llama a onYearChange con year-1 cuando hay margen", () => {
     const onYearChange = vi.fn();
     renderCard({ year: 2026, onYearChange });
     fireEvent.click(screen.getByRole("button", { name: /año anterior/i }));
     expect(onYearChange).toHaveBeenCalledWith(2025);
+  });
+
+  it("al hacer clic en › llama a onYearChange con year+1 cuando hay margen", () => {
+    const onYearChange = vi.fn();
+    renderCard({ year: 2026, onYearChange });
+    fireEvent.click(screen.getByRole("button", { name: /año siguiente/i }));
+    expect(onYearChange).toHaveBeenCalledWith(2027);
+  });
+
+  it("el botón › está deshabilitado en year === maxYear del yearRange", () => {
+    mockHookWithData({ ...mockData, year: 2026, yearRange: { minYear: 2000, maxYear: 2026 } });
+    renderCard({ year: 2026 });
+    const nextBtn = screen.getByRole("button", { name: /año siguiente/i });
+    expect(nextBtn).toBeDisabled();
+  });
+
+  it("el botón ‹ está deshabilitado en year === minYear del yearRange", () => {
+    mockHookWithData({ ...mockData, year: 2026, yearRange: { minYear: 2026, maxYear: 2100 } });
+    renderCard({ year: 2026 });
+    const prevBtn = screen.getByRole("button", { name: /año anterior/i });
+    expect(prevBtn).toBeDisabled();
+  });
+
+  it("yearRange === null: ambas flechas deshabilitadas y el año vigente no cambia", () => {
+    const onYearChange = vi.fn();
+    mockHookWithData({ ...mockDataEmpty, yearRange: null });
+    renderCard({ year: 2026, onYearChange });
+    const prevBtn = screen.getByRole("button", { name: /año anterior/i });
+    const nextBtn = screen.getByRole("button", { name: /año siguiente/i });
+    expect(prevBtn).toBeDisabled();
+    expect(nextBtn).toBeDisabled();
+    fireEvent.click(prevBtn);
+    fireEvent.click(nextBtn);
+    expect(onYearChange).not.toHaveBeenCalled();
+  });
+
+  it("auto-corrige al montar con un año persistido MENOR que minYear: salta a minYear", () => {
+    const onYearChange = vi.fn();
+    mockHookWithData({ ...mockData, year: 2018, yearRange: { minYear: 2022, maxYear: 2026 } });
+    renderCard({ year: 2018, onYearChange });
+    expect(onYearChange).toHaveBeenCalledWith(2022);
+    expect(onYearChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("auto-corrige al montar con un año persistido MAYOR que maxYear: salta a maxYear", () => {
+    const onYearChange = vi.fn();
+    mockHookWithData({ ...mockData, year: 2030, yearRange: { minYear: 2020, maxYear: 2023 } });
+    renderCard({ year: 2030, onYearChange });
+    expect(onYearChange).toHaveBeenCalledWith(2023);
+    expect(onYearChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("no cicla: tras saltar al extremo, una pasada posterior con ese año y el MISMO yearRange (nueva referencia) no vuelve a llamar onYearChange", () => {
+    const onYearChange = vi.fn();
+    mockHookWithData({ ...mockData, year: 2018, yearRange: { minYear: 2022, maxYear: 2026 } });
+    const { rerender } = renderCard({ year: 2018, onYearChange });
+    expect(onYearChange).toHaveBeenCalledTimes(1);
+    expect(onYearChange).toHaveBeenCalledWith(2022);
+
+    mockHookWithData({ ...mockData, year: 2022, yearRange: { minYear: 2022, maxYear: 2026 } });
+    rerender(<InflationIncomeCard year={2022} titlePlaceholder="Reporte 1" onYearChange={onYearChange} />);
+    expect(onYearChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("no cicla cuando el padre aplica la corrección de forma ASÍNCRONA: año fuera de rango se repite en varios re-renders con un onYearChange de identidad NUEVA en cada uno", () => {
+    const onYearChange = vi.fn();
+    mockHookWithData({ ...mockData, year: 2018, yearRange: { minYear: 2022, maxYear: 2026 } });
+    const { rerender } = render(
+      <InflationIncomeCard year={2018} titlePlaceholder="Reporte 1" onYearChange={(y) => onYearChange(y)} />,
+      { wrapper: createWrapper() },
+    );
+    expect(onYearChange).toHaveBeenCalledTimes(1);
+    expect(onYearChange).toHaveBeenCalledWith(2022);
+
+    // El padre todavía no aplicó la corrección: `year` se mantiene fuera de
+    // rango en los re-renders siguientes, pero pasa una identidad NUEVA de
+    // `onYearChange` en cada uno (closure inline). Sin el fix, cicla.
+    for (let i = 0; i < 5; i++) {
+      rerender(
+        <InflationIncomeCard year={2018} titlePlaceholder="Reporte 1" onYearChange={(y) => onYearChange(y)} />,
+      );
+    }
+    expect(onYearChange).toHaveBeenCalledTimes(1);
   });
 
   it("muestra el placeholder de título cuando no hay título propio", () => {

@@ -920,4 +920,90 @@ describe('SimulationsService', () => {
       expect(repo.getUnicosMonthlyTotalsByCategory).not.toHaveBeenCalled();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // getSimulationYearIntervals — insumo de yearRange (includeSimulated)
+  // ---------------------------------------------------------------------------
+  describe('getSimulationYearIntervals', () => {
+    const TODAY = '2026-10-09';
+    const CAT_2 = 'cat-sim-2';
+    const WINDOW = [
+      '2025-10', '2025-11', '2025-12', '2026-01', '2026-02', '2026-03',
+      '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09',
+    ];
+
+    function setup(opts: { sims: ReturnType<typeof simRow>[]; rows: RawSimulationUnicoRow[] }) {
+      const built = buildService();
+      built.repo.findAllForUser.mockResolvedValue(opts.sims);
+      built.repo.getUnicosMonthlyTotalsByCategory.mockImplementation((_u, first, last) =>
+        Promise.resolve(opts.rows.filter((r) => r.monthKey >= first && r.monthKey <= last)),
+      );
+      built.repo.findCategoriesByIds.mockResolvedValue([
+        { id: CAT_ID, name: 'A', color: '#111111', scope: 'BOTH' as never },
+        { id: CAT_2, name: 'B', color: '#222222', scope: 'BOTH' as never },
+      ]);
+      return built;
+    }
+
+    const flat = (cat: string, type: 'EXPENSE' | 'INCOME' = 'EXPENSE') =>
+      WINDOW.map((m) => row(m, 100000, type, cat));
+
+    it('direccion both: aporta el tramo [arranque efectivo..endMonth] (cruza de anio)', async () => {
+      const { service } = setup({
+        sims: [simRow({ startMonth: '2026-10', endMonth: '2027-04' })],
+        rows: flat(CAT_ID),
+      });
+      const r = await service.getSimulationYearIntervals(USER_ID, null, 'both', TODAY);
+      expect(r).toEqual([{ startYear: 2026, endYear: 2027 }]);
+    });
+
+    it('simulacion pausada (< 3 meses con dato) no aporta', async () => {
+      const { service } = setup({
+        sims: [simRow({ startMonth: '2026-10', endMonth: '2027-04' })],
+        rows: [row('2026-08', 100000), row('2026-09', 100000)],
+      });
+      expect(await service.getSimulationYearIntervals(USER_ID, null, 'both', TODAY)).toEqual([]);
+    });
+
+    it('filtro de categorias: excluye las no tildadas; Set vacio no aporta', async () => {
+      const { service } = setup({
+        sims: [
+          simRow({ id: 's1', categoryId: CAT_ID, startMonth: '2026-10', endMonth: '2026-12' }),
+          simRow({ id: 's2', categoryId: CAT_2, startMonth: '2026-10', endMonth: '2027-04' }),
+        ],
+        rows: [...flat(CAT_ID), ...flat(CAT_2)],
+      });
+      expect(
+        await service.getSimulationYearIntervals(USER_ID, new Set([CAT_ID]), 'both', TODAY),
+      ).toEqual([{ startYear: 2026, endYear: 2026 }]);
+      expect(
+        await service.getSimulationYearIntervals(USER_ID, new Set(), 'both', TODAY),
+      ).toEqual([]);
+    });
+
+    it('direccion expense/income: solo aportan los anios cuyos meses derivan esa direccion', async () => {
+      const { service } = setup({
+        sims: [simRow({ startMonth: '2026-10', endMonth: '2027-04' })],
+        rows: flat(CAT_ID, 'EXPENSE'),
+      });
+      expect(
+        await service.getSimulationYearIntervals(USER_ID, null, 'expense', TODAY),
+      ).toEqual(
+        expect.arrayContaining([
+          { startYear: 2026, endYear: 2026 },
+          { startYear: 2027, endYear: 2027 },
+        ]),
+      );
+      expect(await service.getSimulationYearIntervals(USER_ID, null, 'income', TODAY)).toEqual([]);
+    });
+
+    it('nunca devuelve anios pasados (startMonth viejo se clampea al mes en curso)', async () => {
+      const { service } = setup({
+        sims: [simRow({ startMonth: '2024-01', endMonth: '2027-02' })],
+        rows: flat(CAT_ID),
+      });
+      const r = await service.getSimulationYearIntervals(USER_ID, null, 'both', TODAY);
+      expect(r).toEqual([{ startYear: 2026, endYear: 2027 }]);
+    });
+  });
 });

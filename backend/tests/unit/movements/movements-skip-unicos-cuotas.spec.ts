@@ -497,6 +497,7 @@ describe('MovementsService.getReportsMovements — skip de únicos/cuotas en el 
     getAllFijosForAnnual: jest.fn(),
     getAllCuotasForAnnual: jest.fn(),
     getEarliestYear: jest.fn(),
+    getUnicoYearsByCategory: jest.fn(),
     findTransactionsByIds: jest.fn(),
     findInstallmentGroupsByIds: jest.fn(),
     loadPivotRatesForYear: jest.fn().mockResolvedValue(new Map()),
@@ -522,6 +523,7 @@ describe('MovementsService.getReportsMovements — skip de únicos/cuotas en el 
     mockRepoAnnual.getAllFijosForAnnual.mockResolvedValue([]);
     mockRepoAnnual.getAllCuotasForAnnual.mockResolvedValue([]);
     mockRepoAnnual.getEarliestYear.mockResolvedValue(null);
+    mockRepoAnnual.getUnicoYearsByCategory.mockResolvedValue([]);
     mockRepoAnnual.findTransactionsByIds.mockResolvedValue([]);
     mockRepoAnnual.findInstallmentGroupsByIds.mockResolvedValue([]);
     mockRepoAnnual.loadPivotRatesForYear.mockResolvedValue(new Map());

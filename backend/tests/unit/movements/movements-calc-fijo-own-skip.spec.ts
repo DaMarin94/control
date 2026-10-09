@@ -176,6 +176,7 @@ const mockRepo = {
   getCuotasTotalsByMonth: jest.fn(),
   getAnnualUnicosAggregated: jest.fn(),
   getAllFijosForAnnual: jest.fn(),
+  getUnicoYearsByCategory: jest.fn().mockResolvedValue([]),
   getAllCuotasForAnnual: jest.fn(),
   getEarliestYear: jest.fn(),
   findTransactionsByIds: jest.fn().mockResolvedValue([]),

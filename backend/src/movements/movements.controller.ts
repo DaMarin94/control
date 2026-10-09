@@ -43,7 +43,9 @@ export class MovementsController {
    *                   null si mes futuro del año en curso o si ingreso anterior == 0.
    *   incomePctAdj  — igual pero ajustado por IPC; null si falta IPC, mes futuro o anterior == 0.
    * Además: tendencias lineales (slope, intercept, points) para incomePct e incomePctAdj,
-   * earliestYear y availableCategories (universo de categorías con INCOME en el año).
+   * earliestYear, availableCategories (universo de categorías con INCOME en el año) y
+   * yearRange (rango de años navegable de la card, YA filtrado por categories — a
+   * diferencia de earliestYear; null si no hay dato con el filtro vigente).
    *
    * Parámetros:
    * - year (obligatorio): año en formato YYYY.
@@ -131,7 +133,8 @@ export class MovementsController {
    *   Ausente → usa la default del usuario.
    *
    * Respuesta: AnnualCuotasResponse dentro del sobre { success, statusCode, data }.
-   * 200 con las barras del gantt, rowCount y availableCategories.
+   * 200 con las barras del gantt, rowCount, availableCategories y yearRange (rango
+   * de años navegable de la card, ya filtrado por categories; null si sin dato).
    * 400 si year falta, formato inválido, fuera de rango, o currency inválido.
    */
   @Get('reports/annual-cuotas')
@@ -209,7 +212,8 @@ export class MovementsController {
    *   Si viene uno sin el otro → 400.
    *
    * Respuesta: AnnualUnicosResponse dentro del sobre { success, statusCode, data }.
-   * 200 con la grilla y el footer.
+   * 200 con la grilla, el footer y yearRange (rango de años navegable de la card,
+   * ya filtrado por categories; null si sin dato con el filtro vigente).
    * 400 si year falta, formato inválido, fuera de rango, currency inválido,
    * anchorAmountCents no es un entero positivo, anchorCurrency inválido, o si
    * solo uno de los dos parámetros del ancla está presente.
@@ -504,6 +508,11 @@ export class MovementsController {
    * Criterio de imputación por mes (RN-015):
    * - Únicos: mes local (AT TIME ZONE propia del registro)
    * - Fijos y cuotas: por startMonth (comparación léxica YYYY-MM)
+   *
+   * yearRange: rango de años navegable de esta card (income-expense/by-category),
+   * ya filtrado por categories/types/direction (a diferencia de earliestYear, que
+   * los ignora). Un fijo activo sin endMonth extiende maxYear hasta el tope técnico
+   * (añoEnCurso + 100). null si no hay dato con el filtro vigente.
    *
    * 200 + sobre con ReportsMovementsResponse.
    * 400 si "year" falta, no es exactamente 4 dígitos, o no es un año razonable.

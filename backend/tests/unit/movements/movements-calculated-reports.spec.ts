@@ -28,6 +28,7 @@ const mockRepo = {
   getCuotasTotalsByMonth: jest.fn(),
   getAnnualUnicosAggregated: jest.fn(),
   getAllFijosForAnnual: jest.fn(),
+  getUnicoYearsByCategory: jest.fn().mockResolvedValue([]),
   getAllCuotasForAnnual: jest.fn(),
   getEarliestYear: jest.fn(),
   // Fase 1.1.7.ext — lookups de origen para calculados de único y cuota

@@ -49,6 +49,7 @@ const mockRepo = {
   // Métodos de reportes
   getAnnualUnicosAggregated: jest.fn(),
   getAllFijosForAnnual: jest.fn(),
+  getUnicoYearsByCategory: jest.fn().mockResolvedValue([]),
   getAllCuotasForAnnual: jest.fn(),
   getEarliestYear: jest.fn(),
   // Fase 1.1.7.ext — lookups de origen para calculados de único y cuota
@@ -73,6 +74,7 @@ const mockSettingsService = {
 const mockSimulationsService = {
   getSimulatedItemsForMonth: jest.fn().mockResolvedValue([]),
   getSimulatedItemsForMonths: jest.fn().mockResolvedValue(new Map()),
+  getSimulationYearIntervals: jest.fn().mockResolvedValue([]),
 };
 
 // ---------------------------------------------------------------------------
@@ -88,6 +90,8 @@ const CAT_B = 'cat-b-id';
 /** Fila agregada de único sin datos (año sin movimientos únicos). */
 function setupEmptyUnicosMock(): void {
   mockRepo.getAnnualUnicosAggregated.mockResolvedValue([]);
+  // Historia completa (insumo de yearRange) también vacía — ídem arriba.
+  mockRepo.getUnicoYearsByCategory.mockResolvedValue([]);
 }
 
 function setupEmptyFijosMock(): void {
@@ -3253,6 +3257,234 @@ describe('MovementsService — getReportsMovements', () => {
 
       expect(result.simulated).toBeUndefined();
       expect(mockSimulationsService.getSimulatedItemsForMonths).not.toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // yearRange — rango de años navegable de la card (income-expense/by-category)
+  // -------------------------------------------------------------------------
+  describe('yearRange — rango de años navegable', () => {
+    it('sin dato (mocks vacíos) → yearRange null', async () => {
+      setupEmptyMocks();
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, undefined, '2026-06-15',
+      );
+
+      expect(result.yearRange).toBeNull();
+    });
+
+    it('categories=[] (ninguna categoría) → yearRange null aunque haya datos', async () => {
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2020);
+      mockRepo.getUnicoYearsByCategory.mockResolvedValue([
+        { year: 2020, categoryId: CAT_A, type: 'EXPENSE' },
+      ]);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, [], undefined, null, undefined, undefined, '2026-06-15',
+      );
+
+      expect(result.yearRange).toBeNull();
+    });
+
+    it('años huecos internos: únicos en 2020 y 2024 (sin dato 2021-2023) → rango continuo [2020,2024]', async () => {
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2020);
+      mockRepo.getUnicoYearsByCategory.mockResolvedValue([
+        { year: 2020, categoryId: CAT_A, type: 'EXPENSE' },
+        { year: 2024, categoryId: CAT_A, type: 'EXPENSE' },
+      ]);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, undefined, '2026-06-15',
+      );
+
+      expect(result.yearRange).toEqual({ minYear: 2020, maxYear: 2024 });
+    });
+
+    it('filtro de categorías: excluye el año de la categoría destildada (rango con filtro vs. sin filtro)', async () => {
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2018);
+      mockRepo.getUnicoYearsByCategory.mockResolvedValue([
+        { year: 2018, categoryId: CAT_A, type: 'EXPENSE' },
+        { year: 2024, categoryId: CAT_B, type: 'EXPENSE' },
+      ]);
+
+      const sinFiltro = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, undefined, '2026-06-15',
+      );
+      expect(sinFiltro.yearRange).toEqual({ minYear: 2018, maxYear: 2024 });
+
+      const conFiltro = await service.getReportsMovements(
+        USER_A, 2026, [CAT_A], undefined, null, undefined, undefined, '2026-06-15',
+      );
+      expect(conFiltro.yearRange).toEqual({ minYear: 2018, maxYear: 2018 });
+    });
+
+    it('fijo activo sin endMonth → maxYear clampea al tope técnico (añoEnCurso + 100)', async () => {
+      setupEmptyUnicosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ startMonth: '2023-01', deletedFrom: null, type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getEarliestYear.mockResolvedValue(2023);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, undefined, '2026-06-15',
+      );
+
+      // today=2026-06-15 → añoEnCurso=2026 → tope = 2026+100 = 2126
+      expect(result.yearRange).toEqual({ minYear: 2023, maxYear: 2126 });
+    });
+
+    it('filtro de dirección (direction=income) excluye un fijo EXPENSE del rango', async () => {
+      setupEmptyUnicosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ startMonth: '2020-01', deletedFrom: '2021-01', type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getEarliestYear.mockResolvedValue(2020);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, 'income', undefined, '2026-06-15',
+      );
+
+      expect(result.yearRange).toBeNull();
+    });
+
+    it('filtro de tipo (types sin "fijo") excluye el fijo del rango', async () => {
+      setupEmptyUnicosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ startMonth: '2020-01', deletedFrom: '2021-01', type: 'EXPENSE' as any }),
+      ]);
+      mockRepo.getEarliestYear.mockResolvedValue(2020);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, ['cuota', 'unico'], undefined, undefined, '2026-06-15',
+      );
+
+      expect(result.yearRange).toBeNull();
+    });
+
+    it('cuota acotada (totalInstallments finito) aporta un intervalo cerrado, sin tope', async () => {
+      setupEmptyUnicosMock();
+      setupEmptyFijosMock();
+      mockRepo.getAllCuotasForAnnual.mockResolvedValue([
+        makeCuota({ startMonth: '2024-11', totalInstallments: 6 }), // nov-2024 .. abr-2025
+      ]);
+      mockRepo.getEarliestYear.mockResolvedValue(2024);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, undefined, '2026-06-15',
+      );
+
+      expect(result.yearRange).toEqual({ minYear: 2024, maxYear: 2025 });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // yearRange + includeSimulated: el tramo de las simulaciones activas es una
+  // fuente más de intervalos (solo extiende maxYear; el filtrado por categoría
+  // y dirección vive en SimulationsService.getSimulationYearIntervals).
+  // -------------------------------------------------------------------------
+  describe('yearRange — includeSimulated suma tramos de simulaciones', () => {
+    beforeEach(() => {
+      mockSimulationsService.getSimulationYearIntervals.mockReset();
+      mockSimulationsService.getSimulationYearIntervals.mockResolvedValue([]);
+      mockSimulationsService.getSimulatedItemsForMonths.mockResolvedValue(new Map());
+    });
+
+    function setupRealUnicos2025() {
+      setupEmptyFijosMock();
+      setupEmptyCuotasMock();
+      mockRepo.getEarliestYear.mockResolvedValue(2025);
+      mockRepo.getUnicoYearsByCategory.mockResolvedValue([
+        { year: 2025, categoryId: CAT_A, type: 'EXPENSE' },
+      ]);
+    }
+
+    it('toggle encendido: el tramo simulado extiende maxYear (nunca minYear)', async () => {
+      setupRealUnicos2025();
+      mockSimulationsService.getSimulationYearIntervals.mockResolvedValue([
+        { startYear: 2026, endYear: 2027 },
+      ]);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, undefined, '2026-10-09', true,
+      );
+
+      expect(result.yearRange).toEqual({ minYear: 2025, maxYear: 2027 });
+      expect(mockSimulationsService.getSimulationYearIntervals).toHaveBeenCalledWith(
+        USER_A, null, 'both', '2026-10-09',
+      );
+    });
+
+    it('toggle apagado: yearRange idéntico al de dato real y no consulta simulaciones', async () => {
+      setupRealUnicos2025();
+      mockSimulationsService.getSimulationYearIntervals.mockResolvedValue([
+        { startYear: 2026, endYear: 2027 },
+      ]);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, undefined, '2026-10-09',
+      );
+
+      expect(result.yearRange).toEqual({ minYear: 2025, maxYear: 2025 });
+      expect(mockSimulationsService.getSimulationYearIntervals).not.toHaveBeenCalled();
+    });
+
+    it('sin dato real + simulaciones con toggle encendido: yearRange NO es null', async () => {
+      setupEmptyMocks();
+      mockSimulationsService.getSimulationYearIntervals.mockResolvedValue([
+        { startYear: 2026, endYear: 2027 },
+      ]);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, undefined, '2026-10-09', true,
+      );
+
+      expect(result.yearRange).toEqual({ minYear: 2026, maxYear: 2027 });
+    });
+
+    it('sin dato real y simulaciones que no aportan (pausadas/filtradas) -> null', async () => {
+      setupEmptyMocks();
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, null, undefined, undefined, '2026-10-09', true,
+      );
+
+      expect(result.yearRange).toBeNull();
+    });
+
+    it('destildar "unico" saca a las simulaciones del rango (ni se consultan)', async () => {
+      setupEmptyMocks();
+      mockSimulationsService.getSimulationYearIntervals.mockResolvedValue([
+        { startYear: 2026, endYear: 2027 },
+      ]);
+
+      const result = await service.getReportsMovements(
+        USER_A, 2026, null, undefined, ['fijo', 'cuota'], undefined, undefined, '2026-10-09', true,
+      );
+
+      expect(mockSimulationsService.getSimulationYearIntervals).not.toHaveBeenCalled();
+      expect(result.yearRange).toBeNull();
+    });
+
+    it('pasa el filtro de categorias y la direccion vigentes a SimulationsService', async () => {
+      setupRealUnicos2025();
+
+      await service.getReportsMovements(
+        USER_A, 2026, [CAT_B], undefined, null, 'income', undefined, '2026-10-09', true,
+      );
+
+      expect(mockSimulationsService.getSimulationYearIntervals).toHaveBeenCalledWith(
+        USER_A, new Set([CAT_B]), 'income', '2026-10-09',
+      );
     });
   });
 });

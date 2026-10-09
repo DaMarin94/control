@@ -101,6 +101,7 @@ const mockData: UnicoGridResponse = {
   breakdown: makeBreakdownEmpty(),
   footer: makeFooter(),
   availableCategories: [],
+  yearRange: { minYear: 2000, maxYear: 2100 },
 };
 
 function createWrapper() {

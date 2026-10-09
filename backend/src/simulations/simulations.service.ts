@@ -337,6 +337,82 @@ export class SimulationsService {
   }
 
   // ---------------------------------------------------------------------------
+  // Insumo del rango navegable `yearRange` de GET /movements/reports
+  // (includeSimulated=true, RF-REP-017)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Intervalos de años que aportan los TRAMOS de las simulaciones ACTIVAS
+   * (no pausadas) al `yearRange` de la card, bajo el filtro vigente.
+   *
+   * - Categorías: `categoryFilter` (null = sin filtro; Set vacío = ninguna).
+   * - Tipos: lo resuelve el caller (el simulado es un `unico`).
+   * - Dirección `both`: cada simulación aporta su tramo completo
+   *   `[arranque efectivo..endMonth]` (RN-028), sin evaluar la regresión.
+   * - Dirección `expense`/`income`: la dirección de un simulado se deriva mes
+   *   a mes (RN-019), así que se evalúa el MISMO cómputo que grafica la card
+   *   (`getSimulatedItemsForMonths`, una sola llamada batch) sobre la unión de
+   *   tramos y se aportan los años de los meses cuyo ítem tiene esa dirección.
+   *   Es exacto (no aproximado) y cuesta lo mismo que `includeSimulated`.
+   *
+   * Los extremos se clampean a `[añoEnCurso..añoEnCurso+100]` (tope técnico
+   * de la card); nunca devuelve años pasados (un tramo arranca >= mes en curso).
+   */
+  async getSimulationYearIntervals(
+    userId: string,
+    categoryFilter: Set<string> | null,
+    direction: 'both' | 'expense' | 'income',
+    today?: string,
+  ): Promise<{ startYear: number; endYear: number }[]> {
+    if (categoryFilter !== null && categoryFilter.size === 0) return [];
+
+    const todayMonthKey = resolveTodayMonthKey(today);
+    const { simulations } = await this.findAll(userId, today);
+    const ceilMonth = `${parseInt(todayMonthKey.slice(0, 4), 10) + 100}-12`;
+
+    const active = simulations.filter(
+      (s) => !s.paused && (categoryFilter === null || categoryFilter.has(s.categoryId)),
+    );
+    if (active.length === 0) return [];
+
+    const yearOf = (m: string): number => parseInt(m.slice(0, 4), 10);
+
+    if (direction === 'both') {
+      return active
+        .map((s) => ({
+          startMonth: s.effectiveStartMonth,
+          endMonth: s.endMonth < ceilMonth ? s.endMonth : ceilMonth,
+        }))
+        .filter((t) => t.startMonth <= t.endMonth)
+        .map((t) => ({ startYear: yearOf(t.startMonth), endYear: yearOf(t.endMonth) }));
+    }
+
+    let minMonth = active[0].effectiveStartMonth;
+    let maxMonth = active[0].endMonth;
+    for (const s of active) {
+      if (s.effectiveStartMonth < minMonth) minMonth = s.effectiveStartMonth;
+      if (s.endMonth > maxMonth) maxMonth = s.endMonth;
+    }
+    if (maxMonth > ceilMonth) maxMonth = ceilMonth;
+    if (minMonth > maxMonth) return [];
+
+    const activeCategoryIds = new Set(active.map((s) => s.categoryId));
+    const wanted = direction === 'income' ? MovementType.INCOME : MovementType.EXPENSE;
+    const byMonth = await this.getSimulatedItemsForMonths(
+      userId,
+      buildMonthRange(minMonth, maxMonth),
+      today,
+    );
+    const years = new Set<number>();
+    for (const [month, items] of byMonth) {
+      if (items.some((i) => i.type === wanted && activeCategoryIds.has(i.category.id))) {
+        years.add(yearOf(month));
+      }
+    }
+    return Array.from(years).map((y) => ({ startYear: y, endYear: y }));
+  }
+
+  // ---------------------------------------------------------------------------
   // GET /simulations/candidates — universo con motivos (RF-SIM-001, contrato de control-design)
   // ---------------------------------------------------------------------------
 

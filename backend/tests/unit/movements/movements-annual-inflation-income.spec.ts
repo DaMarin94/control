@@ -44,6 +44,7 @@ const mockRepo = {
   getCuotasTotalsByMonth: jest.fn(),
   getAnnualUnicosAggregated: jest.fn(),
   getAllFijosForAnnual: jest.fn(),
+  getUnicoYearsByCategory: jest.fn().mockResolvedValue([]),
   getAllCuotasForAnnual: jest.fn(),
   getEarliestYear: jest.fn(),
   findTransactionsByIds: jest.fn().mockResolvedValue([]),
@@ -136,6 +137,7 @@ function setupDefaults(): void {
   mockRepo.getUnicosIncomeForMonth.mockResolvedValue([]);
   mockRepo.getAllFijosForAnnual.mockResolvedValue([]);
   mockRepo.getAllCuotasForAnnual.mockResolvedValue([]);
+  mockRepo.getUnicoYearsByCategory.mockResolvedValue([]);
   mockRepo.loadInflationRatesForYear.mockResolvedValue(new Map());
   mockRepo.getEarliestYear.mockResolvedValue(null);
   mockRepo.findCategoriesByIds.mockResolvedValue([]);
@@ -706,6 +708,161 @@ describe('MovementsService — getAnnualInflationIncomeReport', () => {
 
     it('ROUNDDOWN(-20.9, 0) = -20 (trunca hacia cero, no hacia -∞)', () => {
       expect(roundDown(-20.9, 0)).toBe(-20);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // yearRange — rango de años navegable de la card (inflation-income)
+  // -------------------------------------------------------------------------
+  describe('yearRange — rango de años navegable', () => {
+    it('sin dato → yearRange null', async () => {
+      const result = await service.getAnnualInflationIncomeReport(
+        USER_A, 2026, null, undefined, '2026-06-15',
+      );
+
+      expect(result.yearRange).toBeNull();
+    });
+
+    it('categories=[] (ninguna) → yearRange null aunque haya ingresos', async () => {
+      mockRepo.getUnicoYearsByCategory.mockResolvedValue([
+        { year: 2020, categoryId: CAT_A, type: 'INCOME' },
+      ]);
+
+      const result = await service.getAnnualInflationIncomeReport(
+        USER_A, 2026, [], undefined, '2026-06-15',
+      );
+
+      expect(result.yearRange).toBeNull();
+    });
+
+    it('ignora filas EXPENSE (esta card solo agrega INCOME)', async () => {
+      mockRepo.getUnicoYearsByCategory.mockResolvedValue([
+        { year: 2019, categoryId: CAT_A, type: 'EXPENSE' },
+        { year: 2022, categoryId: CAT_A, type: 'INCOME' },
+      ]);
+
+      const result = await service.getAnnualInflationIncomeReport(
+        USER_A, 2026, null, undefined, '2026-06-15',
+      );
+
+      expect(result.yearRange).toEqual({ minYear: 2022, maxYear: 2022 });
+    });
+
+    it('años huecos internos: ingreso en 2020 y 2024 (sin dato 2021-2023) → rango continuo [2020,2024]', async () => {
+      mockRepo.getUnicoYearsByCategory.mockResolvedValue([
+        { year: 2020, categoryId: CAT_A, type: 'INCOME' },
+        { year: 2024, categoryId: CAT_A, type: 'INCOME' },
+      ]);
+
+      const result = await service.getAnnualInflationIncomeReport(
+        USER_A, 2026, null, undefined, '2026-06-15',
+      );
+
+      expect(result.yearRange).toEqual({ minYear: 2020, maxYear: 2024 });
+    });
+
+    it('filtro de categorías: excluye el año de la categoría destildada (rango con filtro vs. sin filtro)', async () => {
+      mockRepo.getUnicoYearsByCategory.mockResolvedValue([
+        { year: 2018, categoryId: CAT_A, type: 'INCOME' },
+        { year: 2024, categoryId: CAT_B, type: 'INCOME' },
+      ]);
+
+      const sinFiltro = await service.getAnnualInflationIncomeReport(
+        USER_A, 2026, null, undefined, '2026-06-15',
+      );
+      expect(sinFiltro.yearRange).toEqual({ minYear: 2018, maxYear: 2024 });
+
+      const conFiltro = await service.getAnnualInflationIncomeReport(
+        USER_A, 2026, [CAT_A], undefined, '2026-06-15',
+      );
+      expect(conFiltro.yearRange).toEqual({ minYear: 2018, maxYear: 2018 });
+    });
+
+    it('fijo INCOME activo sin endMonth → maxYear clampea al año en curso (no existe IPC a futuro, más restrictivo que el tope técnico)', async () => {
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        {
+          id: 'fijo-income-001',
+          type: 'INCOME',
+          amountCents: 500000,
+          currency: Currency.ARS,
+          exchangeRate: 1,
+          anchorCurrency: Currency.ARS,
+          startMonth: '2023-01',
+          deletedFrom: null,
+          frequency: 1,
+          skippedMonths: new Set<string>(),
+          categoryId: CAT_A,
+          categoryName: 'Sueldo',
+          categoryColor: '#00ff00',
+          categoryScope: 'INCOME',
+          chainId: 'chain-fijo-income-001',
+          sourceChainId: null,
+          sourceMovementId: null,
+          sourceInstallmentGroupId: null,
+          formulaOperator: null,
+          formulaOperand: null,
+          formulaSign: null,
+        },
+      ]);
+
+      const result = await service.getAnnualInflationIncomeReport(
+        USER_A, 2026, null, undefined, '2026-06-15',
+      );
+
+      // today=2026-06-15 → añoEnCurso=2026 → el recorte adicional por "no hay
+      // IPC a futuro" gana al tope técnico (2026+100=2126): maxYear=2026.
+      expect(result.yearRange).toEqual({ minYear: 2023, maxYear: 2026 });
+    });
+
+    it('recorte al año en curso: dato hasta 2030 con hoy=2026 → maxYear se acota a 2026 (no existe IPC a futuro)', async () => {
+      mockRepo.getUnicoYearsByCategory.mockResolvedValue([
+        { year: 2020, categoryId: CAT_A, type: 'INCOME' },
+        { year: 2030, categoryId: CAT_A, type: 'INCOME' },
+      ]);
+
+      const result = await service.getAnnualInflationIncomeReport(
+        USER_A, 2026, null, undefined, '2026-06-15',
+      );
+
+      expect(result.yearRange).toEqual({ minYear: 2020, maxYear: 2026 });
+    });
+
+    it('todo el dato cae en un año futuro → tras el recorte minYear > maxYear → yearRange null', async () => {
+      mockRepo.getUnicoYearsByCategory.mockResolvedValue([
+        { year: 2030, categoryId: CAT_A, type: 'INCOME' },
+      ]);
+
+      const result = await service.getAnnualInflationIncomeReport(
+        USER_A, 2026, null, undefined, '2026-06-15',
+      );
+
+      expect(result.yearRange).toBeNull();
+    });
+
+    it('cuota INCOME acotada (totalInstallments finito) aporta un intervalo cerrado, sin tope', async () => {
+      mockRepo.getAllCuotasForAnnual.mockResolvedValue([
+        {
+          id: 'cuota-income-001',
+          type: 'INCOME',
+          amountCents: 10000,
+          currency: Currency.ARS,
+          exchangeRate: 1,
+          anchorCurrency: Currency.ARS,
+          totalInstallments: 6,
+          startMonth: '2024-11', // nov-2024 .. abr-2025
+          skippedMonths: new Set<string>(),
+          categoryId: CAT_A,
+          categoryName: 'Reembolso',
+          categoryColor: '#0000ff',
+          categoryScope: 'INCOME',
+        },
+      ]);
+
+      const result = await service.getAnnualInflationIncomeReport(
+        USER_A, 2026, null, undefined, '2026-06-15',
+      );
+
+      expect(result.yearRange).toEqual({ minYear: 2024, maxYear: 2025 });
     });
   });
 });

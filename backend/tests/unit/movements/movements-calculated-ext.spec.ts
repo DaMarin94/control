@@ -747,6 +747,7 @@ const mockRepo = {
   getCuotasTotalsByMonth: jest.fn(),
   getAnnualUnicosAggregated: jest.fn(),
   getAllFijosForAnnual: jest.fn(),
+  getUnicoYearsByCategory: jest.fn().mockResolvedValue([]),
   getAllCuotasForAnnual: jest.fn(),
   getEarliestYear: jest.fn(),
   findTransactionsByIds: jest.fn(),
@@ -830,6 +831,7 @@ describe('MovementsService.getReportsMovements — calculados de único y cuota 
     mockRepo.getAnnualUnicosAggregated.mockResolvedValue([]);
     mockRepo.getAllCuotasForAnnual.mockResolvedValue([]);
     mockRepo.getEarliestYear.mockResolvedValue(null);
+    mockRepo.getUnicoYearsByCategory.mockResolvedValue([]);
     mockRepo.findTransactionsByIds.mockResolvedValue([]);
     mockRepo.findInstallmentGroupsByIds.mockResolvedValue([]);
     mockRepo.loadPivotRatesForYear.mockResolvedValue(new Map());

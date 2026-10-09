@@ -14,6 +14,16 @@ import {
 import { applyFormula } from '../recurring/formula.helper';
 import { convertToDisplayCurrency, convertToDisplayCurrencyByMonth, PivotRates, buildPivotRates, deriveExchangeRate } from '../common/currency.helper';
 import { computeFixedBasketProjection } from '../common/projection.helper';
+import {
+  YearRange,
+  YearInterval,
+  combineYearIntervals,
+  clampYearRangeToNow,
+  recurringMovementBucket,
+  recurringDirectionBucket,
+  recurringRowYearInterval,
+  installmentYearInterval,
+} from '../common/year-range.helper';
 import { SettingsService } from '../settings/settings.service';
 import { SimulationsService } from '../simulations/simulations.service';
 
@@ -147,6 +157,13 @@ export interface ReportsMovementsResponse {
   categories: ReportCategory[];
   availableCategories: ReportsAvailableCategory[];
   earliestYear: number | null;
+  /**
+   * Rango de años navegable de ESTA card (income-expense/by-category), ya
+   * filtrado por `categories`/`types`/`direction` (a diferencia de
+   * `earliestYear`, que los ignora). `null` = sin dato con el filtro
+   * vigente. Ver docs/data-model.md, §Contrato de serie de reportes.
+   */
+  yearRange: YearRange | null;
   /** RF-REP-017: presente solo si se pidió `includeSimulated=true`. */
   simulated?: ReportsSimulatedBlock;
 }
@@ -239,6 +256,13 @@ export interface AnnualUnicosResponse {
   availableCategories: AvailableCategory[];
   colorAnchorCents: number;
   anchorUsdCents: number;
+  /**
+   * Rango de años navegable de esta card, ya filtrado por `categories`.
+   * `null` = sin dato con el filtro vigente. `maxYear` además nunca supera el
+   * año en curso: los únicos no se repiten, no hay dato a futuro. Ver
+   * docs/data-model.md.
+   */
+  yearRange: YearRange | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -310,6 +334,11 @@ export interface AnnualCuotasResponse {
   bars: GanttBar[];
   rowCount: number;
   availableCategories: AvailableCategory[];
+  /**
+   * Rango de años navegable de esta card, ya filtrado por `categories`.
+   * `null` = sin dato con el filtro vigente. Ver docs/data-model.md.
+   */
+  yearRange: YearRange | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -357,6 +386,13 @@ export interface AnnualInflationIncomeResponse {
   incomeAdjTrend: AnnualInflationIncomeTrend;
   earliestYear: number | null;
   availableCategories: AvailableCategory[];
+  /**
+   * Rango de años navegable de esta card, ya filtrado por `categories`
+   * (a diferencia de `earliestYear`, que lo ignora). `null` = sin dato
+   * con el filtro vigente. `maxYear` además nunca supera el año en curso:
+   * no existe IPC a futuro. Ver docs/data-model.md.
+   */
+  yearRange: YearRange | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -728,10 +764,13 @@ export class MovementsService {
     // RF-REP-014: filtro de dirección. 'both' = sin filtro (default).
     const dir: 'both' | 'expense' | 'income' = direction ?? 'both';
 
-    // Cargar la moneda default del usuario y las pivot rates del año en paralelo (Fase 1.2.4)
-    const [userSettings, pivotRatesForYear] = await Promise.all([
+    // Cargar la moneda default del usuario, las pivot rates del año y la
+    // historia COMPLETA (no year-scoped) de únicos por año/categoría/tipo
+    // (insumo del rango navegable `yearRange`) en paralelo (Fase 1.2.4).
+    const [userSettings, pivotRatesForYear, unicosYearsForRange] = await Promise.all([
       this.settingsService.getSettings(userId),
       this.repo.loadPivotRatesForYear(year),
+      this.repo.getUnicoYearsByCategory(userId),
     ]);
     // P3: si viene currencyOverride usa esa moneda; si no, la default del usuario.
     const displayCurrency: Currency =
@@ -1400,6 +1439,54 @@ export class MovementsService {
     }
 
     // ---------------------------------------------------------------------------
+    // yearRange — rango de años navegable de ESTA card (income-expense /
+    // by-category), ya filtrado por categories/types/direction (a diferencia
+    // de earliestYear, que los ignora adrede — ver docs/data-model.md). Cada
+    // fuente aporta un intervalo [startYear, endYear]; un fijo activo sin
+    // endMonth aporta endYear = Infinity, clampeado al tope técnico por
+    // combineYearIntervals. Usa la historia COMPLETA de cada fuente
+    // (unicosYearsForRange/allFijos/cuotas ya están sin acotar por año),
+    // no solo el año pedido.
+    // ---------------------------------------------------------------------------
+    const directionAllowsRange = (t: MovementType): boolean =>
+      dir === 'both' || (dir === 'income' && t === MovementType.INCOME) || (dir === 'expense' && t === MovementType.EXPENSE);
+
+    const yearRangeIntervals: YearInterval[] = [];
+
+    for (const row of unicosYearsForRange) {
+      if (filterSet !== null && !filterSet.has(row.categoryId)) continue;
+      if (!includeMovType('unico')) continue;
+      if (!directionAllowsRange(row.type)) continue;
+      yearRangeIntervals.push({ startYear: row.year, endYear: row.year });
+    }
+
+    for (const fijo of allFijos) {
+      if (filterSet !== null && !filterSet.has(fijo.categoryId)) continue;
+      if (!includeMovType(recurringMovementBucket(fijo))) continue;
+      if (!directionAllowsRange(recurringDirectionBucket(fijo))) continue;
+      yearRangeIntervals.push(recurringRowYearInterval(fijo));
+    }
+
+    for (const grupo of cuotas) {
+      if (filterSet !== null && !filterSet.has(grupo.categoryId)) continue;
+      if (!includeMovType('cuota')) continue;
+      if (!directionAllowsRange(grupo.type)) continue;
+      yearRangeIntervals.push(installmentYearInterval(grupo));
+    }
+
+    // includeSimulated: los tramos de las simulaciones ACTIVAS son una fuente
+    // más (se comportan como un único para los filtros de la card). El tipo
+    // `unico` se resuelve acá; categorías y dirección, en SimulationsService.
+    if (includeSimulated === true && includeMovType('unico')) {
+      yearRangeIntervals.push(
+        ...(await this.simulationsService.getSimulationYearIntervals(userId, filterSet, dir, today)),
+      );
+    }
+
+    const nowYearForRange = parseInt(todayMonthKey.slice(0, 4), 10);
+    const yearRange = combineYearIntervals(yearRangeIntervals, nowYearForRange);
+
+    // ---------------------------------------------------------------------------
     // RF-REP-017: aporte simulado desagregado (opt-in por card, off por defecto)
     // ---------------------------------------------------------------------------
     let simulatedBlock: ReportsSimulatedBlock | undefined;
@@ -1566,6 +1653,7 @@ export class MovementsService {
         categoriesCount: categoriesResult.length,
         availableCategoriesCount: availableCategories.length,
         earliestYear,
+        yearRange,
         includeSimulated: includeSimulated === true,
       },
       'Serie de reportes de movimientos calculada',
@@ -1577,6 +1665,7 @@ export class MovementsService {
       categories: categoriesResult,
       availableCategories,
       earliestYear,
+      yearRange,
       ...(simulatedBlock !== undefined ? { simulated: simulatedBlock } : {}),
     };
   }
@@ -1639,12 +1728,16 @@ export class MovementsService {
     const todayMonth = todayDate.getUTCMonth() + 1; // 1-based
     const todayDay = todayDate.getUTCDate();
 
-    // Cargar moneda de display y pivot rates del año en paralelo
-    const [userSettings, pivotRatesForYear, inflationRates] = await Promise.all([
-      this.settingsService.getSettings(userId),
-      this.repo.loadPivotRatesForYear(year),
-      this.repo.loadInflationRatesForYear(year),
-    ]);
+    // Cargar moneda de display, pivot rates del año y la historia COMPLETA
+    // (no year-scoped) de únicos por año/categoría/tipo (insumo de yearRange)
+    // en paralelo.
+    const [userSettings, pivotRatesForYear, inflationRates, unicosYearsForRange] =
+      await Promise.all([
+        this.settingsService.getSettings(userId),
+        this.repo.loadPivotRatesForYear(year),
+        this.repo.loadInflationRatesForYear(year),
+        this.repo.getUnicoYearsByCategory(userId),
+      ]);
     const displayCurrency: Currency =
       currencyOverride != null ? currencyOverride : userSettings.defaultCurrency;
 
@@ -1909,6 +2002,25 @@ export class MovementsService {
       colorAnchorCents = rate !== null ? Math.round(anchorUsdCents * rate) : anchorUsdCents;
     }
 
+    // ---------------------------------------------------------------------------
+    // yearRange — rango de años navegable de esta card: únicos EXPENSE de la
+    // historia COMPLETA del usuario (unicosYearsForRange, sin acotar por año),
+    // filtrados por `categories`. Esta card no tiene types/direction propios
+    // (solo agrega únicos EXPENSE).
+    // ---------------------------------------------------------------------------
+    const yearRangeIntervals: YearInterval[] = unicosYearsForRange
+      .filter(
+        (row) =>
+          row.type === MovementType.EXPENSE &&
+          (filterSet === null || filterSet.has(row.categoryId)),
+      )
+      .map((row) => ({ startYear: row.year, endYear: row.year }));
+    // Recorte adicional: los únicos no se repiten, no hay dato a futuro.
+    const yearRange = clampYearRangeToNow(
+      combineYearIntervals(yearRangeIntervals, todayYear),
+      todayYear,
+    );
+
     this.logger.debug(
       {
         userId,
@@ -1918,6 +2030,7 @@ export class MovementsService {
         availableCategoriesCount: availableCategories.length,
         anchorUsdCents,
         colorAnchorCents,
+        yearRange,
       },
       'Reporte anual de únicos calculado',
     );
@@ -1931,6 +2044,7 @@ export class MovementsService {
       availableCategories,
       colorAnchorCents,
       anchorUsdCents,
+      yearRange,
     };
   }
 
@@ -2188,6 +2302,19 @@ export class MovementsService {
         return a.categoryId.localeCompare(b.categoryId);
       });
 
+    // ---------------------------------------------------------------------------
+    // yearRange — rango de años navegable de esta card: TODOS los grupos de
+    // cuotas EXPENSE del usuario (allGroups, sin acotar al año pedido —
+    // `intersecting`/`filtered` sí lo están), filtrados por `categories`.
+    // Siempre acotado (totalInstallments es finito): no hay caso "sin fin"
+    // para cuotas. No usa `today` (este endpoint no lo acepta).
+    // ---------------------------------------------------------------------------
+    const yearRangeIntervals: YearInterval[] = allGroups
+      .filter((g) => filterSet === null || filterSet.has(g.categoryId))
+      .map((g) => installmentYearInterval(g));
+    const nowYearForRange = new Date().getUTCFullYear();
+    const yearRange = combineYearIntervals(yearRangeIntervals, nowYearForRange);
+
     this.logger.debug(
       {
         userId,
@@ -2198,6 +2325,7 @@ export class MovementsService {
         filteredCount: filtered.length,
         rowCount,
         availableCategoriesCount: availableCategories.length,
+        yearRange,
       },
       'Reporte anual de cuotas (gantt) calculado',
     );
@@ -2208,6 +2336,7 @@ export class MovementsService {
       bars,
       rowCount,
       availableCategories,
+      yearRange,
     };
   }
 
@@ -2264,7 +2393,9 @@ export class MovementsService {
     });
 
     // Cargar en paralelo: settings, pivot rates, inflation rates, únicos del año,
-    // únicos del mes anterior al año (dic previo), fijos y cuotas
+    // únicos del mes anterior al año (dic previo), fijos, cuotas, earliestYear
+    // y la historia COMPLETA (no year-scoped) de únicos por año/categoría/tipo
+    // (insumo de yearRange).
     const [
       userSettings,
       pivotRatesForYear,
@@ -2274,6 +2405,7 @@ export class MovementsService {
       allFijos,
       allCuotas,
       earliestYear,
+      unicosYearsForRange,
     ] = await Promise.all([
       this.settingsService.getSettings(userId),
       this.repo.loadPivotRatesForYear(year),
@@ -2283,6 +2415,7 @@ export class MovementsService {
       this.repo.getAllFijosForAnnual(userId),
       this.repo.getAllCuotasForAnnual(userId),
       this.repo.getEarliestYear(userId),
+      this.repo.getUnicoYearsByCategory(userId),
     ]);
 
     const displayCurrency: Currency =
@@ -2781,6 +2914,39 @@ export class MovementsService {
       return a.categoryId.localeCompare(b.categoryId);
     });
 
+    // ---------------------------------------------------------------------------
+    // yearRange — rango de años navegable de esta card: INCOME de la historia
+    // COMPLETA del usuario (únicos vía unicosYearsForRange, fijos/calculados
+    // vía allFijos, cuotas vía allCuotas — los tres sin acotar por año),
+    // filtrado por `categories` (a diferencia de earliestYear, que lo ignora).
+    // Un fijo/calculado INCOME activo sin endMonth aporta endYear = Infinity.
+    // ---------------------------------------------------------------------------
+    const yearRangeIntervals: YearInterval[] = [];
+
+    for (const row of unicosYearsForRange) {
+      if (row.type !== MovementType.INCOME) continue;
+      if (filterSet !== null && !filterSet.has(row.categoryId)) continue;
+      yearRangeIntervals.push({ startYear: row.year, endYear: row.year });
+    }
+
+    for (const fijo of allFijos) {
+      if (recurringDirectionBucket(fijo) !== MovementType.INCOME) continue;
+      if (filterSet !== null && !filterSet.has(fijo.categoryId)) continue;
+      yearRangeIntervals.push(recurringRowYearInterval(fijo));
+    }
+
+    for (const grupo of allCuotas) {
+      if (grupo.type !== MovementType.INCOME) continue;
+      if (filterSet !== null && !filterSet.has(grupo.categoryId)) continue;
+      yearRangeIntervals.push(installmentYearInterval(grupo));
+    }
+
+    // Recorte adicional: no existe IPC a futuro, la card no puede graficar ahí.
+    const yearRange = clampYearRangeToNow(
+      combineYearIntervals(yearRangeIntervals, todayYear),
+      todayYear,
+    );
+
     this.logger.debug(
       {
         userId,
@@ -2789,6 +2955,7 @@ export class MovementsService {
         filterCount: filterSet?.size ?? null,
         availableCategoriesCount: availableCategories.length,
         earliestYear,
+        yearRange,
       },
       'Reporte anual de inflación vs ingresos calculado',
     );
@@ -2801,6 +2968,7 @@ export class MovementsService {
       incomeAdjTrend,
       earliestYear,
       availableCategories,
+      yearRange,
     };
   }
 

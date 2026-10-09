@@ -12,6 +12,29 @@
 
 import type { CurrencyCode } from "@/types/settings";
 
+// ─── Rango de años navegable (steppers de Reportes) ──────────────────────────
+
+/**
+ * Rango de años navegable de UNA card, devuelto por los 4 endpoints de
+ * reportes con stepper de año (`/movements/reports`, `annual-unicos`,
+ * `annual-cuotas`, `annual-inflation-income`). Mismo shape que `YearRange`
+ * del backend (`common/year-range.helper.ts`).
+ *
+ * `null` = sin dato navegable con el filtro vigente (p. ej. `categories=`
+ * vacío) → el stepper queda congelado (ambas flechas deshabilitadas, el año
+ * vigente no cambia). Presente = rango CONTINUO [minYear, maxYear]: todo año
+ * intermedio es navegable aunque no tenga dato propio (no se reporta
+ * "hueco por hueco"). El rango ya viene filtrado por el mismo filtro que
+ * recibió el endpoint (categorías en los 3 anuales; categorías + tipos +
+ * dirección en `/movements/reports`) — a diferencia de `earliestYear`, que
+ * es deliberadamente inmune al filtro. El tope técnico
+ * [añoEnCurso-100, añoEnCurso+100] ya lo aplica el backend.
+ */
+export interface YearRange {
+  minYear: number;
+  maxYear: number;
+}
+
 /** Un mes del año con sus totales de ingreso y gasto. Siempre 12, ene→dic. */
 export interface ReportMonth {
   /** "YYYY-MM" */
@@ -133,10 +156,18 @@ export interface ReportsMovementsResponse {
   /**
    * Año más antiguo con algún movimiento del usuario.
    * null si el usuario no tiene ningún movimiento.
-   * NO afectado por el filtro de categorías.
-   * El front lo usa para deshabilitar la navegación ‹ antes del primer año.
+   * NO afectado por el filtro de categorías/tipos/dirección.
+   * Ya NO gobierna la navegación del stepper (ver `yearRange`); se preserva
+   * en el contrato por si un futuro consumidor lo necesita.
    */
   earliestYear: number | null;
+  /**
+   * Rango de años navegable de ESTA card, ya filtrado por categorías, tipos
+   * y dirección (a diferencia de `earliestYear`, que los ignora). El front lo
+   * usa para habilitar/deshabilitar las flechas ‹ › del stepper y para
+   * auto-corregir el año vigente si queda fuera de rango. Ver `YearRange`.
+   */
+  yearRange: YearRange | null;
   /**
    * Movimientos simulados (RF-REP-017) — presente SOLO cuando se pidió
    * `includeSimulated=true`. Se apila sobre el dato real de `months`/`categories`;
@@ -239,6 +270,11 @@ export interface UnicoGridResponse {
    * sin recalcular TC — la conversión a USD la hace el backend, nunca el front.
    */
   anchorUsdCents: number;
+  /**
+   * Rango de años navegable de esta card: únicos EXPENSE de la historia
+   * completa del usuario, filtrados por `categories`. Ver `YearRange`.
+   */
+  yearRange: YearRange | null;
 }
 
 /**
@@ -449,6 +485,11 @@ export interface CuotasGanttResponse {
    * El front resuelve color/nombre de cada barra desde aquí por categoryId.
    */
   availableCategories: Array<{ categoryId: string; name: string; color: string }>;
+  /**
+   * Rango de años navegable de esta card: TODOS los grupos de cuotas EXPENSE
+   * del usuario (sin acotar al año pedido), filtrados por `categories`. Ver `YearRange`.
+   */
+  yearRange: YearRange | null;
 }
 
 // ─── Tipos del endpoint de reporte anual de Inflación vs Ingresos (Ola 4, P5) ──
@@ -518,7 +559,7 @@ export interface AnnualInflationIncomeResponse {
   incomeAdjTrend: InflationIncomeTrend;
   /**
    * Año más antiguo con ingresos del usuario (sin aplicar filtro).
-   * null si no hay datos. Usado para el tope ‹ del stepper.
+   * null si no hay datos. Ya NO gobierna la navegación del stepper (ver `yearRange`).
    */
   earliestYear: number | null;
   /**
@@ -526,6 +567,11 @@ export interface AnnualInflationIncomeResponse {
    * El front lo usa como universo del filtro de chips de categoría.
    */
   availableCategories: Array<{ categoryId: string; name: string; color: string }>;
+  /**
+   * Rango de años navegable de esta card: INCOME de la historia completa del
+   * usuario (sin acotar al año pedido), filtrado por `categories`. Ver `YearRange`.
+   */
+  yearRange: YearRange | null;
 }
 
 // ─── Tipos del reporte "Detalle histórico de gastos fijos" (Ola 5, P6 / Ola 6) ─

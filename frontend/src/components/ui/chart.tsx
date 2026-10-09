@@ -29,6 +29,7 @@ import * as React from "react";
 import { ResponsiveContainer } from "recharts";
 import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { YearRange } from "@/types/reports";
 
 // ─── Margen compartido del eje X ───────────────────────────────────────────────
 
@@ -58,6 +59,101 @@ import { cn } from "@/lib/utils";
  * `fixed-evolution-card.tsx`).
  */
 export const CHART_END_LABEL_MARGIN = 20;
+
+// ─── Rango de años navegable (steppers de Reportes) ───────────────────────────
+
+/**
+ * Estado de habilitación de las flechas ‹ › del stepper de año embebido en una
+ * card de reporte, derivado del `yearRange` que devuelve el propio endpoint
+ * (ya filtrado por categorías/tipos/dirección — ver `docs/data-model.md`,
+ * §Contrato de serie de reportes, y `YearRange` en `@/types/reports`).
+ *
+ * Reemplaza la cota dura ±100 anterior (`getYearNavBounds`, retirada): el
+ * tope técnico ya lo aplica el backend, y el límite real de navegación de
+ * cada card es SU PROPIO dato filtrado, no una ventana relativa al año actual.
+ *
+ * `yearRange === null` → sin dato navegable con el filtro vigente → ambas
+ * flechas deshabilitadas (el stepper queda "congelado").
+ */
+export function getYearStepperState(
+  year: number,
+  yearRange: YearRange | null,
+): { canGoPrev: boolean; canGoNext: boolean } {
+  if (yearRange === null) return { canGoPrev: false, canGoNext: false };
+  return {
+    canGoPrev: year > yearRange.minYear,
+    canGoNext: year < yearRange.maxYear,
+  };
+}
+
+/**
+ * Auto-corrige el año vigente de una card cuando queda FUERA del `yearRange`
+ * recibido (filtro recién cambiado, o año persistido que ya no entra al
+ * montar la card): salta al extremo más cercano (`year < minYear` →
+ * `minYear`; `year > maxYear` → `maxYear`) y lo persiste por el mismo camino
+ * que un cambio manual (`onYearChange`) — decisión de producto cerrada, ver
+ * docs/requirements.md.
+ *
+ * Cero-impacto cuando `yearRange` es `null` (stepper congelado, el año
+ * vigente no cambia) o cuando el año ya entra en el rango.
+ *
+ * No cicla: `yearRange` depende del FILTRO vigente (categorías/tipos/
+ * dirección), nunca del año pedido — tras el salto, el refetch con el año
+ * corregido devuelve el MISMO rango, así que la corrida siguiente del efecto
+ * ya no encuentra el año fuera de rango y no vuelve a llamar `onYearChange`.
+ * Las dependencias del efecto son los límites PRIMITIVOS (`minYear`/
+ * `maxYear`), no el objeto `yearRange`: cada respuesta trae una referencia
+ * nueva aunque los límites no hayan cambiado, y depender del objeto
+ * reiniciaría el efecto en cada refetch sin necesidad (sin afectar la
+ * ausencia de ciclo, pero sin motivo).
+ *
+ * `onYearChange` se guarda en un ref ("latest ref" pattern) y queda FUERA
+ * de las dependencias del efecto. Motivo (bug real de QA visual): cuando
+ * quien aplica la corrección lo hace de forma asíncrona (ej. persistencia en
+ * preferencias con round-trip al backend, caso de `/reportes`), el callback
+ * suele llegar como closure inline (`(y) => handler(cardId, y)`) que el
+ * padre recrea en CADA render — incluyendo los re-renders que la propia
+ * persistencia en vuelo dispara, aunque `year`/`minYear`/`maxYear` no hayan
+ * cambiado todavía. Si `onYearChange` estuviera en las deps, cada una de esas
+ * nuevas identidades re-disparaba el efecto, que volvía a ver el año
+ * (todavía) fuera de rango y volvía a llamar `onYearChange` — bucle infinito
+ * (`Maximum update depth exceeded`) hasta que la corrección persistida por
+ * fin bajaba como prop. Con el ref, el efecto solo corre cuando cambian los
+ * valores primitivos reales.
+ *
+ * Guarda adicional (`lastEmittedRef`): además de lo anterior, no se vuelve a
+ * emitir la MISMA corrección (mismo `year`/`minYear`/`maxYear`) mientras la
+ * anterior está en vuelo, por si el efecto se re-ejecuta por otro motivo
+ * (ej. remount) antes de que la corrección se refleje en la prop `year`.
+ */
+export function useYearRangeAutoCorrect(
+  year: number,
+  yearRange: YearRange | null,
+  onYearChange: ((year: number) => void) | undefined,
+): void {
+  const minYear = yearRange?.minYear;
+  const maxYear = yearRange?.maxYear;
+
+  const onYearChangeRef = React.useRef(onYearChange);
+  React.useEffect(() => {
+    onYearChangeRef.current = onYearChange;
+  }, [onYearChange]);
+
+  const lastEmittedRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    if (minYear === undefined || maxYear === undefined) return;
+    if (year >= minYear && year <= maxYear) {
+      lastEmittedRef.current = null;
+      return;
+    }
+    const key = `${year}:${minYear}:${maxYear}`;
+    if (lastEmittedRef.current === key) return;
+    lastEmittedRef.current = key;
+    const target = year < minYear ? minYear : maxYear;
+    onYearChangeRef.current?.(target);
+  }, [year, minYear, maxYear]);
+}
 
 // ─── ChartContainer ────────────────────────────────────────────────────────────
 

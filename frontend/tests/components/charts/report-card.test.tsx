@@ -147,6 +147,7 @@ const mockData: ReportsMovementsResponse = {
     { categoryId: "cat-2", name: "Transporte", color: "#E07B54", hasExpense: true, hasIncome: false },
   ],
   earliestYear: 2025,
+  yearRange: { minYear: 2000, maxYear: 2100 },
 };
 
 // Universo con una categoría income-only (fix E2): by-category debe excluirla (hasExpense=false),
@@ -193,6 +194,7 @@ const mockYearEmptyExceptSimulated: ReportsMovementsResponse = {
   categories: [],
   availableCategories: [],
   earliestYear: null,
+  yearRange: { minYear: 2000, maxYear: 2100 },
   simulated: {
     months: Array.from({ length: 12 }, (_, i) => ({
       month: `2026-${String(i + 1).padStart(2, "0")}`,
@@ -213,6 +215,7 @@ const emptyData: ReportsMovementsResponse = {
   categories: [],
   availableCategories: [],
   earliestYear: null,
+  yearRange: { minYear: 2000, maxYear: 2100 },
 };
 
 // ─── Wrapper ──────────────────────────────────────────────────────────────────
@@ -313,44 +316,46 @@ describe("ReportCard — cabecera", () => {
   });
 });
 
-describe("ReportCard — stepper de año", () => {
+describe("ReportCard — stepper de año (atado a yearRange del backend)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // earliestYear=2025, year=2026 (año actual aprox)
     mockUseReports.mockReturnValue(makeSuccessReturn());
   });
 
-  it("llama onYearChange al hacer clic en ‹ (año anterior)", () => {
+  it("llama onYearChange al hacer clic en ‹ (año anterior) cuando hay margen", () => {
     const onYearChange = vi.fn();
-    // earliestYear=2025, year=2026 → ‹ habilitado
     renderCard({ type: "income-expense", year: 2026, onYearChange });
 
     fireEvent.click(screen.getByRole("button", { name: /año anterior/i }));
     expect(onYearChange).toHaveBeenCalledWith(2025);
   });
 
-  it("› deshabilitado cuando year === año actual (2026)", () => {
-    // El componente calcula currentYear desde new Date() en el test → es 2026
-    renderCard({ type: "income-expense", year: 2026 });
-    const nextBtn = screen.getByRole("button", { name: /año siguiente/i });
-    // En 2026 (año actual), el botón › debe estar deshabilitado
-    // (puede variar según el año del CI — verificamos que el aria-disabled es coherente)
-    const isDisabled =
-      nextBtn.hasAttribute("disabled") || nextBtn.getAttribute("aria-disabled") === "true";
-    // year=2026 y currentYear=2026 en producción → disabled; en CI año distinto podría no estar
-    // Lo que sí verificamos es que el componente renderiza sin error
-    expect(nextBtn).toBeInTheDocument();
-    // Para garantizar el test: si el año de ejecución es 2026, el botón debe estar disabled
-    const execYear = new Date().getFullYear();
-    if (execYear === 2026) {
-      expect(isDisabled).toBe(true);
-    }
+  it("llama onYearChange al hacer clic en › (año siguiente) cuando hay margen", () => {
+    const onYearChange = vi.fn();
+    renderCard({ type: "income-expense", year: 2026, onYearChange });
+
+    fireEvent.click(screen.getByRole("button", { name: /año siguiente/i }));
+    expect(onYearChange).toHaveBeenCalledWith(2027);
   });
 
-  it("‹ deshabilitado cuando year === earliestYear", () => {
+  it("› deshabilitado en year === maxYear del yearRange", () => {
     mockUseReports.mockReturnValue(makeSuccessReturn({
       ...mockData,
-      earliestYear: 2026,
+      year: 2026,
+      yearRange: { minYear: 2000, maxYear: 2026 },
+    }));
+    renderCard({ type: "income-expense", year: 2026 });
+    const nextBtn = screen.getByRole("button", { name: /año siguiente/i });
+    const isDisabled =
+      nextBtn.hasAttribute("disabled") || nextBtn.getAttribute("aria-disabled") === "true";
+    expect(isDisabled).toBe(true);
+  });
+
+  it("‹ deshabilitado en year === minYear del yearRange", () => {
+    mockUseReports.mockReturnValue(makeSuccessReturn({
+      ...mockData,
+      year: 2026,
+      yearRange: { minYear: 2026, maxYear: 2100 },
     }));
     renderCard({ type: "income-expense", year: 2026 });
     const prevBtn = screen.getByRole("button", { name: /año anterior/i });
@@ -359,13 +364,135 @@ describe("ReportCard — stepper de año", () => {
     expect(isDisabled).toBe(true);
   });
 
-  it("‹ deshabilitado cuando earliestYear es null", () => {
-    mockUseReports.mockReturnValue(makeSuccessReturn(emptyData));
-    renderCard({ type: "income-expense", year: 2026 });
+  it("‹ habilitado un año por encima de minYear", () => {
+    const onYearChange = vi.fn();
+    mockUseReports.mockReturnValue(makeSuccessReturn({
+      ...mockData,
+      year: 2026,
+      yearRange: { minYear: 2025, maxYear: 2100 },
+    }));
+    renderCard({ type: "income-expense", year: 2026, onYearChange });
+    fireEvent.click(screen.getByRole("button", { name: /año anterior/i }));
+    expect(onYearChange).toHaveBeenCalledWith(2025);
+  });
+
+  it("yearRange === null: ambas flechas deshabilitadas y el año vigente no cambia", () => {
+    const onYearChange = vi.fn();
+    mockUseReports.mockReturnValue(makeSuccessReturn({
+      ...emptyData,
+      yearRange: null,
+    }));
+    renderCard({ type: "income-expense", year: 2026, onYearChange });
+
     const prevBtn = screen.getByRole("button", { name: /año anterior/i });
-    const isDisabled =
-      prevBtn.hasAttribute("disabled") || prevBtn.getAttribute("aria-disabled") === "true";
-    expect(isDisabled).toBe(true);
+    const nextBtn = screen.getByRole("button", { name: /año siguiente/i });
+    expect(prevBtn.hasAttribute("disabled") || prevBtn.getAttribute("aria-disabled") === "true").toBe(true);
+    expect(nextBtn.hasAttribute("disabled") || nextBtn.getAttribute("aria-disabled") === "true").toBe(true);
+
+    fireEvent.click(prevBtn);
+    fireEvent.click(nextBtn);
+    expect(onYearChange).not.toHaveBeenCalled();
+  });
+
+  // ── Auto-corrección de año fuera de rango (decisión de producto cerrada) ──
+
+  it("auto-corrige al montar con un año persistido MENOR que minYear: salta a minYear", () => {
+    const onYearChange = vi.fn();
+    mockUseReports.mockReturnValue(makeSuccessReturn({
+      ...mockData,
+      year: 2018,
+      yearRange: { minYear: 2022, maxYear: 2026 },
+    }));
+    renderCard({ type: "income-expense", year: 2018, onYearChange });
+    expect(onYearChange).toHaveBeenCalledWith(2022);
+    expect(onYearChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("auto-corrige al montar con un año persistido MAYOR que maxYear: salta a maxYear", () => {
+    const onYearChange = vi.fn();
+    mockUseReports.mockReturnValue(makeSuccessReturn({
+      ...mockData,
+      year: 2030,
+      yearRange: { minYear: 2020, maxYear: 2023 },
+    }));
+    renderCard({ type: "income-expense", year: 2030, onYearChange });
+    expect(onYearChange).toHaveBeenCalledWith(2023);
+    expect(onYearChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("NO auto-corrige cuando el año ya entra en el rango", () => {
+    const onYearChange = vi.fn();
+    mockUseReports.mockReturnValue(makeSuccessReturn({
+      ...mockData,
+      year: 2026,
+      yearRange: { minYear: 2020, maxYear: 2030 },
+    }));
+    renderCard({ type: "income-expense", year: 2026, onYearChange });
+    expect(onYearChange).not.toHaveBeenCalled();
+  });
+
+  it("NO auto-corrige cuando yearRange es null (stepper congelado)", () => {
+    const onYearChange = vi.fn();
+    mockUseReports.mockReturnValue(makeSuccessReturn({
+      ...emptyData,
+      year: 2026,
+      yearRange: null,
+    }));
+    renderCard({ type: "income-expense", year: 2026, onYearChange });
+    expect(onYearChange).not.toHaveBeenCalled();
+  });
+
+  it("no cicla: tras saltar al extremo, una pasada posterior con ese año y el MISMO yearRange (nueva referencia) no vuelve a llamar onYearChange", () => {
+    const onYearChange = vi.fn();
+    mockUseReports.mockReturnValue(makeSuccessReturn({
+      ...mockData,
+      year: 2018,
+      yearRange: { minYear: 2022, maxYear: 2026 },
+    }));
+    const { rerender } = render(
+      <ReportCard type="income-expense" year={2018} chartHeight={300} onYearChange={onYearChange} />,
+      { wrapper: createWrapper() },
+    );
+    expect(onYearChange).toHaveBeenCalledTimes(1);
+    expect(onYearChange).toHaveBeenCalledWith(2022);
+
+    // El padre persistió el año corregido y volvió a pedir con el mismo filtro:
+    // el backend devuelve el MISMO rango de valores, pero una referencia de
+    // objeto nueva (simulado acá con un objeto literal distinto).
+    mockUseReports.mockReturnValue(makeSuccessReturn({
+      ...mockData,
+      year: 2022,
+      yearRange: { minYear: 2022, maxYear: 2026 },
+    }));
+    rerender(<ReportCard type="income-expense" year={2022} chartHeight={300} onYearChange={onYearChange} />);
+    expect(onYearChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("no cicla cuando el padre aplica la corrección de forma ASÍNCRONA: año fuera de rango se repite en varios re-renders con un onYearChange de identidad NUEVA en cada uno (bug real: padre tipo `(y) => handleYearChange(id, y)` recreado por cada render, la prop `year` todavía no refleja la corrección persistida)", () => {
+    const onYearChange = vi.fn();
+    mockUseReports.mockReturnValue(makeSuccessReturn({
+      ...mockData,
+      year: 2018,
+      yearRange: { minYear: 2022, maxYear: 2026 },
+    }));
+    const { rerender } = render(
+      <ReportCard type="income-expense" year={2018} chartHeight={300} onYearChange={(y) => onYearChange(y)} />,
+      { wrapper: createWrapper() },
+    );
+    expect(onYearChange).toHaveBeenCalledTimes(1);
+    expect(onYearChange).toHaveBeenCalledWith(2022);
+
+    // El padre todavía no aplicó la corrección (round-trip de preferencias en
+    // vuelo): la prop `year` sigue siendo la misma, FUERA de rango, en los
+    // re-renders siguientes, pero el padre vuelve a pasar una identidad NUEVA
+    // de `onYearChange` en cada uno (closure inline `(y) => handler(id, y)`).
+    // Sin el fix, cada identidad nueva re-dispara el efecto → bucle infinito.
+    for (let i = 0; i < 5; i++) {
+      rerender(
+        <ReportCard type="income-expense" year={2018} chartHeight={300} onYearChange={(y) => onYearChange(y)} />,
+      );
+    }
+    expect(onYearChange).toHaveBeenCalledTimes(1);
   });
 });
 

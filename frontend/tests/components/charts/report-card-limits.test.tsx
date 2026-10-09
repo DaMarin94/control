@@ -97,6 +97,7 @@ describe("Form2Tooltip — marca visual pasiva (reporte.cat.*)", () => {
     ],
     availableCategories: [{ categoryId: "cat-1", name: "Comida", color: "#E23B3B", hasExpense: true, hasIncome: false }],
     earliestYear: 2025,
+    yearRange: { minYear: 2000, maxYear: 2100 },
   };
 
   // Form2Tooltip consume mergedCategories (RF-REP-017) en vez de data.categories directo.

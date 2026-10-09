@@ -56,7 +56,7 @@ import { describeLimitMark, type EvaluatedLimitMark } from "@/lib/limits/evaluat
 import { limitBoldClass, limitTintClass, LimitGlyph } from "@/components/limits/limit-mark";
 import { LimitsInfoPopover } from "@/components/limits/limits-info-popover";
 import { formatCurrency, CURRENCY_SYMBOLS, getLocalTodayString } from "@/lib/format";
-import { ChartLegend } from "@/components/ui/chart";
+import { ChartLegend, getYearStepperState, useYearRangeAutoCorrect } from "@/components/ui/chart";
 import { CardCurrencySelect } from "@/components/ui/card-currency-select";
 import { useScrollShadow, getScrollShadowStyle } from "@/hooks/use-scroll-shadow";
 import type { UnicoGridResponse } from "@/types/reports";
@@ -253,17 +253,13 @@ function GridError({ onRetry }: { onRetry: () => void }) {
 
 interface YearStepperProps {
   year: number;
-  currentYear: number;
-  earliestYear: number | null;
+  canGoPrev: boolean;
+  canGoNext: boolean;
   onPrev: () => void;
   onNext: () => void;
 }
 
-function YearStepper({ year, currentYear, earliestYear, onPrev, onNext }: YearStepperProps) {
-  // Cuando earliestYear es null (desconocido), permitir navegación libre hacia atrás
-  const canGoPrev = earliestYear === null ? true : year > earliestYear;
-  const canGoNext = year < currentYear;
-
+function YearStepper({ year, canGoPrev, canGoNext, onPrev, onNext }: YearStepperProps) {
   return (
     <div
       className="flex items-center rounded-pill border border-line bg-panel shadow-[var(--shadow-sm)] p-1"
@@ -1519,26 +1515,18 @@ export function UniqueGridCard({
     if (isEditingTitle) titleInputRef.current?.focus();
   }, [isEditingTitle]);
 
-  // ── Año actual ─────────────────────────────────────────────────────────────
-  const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
-  useEffect(() => { setCurrentYear(new Date().getFullYear()); }, []);
-
-  // ── earliestYear (se infiere del primer año disponible vía useReports) ─────
-  // El contrato de UnicoGridResponse no devuelve earliestYear; usamos la heurística
-  // de que si el año pedido < año actual y la grilla está vacía (todos 0), no navegar más atrás.
-  // Para la navegación, bloqueamos ‹ cuando no haya datos y year < currentYear.
-  // Alternativa: el orquestador puede inyectar earliestYear como prop en el futuro.
-  // Por ahora, sin earliestYear definido, ‹ siempre habilitado (salvo year === currentYear - N límite).
-  // DECISIÓN: sin earliestYear en el contrato de annual-unicos; navegación libre hacia atrás.
-  const earliestYear: number | null = null;
+  // Rango de años navegable de esta card (ya filtrado por categorías, ver
+  // YearRange). Gobierna las flechas del stepper y dispara la auto-corrección
+  // de año fuera de rango (ver useYearRangeAutoCorrect).
+  const yearRange = data?.yearRange ?? null;
+  useYearRangeAutoCorrect(year, yearRange, onYearChange);
+  const { canGoPrev, canGoNext } = getYearStepperState(year, yearRange);
 
   function handlePrev() {
-    // Cuando earliestYear es null, navegación libre hacia atrás
-    const canGoPrev = earliestYear === null ? true : year > earliestYear;
     if (canGoPrev) onYearChange?.(year - 1);
   }
   function handleNext() {
-    if (year < currentYear) onYearChange?.(year + 1);
+    if (canGoNext) onYearChange?.(year + 1);
   }
 
   // ── Lógica de categorías ───────────────────────────────────────────────────
@@ -1616,8 +1604,8 @@ export function UniqueGridCard({
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <YearStepper
             year={year}
-            currentYear={currentYear}
-            earliestYear={earliestYear}
+            canGoPrev={canGoPrev}
+            canGoNext={canGoNext}
             onPrev={handlePrev}
             onNext={handleNext}
           />

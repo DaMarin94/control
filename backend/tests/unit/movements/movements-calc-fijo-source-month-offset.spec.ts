@@ -148,6 +148,7 @@ const mockPrisma = {
 
 const mockRepo = {
   getAllFijosForAnnual: jest.fn(),
+  getUnicoYearsByCategory: jest.fn().mockResolvedValue([]),
   getAnnualUnicosAggregated: jest.fn(),
   getAllCuotasForAnnual: jest.fn(),
   getEarliestYear: jest.fn(),

@@ -45,7 +45,7 @@ import { describeLimitMark, type EvaluatedLimitMark } from "@/lib/limits/evaluat
 import { LimitGlyph, LimitBadge } from "@/components/limits/limit-mark";
 import { LimitsInfoPopover } from "@/components/limits/limits-info-popover";
 import { formatCurrency } from "@/lib/format";
-import { ChartLegend } from "@/components/ui/chart";
+import { ChartLegend, getYearStepperState, useYearRangeAutoCorrect } from "@/components/ui/chart";
 import { CardCurrencySelect } from "@/components/ui/card-currency-select";
 import { useScrollShadow, getScrollShadowStyle } from "@/hooks/use-scroll-shadow";
 import type { CuotasGanttBar, CuotasGanttResponse } from "@/types/reports";
@@ -182,16 +182,13 @@ function GanttError({ onRetry }: { onRetry: () => void }) {
 
 interface YearStepperProps {
   year: number;
-  currentYear: number;
+  canGoPrev: boolean;
+  canGoNext: boolean;
   onPrev: () => void;
   onNext: () => void;
 }
 
-function YearStepper({ year, currentYear, onPrev, onNext }: YearStepperProps) {
-  const canGoNext = year < currentYear;
-  // Navegación libre hacia atrás (sin earliestYear en el contrato de annual-cuotas)
-  const canGoPrev = true;
-
+function YearStepper({ year, canGoPrev, canGoNext, onPrev, onNext }: YearStepperProps) {
   return (
     <div
       className="flex items-center rounded-pill border border-line bg-panel shadow-[var(--shadow-sm)] p-1"
@@ -1092,12 +1089,19 @@ export function CuotasGanttCard({
     if (isEditingTitle) titleInputRef.current?.focus();
   }, [isEditingTitle]);
 
-  // ── Año actual ─────────────────────────────────────────────────────────────
-  const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
-  useEffect(() => { setCurrentYear(new Date().getFullYear()); }, []);
+  // Rango de años navegable de esta card (ya filtrado por categorías, ver
+  // YearRange). Gobierna las flechas del stepper y dispara la auto-corrección
+  // de año fuera de rango (ver useYearRangeAutoCorrect).
+  const yearRange = data?.yearRange ?? null;
+  useYearRangeAutoCorrect(year, yearRange, onYearChange);
+  const { canGoPrev, canGoNext } = getYearStepperState(year, yearRange);
 
-  function handlePrev() { onYearChange?.(year - 1); }
-  function handleNext() { if (year < currentYear) onYearChange?.(year + 1); }
+  function handlePrev() {
+    if (canGoPrev) onYearChange?.(year - 1);
+  }
+  function handleNext() {
+    if (canGoNext) onYearChange?.(year + 1);
+  }
 
   // ── Lógica de categorías ───────────────────────────────────────────────────
   const availableCategories = useMemo(
@@ -1172,7 +1176,8 @@ export function CuotasGanttCard({
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <YearStepper
             year={year}
-            currentYear={currentYear}
+            canGoPrev={canGoPrev}
+            canGoNext={canGoNext}
             onPrev={handlePrev}
             onNext={handleNext}
           />

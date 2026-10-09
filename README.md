@@ -62,7 +62,6 @@ Pendientes abiertos, agrupados por naturaleza.
 
 ### Reportes
 
-- **Navegación de año hacia el futuro.** El stepper de año de las cards de reporte topa en `earliestYear` hacia atrás y en el **año en curso** hacia adelante (RF-REP-002, `docs/requirements.md:1825`). Los fijos activos y las cuotas en tramo sí proyectan datos a meses de años futuros (RN-006), pero esos años no son navegables. A evaluar: correr los límites **según haya datos** —hacia adelante y hacia atrás— en las cinco cards que navegan año. **`fixed-evolution` queda fuera del pendiente**: no navega años y **nunca** grafica meses futuros, por decisión de producto (RF-REP-013).
 - **Moneda de cálculo elegible en los modos de variación.** Los modos de variación de la card "Detalle histórico de gastos fijos" se calculan sobre los montos **convertidos a la moneda de display** de la card (RF-REP-013, `docs/requirements.md:2136`), así que un fijo en moneda extranjera mezcla dos efectos: lo que le aumentó el proveedor y lo que se movió el tipo de cambio. Son dos lecturas legítimas y distintas —*"cuánto más plata me salió"* vs. *"cuánto me aumentaron el servicio"*—. A evaluar: ofrecerlas como opción explícita del usuario. Antes de decidir hay que analizar el alcance: si aplica solo a esta card o también a `inflation-income` (RF-REP-012, `docs/requirements.md:2076`) y a cualquier otra lectura porcentual, y qué implica en el contrato del endpoint.
 
 ## Tests

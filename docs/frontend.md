@@ -668,6 +668,19 @@ El gráfico se separa en una **primitiva reutilizable** (motor de charting, agn�
   - Acepta además dos props para la leyenda-filtro de **categorías** (`by-category` e `income-expense` de `/reportes`): **`scrollable`** confina los chips a una región con alto máximo (≈3 renglones) y **scroll interno**, con un **fade** que señala cuando hay más contenido; **`commandSlot`** inyecta un control en un **carril fijo** debajo del scroll, siempre accesible — lo usa el atajo "Todas/Ninguna" (`LegendAllChip`). El `role="group"` envuelve solo los chips, no el `commandSlot`.
   - La leyenda de **series** Ingresos/Gastos (2 ítems) sobrevive solo en la **card del dashboard**, como leyenda **decorativa** (no interactiva, no filtra): una fila plana sin `scrollable` ni `commandSlot`.
 
+### Stepper de año — rango del endpoint y corrección automática (gotcha estructural)
+
+El estado de las flechas ‹ › y la corrección del año fuera de rango viven en **`components/ui/chart.tsx`** (`getYearStepperState` + el hook `useYearRangeAutoCorrect`), compartidos por las cinco cards con stepper. Se alimentan del **`yearRange` que devuelve el propio endpoint** (contrato en `docs/data-model.md`, §Rango de años navegable; regla en RF-REP-002): el front **no** deriva límites por su cuenta ni aplica una ventana relativa al año actual. `yearRange === null` → ambas flechas deshabilitadas.
+
+El hook **no aplica** la corrección: la **emite** por el callback de cambio de año del padre, que decide qué hacer con ella.
+
+**Gotcha — bucle infinito de updates si el efecto depende de la identidad del callback.** En `/reportes` el padre aplica el año de forma **asíncrona** (lo persiste en preferencias) y pasa a la card un callback **recreado en cada render** (closure inline por card). Un efecto que dependa de esa identidad se re-dispara con cada re-render que la propia persistencia en vuelo provoca, vuelve a ver el año fuera de rango, vuelve a emitir la corrección y tumba la página entera (`Maximum update depth exceeded`). Por eso el hook:
+
+- guarda el callback en un **ref** y depende **solo de valores primitivos** (`year`, `minYear`, `maxYear`) — además, cada respuesta trae un objeto `yearRange` nuevo aunque los límites no cambien;
+- **no re-emite la misma corrección** mientras no se refleje en la prop `year`.
+
+Quien toque estos efectos tiene que saberlo. En el **dashboard** la condición no se da: el mismo widget recibe un setter de estado local (identidad estable, aplicación síncrona).
+
 ### Datos (`use-reports`)
 
 - Hook **`useReports(year, categoryIds, currency, movementTypes, direction, includeSimulated)`** sobre `GET /movements/reports`. Sin mutaciones (solo lectura). Aplica el patrón obligatorio **`enabled: isAuthenticated`** (ver Queries de lectura gate-adas en Autenticación). **No recibe `projectFixed`/`today`**: ninguna pantalla consume la proyección de fijos (RF-REP-015), y el corte de "mes futuro" del aporte simulado lo resuelve el backend con su propio `today`.
@@ -734,7 +747,6 @@ Tercer tipo de card (`ReportCardType = "unique-grid"`). Renderiza la grilla anua
 - **Días inexistentes — distinguir por calendario, no por valor.** El contrato envía `0` tanto para un día sin gasto como para un día que no existe en el mes (ej. 30/feb). El front los separa con `getDaysInMonth(year, month)`: una celda de día inexistente se pinta **nula** (sin número), distinta de un `$0` real (que lleva el tinte de piso de la escala). **No** inferir "inexistente" del valor `0`.
 - **Escala de color anclada a `colorAnchorCents` del response.** El tinte de cada celda usa `t = clamp(total / colorAnchorCents, 0, 1)`, donde `colorAnchorCents` lo trae la propia respuesta (contrato en `docs/data-model.md`). El front **no** calcula el ancla ni la hardcodea: la consume del payload.
 - **Techo editable por card — el front NUNCA calcula TC (gotcha estructural).** El techo de la escala de color es editable desde la propia card (RF-REP-010), vía `ColorAnchorTrigger` + `ColorAnchorPopover` en `unique-grid-card.tsx` (junto a año/moneda/categorías; **no** en `/configuracion`). El front persiste `anchorUsdCents` (centavos de **USD**) en la card y en **cada** fetch manda `anchorAmountCents=<anchorUsdCents>&anchorCurrency=USD`. Al editar, manda el `(monto, moneda)` **tipeado** al endpoint y **persiste el `anchorUsdCents` que devuelve el backend** (la conversión a USD la hace el backend). El **prellenado** del editor = `colorAnchorCents` (el ancla ya en la moneda de la card). **No** existe acción "Restablecer al estándar": el default (15 USD) es simplemente la ausencia de `anchorUsdCents` en el blob.
-- **Navegación de año libre hacia atrás.** El control ‹ está **siempre habilitado** (sin tope) porque el contrato de este endpoint **no expone `earliestYear`**. Decisión cerrada (RF-REP-010). El tope hacia adelante (año en curso) sí aplica, como en las otras cards.
 - **El param `today`** se manda con la **fecha local del usuario** (`YYYY-MM-DD`) para que el backend calcule el divisor del promedio del mes en curso en la zona del usuario (ver contrato).
 - **Tooltip de celda — desglose por categoría.** El hover de una celda muestra fecha + total + el desglose por categoría que trae `breakdown[day-1][month-1]` (contrato en `docs/data-model.md`). El breakdown llega **sin `name`/`color`**: el front los resuelve por `categoryId` contra `availableCategories` de la misma respuesta. El hover del footer despliega las cinco métricas del mes. Spec visual en `docs/design.md` (§4b y §8).
 
@@ -747,7 +759,7 @@ Cuarto tipo de card (`ReportCardType = "installment-gantt"`). Renderiza el gantt
 - **Packing resuelto en el backend.** El renglón (`rowIndex`) lo asigna el endpoint; el front **no** recalcula colisiones ni descansos. El front hace layout, clipping de las barras al borde del año y los indicadores ‹ / › (`continuesBefore`/`continuesAfter`).
 - **Color/nombre por `categoryId`.** Las barras llegan **sin `name`/`color`**: el front los resuelve por `categoryId` contra `availableCategories` de la misma respuesta (igual que el breakdown de `unique-grid`).
 - **Tooltip con rango real.** El rango del tooltip usa `realStartMonth`/`realEndMonth` (período completo del plan, sin recortar al año; ver `docs/data-model.md`), **no** los `startMonthIndex`/`endMonthIndex` clampeados que rigen el layout de la barra.
-- **Navegación de año libre hacia atrás.** El control ‹ está **siempre habilitado** (sin tope) porque el contrato **no expone `earliestYear`**, igual que la card de Únicos. El tope hacia adelante (año en curso) sí aplica. **No** manda `today` (el endpoint no lo usa).
+- **No manda `today`** (el endpoint no lo usa).
 
 ### Card `inflation-income` — líneas de Inflación vs Ingresos (RF-REP-012)
 

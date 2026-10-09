@@ -111,6 +111,7 @@ const mockData: CuotasGanttResponse = {
   ],
   rowCount: 2,
   availableCategories: [{ categoryId: "cat-1", name: "Entretenimiento", color: "#4F86C6" }],
+  yearRange: { minYear: 2020, maxYear: 2030 },
 };
 
 function createWrapper() {

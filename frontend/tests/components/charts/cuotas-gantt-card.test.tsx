@@ -116,6 +116,7 @@ const mockData: CuotasGanttResponse = {
     { categoryId: "cat-1", name: "Entretenimiento", color: "#4F86C6" },
     { categoryId: "cat-2", name: "Tecnología", color: "#E07B54" },
   ],
+  yearRange: { minYear: 2000, maxYear: 2100 },
 };
 
 /** Barra que continúa antes y después del año. */
@@ -144,6 +145,7 @@ const barCrossingYear: CuotasGanttResponse = {
   availableCategories: [
     { categoryId: "cat-1", name: "Viajes", color: "#4F86C6" },
   ],
+  yearRange: { minYear: 2000, maxYear: 2100 },
 };
 
 const emptyData: CuotasGanttResponse = {
@@ -152,6 +154,7 @@ const emptyData: CuotasGanttResponse = {
   bars: [],
   rowCount: 0,
   availableCategories: [],
+  yearRange: { minYear: 2000, maxYear: 2100 },
 };
 
 // ─── Wrapper ──────────────────────────────────────────────────────────────────
@@ -759,33 +762,133 @@ describe("CuotasGanttCard — hook y parámetros", () => {
 
 // ─── Tests — Stepper de año ───────────────────────────────────────────────────
 
-describe("CuotasGanttCard — stepper de año", () => {
+describe("CuotasGanttCard — stepper de año (atado a yearRange del backend)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseCuotasGantt.mockReturnValue(makeSuccessReturn());
   });
 
-  it("llama onYearChange al hacer clic en ‹ (año anterior)", () => {
+  it("llama onYearChange al hacer clic en ‹ (año anterior) cuando hay margen", () => {
     const onYearChange = vi.fn();
     renderCard({ year: 2025, onYearChange });
     fireEvent.click(screen.getByRole("button", { name: /año anterior/i }));
     expect(onYearChange).toHaveBeenCalledWith(2024);
   });
 
-  it("› deshabilitado cuando year === año actual", () => {
-    const currentYear = new Date().getFullYear();
-    renderCard({ year: currentYear });
+  it("llama onYearChange al hacer clic en › (año siguiente) cuando hay margen", () => {
+    const onYearChange = vi.fn();
+    renderCard({ year: 2024, onYearChange });
+    fireEvent.click(screen.getByRole("button", { name: /año siguiente/i }));
+    expect(onYearChange).toHaveBeenCalledWith(2025);
+  });
+
+  it("› deshabilitado en year === maxYear del yearRange", () => {
+    mockUseCuotasGantt.mockReturnValue(makeSuccessReturn({
+      ...mockData,
+      year: 2026,
+      yearRange: { minYear: 2000, maxYear: 2026 },
+    }));
+    renderCard({ year: 2026 });
     const nextBtn = screen.getByRole("button", { name: /año siguiente/i });
     const isDisabled =
       nextBtn.hasAttribute("disabled") || nextBtn.getAttribute("aria-disabled") === "true";
     expect(isDisabled).toBe(true);
   });
 
-  it("llama onYearChange al hacer clic en › (año siguiente)", () => {
+  it("‹ deshabilitado en year === minYear del yearRange", () => {
+    mockUseCuotasGantt.mockReturnValue(makeSuccessReturn({
+      ...mockData,
+      year: 2026,
+      yearRange: { minYear: 2026, maxYear: 2100 },
+    }));
+    renderCard({ year: 2026 });
+    const prevBtn = screen.getByRole("button", { name: /año anterior/i });
+    const isDisabled =
+      prevBtn.hasAttribute("disabled") || prevBtn.getAttribute("aria-disabled") === "true";
+    expect(isDisabled).toBe(true);
+  });
+
+  it("yearRange === null: ambas flechas deshabilitadas y el año vigente no cambia", () => {
     const onYearChange = vi.fn();
-    renderCard({ year: 2024, onYearChange });
-    fireEvent.click(screen.getByRole("button", { name: /año siguiente/i }));
-    expect(onYearChange).toHaveBeenCalledWith(2025);
+    mockUseCuotasGantt.mockReturnValue(makeSuccessReturn({
+      ...emptyData,
+      yearRange: null,
+    }));
+    renderCard({ year: 2026, onYearChange });
+    const prevBtn = screen.getByRole("button", { name: /año anterior/i });
+    const nextBtn = screen.getByRole("button", { name: /año siguiente/i });
+    expect(prevBtn.hasAttribute("disabled") || prevBtn.getAttribute("aria-disabled") === "true").toBe(true);
+    expect(nextBtn.hasAttribute("disabled") || nextBtn.getAttribute("aria-disabled") === "true").toBe(true);
+    fireEvent.click(prevBtn);
+    fireEvent.click(nextBtn);
+    expect(onYearChange).not.toHaveBeenCalled();
+  });
+
+  it("auto-corrige al montar con un año persistido MENOR que minYear: salta a minYear", () => {
+    const onYearChange = vi.fn();
+    mockUseCuotasGantt.mockReturnValue(makeSuccessReturn({
+      ...mockData,
+      year: 2018,
+      yearRange: { minYear: 2022, maxYear: 2026 },
+    }));
+    renderCard({ year: 2018, onYearChange });
+    expect(onYearChange).toHaveBeenCalledWith(2022);
+    expect(onYearChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("auto-corrige al montar con un año persistido MAYOR que maxYear: salta a maxYear", () => {
+    const onYearChange = vi.fn();
+    mockUseCuotasGantt.mockReturnValue(makeSuccessReturn({
+      ...mockData,
+      year: 2030,
+      yearRange: { minYear: 2020, maxYear: 2023 },
+    }));
+    renderCard({ year: 2030, onYearChange });
+    expect(onYearChange).toHaveBeenCalledWith(2023);
+    expect(onYearChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("no cicla: tras saltar al extremo, una pasada posterior con ese año y el MISMO yearRange (nueva referencia) no vuelve a llamar onYearChange", () => {
+    const onYearChange = vi.fn();
+    mockUseCuotasGantt.mockReturnValue(makeSuccessReturn({
+      ...mockData,
+      year: 2018,
+      yearRange: { minYear: 2022, maxYear: 2026 },
+    }));
+    const { rerender } = renderCard({ year: 2018, onYearChange });
+    expect(onYearChange).toHaveBeenCalledTimes(1);
+    expect(onYearChange).toHaveBeenCalledWith(2022);
+
+    mockUseCuotasGantt.mockReturnValue(makeSuccessReturn({
+      ...mockData,
+      year: 2022,
+      yearRange: { minYear: 2022, maxYear: 2026 },
+    }));
+    rerender(<CuotasGanttCard year={2022} onYearChange={onYearChange} />);
+    expect(onYearChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("no cicla cuando el padre aplica la corrección de forma ASÍNCRONA: año fuera de rango se repite en varios re-renders con un onYearChange de identidad NUEVA en cada uno", () => {
+    const onYearChange = vi.fn();
+    mockUseCuotasGantt.mockReturnValue(makeSuccessReturn({
+      ...mockData,
+      year: 2018,
+      yearRange: { minYear: 2022, maxYear: 2026 },
+    }));
+    const { rerender } = render(
+      <CuotasGanttCard year={2018} onYearChange={(y) => onYearChange(y)} />,
+      { wrapper: createWrapper() },
+    );
+    expect(onYearChange).toHaveBeenCalledTimes(1);
+    expect(onYearChange).toHaveBeenCalledWith(2022);
+
+    // El padre todavía no aplicó la corrección: `year` se mantiene fuera de
+    // rango en los re-renders siguientes, pero pasa una identidad NUEVA de
+    // `onYearChange` en cada uno (closure inline). Sin el fix, cicla.
+    for (let i = 0; i < 5; i++) {
+      rerender(<CuotasGanttCard year={2018} onYearChange={(y) => onYearChange(y)} />);
+    }
+    expect(onYearChange).toHaveBeenCalledTimes(1);
   });
 });
 

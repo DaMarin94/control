@@ -707,8 +707,8 @@ En una fila `Recurring` que es un **calculado**, estas columnas **no tienen valo
 - **`direction`** (opcional) — filtro de **dirección** (RF-REP-014): `expense` | `income` | `both`. **Ausente = `both`** (sin filtro). `expense` computa solo gastos; `income`, solo ingresos. Valor fuera del set → `400`. Combina **(AND)** con `categories` y `types`. Lo usa solo la card `income-expense`.
 - **`projectFixed`** (opcional) — proyección de **fijos a futuro** (RF-REP-015): `"true"` activa la proyección; **ausente o cualquier otro valor = off** (respuesta idéntica a la de sin el param). Con `projectFixed=true` los meses futuros (posteriores a `today`) extienden las series proyectando solo los fijos (regla de cálculo en `docs/backend.md`). **Capacidad retenida del backend: hoy ningún consumidor la manda** (ninguna pantalla monta control de proyección).
 - **`today`** (`YYYY-MM-DD`, opcional) — fecha "hoy" que marca qué meses son futuros. **Ausente = ahora UTC.** Solo es relevante con `projectFixed=true` y/o `includeSimulated=true`; sin ninguno de los dos no afecta la respuesta. Es el **único** insumo de "qué mes es futuro" para ambas capacidades: no hay param propio por capacidad.
-- **`includeSimulated`** (opcional) — aporte de **movimientos simulados** (RF-REP-017): `"true"` lo activa; **ausente o cualquier otro valor = off** (respuesta **idéntica** a la de sin el param: la clave `simulated` ni siquiera aparece). Con el flag, la respuesta suma la clave `simulated` (abajo) y **amplía `availableCategories`**. Es **independiente de `projectFixed`**: ni se implican ni se excluyen, y ninguno cambia el efecto del otro.
-- **`availableCategories` y `earliestYear` son inmunes a los tres filtros** (`categories`, `types`, `direction`): se computan sobre todos los movimientos del año/usuario, igual que ante `categories` solo, para que la leyenda-filtro y los límites de navegación no salten al filtrar.
+- **`includeSimulated`** (opcional) — aporte de **movimientos simulados** (RF-REP-017): `"true"` lo activa; **ausente o cualquier otro valor = off** (respuesta **idéntica** a la de sin el param: la clave `simulated` ni siquiera aparece). Con el flag, la respuesta suma la clave `simulated` (abajo), **amplía `availableCategories`** y puede **extender `yearRange`** (ver §Rango de años navegable). Es **independiente de `projectFixed`**: ni se implican ni se excluyen, y ninguno cambia el efecto del otro.
+- **`availableCategories` y `earliestYear` son inmunes a los tres filtros** (`categories`, `types`, `direction`): se computan sobre todos los movimientos del año/usuario, para que la leyenda-filtro no se achique al filtrar. **`yearRange`, en cambio, sí respeta los tres** (ver §Rango de años navegable).
 - **Mapeo persistencia→query** (el front deriva los params del blob de la card): `movementTypes` ausente **o** los tres tipos → se **omite** `types`; `[]` → `types=` vacío; subconjunto → CSV. `direction` ausente **o** `both` → se **omite** `direction`; `expense`/`income` → el valor literal. `includeSimulated` `true` en el blob → `includeSimulated=true`; ausente/`false` → se **omite** el param. El front **no manda `projectFixed` ni `today`** (ninguna pantalla consume la proyección; `projectFixed` del blob queda inerte). (`categoryIds` → `categories` como ya se describe arriba.)
 
 ```
@@ -718,7 +718,14 @@ ReportsMovementsResponse = {
   categories: ReportCategory[],       // desglose de GASTOS: solo categorías con gasto EXPENSE en el año, dentro del set pedido
   availableCategories: ReportsAvailableCategory[],  // universo de categorías con algún movimiento (gasto O ingreso) del año, SIN el filtro; cada ítem con hasExpense/hasIncome
   earliestYear: number | null,        // año más antiguo con algún movimiento del usuario; NO afectado por el filtro
+  yearRange: YearRange | null,        // rango de años navegable de la card; SÍ respeta el filtro — ver §Rango de años navegable
   simulated?: ReportsSimulatedBlock   // SOLO con includeSimulated=true (RF-REP-017); ausente si no
+}
+
+// Rango de años navegable — mismo shape en los 4 endpoints de reportes con stepper de año.
+YearRange = {
+  minYear: number,
+  maxYear: number
 }
 
 // RF-REP-017 — aporte simulado, SEPARADO del dato real: no está sumado en `months`/`categories`.
@@ -773,9 +780,10 @@ ReportCategory = {
 - **`months` — siempre 12, ene→dic.** Los meses sin datos (incluidos los **futuros** del año en curso) vienen con `incomeCents` / `expenseCents` en **cero**, nunca omitidos. Con filtro de categorías, los totales mensuales suman **solo los movimientos de las categorías pedidas** (un mes sin movimientos en el set queda en cero). El mes de cada movimiento se determina con el mismo bucketeo que el mensual (RN-015): únicos por la zona propia del registro (`AT TIME ZONE`), fijos y cuotas a nivel mes. Para los **fijos**, la proyección respeta la **frecuencia** (un fijo solo se imputa a los meses que dicta su `frequency`, RF-MF-006 / RN-016) y **excluye los meses anulados** (RF-MF-005): un mes con skip no suma a ese mes del año.
 - **`projected` — corte real vs. proyectado a futuro (RF-REP-015).** Con `projectFixed=true`, los meses posteriores a `today` vienen con `projected: true` y sus totales suman, además del dato real, la **proyección de los fijos a futuro** (solo fijos; cuotas y únicos no se extienden — regla de cálculo en `docs/backend.md`). Los meses ≤ `today` vienen `projected: false`. **Caso actual: ningún consumidor manda `projectFixed`, así que la respuesta trae `projected: false` en los 12 meses**; el campo es parte del contrato retenido, sin uso hoy.
 - **`categories` — desglose de gasto (`EXPENSE`), dentro del filtro.** Es el **único** desglose por categoría del contrato y es **solo de gastos** (`EXPENSE`). Una categoría aparece si tuvo gasto en algún mes del año, **está dentro del set pedido** (si hay filtro) e **incluye categorías soft-deleted** con gasto histórico (RF-CAT-004; el desglose no filtra por `deletedAt`). Orden: por **gasto anual total DESC**, desempate por `categoryId` ASC. Alimenta la card `by-category` (RF-REP-006) en **ambas representaciones** (barra y línea): mismo dato, distinta geometría de render.
-- **`availableCategories` — universo estable de la leyenda-filtro, SIN el filtro, con flags por línea.** Universo de categorías con **algún movimiento (gasto `EXPENSE` o ingreso `INCOME`)** en el año, computado **ignorando el filtro `categories`** (es un **superconjunto** de `categories`). Cada ítem lleva **`hasExpense`/`hasIncome`** (no-opcionales), que indican si esa categoría tuvo al menos un movimiento de **esa línea** en el año, sobre el mismo universo estable (sin filtro). Una categoría puede tener ambos `true` (participa en gasto e ingreso). **Siempre presente**; `[]` si no hay ningún movimiento en el año. Incluye categorías **soft-deleted** con actividad histórica (no filtra por `deletedAt`). Orden: por **gasto anual DESC**, desempate por `categoryId` ASC. Es el universo que consumen las leyendas-filtro de las cards que sirve el endpoint (`income-expense` usa los dos flags; `by-category` filtra a `hasExpense === true` — ver `docs/frontend.md`): no se achica al filtrar (mismo criterio de estabilidad que `earliestYear`), de modo que destildar una categoría no la quita de la leyenda. Los otros reportes anuales (`annual-unicos`, `annual-cuotas`, `annual-inflation-income`) devuelven el shape base `AvailableCategory` (`{ categoryId, name, color }`), **sin** estos flags. **Con `includeSimulated=true` el universo se amplía** (ver `simulated` abajo).
+- **`availableCategories` — universo estable de la leyenda-filtro, SIN el filtro, con flags por línea.** Universo de categorías con **algún movimiento (gasto `EXPENSE` o ingreso `INCOME`)** en el año, computado **ignorando el filtro `categories`** (es un **superconjunto** de `categories`). Cada ítem lleva **`hasExpense`/`hasIncome`** (no-opcionales), que indican si esa categoría tuvo al menos un movimiento de **esa línea** en el año, sobre el mismo universo estable (sin filtro). Una categoría puede tener ambos `true` (participa en gasto e ingreso). **Siempre presente**; `[]` si no hay ningún movimiento en el año. Incluye categorías **soft-deleted** con actividad histórica (no filtra por `deletedAt`). Orden: por **gasto anual DESC**, desempate por `categoryId` ASC. Es el universo que consumen las leyendas-filtro de las cards que sirve el endpoint (`income-expense` usa los dos flags; `by-category` filtra a `hasExpense === true` — ver `docs/frontend.md`): no se achica al filtrar, de modo que destildar una categoría no la quita de la leyenda. Los otros reportes anuales (`annual-unicos`, `annual-cuotas`, `annual-inflation-income`) devuelven el shape base `AvailableCategory` (`{ categoryId, name, color }`), **sin** estos flags. **Con `includeSimulated=true` el universo se amplía** (ver `simulated` abajo).
 - **Invariante de consistencia.** Para cada mes `i`, la suma de `categories[*].monthlyExpenseCents[i]` **es igual a** `months[i].expenseCents`. El front puede confiar en que las bandas de gasto apiladas por categoría suman exactamente el total de gastos del mes (dentro del set filtrado). **Calculados:** la suma respeta la imputación por **magnitud al bucket del tipo derivado** de RN-019 — un movimiento calculado tiene `type` derivado del signo de su `amountCents` (RN-018), así que un calculado de monto negativo es `EXPENSE` y suma su **magnitud** (`\|amountCents\|`) tanto a `months[i].expenseCents` como a la banda `monthlyExpenseCents[i]` de su categoría, conservando la invariante. Como cada movimiento suma magnitud (nunca resta) al bucket que le corresponde, los totales y las bandas **no pueden quedar negativos** por la presencia de calculados.
-- **`earliestYear` — NO afectado por el filtro.** Año más antiguo con **cualquier** movimiento del usuario (mínimo entre el año del mes local de cualquier único y el año del `startMonth` de cualquier fijo/cuota), **calculado sobre todos los movimientos, ignorando el filtro `categories`**; `null` si el usuario no tiene ningún movimiento. El front lo usa para deshabilitar la navegación ‹ antes del primer año con datos (RF-REP-002); que sea independiente del filtro evita que los límites de navegación salten al filtrar categorías.
+- **`earliestYear` — NO afectado por el filtro.** Año más antiguo con **cualquier** movimiento del usuario (mínimo entre el año del mes local de cualquier único y el año del `startMonth` de cualquier fijo/cuota), **calculado sobre todos los movimientos, ignorando el filtro `categories`**; `null` si el usuario no tiene ningún movimiento. **No gobierna la navegación de año** —eso es `yearRange`— y **no tiene consumidor en el frontend**: es un campo del contrato sin uso hoy.
+- **`yearRange`** — ver §Rango de años navegable (destino canónico, compartido con los tres reportes anuales).
 
 **`simulated` — aporte simulado (RF-REP-017), solo con `includeSimulated=true`:**
 
@@ -786,6 +794,29 @@ ReportCategory = {
 - **`availableCategories` se amplía con el flag.** Una categoría con aporte **solo simulado** entra al universo/leyenda aunque no tenga movimientos reales en el año, con `hasExpense`/`hasIncome` según la **dirección derivada** de sus aportes. La ampliación **ignora los filtros** (`categories`, `types`, `direction`), igual que el universo real: sigue siendo un superconjunto estable.
 - **Los filtros de la card sí acotan `simulated`.** El simulado es un **único**: lo alcanzan `types` (entra con `unico`), `direction` (por su dirección derivada del mes) y `categories` (por su categoría simulada) — misma semántica que cualquier movimiento real.
 - **Moneda de display.** El aporte simulado viene convertido a la **misma** moneda de display que el resto de la respuesta (el query param `currency`, o la default del usuario si no se manda).
+
+---
+
+## Rango de años navegable (`yearRange`)
+
+> **Destino canónico** del campo. Lo devuelven, con el **mismo shape**, los **4 endpoints de reportes que alimentan cards con stepper de año**: `GET /movements/reports` (`income-expense` y `by-category`), `GET /movements/reports/annual-unicos`, `GET /movements/reports/annual-cuotas` y `GET /movements/reports/annual-inflation-income`. `GET /movements/reports/fijos-historico` **no** lo trae (esa card no navega años). Regla funcional en `docs/requirements.md`, RF-REP-002 §Límites de navegación de año; cómputo en `docs/backend.md`, §Rango de años navegable por card.
+
+```
+yearRange: YearRange | null
+
+YearRange = {
+  minYear: number,
+  maxYear: number
+}
+```
+
+- **Es el rango propio del dato que sirve cada endpoint**, no el universo de movimientos del usuario: cada card queda acotada a su propia información.
+- **`null` = sin dato** con el filtro vigente (incluido el filtro de categorías en estado "ninguna"). El front congela el stepper —ambas flechas deshabilitadas— y **sigue graficando en cero**: el `null` no es un error ni cambia qué se dibuja.
+- **Respeta el filtro** que ya recibe cada endpoint: `categories` en los tres reportes anuales; `categories` + `types` + `direction` en `GET /movements/reports`. Cambiar el filtro cambia el rango.
+- **`includeSimulated` es otro insumo del rango, solo en `GET /movements/reports`** (el único endpoint que expone el flag, RF-REP-017; los otros tres no lo tienen y su rango no lo contempla). Con `includeSimulated=true`, los **tramos de las simulaciones activas** entran como una fuente de dato más, junto a únicos, fijos y cuotas, y **respetando el filtro vigente** (el simulado es un **único**: lo alcanzan `categories` por su categoría simulada, `types` —sin `unico` no aporta— y `direction`). Una simulación **pausada no aporta** (no deriva movimientos). Solo puede **extender `maxYear`**: una simulación nunca alcanza meses pasados, así que `minYear` no se mueve. Si **no hay dato real** con el filtro vigente pero alguna simulación aporta, el rango **no es `null`** — cubre el tramo simulado; sigue siendo `null` cuando ninguna fuente aporta. Con el flag off, el rango se computa solo sobre dato real. El **shape no cambia**. Criterio de dirección del aporte en `docs/backend.md`, §Rango de años navegable por card.
+- **Rango continuo:** `[minYear, maxYear]` de punta a punta. Los años **sin dato propio dentro** del rango no se reportan como huecos y siguen siendo navegables.
+- **`maxYear` nunca supera el año en curso** en `annual-unicos` (los únicos no se repiten) y en `annual-inflation-income` (no hay IPC futuro). En `GET /movements/reports` y `annual-cuotas` **sí puede ser futuro** (un fijo activo sin fin y una cuota en tramo son dato real a futuro). Si ese recorte dejara el rango invertido, el campo vale **`null`**.
+- **Cota técnica `[añoEnCurso − 100, añoEnCurso + 100]`**, derivada en runtime (nunca años literales): es lo que acota el extremo de un fijo activo sin fecha de fin, cuyo dato no termina nunca.
 
 ---
 
@@ -810,7 +841,8 @@ AnnualUnicosResponse = {
   footer: AnnualUnicosFooter[],              // SIEMPRE 12 entradas; índice = mes-1
   availableCategories: AvailableCategory[],  // universo del filtro (igual shape que en §Contrato de serie de reportes)
   anchorUsdCents: number,                    // ancla canónica en centavos de USD efectivamente usada (nunca null; default 1500)
-  colorAnchorCents: number                   // tope de la escala de color de las celdas, en centavos de display; ver abajo (nunca null)
+  colorAnchorCents: number,                  // tope de la escala de color de las celdas, en centavos de display; ver abajo (nunca null)
+  yearRange: YearRange | null                // rango de años navegable; ver §Rango de años navegable
 }
 
 BreakdownCell = { categoryId: string, amount: number }
@@ -837,7 +869,8 @@ donde `AvailableCategory = { categoryId, name, color }` (mismo shape que en §Co
 - **`availableCategories`** — universo del filtro: categorías con **gasto Único** del año, computado **sin** aplicar el filtro `categories` (superconjunto estable). Mismo criterio de estabilidad que en la serie de reportes; alimenta la leyenda-filtro de la card.
 - **`anchorUsdCents`** — entero, **centavos de USD**. El ancla canónica en USD efectivamente usada para el cálculo: el override `(anchorAmountCents, anchorCurrency)` ya convertido a USD, o **`1500` (15 USD)** si no se pidió override. **Nunca `null`.** El front lo persiste tal cual en `anchorUsdCents` de la card (ver `docs/frontend.md`): es el valor que el back devuelve, no lo calcula el front.
 - **`colorAnchorCents`** — entero, **centavos de `currency`**. Es `anchorUsdCents` reconvertido a la moneda de display con el TC de **enero del año del reporte** (mecanismo `pivotRatesForYear`, con clamp al mes disponible más cercano; si `currency` es USD, coincide con `anchorUsdCents`). **Nunca `null`.** Es el **tope de la escala de color** de las celdas de la grilla: el front pinta cada celda con `t = clamp(total / colorAnchorCents, 0, 1)`. Es referencia de **paleta visual**, **no** una cotización de negocio (no entra en totales ni conversiones).
-- **NO incluye `earliestYear`** (a diferencia de `GET /movements/reports`): este contrato no expone el primer año con datos. Consecuencia funcional: la card `unique-grid` permite navegación de año hacia atrás **sin tope** (RF-REP-010; ver `docs/frontend.md`, §Reportes).
+- **`yearRange`** — rango navegable de la card, calculado sobre sus **gastos Únicos ya filtrados** (§Rango de años navegable). **`maxYear` nunca supera el año en curso.**
+- **NO incluye `earliestYear`** (a diferencia de `GET /movements/reports`): este contrato no expone el primer año con movimientos del usuario, y no lo necesita.
 
 ---
 
@@ -858,7 +891,8 @@ CuotasGanttResponse = {
   currency: "ARS" | "USD" | "EUR" | "BRL",   // moneda de display usada
   bars: CuotasGanttBar[],                     // ordenadas por rowIndex ASC, dentro por startMonthIndex ASC
   rowCount: number,                           // total de renglones; 0 si no hay barras
-  availableCategories: AvailableCategory[]    // universo del filtro (igual shape que §Contrato de serie de reportes)
+  availableCategories: AvailableCategory[],   // universo del filtro (igual shape que §Contrato de serie de reportes)
+  yearRange: YearRange | null                 // rango de años navegable; ver §Rango de años navegable
 }
 
 CuotasGanttBar = {
@@ -886,7 +920,8 @@ donde `AvailableCategory = { categoryId, name, color }` (mismo shape que en §Co
 - **`rowIndex` y orden.** El backend resuelve el **packing** (asignación de renglones) y emite `bars` ordenado por `rowIndex` ASC y, dentro de cada renglón, por `startMonthIndex` ASC. `rowIndex = 0` es el renglón **pegado al eje**; crece hacia arriba. La **inversión visual** (renglón 0 abajo) la hace el front (ver `docs/frontend.md`, §Reportes).
 - **`rowCount`** — total de renglones ocupados; **0** si no hay barras (gantt vacío).
 - **`availableCategories`** — universo del filtro: categorías con **cuota gasto** del año, computado **sin** aplicar el filtro `categories` (superconjunto estable). Mismo criterio que en la serie de reportes; alimenta la leyenda-filtro de la card.
-- **NO incluye `earliestYear`** (igual que `annual-unicos`): la card `installment-gantt` permite navegación de año hacia atrás **sin tope** (RF-REP-011; ver `docs/frontend.md`, §Reportes).
+- **`yearRange`** — rango navegable de la card, calculado sobre sus **cuotas gasto ya filtradas** (§Rango de años navegable). **`maxYear` puede ser futuro:** un plan en tramo ocupa meses de años por venir.
+- **NO incluye `earliestYear`** (igual que `annual-unicos`): este contrato no expone el primer año con movimientos del usuario, y no lo necesita.
 
 ---
 
@@ -897,7 +932,7 @@ donde `AvailableCategory = { categoryId, name, color }` (mismo shape que en §Co
 **Query params:**
 
 - **`year`** (`YYYY`, requerido) — el año a graficar.
-- **`categories`** (opcional) — filtro por categoría, **tres estados** (§Filtro de categorías — query param `categories`): **ausente = todas**, **`categories=` = ninguna**, **lista `id1,id2` = subconjunto**. Comas **sin URL-encode**. El front lo deriva del `categoryIds` de la card. Restringe **qué ingresos cuentan** en las series; **`earliestYear` y `availableCategories` lo ignoran** (superconjunto estable).
+- **`categories`** (opcional) — filtro por categoría, **tres estados** (§Filtro de categorías — query param `categories`): **ausente = todas**, **`categories=` = ninguna**, **lista `id1,id2` = subconjunto**. Comas **sin URL-encode**. El front lo deriva del `categoryIds` de la card. Restringe **qué ingresos cuentan** en las series y en `yearRange`; **`earliestYear` y `availableCategories` lo ignoran** (superconjunto estable).
 - **`currency`** (opcional) — override de la moneda de display (RF-REP-007), una de las 4 monedas, **case-sensitive**. **Ausente → la default global del usuario**; **presente y válido → esa moneda**; **vacío o fuera del set → `400`**. La moneda solo define en qué moneda se computa el **total de ingreso** del mes (insumo de la variación %); las series resultantes están en **puntos porcentuales**, no en moneda.
 - **`today`** (opcional, `YYYY-MM-DD`) — la **fecha local del usuario**: define el **mes en curso** (su total de ingreso se computa a la fecha) y a partir de qué mes los meses son **futuros** (series en `null`). Si falta, el backend cae a `new Date()` (UTC).
 
@@ -909,7 +944,8 @@ AnnualInflationIncomeResponse = {
   incomeTrend: TrendLine,                     // recta OLS sobre la serie de ingreso nominal (incomePct)
   incomeAdjTrend: TrendLine,                  // recta OLS sobre la serie de ingreso ajustada (incomePctAdj)
   earliestYear: number | null,               // año más antiguo con algún movimiento del usuario; NO afectado por el filtro
-  availableCategories: AvailableCategory[]    // universo de categorías con INGRESO del año, SIN el filtro
+  availableCategories: AvailableCategory[],   // universo de categorías con INGRESO del año, SIN el filtro
+  yearRange: YearRange | null                 // rango de años navegable; ver §Rango de años navegable
 }
 
 InflationIncomeMonth = {
@@ -933,7 +969,8 @@ donde `AvailableCategory = { categoryId, name, color }` (mismo shape que en §Co
   - **`incomePctAdj`** — igual que `incomePct`, pero el ingreso del mes previo se **infla por la variación IPC del mes en curso** antes de comparar (misma semántica que `pctVsPrevAdj` del reporte de Únicos). **`null`** si falta el IPC del mes, si `ingresoPrevio == 0` o si el mes es futuro.
 - **Total de ingreso del mes — insumo de la variación.** Suma de movimientos **`INCOME`** imputados al mes (únicos por su mes local + fijos/cuotas aplicables, con el mismo bucketeo RN-015 que el resto), en centavos de `currency` (capa de display, re-ruteo por pivote USD). El mes en curso usa el total **a la fecha** (`today`); los meses **futuros** no tienen total → `incomePct`/`incomePctAdj` en `null`.
 - **`incomeTrend` / `incomeAdjTrend` — tendencias OLS.** Rectas de mínimos cuadrados ajustadas sobre los **puntos no nulos** de su serie madre (`incomePct` e `incomePctAdj` respectivamente). `points` es la recta evaluada en los 12 meses; **`null` si la serie madre tiene menos de 2 puntos no nulos** (no hay recta posible). No son ítems de la leyenda: en el front cada tendencia sigue la visibilidad de su serie de ingreso madre.
-- **`earliestYear`** — año más antiguo con **cualquier** movimiento del usuario, **ignorando el filtro `categories`** (mismo criterio que en §Contrato de serie de reportes); `null` si el usuario no tiene movimientos. **A diferencia de `annual-unicos`/`annual-cuotas`, este contrato SÍ lo expone:** la card `inflation-income` topea la navegación de año hacia atrás en el primer año con datos (RF-REP-012).
+- **`earliestYear`** — año más antiguo con **cualquier** movimiento del usuario, **ignorando el filtro `categories`** (mismo criterio que en §Contrato de serie de reportes); `null` si el usuario no tiene movimientos. **A diferencia de `annual-unicos`/`annual-cuotas`, este contrato lo expone**, pero **no gobierna la navegación de año** y **no tiene consumidor en el frontend**.
+- **`yearRange`** — rango navegable de la card, calculado sobre sus **ingresos ya filtrados** (§Rango de años navegable). **`maxYear` nunca supera el año en curso.**
 - **`availableCategories`** — universo de categorías con **ingreso (`INCOME`)** del año, computado **sin** aplicar el filtro `categories` (superconjunto estable). Es el universo **de ingreso** (no de gasto, a diferencia de los otros reportes); alimenta la leyenda-filtro de categorías de la card.
 
 ---
@@ -1235,7 +1272,7 @@ El param distingue **tres estados** —y, en particular, distingue **"ausente" d
 
 - El filtro afecta **gastos e ingresos** (ambos tienen categoría).
 - Con **"todas"** (ausente) se siguen incluyendo movimientos cuya categoría está **soft-deleted** (RF-CAT-004). Con **subconjunto**, solo entran los `id`s del set.
-- En reportes, **`earliestYear` ignora el filtro siempre** (ver §Contrato de serie de reportes).
+- En reportes, **`earliestYear` ignora el filtro siempre** y **`yearRange` siempre lo respeta** (ver §Contrato de serie de reportes y §Rango de años navegable).
 - Front: los tres estados derivan de la preferencia/`categoryIds` correspondiente — **`null`/ausente → omitir el param**, **`[]` → `categories=`**, **lista → `categories=id1,id2`**. La coma va **literal** (no `URLSearchParams`).
 
 ### Preferencia `monthListFilters` — filtros por listado de la Vista del mes (RF-VM-006)

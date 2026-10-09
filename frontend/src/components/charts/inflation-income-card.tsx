@@ -54,7 +54,7 @@ import { computeInflationIncomeMarks } from "@/lib/limits/apply-reports";
 import { describeLimitMark, mergeLimitMarks, type EvaluatedLimitMark } from "@/lib/limits/evaluate";
 import { renderSeriesPointMark } from "@/components/limits/limit-mark";
 import { LimitsInfoPopover } from "@/components/limits/limits-info-popover";
-import { ChartContainer, ChartLegend, CHART_END_LABEL_MARGIN } from "@/components/ui/chart";
+import { ChartContainer, ChartLegend, CHART_END_LABEL_MARGIN, getYearStepperState, useYearRangeAutoCorrect } from "@/components/ui/chart";
 import { CardCurrencySelect } from "@/components/ui/card-currency-select";
 import type { AnnualInflationIncomeResponse } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
@@ -195,16 +195,13 @@ function InflationIncomeError({ onRetry }: { onRetry: () => void }) {
 
 interface YearStepperProps {
   year: number;
-  currentYear: number;
-  earliestYear: number | null;
+  canGoPrev: boolean;
+  canGoNext: boolean;
   onPrev: () => void;
   onNext: () => void;
 }
 
-function YearStepper({ year, currentYear, earliestYear, onPrev, onNext }: YearStepperProps) {
-  const canGoNext = year < currentYear;
-  const canGoPrev = earliestYear === null || year > earliestYear;
-
+function YearStepper({ year, canGoPrev, canGoNext, onPrev, onNext }: YearStepperProps) {
   return (
     <div
       className="flex items-center rounded-pill border border-line bg-panel shadow-[var(--shadow-sm)] p-1"
@@ -958,12 +955,19 @@ export function InflationIncomeCard({
     if (isEditingTitle) titleInputRef.current?.focus();
   }, [isEditingTitle]);
 
-  // ── Año actual ─────────────────────────────────────────────────────────────
-  const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
-  useEffect(() => { setCurrentYear(new Date().getFullYear()); }, []);
+  // Rango de años navegable de esta card (ya filtrado por categorías, ver
+  // YearRange). Gobierna las flechas del stepper y dispara la auto-corrección
+  // de año fuera de rango (ver useYearRangeAutoCorrect).
+  const yearRange = data?.yearRange ?? null;
+  useYearRangeAutoCorrect(year, yearRange, onYearChange);
+  const { canGoPrev, canGoNext } = getYearStepperState(year, yearRange);
 
-  function handlePrev() { onYearChange?.(year - 1); }
-  function handleNext() { if (year < currentYear) onYearChange?.(year + 1); }
+  function handlePrev() {
+    if (canGoPrev) onYearChange?.(year - 1);
+  }
+  function handleNext() {
+    if (canGoNext) onYearChange?.(year + 1);
+  }
 
   // ── Lógica de categorías ───────────────────────────────────────────────────
   const availableCategories = useMemo(
@@ -1028,7 +1032,6 @@ export function InflationIncomeCard({
   const showTrendIncome = hasTrendIncome && !hiddenSeries.includes(SERIES_IDS.income);
   const showTrendIncomeAdj = hasTrendIncomeAdj && !hiddenSeries.includes(SERIES_IDS.incomeAdj);
 
-  const earliestYear = data?.earliestYear ?? null;
   const displayTitle = titleProp ?? titlePlaceholder;
 
   return (
@@ -1062,8 +1065,8 @@ export function InflationIncomeCard({
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <YearStepper
             year={year}
-            currentYear={currentYear}
-            earliestYear={earliestYear}
+            canGoPrev={canGoPrev}
+            canGoNext={canGoNext}
             onPrev={handlePrev}
             onNext={handleNext}
           />

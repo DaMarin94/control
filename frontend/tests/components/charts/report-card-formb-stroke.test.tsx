@@ -164,6 +164,7 @@ const mockDataWithSimulated: ReportsMovementsResponse = {
     { categoryId: "cat-3", name: "Viajes", color: "#9B6FD1", hasExpense: false, hasIncome: false },
   ],
   earliestYear: 2025,
+  yearRange: { minYear: 2000, maxYear: 2100 },
   simulated: {
     months: Array.from({ length: 12 }, (_, i) => ({
       month: `2026-${String(i + 1).padStart(2, "0")}`,

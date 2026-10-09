@@ -232,6 +232,12 @@ describe('Movements (e2e)', () => {
     mockPrisma.installmentGroup.findMany.mockResolvedValue([]);
     // Default: sin skips (Fase 1.1.1). Usado por getAllFijosForAnnual en /reports.
     mockPrisma.recurringSkip.findMany.mockResolvedValue([]);
+    // Default: historia completa de únicos vacía. Usado por getUnicoYearsByCategory
+    // (insumo de yearRange) en /reports, /reports/annual-unicos y
+    // /reports/annual-inflation-income — vía prisma.transaction.findMany (ORM,
+    // no $queryRaw), así que no perturba el orden de las secuencias
+    // mockResolvedValueOnce de $queryRaw ya configuradas test a test.
+    mockPrisma.transaction.findMany.mockResolvedValue([]);
   });
 
   // -------------------------------------------------------------------------
@@ -948,6 +954,42 @@ describe('Movements (e2e)', () => {
       // No hay categorías (solo aparecen las de EXPENSE)
       expect(data.categories).toHaveLength(0);
     });
+
+    it('yearRange: historia completa de únicos (transaction.findMany) con años huecos → rango continuo', async () => {
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([])                                   // getAnnualUnicosAggregated (año 2026 vacío)
+        .mockResolvedValueOnce([{ earliestYear: BigInt(2020) }]);     // getEarliestYear
+      mockPrisma.recurring.findMany.mockResolvedValue([]);
+      mockPrisma.installmentGroup.findMany.mockResolvedValue([]);
+      // Historia completa de únicos (insumo de yearRange): 2020 y 2024, con hueco 2021-2023.
+      mockPrisma.transaction.findMany.mockResolvedValue([
+        { occurredAt: new Date('2020-05-10T12:00:00Z'), timezone: 'UTC', categoryId: CAT_ID, type: 'EXPENSE' },
+        { occurredAt: new Date('2024-03-15T12:00:00Z'), timezone: 'UTC', categoryId: CAT_ID, type: 'EXPENSE' },
+      ]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=2026')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.yearRange).toEqual({ minYear: 2020, maxYear: 2024 });
+    });
+
+    it('yearRange: sin ningún movimiento → null', async () => {
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ earliestYear: null }]);
+      mockPrisma.recurring.findMany.mockResolvedValue([]);
+      mockPrisma.installmentGroup.findMany.mockResolvedValue([]);
+      mockPrisma.transaction.findMany.mockResolvedValue([]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=2026')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.yearRange).toBeNull();
+    });
   });
 
   describe('GET /movements/reports — validaciones', () => {
@@ -1148,6 +1190,48 @@ describe('Movements (e2e)', () => {
       expect(res.body.data.months[5].expenseCents).toBe(0);
       // Pero earliestYear sigue siendo 2023 (ignora el filtro)
       expect(res.body.data.earliestYear).toBe(2023);
+    });
+
+    it('yearRange SÍ cambia al filtrar por categorías (a diferencia de earliestYear)', async () => {
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ earliestYear: BigInt(2018) }]);
+      mockPrisma.transaction.findMany.mockResolvedValue([
+        { occurredAt: new Date('2018-01-10T12:00:00Z'), timezone: 'UTC', categoryId: CAT_A_ID, type: 'EXPENSE' },
+        { occurredAt: new Date('2024-01-10T12:00:00Z'), timezone: 'UTC', categoryId: CAT_B_ID, type: 'EXPENSE' },
+      ]);
+
+      const sinFiltro = await request(app.getHttpServer())
+        .get('/movements/reports?year=2026')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+      expect(sinFiltro.body.data.yearRange).toEqual({ minYear: 2018, maxYear: 2024 });
+
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ earliestYear: BigInt(2018) }]);
+
+      const conFiltro = await request(app.getHttpServer())
+        .get(`/movements/reports?year=2026&categories=${CAT_A_ID}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+      expect(conFiltro.body.data.yearRange).toEqual({ minYear: 2018, maxYear: 2018 });
+    });
+
+    it('categories= (vacío, "ninguna") → yearRange null aunque haya historia de únicos', async () => {
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ earliestYear: BigInt(2020) }]);
+      mockPrisma.transaction.findMany.mockResolvedValue([
+        { occurredAt: new Date('2020-01-10T12:00:00Z'), timezone: 'UTC', categoryId: CAT_A_ID, type: 'EXPENSE' },
+      ]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports?year=2026&categories=')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.yearRange).toBeNull();
     });
   });
 
@@ -1467,6 +1551,98 @@ describe('Movements (e2e)', () => {
       });
       expect(data.earliestYear).toBeNull();
       expect(data.availableCategories).toEqual([]);
+    });
+
+    it('yearRange: sin dato → null', async () => {
+      setupInflationIncomeMocks({ unicosYear: [], unicosPrevDec: [], earliestYear: null });
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-inflation-income?year=2025&today=2025-12-31')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.yearRange).toBeNull();
+    });
+
+    it('yearRange: fijo INCOME activo sin endMonth → maxYear clampea al año en curso (no existe IPC a futuro, más restrictivo que el tope técnico)', async () => {
+      setupInflationIncomeMocks({ unicosYear: [], unicosPrevDec: [], earliestYear: null });
+      mockPrisma.recurring.findMany.mockResolvedValue([
+        {
+          id: 'rec-income-sin-fin',
+          type: 'INCOME',
+          description: 'Sueldo',
+          createdAt: new Date('2023-01-01T00:00:00Z'),
+          amountCents: 500000,
+          currency: 'ARS',
+          exchangeRate: 1,
+          anchorCurrency: 'ARS',
+          startMonth: '2023-01',
+          deletedFrom: null,
+          frequency: 1,
+          chainId: 'chain-income-sin-fin',
+          sourceChainId: null,
+          sourceMovementId: null,
+          sourceInstallmentGroupId: null,
+          formulaOperator: null,
+          formulaOperand: null,
+          formulaSign: null,
+          categoryId: CAT_ID,
+          category: { name: 'Sueldo', color: '#4F86C6', scope: 'INCOME' },
+        },
+      ]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-inflation-income?year=2025&today=2026-06-15')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      // today=2026-06-15 → añoEnCurso=2026 → el recorte adicional por "no hay
+      // IPC a futuro" gana al tope técnico (2026+100=2126): maxYear=2026.
+      expect(res.body.data.yearRange).toEqual({ minYear: 2023, maxYear: 2026 });
+    });
+
+    it('yearRange: usa la historia COMPLETA de únicos (no solo el año pedido) y es continuo con huecos', async () => {
+      setupInflationIncomeMocks({ unicosYear: [], unicosPrevDec: [], earliestYear: BigInt(2020) });
+      mockPrisma.transaction.findMany.mockResolvedValue([
+        { occurredAt: new Date('2020-02-10T12:00:00Z'), timezone: 'UTC', categoryId: CAT_ID, type: 'INCOME' },
+        { occurredAt: new Date('2024-02-10T12:00:00Z'), timezone: 'UTC', categoryId: CAT_ID, type: 'INCOME' },
+      ]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-inflation-income?year=2025&today=2025-12-31')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.yearRange).toEqual({ minYear: 2020, maxYear: 2024 });
+    });
+
+    it('yearRange: recorte al año en curso con dato en año futuro (no existe IPC a futuro)', async () => {
+      setupInflationIncomeMocks({ unicosYear: [], unicosPrevDec: [], earliestYear: BigInt(2020) });
+      mockPrisma.transaction.findMany.mockResolvedValue([
+        { occurredAt: new Date('2020-02-10T12:00:00Z'), timezone: 'UTC', categoryId: CAT_ID, type: 'INCOME' },
+        { occurredAt: new Date('2030-02-10T12:00:00Z'), timezone: 'UTC', categoryId: CAT_ID, type: 'INCOME' },
+      ]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-inflation-income?year=2025&today=2026-06-15')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.yearRange).toEqual({ minYear: 2020, maxYear: 2026 });
+    });
+
+    it('yearRange: todo el dato cae en un año futuro → tras el recorte minYear > maxYear → null', async () => {
+      setupInflationIncomeMocks({ unicosYear: [], unicosPrevDec: [], earliestYear: BigInt(2030) });
+      mockPrisma.transaction.findMany.mockResolvedValue([
+        { occurredAt: new Date('2030-02-10T12:00:00Z'), timezone: 'UTC', categoryId: CAT_ID, type: 'INCOME' },
+      ]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/annual-inflation-income?year=2025&today=2026-06-15')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.yearRange).toBeNull();
     });
   });
 

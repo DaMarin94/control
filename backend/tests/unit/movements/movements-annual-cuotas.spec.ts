@@ -1155,4 +1155,70 @@ describe('MovementsService — getAnnualCuotasReport', () => {
       expect(b2.description).toBeNull();
     });
   });
+
+  // -------------------------------------------------------------------------
+  // yearRange — rango de años navegable de la card (installment-gantt)
+  // -------------------------------------------------------------------------
+  describe('yearRange — rango de años navegable', () => {
+    it('sin grupos → yearRange null', async () => {
+      mockRepo.getAllCuotasForGantt.mockResolvedValue([]);
+
+      const result = await service.getAnnualCuotasReport(USER_A, 2026);
+
+      expect(result.yearRange).toBeNull();
+    });
+
+    it('categories=[] (ninguna) → yearRange null aunque haya grupos', async () => {
+      mockRepo.getAllCuotasForGantt.mockResolvedValue([
+        makeGroup({ id: 'g1', startMonth: '2020-01', totalInstallments: 12, categoryId: CAT_A }),
+      ]);
+
+      const result = await service.getAnnualCuotasReport(USER_A, 2026, []);
+
+      expect(result.yearRange).toBeNull();
+    });
+
+    it('usa la historia COMPLETA (no solo el año pedido) y es continuo aunque haya años huecos', async () => {
+      // Grupo viejo: 2015-06 .. 2016-05 (12 cuotas). Grupo "actual": nov-2023 .. abr-2024 (6 cuotas).
+      // Ninguno intersecta el año PEDIDO (2026), pero ambos deben entrar al rango navegable.
+      mockRepo.getAllCuotasForGantt.mockResolvedValue([
+        makeGroup({ id: 'g-old', startMonth: '2015-06', totalInstallments: 12, categoryId: CAT_A }),
+        makeGroup({ id: 'g-new', startMonth: '2023-11', totalInstallments: 6, categoryId: CAT_A }),
+      ]);
+
+      const result = await service.getAnnualCuotasReport(USER_A, 2026);
+
+      // g-old: 2015-06..2016-05 → [2015,2016]; g-new: 2023-11..2024-04 → [2023,2024].
+      // Rango continuo de punta a punta, con 2017-2022 como hueco interno navegable.
+      expect(result.yearRange).toEqual({ minYear: 2015, maxYear: 2024 });
+    });
+
+    it('filtro de categorías: excluye el grupo de la categoría destildada (rango con filtro vs. sin filtro)', async () => {
+      mockRepo.getAllCuotasForGantt.mockResolvedValue([
+        makeGroup({ id: 'g1', startMonth: '2018-01', totalInstallments: 3, categoryId: CAT_A }),
+        makeGroup({ id: 'g2', startMonth: '2024-01', totalInstallments: 3, categoryId: CAT_B }),
+      ]);
+
+      const sinFiltro = await service.getAnnualCuotasReport(USER_A, 2026);
+      expect(sinFiltro.yearRange).toEqual({ minYear: 2018, maxYear: 2024 });
+
+      const conFiltro = await service.getAnnualCuotasReport(USER_A, 2026, [CAT_A]);
+      expect(conFiltro.yearRange).toEqual({ minYear: 2018, maxYear: 2018 });
+    });
+
+    it('NO recorta al año en curso: un grupo de cuotas en tramo futuro es dato real y navegable', async () => {
+      // A diferencia de annual-unicos/annual-inflation-income, esta card no
+      // aplica el recorte adicional al año en curso: una cuota en tramo
+      // futuro es dato real (RF-REP-013/015 — mismo criterio que fijos por
+      // recurrencia). 2060: suficientemente futuro para no depender del año
+      // real, pero dentro del tope técnico (añoEnCurso+100) en cualquier caso.
+      mockRepo.getAllCuotasForGantt.mockResolvedValue([
+        makeGroup({ id: 'g-future', startMonth: '2060-01', totalInstallments: 3, categoryId: CAT_A }),
+      ]);
+
+      const result = await service.getAnnualCuotasReport(USER_A, 2026);
+
+      expect(result.yearRange).toEqual({ minYear: 2060, maxYear: 2060 });
+    });
+  });
 });

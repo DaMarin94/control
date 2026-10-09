@@ -70,7 +70,7 @@ import { LimitsInfoPopover } from "@/components/limits/limits-info-popover";
 import { formatCurrency, CURRENCY_SYMBOLS } from "@/lib/format";
 import { ChartTooltipContent } from "@/components/ui/chart";
 import { ChartLegend } from "@/components/ui/chart";
-import { CHART_END_LABEL_MARGIN } from "@/components/ui/chart";
+import { CHART_END_LABEL_MARGIN, getYearStepperState, useYearRangeAutoCorrect } from "@/components/ui/chart";
 import { CardCurrencySelect } from "@/components/ui/card-currency-select";
 import type { ReportsMovementsResponse, ReportCardType, SimulatedReportCategory } from "@/types/reports";
 import type { CurrencyCode } from "@/types/settings";
@@ -1368,17 +1368,13 @@ function FormBChartInner({
 
 interface YearStepperProps {
   year: number;
-  currentYear: number;
-  earliestYear: number | null;
+  canGoPrev: boolean;
+  canGoNext: boolean;
   onPrev: () => void;
   onNext: () => void;
-  disabled?: boolean;
 }
 
-function YearStepper({ year, currentYear, earliestYear, onPrev, onNext, disabled }: YearStepperProps) {
-  const canGoPrev = !disabled && earliestYear !== null && year > earliestYear;
-  const canGoNext = !disabled && year < currentYear;
-
+function YearStepper({ year, canGoPrev, canGoNext, onPrev, onNext }: YearStepperProps) {
   return (
     <div
       className="flex items-center rounded-pill border border-line bg-panel shadow-[var(--shadow-sm)] p-1"
@@ -1844,8 +1840,8 @@ function EditableTitle({
 
 interface CardControlsProps {
   year: number;
-  currentYear: number;
-  earliestYear: number | null;
+  canGoPrev: boolean;
+  canGoNext: boolean;
   onPrev: () => void;
   onNext: () => void;
   onCurrencyChange?: (c: CurrencyCode) => void;
@@ -1865,8 +1861,8 @@ interface CardControlsProps {
  */
 function CardControls({
   year,
-  currentYear,
-  earliestYear,
+  canGoPrev,
+  canGoNext,
   onPrev,
   onNext,
   onCurrencyChange,
@@ -1882,8 +1878,8 @@ function CardControls({
       {/* Control de año embebido (stepper pill) */}
       <YearStepper
         year={year}
-        currentYear={currentYear}
-        earliestYear={earliestYear}
+        canGoPrev={canGoPrev}
+        canGoNext={canGoNext}
         onPrev={onPrev}
         onNext={onNext}
       />
@@ -2055,15 +2051,21 @@ export function ReportCard({
     }
   }, [isEditingTitle]);
 
-  // Año actual (límite navegación hacia adelante). Se resuelve post-mount para
-  // no arrastrar el "ahora" del server al primer render (evita mismatch de
-  // hidratación).
+  // Año actual (base de hasNoReachedMonthsInYear más abajo — ya NO de la
+  // cota del stepper, que ahora viene de `yearRange`). Se resuelve post-mount
+  // para no arrastrar el "ahora" del server al primer render (evita mismatch
+  // de hidratación).
   const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
   useEffect(() => {
     setCurrentYear(new Date().getFullYear());
   }, []);
 
-  const earliestYear = data?.earliestYear ?? null;
+  // Rango de años navegable de esta card (ya filtrado por categorías/tipos/
+  // dirección, ver YearRange). Gobierna las flechas del stepper y dispara la
+  // auto-corrección de año fuera de rango (ver useYearRangeAutoCorrect).
+  const yearRange = data?.yearRange ?? null;
+  useYearRangeAutoCorrect(year, yearRange, onYearChange);
+  const { canGoPrev, canGoNext } = getYearStepperState(year, yearRange);
 
   // RF-REP-017: universo de categorías real ∪ simulado para el stack de
   // by-category (income-expense no lo usa para su propio chart, pero es
@@ -2201,16 +2203,14 @@ export function ReportCard({
   })();
 
   function handlePrev() {
-    if (earliestYear !== null && year > earliestYear) {
-      const newYear = year - 1;
-      onYearChange?.(newYear);
+    if (canGoPrev) {
+      onYearChange?.(year - 1);
     }
   }
 
   function handleNext() {
-    if (year < currentYear) {
-      const newYear = year + 1;
-      onYearChange?.(newYear);
+    if (canGoNext) {
+      onYearChange?.(year + 1);
     }
   }
 
@@ -2363,8 +2363,8 @@ export function ReportCard({
               {/* Cluster derecho — CardControls */}
               <CardControls
                 year={year}
-                currentYear={currentYear}
-                earliestYear={earliestYear}
+                canGoPrev={canGoPrev}
+                canGoNext={canGoNext}
                 onPrev={handlePrev}
                 onNext={handleNext}
                 onCurrencyChange={onCurrencyChange}
@@ -2399,8 +2399,8 @@ export function ReportCard({
             {/* Controles: stepper + moneda + X (derecha) */}
             <CardControls
               year={year}
-              currentYear={currentYear}
-              earliestYear={earliestYear}
+              canGoPrev={canGoPrev}
+              canGoNext={canGoNext}
               onPrev={handlePrev}
               onNext={handleNext}
               onCurrencyChange={onCurrencyChange}
@@ -2465,8 +2465,8 @@ export function ReportCard({
             </div>
             <CardControls
               year={year}
-              currentYear={currentYear}
-              earliestYear={earliestYear}
+              canGoPrev={canGoPrev}
+              canGoNext={canGoNext}
               onPrev={handlePrev}
               onNext={handleNext}
               onCurrencyChange={onCurrencyChange}
