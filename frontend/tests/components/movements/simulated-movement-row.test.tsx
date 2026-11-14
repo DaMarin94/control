@@ -61,7 +61,7 @@ const baseSimulated: MovementItem = {
   exchangeRate: 1,
   convertedAmountCents: 12500,
   simulated: true,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 function makeLimitMark(effect: LimitEffect): EvaluatedLimitMark {

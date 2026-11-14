@@ -1,31 +1,35 @@
 /**
- * Clave de color de las líneas de la card `fixed-evolution` (Ola 5, P6 — RF-REP-013).
+ * Clave de color de las líneas de la card `fixed-evolution` (RF-REP-013).
  *
- * Regla (docs/design.md §"Detalle histórico de gastos fijos" §3 — "La clave de
- * color: el color lo da la categoría, la tonalidad desempata"):
+ * Regla (docs/design.md §"Detalle histórico de fijos" §3):
  *
- *   El color de la línea es el **color de la categoría re-anclado a una banda de
- *   claridad legible**: se toma `category.color` en OKLCH, se **conservan hue y
- *   croma**, y se sustituye la claridad (L) por uno de tres peldaños de la banda
- *   `[0.46, 0.74]` (separación ~0.14 L): T-claro 0.74, T-medio 0.60, T-oscuro 0.46.
- *
- *   - **Ancla:** el peldaño más cercano a la L propia de la categoría —
- *     `L ≥ 0.67` → claro; `0.53 ≤ L < 0.67` → medio; `L < 0.53` → oscuro.
- *   - **Croma:** se conserva el de origen, con **piso 0.07** para colores con hue
- *     definido (croma de origen `≥ 0.015`). Los colores deliberadamente neutros
- *     (croma `< 0.015`) conservan su croma sin hue inventado.
- *   - **Desempate:** los fijos que comparten el mismo hex de categoría (normalizado)
- *     se ordenan por `ordinal` ASC (estable entre años — nunca el índice del array,
- *     que sigue el gasto anual del año mostrado) y recorren la escalera **desde el
- *     ancla hacia abajo, cíclicamente** (con ancla medio: medio → oscuro → claro;
- *     con ancla claro: claro → medio → oscuro; con ancla oscuro: oscuro → claro →
- *     medio). A partir del 4º fijo de esa categoría, recicla desde el ancla.
- *
- *   **Sin lookup ni tabla de hexes:** la regla opera sobre CUALQUIER hex que venga
- *   en `categoryColor`, pertenezca o no a la matriz de 40 colores de categoría. El
- *   resultado se emite como `oklch(L C H)` — el navegador hace el gamut mapping a
- *   sRGB para el par L/H pedido (Recharts lo acepta como `stroke`/`fill`).
+ *   - **Card de reportes:** cada fijo toma `FX[ordinal mod 12]`, una paleta
+ *     categórica propia de 12 colores (6 hues x 2 claridades), valores fijos en
+ *     claro y oscuro. El color es identificador de fijo: no codifica categoría ni
+ *     dirección. `ordinal` es estable entre rangos (nunca el índice del array).
+ *     Más de 12 fijos: se recicla por `ordinal mod 12`.
+ *   - **Variante acotada (§3 punto 5, §15):** la única línea usa el color de su
+ *     categoría re-anclado a la banda de trazo `[0.46, 0.74]` (`anchorFixedEvolutionColor`):
+ *     hue y croma conservados (piso 0.07 si croma de origen >= 0.015), claridad
+ *     al peldaño más cercano (L >= 0.67 -> 0.74; 0.53 <= L < 0.67 -> 0.60;
+ *     L < 0.53 -> 0.46). Sin desempate ni escalera.
  */
+
+/** Paleta `FX` (docs/design.md §3): 12 colores `oklch()` literales. */
+export const FX_PALETTE: readonly string[] = [
+  "oklch(0.50 0.11 240)",
+  "oklch(0.70 0.15 66)",
+  "oklch(0.50 0.16 320)",
+  "oklch(0.70 0.11 205)",
+  "oklch(0.50 0.16 350)",
+  "oklch(0.72 0.13 90)",
+  "oklch(0.70 0.12 240)",
+  "oklch(0.50 0.09 66)",
+  "oklch(0.70 0.14 320)",
+  "oklch(0.50 0.08 205)",
+  "oklch(0.70 0.15 350)",
+  "oklch(0.52 0.10 90)",
+];
 
 // ─── Conversión hex sRGB → OKLCH (Björn Ottosson) ────────────────────────────
 
@@ -80,24 +84,17 @@ type Step = "light" | "medium" | "dark";
 /** L de cada peldaño de la banda de trazo legible [0.46, 0.74]. */
 const STEP_L: Record<Step, number> = { light: 0.74, medium: 0.6, dark: 0.46 };
 
-/** Piso de croma para colores con hue definido (§3.3). */
+/** Piso de croma para colores con hue definido. */
 const CHROMA_FLOOR = 0.07;
-/** Bajo este croma de origen, el color se considera deliberadamente neutro (§3.3). */
+/** Bajo este croma de origen, el color se considera deliberadamente neutro. */
 const NEUTRAL_CHROMA_THRESHOLD = 0.015;
 
-/** Ancla: el peldaño más cercano a la L propia de la categoría (§3.2). */
+/** Ancla: el peldaño más cercano a la L propia de la categoría. */
 function anchorStep(l: number): Step {
   if (l >= 0.67) return "light";
   if (l >= 0.53) return "medium";
   return "dark";
 }
-
-/** Escalera cíclica desde el ancla hacia abajo (recicla cada 3 fijos, §3.4). */
-const LADDER: Record<Step, readonly Step[]> = {
-  medium: ["medium", "dark", "light"],
-  light: ["light", "medium", "dark"],
-  dark: ["dark", "light", "medium"],
-};
 
 function round(value: number, decimals: number): number {
   const factor = 10 ** decimals;
@@ -109,58 +106,28 @@ function formatOklch(l: number, c: number, h: number): string {
 }
 
 /**
- * Asigna el color de línea (string `oklch(L C H)`) a cada fijo del universo dado.
+ * Asigna a cada fijo su color de la paleta `FX`: `FX[ordinal mod 12]`.
+ * `ordinal` es 0-based y estable entre rangos (docs/design.md §14).
  *
- * @param lines Universo de líneas del año mostrado (chainId, ordinal, categoryColor).
- *              El `ordinal` es estable entre años (docs/design.md §14); se usa para
- *              determinar el orden de desempate dentro de cada hex de categoría, NO
- *              el orden del array (que sigue el gasto anual del año mostrado).
  * @returns Map chainId -> `oklch(L C H)`.
  */
 export function assignFixedEvolutionColors(
-  lines: ReadonlyArray<{ chainId: string; ordinal: number; categoryColor: string }>,
+  lines: ReadonlyArray<{ chainId: string; ordinal: number }>,
 ): Map<string, string> {
-  const byHex = new Map<string, Array<{ chainId: string; ordinal: number }>>();
-
-  for (const line of lines) {
-    const key = line.categoryColor.trim().toUpperCase();
-    const group = byHex.get(key);
-    if (group) {
-      group.push({ chainId: line.chainId, ordinal: line.ordinal });
-    } else {
-      byHex.set(key, [{ chainId: line.chainId, ordinal: line.ordinal }]);
-    }
-  }
-
   const result = new Map<string, string>();
-  for (const [hex, group] of byHex) {
-    const { l: l0, c: c0, h: h0 } = hexToOklch(hex);
-    const hasHue = c0 >= NEUTRAL_CHROMA_THRESHOLD;
-    const c = hasHue ? Math.max(c0, CHROMA_FLOOR) : c0;
-    const ladder = LADDER[anchorStep(l0)];
-
-    const sorted = [...group].sort((a, b) => a.ordinal - b.ordinal);
-    sorted.forEach((item, i) => {
-      const step = ladder[i % ladder.length]!;
-      result.set(item.chainId, formatOklch(STEP_L[step], c, h0));
-    });
+  const n = FX_PALETTE.length;
+  for (const line of lines) {
+    result.set(line.chainId, FX_PALETTE[((line.ordinal % n) + n) % n]!);
   }
   return result;
 }
 
 /**
- * Color de un fijo EXCLUIDO (superficie de excluidos, docs/design.md §8.1):
- * el peldaño ANCLA de su categoría, SIN desempate por `ordinal`. Un excluido
- * no dibuja línea, así que no compite con nadie por tonalidad (el contrato de
- * `excluded` ni siquiera trae `ordinal` — docs/design.md §14).
- *
- * Se apoya en `assignFixedEvolutionColors` con un universo de un solo
- * elemento: al no haber otro fijo con el mismo hex de categoría en ese
- * llamado, la escalera de desempate siempre resuelve al ancla.
+ * Color de la variante acotada (§3 punto 5): el de la categoría re-anclado a la
+ * banda de trazo. Opera sobre cualquier hex, sin lookup en la matriz.
  */
 export function anchorFixedEvolutionColor(categoryColor: string): string {
-  const colors = assignFixedEvolutionColors([
-    { chainId: "__anchor__", ordinal: 0, categoryColor },
-  ]);
-  return colors.get("__anchor__")!;
+  const { l, c: c0, h } = hexToOklch(categoryColor);
+  const c = c0 >= NEUTRAL_CHROMA_THRESHOLD ? Math.max(c0, CHROMA_FLOOR) : c0;
+  return formatOklch(STEP_L[anchorStep(l)], c, h);
 }

@@ -1,5 +1,5 @@
 /**
- * Tests de FixedEvolutionCard ("Detalle histórico de gastos fijos", RF-REP-013,
+ * Tests de FixedEvolutionCard ("Detalle histórico de fijos", RF-REP-013,
  * Ola 6 — migración de año calendario a rango de meses corridos anclado al
  * presente).
  *
@@ -103,7 +103,8 @@ vi.mock("recharts", () => {
 });
 
 import { useFixedEvolution } from "@/hooks/use-reports";
-import { FixedEvolutionCard, computePlotSlot, getGapMotive } from "@/components/charts/fixed-evolution-card";
+import { FixedEvolutionCard, CustomTooltip, PointMarker, computePlotSlot, getGapMotive } from "@/components/charts/fixed-evolution-card";
+import { FX_PALETTE, anchorFixedEvolutionColor } from "@/lib/fixed-evolution-colors";
 import { CHART_END_LABEL_MARGIN } from "@/components/ui/chart";
 import { mockQuerySuccess, mockQueryLoading, mockQueryError } from "../../utils/query-result";
 
@@ -127,6 +128,7 @@ function buildFullMonths(amountCents: number): FixedEvolutionMonthPoint[] {
 /** Dos fijos de LA MISMA categoría (mismo hue, columna 0 de la matriz) — desempate por ordinal. */
 const lineAlquiler: FixedEvolutionLine = {
   chainId: "fx-alquiler",
+  type: "EXPENSE",
   ordinal: 1,
   isCalculated: false,
   description: "Alquiler",
@@ -143,6 +145,7 @@ const lineAlquiler: FixedEvolutionLine = {
 
 const lineExpensas: FixedEvolutionLine = {
   chainId: "fx-expensas",
+  type: "EXPENSE",
   ordinal: 2,
   isCalculated: false,
   description: "Expensas",
@@ -160,6 +163,7 @@ const lineExpensas: FixedEvolutionLine = {
 /** Calculado derivado de Alquiler (mismo color de categoría propia, dasheado). */
 const lineCalculado: FixedEvolutionLine = {
   chainId: "fx-calc",
+  type: "EXPENSE",
   ordinal: 3,
   isCalculated: true,
   description: "Ajuste de alquiler",
@@ -177,6 +181,7 @@ const lineCalculado: FixedEvolutionLine = {
 /** Fijo bimestral con un hueco interno (mes anulado) para probar el puente. */
 const lineHueco: FixedEvolutionLine = {
   chainId: "fx-hueco",
+  type: "EXPENSE",
   ordinal: 4,
   isCalculated: false,
   description: "Seguro",
@@ -200,6 +205,7 @@ const lineHueco: FixedEvolutionLine = {
 
 const excludedItem: FixedEvolutionExcludedLine = {
   chainId: "fx-nuevo",
+  type: "EXPENSE",
   isCalculated: false,
   description: "Suscripción nueva",
   categoryId: "cat-ocio",
@@ -310,15 +316,15 @@ describe("FixedEvolutionCard — rango sin gastos fijos", () => {
     mockHookWithData(mockDataEmpty);
   });
 
-  it("muestra overlay 'Sin gastos fijos en el rango.'", () => {
+  it("muestra overlay 'Sin fijos en el rango.'", () => {
     renderCard();
-    expect(screen.getByText("Sin gastos fijos en el rango.")).toBeInTheDocument();
+    expect(screen.getByText("Sin fijos en el rango.")).toBeInTheDocument();
     expect(screen.getByText("Probá un rango más largo.")).toBeInTheDocument();
   });
 
   it("NO renderiza la leyenda (universo vacío)", () => {
     renderCard();
-    expect(screen.queryByRole("group", { name: /elegir gastos fijos/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: /elegir fijos/i })).not.toBeInTheDocument();
   });
 });
 
@@ -332,19 +338,19 @@ describe("FixedEvolutionCard — ningún fijo con evolución, pero sí excluidos
 
   it("muestra el overlay específico de este estado", () => {
     renderCard();
-    expect(screen.getByText("Ningún gasto fijo tiene dos apariciones en el rango.")).toBeInTheDocument();
+    expect(screen.getByText("Ningún fijo tiene dos apariciones en el rango.")).toBeInTheDocument();
     expect(screen.getByText("Alargá el rango para ver su evolución.")).toBeInTheDocument();
   });
 
   it("NO renderiza la leyenda-filtro, pero SÍ el disparador de excluidos", () => {
     renderCard();
-    expect(screen.queryByRole("group", { name: /elegir gastos fijos/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /gastos fijos con una sola aparición/i })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: /elegir fijos/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /fijos con una sola aparición/i })).toBeInTheDocument();
   });
 
   it("NO renderiza LegendAllChip ni el contador", () => {
     renderCard();
-    expect(screen.queryByRole("button", { name: /mostrar todos los gastos fijos|ocultar todos los gastos fijos/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /mostrar todos los fijos|ocultar todos los fijos/i })).not.toBeInTheDocument();
   });
 });
 
@@ -358,9 +364,9 @@ describe("FixedEvolutionCard — ningún fijo seleccionado", () => {
 
   it("muestra el overlay de selección vacía y NO bloquea la leyenda", () => {
     renderCard({ selectedIds: [] });
-    expect(screen.getByText("Ningún gasto fijo seleccionado.")).toBeInTheDocument();
+    expect(screen.getByText("Ningún fijo seleccionado.")).toBeInTheDocument();
     expect(screen.getByText("Elegí uno en la lista de abajo.")).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: /elegir gastos fijos/i })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /elegir fijos/i })).toBeInTheDocument();
   });
 });
 
@@ -403,13 +409,12 @@ describe("FixedEvolutionCard — líneas del canvas", () => {
     expect(firstLine("line-fx-alquiler")).not.toHaveAttribute("data-dasharray", "6 4");
   });
 
-  it("dos fijos de la MISMA categoría reciben colores (tonalidades) distintos", () => {
+  it("el color de cada línea es FX[ordinal mod 12], sin depender de la categoría", () => {
     renderCard();
-    const strokeAlquiler = firstLine("line-fx-alquiler").getAttribute("data-stroke");
-    const strokeExpensas = firstLine("line-fx-expensas").getAttribute("data-stroke");
-    expect(strokeAlquiler).toBeTruthy();
-    expect(strokeExpensas).toBeTruthy();
-    expect(strokeAlquiler).not.toBe(strokeExpensas);
+    // alquiler ordinal 1, expensas ordinal 2 (misma categoría): colores FX distintos.
+    expect(firstLine("line-fx-alquiler").getAttribute("data-stroke")).toBe(FX_PALETTE[1]);
+    expect(firstLine("line-fx-expensas").getAttribute("data-stroke")).toBe(FX_PALETTE[2]);
+    expect(firstLine("line-fx-calc").getAttribute("data-stroke")).toBe(FX_PALETTE[3]);
   });
 
   it("la línea plena NO conecta nulos en Montos (el puente es una Line aparte)", () => {
@@ -597,13 +602,13 @@ describe("FixedEvolutionCard — leyenda-selector de fijos", () => {
 
   it("muestra un ítem por cada fijo, sin agrupar", () => {
     renderCard();
-    const group = screen.getByRole("group", { name: /elegir gastos fijos/i });
+    const group = screen.getByRole("group", { name: /elegir fijos/i });
     expect(group.querySelectorAll("button")).toHaveLength(4);
   });
 
   it("nace con todos los fijos seleccionados (aria-pressed=true)", () => {
     renderCard();
-    const group = screen.getByRole("group", { name: /elegir gastos fijos/i });
+    const group = screen.getByRole("group", { name: /elegir fijos/i });
     group.querySelectorAll("button").forEach((btn) => {
       expect(btn).toHaveAttribute("aria-pressed", "true");
     });
@@ -611,7 +616,7 @@ describe("FixedEvolutionCard — leyenda-selector de fijos", () => {
 
   it("el contador muestra N / M seleccionados", () => {
     renderCard();
-    expect(screen.getByTitle("4 de 4 gastos fijos seleccionados")).toBeInTheDocument();
+    expect(screen.getByTitle("4 de 4 fijos seleccionados")).toBeInTheDocument();
   });
 
   it("al destildar un fijo llama a onSelectedIdsChange sin ese chainId", () => {
@@ -624,14 +629,14 @@ describe("FixedEvolutionCard — leyenda-selector de fijos", () => {
   it("'Ninguna' llama a onSelectedIdsChange([]) cuando todos están visibles", () => {
     const onSelectedIdsChange = vi.fn();
     renderCard({ onSelectedIdsChange });
-    fireEvent.click(screen.getByRole("button", { name: /ocultar todos los gastos fijos/i }));
+    fireEvent.click(screen.getByRole("button", { name: /ocultar todos los fijos/i }));
     expect(onSelectedIdsChange).toHaveBeenCalledWith([]);
   });
 
   it("'Todas' llama a onSelectedIdsChange(null) cuando la selección está vacía", () => {
     const onSelectedIdsChange = vi.fn();
     renderCard({ selectedIds: [], onSelectedIdsChange });
-    fireEvent.click(screen.getByRole("button", { name: /mostrar todos los gastos fijos/i }));
+    fireEvent.click(screen.getByRole("button", { name: /mostrar todos los fijos/i }));
     expect(onSelectedIdsChange).toHaveBeenCalledWith(null);
   });
 
@@ -713,6 +718,28 @@ describe("FixedEvolutionCard — selector de rango", () => {
     expect(screen.getByRole("option", { name: "2 años" })).toHaveAttribute("aria-selected", "true");
   });
 
+  it("el listbox se alinea al borde derecho del disparador cuando no entra a la izquierda", () => {
+    const prevW = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 600 });
+    const spy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const isPanel = this.getAttribute("role") === "listbox";
+      const r = isPanel
+        ? { left: 0, right: 132, width: 132, top: 0, bottom: 100, height: 100 }
+        : { left: 540, right: 600, width: 60, top: 10, bottom: 40, height: 30 };
+      return { ...r, x: r.left, y: r.top, toJSON: () => ({}) } as DOMRect;
+    });
+    try {
+      renderCard();
+      fireEvent.click(screen.getByRole("button", { name: /rango del reporte/i }));
+      const left = parseFloat(screen.getByRole("listbox").style.left);
+      expect(left + 132).toBeLessThanOrEqual(600 - 12);
+      expect(left).toBeGreaterThanOrEqual(12);
+    } finally {
+      spy.mockRestore();
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: prevW });
+    }
+  });
+
   it("muestra la nota de recorte cuando el rango efectivo es menor al pedido", () => {
     renderCard({ rangeMonths: 60 }); // mockData.rangeMonths = 6 (efectivo) < 60 (pedido)
     expect(screen.getByText("Desde Nov 2025 — es todo tu historial.")).toBeInTheDocument();
@@ -732,7 +759,7 @@ describe("FixedEvolutionCard — superficie de excluidos", () => {
   it("muestra el chip 'N sin evolución' cuando hay excluidos", () => {
     mockHookWithData(mockData);
     renderCard();
-    expect(screen.getByRole("button", { name: /gastos fijos con una sola aparición/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /fijos con una sola aparición/i })).toBeInTheDocument();
   });
 
   it("NO muestra el chip cuando excluded está vacío", () => {
@@ -744,16 +771,59 @@ describe("FixedEvolutionCard — superficie de excluidos", () => {
   it("clickear el chip abre un popover con la lista de excluidos", () => {
     mockHookWithData(mockData);
     renderCard();
-    fireEvent.click(screen.getByRole("button", { name: /gastos fijos con una sola aparición/i }));
-    const dialog = screen.getByRole("dialog", { name: /gastos fijos sin evolución en el rango/i });
+    fireEvent.click(screen.getByRole("button", { name: /fijos con una sola aparición/i }));
+    const dialog = screen.getByRole("dialog", { name: /fijos sin evolución en el rango/i });
     expect(within(dialog).getByText("Suscripción nueva")).toBeInTheDocument();
     expect(within(dialog).getByText(/Ocio · desde Abr 2026/)).toBeInTheDocument();
+  });
+
+  it("el ítem excluido no lleva swatch/mini-línea y su sublínea lleva el punto de categoría", () => {
+    mockHookWithData(mockData);
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: /fijos con una sola aparición/i }));
+    const dialog = screen.getByRole("dialog", { name: /fijos sin evolución en el rango/i });
+    const item = within(dialog).getByRole("listitem");
+    expect(item.querySelector("svg")).toBeNull();
+    const dots = Array.from(item.querySelectorAll("span")).filter((el) => el.className.includes("rounded-full"));
+    expect(dots).toHaveLength(1);
+    expect((dots[0] as HTMLElement).style.background).toMatch(/rgb\(79, 134, 198\)|#4f86c6/i);
+  });
+
+  it("el ítem excluido apila en dos líneas: descripción arriba, sublínea con punto debajo", () => {
+    mockHookWithData(mockData);
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: /fijos con una sola aparición/i }));
+    const item = within(screen.getByRole("dialog", { name: /fijos sin evolución en el rango/i })).getByRole("listitem");
+    const desc = within(item).getByText("Suscripción nueva").closest("p") as HTMLElement;
+    const sub = within(item).getByTestId("excluded-subline");
+    expect(desc).not.toBe(sub);
+    expect(desc.parentElement).toBe(sub.parentElement);
+    expect(desc.nextElementSibling).toBe(sub);
+    // Ambas son de bloque (flex), nunca inline-flex: no comparten línea.
+    expect(desc.className).not.toMatch(/inline/);
+    expect(sub.className).not.toMatch(/inline/);
+    expect(sub.className).toContain("gap-[5px]");
+    expect(sub.firstElementChild?.className).toContain("rounded-full");
+    expect(sub.textContent).toMatch(/Ocio · desde Abr 2026/);
+    expect(desc.textContent).not.toMatch(/Ocio/);
+  });
+
+  it("un excluido calculado/de ingreso conserva solo los glifos ↳ / ↑", () => {
+    mockHookWithData({
+      ...mockData,
+      excluded: [{ ...excludedItem, isCalculated: true, type: "INCOME" }],
+    });
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: /fijos con una sola aparición/i }));
+    const item = within(screen.getByRole("dialog", { name: /fijos sin evolución en el rango/i })).getByRole("listitem");
+    expect(item.querySelectorAll("svg").length).toBe(2);
+    expect(within(item).getByRole("img", { name: "Ingreso" })).toBeInTheDocument();
   });
 
   it("cierra con Escape", () => {
     mockHookWithData(mockData);
     renderCard();
-    fireEvent.click(screen.getByRole("button", { name: /gastos fijos con una sola aparición/i }));
+    fireEvent.click(screen.getByRole("button", { name: /fijos con una sola aparición/i }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -834,17 +904,17 @@ describe("FixedEvolutionCard — parámetros del hook", () => {
 
   it("llama a useFixedEvolution con rangeMonths, moneda y today, sin categorías", () => {
     renderCard({ rangeMonths: 24, currency: "USD" });
-    expect(mockUseFixedEvolution).toHaveBeenCalledWith(24, "USD", expect.any(String));
+    expect(mockUseFixedEvolution).toHaveBeenCalledWith(24, "USD", expect.any(String), undefined);
   });
 
   it("llama a useFixedEvolution con currency=undefined cuando no se pasa override", () => {
     renderCard({ rangeMonths: 36 });
-    expect(mockUseFixedEvolution).toHaveBeenCalledWith(36, undefined, expect.any(String));
+    expect(mockUseFixedEvolution).toHaveBeenCalledWith(36, undefined, expect.any(String), undefined);
   });
 
   it("default de rangeMonths es 36 cuando la prop está ausente", () => {
     render(<FixedEvolutionCard titlePlaceholder="Reporte 1" />, { wrapper: createWrapper() });
-    expect(mockUseFixedEvolution).toHaveBeenCalledWith(36, undefined, expect.any(String));
+    expect(mockUseFixedEvolution).toHaveBeenCalledWith(36, undefined, expect.any(String), undefined);
   });
 });
 
@@ -879,5 +949,219 @@ describe("CHART_END_LABEL_MARGIN (fix de QA visual — desborde del último rót
     // real ≈ 13px. El margen compartido debe cubrir ese peor caso con aire de
     // sobra para variaciones de fuente/zoom entre navegadores.
     expect(CHART_END_LABEL_MARGIN).toBeGreaterThan(13);
+  });
+});
+
+// ─── Tests: dirección (§3.1) — forma del punto, glifo y color por tipo ────────
+
+describe("PointMarker — forma por dirección", () => {
+  it("gasto = círculo de radio r", () => {
+    const { container } = render(
+      <svg>
+        <PointMarker cx={10} cy={10} r={3} fill="red" ring={1.5} income={false} />
+      </svg>,
+    );
+    const circle = container.querySelector("[data-point-shape='circle']");
+    expect(circle).not.toBeNull();
+    expect(circle).toHaveAttribute("r", "3");
+    expect(container.querySelector("[data-point-shape='square']")).toBeNull();
+  });
+
+  it("ingreso = cuadrado de lado 2r, esquinas rectas (sin rx), centrado en el punto", () => {
+    const { container } = render(
+      <svg>
+        <PointMarker cx={10} cy={10} r={3} fill="red" ring={1.5} income />
+      </svg>,
+    );
+    const rect = container.querySelector("[data-point-shape='square']");
+    expect(rect).not.toBeNull();
+    expect(rect).toHaveAttribute("width", "6");
+    expect(rect).toHaveAttribute("height", "6");
+    expect(rect).toHaveAttribute("x", "7");
+    expect(rect).toHaveAttribute("y", "7");
+    expect(rect).not.toHaveAttribute("rx");
+    expect(container.querySelector("[data-point-shape='circle']")).toBeNull();
+  });
+
+  it("sin anillo no dibuja borde", () => {
+    const { container } = render(
+      <svg>
+        <PointMarker cx={0} cy={0} r={2} fill="red" ring={0} income />
+      </svg>,
+    );
+    expect(container.querySelector("rect")).toHaveAttribute("stroke", "none");
+  });
+});
+
+describe("FixedEvolutionCard — fijos de ingreso en la leyenda", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("el ítem de un ingreso lleva el glifo 'Ingreso'; el de un gasto no", () => {
+    const sueldo: FixedEvolutionLine = { ...lineAlquiler, chainId: "fx-sueldo", ordinal: 9, description: "Sueldo", type: "INCOME" };
+    mockHookWithData({ ...mockData, lines: [sueldo, lineAlquiler] });
+    renderCard();
+    const group = screen.getByRole("group", { name: /elegir fijos/i });
+    const sueldoBtn = within(group).getByRole("button", { name: /sueldo/i });
+    const alquilerBtn = within(group).getByRole("button", { name: /alquiler/i });
+    expect(within(sueldoBtn).getByRole("img", { name: "Ingreso" })).toBeInTheDocument();
+    expect(within(alquilerBtn).queryByRole("img", { name: "Ingreso" })).not.toBeInTheDocument();
+  });
+});
+
+describe("CustomTooltip — variante acotada y color por tipo", () => {
+  const months = ["2026-03", "2026-04"];
+  function renderTooltip(type: "EXPENSE" | "INCOME", scoped: boolean, point: FixedEvolutionMonthPoint, value: number | null) {
+    const meta = {
+      chainId: "c1", color: "red", isCalculated: false, type,
+      description: "Sueldo", categoryName: "Trabajo", categoryColor: "#4F86C6", originDescription: null, frequency: 1,
+    };
+    const line: FixedEvolutionLine = { ...lineAlquiler, chainId: "c1", type, frequency: 2 };
+    return render(
+      <CustomTooltip
+        active
+        label="2026-04"
+        scoped={scoped}
+        mode="amounts"
+        currency="ARS"
+        highlightedId="c1"
+        visibleMeta={[meta]}
+        valuesByChain={new Map([["c1", [null, value]]])}
+        pointsByChain={new Map([["c1", [null, point]]])}
+        lineByChain={new Map([["c1", line]])}
+        monthsList={months}
+      />,
+    );
+  }
+
+  it("modo línea: la sublínea lleva el punto de categoría (6px, category.color tal cual)", () => {
+    const { container } = renderTooltip("EXPENSE", false, buildPoint("2026-04", 150000), 150000);
+    const dot = Array.from(container.querySelectorAll("span")).find((el) => el.className.includes("rounded-full")) as HTMLElement;
+    expect(dot).toBeTruthy();
+    expect(dot.className).toContain("w-[6px]");
+    expect(dot.style.background).toMatch(/rgb\(79, 134, 198\)|#4f86c6/i);
+  });
+
+  it("acotada: solo mes + cifra (sin descripción, categoría ni Frecuencia)", () => {
+    renderTooltip("EXPENSE", true, buildPoint("2026-04", 150000), 150000);
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    expect(screen.queryByText("Sueldo")).not.toBeInTheDocument();
+    expect(screen.queryByText("Trabajo")).not.toBeInTheDocument();
+    expect(screen.queryByText("Frecuencia")).not.toBeInTheDocument();
+  });
+
+  it("acotada: la cifra de un ingreso va en --income-ink y la de un gasto en --ink", () => {
+    const { unmount } = renderTooltip("INCOME", true, buildPoint("2026-04", 150000), 150000);
+    expect(screen.getByText(/1\.500/).className).toContain("text-income-ink");
+    unmount();
+    renderTooltip("EXPENSE", true, buildPoint("2026-04", 150000), 150000);
+    expect(screen.getByText(/1\.500/).className).toContain("text-ink");
+    expect(screen.getByText(/1\.500/).className).not.toContain("income");
+  });
+
+  it("acotada: mes sin punto muestra '—' + el motivo", () => {
+    renderTooltip("EXPENSE", true, buildPoint("2026-04", null, "skipped"), null);
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.getByText("Mes anulado.")).toBeInTheDocument();
+  });
+
+  it("no acotada (modo línea): muestra el badge de dirección Ingreso/Gasto y la fila Frecuencia", () => {
+    const { unmount } = renderTooltip("INCOME", false, buildPoint("2026-04", 150000), 150000);
+    expect(screen.getByText("Ingreso")).toBeInTheDocument();
+    expect(screen.getByText("Frecuencia")).toBeInTheDocument();
+    unmount();
+    renderTooltip("EXPENSE", false, buildPoint("2026-04", 150000), 150000);
+    expect(screen.getByText("Gasto")).toBeInTheDocument();
+  });
+});
+
+// ─── Tests: variante acotada a un fijo (RF-VM-009, §15) ───────────────────────
+
+describe("FixedEvolutionCard — variante acotada (chainId)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockHookWithData({ ...mockData, lines: [lineAlquiler], excluded: [] });
+  });
+
+  it("llama al hook con el chainId, sin moneda (default)", () => {
+    renderCard({ chainId: "fx-alquiler", currency: "USD" });
+    expect(mockUseFixedEvolution).toHaveBeenCalledWith(RANGE_MONTHS, undefined, expect.any(String), "fx-alquiler");
+  });
+
+  it("solo conserva el select de rango: sin tabs, chip, moneda, refrescar, quitar, leyenda, título ni excluidos", () => {
+    renderCard({ chainId: "fx-alquiler", removable: true, title: "Mi reporte" });
+    expect(screen.getByRole("button", { name: /rango del reporte/i })).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /ajustada por inflación/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /moneda del reporte/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /actualizar reporte/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /quitar reporte/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: /elegir fijos/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Mi reporte")).not.toBeInTheDocument();
+    expect(screen.queryByText(/sin evolución/i)).not.toBeInTheDocument();
+  });
+
+  it("no tiene envase de card (sin borde ni sombra de panel)", () => {
+    const { container } = renderCard({ chainId: "fx-alquiler" });
+    expect((container.firstChild as HTMLElement).className).not.toContain("rounded-card");
+  });
+
+  it("dibuja una sola línea", () => {
+    renderCard({ chainId: "fx-alquiler" });
+    expect(screen.getByTestId("line-fx-alquiler")).toBeInTheDocument();
+  });
+
+  it("la única línea usa el color de su categoría re-anclado (no la paleta FX)", () => {
+    renderCard({ chainId: "fx-alquiler" });
+    const stroke = screen.getByTestId("line-fx-alquiler").getAttribute("data-stroke");
+    expect(stroke).toBe(anchorFixedEvolutionColor(lineAlquiler.categoryColor));
+    expect(FX_PALETTE).not.toContain(stroke);
+  });
+
+  it("la única línea va en tratamiento de destacado permanente (2.5px)", () => {
+    renderCard({ chainId: "fx-alquiler" });
+    expect(screen.getByTestId("line-fx-alquiler")).toHaveAttribute("data-stroke-width", "2.5");
+  });
+
+  it("el select cambia el rango vía onRangeMonthsChange", () => {
+    const onRangeMonthsChange = vi.fn();
+    renderCard({ chainId: "fx-alquiler", onRangeMonthsChange });
+    fireEvent.click(screen.getByRole("button", { name: /rango del reporte/i }));
+    fireEvent.click(screen.getByRole("option", { name: /2 años/i }));
+    expect(onRangeMonthsChange).toHaveBeenCalledWith(24);
+  });
+
+  it("cargando: skeleton sin chips, con el select operable", () => {
+    mockHookLoading();
+    renderCard({ chainId: "fx-alquiler" });
+    expect(screen.getByRole("status", { name: /cargando evolución/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /rango del reporte/i })).toBeEnabled();
+  });
+
+  it("cambio de rango en curso (placeholder data): vuelve a mostrar el skeleton", () => {
+    mockUseFixedEvolution.mockReturnValue(mockQuerySuccess(mockData, { isPlaceholderData: true }));
+    renderCard({ chainId: "fx-alquiler" });
+    expect(screen.getByRole("status", { name: /cargando evolución/i })).toBeInTheDocument();
+  });
+
+  it("error: copy propio y Reintentar", () => {
+    const refetch = vi.fn();
+    mockHookError(refetch);
+    renderCard({ chainId: "fx-alquiler" });
+    expect(screen.getByText("No se pudo cargar la evolución.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /reintentar/i }));
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it("vacío: copy en singular + segunda línea; con 5 años no ofrece alargar el rango", () => {
+    mockHookWithData({ ...mockData, lines: [], excluded: [excludedItem] });
+    const { unmount } = renderCard({ chainId: "fx-nuevo", rangeMonths: 12 });
+    expect(screen.getByText("Este fijo no tiene dos meses con monto en el rango.")).toBeInTheDocument();
+    expect(screen.getByText("Alargá el rango para ver su evolución.")).toBeInTheDocument();
+    unmount();
+    renderCard({ chainId: "fx-nuevo", rangeMonths: 60 });
+    expect(screen.getByText("Este fijo no tiene dos meses con monto en el rango.")).toBeInTheDocument();
+    expect(screen.queryByText("Alargá el rango para ver su evolución.")).not.toBeInTheDocument();
   });
 });

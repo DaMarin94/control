@@ -272,7 +272,7 @@ const mockMovementExpense = {
   exchangeRate: 1,
   convertedAmountCents: 15000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 const mockMovementIncome = {
@@ -298,7 +298,7 @@ const mockMovementIncome = {
   exchangeRate: 1,
   convertedAmountCents: 500000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 const mockMovementFijo = {
@@ -324,7 +324,7 @@ const mockMovementFijo = {
   exchangeRate: 1,
   convertedAmountCents: 150000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 const mockMovementCuota = {
@@ -354,7 +354,7 @@ const mockMovementCuota = {
   exchangeRate: 1,
   convertedAmountCents: 50000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 const mockWithData: MonthMovements = {
@@ -430,7 +430,7 @@ const mockMovementCalculadoExpense = {
   exchangeRate: 1,
   convertedAmountCents: -5000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 // Calculados por tipo de origen (Fase 1.1.8)

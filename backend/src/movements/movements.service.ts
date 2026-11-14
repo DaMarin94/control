@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Currency, FormulaOperator, MovementType } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import {
@@ -477,6 +477,8 @@ export const FIXED_EVOLUTION_DEFAULT_RANGE_MONTHS: FixedEvolutionRangeMonths = 3
 export interface FixedEvolutionLine {
   chainId: string;
   ordinal: number;
+  /** Dirección de la cadena (EXPENSE | INCOME). Un calculado es siempre 'EXPENSE'. amountCents = magnitud >= 0. */
+  type: 'EXPENSE' | 'INCOME';
   isCalculated: boolean;
   description: string | null;
   categoryId: string;
@@ -504,6 +506,8 @@ export interface FixedEvolutionLine {
  */
 export interface FixedEvolutionExcludedLine {
   chainId: string;
+  /** Dirección de la cadena; idem FixedEvolutionLine.type. */
+  type: 'EXPENSE' | 'INCOME';
   isCalculated: boolean;
   description: string | null;
   categoryId: string;
@@ -543,6 +547,57 @@ export interface FijosHistoricoResponse {
   endMonth: string;
   lines: FixedEvolutionLine[];
   excluded: FixedEvolutionExcludedLine[];
+}
+
+/** Resolución de un mes para una cadena de fijo (ver `resolveFixedChainMonth`). */
+export type FixedChainResolution =
+  | { chainStart: string; chainEnd: string | null; present: true; row: RecurringForAnnual }
+  | {
+      chainStart: string;
+      chainEnd: string | null;
+      present: false;
+      reason: 'beforeStart' | 'afterEnd' | 'frequency' | 'skipped';
+    };
+
+/**
+ * Resuelve, para una cadena (todas sus filas/splits) y un mes dado, si hay fila
+ * activa o el motivo de ausencia. La cadena es contigua por construcción
+ * (RN-005): cada split cierra al anterior exactamente donde empieza, así que a
+ * lo sumo una fila cubre cada mes dentro de los bordes. Criterio único de
+ * "aparición" compartido por `getFijosHistoricoReport` y por
+ * `MovementItem.evolutionAvailable` (RF-VM-009).
+ */
+function resolveFixedChainMonth(rows: RecurringForAnnual[], mes: string): FixedChainResolution {
+  const sorted = [...rows].sort((a, b) =>
+    a.startMonth < b.startMonth ? -1 : a.startMonth > b.startMonth ? 1 : 0,
+  );
+  const chainStart = sorted[0].startMonth;
+  const lastRow = sorted[sorted.length - 1]; // mayor startMonth = fila vigente
+  const chainEnd = lastRow.deletedFrom;
+
+  if (mes < chainStart) {
+    return { chainStart, chainEnd, present: false, reason: 'beforeStart' };
+  }
+  if (chainEnd !== null && mes >= chainEnd) {
+    return { chainStart, chainEnd, present: false, reason: 'afterEnd' };
+  }
+
+  let active: RecurringForAnnual | undefined;
+  for (const r of sorted) {
+    const inRange = r.startMonth <= mes && (r.deletedFrom === null || r.deletedFrom > mes);
+    if (inRange && (!active || r.startMonth > active.startMonth)) active = r;
+  }
+  if (!active) {
+    // Defensivo: no debería ocurrir dado que la cadena es contigua entre sus bordes.
+    return { chainStart, chainEnd, present: false, reason: 'beforeStart' };
+  }
+  if (!isOnFrequency(active.startMonth, active.frequency, mes)) {
+    return { chainStart, chainEnd, present: false, reason: 'frequency' };
+  }
+  if (active.skippedMonths.has(mes)) {
+    return { chainStart, chainEnd, present: false, reason: 'skipped' };
+  }
+  return { chainStart, chainEnd, present: true, row: active };
 }
 
 @Injectable()
@@ -600,6 +655,10 @@ export class MovementsService {
       // del horizonte (RN-028, resuelto dentro de SimulationsService).
       this.simulationsService.getSimulatedItemsForMonth(userId, month, today),
     ]);
+
+    // RF-VM-009: evolutionAvailable de los fijos no calculados (una sola carga
+    // del universo de fijos del usuario, no una query por ítem).
+    await this.resolveEvolutionAvailable(userId, fijos, today);
 
     // Aplicar filtro de categorías
     const filterSet = categoryIds !== null ? new Set(categoryIds) : null;
@@ -3040,6 +3099,7 @@ export class MovementsService {
     rangeMonths: FixedEvolutionRangeMonths,
     currencyOverride?: Currency | null,
     today?: string,
+    chainIdFilter?: string,
   ): Promise<FijosHistoricoResponse> {
     const todayDate = today ? new Date(today + 'T00:00:00Z') : new Date();
     const todayYear = todayDate.getUTCFullYear();
@@ -3053,6 +3113,21 @@ export class MovementsService {
 
     const displayCurrency: Currency =
       currencyOverride != null ? currencyOverride : userSettings.defaultCurrency;
+
+    // chainId: debe ser una cadena de fijo vigente del usuario (normal o
+    // calculado de fijo). Inexistente / ajena / eliminada (RN-026) → 404;
+    // `allFijos` ya viene scopeado por userId y sin borrados lógicos.
+    if (
+      chainIdFilter !== undefined &&
+      !allFijos.some(
+        (f) =>
+          f.chainId === chainIdFilter &&
+          f.sourceMovementId === null &&
+          f.sourceInstallmentGroupId === null,
+      )
+    ) {
+      throw new NotFoundException('El fijo indicado no existe');
+    }
 
     // -------------------------------------------------------------------------
     // Universo: normales (cualquier tipo, para resolver orígenes de calculados)
@@ -3074,13 +3149,6 @@ export class MovementsService {
       normalesAnyByChain.get(f.chainId)!.push(f);
     }
 
-    const normalesExpenseByChain = new Map<string, RecurringForAnnual[]>();
-    for (const f of normalesAnyType) {
-      if (f.type !== MovementType.EXPENSE) continue;
-      if (!normalesExpenseByChain.has(f.chainId)) normalesExpenseByChain.set(f.chainId, []);
-      normalesExpenseByChain.get(f.chainId)!.push(f);
-    }
-
     const calcByChain = new Map<string, RecurringForAnnual[]>();
     for (const c of calculadosDeFijo) {
       if (!calcByChain.has(c.chainId)) calcByChain.set(c.chainId, []);
@@ -3099,7 +3167,7 @@ export class MovementsService {
       rows.reduce((min, r) => (r.startMonth < min ? r.startMonth : min), rows[0].startMonth);
 
     let universeEarliestMonth: string | null = null;
-    for (const rows of [...normalesExpenseByChain.values(), ...calcByChain.values()]) {
+    for (const rows of [...normalesAnyByChain.values(), ...calcByChain.values()]) {
       const start = chainStartMonth(rows);
       if (start > todayKey) continue; // todavía no tuvo ninguna aparición
       if (universeEarliestMonth === null || start < universeEarliestMonth) {
@@ -3149,55 +3217,19 @@ export class MovementsService {
     // construcción (RN-005): cada split cierra al anterior exactamente donde
     // empieza, así que a lo sumo una fila cubre cada mes dentro de los bordes.
     // -------------------------------------------------------------------------
-    type ChainResolution =
-      | { chainStart: string; chainEnd: string | null; present: true; row: RecurringForAnnual }
-      | {
-          chainStart: string;
-          chainEnd: string | null;
-          present: false;
-          reason: 'beforeStart' | 'afterEnd' | 'frequency' | 'skipped';
-        };
+    type ChainResolution = FixedChainResolution;
 
     // Fallback defensivo: createdAt/description son opcionales en el tipo
     // RecurringForAnnual (por compatibilidad con fixtures de otros reportes que
     // no los necesitan); la implementación real del repo siempre los completa.
     const rowCreatedAt = (r: RecurringForAnnual): Date => r.createdAt ?? new Date(0);
 
-    const resolveChain = (rows: RecurringForAnnual[], mes: string): ChainResolution => {
-      const sorted = [...rows].sort((a, b) =>
-        a.startMonth < b.startMonth ? -1 : a.startMonth > b.startMonth ? 1 : 0,
-      );
-      const chainStart = sorted[0].startMonth;
-      const lastRow = sorted[sorted.length - 1]; // mayor startMonth = fila vigente
-      const chainEnd = lastRow.deletedFrom;
-
-      if (mes < chainStart) {
-        return { chainStart, chainEnd, present: false, reason: 'beforeStart' };
-      }
-      if (chainEnd !== null && mes >= chainEnd) {
-        return { chainStart, chainEnd, present: false, reason: 'afterEnd' };
-      }
-
-      let active: RecurringForAnnual | undefined;
-      for (const r of sorted) {
-        const inRange = r.startMonth <= mes && (r.deletedFrom === null || r.deletedFrom > mes);
-        if (inRange && (!active || r.startMonth > active.startMonth)) active = r;
-      }
-      if (!active) {
-        // Defensivo: no debería ocurrir dado que la cadena es contigua entre sus bordes.
-        return { chainStart, chainEnd, present: false, reason: 'beforeStart' };
-      }
-      if (!isOnFrequency(active.startMonth, active.frequency, mes)) {
-        return { chainStart, chainEnd, present: false, reason: 'frequency' };
-      }
-      if (active.skippedMonths.has(mes)) {
-        return { chainStart, chainEnd, present: false, reason: 'skipped' };
-      }
-      return { chainStart, chainEnd, present: true, row: active };
-    };
+    const resolveChain = (rows: RecurringForAnnual[], mes: string): ChainResolution =>
+      resolveFixedChainMonth(rows, mes);
 
     interface LineBuild {
       chainId: string;
+      type: 'EXPENSE' | 'INCOME';
       isCalculated: boolean;
       description: string | null;
       categoryId: string;
@@ -3266,6 +3298,7 @@ export class MovementsService {
 
       return {
         chainId,
+        type: lastRow.type === MovementType.INCOME ? 'INCOME' : 'EXPENSE',
         isCalculated: false,
         description: lastRow.description ?? null,
         categoryId: lastRow.categoryId,
@@ -3380,6 +3413,7 @@ export class MovementsService {
 
       return {
         chainId,
+        type: 'EXPENSE',
         isCalculated: true,
         description: lastRow.description ?? null,
         categoryId: lastRow.categoryId,
@@ -3403,7 +3437,7 @@ export class MovementsService {
     }
 
     const candidates: Candidate[] = [];
-    for (const [chainId, rows] of normalesExpenseByChain) {
+    for (const [chainId, rows] of normalesAnyByChain) {
       candidates.push({ chainId, isCalculated: false, build: buildNormalLine(chainId, rows) });
     }
     for (const [chainId, rows] of calcByChain) {
@@ -3497,7 +3531,12 @@ export class MovementsService {
     const appearanceCount = (c: (typeof candidates)[number]): number =>
       rangePortion(c).filter((v) => v !== null).length;
 
-    const lines: FixedEvolutionLine[] = candidates
+    // Con `chainId` el resultado se acota a esa cadena; el ordinal ya se
+    // computó sobre el universo completo (ordinalMap), no se recalcula.
+    const visibleCandidates =
+      chainIdFilter !== undefined ? candidates.filter((c) => c.chainId === chainIdFilter) : candidates;
+
+    const lines: FixedEvolutionLine[] = visibleCandidates
       .filter((c) => appearanceCount(c) >= 2)
       .map((c) => {
         const { nominal, adjusted } = computeVariations(c.build.rawAmounts);
@@ -3515,6 +3554,7 @@ export class MovementsService {
         return {
           chainId: c.chainId,
           ordinal: ordinalMap.get(c.chainId)!,
+          type: c.build.type,
           isCalculated: c.isCalculated,
           description: c.build.description,
           categoryId: c.build.categoryId,
@@ -3536,10 +3576,11 @@ export class MovementsService {
       )
       .map(({ rangeTotal: _rangeTotal, ...rest }) => rest);
 
-    const excluded: FixedEvolutionExcludedLine[] = candidates
+    const excluded: FixedEvolutionExcludedLine[] = visibleCandidates
       .filter((c) => appearanceCount(c) <= 1)
       .map((c) => ({
         chainId: c.chainId,
+        type: c.build.type,
         isCalculated: c.isCalculated,
         description: c.build.description,
         categoryId: c.build.categoryId,
@@ -3580,6 +3621,60 @@ export class MovementsService {
   // ---------------------------------------------------------------------------
   // Helpers privados
   // ---------------------------------------------------------------------------
+
+  /**
+   * RF-VM-009 — marca `evolutionAvailable` (muta los ítems recibidos) en los
+   * fijos NO calculados cuya cadena tiene ≥2 apariciones graficables entre su
+   * arranque y el mes en curso inclusive (`today` local o UTC). Propiedad de la
+   * cadena, no del mes consultado. Criterio de aparición = `resolveFixedChainMonth`
+   * (el mismo de fixed-evolution). Carga el universo de fijos UNA vez, y solo si
+   * hay algún ítem elegible.
+   */
+  private async resolveEvolutionAvailable(
+    userId: string,
+    fijos: MovementItem[],
+    today?: string,
+  ): Promise<void> {
+    const eligible = fijos.filter(
+      (f) => f.origin === 'fijo' && f.calculated === null && !f.simulated && f.chainId !== null,
+    );
+    if (eligible.length === 0) return;
+
+    const todayDate = today ? new Date(today + 'T00:00:00Z') : new Date();
+    const todayKey = `${String(todayDate.getUTCFullYear()).padStart(4, '0')}-${String(
+      todayDate.getUTCMonth() + 1,
+    ).padStart(2, '0')}`;
+
+    const allFijos = await this.repo.getAllFijosForAnnual(userId);
+    const rowsByChain = new Map<string, RecurringForAnnual[]>();
+    for (const r of allFijos) {
+      if (r.sourceChainId !== null || r.sourceMovementId !== null || r.sourceInstallmentGroupId !== null) {
+        continue;
+      }
+      if (!rowsByChain.has(r.chainId)) rowsByChain.set(r.chainId, []);
+      rowsByChain.get(r.chainId)!.push(r);
+    }
+
+    const cache = new Map<string, boolean>();
+    const hasTwoAppearances = (chainId: string): boolean => {
+      const rows = rowsByChain.get(chainId);
+      if (!rows || rows.length === 0) return false;
+      const start = rows.reduce((min, r) => (r.startMonth < min ? r.startMonth : min), rows[0].startMonth);
+      if (start > todayKey) return false;
+      const span = monthDiff(start, todayKey);
+      let count = 0;
+      for (let i = 0; i <= span; i++) {
+        if (resolveFixedChainMonth(rows, addMonths(start, i)).present && ++count >= 2) return true;
+      }
+      return false;
+    };
+
+    for (const item of eligible) {
+      const chainId = item.chainId!;
+      if (!cache.has(chainId)) cache.set(chainId, hasTwoAppearances(chainId));
+      item.evolutionAvailable = cache.get(chainId)!;
+    }
+  }
 
   private validateMonth(month: string): void {
     if (!month || !/^\d{4}-\d{2}$/.test(month)) {

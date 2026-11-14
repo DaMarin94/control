@@ -62,6 +62,18 @@ export interface ModalShellProps {
    * de los modales (confirmaciones, forms) NO cierran por clic afuera.
    */
   closeOnScrimClick?: boolean;
+  /**
+   * Handler de `Esc`, separado de `onClose`. Default: `onClose` (todos los
+   * modales existentes). La card de detalle de movimiento lo usa para que
+   * `Esc` en la vista evolución vuelva al detalle en vez de cerrar, mientras
+   * ✕ y scrim siguen cerrando con `onClose`.
+   */
+  onEscape?: () => void;
+  /**
+   * Ensancha el panel a `max-w-[640px]` (vista evolución de la card de
+   * detalle, docs/design.md). Default false: el ancho lo da la `variant`.
+   */
+  wide?: boolean;
   children: ReactNode;
 }
 
@@ -73,6 +85,8 @@ export function ModalShell({
   role = "dialog",
   stacked = false,
   closeOnScrimClick = false,
+  onEscape,
+  wide = false,
   children,
 }: ModalShellProps) {
   const [mounted, setMounted] = useState(false);
@@ -87,11 +101,11 @@ export function ModalShell({
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") (onEscape ?? onClose)();
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  }, [onClose, onEscape]);
 
   if (!mounted) return null;
 
@@ -133,7 +147,7 @@ export function ModalShell({
       <div
         className={cn(
           "w-full bg-panel border border-line overflow-hidden animate-modal-pop max-h-[calc(100dvh-48px)] flex flex-col",
-          VARIANT_MAX_WIDTH[variant],
+          wide ? "max-w-[640px]" : VARIANT_MAX_WIDTH[variant],
         )}
         style={{ borderRadius: "18px", boxShadow: "var(--shadow-lg)" }}
         onClick={(e) => e.stopPropagation()}
@@ -154,7 +168,11 @@ export interface ModalShellHeaderProps {
   onClose?: () => void;
 }
 
-export function ModalShellHeader({ titleId, title, onClose }: ModalShellHeaderProps) {
+export function ModalShellHeader({
+  titleId,
+  title,
+  onClose,
+}: ModalShellHeaderProps) {
   return (
     <div className="flex items-center justify-between px-[22px] pt-5 pb-4 shrink-0">
       <h2 id={titleId} className="text-[18px] font-bold tracking-[-0.01em] text-ink m-0 min-w-0 flex-1 truncate">
@@ -165,7 +183,7 @@ export function ModalShellHeader({ titleId, title, onClose }: ModalShellHeaderPr
           type="button"
           onClick={onClose}
           aria-label="Cerrar"
-          className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
         >
           <X size={18} aria-hidden="true" />
         </button>

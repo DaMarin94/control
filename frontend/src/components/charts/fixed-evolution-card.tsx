@@ -1,21 +1,30 @@
 "use client";
 
 /**
- * FixedEvolutionCard — Card de reporte "Detalle histórico de gastos fijos"
+ * FixedEvolutionCard — Card de reporte "Detalle histórico de fijos"
  * (RF-REP-013). Ola 6: migrada de año calendario navegable a un RANGO DE
  * MESES CORRIDOS anclado al presente (3..60 meses, borde derecho siempre el
  * mes en curso).
  *
- * Gráfico de líneas (Recharts LineChart) con UNA LÍNEA POR GASTO FIJO —
- * sin total, sin suma, sin agregación de ningún tipo. Alcance: solo fijos EXPENSE
- * (más sus calculados derivados); no cuotas, no únicos, no fijos de ingreso.
+ * Gráfico de líneas (Recharts LineChart) con UNA LÍNEA POR FIJO (gasto o
+ * ingreso) — sin total, sin suma, sin agregación de ningún tipo. Alcance: fijos
+ * EXPENSE e INCOME (más sus calculados derivados, siempre EXPENSE); no cuotas,
+ * no únicos. La dirección va por canales propios (docs/design.md §3.1): forma
+ * del punto (círculo gasto / cuadrado ingreso), glifo ArrowUp en listas, color
+ * por tipo de la cifra del tooltip; NUNCA en el color del trazo.
+ *
+ * VARIANTE ACOTADA (RF-VM-009, docs/design.md §15): con la prop `chainId` la
+ * misma card se monta dentro de la vista evolución de la card de detalle de
+ * /mes para UN solo fijo — sin envase de card, título, tabs, chip, moneda,
+ * refrescar, quitar, leyenda, excluidos ni nota de recorte; canvas de 240px con
+ * la única línea en tratamiento de destacado permanente. El rango lo controla
+ * quien la monta (`rangeMonths` + `onRangeMonthsChange`), sin persistencia.
  *
  * Piezas propias de esta card (no existían antes en el lenguaje visual):
- *   1. Clave de color por fijo: `category.color` re-anclado en OKLCH a la banda
- *      de trazo legible (tres peldaños claro/medio/oscuro, hue y croma
- *      conservados) + desempate por orden de `ordinal` dentro del mismo hex de
- *      categoría (NUNCA por el índice del array, que varía con el rango) — ver
- *      `lib/fixed-evolution-colors.ts`.
+ *   1. Clave de color por fijo: paleta categórica `FX` de 12 colores,
+ *      `FX[ordinal mod 12]` (NUNCA el índice del array, que varía con el rango).
+ *      La variante acotada usa en cambio el color de su categoría re-anclado —
+ *      ver `lib/fixed-evolution-colors.ts`.
  *   2. El hueco como dato: la ausencia NO se grafica en cero. El PORTADOR
  *      PRINCIPAL del hueco es el trazo (puente atenuado, opacidad 0.35, solo
  *      en Montos) — no escala con el largo del rango; el punto es apoyo
@@ -73,7 +82,7 @@
  *     card en vez de arriesgar otro fix parcial.
  */
 
-import { useState, useEffect, useRef, useMemo, useId, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useId, useCallback, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   LineChart,
@@ -96,12 +105,13 @@ import {
   ChevronDown,
   Check,
   Info,
+  ArrowUp,
 } from "lucide-react";
 import { useFixedEvolution } from "@/hooks/use-reports";
 import { useSettings } from "@/hooks/use-settings";
 import { ChartContainer, CHART_END_LABEL_MARGIN } from "@/components/ui/chart";
 import { CardCurrencySelect } from "@/components/ui/card-currency-select";
-import { useListboxPosition, useListboxDismiss } from "@/hooks/use-listbox-popover";
+import { useListboxPosition, useListboxDismiss, VIEWPORT_MARGIN } from "@/hooks/use-listbox-popover";
 import { assignFixedEvolutionColors, anchorFixedEvolutionColor } from "@/lib/fixed-evolution-colors";
 import { FREQUENCY_LABEL } from "@/lib/movements";
 import { formatCurrency, CURRENCY_SYMBOLS, getLocalTodayString, formatMonthShort, nextMonth } from "@/lib/format";
@@ -163,6 +173,22 @@ const RANGE_DIVIDER_INDEX = 3;
 const LINE_CHART_MARGIN = { top: 8, right: CHART_END_LABEL_MARGIN, bottom: 0, left: 4 } as const;
 
 const DEFAULT_RANGE_MONTHS: FixedEvolutionRangeMonths = 36;
+
+/** Alto fijo del canvas en la variante acotada (docs/design.md §15). */
+const SCOPED_CHART_HEIGHT = 240;
+
+/** Glifo de dirección "ingreso" de listas y tooltip (docs/design.md §3.1): ArrowUp 11px `--income-ink`, stroke 2.2. */
+function IncomeGlyph() {
+  return (
+    <ArrowUp
+      size={11}
+      strokeWidth={2.2}
+      aria-label="Ingreso"
+      role="img"
+      className="shrink-0 text-income-ink"
+    />
+  );
+}
 
 // ─── Hook: prefers-reduced-motion ─────────────────────────────────────────────
 
@@ -493,11 +519,24 @@ function FixedEvolutionSkeleton({ height }: { height: number }) {
 
 // ─── Error ────────────────────────────────────────────────────────────────────
 
-function FixedEvolutionError({ onRetry }: { onRetry: () => void }) {
+function FixedEvolutionError({
+  onRetry,
+  message = "No se pudo cargar el reporte.",
+  height,
+}: {
+  onRetry: () => void;
+  message?: string;
+  /** Variante acotada: el estado se centra en el área fija del canvas (240px). */
+  height?: number;
+}) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 py-16" role="alert">
+    <div
+      className={cn("flex flex-col items-center justify-center gap-3", height === undefined && "py-16")}
+      style={height === undefined ? undefined : { height }}
+      role="alert"
+    >
       <AlertTriangle size={20} aria-hidden="true" className="text-warning-ink" />
-      <p className="text-[14px] text-ink-2">No se pudo cargar el reporte.</p>
+      <p className="text-[14px] text-ink-2">{message}</p>
       <button
         type="button"
         onClick={onRetry}
@@ -658,6 +697,23 @@ function RangeSelect({ value, onChange }: RangeSelectProps) {
   useListboxDismiss(open, close, triggerRef, panelRef);
   const pos = useListboxPosition(open, triggerRef, panelRef, RANGE_INTRINSIC_MAX_HEIGHT);
 
+  // El panel (minWidth 132) puede ser más ancho que el disparador, y el hook
+  // clampea con el ancho del disparador: si no entra alineado a la izquierda,
+  // se alinea al borde derecho del disparador, siempre dentro del margen.
+  const [panelLeft, setPanelLeft] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (!open || !mounted || !panelRef.current || !triggerRef.current) {
+      setPanelLeft(null);
+      return;
+    }
+    const rect = triggerRef.current.getBoundingClientRect();
+    const panelWidth = panelRef.current.getBoundingClientRect().width;
+    const vw = window.innerWidth;
+    const fits = rect.left + panelWidth <= vw - VIEWPORT_MARGIN;
+    const left = fits ? rect.left : rect.right - panelWidth;
+    setPanelLeft(Math.max(VIEWPORT_MARGIN, Math.min(left, vw - panelWidth - VIEWPORT_MARGIN)));
+  }, [open, mounted, pos]);
+
   useEffect(() => {
     if (open) setFocusedIdx(RANGE_OPTIONS.findIndex((o) => o.value === value));
   }, [open, value]);
@@ -728,7 +784,7 @@ function RangeSelect({ value, onChange }: RangeSelectProps) {
             style={{
               position: "fixed",
               top: pos.top,
-              left: pos.left,
+              left: panelLeft ?? pos.left,
               minWidth: 132,
               zIndex: 80,
               maxHeight: pos.maxHeight,
@@ -948,7 +1004,7 @@ interface ExcludedTriggerProps {
 }
 
 function ExcludedTrigger({ count, open, onClick, triggerRef }: ExcludedTriggerProps) {
-  const label = `${count} gastos fijos con una sola aparición en el rango`;
+  const label = `${count} fijos con una sola aparición en el rango`;
   return (
     <button
       ref={triggerRef}
@@ -1046,7 +1102,7 @@ function ExcludedPopover({ items, anchorRef, onClose }: ExcludedPopoverProps) {
     <div
       ref={popoverRef}
       role="dialog"
-      aria-label="Gastos fijos sin evolución en el rango"
+      aria-label="Fijos sin evolución en el rango"
       className="fixed z-50 rounded-ctl border border-line bg-panel shadow-[var(--shadow-lg)] p-[4px] animate-modal-pop"
       style={{
         top: position.top,
@@ -1067,29 +1123,30 @@ function ExcludedPopover({ items, anchorRef, onClose }: ExcludedPopoverProps) {
         className="max-h-[240px] overflow-y-auto overflow-x-hidden legend-scroll-region"
       >
         {items.map((item) => {
-          const color = anchorFixedEvolutionColor(item.categoryColor);
           const label = item.description ?? "Sin descripción";
           return (
             <div key={item.chainId} role="listitem" className="flex items-start gap-[8px] px-[8px] py-[6px] cursor-default">
-              {item.isCalculated ? (
-                <span className="inline-flex items-center gap-[3px] shrink-0 mt-[2px]">
-                  <Swatch color={color} dashed size={10} />
-                  <CornerDownRight size={11} aria-hidden="true" className="text-muted" />
-                </span>
-              ) : (
-                <span className="mt-[2px]">
-                  <Swatch color={color} dashed={false} size={10} />
-                </span>
-              )}
               <div className="min-w-0">
                 <p
                   title={label}
-                  className={cn("text-[12.5px] font-medium truncate", item.description ? "text-ink-2" : "text-muted")}
+                  className={cn(
+                    "flex max-w-full items-center gap-[4px] text-[12.5px] font-medium",
+                    item.description ? "text-ink-2" : "text-muted",
+                  )}
                   style={{ maxWidth: 180 }}
                 >
-                  {label}
+                  {item.isCalculated && (
+                    <CornerDownRight size={11} aria-hidden="true" className="shrink-0 text-muted" />
+                  )}
+                  {item.type === "INCOME" && <IncomeGlyph />}
+                  <span className="truncate">{label}</span>
                 </p>
-                <p className="text-[11.5px] text-faint">
+                <p data-testid="excluded-subline" className="flex items-center gap-[5px] text-[11.5px] text-faint">
+                  <span
+                    className="h-[6px] w-[6px] rounded-full shrink-0"
+                    style={{ background: item.categoryColor }}
+                    aria-hidden="true"
+                  />
                   {item.categoryName} · desde {formatMonthShort(item.startMonth)}
                 </p>
               </div>
@@ -1162,8 +1219,11 @@ interface LineMeta {
   chainId: string;
   color: string;
   isCalculated: boolean;
+  /** Dirección (§3.1). Ausente/`EXPENSE` = gasto. */
+  type: "EXPENSE" | "INCOME";
   description: string | null;
   categoryName: string;
+  categoryColor: string;
   originDescription: string | null;
   frequency: number;
 }
@@ -1171,6 +1231,8 @@ interface LineMeta {
 interface CustomTooltipProps {
   active?: boolean;
   label?: string | number;
+  /** Variante acotada (§15): siempre modo línea, sin encabezado de identidad ni fila Frecuencia. */
+  scoped?: boolean;
   mode: EffectiveMode;
   currency: CurrencyCode;
   highlightedId: string | null;
@@ -1190,8 +1252,13 @@ function formatDominantValue(value: number, mode: EffectiveMode, currency: Curre
   return formatPct(value);
 }
 
-function CustomTooltip({
-  active, label, mode, currency, highlightedId, visibleMeta, valuesByChain, pointsByChain, lineByChain, monthsList,
+/** Color por tipo de la cifra de dinero (§3.1): solo en Montos; en variación siempre `--ink`. */
+function dominantValueColorClass(type: "EXPENSE" | "INCOME", mode: EffectiveMode): string {
+  return mode === "amounts" && type === "INCOME" ? "text-income-ink" : "text-ink";
+}
+
+export function CustomTooltip({
+  active, label, scoped = false, mode, currency, highlightedId, visibleMeta, valuesByChain, pointsByChain, lineByChain, monthsList,
 }: CustomTooltipProps) {
   if (!active || typeof label !== "string") return null;
   const monthIndex = monthsList.indexOf(label);
@@ -1208,6 +1275,40 @@ function CustomTooltip({
     const value = valuesByChain.get(highlightedId)?.[monthIndex] ?? null;
     const point = pointsByChain.get(highlightedId)?.[monthIndex] ?? null;
 
+    const isIncome = meta.type === "INCOME";
+
+    // ── Variante acotada (§15): micro-rótulo del mes + cifra (o "—" + motivo). Sin
+    //    encabezado de identidad ni fila Frecuencia; min-width 160px. ──
+    if (scoped) {
+      return (
+        <div
+          role="tooltip"
+          className="rounded-ctl border border-line bg-panel px-3 py-[10px] text-[12.5px] font-medium"
+          style={{ boxShadow: "var(--shadow-lg)", minWidth: "160px", maxWidth: "320px" }}
+        >
+          {value !== null ? (
+            <div>
+              <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-faint">{monthShort} {year}</p>
+              <p className={cn("mono text-[13px] font-semibold tabular-nums", dominantValueColorClass(meta.type, mode))}>
+                {formatDominantValue(value, mode, currency)}
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-faint">{monthShort} {year}</p>
+              <p className="mono text-[13px] text-faint">—</p>
+              {point && (
+                <>
+                  <div className="my-[7px]" style={{ borderTop: "1px solid var(--hair)" }} />
+                  <p className="text-[11.5px] font-medium text-ink-2">{getGapMotive(point, mode, line)}</p>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      );
+    }
+
     return (
       <div
         role="tooltip"
@@ -1222,7 +1323,21 @@ function CustomTooltip({
               {meta.description ?? "Sin descripción"}
             </p>
             <p className="text-[11.5px] font-medium text-ink-2 truncate">
+              <span
+                className="inline-block h-[6px] w-[6px] rounded-full align-middle mr-[5px]"
+                style={{ background: meta.categoryColor }}
+                aria-hidden="true"
+              />
               {meta.categoryName}
+              {" · "}
+              <span
+                className={cn(
+                  "inline-flex items-center rounded-[var(--r-chip)] px-[6px] py-[1px] text-[11px] font-semibold",
+                  isIncome ? "bg-income-soft text-income-ink" : "bg-expense-soft text-expense-ink",
+                )}
+              >
+                {isIncome ? "Ingreso" : "Gasto"}
+              </span>
               {meta.isCalculated && meta.originDescription && (
                 <span className="inline-flex items-center gap-[4px] ml-[4px] text-muted">
                   · <CornerDownRight size={12} aria-hidden="true" /> desde <span className="text-ink-2">{meta.originDescription}</span>
@@ -1238,7 +1353,9 @@ function CustomTooltip({
         {value !== null ? (
           <div>
             <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-muted">{monthShort} {year}</p>
-            <p className="mono text-[13px] font-semibold text-ink">{formatDominantValue(value, mode, currency)}</p>
+            <p className={cn("mono text-[13px] font-semibold", dominantValueColorClass(meta.type, mode))}>
+              {formatDominantValue(value, mode, currency)}
+            </p>
           </div>
         ) : (
           <p className="mono text-[13px] text-faint">—</p>
@@ -1267,11 +1384,11 @@ function CustomTooltip({
   }
 
   // ── Modo A: sin línea destacada — lectura comparativa del mes ──
-  const rows: Array<{ chainId: string; color: string; dashed: boolean; label: string; value: number }> = [];
+  const rows: Array<{ chainId: string; color: string; dashed: boolean; label: string; value: number; type: "EXPENSE" | "INCOME" }> = [];
   for (const meta of visibleMeta) {
     const value = valuesByChain.get(meta.chainId)?.[monthIndex] ?? null;
     if (value === null) continue;
-    rows.push({ chainId: meta.chainId, color: meta.color, dashed: meta.isCalculated, label: meta.description ?? "Sin descripción", value });
+    rows.push({ chainId: meta.chainId, color: meta.color, dashed: meta.isCalculated, label: meta.description ?? "Sin descripción", value, type: meta.type });
   }
   if (rows.length === 0) return null;
   rows.sort((a, b) => b.value - a.value);
@@ -1289,8 +1406,11 @@ function CustomTooltip({
         {shown.map((row) => (
           <div key={row.chainId} className="flex items-center gap-[7px]">
             <Swatch color={row.color} dashed={row.dashed} size={8} />
+            {row.type === "INCOME" && <IncomeGlyph />}
             <span className="flex-1 text-ink-2 truncate">{row.label}</span>
-            <span className="mono shrink-0 text-ink tabular-nums">{formatDominantValue(row.value, mode, currency)}</span>
+            <span className={cn("mono shrink-0 tabular-nums", dominantValueColorClass(row.type, mode))}>
+              {formatDominantValue(row.value, mode, currency)}
+            </span>
           </div>
         ))}
         {more > 0 && (
@@ -1371,6 +1491,39 @@ function AmountYTick({ x = 0, y = 0, payload, formatter }: AmountYTickProps) {
 
 // ─── Dot / activeDot custom (hueco visible, extremos anillados, hover) ───────
 
+/**
+ * Marca de un punto según dirección (docs/design.md §3.1): gasto = círculo de
+ * radio `r`; ingreso = cuadrado de lado `2r` (esquinas rectas, sin `rx`), mismo
+ * relleno y mismo anillo/borde `--panel`.
+ */
+export function PointMarker({
+  cx, cy, r, fill, ring, income,
+}: {
+  cx: number;
+  cy: number;
+  r: number;
+  fill: string;
+  ring: number;
+  income: boolean;
+}) {
+  const stroke = ring > 0 ? "var(--panel)" : "none";
+  if (income) {
+    return (
+      <rect
+        data-point-shape="square"
+        x={cx - r}
+        y={cy - r}
+        width={r * 2}
+        height={r * 2}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={ring}
+      />
+    );
+  }
+  return <circle data-point-shape="circle" cx={cx} cy={cy} r={r} fill={fill} stroke={stroke} strokeWidth={ring} />;
+}
+
 function makeDotRenderer(
   chainId: string,
   color: string,
@@ -1380,6 +1533,7 @@ function makeDotRenderer(
   isHighlightedLine: boolean,
   slot: number,
   onHoverChain: (id: string | null) => void,
+  income: boolean,
 ) {
   return function CustomDot(props: { cx?: number; cy?: number; index?: number }) {
     const { cx, cy, index } = props;
@@ -1392,7 +1546,7 @@ function makeDotRenderer(
     if (!spec) return <g key={`d-${chainId}-${index}`} />;
     return (
       <g key={`d-${chainId}-${index}`}>
-        <circle cx={cx} cy={cy} r={spec.r} fill={color} stroke={spec.ring > 0 ? "var(--panel)" : "none"} strokeWidth={spec.ring} />
+        <PointMarker cx={cx} cy={cy} r={spec.r} fill={color} ring={spec.ring} income={income} />
         <circle
           cx={cx}
           cy={cy}
@@ -1407,22 +1561,23 @@ function makeDotRenderer(
   };
 }
 
-function makeActiveDotRenderer(chainId: string, color: string, onHoverChain: (id: string | null) => void) {
+function makeActiveDotRenderer(
+  chainId: string,
+  color: string,
+  onHoverChain: (id: string | null) => void,
+  income: boolean,
+) {
   return function CustomActiveDot(props: { cx?: number; cy?: number }) {
     const { cx, cy } = props;
     if (cx === undefined || cy === undefined) return <g />;
     return (
-      <circle
-        cx={cx}
-        cy={cy}
-        r={4}
-        fill={color}
-        stroke="var(--panel)"
-        strokeWidth={2}
+      <g
         style={{ cursor: "pointer" }}
         onMouseEnter={() => onHoverChain(chainId)}
         onMouseLeave={() => onHoverChain(null)}
-      />
+      >
+        <PointMarker cx={cx} cy={cy} r={4} fill={color} ring={2} income={income} />
+      </g>
     );
   };
 }
@@ -1497,7 +1652,7 @@ function FixedLegend({
         className="max-h-[112px] overflow-y-auto overflow-x-hidden pr-[2px] legend-scroll-region"
         data-overflow={hasOverflow ? "true" : "false"}
       >
-        <div role="group" aria-label="Elegir gastos fijos" className="flex flex-wrap items-center gap-x-[10px] gap-y-[6px] -mx-[6px]">
+        <div role="group" aria-label="Elegir fijos" className="flex flex-wrap items-center gap-x-[10px] gap-y-[6px] -mx-[6px]">
           {lines.map((line) => {
             const color = colorByChain.get(line.chainId) ?? "var(--muted)";
             const isSelected = selectedSet.has(line.chainId);
@@ -1534,6 +1689,7 @@ function FixedLegend({
                 ) : (
                   <Swatch color={color} dashed={false} size={10} hollow={state === "unselected"} />
                 )}
+                {line.type === "INCOME" && <IncomeGlyph />}
                 <span
                   title={label}
                   className={cn(
@@ -1555,7 +1711,7 @@ function FixedLegend({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            aria-label={allVisible ? "Ocultar todos los gastos fijos" : "Mostrar todos los gastos fijos"}
+            aria-label={allVisible ? "Ocultar todos los fijos" : "Mostrar todos los fijos"}
             onClick={() => onAllNone(!allVisible)}
             className="group inline-flex items-center gap-[6px] px-[8px] py-[4px] rounded-[7px] cursor-pointer transition-colors duration-[140ms] bg-panel-2 hover:bg-panel-3 active:bg-panel-3 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
           >
@@ -1573,8 +1729,8 @@ function FixedLegend({
         </div>
         <span
           className="mono text-[11.5px] text-muted shrink-0"
-          aria-label={`${selectedSet.size} de ${lines.length} gastos fijos seleccionados`}
-          title={`${selectedSet.size} de ${lines.length} gastos fijos seleccionados`}
+          aria-label={`${selectedSet.size} de ${lines.length} fijos seleccionados`}
+          title={`${selectedSet.size} de ${lines.length} fijos seleccionados`}
         >
           {selectedSet.size} / {lines.length}
         </span>
@@ -1595,6 +1751,14 @@ export interface FixedEvolutionCardProps {
   mode?: FixedMode;
   adjusted?: boolean;
   selectedIds?: string[] | null;
+  /**
+   * Variante acotada a UN fijo (RF-VM-009, docs/design.md §15): se manda como
+   * `chainId` al endpoint y la card se renderiza sin chrome de reporte (solo
+   * fila de controles con el select de rango + canvas de 240px). `currency`,
+   * `title`, `mode`, `adjusted`, `selectedIds`, `chartHeight`, `removable` y
+   * los callbacks de título/moneda/modo/selección/quitar se ignoran.
+   */
+  chainId?: string;
   onRangeMonthsChange?: (rangeMonths: FixedEvolutionRangeMonths) => void;
   onCurrencyChange?: (c: CurrencyCode) => void;
   onTitleChange?: (title: string) => void;
@@ -1608,14 +1772,15 @@ export interface FixedEvolutionCardProps {
 
 export function FixedEvolutionCard({
   rangeMonths = DEFAULT_RANGE_MONTHS,
-  currency,
+  currency: currencyProp,
   title: titleProp,
   titlePlaceholder = "Reporte",
-  removable = false,
-  chartHeight = 300,
-  mode = "amounts",
-  adjusted = false,
-  selectedIds = null,
+  removable: removableProp = false,
+  chartHeight: chartHeightProp = 300,
+  mode: modeProp = "amounts",
+  adjusted: adjustedProp = false,
+  selectedIds: selectedIdsProp = null,
+  chainId: scopedChainId,
   onRangeMonthsChange,
   onCurrencyChange,
   onTitleChange,
@@ -1624,11 +1789,25 @@ export function FixedEvolutionCard({
   onAdjustedChange,
   onSelectedIdsChange,
 }: FixedEvolutionCardProps) {
+  const scoped = scopedChainId !== undefined;
+  // Variante acotada (§15): Montos, moneda default, todo seleccionado, sin quitar.
+  const currency = scoped ? undefined : currencyProp;
+  const removable = scoped ? false : removableProp;
+  const chartHeight = scoped ? SCOPED_CHART_HEIGHT : chartHeightProp;
+  const mode: FixedMode = scoped ? "amounts" : modeProp;
+  const adjusted = scoped ? false : adjustedProp;
+  const selectedIds = scoped ? null : selectedIdsProp;
+
   const { defaultCurrency } = useSettings();
   const effectiveCurrency = currency ?? defaultCurrency;
   const today = useMemo(() => getLocalTodayString(), []);
 
-  const { data, isLoading, isError, isFetching, refetch } = useFixedEvolution(rangeMonths, currency, today);
+  const { data, isLoading, isError, isFetching, isPlaceholderData, refetch } = useFixedEvolution(rangeMonths, currency, today, scopedChainId);
+
+  // Variante acotada: el skeleton también cubre el cambio de rango (con `keepPreviousData`
+  // la data vieja seguiría a la vista mientras llega la nueva).
+  const showSkeleton = isLoading || !data || (scoped && isPlaceholderData);
+  const showMeasuredArea = !isError && !showSkeleton;
 
   const [removeOpen, setRemoveOpen] = useState(false);
   const removeButtonRef = useRef<HTMLButtonElement>(null);
@@ -1638,7 +1817,7 @@ export function FixedEvolutionCard({
   const excludedTriggerRef = useRef<HTMLButtonElement>(null);
 
   // ── Destacado por hover (efímero, no persiste, no toca la selección) ──────
-  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [hoveredId, setHighlightedId] = useState<string | null>(null);
 
   // ── Medición en vivo del ancho del plot (slot de densidad, §4.B) ──────────
   const chartAreaRef = useRef<HTMLDivElement>(null);
@@ -1654,7 +1833,9 @@ export function FixedEvolutionCard({
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+    // `showMeasuredArea`: el panel del canvas solo existe tras la carga — hay que
+    // (re)enganchar la medición cuando aparece, no solo en el primer mount.
+  }, [showMeasuredArea]);
 
   // ── Edición de título ──────────────────────────────────────────────────────
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -1689,6 +1870,10 @@ export function FixedEvolutionCard({
       return da.localeCompare(db, "es-AR");
     });
   }, [data]);
+
+  // Variante acotada: la única línea va SIEMPRE en tratamiento de destacado (§15) y el
+  // hover no cambia nada. En /reportes manda el hover.
+  const highlightedId = scoped ? (lines[0]?.chainId ?? null) : hoveredId;
 
   const allChainIds = useMemo(() => lines.map((l) => l.chainId), [lines]);
 
@@ -1726,9 +1911,14 @@ export function FixedEvolutionCard({
       ? "Sin variación ajustada en el rango — falta el dato de inflación entre sus pagos."
       : "Sin variación computable en el rango — ningún pago de este fijo se pudo comparar con el anterior.";
 
+  // Reportes: `FX[ordinal mod 12]`. Variante acotada (§3 punto 5): color de la
+  // categoría re-anclado (una sola línea, sin vecinos que separar).
   const colorByChain = useMemo(
-    () => assignFixedEvolutionColors(lines.map((l) => ({ chainId: l.chainId, ordinal: l.ordinal, categoryColor: l.categoryColor }))),
-    [lines],
+    () =>
+      scoped
+        ? new Map(lines.map((l) => [l.chainId, anchorFixedEvolutionColor(l.categoryColor)] as const))
+        : assignFixedEvolutionColors(lines.map((l) => ({ chainId: l.chainId, ordinal: l.ordinal }))),
+    [lines, scoped],
   );
 
   const lineByChain = useMemo(() => new Map(lines.map((l) => [l.chainId, l])), [lines]);
@@ -1773,8 +1963,10 @@ export function FixedEvolutionCard({
         chainId: l.chainId,
         color: colorByChain.get(l.chainId) ?? "var(--muted)",
         isCalculated: l.isCalculated,
+        type: l.type === "INCOME" ? "INCOME" : "EXPENSE",
         description: l.description,
         categoryName: l.categoryName,
+        categoryColor: l.categoryColor,
         originDescription: l.originDescription,
         frequency: l.frequency,
       })),
@@ -1886,6 +2078,7 @@ export function FixedEvolutionCard({
             cursor={{ stroke: "var(--hair)", strokeWidth: 1 }}
             content={
               <CustomTooltip
+                scoped={scoped}
                 mode={effectiveMode}
                 currency={effectiveCurrency}
                 highlightedId={highlightedId}
@@ -1945,12 +2138,12 @@ export function FixedEvolutionCard({
                 dot={
                   isDim
                     ? false
-                    : (makeDotRenderer(line.chainId, color, values, first, last, isHi, slot, setHighlightedId) as unknown as boolean)
+                    : (makeDotRenderer(line.chainId, color, values, first, last, isHi, slot, setHighlightedId, line.type === "INCOME") as unknown as boolean)
                 }
                 activeDot={
                   isDim
                     ? false
-                    : (makeActiveDotRenderer(line.chainId, color, setHighlightedId) as unknown as boolean)
+                    : (makeActiveDotRenderer(line.chainId, color, setHighlightedId, line.type === "INCOME") as unknown as boolean)
                 }
               />
             );
@@ -1963,7 +2156,17 @@ export function FixedEvolutionCard({
   }
 
   return (
-    <div className="bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] p-[var(--card-pad)] animate-screen-fade" aria-label={displayTitle}>
+    <div
+      className={cn(!scoped && "bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] p-[var(--card-pad)] animate-screen-fade")}
+      aria-label={scoped ? "Evolución del fijo" : displayTitle}
+    >
+      {scoped ? (
+        /* ── Variante acotada (§15): una sola fila de controles con el select de rango ── */
+        <div className="mb-[14px] flex items-center justify-end">
+          <RangeSelect value={rangeMonths} onChange={(v) => onRangeMonthsChange?.(v)} />
+        </div>
+      ) : (
+        <>
       {/* ── Línea 1: título editable ── */}
       <div className="mb-[8px] flex items-center gap-[6px]">
         <div className="min-w-0">
@@ -2003,30 +2206,56 @@ export function FixedEvolutionCard({
           isFetching={isFetching}
         />
       </div>
+        </>
+      )}
 
       {/* ── Área del gráfico ── */}
       {isError ? (
-        <FixedEvolutionError onRetry={() => refetch()} />
-      ) : isLoading || !data ? (
-        <FixedEvolutionSkeleton height={chartHeight} />
+        <FixedEvolutionError
+          onRetry={() => refetch()}
+          message={scoped ? "No se pudo cargar la evolución." : undefined}
+          height={scoped ? SCOPED_CHART_HEIGHT : undefined}
+        />
+      ) : showSkeleton ? (
+        scoped ? (
+          <div role="status" aria-label="Cargando evolución">
+            <SkeletonBlock height={SCOPED_CHART_HEIGHT} radius="ctl" />
+          </div>
+        ) : (
+          <FixedEvolutionSkeleton height={chartHeight} />
+        )
       ) : (
         <>
-          <div id={CHART_PANEL_ID} ref={chartAreaRef} role="tabpanel" aria-labelledby={mode === "amounts" ? "tab-fe-montos" : "tab-fe-variacion"} className="relative">
-            {isRangeEmptyPure && (
+          <div
+            id={scoped ? undefined : CHART_PANEL_ID}
+            ref={chartAreaRef}
+            role={scoped ? undefined : "tabpanel"}
+            aria-labelledby={scoped ? undefined : mode === "amounts" ? "tab-fe-montos" : "tab-fe-variacion"}
+            className="relative"
+          >
+            {scoped && isRangeEmpty && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 z-10 pointer-events-none text-center px-4" aria-live="polite">
-                <p className="text-[14px] text-muted">Sin gastos fijos en el rango.</p>
+                <p className="text-[14px] text-muted">Este fijo no tiene dos meses con monto en el rango.</p>
+                {rangeMonths !== 60 && (
+                  <p className="text-[12.5px] leading-[1.5] text-faint">Alargá el rango para ver su evolución.</p>
+                )}
+              </div>
+            )}
+            {!scoped && isRangeEmptyPure && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 z-10 pointer-events-none text-center px-4" aria-live="polite">
+                <p className="text-[14px] text-muted">Sin fijos en el rango.</p>
                 <p className="text-[12.5px] leading-[1.5] text-muted">Probá un rango más largo.</p>
               </div>
             )}
-            {isRangeEmptyWithExcluded && (
+            {!scoped && isRangeEmptyWithExcluded && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 z-10 pointer-events-none text-center px-4" aria-live="polite">
-                <p className="text-[14px] text-muted">Ningún gasto fijo tiene dos apariciones en el rango.</p>
+                <p className="text-[14px] text-muted">Ningún fijo tiene dos apariciones en el rango.</p>
                 <p className="text-[12.5px] leading-[1.5] text-muted">Alargá el rango para ver su evolución.</p>
               </div>
             )}
             {!isRangeEmpty && isNoneSelected && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 z-10 pointer-events-none text-center px-4" aria-live="polite">
-                <p className="text-[14px] text-muted">Ningún gasto fijo seleccionado.</p>
+                <p className="text-[14px] text-muted">Ningún fijo seleccionado.</p>
                 <p className="text-[12.5px] leading-[1.5] text-muted">Elegí uno en la lista de abajo.</p>
               </div>
             )}
@@ -2045,10 +2274,15 @@ export function FixedEvolutionCard({
                 )}
               </div>
             )}
-            <ChartResponsiveArea desktopHeight={chartHeight}>{(height, wide) => renderCanvas(height, wide)}</ChartResponsiveArea>
+            {scoped ? (
+              // Siempre la columna "amplio" de la cadencia de rótulos (§15): el ancho lo fija el panel del modal.
+              renderCanvas(SCOPED_CHART_HEIGHT, true)
+            ) : (
+              <ChartResponsiveArea desktopHeight={chartHeight}>{(height, wide) => renderCanvas(height, wide)}</ChartResponsiveArea>
+            )}
           </div>
 
-          {!isRangeEmpty && (
+          {!scoped && !isRangeEmpty && (
             <FixedLegend
               lines={lines}
               colorByChain={colorByChain}
@@ -2067,7 +2301,7 @@ export function FixedEvolutionCard({
           )}
 
           {/* Carril mínimo cuando el universo tildable está vacío pero hay excluidos (docs/design.md §10). */}
-          {isRangeEmptyWithExcluded && (
+          {!scoped && isRangeEmptyWithExcluded && (
             <div className="mt-[14px] pt-[8px] flex items-center" style={{ borderTop: "1px solid var(--hair)" }}>
               <ExcludedTrigger
                 count={excluded.length}
@@ -2080,7 +2314,7 @@ export function FixedEvolutionCard({
         </>
       )}
 
-      {excludedOpen && excluded.length > 0 && (
+      {!scoped && excludedOpen && excluded.length > 0 && (
         <ExcludedPopover items={excluded} anchorRef={excludedTriggerRef} onClose={() => setExcludedOpen(false)} />
       )}
 

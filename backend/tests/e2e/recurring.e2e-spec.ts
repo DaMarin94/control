@@ -66,6 +66,8 @@ const mockPrisma = {
     delete: jest.fn(),
   },
   // installmentGroup — necesario para InstallmentsModule (Fase 7 — registrado en AppModule)
+  // simulation.findMany: SimulationsService.getSimulatedItemsForMonth cuando GET /movements recibe `today`
+  simulation: { findMany: jest.fn().mockResolvedValue([]) },
   installmentGroup: {
     create: jest.fn(),
     findUnique: jest.fn(),
@@ -99,6 +101,8 @@ const mockPrisma = {
   // (RecurringRepository.applySkipRange — RF-MF-005).
   recurringSkip: {
     findUnique: jest.fn().mockResolvedValue(null),
+    // getAllFijosForAnnual (evolutionAvailable, RF-VM-009): skips del universo de fijos
+    findMany: jest.fn().mockResolvedValue([]),
     create: jest.fn(),
     delete: jest.fn(),
     createMany: jest.fn().mockResolvedValue({ count: 0 }),
@@ -1093,6 +1097,30 @@ describe('Recurring (e2e)', () => {
       expect(item.category).toBeDefined();
       expect(item.category).toHaveProperty('id', CAT_ID);
       expect(item.category).toHaveProperty('name', 'Servicios');
+    });
+
+    it('evolutionAvailable: true con >=2 apariciones hasta el mes en curso (today), false con 1', async () => {
+      mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+        if (args?.where?.sourceMovementId?.not !== undefined) return Promise.resolve([]);
+        if (args?.where?.sourceInstallmentGroupId?.not !== undefined) return Promise.resolve([]);
+        return Promise.resolve([
+          makeDbRecurring({ id: 'fijo-ev-1', chainId: 'chain-ev-1', startMonth: '2026-01' }),
+          makeDbRecurring({ id: 'fijo-ev-2', chainId: 'chain-ev-2', startMonth: '2026-11', amountCents: 4000 }),
+        ]);
+      });
+
+      const res = await request(app.getHttpServer())
+        .get('/movements?month=2026-11&today=2026-11-14')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      const byId = Object.fromEntries(
+        res.body.data.movements.fijos.map((f: any) => [f.id, f.evolutionAvailable]),
+      );
+      expect(byId['fijo-ev-1']).toBe(true);
+      expect(byId['fijo-ev-2']).toBe(false);
+      // únicos/cuotas: siempre false
+      res.body.data.movements.unicos.forEach((u: any) => expect(u.evolutionAvailable).toBe(false));
     });
 
     it('200 + totales combinados: únicos + fijos', async () => {

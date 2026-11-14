@@ -638,6 +638,7 @@ export class SimulationsService {
           hasCalculated: false,
           calculatedChildren: [],
           simulated: true,
+          evolutionAvailable: false,
         });
       }
     }

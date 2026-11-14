@@ -631,6 +631,8 @@ export interface FixedEvolutionMonthPoint {
  */
 export interface FixedEvolutionLine {
   chainId: string;
+  /** Dirección del fijo. Un calculado es siempre `EXPENSE`. `amountCents` es magnitud ≥ 0 en ambos casos. */
+  type: "EXPENSE" | "INCOME";
   /**
    * Orden estable de la cadena en el universo completo del usuario (NO cambia
    * al cambiar el rango). USAR PARA EL COLOR (nunca el índice del array — ver
@@ -668,6 +670,8 @@ export interface FixedEvolutionLine {
  */
 export interface FixedEvolutionExcludedLine {
   chainId: string;
+  /** Dirección del fijo (calculado = siempre `EXPENSE`). */
+  type: "EXPENSE" | "INCOME";
   isCalculated: boolean;
   description: string | null;
   categoryId: string;

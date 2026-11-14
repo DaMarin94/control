@@ -58,7 +58,7 @@ function ReportCardMini({
     : type === "unique-grid" ? "Gastos Únicos"
     : type === "installment-gantt" ? "Gastos en Cuotas"
     : type === "inflation-income" ? "Inflación vs Ingresos"
-    : "Detalle histórico de gastos fijos";
+    : "Detalle histórico de fijos";
 
   const hasTitle = Boolean(title);
 

@@ -44,7 +44,7 @@ function makeItem(overrides: Partial<MovementItem> = {}): MovementItem {
     convertedAmountCents: 10000,
     autoDebit: null,
     simulated: false,
-    calculatedChildren: [],
+    calculatedChildren: [], evolutionAvailable: false,
     ...overrides,
   };
 }

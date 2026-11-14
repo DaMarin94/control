@@ -31,6 +31,25 @@ vi.mock("@/hooks/use-settings", () => ({
   })),
 }));
 
+// Stub de la card de evolución (Recharts no aporta a estos tests): expone chainId/rango y
+// un par de botones para ejercitar el cambio de rango y un listbox abierto.
+vi.mock("@/components/charts/fixed-evolution-card", () => {
+  const React = require("react");
+  return {
+    FixedEvolutionCard: (props: { chainId?: string; rangeMonths?: number; onRangeMonthsChange?: (v: number) => void }) => {
+      const [open, setOpen] = React.useState(false);
+      return React.createElement(
+        "div",
+        { "data-testid": "evolution-stub", "data-chain": props.chainId, "data-range": props.rangeMonths },
+        React.createElement("button", { type: "button", "aria-haspopup": "listbox", "aria-label": "Rango del reporte" }, "1 año"),
+        React.createElement("button", { type: "button", onClick: () => setOpen((o: boolean) => !o) }, "abrir listbox"),
+        open && React.createElement("div", { role: "listbox" }),
+        React.createElement("button", { type: "button", onClick: () => props.onRangeMonthsChange?.(24) }, "rango 24"),
+      );
+    },
+  };
+});
+
 import { useSettings } from "@/hooks/use-settings";
 const mockUseSettings = vi.mocked(useSettings);
 
@@ -66,7 +85,7 @@ const unico: MovementItem = {
   exchangeRate: 1,
   convertedAmountCents: 10000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 const fijoActivo: MovementItem = {
@@ -92,7 +111,7 @@ const fijoActivo: MovementItem = {
   exchangeRate: 1,
   convertedAmountCents: 150000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 const cuota: MovementItem = {
@@ -118,7 +137,7 @@ const cuota: MovementItem = {
   exchangeRate: 1,
   convertedAmountCents: 50000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 const fijoCalculado: MovementItem = {
@@ -524,5 +543,170 @@ describe('MovementDetailCard — bloque "Calculados" (derivados del origen)', ()
   it("en un ítem que ES calculado: NO muestra el bloque (un calculado nunca es padre)", () => {
     renderCard(fijoCalculado);
     expect(screen.queryByText("Calculados")).not.toBeInTheDocument();
+  });
+});
+
+// ─── Tests: acceso "Ver evolución" + vista evolución (RF-VM-009) ──────────────
+
+const fijoConEvolucion: MovementItem = { ...fijoActivo, evolutionAvailable: true };
+const fijoIngresoConEvolucion: MovementItem = {
+  ...fijoConEvolucion,
+  id: "rec-ing",
+  type: "INCOME",
+  description: "Sueldo",
+  chainId: "chain-ing",
+};
+
+describe("MovementDetailCard — acceso 'Ver evolución' (gate)", () => {
+  it("fijo no calculado con evolución disponible: acceso habilitado, último elemento del cuerpo", () => {
+    renderCard(fijoConEvolucion);
+    const access = screen.getByRole("button", { name: /ver evolución/i });
+    expect(access).toBeInTheDocument();
+    expect(access).not.toHaveAttribute("aria-disabled");
+    expect(access).not.toHaveAttribute("title");
+    // Último elemento del cuerpo (tras su divisor).
+    const body = access.closest(".overflow-y-auto") as HTMLElement;
+    expect(body.lastElementChild).toBe(access);
+  });
+
+  it("fijo de ingreso: también muestra el acceso", () => {
+    renderCard(fijoIngresoConEvolucion);
+    expect(screen.getByRole("button", { name: /ver evolución/i })).toBeInTheDocument();
+  });
+
+  it("evolutionAvailable=false: grisado (aria-disabled, nunca disabled), con motivo, focuseable y sin efecto", () => {
+    renderCard(fijoActivo);
+    const access = screen.getByRole("button", { name: /ver evolución/i });
+    expect(access).toHaveAttribute("aria-disabled", "true");
+    expect(access).not.toBeDisabled();
+    expect(access).toHaveClass("opacity-45");
+    expect(access).toHaveAttribute("title", "Hacen falta al menos dos meses con monto para ver la evolución.");
+    expect(access).toHaveAccessibleDescription("Hacen falta al menos dos meses con monto para ver la evolución.");
+    access.focus();
+    expect(access).toHaveFocus();
+    fireEvent.click(access);
+    expect(screen.queryByTestId("evolution-stub")).not.toBeInTheDocument();
+    expect(screen.getByText("Frecuencia")).toBeInTheDocument();
+  });
+
+  it("no aparece en único, cuota, calculado ni simulado", () => {
+    const { unmount: u1 } = renderCard({ ...unico, evolutionAvailable: true });
+    expect(screen.queryByRole("button", { name: /ver evolución/i })).not.toBeInTheDocument();
+    u1();
+    const { unmount: u2 } = renderCard({ ...cuota, evolutionAvailable: true });
+    expect(screen.queryByRole("button", { name: /ver evolución/i })).not.toBeInTheDocument();
+    u2();
+    const { unmount: u3 } = renderCard({ ...fijoCalculado, evolutionAvailable: true });
+    expect(screen.queryByRole("button", { name: /ver evolución/i })).not.toBeInTheDocument();
+    u3();
+    renderCard({ ...fijoConEvolucion, simulated: true });
+    expect(screen.queryByRole("button", { name: /ver evolución/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("MovementDetailCard — vista evolución (toggle, foco, Esc)", () => {
+  function openEvolution(movement: MovementItem = fijoConEvolucion, onClose = vi.fn()) {
+    const utils = renderCard(movement, onClose);
+    fireEvent.click(screen.getByRole("button", { name: /ver evolución/i }));
+    return { ...utils, onClose };
+  }
+
+  it("activar el acceso reemplaza el cuerpo por la evolución del fijo (chainId, 1 año), mismo título", () => {
+    openEvolution();
+    const stub = screen.getByTestId("evolution-stub");
+    expect(stub).toHaveAttribute("data-chain", "chain-1");
+    expect(stub).toHaveAttribute("data-range", "12");
+    expect(screen.queryByText("Frecuencia")).not.toBeInTheDocument();
+    expect(screen.queryByText("Vigencia")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Alquiler" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("Alquiler");
+  });
+
+  it("el panel se ensancha a 640px en la evolución y vuelve a 440px en el detalle", () => {
+    renderCard(fijoConEvolucion);
+    const panel = () => screen.getByRole("dialog").firstElementChild as HTMLElement;
+    expect(panel()).toHaveClass("max-w-[440px]");
+    fireEvent.click(screen.getByRole("button", { name: /ver evolución/i }));
+    expect(panel()).toHaveClass("max-w-[640px]");
+    fireEvent.click(screen.getByRole("button", { name: "Volver al detalle" }));
+    expect(panel()).toHaveClass("max-w-[440px]");
+  });
+
+  it("el header solo tiene ✕; 'Volver al detalle' es la última fila del cuerpo y el foco va al select de rango", () => {
+    openEvolution();
+    const back = screen.getByRole("button", { name: "Volver al detalle" });
+    expect(back).not.toHaveAttribute("title");
+    expect(screen.getByRole("button", { name: "Rango del reporte" })).toHaveFocus();
+    const heading = screen.getByRole("heading", { name: "Alquiler" });
+    expect(heading.parentElement).toContainElement(screen.getByRole("button", { name: "Cerrar" }));
+    expect(heading.parentElement).not.toContainElement(back);
+    expect(back.parentElement?.lastElementChild).toBe(back);
+    expect(back.previousElementSibling).toHaveClass("bg-hair");
+  });
+
+  it("'Volver' vuelve al detalle y devuelve el foco al acceso", () => {
+    openEvolution();
+    fireEvent.click(screen.getByRole("button", { name: "Volver al detalle" }));
+    expect(screen.queryByTestId("evolution-stub")).not.toBeInTheDocument();
+    expect(screen.getByText("Frecuencia")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Volver al detalle" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ver evolución/i })).toHaveFocus();
+  });
+
+  it("Esc en la vista evolución vuelve al detalle (no cierra); Esc en el detalle cierra", () => {
+    const { onClose } = openEvolution();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("evolution-stub")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ver evolución/i })).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("con el listbox del rango abierto, el primer Esc NO vuelve al detalle", () => {
+    const { onClose } = openEvolution();
+    fireEvent.click(screen.getByRole("button", { name: "abrir listbox" }));
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.getByTestId("evolution-stub")).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    // Cerrado el listbox (lo hace su propio handler), el siguiente Esc sí vuelve.
+    fireEvent.click(screen.getByRole("button", { name: "abrir listbox" }));
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByTestId("evolution-stub")).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("✕ y el scrim cierran la card desde la vista evolución", () => {
+    const { onClose } = openEvolution();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("dialog"));
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it("el rango es local a la vista: al volver y re-entrar arranca otra vez en 1 año", () => {
+    openEvolution();
+    fireEvent.click(screen.getByRole("button", { name: "rango 24" }));
+    expect(screen.getByTestId("evolution-stub")).toHaveAttribute("data-range", "24");
+    fireEvent.click(screen.getByRole("button", { name: "Volver al detalle" }));
+    fireEvent.click(screen.getByRole("button", { name: /ver evolución/i }));
+    expect(screen.getByTestId("evolution-stub")).toHaveAttribute("data-range", "12");
+  });
+
+  it("cerrar y reabrir la card siempre abre en detalle", () => {
+    const { unmount } = openEvolution();
+    unmount();
+    renderCard(fijoConEvolucion);
+    expect(screen.queryByTestId("evolution-stub")).not.toBeInTheDocument();
+    expect(screen.getByText("Frecuencia")).toBeInTheDocument();
+  });
+
+  it("en el detalle de otros tipos Esc sigue cerrando (el shell no cambia para los demás modales)", () => {
+    const onClose = vi.fn();
+    renderCard(unico, onClose);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

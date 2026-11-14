@@ -56,7 +56,7 @@ function makeItem(
     exchangeRate: convertedAmountCents !== undefined ? 1200 : 1,
     convertedAmountCents: convertedAmountCents ?? amountCents,
     simulated: false,
-    calculatedChildren: [],
+    calculatedChildren: [], evolutionAvailable: false,
   };
 }
 
@@ -91,7 +91,7 @@ function makeUnico(
     exchangeRate: 1,
     convertedAmountCents: amountCents,
     simulated: false,
-    calculatedChildren: [],
+    calculatedChildren: [], evolutionAvailable: false,
   };
 }
 

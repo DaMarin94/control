@@ -259,8 +259,8 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
       >
         <Repeat size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
         <div>
-          <p className="text-[13px] font-semibold text-ink">Detalle histórico de gastos fijos</p>
-          <p className="text-[12.5px] leading-[1.5] text-muted mt-[1px]">Cada gasto fijo por separado, mes a mes: cuánto pagabas y cuándo aumentó.</p>
+          <p className="text-[13px] font-semibold text-ink">Detalle histórico de fijos</p>
+          <p className="text-[12.5px] leading-[1.5] text-muted mt-[1px]">Cada gasto e ingreso fijo por separado, mes a mes: cuánto valía y cuándo cambió.</p>
         </div>
       </button>
     </div>

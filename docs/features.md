@@ -33,6 +33,7 @@
 | Vista del mes — secciones colapsables + reordenables (persistidas) | RF-VM-005 | Implementado |
 | Vista del mes — filtros por listado (tipo + categoría por sección, filtrado en front) | RF-VM-006 | Implementado |
 | Vista del mes — duplicar movimiento (kebab de la fila; único/fijo/cuota no calculados; alta nueva precargada con los valores del original) | RF-VM-008 | Implementado |
+| Vista del mes — evolución de un fijo en la card de detalle | RF-VM-009 | Implementado |
 | Reportes + listado — filtro vía leyenda interactiva en cards y orden configurable de Únicos | RF-REP-002/006, RF-VM-001 | Implementado |
 | Navegación global — sidebar persistente (5 entradas: Dashboard, Vista del mes, Reportes, Historial, Configuración) | RF-NAV-001 | Implementado |
 | Configuración — hub con 4 secciones deep-linkables (General, Categorías, Métodos de pago, Límites) bajo `/configuracion/*`; Categorías y Métodos de pago no son entradas del sidebar (ver `docs/frontend.md` § Hub de Configuración) | RF-NAV-001 | Implementado |
@@ -48,7 +49,7 @@
 | Reportes — Únicos: techo editable de la escala de color de la card (monto + moneda, persistido en USD, default 15 USD) | RF-REP-010 | Implementado |
 | Reportes — card "Reporte anual de gastos en Cuotas" (gantt de barras horizontales por mes) | RF-REP-011 | Implementado |
 | Reportes — card "Inflación vs Ingresos" (líneas anuales: inflación, variación de ingresos y ajustada + tendencias OLS) | RF-REP-012 | Implementado |
-| Reportes — card "Detalle histórico de gastos fijos" (rango de 3 meses a 5 años anclado al mes en curso, una línea por fijo, selección por fijo, modos montos/variación/ajustada) | RF-REP-013 | Implementado |
+| Reportes — card "Detalle histórico de fijos" (fijos de gasto e ingreso; rango de 3 meses a 5 años anclado al mes en curso, una línea por fijo, selección por fijo, modos montos/variación/ajustada) | RF-REP-013 | Implementado |
 | Reportes — Ingresos vs Gastos: filtros de tipo de movimiento, dirección y categoría (acotan las 2 series, no es desglose) | RF-REP-014 | Implementado |
 | Reportes — Ingresos vs Gastos: proyección de fijos a futuro (capacidad retenida en el backend, sin UI que la consuma) | RF-REP-015 | Backend disponible, no expuesto en UI |
 | Reportes — botón de refrescar per-card (los 6 tipos + widget del Dashboard; refetch independiente, feedback solo-spinner) | RF-REP-016 | Implementado |

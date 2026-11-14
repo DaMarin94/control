@@ -400,7 +400,8 @@ export const FIXED_EVOLUTION_QUERY_KEY = (
   rangeMonths: number,
   currency?: CurrencyCode,
   today?: string,
-) => ["reports-fixed-evolution", rangeMonths, currency ?? null, today ?? null] as const;
+  chainId?: string,
+) => ["reports-fixed-evolution", rangeMonths, currency ?? null, today ?? null, chainId ?? null] as const;
 
 /**
  * Hook para obtener el reporte de Detalle histórico de gastos fijos (RF-REP-013).
@@ -418,22 +419,26 @@ export const FIXED_EVOLUTION_QUERY_KEY = (
  * @param currency    undefined = default del usuario; presente = override de moneda.
  * @param today       Fecha local del usuario (YYYY-MM-DD). Se manda para que el backend
  *                    resuelva el mes en curso (borde derecho del rango) en la zona del usuario.
+ * @param chainId     Opcional (RF-VM-009): acota `lines`/`excluded` a esa cadena de fijo
+ *                    (vista evolución de /mes). 404 si no es un fijo del usuario.
  */
 export function useFixedEvolution(
   rangeMonths: number,
   currency?: CurrencyCode,
   today?: string,
+  chainId?: string,
 ) {
   const { api, isAuthenticated } = useApi();
 
   const currencyParam = currency ? `&currency=${currency}` : "";
   const todayParam = today ? `&today=${today}` : "";
+  const chainParam = chainId ? `&chainId=${encodeURIComponent(chainId)}` : "";
 
   const query = useQuery<FijosHistoricoResponse>({
-    queryKey: FIXED_EVOLUTION_QUERY_KEY(rangeMonths, currency, today),
+    queryKey: FIXED_EVOLUTION_QUERY_KEY(rangeMonths, currency, today, chainId),
     queryFn: () => {
-      const url = `/movements/reports/fijos-historico?rangeMonths=${rangeMonths}${currencyParam}${todayParam}`;
-      logger.debug("Cargando reporte Detalle histórico de gastos fijos", { rangeMonths, currency, today });
+      const url = `/movements/reports/fijos-historico?rangeMonths=${rangeMonths}${currencyParam}${todayParam}${chainParam}`;
+      logger.debug("Cargando reporte Detalle histórico de fijos", { rangeMonths, currency, today, chainId });
       return api.get<FijosHistoricoResponse>(url);
     },
     enabled: Boolean(rangeMonths) && isAuthenticated,

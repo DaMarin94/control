@@ -248,3 +248,32 @@ describe("ModalShell — variantes", () => {
     expect(panel.className).toContain("max-w-[460px]");
   });
 });
+
+describe("ModalShell — onEscape / wide / botón Volver del header", () => {
+  it("sin onEscape, Esc llama a onClose (default de todos los modales)", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderShell(onClose);
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("con onEscape, Esc llama a onEscape y NO a onClose; ✕ sigue llamando a onClose", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const onEscape = vi.fn();
+    renderShell(onClose, { onEscape });
+    await user.keyboard("{Escape}");
+    expect(onEscape).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Cerrar" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("wide=true ensancha el panel a max-w-[640px] (en lugar del de la variante)", () => {
+    renderShell(vi.fn(), { variant: "dialog", wide: true });
+    const { panel } = getScrimAndPanel();
+    expect(panel.className).toContain("max-w-[640px]");
+    expect(panel.className).not.toContain("max-w-[440px]");
+  });
+});

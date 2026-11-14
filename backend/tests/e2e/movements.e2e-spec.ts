@@ -1795,9 +1795,10 @@ describe('Movements (e2e)', () => {
       expect(calcLine.originChainId).toBe('chain-e2e-origin');
     });
 
-    it('fijo INCOME no entra (alcance exclusivo Fijo + EXPENSE)', async () => {
+    it('fijo INCOME entra en el universo con type INCOME; el gasto trae type EXPENSE (una sola lista)', async () => {
       mockPrisma.recurring.findMany.mockResolvedValue([
-        makeRawRecurringRow({ type: 'INCOME' }),
+        makeRawRecurringRow({ id: 'rec-inc', chainId: 'chain-inc', type: 'INCOME', amountCents: 500000 }),
+        makeRawRecurringRow({ id: 'rec-exp', chainId: 'chain-exp', amountCents: 100000 }),
       ]);
 
       const res = await request(app.getHttpServer())
@@ -1805,7 +1806,41 @@ describe('Movements (e2e)', () => {
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(200);
 
-      expect(res.body.data.lines).toEqual([]);
+      const lines = res.body.data.lines;
+      expect(lines.map((l: Record<string, unknown>) => [l.chainId, l.type])).toEqual([
+        ['chain-inc', 'INCOME'],
+        ['chain-exp', 'EXPENSE'],
+      ]);
+      expect(lines[0].months[0].amountCents).toBe(500000);
+    });
+
+    it('chainId filtra lines a esa cadena (ordinal del universo completo)', async () => {
+      mockPrisma.recurring.findMany.mockResolvedValue([
+        makeRawRecurringRow({ id: 'rec-a', chainId: 'chain-a', createdAt: new Date('2025-01-01T00:00:00Z') }),
+        makeRawRecurringRow({ id: 'rec-b', chainId: 'chain-b', type: 'INCOME', createdAt: new Date('2025-02-01T00:00:00Z') }),
+      ]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/fijos-historico?rangeMonths=6&today=2026-06-25&chainId=chain-b')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+
+      expect(res.body.data.lines).toHaveLength(1);
+      expect(res.body.data.lines[0].chainId).toBe('chain-b');
+      expect(res.body.data.lines[0].ordinal).toBe(1);
+      expect(res.body.data.excluded).toEqual([]);
+    });
+
+    it('404 si chainId no es una cadena de fijo del usuario', async () => {
+      mockPrisma.recurring.findMany.mockResolvedValue([makeRawRecurringRow()]);
+
+      const res = await request(app.getHttpServer())
+        .get('/movements/reports/fijos-historico?rangeMonths=6&today=2026-06-25&chainId=no-existe')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(404);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(404);
     });
 
     it('un fijo con exactamente 1 aparición en el rango efectivo viaja en "excluded", no en "lines"', async () => {

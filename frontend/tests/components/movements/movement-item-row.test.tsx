@@ -113,7 +113,7 @@ const fijoActivo: MovementItem = {
   exchangeRate: 1,
   convertedAmountCents: 150000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 const fijoAnulado: MovementItem = {
@@ -174,7 +174,7 @@ const unico: MovementItem = {
   exchangeRate: 1,
   convertedAmountCents: 10000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 const cuota: MovementItem = {
@@ -200,7 +200,7 @@ const cuota: MovementItem = {
   exchangeRate: 1,
   convertedAmountCents: 50000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 /** Fijo calculado (hijo) */

@@ -209,7 +209,7 @@ const mockFijoMovement: MovementItem = {
   exchangeRate: 1,
   convertedAmountCents: 150000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 /** Calculado de fijo — chainId propio (distinto del sourceChainId del origen) */
@@ -245,7 +245,7 @@ const mockCalculadoFijoMovement: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: -15000,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
   simulated: false,
 };
 
@@ -282,7 +282,7 @@ const mockCalculadoUnicoMovement: MovementItem = {
   currency: "ARS",
   exchangeRate: 1,
   convertedAmountCents: 5000,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
   simulated: false,
 };
 

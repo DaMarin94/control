@@ -75,7 +75,7 @@ const fijoTrimestral: MovementItem = {
   exchangeRate: 1,
   convertedAmountCents: 150000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 const fijoTrimestralAnulado: MovementItem = { ...fijoTrimestral, skipped: true };

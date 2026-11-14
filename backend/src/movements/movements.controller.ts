@@ -318,7 +318,7 @@ export class MovementsController {
   }
 
   /**
-   * GET /movements/reports/fijos-historico?rangeMonths=<3|6|9|12|24|36|48|60>[&currency=<ARS|USD|EUR|BRL>][&today=YYYY-MM-DD]
+   * GET /movements/reports/fijos-historico?rangeMonths=<3|6|9|12|24|36|48|60>[&currency=<ARS|USD|EUR|BRL>][&today=YYYY-MM-DD][&chainId=ID]
    *
    * Devuelve el Detalle histórico de gastos fijos (RF-REP-013): una serie POR
    * CADA gasto fijo lógico (cadena `chainId`) del usuario, alcance exclusivo
@@ -343,8 +343,12 @@ export class MovementsController {
    *   resolver el mes en curso (borde derecho del rango). Ausente → fecha UTC
    *   del sistema.
    *
+   * - chainId (opcional): acota lines/excluded a esa cadena (404 si no existe,
+   *   es ajena o está eliminada). El ordinal sigue siendo el del universo completo.
+   *
    * Respuesta: FijosHistoricoResponse dentro del sobre { success, statusCode, data }.
-   * 400 si rangeMonths, currency o today tienen formato/valor inválido.
+   * 400 si rangeMonths, currency, today, o chainId tienen formato/valor
+   * inválido; 404 si chainId no es un fijo del usuario.
    */
   @Get('reports/fijos-historico')
   getFijosHistoricoReport(
@@ -352,6 +356,7 @@ export class MovementsController {
     @Query('rangeMonths') rangeMonthsParam: string | undefined,
     @Query('currency') currencyParam: string | undefined,
     @Query('today') todayParam: string | undefined,
+    @Query('chainId') chainIdParam: string | undefined,
   ) {
     let rangeMonths: FixedEvolutionRangeMonths = FIXED_EVOLUTION_DEFAULT_RANGE_MONTHS;
     if (rangeMonthsParam !== undefined) {
@@ -388,11 +393,16 @@ export class MovementsController {
       todayStr = todayParam;
     }
 
+    if (chainIdParam !== undefined && chainIdParam.trim() === '') {
+      throw new BadRequestException('El parámetro "chainId" no puede estar vacío');
+    }
+
     return this.movementsService.getFijosHistoricoReport(
       req.user.userId,
       rangeMonths,
       currencyOverride,
       todayStr,
+      chainIdParam,
     );
   }
 

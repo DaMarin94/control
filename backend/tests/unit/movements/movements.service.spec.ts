@@ -23,6 +23,7 @@ import { MovementsService } from '../../../src/movements/movements.service';
 import {
   MovementsRepository,
   MovementItem,
+  RecurringForAnnual,
 } from '../../../src/movements/movements.repository';
 import { SettingsService } from '../../../src/settings/settings.service';
 import { SimulationsService } from '../../../src/simulations/simulations.service';
@@ -37,6 +38,7 @@ const mockRepo = {
   findUnicosByMonth: jest.fn(),
   findFijosByMonth: jest.fn(),
   findCuotasByMonth: jest.fn(),
+  getAllFijosForAnnual: jest.fn().mockResolvedValue([]),
   // Los métodos de totales son del repo pero el service NO los usa desde Fase 1.1.6.
   // Se mantienen en el mock por compatibilidad pero no se asertan sobre ellos.
   getTotalsByMonth: jest.fn(),
@@ -101,6 +103,7 @@ function makeUnicoItem(overrides: Partial<MovementItem> = {}): MovementItem {
     calculated: null,
     hasCalculated: false,
     simulated: false,
+    evolutionAvailable: false,
     calculatedChildren: [],
     ...overrides,
   };
@@ -140,6 +143,7 @@ function makeFijoItem(overrides: Partial<MovementItem> = {}): MovementItem {
     calculated: null,
     hasCalculated: false,
     simulated: false,
+    evolutionAvailable: false,
     calculatedChildren: [],
     ...overrides,
   };
@@ -182,6 +186,7 @@ function makeCuotaItem(overrides: Partial<MovementItem> = {}): MovementItem {
     calculated: null,
     hasCalculated: false,
     simulated: false,
+    evolutionAvailable: false,
     calculatedChildren: [],
     ...overrides,
   };
@@ -215,6 +220,7 @@ describe('MovementsService', () => {
     mockSettingsService.getSettings.mockResolvedValue({ defaultCurrency: Currency.ARS, lastExchangeRate: null });
     // Restablecer el mock de simulaciones (clearAllMocks limpia las implementaciones)
     mockSimulationsService.getSimulatedItemsForMonth.mockResolvedValue([]);
+    mockRepo.getAllFijosForAnnual.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -737,4 +743,133 @@ describe('MovementsService', () => {
       expect(result.movements.cuotas).toHaveLength(1);
     });
   });
+  // -------------------------------------------------------------------------
+  // evolutionAvailable (RF-VM-009)
+  // -------------------------------------------------------------------------
+
+  describe('evolutionAvailable (RF-VM-009)', () => {
+    const TODAY = '2026-11-14';
+    const row = (o: Partial<RecurringForAnnual> = {}): RecurringForAnnual => ({
+      id: 'row-1',
+      type: MovementType.EXPENSE,
+      description: 'Netflix',
+      createdAt: new Date('2025-01-01T00:00:00Z'),
+      amountCents: 5000,
+      currency: Currency.ARS,
+      exchangeRate: 1,
+      anchorCurrency: Currency.ARS,
+      startMonth: '2026-01',
+      deletedFrom: null,
+      frequency: 1,
+      skippedMonths: new Set<string>(),
+      categoryId: CAT_A,
+      categoryName: 'Servicios',
+      categoryColor: '#4F86C6',
+      categoryScope: 'EXPENSE',
+      chainId: 'chain-fijo-001',
+      sourceChainId: null,
+      sourceMovementId: null,
+      sourceInstallmentGroupId: null,
+      formulaOperator: null,
+      formulaOperand: null,
+      formulaSign: null,
+      ...o,
+    });
+
+    it('true: fijo con >=2 apariciones desde su arranque hasta el mes en curso', async () => {
+      setupEmptyMocks();
+      mockRepo.findFijosByMonth.mockResolvedValue([makeFijoItem()]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([row()]);
+      const r = await service.getMonthMovements(USER_A, '2026-06', null, TODAY);
+      expect(r.movements.fijos[0].evolutionAvailable).toBe(true);
+    });
+
+    it('false: fijo que arranca en el mes en curso (1 sola aparición)', async () => {
+      setupEmptyMocks();
+      mockRepo.findFijosByMonth.mockResolvedValue([makeFijoItem()]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([row({ startMonth: '2026-11' })]);
+      const r = await service.getMonthMovements(USER_A, '2026-11', null, TODAY);
+      expect(r.movements.fijos[0].evolutionAvailable).toBe(false);
+    });
+
+    it('false: arranque futuro (no cuenta meses posteriores al mes en curso)', async () => {
+      setupEmptyMocks();
+      mockRepo.findFijosByMonth.mockResolvedValue([makeFijoItem()]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([row({ startMonth: '2027-01' })]);
+      const r = await service.getMonthMovements(USER_A, '2027-02', null, TODAY);
+      expect(r.movements.fijos[0].evolutionAvailable).toBe(false);
+    });
+
+    it('false: frecuencia anual con una sola aparición hasta hoy; true con dos', async () => {
+      setupEmptyMocks();
+      mockRepo.findFijosByMonth.mockResolvedValue([makeFijoItem()]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([row({ frequency: 12, startMonth: '2026-03' })]);
+      const r1 = await service.getMonthMovements(USER_A, '2026-03', null, TODAY);
+      expect(r1.movements.fijos[0].evolutionAvailable).toBe(false);
+
+      mockRepo.findFijosByMonth.mockResolvedValue([makeFijoItem()]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([row({ frequency: 12, startMonth: '2025-03' })]);
+      const r2 = await service.getMonthMovements(USER_A, '2026-03', null, TODAY);
+      expect(r2.movements.fijos[0].evolutionAvailable).toBe(true);
+    });
+
+    it('meses anulados y posteriores a la baja no cuentan', async () => {
+      setupEmptyMocks();
+      mockRepo.findFijosByMonth.mockResolvedValue([makeFijoItem()]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        row({ startMonth: '2026-01', deletedFrom: '2026-03', skippedMonths: new Set(['2026-02']) }),
+      ]);
+      const r = await service.getMonthMovements(USER_A, '2026-01', null, TODAY);
+      expect(r.movements.fijos[0].evolutionAvailable).toBe(false);
+    });
+
+    it('splits de la cadena se recomponen (cuentan como una sola serie)', async () => {
+      setupEmptyMocks();
+      mockRepo.findFijosByMonth.mockResolvedValue([makeFijoItem()]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        row({ id: 'r1', startMonth: '2026-10', deletedFrom: '2026-11' }),
+        row({ id: 'r2', startMonth: '2026-11', amountCents: 6000 }),
+      ]);
+      const r = await service.getMonthMovements(USER_A, '2026-11', null, TODAY);
+      expect(r.movements.fijos[0].evolutionAvailable).toBe(true);
+    });
+
+    it('false en calculados, y no consulta el universo si no hay fijos elegibles', async () => {
+      setupEmptyMocks();
+      mockRepo.findFijosByMonth.mockResolvedValue([
+        makeFijoItem({
+          calculated: {
+            sourceType: 'fijo',
+            sourceId: 'x',
+            sourceChainId: 'x',
+            sourceDescription: null,
+            formulaOperator: 'ADD',
+            formulaOperand: 1,
+            formulaSign: 1,
+            sourceMonthOffset: 0,
+            sourceAmountCents: 1,
+          } as unknown as MovementItem['calculated'],
+        }),
+      ]);
+      const r = await service.getMonthMovements(USER_A, '2026-06', null, TODAY);
+      expect(r.movements.fijos[0].evolutionAvailable).toBe(false);
+      expect(mockRepo.getAllFijosForAnnual).not.toHaveBeenCalled();
+    });
+
+    it('una sola carga del universo aunque haya varios fijos (sin N+1)', async () => {
+      setupEmptyMocks();
+      mockRepo.findFijosByMonth.mockResolvedValue([
+        makeFijoItem({ id: 'a', chainId: 'chain-fijo-001' }),
+        makeFijoItem({ id: 'b', chainId: 'chain-fijo-002' }),
+      ]);
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        row(),
+        row({ id: 'row-2', chainId: 'chain-fijo-002', startMonth: '2026-11' }),
+      ]);
+      const r = await service.getMonthMovements(USER_A, '2026-06', null, TODAY);
+      expect(r.movements.fijos.map((f) => f.evolutionAvailable)).toEqual([true, false]);
+      expect(mockRepo.getAllFijosForAnnual).toHaveBeenCalledTimes(1);
+    });
+  });
+
 });

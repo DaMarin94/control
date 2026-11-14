@@ -77,7 +77,7 @@ const mockFijoMovement: MovementItem = {
   exchangeRate: 1,
   convertedAmountCents: 150000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 /** Calculado de origen único — fixture para la variante calculated-simple */
@@ -119,7 +119,7 @@ const mockCalculatedUnicoMovement: MovementItem = {
   exchangeRate: 1,
   convertedAmountCents: 5000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

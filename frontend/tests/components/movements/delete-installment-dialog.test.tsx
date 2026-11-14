@@ -64,7 +64,7 @@ const mockCuotaMovement: MovementItem = {
   exchangeRate: 1,
   convertedAmountCents: 50000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

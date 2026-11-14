@@ -492,6 +492,12 @@ export interface MovementItem {
    * de fila real.
    */
   simulated: boolean;
+  /**
+   * RF-VM-009: true solo en fijos NO calculados y NO simulados cuya cadena tiene
+   * ≥2 apariciones graficables entre su arranque y el mes en curso. El repo lo
+   * emite en false; `MovementsService.getMonthMovements` lo resuelve para los fijos.
+   */
+  evolutionAvailable: boolean;
 }
 
 /**
@@ -910,6 +916,7 @@ export class MovementsRepository {
         hasCalculated: false,
         calculatedChildren: [],
         simulated: false,
+        evolutionAvailable: false,
       });
     }
 
@@ -1137,6 +1144,7 @@ export class MovementsRepository {
         hasCalculated: false,
         calculatedChildren: [],
         simulated: false,
+        evolutionAvailable: false,
       };
       result.push(item);
       fijoItemByChainId.set(r.chainId, item);
@@ -1246,6 +1254,7 @@ export class MovementsRepository {
         hasCalculated: false,
         calculatedChildren: [],
         simulated: false,
+        evolutionAvailable: false,
       });
     }
 
@@ -1360,6 +1369,7 @@ export class MovementsRepository {
         hasCalculated: false,
         calculatedChildren: [],
         simulated: false,
+        evolutionAvailable: false,
       };
       result.push(item);
       cuotaItemByGroupId.set(g.id, item);
@@ -1537,6 +1547,7 @@ export class MovementsRepository {
           hasCalculated: false,
           calculatedChildren: [],
           simulated: false,
+          evolutionAvailable: false,
         });
       }
     }
@@ -2518,6 +2529,7 @@ export class MovementsRepository {
       hasCalculated: false,
       calculatedChildren: [],
       simulated: false,
+      evolutionAvailable: false,
     };
   }
 }

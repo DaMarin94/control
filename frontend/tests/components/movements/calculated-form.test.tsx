@@ -151,7 +151,7 @@ const origenFijo: MovementItem = {
   exchangeRate: 1,
   convertedAmountCents: 100000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 /** Ítem único de origen — Fase 1.1.8 */
@@ -178,7 +178,7 @@ const origenUnico: MovementItem = {
   exchangeRate: 1,
   convertedAmountCents: 50000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 /** Ítem cuota de origen — Fase 1.1.8 */
@@ -205,7 +205,7 @@ const origenCuota: MovementItem = {
   exchangeRate: 1,
   convertedAmountCents: 30000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 /** Ítem calculado (para modo editar — origen fijo) */
@@ -243,7 +243,7 @@ const calculadoExistente: MovementItem = {
   exchangeRate: 1,
   convertedAmountCents: -10000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 /** Ítem calculado de origen único (para modo editar — Fase 1.1.8) */
@@ -280,7 +280,7 @@ const calculadoUnicoExistente: MovementItem = {
   exchangeRate: 1,
   convertedAmountCents: 5000,
   simulated: false,
-  calculatedChildren: [],
+  calculatedChildren: [], evolutionAvailable: false,
 };
 
 /** Ítem calculado (origen fijo), pero YA anulado — alimenta el test de D16 */

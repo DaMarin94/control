@@ -1,240 +1,157 @@
 /**
- * Tests de `lib/fixed-evolution-colors.ts` (Ola 5, P6 — RF-REP-013).
+ * Tests de `lib/fixed-evolution-colors.ts` (RF-REP-013).
  *
- * Verifica la regla de docs/design.md §"Detalle histórico de gastos fijos" §3:
- * - Opera sobre CUALQUIER hex de categoría, esté o no en la matriz de 40 (bug
- *   encontrado en QA: antes caía a rojo por fallback de lookup).
- * - Conserva hue y croma de origen; solo sustituye la claridad por un peldaño
- *   de la banda [0.46, 0.74] (claro/medio/oscuro).
- * - El ancla es el peldaño más cercano a la L propia de la categoría.
- * - Piso de croma 0.07 para colores con hue definido; los neutros (croma de
- *   origen < 0.015) conservan su croma sin hue inventado.
- * - Desempate por `ordinal` ASC (nunca el índice del array), recorriendo la
- *   escalera cíclicamente desde el ancla.
+ * docs/design.md §"Detalle histórico de fijos" §3:
+ * - Card de reportes: `FX[ordinal mod 12]` (paleta de 12), estable entre rangos,
+ *   sin depender de la categoría ni del índice del array; recicla mod 12.
+ * - Variante acotada: color de categoría re-anclado (`anchorFixedEvolutionColor`).
  */
 
 import { describe, it, expect } from "vitest";
-import { assignFixedEvolutionColors, hexToOklch, anchorFixedEvolutionColor } from "@/lib/fixed-evolution-colors";
+import {
+  assignFixedEvolutionColors,
+  hexToOklch,
+  anchorFixedEvolutionColor,
+  FX_PALETTE,
+} from "@/lib/fixed-evolution-colors";
 
-/** Parsea un string `oklch(L C H)` a sus tres componentes numéricos. */
 function parseOklch(value: string): { l: number; c: number; h: number } {
   const match = value.match(/^oklch\(([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\)$/);
   if (!match) throw new Error(`No es un string oklch() válido: ${value}`);
   return { l: Number(match[1]), c: Number(match[2]), h: Number(match[3]) };
 }
 
+/** OKLCH -> sRGB lineal (Ottosson); sin clamp, para medir el gamut. */
+function oklchToLinearSrgb({ l, c, h }: { l: number; c: number; h: number }): [number, number, number] {
+  const a = c * Math.cos((h * Math.PI) / 180);
+  const b = c * Math.sin((h * Math.PI) / 180);
+  const l_ = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m_ = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s_ = (l - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  return [
+    4.0767416621 * l_ - 3.3077115913 * m_ + 0.2309699292 * s_,
+    -1.2684380046 * l_ + 2.6097574011 * m_ - 0.3413193965 * s_,
+    -0.0041960863 * l_ - 0.7034186147 * m_ + 1.707614701 * s_,
+  ];
+}
+
 const STEP_LS = [0.74, 0.6, 0.46];
 
 describe("hexToOklch", () => {
-  it("un gris puro tiene croma prácticamente nulo (acromático)", () => {
-    const { c } = hexToOklch("#808080");
-    expect(c).toBeLessThan(0.01);
+  it("un gris puro tiene croma prácticamente nulo", () => {
+    expect(hexToOklch("#808080").c).toBeLessThan(0.01);
   });
 
-  it("un color vívido tiene croma sensiblemente mayor que un gris", () => {
-    const { c: cRed } = hexToOklch("#E23B3B");
-    const { c: cGray } = hexToOklch("#808080");
-    expect(cRed).toBeGreaterThan(cGray);
-  });
-
-  it("hues opuestos (rojo vs. celeste) resuelven a ángulos de hue distantes", () => {
-    const { h: hRed } = hexToOklch("#E23B3B");
-    const { h: hBlue } = hexToOklch("#3B7DE0");
-    const diff = Math.abs(hRed - hBlue);
+  it("hues opuestos (rojo vs. celeste) resuelven a ángulos distantes", () => {
+    const diff = Math.abs(hexToOklch("#E23B3B").h - hexToOklch("#3B7DE0").h);
     expect(Math.min(diff, 360 - diff)).toBeGreaterThan(60);
   });
 });
 
-describe("assignFixedEvolutionColors — color fuera de la matriz de 40 (bug QA)", () => {
-  it("un hex que NO pertenece a la matriz de 40 no cae al rojo por fallback", () => {
-    // #84A9D6 (Agua) — uno de los hexes del reporte de QA ausentes de la matriz.
-    const colors = assignFixedEvolutionColors([
-      { chainId: "fx-agua", ordinal: 1, categoryColor: "#84A9D6" },
-    ]);
-    const assigned = colors.get("fx-agua")!;
-    const { h } = parseOklch(assigned);
-    const { h: hRed } = hexToOklch("#E23B3B");
-    const diff = Math.abs(h - hRed);
-    expect(Math.min(diff, 360 - diff)).toBeGreaterThan(30);
+describe("FX_PALETTE", () => {
+  it("tiene 12 colores oklch() distintos", () => {
+    expect(FX_PALETTE).toHaveLength(12);
+    expect(new Set(FX_PALETTE).size).toBe(12);
+    FX_PALETTE.forEach((c) => expect(() => parseOklch(c)).not.toThrow());
   });
 
-  it("categorías distintas fuera de la matriz reciben hues distintos entre sí", () => {
-    const colors = assignFixedEvolutionColors([
-      { chainId: "fx-agua", ordinal: 1, categoryColor: "#84A9D6" }, // Agua
-      { chainId: "fx-ropa", ordinal: 2, categoryColor: "#BFA4E1" }, // Ropa
-      { chainId: "fx-viaje", ordinal: 3, categoryColor: "#443458" }, // Viaje
-    ]);
-    const hues = ["fx-agua", "fx-ropa", "fx-viaje"].map((id) => parseOklch(colors.get(id)!).h);
-    // Ninguna combinación de a pares debería coincidir en hue redondeado.
-    expect(new Set(hues.map((h) => Math.round(h))).size).toBe(3);
+  it("los 12 colores caen dentro del gamut sRGB (sin tolerancia)", () => {
+    for (const color of FX_PALETTE) {
+      const rgb = oklchToLinearSrgb(parseOklch(color));
+      for (const ch of rgb) {
+        expect(ch, color).toBeGreaterThanOrEqual(0);
+        expect(ch, color).toBeLessThanOrEqual(1);
+      }
+    }
   });
 
-  it("la claridad resultante siempre cae en uno de los tres peldaños de la banda", () => {
-    const colors = assignFixedEvolutionColors([
-      { chainId: "fx-1", ordinal: 1, categoryColor: "#84A9D6" },
-      { chainId: "fx-2", ordinal: 1, categoryColor: "#E8C84A" },
-      { chainId: "fx-3", ordinal: 1, categoryColor: "#443458" },
-    ]);
-    for (const value of colors.values()) {
-      const { l } = parseOklch(value);
-      expect(STEP_LS).toContain(l);
+  it("las claridades están dentro de la banda de trazo [0.46, 0.74]", () => {
+    for (const color of FX_PALETTE) {
+      const { l } = parseOklch(color);
+      expect(l).toBeGreaterThanOrEqual(0.46);
+      expect(l).toBeLessThanOrEqual(0.74);
     }
   });
 });
 
-describe("assignFixedEvolutionColors — ancla por claridad propia", () => {
-  it("un color muy claro (pastel) ancla en el peldaño claro (L 0.74)", () => {
+describe("assignFixedEvolutionColors — FX[ordinal mod 12]", () => {
+  it("asigna FX[ordinal] por chainId", () => {
     const colors = assignFixedEvolutionColors([
-      { chainId: "fx-pastel", ordinal: 1, categoryColor: "#F7C8C8" }, // L1 de la matriz
+      { chainId: "a", ordinal: 0 },
+      { chainId: "b", ordinal: 5 },
+      { chainId: "c", ordinal: 11 },
     ]);
-    expect(parseOklch(colors.get("fx-pastel")!).l).toBe(0.74);
+    expect(colors.get("a")).toBe(FX_PALETTE[0]);
+    expect(colors.get("b")).toBe(FX_PALETTE[5]);
+    expect(colors.get("c")).toBe(FX_PALETTE[11]);
   });
 
-  it("un color muy oscuro ancla en el peldaño oscuro (L 0.46)", () => {
+  it("recicla por ordinal mod 12", () => {
     const colors = assignFixedEvolutionColors([
-      { chainId: "fx-oscuro", ordinal: 1, categoryColor: "#6C1C1C" }, // L5 de la matriz
+      { chainId: "a", ordinal: 12 },
+      { chainId: "b", ordinal: 13 },
+      { chainId: "c", ordinal: 25 },
     ]);
-    expect(parseOklch(colors.get("fx-oscuro")!).l).toBe(0.46);
+    expect(colors.get("a")).toBe(FX_PALETTE[0]);
+    expect(colors.get("b")).toBe(FX_PALETTE[1]);
+    expect(colors.get("c")).toBe(FX_PALETTE[1]);
   });
 
-  it("un color de claridad media ancla en el peldaño medio (L 0.60)", () => {
-    const colors = assignFixedEvolutionColors([
-      { chainId: "fx-medio", ordinal: 1, categoryColor: "#E23B3B" }, // L3 de la matriz (vívida)
+  it("no depende del orden del array ni del universo: el mismo ordinal da el mismo color", () => {
+    const full = assignFixedEvolutionColors([
+      { chainId: "x", ordinal: 7 },
+      { chainId: "y", ordinal: 2 },
     ]);
-    expect(parseOklch(colors.get("fx-medio")!).l).toBe(0.6);
+    const reordered = assignFixedEvolutionColors([{ chainId: "y", ordinal: 2 }, { chainId: "x", ordinal: 7 }]);
+    const alone = assignFixedEvolutionColors([{ chainId: "x", ordinal: 7 }]);
+    expect(full.get("x")).toBe(reordered.get("x"));
+    expect(full.get("x")).toBe(alone.get("x"));
+  });
+
+  it("la categoría no interviene: mismo ordinal con distinta categoría = mismo color", () => {
+    const colors = assignFixedEvolutionColors([
+      { chainId: "a", ordinal: 3, categoryColor: "#E23B3B" } as { chainId: string; ordinal: number },
+      { chainId: "b", ordinal: 3, categoryColor: "#1AA5B0" } as { chainId: string; ordinal: number },
+    ]);
+    expect(colors.get("a")).toBe(colors.get("b"));
+  });
+
+  it("ordinales consecutivos reciben colores distintos", () => {
+    const colors = assignFixedEvolutionColors(Array.from({ length: 12 }, (_, i) => ({ chainId: `c${i}`, ordinal: i })));
+    expect(new Set(colors.values()).size).toBe(12);
   });
 });
 
-describe("assignFixedEvolutionColors — croma: piso y conservación de neutros", () => {
-  it("un color con hue definido pero croma bajo se sube al piso 0.07", () => {
-    // Un tono apenas saturado (croma de origen entre 0.015 y 0.07).
-    const colors = assignFixedEvolutionColors([
-      { chainId: "fx-tenue", ordinal: 1, categoryColor: "#9A8E86" },
-    ]);
-    const { c: originC } = hexToOklch("#9A8E86");
-    expect(originC).toBeGreaterThanOrEqual(0.015);
-    expect(originC).toBeLessThan(0.07);
-    expect(parseOklch(colors.get("fx-tenue")!).c).toBe(0.07);
+describe("anchorFixedEvolutionColor — variante acotada (color de categoría)", () => {
+  it("color de claridad media ancla en L 0.60", () => {
+    expect(parseOklch(anchorFixedEvolutionColor("#E23B3B")).l).toBe(0.6);
   });
 
-  it("un color deliberadamente neutro conserva su croma de origen sin piso", () => {
-    const colors = assignFixedEvolutionColors([
-      { chainId: "fx-gris", ordinal: 1, categoryColor: "#808080" },
-    ]);
-    const { c: originC } = hexToOklch("#808080");
-    expect(originC).toBeLessThan(0.015);
-    const assignedC = parseOklch(colors.get("fx-gris")!).c;
-    expect(assignedC).toBeCloseTo(originC, 2);
-    expect(assignedC).toBeLessThan(0.07);
-  });
-
-  it("un color vívido conserva un croma por encima del piso", () => {
-    const colors = assignFixedEvolutionColors([
-      { chainId: "fx-vivido", ordinal: 1, categoryColor: "#E23B3B" },
-    ]);
-    expect(parseOklch(colors.get("fx-vivido")!).c).toBeGreaterThan(0.07);
-  });
-});
-
-describe("assignFixedEvolutionColors — desempate por ordinal, escalera cíclica", () => {
-  it("dos fijos de la misma categoría reciben tonalidades (L) distintas, mismo hue", () => {
-    const colors = assignFixedEvolutionColors([
-      { chainId: "fx-a", ordinal: 1, categoryColor: "#E23B3B" },
-      { chainId: "fx-b", ordinal: 2, categoryColor: "#E23B3B" },
-    ]);
-    const a = parseOklch(colors.get("fx-a")!);
-    const b = parseOklch(colors.get("fx-b")!);
-    expect(a.l).not.toBe(b.l);
-    expect(a.h).toBeCloseTo(b.h, 1);
-    expect(a.c).toBeCloseTo(b.c, 4);
-  });
-
-  it("el desempate se resuelve por `ordinal` ASC, no por el orden del array", () => {
-    // Ancla de #E23B3B es "medio" (L≈0.60) → escalera medio→oscuro→claro.
-    const colors = assignFixedEvolutionColors([
-      { chainId: "fx-ordinal-2", ordinal: 2, categoryColor: "#E23B3B" },
-      { chainId: "fx-ordinal-1", ordinal: 1, categoryColor: "#E23B3B" },
-    ]);
-    // El de menor ordinal (1) debe tomar el ancla (medio, L=0.60) pese a venir
-    // segundo en el array.
-    expect(parseOklch(colors.get("fx-ordinal-1")!).l).toBe(0.6);
-    expect(parseOklch(colors.get("fx-ordinal-2")!).l).toBe(0.46);
-  });
-
-  it("con 3 fijos de la misma categoría, las tres claridades son distintas entre sí", () => {
-    const colors = assignFixedEvolutionColors([
-      { chainId: "fx-1", ordinal: 1, categoryColor: "#E23B3B" },
-      { chainId: "fx-2", ordinal: 2, categoryColor: "#E23B3B" },
-      { chainId: "fx-3", ordinal: 3, categoryColor: "#E23B3B" },
-    ]);
-    const ls = ["fx-1", "fx-2", "fx-3"].map((id) => parseOklch(colors.get(id)!).l);
-    expect(new Set(ls).size).toBe(3);
-    expect(new Set(ls)).toEqual(new Set(STEP_LS));
-  });
-
-  it("el 4º fijo de la misma categoría recicla el trazo del 1º (mismo ancla)", () => {
-    const colors = assignFixedEvolutionColors([
-      { chainId: "fx-1", ordinal: 1, categoryColor: "#E23B3B" },
-      { chainId: "fx-2", ordinal: 2, categoryColor: "#E23B3B" },
-      { chainId: "fx-3", ordinal: 3, categoryColor: "#E23B3B" },
-      { chainId: "fx-4", ordinal: 4, categoryColor: "#E23B3B" },
-    ]);
-    expect(colors.get("fx-4")).toBe(colors.get("fx-1"));
-  });
-
-  it("agrupa por hex normalizado (mayúsculas/minúsculas indistinto)", () => {
-    const colors = assignFixedEvolutionColors([
-      { chainId: "fx-upper", ordinal: 1, categoryColor: "#E23B3B" },
-      { chainId: "fx-lower", ordinal: 2, categoryColor: "#e23b3b" },
-    ]);
-    // Al compartir hex (normalizado), participan del mismo desempate: L distintas.
-    expect(parseOklch(colors.get("fx-upper")!).l).not.toBe(parseOklch(colors.get("fx-lower")!).l);
-  });
-
-  it("categorías con hex distinto NO comparten desempate (cada una ancla independiente)", () => {
-    const colors = assignFixedEvolutionColors([
-      { chainId: "fx-rojo", ordinal: 1, categoryColor: "#E23B3B" },
-      { chainId: "fx-teal", ordinal: 2, categoryColor: "#1AA5B0" },
-    ]);
-    // Ambos son ordinal más bajo de su propio grupo → ambos anclan en su propio peldaño medio.
-    expect(parseOklch(colors.get("fx-rojo")!).l).toBe(0.6);
-    expect(parseOklch(colors.get("fx-teal")!).l).toBe(0.6);
-  });
-});
-
-describe("anchorFixedEvolutionColor — color de un excluido (§8.1), sin desempate", () => {
-  it("devuelve el peldaño ancla del color de categoría", () => {
-    const color = anchorFixedEvolutionColor("#E23B3B");
-    expect(parseOklch(color).l).toBe(0.6); // ancla medio para #E23B3B
-  });
-
-  it("dos excluidos con el MISMO hex de categoría reciben el MISMO color (sin desempate)", () => {
-    const a = anchorFixedEvolutionColor("#E23B3B");
-    const b = anchorFixedEvolutionColor("#E23B3B");
-    expect(a).toBe(b);
-  });
-
-  it("coincide con el ancla que tomaría el primer fijo (ordinal más bajo) de esa categoría en la leyenda", () => {
-    const legendColors = assignFixedEvolutionColors([
-      { chainId: "fx-1", ordinal: 1, categoryColor: "#E23B3B" },
-    ]);
-    expect(anchorFixedEvolutionColor("#E23B3B")).toBe(legendColors.get("fx-1"));
-  });
-
-  it("respeta un color muy claro (pastel) → ancla claro", () => {
+  it("pastel ancla claro (0.74) y muy oscuro ancla oscuro (0.46)", () => {
     expect(parseOklch(anchorFixedEvolutionColor("#F7C8C8")).l).toBe(0.74);
-  });
-
-  it("respeta un color muy oscuro → ancla oscuro", () => {
     expect(parseOklch(anchorFixedEvolutionColor("#6C1C1C")).l).toBe(0.46);
   });
-});
 
-describe("assignFixedEvolutionColors — formato de salida", () => {
-  it("devuelve un string oklch(L C H) parseable para cada línea", () => {
-    const colors = assignFixedEvolutionColors([
-      { chainId: "fx-1", ordinal: 1, categoryColor: "#8B4FD4" },
-    ]);
-    expect(() => parseOklch(colors.get("fx-1")!)).not.toThrow();
+  it("la claridad siempre cae en uno de los tres peldaños", () => {
+    for (const hex of ["#84A9D6", "#E8C84A", "#443458"]) {
+      expect(STEP_LS).toContain(parseOklch(anchorFixedEvolutionColor(hex)).l);
+    }
+  });
+
+  it("conserva el hue de la categoría (hex fuera de la matriz)", () => {
+    const origin = hexToOklch("#84A9D6").h;
+    const out = parseOklch(anchorFixedEvolutionColor("#84A9D6")).h;
+    expect(Math.abs(out - origin)).toBeLessThan(0.1);
+  });
+
+  it("croma: piso 0.07 con hue definido; neutros conservan su croma", () => {
+    expect(parseOklch(anchorFixedEvolutionColor("#9A8E86")).c).toBe(0.07);
+    const originC = hexToOklch("#808080").c;
+    expect(originC).toBeLessThan(0.015);
+    expect(parseOklch(anchorFixedEvolutionColor("#808080")).c).toBeCloseTo(originC, 2);
+  });
+
+  it("es determinista (sin desempate)", () => {
+    expect(anchorFixedEvolutionColor("#E23B3B")).toBe(anchorFixedEvolutionColor("#E23B3B"));
   });
 });

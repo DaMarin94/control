@@ -260,6 +260,13 @@ export interface MovementItem {
    * simulado no puede originar ni ser un calculado (RN-029).
    */
   simulated: boolean;
+  /**
+   * Vista evolución de un fijo (RF-VM-009). `true` solo para un fijo no
+   * calculado, no simulado, con ≥2 apariciones hasta hoy. Gate del acceso
+   * "Ver evolución" de la card de detalle: el acceso se muestra para todo fijo
+   * no calculado ni simulado; con `false` va grisado con tooltip.
+   */
+  evolutionAvailable: boolean;
 }
 
 /** Totales del mes */

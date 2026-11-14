@@ -66,6 +66,7 @@ function makeRealUnico(overrides: Partial<MovementItem> = {}): MovementItem {
     hasCalculated: false,
     calculatedChildren: [],
     simulated: false,
+    evolutionAvailable: false,
     ...overrides,
   };
 }
@@ -95,6 +96,7 @@ function makeSimulatedUnico(overrides: Partial<MovementItem> = {}): MovementItem
     hasCalculated: false,
     calculatedChildren: [],
     simulated: true,
+    evolutionAvailable: false,
     ...overrides,
   };
 }

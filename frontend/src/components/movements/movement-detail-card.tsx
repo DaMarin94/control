@@ -14,10 +14,18 @@
  *
  * Card read-only pura: sin footer ni acción de edición — editar ya vive en
  * el kebab "⋮" de la fila (movement-item-row.tsx).
+ *
+ * Dos vistas (RF-VM-009): "detail" (siempre la de apertura, no dispara fetch)
+ * y "evolution" (solo fijos no calculados ni simulados): reemplaza el cuerpo
+ * por `FixedEvolutionCard` en su variante acotada, ensancha el panel a 640px y
+ * hace que `Esc` vuelva al detalle (✕ y scrim siguen cerrando).
  */
 
-import type { ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode, type Ref } from "react";
 import {
+  LineChart,
+  ChevronRight,
+  ChevronLeft,
   Zap,
   Repeat,
   Receipt,
@@ -29,6 +37,8 @@ import {
 } from "lucide-react";
 import { ModalShell, ModalShellHeader, ModalShellBody } from "@/components/ui/modal-shell";
 import { PaymentMethodIcon } from "@/components/ui/payment-method-icon";
+import { FixedEvolutionCard } from "@/components/charts/fixed-evolution-card";
+import type { FixedEvolutionRangeMonths } from "@/types/reports";
 import { useSettings } from "@/hooks/use-settings";
 import { formatConvertedAmountDisplay, FREQUENCY_LABEL } from "@/lib/movements";
 import { descaleOperand, buildFormulaExpression } from "@/lib/formula";
@@ -237,8 +247,154 @@ function CalculatedChildrenBlock({
   );
 }
 
+/** Fundido del contenido entrante al cambiar de vista (140ms ease-out; instantáneo con reduced-motion). */
+const VIEW_FADE_CLASS = "animate-[fadeIn_140ms_ease-out_both] motion-reduce:animate-none";
+
+/** Rango por defecto de la vista evolución (RF-VM-009): 1 año. No persistido: cada entrada arranca acá. */
+const EVOLUTION_DEFAULT_RANGE: FixedEvolutionRangeMonths = 12;
+
+const EVOLUTION_UNAVAILABLE_MOTIVE = "Hacen falta al menos dos meses con monto para ver la evolución.";
+
+/**
+ * Acceso "Ver evolución" (item 7 de la card): fila de navegación "drill-in".
+ * Deshabilitado = grisado con `aria-disabled` (nunca `disabled` nativo: el
+ * motivo tiene que seguir alcanzable con teclado) + motivo por title/describedby.
+ */
+const NAV_ROW_BOX =
+  "flex w-full items-center gap-[10px] min-h-[44px] rounded-ctl border border-line bg-panel px-[13px] py-[10px] text-left focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]";
+const NAV_ROW_ENABLED = "group cursor-pointer transition-colors duration-[140ms] hover:bg-panel-2 hover:border-line-strong active:bg-panel-3";
+
+/** Fila "Volver al detalle" (pie de la vista evolución): espejo del acceso, chevron a la izquierda, nunca deshabilitada. */
+function BackToDetailRow({ onBack }: { onBack: () => void }) {
+  return (
+    <button type="button" onClick={onBack} className={cn(NAV_ROW_BOX, NAV_ROW_ENABLED)}>
+      <ChevronLeft
+        size={16}
+        className="shrink-0 text-faint transition-colors duration-[140ms] group-hover:text-muted"
+        aria-hidden="true"
+      />
+      <span className="flex-1 min-w-0 text-[14px] font-semibold text-ink-2 transition-colors duration-[140ms] group-hover:text-ink">
+        Volver al detalle
+      </span>
+    </button>
+  );
+}
+
+function EvolutionAccess({
+  available,
+  onOpen,
+  buttonRef,
+}: {
+  available: boolean;
+  onOpen: () => void;
+  buttonRef: Ref<HTMLButtonElement>;
+}) {
+  const motiveId = useId();
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-disabled={!available || undefined}
+        aria-describedby={available ? undefined : motiveId}
+        title={available ? undefined : EVOLUTION_UNAVAILABLE_MOTIVE}
+        onClick={() => {
+          if (!available) return;
+          onOpen();
+        }}
+        className={cn(
+          NAV_ROW_BOX,
+          available ? NAV_ROW_ENABLED : "opacity-45 cursor-default",
+        )}
+      >
+        <LineChart size={15} className="shrink-0 text-ink-2" aria-hidden="true" />
+        <span
+          className={cn(
+            "flex-1 min-w-0 text-[14px] font-semibold text-ink-2 transition-colors duration-[140ms]",
+            available && "group-hover:text-ink",
+          )}
+        >
+          Ver evolución
+        </span>
+        <ChevronRight
+          size={16}
+          className={cn("shrink-0 text-faint transition-colors duration-[140ms]", available && "group-hover:text-muted")}
+          aria-hidden="true"
+        />
+      </button>
+      {!available && (
+        <span id={motiveId} className="sr-only">
+          {EVOLUTION_UNAVAILABLE_MOTIVE}
+        </span>
+      )}
+    </>
+  );
+}
+
+/**
+ * Cuerpo de la vista evolución: la card `fixed-evolution` en su variante
+ * acotada (docs/design.md §15). Es dueña del rango (default 1 año, sin
+ * persistir): al montarse solo en la vista evolución, cada entrada arranca en
+ * `EVOLUTION_DEFAULT_RANGE`.
+ */
+function EvolutionView({ chainId, onBack }: { chainId: string; onBack: () => void }) {
+  const [rangeMonths, setRangeMonths] = useState<FixedEvolutionRangeMonths>(EVOLUTION_DEFAULT_RANGE);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  // Foco al entrar: disparador del RangeSelect (primer control del contenido nuevo).
+  useEffect(() => {
+    wrapperRef.current?.querySelector<HTMLElement>('button[aria-haspopup="listbox"]')?.focus();
+  }, []);
+  return (
+    <div ref={wrapperRef} className="space-y-[14px]">
+      <FixedEvolutionCard chainId={chainId} rangeMonths={rangeMonths} onRangeMonthsChange={setRangeMonths} />
+      <div className="h-px bg-hair" aria-hidden="true" />
+      <BackToDetailRow onBack={onBack} />
+    </div>
+  );
+}
+
 export function MovementDetailCard({ movement, onClose, viewMonth }: MovementDetailCardProps) {
   const { defaultCurrency } = useSettings();
+
+  // Vista actual de la card. Siempre abre en "detail": la card se monta al abrir y se
+  // desmonta al cerrar, así que el estado se resetea por construcción.
+  const [view, setView] = useState<"detail" | "evolution">("detail");
+  const accessRef = useRef<HTMLButtonElement>(null);
+  const cameFromEvolutionRef = useRef(false);
+
+  // Foco de vuelta: acceso "Ver evolución" (el de entrada lo maneja EvolutionView).
+  useEffect(() => {
+    if (view === "detail" && cameFromEvolutionRef.current) {
+      cameFromEvolutionRef.current = false;
+      accessRef.current?.focus();
+    }
+  }, [view]);
+
+  const hasEvolutionAccess =
+    movement.origin === "fijo" && movement.calculated === null && !movement.simulated && movement.chainId !== null;
+  const isEvolutionView = view === "evolution" && hasEvolutionAccess;
+
+  // La primera apertura NO fade-ea (ya tiene `animate-modal-pop` del shell); el detalle solo
+  // se fundido-entra al VOLVER de la evolución.
+  const [returnedFromEvolution, setReturnedFromEvolution] = useState(false);
+
+  function backToDetail() {
+    cameFromEvolutionRef.current = true;
+    setReturnedFromEvolution(true);
+    setView("detail");
+  }
+
+  // `Esc` en evolución vuelve al detalle (en detalle cierra, vía el default del shell). Con el
+  // listbox del rango abierto el primer `Esc` solo lo cierra (su propio handler, registrado
+  // DESPUÉS del del shell): el shell lo ve todavía en el DOM y no hace nada.
+  function handleEscape() {
+    if (!isEvolutionView) {
+      onClose();
+      return;
+    }
+    if (document.querySelector('[role="listbox"]')) return;
+    backToDetail();
+  }
 
   const isExpense = movement.type === "EXPENSE";
   const isCrossRate = movement.currency !== defaultCurrency;
@@ -252,10 +408,26 @@ export function MovementDetailCard({ movement, onClose, viewMonth }: MovementDet
   const titleId = "movement-detail-title";
 
   return (
-    <ModalShell variant="dialog" onClose={onClose} labelledBy={titleId} closeOnScrimClick>
-      <ModalShellHeader titleId={titleId} title={titleLabel} onClose={onClose} />
+    <ModalShell
+      variant="dialog"
+      onClose={onClose}
+      onEscape={handleEscape}
+      wide={isEvolutionView}
+      labelledBy={titleId}
+      closeOnScrimClick
+    >
+      <ModalShellHeader
+        titleId={titleId}
+        title={titleLabel}
+        onClose={onClose}
+      />
 
-      <ModalShellBody>
+      {isEvolutionView && movement.chainId !== null ? (
+        <ModalShellBody key="evolution" className={VIEW_FADE_CLASS}>
+          <EvolutionView chainId={movement.chainId} onBack={backToDetail} />
+        </ModalShellBody>
+      ) : (
+      <ModalShellBody key="detail" className={cn(returnedFromEvolution && VIEW_FADE_CLASS)}>
         {movement.skipped && (
           <span
             className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em]"
@@ -439,7 +611,21 @@ export function MovementDetailCard({ movement, onClose, viewMonth }: MovementDet
             />
           </>
         )}
+
+        {/* Acceso "Ver evolución" (RF-VM-009) — siempre el ÚLTIMO elemento del cuerpo. Solo fijo no
+            calculado ni simulado; grisado con motivo si `evolutionAvailable` es false. */}
+        {hasEvolutionAccess && (
+          <>
+            <div className="h-px bg-hair" aria-hidden="true" />
+            <EvolutionAccess
+              available={movement.evolutionAvailable === true}
+              onOpen={() => setView("evolution")}
+              buttonRef={accessRef}
+            />
+          </>
+        )}
       </ModalShellBody>
+      )}
     </ModalShell>
   );
 }

@@ -47,6 +47,7 @@
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { Currency, FormulaOperator, MovementType } from '@prisma/client';
+import { NotFoundException } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import {
   MovementsService,
@@ -244,13 +245,36 @@ describe('MovementsService — getFijosHistoricoReport (RF-REP-013, GET /movemen
   // -------------------------------------------------------------------------
 
   describe('alcance', () => {
-    it('fijo INCOME no entra en las líneas', async () => {
+    it('fijo INCOME entra en las líneas con type INCOME y magnitud >= 0; el gasto trae type EXPENSE', async () => {
       mockRepo.getAllFijosForAnnual.mockResolvedValue([
-        makeFijo({ chainId: 'chain-income', type: MovementType.INCOME }),
+        makeFijo({ chainId: 'chain-income', type: MovementType.INCOME, amountCents: 500000 }),
+        makeFijo({ id: 'row-exp', chainId: 'chain-exp', amountCents: 100000 }),
+      ]);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const inc = findLine(result.lines, 'chain-income');
+      expect(inc.type).toBe('INCOME');
+      expect(inc.months[0].amountCents).toBe(500000);
+      expect(findLine(result.lines, 'chain-exp').type).toBe('EXPENSE');
+      // Una sola lista por total DESC, sin agrupar por dirección
+      expect(result.lines.map((l) => l.chainId)).toEqual(['chain-income', 'chain-exp']);
+    });
+
+    it('fijo INCOME con <2 apariciones va a excluded con type INCOME', async () => {
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ chainId: 'chain-income', type: MovementType.INCOME, startMonth: '2026-12' }),
       ]);
       const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
       expect(result.lines).toEqual([]);
-      expect(result.excluded).toEqual([]);
+      expect(findExcluded(result.excluded, 'chain-income').type).toBe('INCOME');
+    });
+
+    it('calculado de un origen INCOME trae type EXPENSE', async () => {
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ chainId: 'chain-income', type: MovementType.INCOME, amountCents: 500000 }),
+        makeCalc({ chainId: 'calc-chain-1', sourceChainId: 'chain-income', formulaSign: -1 }),
+      ]);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      expect(findLine(result.lines, 'calc-chain-1').type).toBe('EXPENSE');
     });
 
     it('fijo mensual vigente todo el rango → un punto por mes, todos presentes, con `month` YYYY-MM', async () => {
@@ -495,7 +519,7 @@ describe('MovementsService — getFijosHistoricoReport (RF-REP-013, GET /movemen
       expect(line.originChainId).toBeNull();
     });
 
-    it('calculado con origen INCOME: originDescription/originChainId se resuelven aunque el origen (INCOME) no genere línea propia', async () => {
+    it('calculado con origen INCOME: originDescription/originChainId se resuelven contra el universo completo', async () => {
       mockRepo.getAllFijosForAnnual.mockResolvedValue([
         makeFijo({ chainId: 'chain-income', type: MovementType.INCOME, description: 'Sueldo', amountCents: 500000 }),
         makeCalc({
@@ -507,7 +531,7 @@ describe('MovementsService — getFijosHistoricoReport (RF-REP-013, GET /movemen
         }),
       ]);
       const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
-      expect(result.lines.find((l) => l.chainId === 'chain-income')).toBeUndefined();
+      expect(findLine(result.lines, 'chain-income').type).toBe('INCOME');
 
       const calcLine = findLine(result.lines, 'calc-chain-1');
       expect(calcLine.isCalculated).toBe(true);
@@ -924,4 +948,59 @@ describe('MovementsService — getFijosHistoricoReport (RF-REP-013, GET /movemen
       expect(ordinalOldA).toBeLessThan(ordinalNewA);
     });
   });
+  // -------------------------------------------------------------------------
+  // chainId (RF-VM-009)
+  // -------------------------------------------------------------------------
+
+  describe('chainId', () => {
+    const today = '2026-11-14';
+    const universe = (): RecurringForAnnual[] => [
+      makeFijo({ chainId: 'chain-a', startMonth: '2024-03', createdAt: new Date('2024-03-01') }),
+      makeFijo({
+        id: 'row-b',
+        chainId: 'chain-b',
+        type: MovementType.INCOME,
+        startMonth: '2025-06',
+        createdAt: new Date('2025-06-01'),
+      }),
+    ];
+
+    it('chainId filtra lines y excluded a esa cadena; el ordinal es el del universo completo', async () => {
+      mockRepo.getAllFijosForAnnual.mockResolvedValue(universe());
+      const full = await service.getFijosHistoricoReport(USER_A, 12, undefined, today);
+      const filtered = await service.getFijosHistoricoReport(USER_A, 12, undefined, today, 'chain-b');
+      expect(filtered.lines.map((l) => l.chainId)).toEqual(['chain-b']);
+      expect(filtered.excluded).toEqual([]);
+      expect(filtered.lines[0].ordinal).toBe(1);
+      expect(filtered.lines[0].ordinal).toBe(findLine(full.lines, 'chain-b').ordinal);
+    });
+
+    it('chainId de una cadena con <2 apariciones viaja en excluded', async () => {
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        ...universe(),
+        makeFijo({ id: 'row-c', chainId: 'chain-c', startMonth: '2026-11', createdAt: new Date('2026-11-01') }),
+      ]);
+      const r = await service.getFijosHistoricoReport(USER_A, 12, undefined, today, 'chain-c');
+      expect(r.lines).toEqual([]);
+      expect(r.excluded.map((e) => e.chainId)).toEqual(['chain-c']);
+    });
+
+    it('chainId inexistente → NotFoundException', async () => {
+      mockRepo.getAllFijosForAnnual.mockResolvedValue(universe());
+      await expect(
+        service.getFijosHistoricoReport(USER_A, 12, undefined, today, 'nope'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('los meses previos al alta del fijo quedan como hueco beforeStart (recorte contra el universo, no la cadena)', async () => {
+      mockRepo.getAllFijosForAnnual.mockResolvedValue(universe());
+      const r = await service.getFijosHistoricoReport(USER_A, 48, undefined, today, 'chain-b');
+      // Universo arranca en 2024-03 > 2023-01 pedido -> recorte a 2024-03
+      expect(r.startMonth).toBe('2024-03');
+      const line = r.lines[0];
+      expect(line.months[0].reason).toBe('beforeStart');
+      expect(line.months[0].amountCents).toBeNull();
+    });
+  });
+
 });
