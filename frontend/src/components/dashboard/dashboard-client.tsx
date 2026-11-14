@@ -15,6 +15,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, Plus } from "lucide-react";
 import { useMovements } from "@/hooks/use-movements";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { useApi } from "@/hooks/use-api";
 import { useSettings } from "@/hooks/use-settings";
 import { useLimits } from "@/hooks/use-limits";
@@ -44,6 +45,9 @@ export function DashboardClient() {
   const currentYear = getCurrentYear();
   const { isAuthenticated } = useApi();
   const { data, isLoading, isError } = useMovements(month);
+  // El 1er render del cliente (hidratación) debe coincidir con el SSR, que pinta el
+  // skeleton; la caché de React Query puede tener `data` antes de que este boundary hidrate.
+  const hydrated = useHydrated();
   const { defaultCurrency } = useSettings();
   // P2 — Fase 1 (Tramo 2): límites del usuario (marca visual pasiva). [] = cero impacto (D9).
   const { limits } = useLimits();
@@ -146,7 +150,7 @@ export function DashboardClient() {
        * - Si ya hay `data` nunca se muestra el skeleton (evita flash en refetch).
        * - Guard !isAuthenticated cubre sesión aún resolviendo (Auth.js status="loading").
        */}
-      {(!data && (!isAuthenticated || isLoading)) ? (
+      {(!hydrated || (!data && (!isAuthenticated || isLoading))) ? (
         <div className="space-y-[var(--gap)]" aria-label="Cargando totales" role="status">
           {/* Grid 2 stat-cards: Gastos / Ingresos (~120px cada una) */}
           <div className="grid grid-cols-2 gap-[var(--gap)]">

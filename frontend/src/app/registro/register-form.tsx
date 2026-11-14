@@ -70,7 +70,7 @@ export function RegisterForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-[14px]">
+    <form method="post" onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-[14px]">
       {/* Campo email */}
       <div className="flex flex-col gap-[7px]">
         <Label htmlFor="email" required>

@@ -72,6 +72,7 @@ import {
 } from "@dnd-kit/sortable";
 import { useApi } from "@/hooks/use-api";
 import { useMovements } from "@/hooks/use-movements";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { usePreferences } from "@/hooks/use-preferences";
 import { useSettings } from "@/hooks/use-settings";
 import { useLimits } from "@/hooks/use-limits";
@@ -420,6 +421,9 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   // El filtrado se hace en el frontend; el hook trae todo el mes.
   const { isAuthenticated } = useApi();
   const { data, isLoading, isError } = useMovements(month);
+  // El 1er render del cliente (hidratación) debe coincidir con el SSR, que pinta el
+  // skeleton; la caché de React Query puede tener `data` antes de que este boundary hidrate.
+  const hydrated = useHydrated();
   const { defaultCurrency } = useSettings();
   // P2 — Fase 1: límites del usuario (marca visual pasiva). [] = cero impacto (D9).
   const { limits } = useLimits();
@@ -1096,7 +1100,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
          *   (Auth.js status="loading" → isAuthenticated=false → query disabled →
          *   React Query devuelve data=undefined sin isLoading=true).
          */}
-        {(!data && (!isAuthenticated || isLoading)) ? (
+        {(!hydrated || (!data && (!isAuthenticated || isLoading))) ? (
           <>
             {/* Skeleton de totales — mismo template que el bloque real (ver más abajo),
                 para que no salte al aterrizar. */}

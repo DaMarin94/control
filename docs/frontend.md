@@ -35,6 +35,14 @@ Dentro de cada carpeta se pueden agrupar archivos por dominio (ej: `components/m
 - **Capa de llamadas al backend en `lib/`:** un único lugar centraliza las llamadas (ver Error handling en `docs/technical.md`). Ningún componente llama a `fetch` directo.
 - **Hooks de datos:** envuelven esa capa con React Query (ver Convenciones de hooks en `docs/technical.md`).
 
+### Hidratación y SSR
+
+El primer render del cliente tiene que coincidir con el markup del SSR.
+
+- **Gates sobre `data` de React Query incluyen `!hydrated`.** `useHydrated()` (`src/hooks/use-hydrated.ts`) usa `useSyncExternalStore` con snapshot de servidor `false` y de cliente `true`. Todo gate que elige entre skeleton y contenido según `data` lleva `!hydrated`: la caché del cliente puede tener datos antes de que hidrate un boundary de Suspense (p. ej. el de `MonthViewWrapper` por `useSearchParams`). En navegación client-side el hook vale `true` desde el primer render (sin flash). Lo usan los skeletons de totales de `month-view-client.tsx` y `dashboard-client.tsx`.
+- **Valores derivados de APIs del navegador se renderizan después de montar.** Todo valor que sale de `matchMedia` u otra API del navegador (p. ej. `resolvedTheme` de `useTheme`) y llega al markup usa el patrón `mounted`; antes de montar se renderiza la variante neutra. Ej.: `ThemeIconToggle` muestra "Tema del sistema" sin "(ahora: …)" hasta montar.
+- **Forms con credenciales llevan `method="post"`.** Aplica a login y registro (`capture-access-shell` reusa `LoginForm`). Un submit anterior a la hidratación hace el envío nativo del navegador; con GET los campos irían en la query string. Un POST nativo a esas rutas devuelve la misma página.
+
 ## Sistema de componentes (UI primitives)
 
 Lo visual se define **una sola vez**. Stack: **shadcn/ui + cva** sobre Tailwind v4.

@@ -46,6 +46,11 @@ describe("RegisterForm", () => {
     });
   });
 
+  it("el <form> usa method=\"post\" (un submit nativo antes de hidratar no filtra credenciales a la URL)", () => {
+    const { container } = renderRegisterForm();
+    expect(container.querySelector("form")).toHaveAttribute("method", "post");
+  });
+
   it("renderiza los campos email, password, confirmación y el botón de submit", () => {
     renderRegisterForm();
 

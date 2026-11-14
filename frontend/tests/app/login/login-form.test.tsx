@@ -47,6 +47,11 @@ describe("LoginForm", () => {
     vi.clearAllMocks();
   });
 
+  it("el <form> usa method=\"post\" (un submit nativo antes de hidratar no filtra credenciales a la URL)", () => {
+    const { container } = renderLoginForm();
+    expect(container.querySelector("form")).toHaveAttribute("method", "post");
+  });
+
   it("renderiza los campos email, password y el botón de submit", () => {
     renderLoginForm();
 

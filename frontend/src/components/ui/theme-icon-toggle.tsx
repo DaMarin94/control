@@ -18,6 +18,7 @@
  * - Sin label visible (el ícono es el control; el texto vive en aria-label).
  */
 
+import { useEffect, useState } from "react";
 import { Monitor, Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ThemeValue, ResolvedTheme } from "@/hooks/use-theme";
@@ -64,6 +65,13 @@ export function ThemeIconToggle({
   disabled = false,
   resolvedTheme,
 }: ThemeIconToggleProps) {
+  // `resolvedTheme` depende de matchMedia (solo cliente): en SSR siempre es
+  // "light" y el cliente puede resolver "dark" → mismatch de hidratación en el
+  // aria-label. Hasta montar se usa el label sin el "(ahora: …)".
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const labelTheme = mounted ? resolvedTheme : undefined;
+
   const selectedIndex = OPTIONS.findIndex((o) => o.value === value);
 
   function handleKeyDown(e: React.KeyboardEvent, index: number) {
@@ -98,7 +106,7 @@ export function ThemeIconToggle({
       {OPTIONS.map((option, i) => {
         const isSelected = option.value === value;
         const { Icon } = option;
-        const ariaLabel = option.getAriaLabel(resolvedTheme);
+        const ariaLabel = option.getAriaLabel(labelTheme);
         return (
           <button
             key={option.value}

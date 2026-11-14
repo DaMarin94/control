@@ -198,7 +198,7 @@ export function CredentialsForm({
   submitClassName,
 }: CredentialsFormProps) {
   return (
-    <form onSubmit={onFormSubmit} noValidate className={cn("flex flex-col gap-[14px]", className)}>
+    <form method="post" onSubmit={onFormSubmit} noValidate className={cn("flex flex-col gap-[14px]", className)}>
       {/* Error general del formulario */}
       {formError && (
         <div
