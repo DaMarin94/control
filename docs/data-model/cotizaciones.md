@@ -39,7 +39,7 @@ Tabla **global**, **interna y no editable por UI**, que guarda el IPC nacional (
 
 - **Clave única `yearMonth`.** El IPC nacional es un único valor por mes (sin moneda ni variante). Upsert idempotente por esta clave.
 - **Consumo.** No alimenta la conversión de monedas ni los totales del mes. Lo consumen el reporte anual de gastos Únicos (RF-REP-010, footer de inflación y % ajustado; ver `informes.md`, §Contrato de reporte anual de Únicos), el reporte anual de Inflación vs Ingresos (RF-REP-012, serie de inflación y ajuste del ingreso; ver `informes.md`, §Contrato de reporte anual de Inflación vs Ingresos), el Detalle histórico de fijos (RF-REP-013, variación ajustada) y la superficie de datos externos de `/configuracion` (RF-SYNC-002).
-- **Histórico sembrado por data migration (`20260623000000_seed_historical_ipc`).** **113 meses (2017-01 … 2026-05)** de la serie completa de INDEC (`apis.datos.gob.ar`, variación e índice) insertados con `ON CONFLICT ("yearMonth") DO NOTHING`. Idempotente y convive con el sync sin pisarse: la migración no sobrescribe filas existentes, y el sync completa desde el último mes guardado en adelante (RF-IPC-001).
+- **Histórico sembrado por data migration (`20260623000000_seed_historical_ipc`).** **113 meses (2017-01 … 2026-05)** de la serie completa de INDEC (`apis.datos.gob.ar`, variación e índice) insertados con `ON CONFLICT ("yearMonth") DO NOTHING`. Idempotente y convive con el sync sin pisarse: la migración no sobrescribe filas existentes, y el sync completa los meses faltantes (mes de arranque en RF-IPC-001).
 
 ### `RateSyncLog` — auditoría de la sincronización
 

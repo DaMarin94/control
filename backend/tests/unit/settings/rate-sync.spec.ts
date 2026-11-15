@@ -355,7 +355,7 @@ describe('RateSyncService — upsert transaccional via sync()', () => {
       upsert: jest.Mock;
     };
     inflationRate: {
-      findFirst: jest.Mock;
+      findMany: jest.Mock;
       findUnique: jest.Mock;
       upsert: jest.Mock;
     };
@@ -378,7 +378,7 @@ describe('RateSyncService — upsert transaccional via sync()', () => {
         upsert: jest.fn().mockResolvedValue({}),
       },
       inflationRate: {
-        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
         findUnique: jest.fn().mockResolvedValue(null),
         upsert: jest.fn().mockResolvedValue({}),
       },
@@ -661,7 +661,7 @@ describe('RateSyncService — upsert transaccional via sync()', () => {
     const IDX = '148.3_INIVELNAL_DICI_M_26';
 
     it('completa los huecos entre el último guardado y el último publicado, en orden', async () => {
-      mockPrisma.inflationRate.findFirst.mockResolvedValue({ yearMonth: '2026-05' });
+      mockPrisma.inflationRate.findMany.mockResolvedValue([{ yearMonth: '2026-05' }]);
       mockFetch({
         [VAR]: { data: [['2026-05-01', 0.02], ['2026-06-01', 0.021], ['2026-07-01', 0.022]] },
         [IDX]: { data: [['2026-05-01', 3800], ['2026-06-01', 3880], ['2026-07-01', 3965]] },
@@ -683,7 +683,7 @@ describe('RateSyncService — upsert transaccional via sync()', () => {
     });
 
     it('al día: un solo mes (el ya guardado) y sin meses nuevos', async () => {
-      mockPrisma.inflationRate.findFirst.mockResolvedValue({ yearMonth: '2026-05' });
+      mockPrisma.inflationRate.findMany.mockResolvedValue([{ yearMonth: '2026-05' }]);
       mockPrisma.inflationRate.findUnique.mockResolvedValue({
         monthlyVariation: new Prisma.Decimal(2.7),
       });
@@ -697,8 +697,49 @@ describe('RateSyncService — upsert transaccional via sync()', () => {
       expect(result.results).toEqual([{ target: 'InflationRate:2026-05', accepted: true }]);
     });
 
+    it('hueco en el medio (08 y 10 guardados, 09 falta): pide desde 09 y lo persiste', async () => {
+      mockPrisma.inflationRate.findMany.mockResolvedValue([
+        { yearMonth: '2026-08' },
+        { yearMonth: '2026-10' },
+      ]);
+      mockFetch({
+        [VAR]: { data: [['2026-09-01', 0.021], ['2026-10-01', 0.022]] },
+        [IDX]: { data: [['2026-09-01', 3880], ['2026-10-01', 3965]] },
+      });
+
+      const result = await service.sync(SyncScope.IPC);
+
+      const urls = (global.fetch as jest.Mock).mock.calls.map((c) => c[0] as string);
+      expect(urls.every((u) => u.includes('start_date=2026-09-01'))).toBe(true);
+      const upserted = mockPrisma.inflationRate.upsert.mock.calls.map(
+        (c) => (c[0] as { where: { yearMonth: string } }).where.yearMonth,
+      );
+      expect(upserted).toContain('2026-09');
+      expect(result.results.map((r) => r.target)).toEqual([
+        'InflationRate:2026-09',
+        'InflationRate:2026-10',
+      ]);
+    });
+
+    it('sin huecos: sigue arrancando desde el último guardado', async () => {
+      mockPrisma.inflationRate.findMany.mockResolvedValue([
+        { yearMonth: '2026-08' },
+        { yearMonth: '2026-09' },
+        { yearMonth: '2026-10' },
+      ]);
+      mockFetch({
+        [VAR]: { data: [['2026-10-01', 0.022]] },
+        [IDX]: { data: [['2026-10-01', 3965]] },
+      });
+
+      await service.sync(SyncScope.IPC);
+
+      const urls = (global.fetch as jest.Mock).mock.calls.map((c) => c[0] as string);
+      expect(urls.every((u) => u.includes('start_date=2026-10-01'))).toBe(true);
+    });
+
     it('tabla vacía: arranca 24 meses atrás del mes en curso', async () => {
-      mockPrisma.inflationRate.findFirst.mockResolvedValue(null);
+      mockPrisma.inflationRate.findMany.mockResolvedValue([]);
       mockFetch({
         [VAR]: { data: [['2026-05-01', 0.027]] },
         [IDX]: { data: [['2026-05-01', 3825.4]] },
@@ -714,7 +755,7 @@ describe('RateSyncService — upsert transaccional via sync()', () => {
     });
 
     it('mes inválido en el medio: no se guarda, se loguea y los siguientes se procesan', async () => {
-      mockPrisma.inflationRate.findFirst.mockResolvedValue({ yearMonth: '2026-05' });
+      mockPrisma.inflationRate.findMany.mockResolvedValue([{ yearMonth: '2026-05' }]);
       mockFetch({
         [VAR]: { data: [['2026-05-01', 0.02], ['2026-06-01', 9.99], ['2026-07-01', 0.022]] },
         [IDX]: { data: [['2026-05-01', 3800], ['2026-06-01', 3880], ['2026-07-01', 3965]] },
@@ -740,7 +781,7 @@ describe('RateSyncService — upsert transaccional via sync()', () => {
     });
 
     it('mes presente en una sola serie → schema, sin frenar a los demás', async () => {
-      mockPrisma.inflationRate.findFirst.mockResolvedValue({ yearMonth: '2026-05' });
+      mockPrisma.inflationRate.findMany.mockResolvedValue([{ yearMonth: '2026-05' }]);
       mockFetch({
         [VAR]: { data: [['2026-05-01', 0.02], ['2026-06-01', 0.021]] },
         [IDX]: { data: [['2026-06-01', 3880]] },

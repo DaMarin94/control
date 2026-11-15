@@ -437,7 +437,8 @@ export class RateSyncService {
 
   /**
    * IPC desde apis.datos.gob.ar — series de tiempo INDEC.
-   * Backfill: consulta ambas series desde el último mes guardado (inclusive) hasta el último
+   * Backfill: consulta ambas series desde el primer mes faltante dentro del rango guardado
+   * (o, sin huecos, desde el último guardado, inclusive) hasta el último
    * publicado, y procesa cada mes en orden cronológico (upsert de InflationRate por mes).
    * Si la tabla está vacía, arranca IPC_INITIAL_BACKFILL_MONTHS meses atrás.
    * Un mes que falla no se guarda, se loguea y NO frena a los siguientes.
@@ -447,13 +448,27 @@ export class RateSyncService {
     const variationId = '145.3_INGNACUAL_DICI_M_38';
     const indexId = '148.3_INIVELNAL_DICI_M_26';
 
-    const lastStored = await this.prisma.inflationRate.findFirst({
-      orderBy: { yearMonth: 'desc' },
+    // Solo yearMonth, ascendente: el primer hueco dentro del rango cubierto (si lo hay)
+    // o, si no hay huecos, el último mes guardado (inclusive).
+    const stored = await this.prisma.inflationRate.findMany({
+      orderBy: { yearMonth: 'asc' },
       select: { yearMonth: true },
     });
-    const startMonth =
-      lastStored?.yearMonth ??
-      this.shiftYearMonth(this.currentYearMonth(), -IPC_INITIAL_BACKFILL_MONTHS);
+    let startMonth: string;
+    if (stored.length === 0) {
+      startMonth = this.shiftYearMonth(this.currentYearMonth(), -IPC_INITIAL_BACKFILL_MONTHS);
+    } else {
+      const have = new Set(stored.map((r) => r.yearMonth));
+      const first = stored[0].yearMonth;
+      const last = stored[stored.length - 1].yearMonth;
+      startMonth = last;
+      for (let m = first; m < last; m = this.shiftYearMonth(m, 1)) {
+        if (!have.has(m)) {
+          startMonth = m;
+          break;
+        }
+      }
+    }
     const base = 'https://apis.datos.gob.ar/series/api/series/';
     const qs = `limit=${IPC_QUERY_LIMIT}&sort=asc&start_date=${startMonth}-01&format=json`;
     const varUrl = `${base}?ids=${variationId}&${qs}`;
