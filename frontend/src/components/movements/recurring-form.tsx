@@ -104,14 +104,14 @@ export function RecurringForm({
   return (
     <>
       <form id={formId} onSubmit={onSubmit} noValidate className="flex flex-col flex-1 min-h-0">
-        <div className="flex-1 min-h-0 overflow-y-auto px-[22px] pb-[22px] space-y-[14px]">
+        <div className="flex-1 min-h-0 overflow-y-auto px-5.5 pb-5.5 space-y-3.5">
           {/* ── Tipo (toggle o read-only en edición) ── */}
           {isEditing ? (
-            <div className="flex flex-col gap-[7px]">
+            <div className="flex flex-col gap-1.75">
               <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Tipo
               </Label>
-              <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px] text-[14px] font-semibold text-ink-2">
+              <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-3.25 py-2.75 text-[14px] font-semibold text-ink-2">
                 {recurring?.type === "EXPENSE" ? (
                   <ArrowDown size={15} className="text-expense-ink" aria-hidden="true" />
                 ) : (
@@ -132,7 +132,7 @@ export function RecurringForm({
                     type="button"
                     onClick={() => field.onChange("EXPENSE")}
                     className={cn(
-                      "flex items-center justify-center gap-2 rounded-ctl border-[1.5px] px-3 py-3 text-[14px] font-semibold transition-colors duration-[140ms] cursor-pointer",
+                      "flex items-center justify-center gap-2 rounded-ctl border-[1.5px] px-3 py-3 text-[14px] font-semibold transition-colors duration-140 cursor-pointer",
                       "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--expense-soft)]",
                       field.value === "EXPENSE"
                         ? "border-expense bg-expense-soft text-expense-ink"
@@ -146,7 +146,7 @@ export function RecurringForm({
                     type="button"
                     onClick={() => field.onChange("INCOME")}
                     className={cn(
-                      "flex items-center justify-center gap-2 rounded-ctl border-[1.5px] px-3 py-3 text-[14px] font-semibold transition-colors duration-[140ms] cursor-pointer",
+                      "flex items-center justify-center gap-2 rounded-ctl border-[1.5px] px-3 py-3 text-[14px] font-semibold transition-colors duration-140 cursor-pointer",
                       "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--income-soft)]",
                       field.value === "INCOME"
                         ? "border-income bg-income-soft text-income-ink"
@@ -162,13 +162,13 @@ export function RecurringForm({
           )}
 
           {/* ── Monto ── */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <Label htmlFor={`${formId}-amount`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Monto
             </Label>
             <div
               className={cn(
-                "flex items-center gap-2 rounded-ctl border-[1.5px] px-[13px] py-[11px] transition-colors duration-[140ms]",
+                "flex items-center gap-2 rounded-ctl border-[1.5px] px-3.25 py-2.75 transition-colors duration-140",
                 "focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft)]",
                 errors.amountInput
                   ? "border-expense shadow-[0_0_0_3px_var(--expense-soft)]"
@@ -196,7 +196,7 @@ export function RecurringForm({
 
           {/* ── Mes de inicio (solo en modo crear) ── */}
           {!isEditing && (
-            <div className="flex flex-col gap-[7px]">
+            <div className="flex flex-col gap-1.75">
               <Label htmlFor={`${formId}-start-month`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Mes de inicio
               </Label>
@@ -214,18 +214,18 @@ export function RecurringForm({
 
           {/* ── Frecuencia: selector en crear / read-only con badge en editar ── */}
           {isEditing ? (
-            <div className="flex flex-col gap-[7px]">
+            <div className="flex flex-col gap-1.75">
               <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Frecuencia
               </Label>
-              <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px] text-[14px] font-semibold text-ink-2">
+              <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-3.25 py-2.75 text-[14px] font-semibold text-ink-2">
                 <Repeat size={15} className="text-accent-ink shrink-0" aria-hidden="true" />
                 {FREQUENCY_OPTIONS.find((o) => o.value === selectedFrequency)?.label ?? "Mensual"}
               </div>
               <input type="hidden" {...register("frequency")} />
             </div>
           ) : (
-            <div className="flex flex-col gap-[7px]">
+            <div className="flex flex-col gap-1.75">
               <Label htmlFor={`${formId}-frequency`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Frecuencia
               </Label>
@@ -251,7 +251,7 @@ export function RecurringForm({
           )}
 
           {/* ── Categoría ── */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <div className="flex items-center justify-between">
               <Label htmlFor={`${formId}-category`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Categoría
@@ -259,20 +259,20 @@ export function RecurringForm({
               <button
                 type="button"
                 onClick={openCategoryModal}
-                className="text-[12.5px] font-semibold text-accent-ink hover:text-accent transition-colors duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-sm"
+                className="text-[12.5px] font-semibold text-accent-ink hover:text-accent transition-colors duration-140 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-sm"
               >
                 + Nueva
               </button>
             </div>
 
             {noCategoriesAvailable ? (
-              <div className="flex items-start gap-[11px] rounded-ctl border px-[14px] py-[13px] bg-expense-soft" style={{ borderColor: "oklch(0.57 0.16 27 / 0.25)" }}>
-                <AlertTriangle size={18} className="text-expense-ink shrink-0 mt-[1px]" aria-hidden="true" />
+              <div className="flex items-start gap-2.75 rounded-ctl border px-3.5 py-3.25 bg-expense-soft" style={{ borderColor: "oklch(0.57 0.16 27 / 0.25)" }}>
+                <AlertTriangle size={18} className="text-expense-ink shrink-0 mt-px" aria-hidden="true" />
                 <div className="text-[13px] leading-[1.45] text-expense-ink">
                   <b className="font-bold">Sin categorías para este tipo.</b>{" "}
                   <Link
                     href="/configuracion/categorias"
-                    className="font-bold underline underline-offset-[2px] text-expense-ink hover:opacity-80"
+                    className="font-bold underline underline-offset-2 text-expense-ink hover:opacity-80"
                     onClick={onClose}
                   >
                     Creá una categoría
@@ -305,14 +305,14 @@ export function RecurringForm({
 
           {/* ── Nota de recurrencia (solo en crear): copy dinámico según frecuencia ── */}
           {!isEditing && (
-            <div className="flex items-center gap-[7px] pt-[2px] text-[12.5px] text-muted">
+            <div className="flex items-center gap-1.75 pt-0.5 text-[12.5px] text-muted">
               <Repeat size={14} className="text-accent-ink shrink-0" aria-hidden="true" />
               Se registra automáticamente {FREQUENCY_LABEL_LOWER[selectedFrequency]} a partir del mes de inicio.
             </div>
           )}
 
           {/* ── Descripción ── */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <Label htmlFor={`${formId}-description`} className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Descripción{" "}
               <span className="text-faint font-normal">(opcional)</span>

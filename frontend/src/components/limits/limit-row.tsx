@@ -60,7 +60,7 @@ export function LimitRow({ limit, categoryName, onToggleEnabled, onRemove }: Lim
     >
       {/* Zona identidad (izquierda, flex-1) */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-[8px]">
+        <div className="flex items-center gap-2">
           {isActive ? (
             <AlertTriangle size={13} aria-hidden="true" style={{ color: "var(--warning-ink)" }} />
           ) : (
@@ -68,19 +68,19 @@ export function LimitRow({ limit, categoryName, onToggleEnabled, onRemove }: Lim
           )}
           <b className="text-[14.5px] font-semibold text-ink truncate">{label}</b>
         </div>
-        <div className="flex items-center gap-[8px] mt-[2px] flex-wrap">
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           <span className="text-[12.5px] font-medium text-muted">{metaParts.join(" · ")}</span>
-          <span className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-ink-2 px-[7px] py-[1px] text-[12px] font-semibold mono tabular-nums">
+          <span className="inline-flex items-center rounded-(--r-chip) bg-panel-3 text-ink-2 px-1.75 py-px text-[12px] font-semibold mono tabular-nums">
             {conditionChip}
           </span>
-          <span className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em]">
+          <span className="inline-flex items-center rounded-(--r-chip) bg-panel-3 text-muted px-1.75 py-px text-[11px] font-semibold tracking-[0.04em]">
             {isActive ? "Alerta activa" : limit.temporalScope === "all" ? "Todos los meses" : "Mes en curso"}
           </span>
         </div>
       </div>
 
       {/* Zona estados/acciones (derecha, shrink-0) */}
-      <div className="flex items-center gap-[10px] shrink-0">
+      <div className="flex items-center gap-2.5 shrink-0">
         {confirmingDelete ? (
           <div className="flex items-center gap-2">
             <span className="text-[12.5px] text-muted whitespace-nowrap">¿Eliminar?</span>
@@ -100,12 +100,12 @@ export function LimitRow({ limit, categoryName, onToggleEnabled, onRemove }: Lim
               aria-checked={limit.enabled}
               aria-label={`Activar límite: ${label}`}
               onClick={() => onToggleEnabled(!limit.enabled)}
-              className="relative inline-flex h-[22px] w-[38px] items-center rounded-pill transition-colors duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+              className="relative inline-flex h-5.5 w-9.5 items-center rounded-pill transition-colors duration-140 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
               style={{ backgroundColor: limit.enabled ? "var(--accent)" : "var(--panel-3)" }}
             >
               <span
                 aria-hidden="true"
-                className="inline-block h-[18px] w-[18px] rounded-full bg-panel shadow-[var(--shadow-sm)] transition-transform duration-[140ms] motion-reduce:transition-none"
+                className="inline-block h-4.5 w-4.5 rounded-full bg-panel shadow-(--shadow-sm) transition-transform duration-140 motion-reduce:transition-none"
                 style={{ transform: limit.enabled ? "translateX(18px)" : "translateX(2px)" }}
               />
             </button>

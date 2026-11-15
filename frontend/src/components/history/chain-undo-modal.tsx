@@ -38,8 +38,8 @@ export function ChainUndoModal({ entry, chainEntries, isSubmitting, onConfirm, o
       <ModalShellHeader titleId={titleId} title="Hay cambios posteriores" onClose={onClose} />
 
       <ModalShellBody>
-        <div className="flex items-start gap-[10px] rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px]">
-          <Info size={16} className="text-ink-2 shrink-0 mt-[1px]" aria-hidden="true" />
+        <div className="flex items-start gap-2.5 rounded-ctl border border-line bg-panel-2 px-3.25 py-2.75">
+          <Info size={16} className="text-ink-2 shrink-0 mt-px" aria-hidden="true" />
           <p className="text-[14px] text-ink">
             Este no es el cambio más reciente de <b className="font-semibold">{rowLabel}</b>. Para deshacerlo hay
             que deshacer antes{" "}
@@ -55,7 +55,7 @@ export function ChainUndoModal({ entry, chainEntries, isSubmitting, onConfirm, o
         </div>
 
         <div>
-          <p className="text-[12.5px] leading-[1.5] text-muted mb-[8px]">Se van a deshacer, en este orden:</p>
+          <p className="text-[12.5px] leading-normal text-muted mb-2">Se van a deshacer, en este orden:</p>
           <div className="rounded-ctl border border-line overflow-hidden">
             {chainEntries.map((chainEntry, index) => {
               const isThisEntry = chainEntry.id === entry.id;
@@ -66,7 +66,7 @@ export function ChainUndoModal({ entry, chainEntries, isSubmitting, onConfirm, o
                 <div
                   key={chainEntry.id}
                   className={cn(
-                    "flex flex-wrap items-center gap-x-[8px] gap-y-[2px] px-[10px] py-[8px] text-[12px]",
+                    "flex flex-wrap items-center gap-x-2 gap-y-0.5 px-2.5 py-2 text-[12px]",
                     index > 0 && "border-t border-hair",
                     isThisEntry && "bg-panel-3",
                   )}
@@ -78,14 +78,14 @@ export function ChainUndoModal({ entry, chainEntries, isSubmitting, onConfirm, o
                   <span className="text-faint shrink-0" aria-hidden="true">
                     ·
                   </span>
-                  <span className="inline-flex items-center rounded-[var(--r-chip)] bg-panel text-muted px-[6px] py-[1px] text-[10.5px] font-semibold tracking-[0.04em] shrink-0">
+                  <span className="inline-flex items-center rounded-(--r-chip) bg-panel text-muted px-1.5 py-px text-[10.5px] font-semibold tracking-[0.04em] shrink-0">
                     {chainEntry.action === "EDIT" ? "Editado" : "Eliminado"}
                   </span>
                   {summary &&
                     (summary.nowrap ? (
                       // Cifra indivisible (§6.2 prioridad 2): nunca trunca — si no
                       // entra en la línea, el resumen entero envuelve a la siguiente.
-                      <span className="inline-flex items-center gap-[6px] shrink-0">
+                      <span className="inline-flex items-center gap-1.5 shrink-0">
                         <span className="text-faint" aria-hidden="true">
                           ·
                         </span>
@@ -93,7 +93,7 @@ export function ChainUndoModal({ entry, chainEntries, isSubmitting, onConfirm, o
                       </span>
                     ) : (
                       // Valor de texto (§6.2 prioridad 4): puede truncar con elipsis.
-                      <span className="inline-flex min-w-0 items-center gap-[6px]">
+                      <span className="inline-flex min-w-0 items-center gap-1.5">
                         <span className="text-faint shrink-0" aria-hidden="true">
                           ·
                         </span>
@@ -107,7 +107,7 @@ export function ChainUndoModal({ entry, chainEntries, isSubmitting, onConfirm, o
           </div>
         </div>
 
-        <p className="text-[12.5px] leading-[1.5] text-muted">Todas se borran del historial.</p>
+        <p className="text-[12.5px] leading-normal text-muted">Todas se borran del historial.</p>
       </ModalShellBody>
 
       <ModalShellFooter>

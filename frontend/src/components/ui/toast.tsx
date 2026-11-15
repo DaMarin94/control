@@ -7,17 +7,17 @@
  * (docs/design.md §"Toast con acción — Deshacer inmediato tras editar o eliminar").
  *
  * Cambios de estilo (funcionalidad 100% preservada, salvo lo indicado):
- *  - Viewport: abajo-centro (fixed bottom-[26px] left-1/2 -translate-x-1/2)
+ *  - Viewport: abajo-centro (fixed bottom-6.5 left-1/2 -translate-x-1/2)
  *    → era abajo-derecha; el DS lo define en centro.
  *  - Item: pill bg-ink text-paper, rounded-[13px], padding 12px 14px 12px 16px,
- *    shadow-[var(--shadow-lg)], animación slide-up .3s.
+ *    shadow-(--shadow-lg), animación slide-up .3s.
  *  - Ícono "tick": círculo 24px con ícono Lucide. Color varía por tipo:
  *      success → bg-income  (verde) + Check
  *      error   → bg-expense (rojo)  + X
  *      warning → bg-warning (ámbar) + AlertTriangle
  *      info    → bg-accent-ink      + Info
  *  - Acción — INLINE (no debajo del mensaje): divisor vertical + botón, con
- *    hit area de 48px vía `after` sin engordar el pill. `min-w-[104px]` anti
+ *    hit area de 48px vía `after` sin engordar el pill. `min-w-26` anti
  *    layout-shift (reserva el ancho de "Deshaciendo…").
  *  - Close: ícono X de lucide-react.
  *
@@ -449,12 +449,12 @@ function ToastItem({ toast, onDismiss, onAction, onPause, onResume }: ToastItemP
       onBlur={handleBlur}
       className={cn(
         // Pill oscuro DS: bg-ink text-paper, rounded-[13px]
-        "pointer-events-auto flex items-center gap-[14px]",
+        "pointer-events-auto flex items-center gap-3.5",
         "rounded-[13px] bg-ink text-paper",
         // Padding DS: 12px top/bottom, 14px right, 16px left
-        "py-3 pl-4 pr-[14px]",
+        "py-3 pl-4 pr-3.5",
         // Sombra DS
-        "shadow-[var(--shadow-lg)]",
+        "shadow-(--shadow-lg)",
         // Fuente
         "font-ui text-[14px] font-medium",
         // Animación slide-up — keyframes definidos en globals.css via @layer
@@ -497,9 +497,9 @@ function ToastItem({ toast, onDismiss, onAction, onPause, onResume }: ToastItemP
             disabled={isPending}
             aria-busy={isPending || undefined}
             className={cn(
-              "relative min-w-[104px] shrink-0 whitespace-nowrap text-center text-[14px] font-bold",
+              "relative min-w-26 shrink-0 whitespace-nowrap text-center text-[14px] font-bold",
               // Hit area 48px sin engordar el pill (no crece el alto real del botón)
-              "after:absolute after:-inset-y-[7px] after:inset-x-0 after:content-['']",
+              "after:absolute after:-inset-y-1.75 after:inset-x-0 after:content-['']",
               isPending
                 ? "cursor-default opacity-70"
                 : cn(
@@ -547,7 +547,7 @@ function ToastViewport({ toasts, onDismiss, onAction, onPause, onResume }: Toast
      */
     <div
       aria-label="Notificaciones"
-      className="pointer-events-none fixed bottom-[var(--toast-inset-bottom)] left-1/2 z-[90] flex -translate-x-1/2 flex-col items-center gap-[10px]"
+      className="pointer-events-none fixed bottom-(--toast-inset-bottom) left-1/2 z-90 flex -translate-x-1/2 flex-col items-center gap-2.5"
     >
       {toasts.map((t) => (
         <ToastItem

@@ -230,23 +230,23 @@ export function ChartTooltipContent({
 }: ChartTooltipContentProps) {
   return (
     <div
-      className="rounded-ctl border border-line bg-panel px-3 py-[10px] text-[12.5px] font-medium"
+      className="rounded-ctl border border-line bg-panel px-3 py-2.5 text-[12.5px] font-medium"
       style={{ boxShadow: "var(--shadow-lg)", minWidth: "180px" }}
     >
       {/* Encabezado: mes y año (+ sufijo "· Proyección" cuando es mes proyectado) */}
-      <p className="mb-[8px] font-semibold text-ink">
+      <p className="mb-2 font-semibold text-ink">
         {monthLabel}
         {isProjected && (
-          <span className="ml-[5px] text-[10.5px] font-semibold text-muted">
+          <span className="ml-1.25 text-[10.5px] font-semibold text-muted">
             · Proyección
           </span>
         )}
       </p>
 
       {/* Filas de series/categorías */}
-      <div className="flex flex-col gap-[5px]">
+      <div className="flex flex-col gap-1.25">
         {rows.map((row, i) => (
-          <div key={i} className="flex items-center gap-[7px]">
+          <div key={i} className="flex items-center gap-1.75">
             {/* Swatch 8px */}
             <span
               className="shrink-0 rounded-[3px]"
@@ -269,8 +269,8 @@ export function ChartTooltipContent({
       {/* Total (Forma 2) separado por divisor */}
       {totalRow && (
         <>
-          <div className="my-[7px]" style={{ borderTop: "1px solid var(--hair)" }} />
-          <div className="flex items-center gap-[7px]">
+          <div className="my-1.75" style={{ borderTop: "1px solid var(--hair)" }} />
+          <div className="flex items-center gap-1.75">
             <span
               className="shrink-0 rounded-[3px]"
               style={{ width: 8, height: 8, background: totalRow.color }}
@@ -290,8 +290,8 @@ export function ChartTooltipContent({
       {/* Nota de límite cruzado (P2 — Tramo 2): portador de a11y de la marca pasiva. */}
       {warningNote && (
         <>
-          <div className="my-[7px]" style={{ borderTop: "1px solid var(--hair)" }} />
-          <div className="flex items-center gap-[6px]">
+          <div className="my-1.75" style={{ borderTop: "1px solid var(--hair)" }} />
+          <div className="flex items-center gap-1.5">
             <AlertTriangle size={12} aria-hidden="true" className="shrink-0 text-warning-ink" />
             <span className="text-[11.5px] font-medium text-warning-ink">{warningNote}</span>
           </div>
@@ -340,7 +340,7 @@ interface ChartLegendProps {
   commandSlot?: React.ReactNode;
   /**
    * Cuando true, los chips de categoría se envuelven en una región scrolleable
-   * (max-h-[84px] overflow-y-auto) con fade inferior condicional y el commandSlot
+   * (max-h-21 overflow-y-auto) con fade inferior condicional y el commandSlot
    * va en un carril fijo debajo.
    *
    * Usar solo para leyendas de categorías (Forma 1 Por cat + Forma 2).
@@ -369,9 +369,9 @@ interface ChartLegendProps {
  * - Active/pressed: fondo --panel-3.
  * - Focus: ring --accent-soft 3px, radio --r-chip (7px).
  *
- * Layout: -mx-[6px] en el contenedor de chips para compensar el padding lateral de los botones
+ * Layout: -mx-1.5 en el contenedor de chips para compensar el padding lateral de los botones
  * (el swatch del primer ítem queda alineado al eje del gráfico, igual que la leyenda decorativa).
- * gap-x-[10px] + px-[6px] de cada botón ≈ 16px de aire visual entre swatches (misma densidad).
+ * gap-x-2.5 + px-1.5 de cada botón ≈ 16px de aire visual entre swatches (misma densidad).
  */
 export function ChartLegend({
   items,
@@ -412,13 +412,13 @@ export function ChartLegend({
     return (
       <div
         className={cn(
-          "flex flex-wrap items-center gap-x-4 gap-y-2 mt-[14px]",
+          "flex flex-wrap items-center gap-x-4 gap-y-2 mt-3.5",
           className,
         )}
         aria-label="Leyenda del gráfico"
       >
         {items.map((item) => (
-          <div key={item.id} className="flex items-center gap-[6px]">
+          <div key={item.id} className="flex items-center gap-1.5">
             <span
               className="shrink-0 rounded-[3px]"
               style={{ width: 10, height: 10, background: item.color }}
@@ -437,7 +437,7 @@ export function ChartLegend({
     <div
       role="group"
       aria-label={groupLabel ?? "Filtrar series"}
-      className="flex flex-wrap items-center gap-x-[10px] gap-y-[6px] -mx-[6px]"
+      className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 -mx-1.5"
     >
       {items.map((item) => {
         const isOff = hiddenIds.includes(item.id);
@@ -449,8 +449,8 @@ export function ChartLegend({
             onClick={() => onToggle?.(item.id)}
             className={cn(
               // "group" permite que los spans hijos reaccionen al hover del botón
-              "group inline-flex items-center gap-[6px] px-[6px] py-[4px] rounded-[7px]",
-              "cursor-pointer transition-[background-color,opacity] duration-[140ms]",
+              "group inline-flex items-center gap-1.5 px-1.5 py-1 rounded-chip",
+              "cursor-pointer transition-[background-color,opacity] duration-140",
               "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
               // Hover/active — aplica en ambos estados on/off
               "hover:bg-panel-2 active:bg-panel-3",
@@ -482,7 +482,7 @@ export function ChartLegend({
                 Apagado: --muted + line-through → --ink-2 en hover del botón (group-hover:text-ink-2), sigue tachado. */}
             <span
               className={cn(
-                "text-[12.5px] font-medium select-none transition-colors duration-[140ms]",
+                "text-[12.5px] font-medium select-none transition-colors duration-140",
                 isOff
                   ? "line-through text-muted group-hover:text-ink-2"
                   : "text-ink-2 group-hover:text-ink",
@@ -500,7 +500,7 @@ export function ChartLegend({
   if (!scrollable) {
     return (
       <div
-        className={cn("mt-[14px]", className)}
+        className={cn("mt-3.5", className)}
       >
         {chipsGroup}
       </div>
@@ -510,21 +510,21 @@ export function ChartLegend({
   // ── Modo scrollable: stack vertical (leyendas de categorías) ──
   //
   // Estructura:
-  //   <bloque-leyenda mt-[14px] stack vertical>
-  //     <región-scroll max-h-[84px] overflow-y-auto overflow-x-hidden data-overflow>
-  //       <div role="group" flex-wrap -mx-[6px]> …chips… </div>
+  //   <bloque-leyenda mt-3.5 stack vertical>
+  //     <región-scroll max-h-21 overflow-y-auto overflow-x-hidden data-overflow>
+  //       <div role="group" flex-wrap -mx-1.5> …chips… </div>
   //     </región-scroll>
-  //     <carril-comando -ml-[8px]>  [divisor hr][LegendAllChip]  </carril-comando>
+  //     <carril-comando -ml-2>  [divisor hr][LegendAllChip]  </carril-comando>
   //   </bloque-leyenda>
   //
   // El fade inferior se implementa con mask-image sobre la región scrolleable,
   // atado al atributo data-overflow="true" vía CSS en globals.css.
   return (
-    <div className={cn("mt-[14px]", className)}>
+    <div className={cn("mt-3.5", className)}>
       {/* Región scrolleable — los chips viven acá */}
       <div
         ref={scrollRegionRef}
-        className="max-h-[84px] overflow-y-auto overflow-x-hidden pr-[2px] legend-scroll-region"
+        className="max-h-21 overflow-y-auto overflow-x-hidden pr-0.5 legend-scroll-region"
         data-overflow={hasOverflow ? "true" : "false"}
       >
         {chipsGroup}
@@ -532,7 +532,7 @@ export function ChartLegend({
 
       {/* Carril fijo del comando (divisor + LegendAllChip) — nunca scrollea */}
       {commandSlot && (
-        <div className="-ml-[8px]">
+        <div className="-ml-2">
           {commandSlot}
         </div>
       )}

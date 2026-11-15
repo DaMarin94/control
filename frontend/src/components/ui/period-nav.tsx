@@ -22,7 +22,7 @@
  *
  * 1) ANCHO — el bloque de contenido usa el mecanismo CANÓNICO, el mismo que
  *    las otras cinco pantallas (`/`, `/categorias`, `/metodos-pago`,
- *    `/reportes`, `/configuracion`): `max-w-[1120px] mx-auto` (el `px-10` y
+ *    `/reportes`, `/configuracion`): `max-w-280 mx-auto` (el `px-10` y
  *    el padding vertical los agrega el consumidor sobre `children`, igual
  *    que antes). Es un BLOQUE, no un track de grid: llena el disponible y
  *    recién capea al llegar a 1120px — nunca colapsa a `max-content` ni dejar
@@ -119,7 +119,7 @@
  *
  * Props:
  *  - children: contenido de la columna central (el consumidor agrega su
- *    propio `px-10` y padding vertical; PeriodNav solo aporta `max-w-[1120px]
+ *    propio `px-10` y padding vertical; PeriodNav solo aporta `max-w-280
  *    mx-auto`).
  *  - prevLabel: aria-label del botón anterior (ej. "Mes anterior").
  *  - nextLabel: aria-label del botón siguiente (ej. "Mes siguiente").
@@ -255,7 +255,7 @@ export function PeriodNav({
 
       {/* ── Bloque de contenido — mecanismo canónico ─────────────────────── */}
       {/*
-       * max-w-[1120px] mx-auto: el mismo mecanismo que las otras cinco
+       * max-w-280 mx-auto: el mismo mecanismo que las otras cinco
        * pantallas. El px-10 y el padding vertical los aporta el consumidor
        * sobre `children` (no acá), igual que antes.
        * min-w-0: un hijo de bloque normal no lo necesita para no colapsar
@@ -263,7 +263,7 @@ export function PeriodNav({
        * algún descendiente todavía asume un contexto flex/grid ancestro
        * para su propio truncado de texto.
        */}
-      <div className="max-w-[1120px] mx-auto min-w-0">{children}</div>
+      <div className="max-w-280 mx-auto min-w-0">{children}</div>
 
       {/* ── Ancla siguiente › — sonda de medición, sin contenido visual ──── */}
       <div
@@ -349,7 +349,7 @@ function PeriodNavButton({ label, disabled, onClick, side }: PeriodNavButtonProp
         "flex items-center justify-center rounded-full",
         "w-16 h-16",
         // Transición de color (hover estándar DS 0.14s)
-        "transition-colors duration-[140ms] motion-reduce:transition-none",
+        "transition-colors duration-140 motion-reduce:transition-none",
         // Glifo en reposo: --faint
         "text-faint",
         // Fondo en reposo: transparente (sin fill; es affordance "al aire")

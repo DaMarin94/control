@@ -34,9 +34,9 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
               // Superficie y borde
               "rounded-ctl border-[1.5px] border-line bg-panel",
               // Padding DS: 11px vertical, 13px horizontal; pr extra para el ícono
-              "py-[11px] pl-[13px] pr-10",
+              "py-2.75 pl-3.25 pr-10",
               // Cursor y transición
-              "cursor-pointer transition-all duration-[140ms]",
+              "cursor-pointer transition-all duration-140",
               // Focus: borde accent + ring 3px accent-soft
               "focus-visible:outline-none focus:outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]",
               // Disabled

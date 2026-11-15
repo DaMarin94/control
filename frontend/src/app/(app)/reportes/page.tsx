@@ -76,7 +76,7 @@ interface AddCardMenuProps {
   onClose: () => void;
 }
 
-/** Ancho fijo del popover (debe coincidir con w-[240px] en el JSX). */
+/** Ancho fijo del popover (debe coincidir con w-60 en el JSX). */
 const POPOVER_WIDTH = 240;
 /** Colchón mínimo al borde del viewport. */
 const VIEWPORT_MARGIN = 12;
@@ -175,7 +175,7 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
   const menuContent = (
     <div
       ref={menuRef}
-      className="fixed z-50 w-[240px] rounded-ctl border border-line bg-panel shadow-[var(--shadow-lg)] p-[6px] animate-modal-pop"
+      className="fixed z-50 w-60 rounded-ctl border border-line bg-panel shadow-(--shadow-lg) p-1.5 animate-modal-pop"
       style={{ top: position.top, left: position.left }}
       role="menu"
       aria-label="Tipo de reporte"
@@ -185,12 +185,12 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
         type="button"
         role="menuitem"
         onClick={() => onSelect("income-expense")}
-        className="flex w-full items-center gap-[10px] rounded-ctl px-3 py-[10px] text-left transition-colors duration-[140ms] hover:bg-panel-2 focus-visible:outline-none focus-visible:bg-panel-2"
+        className="flex w-full items-center gap-2.5 rounded-ctl px-3 py-2.5 text-left transition-colors duration-140 hover:bg-panel-2 focus-visible:outline-none focus-visible:bg-panel-2"
       >
         <AreaChart size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
         <div>
           <p className="text-[13px] font-semibold text-ink">Ingresos vs Gastos</p>
-          <p className="text-[12.5px] leading-[1.5] text-muted mt-[1px]">Ingresos vs. gastos por mes</p>
+          <p className="text-[12.5px] leading-normal text-muted mt-px">Ingresos vs. gastos por mes</p>
         </div>
       </button>
 
@@ -199,12 +199,12 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
         type="button"
         role="menuitem"
         onClick={() => onSelect("by-category")}
-        className="flex w-full items-center gap-[10px] rounded-ctl px-3 py-[10px] text-left transition-colors duration-[140ms] hover:bg-panel-2 focus-visible:outline-none focus-visible:bg-panel-2"
+        className="flex w-full items-center gap-2.5 rounded-ctl px-3 py-2.5 text-left transition-colors duration-140 hover:bg-panel-2 focus-visible:outline-none focus-visible:bg-panel-2"
       >
         <BarChart3 size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
         <div>
           <p className="text-[13px] font-semibold text-ink">Gastos por categoría</p>
-          <p className="text-[12.5px] leading-[1.5] text-muted mt-[1px]">Gastos por categoría, apilado</p>
+          <p className="text-[12.5px] leading-normal text-muted mt-px">Gastos por categoría, apilado</p>
         </div>
       </button>
 
@@ -213,12 +213,12 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
         type="button"
         role="menuitem"
         onClick={() => onSelect("unique-grid")}
-        className="flex w-full items-center gap-[10px] rounded-ctl px-3 py-[10px] text-left transition-colors duration-[140ms] hover:bg-panel-2 focus-visible:outline-none focus-visible:bg-panel-2"
+        className="flex w-full items-center gap-2.5 rounded-ctl px-3 py-2.5 text-left transition-colors duration-140 hover:bg-panel-2 focus-visible:outline-none focus-visible:bg-panel-2"
       >
         <CalendarDays size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
         <div>
           <p className="text-[13px] font-semibold text-ink">Gastos Únicos</p>
-          <p className="text-[12.5px] leading-[1.5] text-muted mt-[1px]">Grilla día × mes de gastos únicos</p>
+          <p className="text-[12.5px] leading-normal text-muted mt-px">Grilla día × mes de gastos únicos</p>
         </div>
       </button>
 
@@ -227,12 +227,12 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
         type="button"
         role="menuitem"
         onClick={() => onSelect("installment-gantt")}
-        className="flex w-full items-center gap-[10px] rounded-ctl px-3 py-[10px] text-left transition-colors duration-[140ms] hover:bg-panel-2 focus-visible:outline-none focus-visible:bg-panel-2"
+        className="flex w-full items-center gap-2.5 rounded-ctl px-3 py-2.5 text-left transition-colors duration-140 hover:bg-panel-2 focus-visible:outline-none focus-visible:bg-panel-2"
       >
         <CalendarRange size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
         <div>
           <p className="text-[13px] font-semibold text-ink">Gastos en Cuotas</p>
-          <p className="text-[12.5px] leading-[1.5] text-muted mt-[1px]">Gantt anual de gastos en cuotas</p>
+          <p className="text-[12.5px] leading-normal text-muted mt-px">Gantt anual de gastos en cuotas</p>
         </div>
       </button>
 
@@ -241,12 +241,12 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
         type="button"
         role="menuitem"
         onClick={() => onSelect("inflation-income")}
-        className="flex w-full items-center gap-[10px] rounded-ctl px-3 py-[10px] text-left transition-colors duration-[140ms] hover:bg-panel-2 focus-visible:outline-none focus-visible:bg-panel-2"
+        className="flex w-full items-center gap-2.5 rounded-ctl px-3 py-2.5 text-left transition-colors duration-140 hover:bg-panel-2 focus-visible:outline-none focus-visible:bg-panel-2"
       >
         <TrendingUp size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
         <div>
           <p className="text-[13px] font-semibold text-ink">Inflación vs Ingresos</p>
-          <p className="text-[12.5px] leading-[1.5] text-muted mt-[1px]">Variación de tus ingresos frente a la inflación, mes a mes.</p>
+          <p className="text-[12.5px] leading-normal text-muted mt-px">Variación de tus ingresos frente a la inflación, mes a mes.</p>
         </div>
       </button>
 
@@ -255,12 +255,12 @@ function AddCardMenu({ anchorRef, onSelect, onClose }: AddCardMenuProps) {
         type="button"
         role="menuitem"
         onClick={() => onSelect("fixed-evolution")}
-        className="flex w-full items-center gap-[10px] rounded-ctl px-3 py-[10px] text-left transition-colors duration-[140ms] hover:bg-panel-2 focus-visible:outline-none focus-visible:bg-panel-2"
+        className="flex w-full items-center gap-2.5 rounded-ctl px-3 py-2.5 text-left transition-colors duration-140 hover:bg-panel-2 focus-visible:outline-none focus-visible:bg-panel-2"
       >
         <Repeat size={16} className="shrink-0 text-ink-2" aria-hidden="true" />
         <div>
           <p className="text-[13px] font-semibold text-ink">Detalle histórico de fijos</p>
-          <p className="text-[12.5px] leading-[1.5] text-muted mt-[1px]">Cada gasto e ingreso fijo por separado, mes a mes: cuánto valía y cuándo cambió.</p>
+          <p className="text-[12.5px] leading-normal text-muted mt-px">Cada gasto e ingreso fijo por separado, mes a mes: cuánto valía y cuándo cambió.</p>
         </div>
       </button>
     </div>
@@ -289,9 +289,9 @@ function AddCardButton({ variant, buttonRef, isMenuOpen, onClick }: AddCardButto
         aria-label="Agregar primer reporte"
         aria-expanded={isMenuOpen}
         className={cn(
-          "mx-auto flex w-full max-w-[480px] flex-col items-center justify-center gap-3",
+          "mx-auto flex w-full max-w-120 flex-col items-center justify-center gap-3",
           "rounded-card border border-dashed border-line bg-panel-2",
-          "transition-all duration-[140ms] cursor-pointer",
+          "transition-all duration-140 cursor-pointer",
           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
           "hover:border-line-strong hover:bg-panel-3",
         )}
@@ -304,7 +304,7 @@ function AddCardButton({ variant, buttonRef, isMenuOpen, onClick }: AddCardButto
         {/* Copy */}
         <div className="text-center px-6">
           <p className="text-[15px] font-semibold text-ink-2">Armá tu primer reporte</p>
-          <p className="text-[12.5px] font-medium text-muted mt-1 leading-[1.5] max-w-[300px]">
+          <p className="text-[12.5px] font-medium text-muted mt-1 leading-normal max-w-75">
             Agregá un reporte de ingresos y gastos o de gastos por categoría. Cada uno navega su propio año y filtra sus categorías.
           </p>
         </div>
@@ -323,7 +323,7 @@ function AddCardButton({ variant, buttonRef, isMenuOpen, onClick }: AddCardButto
       className={cn(
         "flex w-full flex-col items-center justify-center gap-2",
         "rounded-card border border-dashed border-line bg-panel-2",
-        "transition-all duration-[140ms] cursor-pointer",
+        "transition-all duration-140 cursor-pointer",
         "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
         "hover:border-line-strong hover:bg-panel-3",
       )}
@@ -639,13 +639,13 @@ function ReportesPageContent() {
   const hasCards = cards.length > 0;
 
   return (
-    <div className="px-10 py-[34px] pb-20 max-w-[1120px] mx-auto animate-screen-fade">
+    <div className="px-10 py-8.5 pb-20 max-w-280 mx-auto animate-screen-fade">
       {/* ── Header .phead ── */}
       <div className="flex items-end justify-between gap-5 mb-7 flex-wrap">
         <div>
           {/* Fila del eyebrow: label + chip de moneda default (a la derecha del eyebrow) */}
-          <div className="flex items-center gap-[10px] mb-[6px]">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <p className="text-[12px] font-semibold uppercase tracking-widest text-muted">
               Tu actividad
             </p>
             <CurrencyChip currency={defaultCurrency} />
@@ -666,12 +666,12 @@ function ReportesPageContent() {
                 // Primario índigo (señala modo activo)
                 "inline-flex items-center gap-1.5 px-3 py-2",
                 "text-[13px] font-semibold text-white",
-                "rounded-[var(--r-ctl)]",
+                "rounded-(--r-ctl)",
                 "bg-accent hover:bg-accent-press",
-                "transition-colors duration-[140ms]",
+                "transition-colors duration-140",
                 "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
-                "shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0_/_0.2)]",
-                "hover:shadow-[var(--shadow-md)]",
+                "shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0/0.2)]",
+                "hover:shadow-(--shadow-md)",
               ].join(" ")}
             >
               <Check size={15} aria-hidden="true" />
@@ -686,10 +686,10 @@ function ReportesPageContent() {
                 // Ghost del DS
                 "inline-flex items-center gap-1.5 px-3 py-2",
                 "text-[13px] font-semibold text-ink-2",
-                "rounded-[var(--r-ctl)]",
+                "rounded-(--r-ctl)",
                 "bg-panel border border-line",
                 "hover:bg-panel-2 hover:text-ink",
-                "transition-colors duration-[140ms]",
+                "transition-colors duration-140",
                 "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
               ].join(" ")}
             >
@@ -724,7 +724,7 @@ function ReportesPageContent() {
             items={cards.map((c) => c.id)}
             strategy={verticalListSortingStrategy}
           >
-            <div className="flex flex-col gap-[var(--gap)]">
+            <div className="flex flex-col gap-(--gap)">
               {cards.map((card, index) => (
                 <SortableReportCard
                   key={card.id}

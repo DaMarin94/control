@@ -32,9 +32,9 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             // Superficie y borde
             "rounded-ctl border-[1.5px] border-line bg-panel",
             // Padding DS: 11px vertical, 13px horizontal
-            "px-[13px] py-[11px]",
+            "px-3.25 py-2.75",
             // Transición
-            "transition-all duration-[140ms]",
+            "transition-all duration-140",
             // Placeholder
             "placeholder:text-faint",
             // Focus: borde accent + ring 3px accent-soft

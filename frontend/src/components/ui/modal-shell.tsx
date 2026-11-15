@@ -17,9 +17,9 @@
  *
  * Dos variantes (anatomía y contrato idénticos, difieren en tamaño/densidad):
  * - "dialog" — confirmación / diálogo chico (borrados, reactivación,
- *   active-limit-dialog): max-w-[440px].
+ *   active-limit-dialog): max-w-110.
  * - "form" — formulario largo (transaction-modal, category-form-modal,
- *   método de pago, crear/editar límite): max-w-[460px], puede llevar tabs
+ *   método de pago, crear/editar límite): max-w-115, puede llevar tabs
  *   en el header.
  *
  * Apilamiento (invariante 3 / RN de overlays): `stacked` monta el scrim en
@@ -38,8 +38,8 @@ import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 export type ModalShellVariant = "dialog" | "form";
 
 const VARIANT_MAX_WIDTH: Record<ModalShellVariant, string> = {
-  dialog: "max-w-[440px]",
-  form: "max-w-[460px]",
+  dialog: "max-w-110",
+  form: "max-w-115",
 };
 
 export interface ModalShellProps {
@@ -70,7 +70,7 @@ export interface ModalShellProps {
    */
   onEscape?: () => void;
   /**
-   * Ensancha el panel a `max-w-[640px]` (vista evolución de la card de
+   * Ensancha el panel a `max-w-160` (vista evolución de la card de
    * detalle, docs/design.md). Default false: el ancho lo da la `variant`.
    */
   wide?: boolean;
@@ -147,7 +147,7 @@ export function ModalShell({
       <div
         className={cn(
           "w-full bg-panel border border-line overflow-hidden animate-modal-pop max-h-[calc(100dvh-48px)] flex flex-col",
-          wide ? "max-w-[640px]" : VARIANT_MAX_WIDTH[variant],
+          wide ? "max-w-160" : VARIANT_MAX_WIDTH[variant],
         )}
         style={{ borderRadius: "18px", boxShadow: "var(--shadow-lg)" }}
         onClick={(e) => e.stopPropagation()}
@@ -174,7 +174,7 @@ export function ModalShellHeader({
   onClose,
 }: ModalShellHeaderProps) {
   return (
-    <div className="flex items-center justify-between px-[22px] pt-5 pb-4 shrink-0">
+    <div className="flex items-center justify-between px-5.5 pt-5 pb-4 shrink-0">
       <h2 id={titleId} className="text-[18px] font-bold tracking-[-0.01em] text-ink m-0 min-w-0 flex-1 truncate">
         {title}
       </h2>
@@ -183,7 +183,7 @@ export function ModalShellHeader({
           type="button"
           onClick={onClose}
           aria-label="Cerrar"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-ctl text-muted transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
         >
           <X size={18} aria-hidden="true" />
         </button>
@@ -205,7 +205,7 @@ export function ModalShellBody({ id, className, children }: ModalShellBodyProps)
     <div
       id={id}
       className={cn(
-        "flex-1 min-h-0 overflow-y-auto px-[22px] pb-[22px] space-y-[14px]",
+        "flex-1 min-h-0 overflow-y-auto px-5.5 pb-5.5 space-y-3.5",
         className,
       )}
     >
@@ -225,7 +225,7 @@ export function ModalShellFooter({ className, children }: ModalShellFooterProps)
   return (
     <div
       className={cn(
-        "flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2 shrink-0",
+        "flex items-center justify-end gap-3 px-5.5 py-4 border-t border-hair bg-panel-2 shrink-0",
         className,
       )}
     >

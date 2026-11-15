@@ -206,7 +206,7 @@ export function CategoryFormModal({
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col flex-1 min-h-0">
         <ModalShellBody>
           {/* Campo nombre */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <Label htmlFor="cat-name" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Nombre
             </Label>
@@ -220,7 +220,7 @@ export function CategoryFormModal({
           </div>
 
           {/* Scope picker */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Alcance
             </Label>
@@ -235,7 +235,7 @@ export function CategoryFormModal({
                       type="button"
                       onClick={() => field.onChange(opt.value)}
                       className={cn(
-                        "text-[13px] font-semibold cursor-pointer px-2 py-[10px] rounded-ctl border transition-colors duration-[140ms]",
+                        "text-[13px] font-semibold cursor-pointer px-2 py-2.5 rounded-ctl border transition-colors duration-140",
                         field.value === opt.value
                           ? "border-accent bg-accent-soft text-accent-ink"
                           : "border-line bg-panel text-muted hover:text-ink",
@@ -247,7 +247,7 @@ export function CategoryFormModal({
                 </div>
               )}
             />
-            <p className="text-[12.5px] leading-[1.5] text-muted">
+            <p className="text-[12.5px] leading-normal text-muted">
               Define si esta categoría aplica a gastos, ingresos o ambos.
             </p>
           </div>
@@ -294,7 +294,7 @@ function ColorPicker({ value, onChange }: ColorPickerProps) {
   }
 
   return (
-    <div className="flex flex-col gap-[7px]">
+    <div className="flex flex-col gap-1.75">
       {/* Fila cabecera: Label + botón Aleatorio */}
       <div className="flex items-center justify-between">
         <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
@@ -304,7 +304,7 @@ function ColorPicker({ value, onChange }: ColorPickerProps) {
           type="button"
           onClick={handleRandom}
           aria-label="Elegir color aleatorio"
-          className="inline-flex items-center gap-[5px] rounded-ctl px-2 py-1 text-[12.5px] font-semibold text-ink-2 border border-line bg-panel transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+          className="inline-flex items-center gap-1.25 rounded-ctl px-2 py-1 text-[12.5px] font-semibold text-ink-2 border border-line bg-panel transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
         >
           <Shuffle size={15} aria-hidden="true" />
           Aleatorio

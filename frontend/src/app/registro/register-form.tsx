@@ -70,9 +70,9 @@ export function RegisterForm() {
   }
 
   return (
-    <form method="post" onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-[14px]">
+    <form method="post" onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-3.5">
       {/* Campo email */}
-      <div className="flex flex-col gap-[7px]">
+      <div className="flex flex-col gap-1.75">
         <Label htmlFor="email" required>
           Email
         </Label>
@@ -88,7 +88,7 @@ export function RegisterForm() {
         {emailInUseError && (
           <a
             href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}
-            className="text-[12.5px] font-semibold text-accent-ink underline-offset-[2px] hover:underline"
+            className="text-[12.5px] font-semibold text-accent-ink underline-offset-2 hover:underline"
           >
             Ir a iniciar sesión
           </a>
@@ -102,7 +102,7 @@ export function RegisterForm() {
       </div>
 
       {/* Campo contraseña */}
-      <div className="flex flex-col gap-[7px]">
+      <div className="flex flex-col gap-1.75">
         <Label htmlFor="password" required>
           Contraseña
         </Label>
@@ -117,7 +117,7 @@ export function RegisterForm() {
       </div>
 
       {/* Campo confirmar contraseña */}
-      <div className="flex flex-col gap-[7px]">
+      <div className="flex flex-col gap-1.75">
         <Label htmlFor="confirmPassword" required>
           Confirmá tu contraseña
         </Label>
@@ -135,7 +135,7 @@ export function RegisterForm() {
       <button
         type="submit"
         disabled={isLoading}
-        className="mt-1 inline-flex w-full items-center justify-center gap-2 rounded-ctl border border-transparent bg-accent px-4 py-[13px] text-[15px] font-semibold text-white shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0_/_0.2)] transition-all duration-[140ms] hover:-translate-y-px hover:bg-accent-press hover:shadow-[var(--shadow-md)] disabled:pointer-events-none disabled:opacity-50"
+        className="mt-1 inline-flex w-full items-center justify-center gap-2 rounded-ctl border border-transparent bg-accent px-4 py-3.25 text-[15px] font-semibold text-white shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0/0.2)] transition-all duration-140 hover:-translate-y-px hover:bg-accent-press hover:shadow-(--shadow-md) disabled:pointer-events-none disabled:opacity-50"
       >
         {isLoading ? "Creando cuenta..." : "Crear cuenta"}
       </button>

@@ -64,7 +64,7 @@ export function UserMenu({ email }: UserMenuProps) {
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="flex w-full items-center gap-[10px] rounded-ctl p-2 text-left transition-colors duration-[140ms] hover:bg-panel-2"
+        className="flex w-full items-center gap-2.5 rounded-ctl p-2 text-left transition-colors duration-140 hover:bg-panel-2"
       >
         {/* Avatar: gradiente de acento con la inicial */}
         <span
@@ -88,7 +88,7 @@ export function UserMenu({ email }: UserMenuProps) {
         <ChevronDown
           size={14}
           aria-hidden="true"
-          className={`shrink-0 text-muted transition-transform duration-[140ms] ${open ? "rotate-180" : ""}`}
+          className={`shrink-0 text-muted transition-transform duration-140 ${open ? "rotate-180" : ""}`}
         />
       </button>
 
@@ -96,7 +96,7 @@ export function UserMenu({ email }: UserMenuProps) {
       {open && (
         <div
           role="menu"
-          className="absolute bottom-full left-0 z-50 mb-2 w-full rounded-ctl border border-line bg-panel shadow-[var(--shadow-md)] overflow-hidden"
+          className="absolute bottom-full left-0 z-50 mb-2 w-full rounded-ctl border border-line bg-panel shadow-(--shadow-md) overflow-hidden"
         >
           <button
             type="button"
@@ -105,7 +105,7 @@ export function UserMenu({ email }: UserMenuProps) {
               setOpen(false);
               signOut({ callbackUrl: "/login" });
             }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-[14px] font-medium text-ink-2 transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink"
+            className="flex w-full items-center gap-2 px-3 py-2 text-[14px] font-medium text-ink-2 transition-colors duration-140 hover:bg-panel-2 hover:text-ink"
           >
             <LogOut size={14} aria-hidden="true" className="shrink-0 opacity-70" />
             Cerrar sesión

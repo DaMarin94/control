@@ -129,8 +129,8 @@ export function SimulationBand({
   }
 
   return (
-    <div className="shrink-0 border-t border-line bg-panel-2 px-3 py-[10px] flex flex-col gap-[8px]">
-      <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+    <div className="shrink-0 border-t border-line bg-panel-2 px-3 py-2.5 flex flex-col gap-2">
+      <span className="text-[12px] font-semibold uppercase tracking-widest text-muted">
         Simulación
       </span>
 
@@ -138,9 +138,9 @@ export function SimulationBand({
         type="button"
         onClick={onOpenCreate}
         className={cn(
-          "flex w-full items-center justify-center gap-[6px] min-h-[34px] rounded-ctl",
+          "flex w-full items-center justify-center gap-1.5 min-h-8.5 rounded-ctl",
           "bg-panel border border-line text-[12.5px] font-semibold text-ink-2",
-          "transition-colors duration-[140ms] hover:bg-panel-3 hover:text-ink",
+          "transition-colors duration-140 hover:bg-panel-3 hover:text-ink",
           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
         )}
       >
@@ -149,10 +149,10 @@ export function SimulationBand({
       </button>
 
       {!hasActive ? (
-        <p className="text-[12.5px] leading-[1.5] text-muted">Proyecta categorías desde el mes que estás viendo.</p>
+        <p className="text-[12.5px] leading-normal text-muted">Proyecta categorías desde el mes que estás viendo.</p>
       ) : (
         <>
-          <div className="flex flex-col max-h-[176px] overflow-y-auto">
+          <div className="flex flex-col max-h-44 overflow-y-auto">
             {simulations.map((simulation) => (
               <SimulationListItem
                 key={simulation.id}
@@ -172,7 +172,7 @@ export function SimulationBand({
               />
             ))}
           </div>
-          <p className="text-[12.5px] leading-[1.5] text-muted">{formatHorizonBandNote()}</p>
+          <p className="text-[12.5px] leading-normal text-muted">{formatHorizonBandNote()}</p>
         </>
       )}
     </div>
@@ -235,16 +235,16 @@ function SimulationListItem({
   // tenue accionable, sin peso extra, tamaño heredado de la línea (11.5px).
   const textLinkClass = cn(
     "cursor-pointer text-muted",
-    "hover:text-ink-2 hover:underline hover:underline-offset-[2px]",
-    "transition-colors duration-[140ms]",
-    "rounded-[var(--r-chip)]",
+    "hover:text-ink-2 hover:underline hover:underline-offset-2",
+    "transition-colors duration-140",
+    "rounded-(--r-chip)",
     "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
   );
 
   return (
-    <div className="flex flex-wrap items-center gap-[8px] py-[6px]">
+    <div className="flex flex-wrap items-center gap-2 py-1.5">
       <span
-        className="h-[8px] w-[8px] rounded-full shrink-0"
+        className="h-2 w-2 rounded-full shrink-0"
         style={{ background: simulation.category.color }}
         aria-hidden="true"
       />
@@ -260,7 +260,7 @@ function SimulationListItem({
       {/* Chip "Sin datos" — neutro, mismo molde que "Desactivado" del popover de límites.
           Extender no lo toca en ningún momento del flujo (§4.1). */}
       {isPaused && (
-        <span className="shrink-0 inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[6px] py-[1px] text-[10.5px] font-semibold">
+        <span className="shrink-0 inline-flex items-center rounded-(--r-chip) bg-panel-3 text-muted px-1.5 py-px text-[10.5px] font-semibold">
           Sin datos
         </span>
       )}
@@ -271,8 +271,8 @@ function SimulationListItem({
         disabled={isPending}
         aria-label={`Eliminar la simulación de ${categoryName}`}
         className={cn(
-          "flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-muted",
-          "transition-colors duration-[140ms] hover:bg-expense-soft hover:text-expense-ink",
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted",
+          "transition-colors duration-140 hover:bg-expense-soft hover:text-expense-ink",
           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
           // En vuelo: previene la carrera entre eliminar y extender la MISMA
           // simulación (§4.1 c). Las demás filas no se ven afectadas.
@@ -294,7 +294,7 @@ function SimulationListItem({
         ) : extendPhase === "choosing" ? (
           <div
             data-extend-options=""
-            className="flex flex-wrap items-center gap-x-[6px] gap-y-[2px]"
+            className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5"
           >
             {EXTEND_MONTH_OPTIONS.map((option, index) => (
               <Fragment key={option.months}>
@@ -310,7 +310,7 @@ function SimulationListItem({
                   aria-label={option.ariaLabel}
                   // Hit area: el margen negativo cancela el efecto visual del
                   // padding — amplía el alto de clic sin separar los valores.
-                  className={cn(textLinkClass, "whitespace-nowrap py-[3px] -my-[3px]")}
+                  className={cn(textLinkClass, "whitespace-nowrap py-0.75 -my-0.75")}
                 >
                   {option.label}
                 </button>
@@ -327,7 +327,7 @@ function SimulationListItem({
                   ref={triggerRef}
                   type="button"
                   onClick={onStartExtend}
-                  className={cn(textLinkClass, "inline-flex items-center gap-[3px]")}
+                  className={cn(textLinkClass, "inline-flex items-center gap-0.75")}
                 >
                   Extender
                   <ChevronDown size={11} aria-hidden="true" />

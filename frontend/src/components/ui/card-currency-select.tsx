@@ -9,7 +9,7 @@
  * Anatomía:
  *   - Disparador (`CardCurrencyTrigger`): chip-dropdown in-situ, compacto (~52px).
  *     Código de moneda mono 12px/600/tnum --ink-2 + ChevronDown 12px --faint (rota a ▲ al abrir).
- *     Caja: bg-panel-3, --r-chip 7px, px-[8px] py-[3px], gap-[6px]. Sin glifo Wallet.
+ *     Caja: bg-panel-3, --r-chip 7px, px-2 py-0.75, gap-1.5. Sin glifo Wallet.
  *   - Popover-listbox: caja --panel/--line/--r-ctl 10px/--shadow-lg/p-[4px].
  *     4 ítems role="option", orden ARS→USD→EUR→BRL.
  *     Seleccionado: código --ink + Check 14px --ink-2. Hover: fondo --panel-2.
@@ -153,8 +153,8 @@ function CurrencyPopover({ value, anchorRef, onSelect, onClose }: CurrencyPopove
       role="listbox"
       aria-label="Moneda del reporte"
       className={cn(
-        "fixed z-50 min-w-[96px] rounded-ctl border border-line bg-panel",
-        "shadow-[var(--shadow-lg)] p-[4px] animate-modal-pop",
+        "fixed z-50 min-w-24 rounded-ctl border border-line bg-panel",
+        "shadow-(--shadow-lg) p-1 animate-modal-pop",
       )}
       style={{ top: position.top, right: position.right }}
     >
@@ -170,9 +170,9 @@ function CurrencyPopover({ value, anchorRef, onSelect, onClose }: CurrencyPopove
             onClick={() => onSelect(code)}
             onMouseEnter={() => setFocusedIdx(idx)}
             className={cn(
-              "flex w-full items-center justify-between gap-[8px]",
-              "px-[10px] py-[6px] rounded-[7px] cursor-pointer",
-              "transition-colors duration-[140ms]",
+              "flex w-full items-center justify-between gap-2",
+              "px-2.5 py-1.5 rounded-chip cursor-pointer",
+              "transition-colors duration-140",
               "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
               isFocused && !isSelected ? "bg-panel-2" : "",
               isSelected ? "bg-transparent" : "",
@@ -194,7 +194,7 @@ function CurrencyPopover({ value, anchorRef, onSelect, onClose }: CurrencyPopove
               <Check size={14} aria-hidden="true" className="shrink-0 text-ink-2" />
             ) : (
               /* Spacer para alinear el texto con el check */
-              <span className="w-[14px] shrink-0" aria-hidden="true" />
+              <span className="w-3.5 shrink-0" aria-hidden="true" />
             )}
           </button>
         );
@@ -252,9 +252,9 @@ export function CardCurrencySelect({ value, onChange }: CardCurrencySelectProps)
         aria-label={`Moneda del reporte: ${value}`}
         onClick={handleTriggerClick}
         className={cn(
-          "inline-flex items-center gap-[6px] px-[8px] py-[3px]",
-          "rounded-[7px] cursor-pointer",
-          "transition-colors duration-[140ms]",
+          "inline-flex items-center gap-1.5 px-2 py-0.75",
+          "rounded-chip cursor-pointer",
+          "transition-colors duration-140",
           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
           // Reposo: panel-3 / ink-2 / faint
           // Hover o abierto: panel-2 / ink / muted
@@ -277,7 +277,7 @@ export function CardCurrencySelect({ value, onChange }: CardCurrencySelectProps)
           size={12}
           aria-hidden="true"
           className={cn(
-            "shrink-0 transition-[transform,color] duration-[140ms]",
+            "shrink-0 transition-[transform,color] duration-140",
             open ? "rotate-180 text-muted" : "text-faint",
           )}
         />

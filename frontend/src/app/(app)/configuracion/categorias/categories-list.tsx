@@ -42,14 +42,14 @@ function ScopeBadge({ scope }: { scope: ScopeVariant }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-[6px]",
+        "inline-flex items-center gap-1.5",
         "text-[11.5px] font-semibold tracking-[0.02em] leading-[1.4]",
-        "px-[9px] py-[3px] rounded-chip",
+        "px-2.25 py-0.75 rounded-chip",
         SCOPE_BADGE_CLASSES[scope],
       )}
     >
       {/* Punto de color */}
-      <span className="inline-block h-[6px] w-[6px] rounded-full bg-current shrink-0" aria-hidden="true" />
+      <span className="inline-block h-1.5 w-1.5 rounded-full bg-current shrink-0" aria-hidden="true" />
       {SCOPE_LABELS[scope]}
     </span>
   );
@@ -81,11 +81,11 @@ export function CategoriesList() {
         </div>
 
         {/* Lista fantasma: 6 filas que replican la estructura del catrow */}
-        <div className="bg-panel border border-line rounded-card overflow-hidden shadow-[var(--shadow-sm)]">
+        <div className="bg-panel border border-line rounded-card overflow-hidden shadow-(--shadow-sm)">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="grid items-center gap-4 px-5 py-[15px] [&+div]:border-t [&+div]:border-hair"
+              className="grid items-center gap-4 px-5 py-3.75 [&+div]:border-t [&+div]:border-hair"
               style={{ gridTemplateColumns: "16px 1fr auto" }}
             >
               {/* Swatch de color (14×14, radio 5px igual al swatch real) */}
@@ -119,7 +119,7 @@ export function CategoriesList() {
       <div className="flex items-center justify-between gap-5 flex-wrap mb-4">
         <div>
           <h2 className="text-[18px] font-bold tracking-[-0.01em] text-ink">Categorías</h2>
-          <p className="text-[14.5px] leading-[1.5] text-muted mt-[3px]">
+          <p className="text-[14.5px] leading-normal text-muted mt-0.75">
             <span className="mono font-semibold text-ink">{count}</span>{" "}
             {count === 1 ? "categoría activa" : "categorías activas"}. El{" "}
             <b className="font-semibold text-ink">alcance</b> define en qué tipo de movimiento
@@ -136,7 +136,7 @@ export function CategoriesList() {
       {!categories || categories.length === 0 ? (
         <div className="rounded-card border border-dashed border-line bg-panel-2 py-12 text-center">
           <p className="text-[15px] font-semibold text-ink">No tenés categorías activas.</p>
-          <p className="mt-1 text-[12.5px] leading-[1.5] text-muted">
+          <p className="mt-1 text-[12.5px] leading-normal text-muted">
             Creá una para empezar a organizar tus movimientos.
           </p>
           <Button
@@ -148,7 +148,7 @@ export function CategoriesList() {
           </Button>
         </div>
       ) : (
-        <div className="bg-panel border border-line rounded-card overflow-hidden shadow-[var(--shadow-sm)]">
+        <div className="bg-panel border border-line rounded-card overflow-hidden shadow-(--shadow-sm)">
           <ul role="list" className="divide-y-0">
             {categories.map((category) => (
               <CategoryRow
@@ -199,12 +199,12 @@ function CategoryRow({ category, onEdit, onDelete }: CategoryRowProps) {
 
   return (
     <li
-      className="group grid items-center gap-4 px-5 py-[15px] transition-colors duration-[120ms] hover:bg-panel-2 [&+li]:border-t [&+li]:border-hair"
+      className="group grid items-center gap-4 px-5 py-3.75 transition-colors duration-120 hover:bg-panel-2 [&+li]:border-t [&+li]:border-hair"
       style={{ gridTemplateColumns: "16px 1fr auto auto auto" }}
     >
       {/* Swatch de color */}
       <span
-        className="h-[14px] w-[14px] shrink-0 rounded-[5px]"
+        className="h-3.5 w-3.5 shrink-0 rounded-[5px]"
         style={{ backgroundColor: category.color }}
         aria-label={`Color: ${category.color}`}
       />

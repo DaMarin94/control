@@ -21,7 +21,7 @@
  *   - leyenda-filtro de categorías en el footer (= mismo ChartLegend que by-category)
  *   - LegendAllChip presente, región scrolleable presente
  *   - NO hay leyenda de series ni group "Filtrar series"
- * - Región scrolleable con max-h-[84px] en leyenda de by-category
+ * - Región scrolleable con max-h-21 en leyenda de by-category
  * - data-overflow: lógica de medición de scrollHeight > clientHeight
  * - Toggle Barra/Línea en by-category (categoryChartMode + onCategoryChartModeChange)
  */

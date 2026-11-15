@@ -43,7 +43,7 @@ interface MenuPosition {
 
 /**
  * Altura estimada de cada ítem del panel (fila ~33px, ver padding vertical
- * py-[7px] + texto 13.5px) — se combina con la CANTIDAD REAL de ítems para
+ * py-1.75 + texto 13.5px) — se combina con la CANTIDAD REAL de ítems para
  * decidir si el panel abre hacia arriba. Corrección (docs/design.md
  * §"Duplicar movimiento" — 5.º ítem del menú): una constante fija (antes
  * 120px) queda corta con 5 ítems (~173px reales) y el panel abierto en el
@@ -155,10 +155,10 @@ export function KebabMenu({ ariaLabel, items, className }: KebabMenuProps) {
             role="menuitem"
             type="button"
             className={cn(
-              "flex w-full items-center gap-[9px] text-left",
-              "px-3 py-[7px] rounded-[7px]",
+              "flex w-full items-center gap-2.25 text-left",
+              "px-3 py-1.75 rounded-chip",
               "text-[13.5px] font-ui cursor-pointer",
-              "transition-colors duration-[100ms]",
+              "transition-colors duration-100",
               item.danger
                 ? "text-expense-ink hover:bg-expense-soft"
                 : "text-ink hover:bg-panel-2",
@@ -187,9 +187,9 @@ export function KebabMenu({ ariaLabel, items, className }: KebabMenuProps) {
         aria-label={ariaLabel}
         onClick={handleTriggerClick}
         className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-[8px]",
+          "flex h-8 w-8 items-center justify-center rounded-lg",
           "border border-transparent bg-transparent",
-          "text-muted transition-colors duration-[140ms]",
+          "text-muted transition-colors duration-140",
           "hover:bg-panel-3 hover:text-ink",
           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
           /* Cuando el menú está abierto, el trigger debe seguir visible aunque

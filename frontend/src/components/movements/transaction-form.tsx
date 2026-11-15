@@ -100,7 +100,7 @@ export function TransactionForm({
   return (
     <>
       <form id={formId} onSubmit={onSubmit} noValidate className="flex flex-col flex-1 min-h-0">
-        <div className="flex-1 min-h-0 overflow-y-auto px-[22px] pb-[22px] space-y-[14px]">
+        <div className="flex-1 min-h-0 overflow-y-auto px-5.5 pb-5.5 space-y-3.5">
           {/* ── Toggle Gasto/Ingreso (.gi) ── */}
           <Controller
             name="type"
@@ -111,7 +111,7 @@ export function TransactionForm({
                   type="button"
                   onClick={() => field.onChange("EXPENSE")}
                   className={cn(
-                    "flex items-center justify-center gap-2 rounded-ctl border-[1.5px] px-3 py-3 text-[14px] font-semibold transition-colors duration-[140ms] cursor-pointer",
+                    "flex items-center justify-center gap-2 rounded-ctl border-[1.5px] px-3 py-3 text-[14px] font-semibold transition-colors duration-140 cursor-pointer",
                     "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--expense-soft)]",
                     field.value === "EXPENSE"
                       ? "border-expense bg-expense-soft text-expense-ink"
@@ -125,7 +125,7 @@ export function TransactionForm({
                   type="button"
                   onClick={() => field.onChange("INCOME")}
                   className={cn(
-                    "flex items-center justify-center gap-2 rounded-ctl border-[1.5px] px-3 py-3 text-[14px] font-semibold transition-colors duration-[140ms] cursor-pointer",
+                    "flex items-center justify-center gap-2 rounded-ctl border-[1.5px] px-3 py-3 text-[14px] font-semibold transition-colors duration-140 cursor-pointer",
                     "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--income-soft)]",
                     field.value === "INCOME"
                       ? "border-income bg-income-soft text-income-ink"
@@ -143,13 +143,13 @@ export function TransactionForm({
           )}
 
           {/* ── Monto (input amount mono) ── */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <Label htmlFor={`${formId}-amount`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Monto
             </Label>
             <div
               className={cn(
-                "flex items-center gap-2 rounded-ctl border-[1.5px] px-[13px] py-[11px] transition-colors duration-[140ms]",
+                "flex items-center gap-2 rounded-ctl border-[1.5px] px-3.25 py-2.75 transition-colors duration-140",
                 "focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft)]",
                 errors.amountInput
                   ? "border-expense shadow-[0_0_0_3px_var(--expense-soft)]"
@@ -176,7 +176,7 @@ export function TransactionForm({
           </div>
 
           {/* ── Categoría ── */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <div className="flex items-center justify-between">
               <Label htmlFor={`${formId}-category`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Categoría
@@ -184,20 +184,20 @@ export function TransactionForm({
               <button
                 type="button"
                 onClick={openCategoryModal}
-                className="text-[12.5px] font-semibold text-accent-ink hover:text-accent transition-colors duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-sm"
+                className="text-[12.5px] font-semibold text-accent-ink hover:text-accent transition-colors duration-140 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-sm"
               >
                 + Nueva
               </button>
             </div>
 
             {noCategoriesAvailable ? (
-              <div className="flex items-start gap-[11px] rounded-ctl border px-[14px] py-[13px] bg-expense-soft" style={{ borderColor: "oklch(0.57 0.16 27 / 0.25)" }}>
-                <AlertTriangle size={18} className="text-expense-ink shrink-0 mt-[1px]" aria-hidden="true" />
+              <div className="flex items-start gap-2.75 rounded-ctl border px-3.5 py-3.25 bg-expense-soft" style={{ borderColor: "oklch(0.57 0.16 27 / 0.25)" }}>
+                <AlertTriangle size={18} className="text-expense-ink shrink-0 mt-px" aria-hidden="true" />
                 <div className="text-[13px] leading-[1.45] text-expense-ink">
                   <b className="font-bold">Sin categorías para este tipo.</b>{" "}
                   <Link
                     href="/configuracion/categorias"
-                    className="font-bold underline underline-offset-[2px] text-expense-ink hover:opacity-80"
+                    className="font-bold underline underline-offset-2 text-expense-ink hover:opacity-80"
                     onClick={onClose}
                   >
                     Creá una categoría
@@ -229,8 +229,8 @@ export function TransactionForm({
           </div>
 
           {/* ── Fecha y hora ── */}
-          <div className="grid grid-cols-2 gap-[14px]">
-            <div className="flex flex-col gap-[7px]">
+          <div className="grid grid-cols-2 gap-3.5">
+            <div className="flex flex-col gap-1.75">
               <Label htmlFor={`${formId}-date`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 <span className="inline-flex items-center gap-1">
                   <Calendar size={13} aria-hidden="true" />
@@ -244,7 +244,7 @@ export function TransactionForm({
                 {...register("date")}
               />
             </div>
-            <div className="flex flex-col gap-[7px]">
+            <div className="flex flex-col gap-1.75">
               <Label htmlFor={`${formId}-time`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Hora
               </Label>
@@ -258,7 +258,7 @@ export function TransactionForm({
           </div>
 
           {/* ── Descripción ── */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <Label htmlFor={`${formId}-description`} className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Descripción{" "}
               <span className="text-faint font-normal">(opcional)</span>

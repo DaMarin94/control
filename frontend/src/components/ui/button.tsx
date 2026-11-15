@@ -25,7 +25,7 @@ const buttonVariants = cva(
   [
     "inline-flex items-center justify-center gap-2 whitespace-nowrap font-ui font-semibold cursor-pointer",
     "rounded-ctl",
-    "transition-all duration-[140ms]",
+    "transition-all duration-140",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
     "disabled:pointer-events-none disabled:opacity-50",
     "[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
@@ -41,15 +41,15 @@ const buttonVariants = cva(
          */
         default: [
           "bg-accent text-white border border-transparent",
-          "shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0_/_0.2)]",
-          "hover:bg-accent-press hover:-translate-y-px hover:shadow-[var(--shadow-md)]",
+          "shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0/0.2)]",
+          "hover:bg-accent-press hover:-translate-y-px hover:shadow-(--shadow-md)",
         ],
         /**
          * Ghost / secundario — panel con borde, hover a panel-2.
          */
         ghost: [
           "bg-panel text-ink border border-line",
-          "shadow-[var(--shadow-sm)]",
+          "shadow-(--shadow-sm)",
           "hover:bg-panel-2 hover:border-line-strong",
         ],
         /**
@@ -58,7 +58,7 @@ const buttonVariants = cva(
          */
         destructive: [
           "bg-expense-soft text-expense-ink border border-expense",
-          "shadow-[var(--shadow-sm)]",
+          "shadow-(--shadow-sm)",
           "hover:bg-expense hover:text-white hover:-translate-y-px",
         ],
         /**
@@ -66,7 +66,7 @@ const buttonVariants = cva(
          */
         outline: [
           "bg-panel text-ink border border-line-strong",
-          "shadow-[var(--shadow-sm)]",
+          "shadow-(--shadow-sm)",
           "hover:bg-panel-2 hover:-translate-y-px",
         ],
         /**
@@ -74,7 +74,7 @@ const buttonVariants = cva(
          */
         secondary: [
           "bg-panel-2 text-ink border border-line",
-          "shadow-[var(--shadow-sm)]",
+          "shadow-(--shadow-sm)",
           "hover:bg-panel-3 hover:border-line-strong",
         ],
         /**
@@ -93,9 +93,9 @@ const buttonVariants = cva(
          *   lg:      13px 20px / 15px
          *   icon:    cuadrado 36px
          */
-        default: "px-4 py-[10px] text-sm",
-        sm: "px-3 py-[7px] text-[13px]",
-        lg: "px-5 py-[13px] text-[15px]",
+        default: "px-4 py-2.5 text-sm",
+        sm: "px-3 py-1.75 text-[13px]",
+        lg: "px-5 py-3.25 text-[15px]",
         icon: "h-9 w-9 p-0",
       },
     },

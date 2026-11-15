@@ -14,7 +14,7 @@
  *
  * - moneda==default: solo selector de moneda a ancho completo (una columna, sin compact).
  *   No hay label "Cotización", no hay input, no hay prefijo, no hay field-note.
- * - moneda≠default: grid grid-cols-2 gap-[14px] → col izq selector (compact=true) + col der cotización completa.
+ * - moneda≠default: grid grid-cols-2 gap-3.5 → col izq selector (compact=true) + col der cotización completa.
  *
  * LÓGICA: cuando currency === defaultCurrency, el onSubmit de los forms envía exchangeRate = 1.
  * El campo cotización no se renderiza en ese caso — el form no lee el campo oculto.
@@ -69,7 +69,7 @@ export function CurrencyExchangeFields({
 
   return isDefault ? (
     /* ── moneda==default: selector a ancho completo, sin cotización ── */
-    <div className="flex flex-col gap-[7px]">
+    <div className="flex flex-col gap-1.75">
       <Label
         htmlFor="currency-selector"
         className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]"
@@ -78,7 +78,7 @@ export function CurrencyExchangeFields({
       </Label>
       {/*
        * Sin compact: el segmented ocupa todo el ancho del form.
-       * px-[14px] normal para los 4 segmentos.
+       * px-3.5 normal para los 4 segmentos.
        */}
       <CurrencySegmented
         value={currency}
@@ -89,9 +89,9 @@ export function CurrencyExchangeFields({
     </div>
   ) : (
     /* ── moneda≠default: grid 2-col selector + cotización ── */
-    <div className="grid grid-cols-2 gap-[14px]">
+    <div className="grid grid-cols-2 gap-3.5">
       {/* Col izq: Selector de moneda (compact=true — mitad del ancho) */}
-      <div className="flex flex-col gap-[7px]">
+      <div className="flex flex-col gap-1.75">
         <Label
           htmlFor="currency-selector"
           className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]"
@@ -100,7 +100,7 @@ export function CurrencyExchangeFields({
         </Label>
         {/*
          * compact=true: el segmented ocupa la mitad del grid de 2 col.
-         * Padding reducido a px-[8px] para que las 4 etiquetas entren sin recorte.
+         * Padding reducido a px-2 para que las 4 etiquetas entren sin recorte.
          */}
         <CurrencySegmented
           value={currency}
@@ -114,13 +114,13 @@ export function CurrencyExchangeFields({
       {/*
        * Transición al cambiar moneda con disclosure abierto:
        * la columna de cotización hace fade + leve expansión de ancho (~0.14-0.18s).
-       * Se logra con transition-[opacity] en el wrapper de la columna.
+       * Se logra con transition-opacity en el wrapper de la columna.
        * Con prefers-reduced-motion: instantáneo (motion-reduce:transition-none).
        */}
       <div
         className={cn(
-          "flex flex-col gap-[7px]",
-          "transition-[opacity] duration-[160ms] ease-out motion-reduce:transition-none",
+          "flex flex-col gap-1.75",
+          "transition-opacity duration-160 ease-out motion-reduce:transition-none",
         )}
       >
         <Label
@@ -131,7 +131,7 @@ export function CurrencyExchangeFields({
         </Label>
         <div
           className={cn(
-            "flex items-center gap-2 rounded-ctl border-[1.5px] px-[13px] py-[11px] transition-colors duration-[140ms]",
+            "flex items-center gap-2 rounded-ctl border-[1.5px] px-3.25 py-2.75 transition-colors duration-140",
             "focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft)]",
             exchangeRateError
               ? "border-expense shadow-[0_0_0_3px_var(--expense-soft)]"
@@ -160,7 +160,7 @@ export function CurrencyExchangeFields({
 
         {/* Nota de estado (solo si no hay error) */}
         {!exchangeRateError && (
-          <p className="flex items-center gap-[5px] text-[12px] mt-[2px]">
+          <p className="flex items-center gap-1.25 text-[12px] mt-0.5">
             {isExchangeRateModified ? (
               <span className="text-ink-2">Cotización modificada</span>
             ) : (
@@ -174,7 +174,7 @@ export function CurrencyExchangeFields({
 
         {/* Nota extra para fijos (ej. "Cotización para Junio 2026") */}
         {recurringMonthNote && !exchangeRateError && (
-          <p className="text-[12px] text-muted mt-[2px]">{recurringMonthNote}</p>
+          <p className="text-[12px] text-muted mt-0.5">{recurringMonthNote}</p>
         )}
       </div>
     </div>

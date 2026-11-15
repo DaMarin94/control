@@ -88,15 +88,15 @@ export function ThemeIconToggle({
     <div
       role="radiogroup"
       aria-label="Modo de color"
-      className="relative inline-flex rounded-pill p-[2px]"
+      className="relative inline-flex rounded-pill p-0.5"
       style={{ backgroundColor: "var(--panel-3)" }}
     >
       {/* Thumb deslizante — neutro, sin colores semánticos */}
       <span
         aria-hidden="true"
         className={cn(
-          "pointer-events-none absolute top-[2px] bottom-[2px] rounded-pill bg-panel shadow-[var(--shadow-sm)]",
-          "transition-[left,width] duration-[140ms] ease-out motion-reduce:transition-none",
+          "pointer-events-none absolute top-0.5 bottom-0.5 rounded-pill bg-panel shadow-(--shadow-sm)",
+          "transition-[left,width] duration-140 ease-out motion-reduce:transition-none",
         )}
         style={{
           left: `calc(${(selectedIndex / N) * 100}% + 2px)`,
@@ -118,8 +118,8 @@ export function ThemeIconToggle({
             onClick={() => onChange(option.value)}
             onKeyDown={(e) => handleKeyDown(e, i)}
             className={cn(
-              "relative z-10 flex h-[34px] w-[34px] items-center justify-center rounded-pill",
-              "transition-colors duration-[140ms]",
+              "relative z-10 flex h-8.5 w-8.5 items-center justify-center rounded-pill",
+              "transition-colors duration-140",
               "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
               "disabled:opacity-50 disabled:cursor-not-allowed",
               isSelected ? "text-ink" : "text-muted hover:text-ink-2",

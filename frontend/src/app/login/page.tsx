@@ -20,15 +20,15 @@ import { BrandSide } from "@/components/ui/auth-brand-side";
 
 export default function LoginPage() {
   return (
-    <div className="grid min-h-screen [grid-template-columns:1.05fr_1fr] max-[940px]:grid-cols-1">
+    <div className="grid min-h-screen grid-cols-[1.05fr_1fr] max-[940px]:grid-cols-1">
       {/* Panel izquierdo — marca */}
       <BrandSide />
 
       {/* Panel derecho — acceso */}
       <div className="flex items-center justify-center bg-paper px-10 py-10">
-        <div className="flex w-full max-w-[360px] flex-col">
+        <div className="flex w-full max-w-90 flex-col">
           {/* Eyebrow */}
-          <span className="text-[12px] font-semibold uppercase tracking-[.1em] text-muted">
+          <span className="text-[12px] font-semibold uppercase tracking-widest text-muted">
             Bienvenido
           </span>
 
@@ -38,7 +38,7 @@ export default function LoginPage() {
           </h3>
 
           {/* Subtítulo */}
-          <p className="mb-[30px] text-[14.5px] leading-[1.5] text-muted">
+          <p className="mb-7.5 text-[14.5px] leading-normal text-muted">
             Usá tu cuenta de Google. Sin contraseñas que recordar.
           </p>
 
@@ -48,18 +48,18 @@ export default function LoginPage() {
           </Suspense>
 
           {/* Fine print */}
-          <p className="mt-[22px] text-center text-[12.5px] leading-[1.5] text-muted">
+          <p className="mt-5.5 text-center text-[12.5px] leading-normal text-muted">
             Al continuar aceptás los{" "}
             <a
               href="#"
-              className="text-ink-2 underline underline-offset-[2px] hover:text-ink"
+              className="text-ink-2 underline underline-offset-2 hover:text-ink"
             >
               Términos
             </a>{" "}
             y la{" "}
             <a
               href="#"
-              className="text-ink-2 underline underline-offset-[2px] hover:text-ink"
+              className="text-ink-2 underline underline-offset-2 hover:text-ink"
             >
               Política de privacidad
             </a>
@@ -67,11 +67,11 @@ export default function LoginPage() {
           </p>
 
           {/* Link a registro */}
-          <p className="mt-8 text-center text-[12.5px] leading-[1.5] text-muted">
+          <p className="mt-8 text-center text-[12.5px] leading-normal text-muted">
             ¿No tenés cuenta?{" "}
             <a
               href="/registro"
-              className="font-semibold text-accent-ink underline-offset-[2px] hover:underline"
+              className="font-semibold text-accent-ink underline-offset-2 hover:underline"
             >
               Registrate
             </a>

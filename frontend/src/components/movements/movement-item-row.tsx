@@ -96,7 +96,7 @@ import { cn } from "@/lib/utils";
 function IdentitySeparator() {
   return (
     <span
-      className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
+      className="inline-block h-0.75 w-0.75 rounded-full bg-faint shrink-0"
       aria-hidden="true"
     />
   );
@@ -304,7 +304,7 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onSkipS
       onClick={() => setIsDetailOpen(true)}
       onKeyDown={handleRowKeyDown}
       className={cn(
-        "group relative grid items-center gap-[14px] px-[18px] cursor-pointer transition-colors duration-[120ms] [&+&]:border-t [&+&]:border-hair",
+        "group relative grid items-center gap-3.5 px-4.5 cursor-pointer transition-colors duration-120 [&+&]:border-t [&+&]:border-hair",
         "focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--accent-soft)]",
         rowFillClass ? rowFillClass : "hover:bg-panel-2",
       )}
@@ -325,13 +325,13 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onSkipS
         </b>
 
         {/* Sublínea — dos zonas: identidad (izquierda, trunca) · estados (derecha, cluster) */}
-        <span className="flex items-center gap-[10px] mt-[1px]">
+        <span className="flex items-center gap-2.5 mt-px">
           {/* Zona de identidad */}
-          <span className="flex flex-1 min-w-0 items-center gap-[6px] overflow-hidden text-[12px] text-muted">
+          <span className="flex flex-1 min-w-0 items-center gap-1.5 overflow-hidden text-[12px] text-muted">
             {/* Badge "Anulado" — primer segmento cuando skipped */}
             {isSkipped && (
               <span
-                className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em] shrink-0"
+                className="inline-flex items-center rounded-(--r-chip) bg-panel-3 text-muted px-1.75 py-px text-[11px] font-semibold tracking-[0.04em] shrink-0"
                 aria-label="Movimiento anulado para este mes"
               >
                 Anulado
@@ -343,7 +343,7 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onSkipS
 
             {/* Punto de color de categoría — ancla de identidad, inmediatamente antes del nombre */}
             <span
-              className="h-[6px] w-[6px] rounded-full shrink-0"
+              className="h-1.5 w-1.5 rounded-full shrink-0"
               style={{ background: movement.category.color }}
               aria-hidden="true"
             />
@@ -353,7 +353,7 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onSkipS
             {isFijo && (
               <>
                 <IdentitySeparator />
-                <span className="inline-flex items-center gap-[4px] shrink-0">
+                <span className="inline-flex items-center gap-1 shrink-0">
                   <Repeat size={12} className="text-muted shrink-0" aria-hidden="true" />
                   {frequencyLabel}
                 </span>
@@ -367,7 +367,7 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onSkipS
             {isCalculated && movement.calculated?.sourceDescription && (
               <>
                 <IdentitySeparator />
-                <span className="inline-flex min-w-0 items-center gap-[4px]">
+                <span className="inline-flex min-w-0 items-center gap-1">
                   <CornerDownRight size={12} className="text-muted shrink-0" aria-hidden="true" />
                   <span className="min-w-0 truncate">
                     <span className="text-muted">desde </span>
@@ -388,8 +388,8 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onSkipS
               renderiza si ninguna bandera aplica. */}
           {hasStatesZone && (
             <>
-              <span className="h-[12px] w-px bg-hair shrink-0" aria-hidden="true" />
-              <span className="flex items-center gap-[8px] shrink-0">
+              <span className="h-3 w-px bg-hair shrink-0" aria-hidden="true" />
+              <span className="flex items-center gap-2 shrink-0">
                 {/* Marca de límite — efecto "glyph"/"fill" (P2 — Fase 1), primero del cluster */}
                 {limitShowsGlyphInStates && limitTooltip && <LimitGlyph tooltip={limitTooltip} />}
                 {isParent && (
@@ -416,7 +416,7 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onSkipS
 
       {/* Col 4: Monto mono — SIEMPRE una sola línea, tachado si anulado, color semántico */}
       <div
-        className={`flex items-center justify-end text-right min-w-[100px] ${
+        className={`flex items-center justify-end text-right min-w-25 ${
           isSkipped ? "opacity-[0.55]" : ""
         }`}
       >

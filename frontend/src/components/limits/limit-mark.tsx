@@ -59,8 +59,8 @@ export function LimitBadge({ tooltip, label = "Límite", className }: LimitBadge
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-[4px] rounded-[var(--r-chip)]",
-        "bg-warning-soft text-warning-ink px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em]",
+        "inline-flex shrink-0 items-center gap-1 rounded-(--r-chip)",
+        "bg-warning-soft text-warning-ink px-1.75 py-px text-[11px] font-semibold tracking-[0.04em]",
         className,
       )}
       aria-label={tooltip}
@@ -99,9 +99,9 @@ export function limitFillClass(effect: LimitEffect | null | undefined): string |
 /**
  * Efecto `ring` — anillo ámbar 1.5px vía box-shadow (mecanismo del focus ring,
  * no reflowea), para envolver un BLOQUE de tarjeta (ej. la card de total del
- * mes) que ya trae `shadow-[var(--shadow-sm)]`. Compone ambas sombras en una
+ * mes) que ya trae `shadow-(--shadow-sm)`. Compone ambas sombras en una
  * sola clase arbitraria (mismo patrón que el inset-highlight de Button)
- * — twMerge la deduplica contra la clase `shadow-[var(--shadow-sm)]` base.
+ * — twMerge la deduplica contra la clase `shadow-(--shadow-sm)` base.
  * Nunca va solo (a11y): el caller SIEMPRE combina con un <LimitGlyph>/<LimitBadge>.
  */
 export function limitRingCardClass(
@@ -118,7 +118,7 @@ export function limitRingCardClass(
  */
 export function limitRingInlineClass(effect: LimitEffect | null | undefined): string | undefined {
   return effect === "ring"
-    ? "rounded-[var(--r-chip)] shadow-[0_0_0_1.5px_var(--warning)] px-[5px]"
+    ? "rounded-(--r-chip) shadow-[0_0_0_1.5px_var(--warning)] px-1.25"
     : undefined;
 }
 
@@ -390,7 +390,7 @@ export function makeMonthCartoucheTick(
           }}
         >
           {isQuiet ? (
-            <span className="inline-flex items-center gap-[4px]">
+            <span className="inline-flex items-center gap-1">
               <LimitGlyph tooltip={tooltip} size={isCompact ? 11 : 12} />
               <span style={{ fontFamily: "var(--ui)", fontSize: 12, fontWeight: 500, color: "var(--muted)" }}>
                 {label}

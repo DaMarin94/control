@@ -56,7 +56,7 @@ export function AppShell({ email, initialSidebarOpen, children }: AppShellProps)
       <AppSidebar email={email} open={sidebarOpen} onToggle={toggleSidebar} />
 
       <main
-        className="@container min-h-screen transition-[margin-left,padding-top] duration-[240ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none"
+        className="@container min-h-screen transition-[margin-left,padding-top] duration-240 ease-in-out motion-reduce:transition-none"
         style={{ marginLeft: sidebarOpen ? 248 : 0, paddingTop: sidebarOpen ? 0 : 36 }}
       >
         {children}

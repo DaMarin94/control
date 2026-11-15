@@ -84,7 +84,7 @@ function formatVigencia(startMonth: string, endMonth: string | null): string {
 
 /** Separador "·" entre segmentos — mismo molde que IdentitySeparator de movement-item-row.tsx */
 function Dot() {
-  return <span className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0" aria-hidden="true" />;
+  return <span className="inline-block h-0.75 w-0.75 rounded-full bg-faint shrink-0" aria-hidden="true" />;
 }
 
 // ─── Fila de radio del alcance ──────────────────────────────────────────────
@@ -108,7 +108,7 @@ const RadioRow = forwardRef<HTMLDivElement, RadioRowProps>(function RadioRow(
       tabIndex={checked ? 0 : -1}
       onClick={onSelect}
       className={cn(
-        "flex items-start gap-[10px] px-[10px] py-[9px] rounded-[var(--r-ctl)] min-h-[44px] border cursor-pointer transition-colors duration-[140ms]",
+        "flex items-start gap-2.5 px-2.5 py-2.25 rounded-(--r-ctl) min-h-11 border cursor-pointer transition-colors duration-140",
         "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
         checked ? "bg-panel-2 border-accent" : "border-transparent hover:bg-panel-2",
       )}
@@ -116,11 +116,11 @@ const RadioRow = forwardRef<HTMLDivElement, RadioRowProps>(function RadioRow(
       <span
         aria-hidden="true"
         className={cn(
-          "mt-[1px] flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2",
+          "mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2",
           checked ? "border-accent bg-accent" : "border-line-strong",
         )}
       >
-        {checked && <span className="h-[6px] w-[6px] rounded-full bg-white" />}
+        {checked && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
       </span>
       <span className="flex flex-col min-w-0">
         <span className="text-[13.5px] font-semibold text-ink">{label}</span>
@@ -291,9 +291,9 @@ export function RecurringSkipScopeModal({ movement, viewMonth, onClose }: Recurr
         {/* Caja de identidad — nombre + categoría · frecuencia · vigencia */}
         <div className="rounded-ctl border border-line bg-panel-2 px-4 py-3">
           <p className="text-[13px] font-semibold text-ink truncate m-0">{name}</p>
-          <p className="mt-[2px] flex flex-wrap items-center gap-[6px] text-[12px] text-muted m-0">
+          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12px] text-muted m-0">
             <span
-              className="h-[6px] w-[6px] rounded-full shrink-0"
+              className="h-1.5 w-1.5 rounded-full shrink-0"
               style={{ background: movement.category.color }}
               aria-hidden="true"
             />
@@ -309,7 +309,7 @@ export function RecurringSkipScopeModal({ movement, viewMonth, onClose }: Recurr
         <div
           role="radiogroup"
           aria-label="Alcance de la anulación"
-          className="flex flex-col gap-[6px]"
+          className="flex flex-col gap-1.5"
           onKeyDown={handleRadiogroupKeyDown}
         >
           <RadioRow
@@ -330,9 +330,9 @@ export function RecurringSkipScopeModal({ movement, viewMonth, onClose }: Recurr
 
         {/* Bloque de rango — solo en el DOM cuando scope === "range" (cero impacto en "este mes") */}
         {scope === "range" && (
-          <div className="pl-[36px] flex flex-col gap-[14px]">
-            <div className="grid grid-cols-2 gap-[14px]">
-              <div className="flex flex-col gap-[7px] min-w-0">
+          <div className="pl-9 flex flex-col gap-3.5">
+            <div className="grid grid-cols-2 gap-3.5">
+              <div className="flex flex-col gap-1.75 min-w-0">
                 <Label htmlFor="skip-scope-desde">Desde</Label>
                 <Select
                   id="skip-scope-desde"
@@ -347,7 +347,7 @@ export function RecurringSkipScopeModal({ movement, viewMonth, onClose }: Recurr
                   ))}
                 </Select>
               </div>
-              <div className="flex flex-col gap-[7px] min-w-0">
+              <div className="flex flex-col gap-1.75 min-w-0">
                 <Label htmlFor="skip-scope-hasta">Hasta</Label>
                 <Select
                   id="skip-scope-hasta"
@@ -365,7 +365,7 @@ export function RecurringSkipScopeModal({ movement, viewMonth, onClose }: Recurr
             </div>
 
             {/* Nota de límite — siempre presente, solo cambia el texto */}
-            <p className="flex items-center gap-[7px] text-[12.5px] text-muted m-0">
+            <p className="flex items-center gap-1.75 text-[12.5px] text-muted m-0">
               <CalendarRange size={14} className="text-accent-ink shrink-0" aria-hidden="true" />
               {NOTE_COPY[noteState]}
             </p>
@@ -374,11 +374,11 @@ export function RecurringSkipScopeModal({ movement, viewMonth, onClose }: Recurr
             <div
               id={resultBoxId}
               aria-live="polite"
-              className="rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px] flex items-start gap-[10px]"
+              className="rounded-ctl border border-line bg-panel-2 px-3.25 py-2.75 flex items-start gap-2.5"
             >
               {rangeResult.count === 0 ? (
                 <>
-                  <Info size={16} className="text-ink-2 shrink-0 mt-[1px]" aria-hidden="true" />
+                  <Info size={16} className="text-ink-2 shrink-0 mt-px" aria-hidden="true" />
                   <p className="text-[13px] text-ink-2 m-0">
                     El rango no incluye ninguna aparición: <span className="font-semibold">{name}</span> es{" "}
                     <span className="font-semibold">{frequencyLabel}</span> y no cae en esos meses.
@@ -386,7 +386,7 @@ export function RecurringSkipScopeModal({ movement, viewMonth, onClose }: Recurr
                 </>
               ) : (
                 <>
-                  <ResultIcon size={16} className="text-ink-2 shrink-0 mt-[1px]" aria-hidden="true" />
+                  <ResultIcon size={16} className="text-ink-2 shrink-0 mt-px" aria-hidden="true" />
                   <p className="text-[13px] text-ink m-0">
                     {rangeResult.count === 1 ? (
                       <>

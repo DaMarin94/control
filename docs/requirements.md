@@ -2747,7 +2747,9 @@ P7 se parte en dos requerimientos independientes (fuentes distintas): **P7a = FX
 
 **Criterios de aceptación:**
 - [ ] La fuente es `apis.datos.gob.ar` (series de tiempo INDEC): variación mensual (`145.3_INGNACUAL_DICI_M_38`) y nivel del índice (`148.3_INIVELNAL_DICI_M_26`).
-- [ ] Cada corrida captura el **último mes publicado por la fuente**, que es el mes al que se imputa el dato. INDEC publica con desfasaje: el mes en curso **no tiene dato** hasta que la fuente lo publica, y una corrida que no encuentra un mes nuevo no cambia nada (desenlace "ya estaba al día" de RF-SYNC-002).
+- [ ] Cada corrida **completa todos los meses faltantes**: trae ambas series desde el último mes ya guardado en `InflationRate` (inclusive, que se vuelve a guardar para captar revisiones de la fuente) hasta el **último mes publicado por la fuente**. Con la tabla vacía arranca **24 meses atrás** del mes en curso. INDEC publica con desfasaje: el mes en curso **no tiene dato** hasta que la fuente lo publica, y una corrida que no encuentra meses nuevos no cambia nada (desenlace "ya estaba al día" de RF-SYNC-002).
+- [ ] Cada mes se valida y se guarda **por separado**, con su propia fila de auditoría: un mes rechazado no frena a los siguientes. Un mes que aparece en **una sola** de las dos series se rechaza (`schema`).
+- [ ] No hay ingesta agendada dentro del sistema: el IPC se captura solo cuando corre el trigger de operación (RF-SYNC-001) o el disparo manual (RF-SYNC-002).
 - [ ] Cada mes se guarda en `InflationRate` por `yearMonth` (clave única, upsert idempotente): variación mensual + nivel del índice + fuente + instante de captura.
 - [ ] El IPC **no alimenta** la conversión de monedas ni los totales del mes; sí lo consumen los reportes anuales que exponen inflación o variación ajustada (RF-REP-010, RF-REP-012) y la superficie de datos externos de `/configuracion` (RF-SYNC-002).
 - [ ] Mismas garantías de ingesta segura que RF-FX-001 (schema estricto, cotas, log de auditoría).

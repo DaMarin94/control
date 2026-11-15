@@ -100,13 +100,13 @@ export function InstallmentForm({
   return (
     <>
       <form id={formId} onSubmit={onSubmit} noValidate className="flex flex-col flex-1 min-h-0">
-        <div className="flex-1 min-h-0 overflow-y-auto px-[22px] pb-[22px] space-y-[14px]">
+        <div className="flex-1 min-h-0 overflow-y-auto px-5.5 pb-5.5 space-y-3.5">
           {/* ── Tipo (read-only: siempre Gasto) ── */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Tipo
             </Label>
-            <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px] text-[14px] font-semibold text-ink-2">
+            <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-3.25 py-2.75 text-[14px] font-semibold text-ink-2">
               <ArrowDown size={15} className="text-expense-ink" aria-hidden="true" />
               Gasto
             </div>
@@ -116,13 +116,13 @@ export function InstallmentForm({
           </div>
 
           {/* ── Monto por cuota ── */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <Label htmlFor={`${formId}-amount`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Monto por cuota
             </Label>
             <div
               className={cn(
-                "flex items-center gap-2 rounded-ctl border-[1.5px] px-[13px] py-[11px] transition-colors duration-[140ms]",
+                "flex items-center gap-2 rounded-ctl border-[1.5px] px-3.25 py-2.75 transition-colors duration-140",
                 "focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft)]",
                 errors.amountInput
                   ? "border-expense shadow-[0_0_0_3px_var(--expense-soft)]"
@@ -149,8 +149,8 @@ export function InstallmentForm({
           </div>
 
           {/* ── Cantidad de cuotas + Mes de inicio (grid 2-col) ── */}
-          <div className="grid grid-cols-2 gap-[14px]">
-            <div className="flex flex-col gap-[7px]">
+          <div className="grid grid-cols-2 gap-3.5">
+            <div className="flex flex-col gap-1.75">
               <Label htmlFor={`${formId}-total`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Cant. de cuotas
               </Label>
@@ -165,7 +165,7 @@ export function InstallmentForm({
                 {...register("totalInstallments")}
               />
             </div>
-            <div className="flex flex-col gap-[7px]">
+            <div className="flex flex-col gap-1.75">
               <Label htmlFor={`${formId}-start-month`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Mes de inicio
               </Label>
@@ -189,12 +189,12 @@ export function InstallmentForm({
           )}
 
           {/* ── Total del plan — preview en vivo, read-only, informativo (no valida) ── */}
-          <div className="flex flex-wrap items-center justify-between gap-x-[16px] gap-y-[4px] rounded-ctl border border-line bg-panel-2 px-[13px] py-[10px]">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-ctl border border-line bg-panel-2 px-3.25 py-2.5">
             <span className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Total del plan
             </span>
-            <div className="flex flex-col items-end gap-[2px] shrink-0">
-              <span className="inline-flex items-center gap-[6px]">
+            <div className="flex flex-col items-end gap-0.5 shrink-0">
+              <span className="inline-flex items-center gap-1.5">
                 <span
                   className={cn(
                     "mono text-[16px] font-semibold whitespace-nowrap",
@@ -207,7 +207,7 @@ export function InstallmentForm({
                 </span>
                 {planPreviewValid && isPlanCrossRate && (
                   <span
-                    className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em] mono shrink-0"
+                    className="inline-flex items-center rounded-(--r-chip) bg-panel-3 text-muted px-1.75 py-px text-[11px] font-semibold tracking-[0.04em] mono shrink-0"
                     aria-label={`Total del plan en ${selectedCurrency}`}
                   >
                     {selectedCurrency}
@@ -228,7 +228,7 @@ export function InstallmentForm({
           </div>
 
           {/* ── Categoría ── */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <div className="flex items-center justify-between">
               <Label htmlFor={`${formId}-category`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Categoría
@@ -236,20 +236,20 @@ export function InstallmentForm({
               <button
                 type="button"
                 onClick={openCategoryModal}
-                className="text-[12.5px] font-semibold text-accent-ink hover:text-accent transition-colors duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-sm"
+                className="text-[12.5px] font-semibold text-accent-ink hover:text-accent transition-colors duration-140 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-sm"
               >
                 + Nueva
               </button>
             </div>
 
             {noCategoriesAvailable ? (
-              <div className="flex items-start gap-[11px] rounded-ctl border px-[14px] py-[13px] bg-expense-soft" style={{ borderColor: "oklch(0.57 0.16 27 / 0.25)" }}>
-                <AlertTriangle size={18} className="text-expense-ink shrink-0 mt-[1px]" aria-hidden="true" />
+              <div className="flex items-start gap-2.75 rounded-ctl border px-3.5 py-3.25 bg-expense-soft" style={{ borderColor: "oklch(0.57 0.16 27 / 0.25)" }}>
+                <AlertTriangle size={18} className="text-expense-ink shrink-0 mt-px" aria-hidden="true" />
                 <div className="text-[13px] leading-[1.45] text-expense-ink">
                   <b className="font-bold">Sin categorías para Gasto.</b>{" "}
                   <Link
                     href="/configuracion/categorias"
-                    className="font-bold underline underline-offset-[2px] text-expense-ink hover:opacity-80"
+                    className="font-bold underline underline-offset-2 text-expense-ink hover:opacity-80"
                     onClick={onClose}
                   >
                     Creá una categoría
@@ -281,7 +281,7 @@ export function InstallmentForm({
           </div>
 
           {/* ── Descripción ── */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <Label htmlFor={`${formId}-description`} className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Descripción{" "}
               <span className="text-faint font-normal">(opcional)</span>

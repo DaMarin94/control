@@ -81,7 +81,7 @@ function InflationCard({
   if (isError) {
     return (
       <div
-        className="rounded-[14px] border border-line bg-panel shadow-[var(--shadow-sm)]"
+        className="rounded-card border border-line bg-panel shadow-(--shadow-sm)"
         style={{ padding: "var(--card-pad)" }}
       >
         <p className="text-[13px] text-expense-ink">
@@ -98,25 +98,25 @@ function InflationCard({
 
   return (
     <div
-      className="rounded-[14px] border border-line bg-panel shadow-[var(--shadow-sm)]"
+      className="rounded-card border border-line bg-panel shadow-(--shadow-sm)"
       style={{ padding: "var(--card-pad)" }}
     >
       {/* Destacado — último dato */}
       <div className="flex items-center justify-between gap-6">
         <div>
-          <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+          <p className="text-[12px] font-semibold uppercase tracking-widest text-muted">
             Último dato
           </p>
           {isLoading ? (
-            <div className="mt-[2px]">
+            <div className="mt-0.5">
               <SkeletonLine height={14.5} width={120} />
             </div>
           ) : (
-            <p className="text-[14.5px] font-semibold text-ink mt-[2px]">
+            <p className="text-[14.5px] font-semibold text-ink mt-0.5">
               {latest ? capitalize(formatMonthLabel(latest.yearMonth)) : "—"}
             </p>
           )}
-          <p className="text-[12.5px] font-medium text-muted mt-[2px]">Variación mensual</p>
+          <p className="text-[12.5px] font-medium text-muted mt-0.5">Variación mensual</p>
         </div>
         <div className="shrink-0">
           {isLoading ? (
@@ -136,7 +136,7 @@ function InflationCard({
             {Array.from({ length: 4 }).map((_, i) => (
               <div
                 key={i}
-                className="flex items-center justify-between py-[10px] border-b border-hair last:border-b-0"
+                className="flex items-center justify-between py-2.5 border-b border-hair last:border-b-0"
               >
                 <SkeletonPill height={14} width={90} />
                 <SkeletonPill height={14} width={44} />
@@ -144,7 +144,7 @@ function InflationCard({
             ))}
           </div>
         ) : historyRows.length === 0 ? (
-          <p className="text-[12.5px] leading-[1.5] text-muted text-center">
+          <p className="text-[12.5px] leading-normal text-muted text-center">
             Todavía no hay más datos de {currentYear}.
           </p>
         ) : (
@@ -152,7 +152,7 @@ function InflationCard({
             {historyRows.map((entry) => (
               <li
                 key={entry.yearMonth}
-                className="flex items-center justify-between py-[10px] border-b border-hair last:border-b-0"
+                className="flex items-center justify-between py-2.5 border-b border-hair last:border-b-0"
               >
                 <span className="text-[13px] font-medium text-ink-2">
                   {capitalize(formatMonthLabel(entry.yearMonth))}
@@ -174,7 +174,7 @@ function InflationCard({
             onClick={onLoadMore}
             disabled={isLoadingMore}
             aria-busy={isLoadingMore}
-            className="flex w-full items-center justify-center gap-1.5 rounded-ctl py-2.5 text-[13px] font-semibold text-ink-2 transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] disabled:opacity-60"
+            className="flex w-full items-center justify-center gap-1.5 rounded-ctl py-2.5 text-[13px] font-semibold text-ink-2 transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] disabled:opacity-60"
           >
             {isLoadingMore ? "Cargando…" : "Ver meses anteriores"}
             {isLoadingMore ? (
@@ -206,7 +206,7 @@ function QuotesCard({ snapshot, isLoading, isError }: QuotesCardProps) {
   if (isError) {
     return (
       <div
-        className="rounded-[14px] border border-line bg-panel shadow-[var(--shadow-sm)]"
+        className="rounded-card border border-line bg-panel shadow-(--shadow-sm)"
         style={{ padding: "var(--card-pad)" }}
       >
         <p className="text-[13px] text-expense-ink">
@@ -226,19 +226,19 @@ function QuotesCard({ snapshot, isLoading, isError }: QuotesCardProps) {
 
   return (
     <div
-      className="rounded-[14px] border border-line bg-panel shadow-[var(--shadow-sm)]"
+      className="rounded-card border border-line bg-panel shadow-(--shadow-sm)"
       style={{ padding: "var(--card-pad)" }}
     >
       <div className="mb-4">
         <p className="text-[14.5px] font-semibold text-ink">Cotizaciones</p>
-        <p className="text-[12.5px] leading-[1.5] text-muted mt-[2px]">Valores del mes en curso.</p>
+        <p className="text-[12.5px] leading-normal text-muted mt-0.5">Valores del mes en curso.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         {tiles.map((tile) => (
           <div
             key={tile.label}
-            className="flex min-w-0 flex-col gap-1 rounded-[var(--r-ctl)] border border-line bg-panel-2 px-3.5 py-3"
+            className="flex min-w-0 flex-col gap-1 rounded-(--r-ctl) border border-line bg-panel-2 px-3.5 py-3"
           >
             <span className="text-[12.5px] font-medium text-muted">{tile.label}</span>
             {isLoading ? (
@@ -322,7 +322,7 @@ export function ExternalRatesSection() {
       <div className="flex items-center justify-between gap-5 flex-wrap mb-4">
         <div>
           <h2 className="text-[18px] font-bold tracking-[-0.01em] text-ink">Datos externos</h2>
-          <p className="text-[14.5px] leading-[1.5] text-muted mt-[3px]">
+          <p className="text-[14.5px] leading-normal text-muted mt-0.75">
             Inflación y cotizaciones que Control usa para convertir y ajustar tus montos.
           </p>
         </div>

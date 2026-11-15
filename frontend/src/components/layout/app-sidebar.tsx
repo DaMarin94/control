@@ -81,22 +81,22 @@ export function AppSidebar({ email, open, onToggle }: AppSidebarProps) {
         aria-hidden={!open}
         inert={!open}
         className={cn(
-          "fixed inset-y-0 left-0 z-30 w-[248px] flex flex-col",
+          "fixed inset-y-0 left-0 z-30 w-62 flex flex-col",
           "border-r border-line bg-panel",
-          "px-4 py-[22px]",
-          "transition-transform duration-[240ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none",
+          "px-4 py-5.5",
+          "transition-transform duration-240 ease-in-out motion-reduce:transition-none",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
         <div className="flex h-full flex-col gap-1">
           {/* ── Logo + botón de colapsar ── */}
-          <div className="flex items-center gap-[11px] pb-[18px] pt-[10px]">
+          <div className="flex items-center gap-2.75 pb-4.5 pt-2.5">
             <Link
               href="/"
-              className="flex min-w-0 flex-1 items-center gap-[11px] -mx-2 -my-1 rounded-ctl px-2 py-1 transition-colors duration-[140ms] hover:bg-panel-2 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+              className="flex min-w-0 flex-1 items-center gap-2.75 -mx-2 -my-1 rounded-ctl px-2 py-1 transition-colors duration-140 hover:bg-panel-2 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
             >
               {/* Gem */}
-              <div className="h-[34px] w-[34px] shrink-0 rounded-[10px] overflow-hidden shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0_/_0.25)]">
+              <div className="h-8.5 w-8.5 shrink-0 rounded-ctl overflow-hidden shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0/0.25)]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src="/brand-icon.svg"
@@ -110,7 +110,7 @@ export function AppSidebar({ email, open, onToggle }: AppSidebarProps) {
                 <span className="block text-[18px] font-bold tracking-[-0.01em] text-ink leading-none">
                   Control
                 </span>
-                <span className="block text-[11px] font-medium text-muted tracking-[0.04em] mt-[-2px]">
+                <span className="block text-[11px] font-medium text-muted tracking-[0.04em] -mt-0.5">
                   Finanzas del mes
                 </span>
               </div>
@@ -122,14 +122,14 @@ export function AppSidebar({ email, open, onToggle }: AppSidebarProps) {
               onClick={onToggle}
               aria-label="Ocultar menú"
               aria-expanded="true"
-              className="ml-auto shrink-0 flex items-center justify-center rounded-ctl p-1.5 text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink active:bg-panel-3 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] motion-reduce:transition-none"
+              className="ml-auto shrink-0 flex items-center justify-center rounded-ctl p-1.5 text-muted transition-colors duration-140 hover:bg-panel-2 hover:text-ink active:bg-panel-3 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] motion-reduce:transition-none"
             >
               <PanelLeftClose size={18} aria-hidden="true" />
             </button>
           </div>
 
           {/* ── Label de sección ── */}
-          <p className="px-[10px] pb-[6px] pt-[10px] text-[10.5px] font-semibold uppercase tracking-[0.12em] text-faint">
+          <p className="px-2.5 pb-1.5 pt-2.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-faint">
             Menú
           </p>
 
@@ -143,8 +143,8 @@ export function AppSidebar({ email, open, onToggle }: AppSidebarProps) {
                     <Link
                       href={href}
                       className={cn(
-                        "flex items-center gap-[11px] rounded-ctl px-[11px] py-[9px]",
-                        "text-[14.5px] font-medium transition-colors duration-[140ms]",
+                        "flex items-center gap-2.75 rounded-ctl px-2.75 py-2.25",
+                        "text-[14.5px] font-medium transition-colors duration-140",
                         active
                           ? "bg-accent-soft text-accent-ink font-semibold"
                           : "text-ink-2 hover:bg-panel-2 hover:text-ink",
@@ -168,13 +168,13 @@ export function AppSidebar({ email, open, onToggle }: AppSidebarProps) {
           <div className="flex-1" />
 
           {/* ── CTA Nuevo movimiento ── */}
-          <div className="mx-0.5 mb-[14px] mt-1 [&>*]:w-full [&>*>button]:w-full">
+          <div className="mx-0.5 mb-3.5 mt-1 *:w-full [&>*>button]:w-full">
             <NewTransactionButton label="+ Nuevo movimiento" variant="default" />
           </div>
 
           {/* ── Fila de tema — toggle de iconos encima del UserMenu ── */}
           <div
-            className="flex items-center justify-between mb-[10px]"
+            className="flex items-center justify-between mb-2.5"
             style={{ borderTop: "1px solid var(--hair)", paddingTop: "10px" }}
           >
             <span
@@ -206,7 +206,7 @@ export function AppSidebar({ email, open, onToggle }: AppSidebarProps) {
           onClick={onToggle}
           aria-label="Mostrar menú"
           aria-expanded="false"
-          className="fixed top-4 left-4 z-40 flex items-center justify-center rounded-ctl border border-line bg-panel p-2.5 text-ink-2 shadow-[var(--shadow-sm)] transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink active:bg-panel-3 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] motion-reduce:transition-none"
+          className="fixed top-4 left-4 z-40 flex items-center justify-center rounded-ctl border border-line bg-panel p-2.5 text-ink-2 shadow-(--shadow-sm) transition-colors duration-140 hover:bg-panel-2 hover:text-ink active:bg-panel-3 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] motion-reduce:transition-none"
         >
           <PanelLeft size={20} aria-hidden="true" />
         </button>

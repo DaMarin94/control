@@ -47,8 +47,8 @@ export function LimitEffectPreview({ effect }: { effect: LimitEffect }) {
   // pero se soporta acá para que el picker no rompa si el catálogo lo habilita.
   if (effect === "dot") {
     return (
-      <span className="inline-flex items-center gap-[6px]">
-        <span className="h-[6px] w-[6px] rounded-full bg-warning shrink-0" aria-hidden="true" />
+      <span className="inline-flex items-center gap-1.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-warning shrink-0" aria-hidden="true" />
         <span className="text-[13px] mono tabular-nums text-ink-2">{SAMPLE_FIGURE}</span>
       </span>
     );
@@ -57,8 +57,8 @@ export function LimitEffectPreview({ effect }: { effect: LimitEffect }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-[6px] rounded-[7px]",
-        limitFillClass(effect) && "px-[6px] py-[2px]",
+        "inline-flex items-center gap-1.5 rounded-chip",
+        limitFillClass(effect) && "px-1.5 py-0.5",
         limitRingInlineClass(effect),
       )}
     >
@@ -112,8 +112,8 @@ function LimitEffectSingleInfo({
   description?: string;
 }) {
   return (
-    <div className="flex flex-col gap-[8px]">
-      <div className="flex items-center gap-[8px]">
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
         <span className="text-[13px] font-semibold text-ink">{EFFECT_NAMES[effect]}</span>
         <LimitEffectPreview effect={effect} />
       </div>
@@ -138,8 +138,8 @@ export function LimitEffectPicker({ effects, value, onChange, singleEffectDescri
             aria-checked={isSelected}
             onClick={() => onChange(effect)}
             className={cn(
-              "flex flex-col items-start gap-[8px] rounded-ctl border bg-panel px-3 py-[10px] text-left",
-              "transition-all duration-[140ms]",
+              "flex flex-col items-start gap-2 rounded-ctl border bg-panel px-3 py-2.5 text-left",
+              "transition-all duration-140",
               "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
               isSelected
                 ? "border-accent shadow-[0_0_0_3px_var(--accent-soft)]"

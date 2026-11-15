@@ -9,7 +9,7 @@
  *   - "date": occurredAt DESC (más reciente arriba), desempate por |amountCents| DESC.
  *
  * Mismo molde visual que SectionFilterButton:
- *   - Icon-only, padding px-[7px] py-[5px], radio --r-ctl, transición colors 0.14s.
+ *   - Icon-only, padding px-1.75 py-1.25, radio --r-ctl, transición colors 0.14s.
  *   - Punto indicador --accent 6px cuando el orden es != default ("date").
  *   - Glifo muta: ArrowDownWideNarrow (por monto) ↔ ArrowDownNarrowWide (por fecha).
  *   - aria-pressed=true cuando orden por fecha; aria-label dinámico (anuncia próxima acción).
@@ -62,8 +62,8 @@ export function SectionSortButton({ sort, onToggle }: SectionSortButtonProps) {
         aria-label={ariaLabel}
         className={cn(
           "flex items-center justify-center rounded-ctl",
-          "px-[7px] py-[5px]",
-          "transition-colors duration-[140ms]",
+          "px-1.75 py-1.25",
+          "transition-colors duration-140",
           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
           // Activo (active/pressed CSS)
           "active:bg-panel-3",
@@ -83,7 +83,7 @@ export function SectionSortButton({ sort, onToggle }: SectionSortButtonProps) {
       {/* Punto indicador: visible cuando el orden es != default ("date") */}
       {isDate && (
         <span
-          className="pointer-events-none absolute -top-[2px] -right-[2px] h-[6px] w-[6px] rounded-full bg-accent"
+          className="pointer-events-none absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-accent"
           style={{ border: "2px solid var(--panel)" }}
           aria-hidden="true"
         />

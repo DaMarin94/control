@@ -21,8 +21,8 @@
  *
  * Layout:
  *   - PeriodNav (overlay, sin grid — ver docstring de period-nav.tsx):
- *       Bloque de contenido: max-w-[1120px] mx-auto (PeriodNav) + px-10
- *       py-[34px] pb-20 (acá, este div) = mismo mecanismo canónico que las
+ *       Bloque de contenido: max-w-280 mx-auto (PeriodNav) + px-10
+ *       py-8.5 pb-20 (acá, este div) = mismo mecanismo canónico que las
  *       otras cinco pantallas, mismo ancho a igual viewport.
  *       Flechas ‹ / ›: overlay absolute respecto de PeriodNav, ocultas en
  *       compacto (ancho de contenido <1288px, `--bp-arrows`), NO reservan
@@ -910,12 +910,12 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
       type="button"
       onClick={goToCurrentMonth}
       className={cn(
-        "inline-flex items-center gap-[5px] whitespace-nowrap cursor-pointer",
+        "inline-flex items-center gap-1.25 whitespace-nowrap cursor-pointer",
         "text-[12.5px] font-medium text-muted",
-        "hover:text-ink-2 hover:underline hover:underline-offset-[2px]",
-        "transition-colors duration-[140ms]",
-        "rounded-[var(--r-chip)]",
-        "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:underline focus-visible:underline-offset-[2px]",
+        "hover:text-ink-2 hover:underline hover:underline-offset-2",
+        "transition-colors duration-140",
+        "rounded-(--r-chip)",
+        "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:underline focus-visible:underline-offset-2",
       )}
     >
       {isPastMonth ? (
@@ -945,7 +945,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
       canGoPrev={true}
       canGoNext={true}
     >
-      <div className="px-10 py-[34px] pb-20 space-y-0">
+      <div className="px-10 py-8.5 pb-20 space-y-0">
         {/* ── Header ──────────────────────────────────────────────── */}
         <div className="flex items-end justify-between gap-5 mb-6 flex-wrap">
 
@@ -953,8 +953,8 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
           <div className="hidden @arrows:flex flex-col gap-0">
             {/* Fila del eyebrow: label + chip de moneda default (a la derecha del eyebrow).
                 Quedan FUERA del disparador (per spec §1). */}
-            <div className="flex items-center gap-[10px] mb-0.5">
-              <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+            <div className="flex items-center gap-2.5 mb-0.5">
+              <span className="text-[12px] font-semibold uppercase tracking-widest text-muted">
                 Tu mes
               </span>
               <CurrencyChip currency={defaultCurrency} />
@@ -962,7 +962,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
             {/* H1 envuelto en disparador — sin el link "Ir al mes en curso"
                 (spec §4: reversión de la iteración anterior, vuelve a su
                 estado pre-feature, solo el trigger). */}
-            <div className="mt-0.5 mb-1 flex items-center gap-[8px]">
+            <div className="mt-0.5 mb-1 flex items-center gap-2">
               <MonthJumpTriggerDesktop
                 periodLabel={periodLabel}
                 isOpen={monthJump.isOpen}
@@ -975,7 +975,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
             {/* Sub-label estado + link "Ir al mes en curso" (spec §4/§5).
                 Sin min-h: la fila mide lo mismo con y sin link (misma caja
                 tipográfica de 12.5px en ambos estados — cero-impacto real). */}
-            <div className="flex items-center gap-[8px]">
+            <div className="flex items-center gap-2">
               <span className="text-[12.5px] font-medium text-muted">
                 {statusLabel}
               </span>
@@ -997,17 +997,17 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
            * El chip va a la derecha del stepper (gap-[10px]); si no entra, flex-wrap
            * lo baja a su propia línea alineado a la derecha (spec).
            */}
-          <div className="@arrows:hidden flex items-center gap-[10px] flex-wrap">
+          <div className="@arrows:hidden flex items-center gap-2.5 flex-wrap">
             {/*
              * Pill stepper — aria-hidden para evitar duplicados de botones en jsdom.
              * El disparador accesible del selector mes/año es el botón desktop (que
              * existe en el DOM aunque esté oculto por CSS en mobile).
              */}
-            <div aria-hidden="true" className="inline-flex items-center gap-0.5 bg-panel border border-line rounded-pill px-1 py-1 shadow-[var(--shadow-sm)]">
+            <div aria-hidden="true" className="inline-flex items-center gap-0.5 bg-panel border border-line rounded-pill px-1 py-1 shadow-(--shadow-sm)">
               <button
                 onClick={goToPrevMonth}
                 aria-label="Mes anterior"
-                className="flex h-8 w-8 items-center justify-center rounded-full text-ink-2 hover:bg-panel-2 hover:text-ink transition-colors duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-ink-2 hover:bg-panel-2 hover:text-ink transition-colors duration-140 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
               >
                 <ChevronLeft size={18} aria-hidden="true" />
               </button>
@@ -1023,7 +1023,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
               <button
                 onClick={goToNextMonth}
                 aria-label="Mes siguiente"
-                className="flex h-8 w-8 items-center justify-center rounded-full text-ink-2 hover:bg-panel-2 hover:text-ink transition-colors duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-ink-2 hover:bg-panel-2 hover:text-ink transition-colors duration-140 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
               >
                 <ChevronRight size={18} aria-hidden="true" />
               </button>
@@ -1050,12 +1050,12 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                   // Primario índigo (señala modo activo)
                   "inline-flex items-center gap-1.5 px-3 py-2",
                   "text-[13px] font-semibold text-white",
-                  "rounded-[var(--r-ctl)]",
+                  "rounded-(--r-ctl)",
                   "bg-accent hover:bg-accent-press",
-                  "transition-colors duration-[140ms]",
+                  "transition-colors duration-140",
                   "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
-                  "shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0_/_0.2)]",
-                  "hover:shadow-[var(--shadow-md)]",
+                  "shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0/0.2)]",
+                  "hover:shadow-(--shadow-md)",
                 ].join(" ")}
               >
                 <Check size={15} aria-hidden="true" />
@@ -1069,10 +1069,10 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                   // Ghost del DS
                   "inline-flex items-center gap-1.5 px-3 py-2",
                   "text-[13px] font-semibold text-ink-2",
-                  "rounded-[var(--r-ctl)]",
+                  "rounded-(--r-ctl)",
                   "bg-panel border border-line",
                   "hover:bg-panel-2 hover:text-ink",
-                  "transition-colors duration-[140ms]",
+                  "transition-colors duration-140",
                   "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
                 ].join(" ")}
                 aria-label="Ordenar secciones"
@@ -1105,7 +1105,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
             {/* Skeleton de totales — mismo template que el bloque real (ver más abajo),
                 para que no salte al aterrizar. */}
             <div
-              className="grid grid-cols-1 @wide:grid-cols-[1fr_1fr_1.1fr] gap-[var(--gap)] mb-6"
+              className="grid grid-cols-1 @wide:grid-cols-[1fr_1fr_1.1fr] gap-(--gap) mb-6"
               aria-label="Cargando totales"
               role="status"
             >
@@ -1120,12 +1120,12 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
             <div
               role="status"
               aria-label="Cargando movimientos"
-              className="space-y-[30px] mt-1"
+              className="space-y-7.5 mt-1"
             >
               {(["Únicos", "Fijos", "Cuotas"] as const).map((label) => (
                 <div key={label}>
                   {/* ─ Cabecera fantasma (imita .ghead) ─ */}
-                  <div className="flex items-center gap-[8px] pb-[10px] px-1">
+                  <div className="flex items-center gap-2 pb-2.5 px-1">
                     {/* Chevron fantasma */}
                     <SkeletonBlock height={16} width={16} radius="ctl" className="shrink-0" />
                     {/* Rótulo de sección */}
@@ -1140,19 +1140,19 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
 
                   {/* ─ Tarjeta-lista con 3 filas fantasma ─
                       Chrome estable (bg-panel border rounded-card shadow) presente ya. */}
-                  <div className="bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] overflow-hidden">
+                  <div className="bg-panel border border-line rounded-card shadow-(--shadow-sm) overflow-hidden">
                     {([0, 1, 2] as const).map((i) => (
                       <div key={i}>
                         {/* Fila fantasma — replica grid MovementItemRow:
                             40px 1fr auto auto auto, padding var(--row-pad) 18px */}
                         <div
-                          className="flex items-center gap-[10px]"
+                          className="flex items-center gap-2.5"
                           style={{ padding: "14px 18px" }}
                         >
                           {/* Col 1: ícono circular 40px */}
                           <SkeletonCircle diameter={40} />
                           {/* Col 2: nombre + meta apiladas */}
-                          <div className="flex flex-col gap-[6px] flex-1 min-w-0">
+                          <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                             <SkeletonLine height={14.5} width="60%" />
                             <SkeletonLine height={12.5} width="40%" />
                           </div>
@@ -1163,7 +1163,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                         </div>
                         {/* Divisor entre filas (no en la última) */}
                         {i < 2 && (
-                          <div aria-hidden="true" className="mx-[18px] h-px bg-hair" />
+                          <div aria-hidden="true" className="mx-4.5 h-px bg-hair" />
                         )}
                       </div>
                     ))}
@@ -1191,22 +1191,22 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                 se aplasta). Mismo template que el skeleton de arriba. */}
             <div
               className={cn(
-                "grid grid-cols-1 @wide:grid-cols-[1fr_1fr_1.1fr] gap-[var(--gap)]",
-                visibleSimulatedCount > 0 ? "mb-[10px]" : "mb-6",
+                "grid grid-cols-1 @wide:grid-cols-[1fr_1fr_1.1fr] gap-(--gap)",
+                visibleSimulatedCount > 0 ? "mb-2.5" : "mb-6",
               )}
             >
               {/* Gastos — mes.total.gasto (P2, Fase 1: marca visual pasiva) */}
               <div
                 className={cn(
-                  "bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] flex flex-col gap-[6px] min-w-0",
+                  "bg-panel border border-line rounded-card shadow-(--shadow-sm) flex flex-col gap-1.5 min-w-0",
                   limitRingCardClass(expenseLimitMark?.effect),
                 )}
                 style={{ padding: "16px 18px" }}
               >
-                <div className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+                <div className="text-[12px] font-semibold uppercase tracking-widest text-muted">
                   Gastos
                 </div>
-                <div className="inline-flex items-center gap-[7px]">
+                <div className="inline-flex items-center gap-1.75">
                   <LimitMarkAdorner mark={expenseLimitMark} glyphSize={15} />
                   <span
                     className={cn(
@@ -1223,15 +1223,15 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
               {/* Ingresos — mes.total.ingreso (tint NO ofrecido: monto tipado income-ink) */}
               <div
                 className={cn(
-                  "bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] flex flex-col gap-[6px] min-w-0",
+                  "bg-panel border border-line rounded-card shadow-(--shadow-sm) flex flex-col gap-1.5 min-w-0",
                   limitRingCardClass(incomeLimitMark?.effect),
                 )}
                 style={{ padding: "16px 18px" }}
               >
-                <div className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+                <div className="text-[12px] font-semibold uppercase tracking-widest text-muted">
                   Ingresos
                 </div>
-                <div className="inline-flex items-center gap-[7px]">
+                <div className="inline-flex items-center gap-1.75">
                   <LimitMarkAdorner mark={incomeLimitMark} glyphSize={15} />
                   <span
                     className={cn(
@@ -1247,7 +1247,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
               {/* Mini-balance — mes.balance (tint NO ofrecido: bloque de acento con signo) */}
               <div
                 className={cn(
-                  "rounded-card relative overflow-hidden text-white shadow-[var(--shadow-md)] flex flex-col gap-[6px] min-w-0 order-first @wide:order-none",
+                  "rounded-card relative overflow-hidden text-white shadow-(--shadow-md) flex flex-col gap-1.5 min-w-0 order-first @wide:order-none",
                   limitRingCardClass(balanceLimitMark?.effect, "--shadow-md"),
                 )}
                 style={{
@@ -1255,10 +1255,10 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                   background: "linear-gradient(135deg, var(--accent-press), var(--accent))",
                 }}
               >
-                <div className="text-[12px] font-semibold uppercase tracking-[0.1em] text-white/70">
+                <div className="text-[12px] font-semibold uppercase tracking-widest text-white/70">
                   Balance
                 </div>
-                <div className="inline-flex items-center gap-[7px]">
+                <div className="inline-flex items-center gap-1.75">
                   <LimitMarkAdorner mark={balanceLimitMark} glyphSize={15} />
                   <span
                     className={cn(
@@ -1279,7 +1279,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                 línea no existe y la grilla de arriba conserva su mb-6 de siempre —
                 el layout es idéntico byte a byte al de un mes sin la feature. */}
             {visibleSimulatedCount > 0 && (
-              <div className="inline-flex items-center gap-[6px] mb-6">
+              <div className="inline-flex items-center gap-1.5 mb-6">
                 <ChartSpline size={13} className="text-muted shrink-0" aria-hidden="true" />
                 <span className="text-[12px] text-muted">
                   {formatTotalsSimulatedLine(visibleSimulatedCount)}
@@ -1309,7 +1309,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                 items={sectionOrder}
                 strategy={verticalListSortingStrategy}
               >
-                <div className="space-y-[30px] mt-1">
+                <div className="space-y-7.5 mt-1">
                   {sectionOrder.map((key) => {
                     const items = sectionItems[key];
                     const label = SECTION_LABELS[key];
@@ -1650,7 +1650,7 @@ function SectionList({
   footer,
 }: SectionListProps) {
   return (
-    <div className="bg-panel border border-line rounded-card overflow-hidden shadow-[var(--shadow-sm)]">
+    <div className="bg-panel border border-line rounded-card overflow-hidden shadow-(--shadow-sm)">
       {items.map((item) =>
         item.simulated ? (
           // Movimiento simulado (RF-SIM-003) — sin acciones, sin card de detalle.
@@ -1695,11 +1695,11 @@ function SimulationPausedNote({
   return (
     <div
       className={cn(
-        "flex items-start gap-[6px]",
-        variant === "listed" ? "border-t border-hair px-[18px] py-[12px]" : "mt-[8px] px-1",
+        "flex items-start gap-1.5",
+        variant === "listed" ? "border-t border-hair px-4.5 py-3" : "mt-2 px-1",
       )}
     >
-      <Info size={14} className="text-muted shrink-0 mt-[1px]" aria-hidden="true" />
+      <Info size={14} className="text-muted shrink-0 mt-px" aria-hidden="true" />
       <span className="text-[12px] text-muted">{formatPausedListNote(count)}</span>
     </div>
   );

@@ -55,7 +55,7 @@ export function SettingsClient() {
     <div className="space-y-4">
       {/* Tarjeta 1: Moneda por defecto */}
       <div
-        className="rounded-[14px] border border-line bg-panel shadow-[var(--shadow-sm)]"
+        className="rounded-card border border-line bg-panel shadow-(--shadow-sm)"
         style={{ padding: "var(--card-pad)" }}
       >
         <div className="flex items-center justify-between gap-6 flex-wrap">
@@ -64,7 +64,7 @@ export function SettingsClient() {
             <p className="text-[14.5px] font-semibold text-ink">
               Moneda por defecto
             </p>
-            <p className="text-[12.5px] leading-[1.5] text-muted mt-[2px]">
+            <p className="text-[12.5px] leading-normal text-muted mt-0.5">
               Los totales y reportes se muestran en esta moneda.
             </p>
           </div>

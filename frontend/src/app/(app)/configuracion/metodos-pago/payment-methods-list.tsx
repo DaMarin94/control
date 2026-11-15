@@ -70,11 +70,11 @@ export function PaymentMethodsList() {
         </div>
 
         {/* Lista fantasma: 4 filas que replican la estructura de la fila real */}
-        <div className="bg-panel border border-line rounded-card overflow-hidden shadow-[var(--shadow-sm)]">
+        <div className="bg-panel border border-line rounded-card overflow-hidden shadow-(--shadow-sm)">
           {Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="grid items-center gap-4 px-5 py-[15px] [&+div]:border-t [&+div]:border-hair"
+              className="grid items-center gap-4 px-5 py-3.75 [&+div]:border-t [&+div]:border-hair"
               style={{ gridTemplateColumns: "34px 1fr auto auto" }}
             >
               {/* Tile de ícono (34×34, radio r-ctl igual al tile real) */}
@@ -110,7 +110,7 @@ export function PaymentMethodsList() {
       <div className="flex items-center justify-between gap-5 flex-wrap mb-4">
         <div>
           <h2 className="text-[18px] font-bold tracking-[-0.01em] text-ink">Métodos de pago</h2>
-          <p className="text-[14.5px] leading-[1.5] text-muted mt-[3px]">
+          <p className="text-[14.5px] leading-normal text-muted mt-0.75">
             <span className="mono font-semibold text-ink">{count}</span>{" "}
             {count === 1 ? "método de pago activo" : "métodos de pago activos"}. Asociá un
             método a tus movimientos para saber <b className="font-semibold text-ink">con qué</b>{" "}
@@ -127,7 +127,7 @@ export function PaymentMethodsList() {
       {!paymentMethods || paymentMethods.length === 0 ? (
         <div className="rounded-card border border-dashed border-line bg-panel-2 py-12 text-center">
           <p className="text-[15px] font-semibold text-ink">No tenés métodos de pago activos.</p>
-          <p className="mt-1 text-[12.5px] leading-[1.5] text-muted">
+          <p className="mt-1 text-[12.5px] leading-normal text-muted">
             Creá uno para asociarlo a tus movimientos.
           </p>
           <Button
@@ -139,7 +139,7 @@ export function PaymentMethodsList() {
           </Button>
         </div>
       ) : (
-        <div className="bg-panel border border-line rounded-card overflow-hidden shadow-[var(--shadow-sm)]">
+        <div className="bg-panel border border-line rounded-card overflow-hidden shadow-(--shadow-sm)">
           <ul role="list" className="divide-y-0">
             {paymentMethods.map((method) => (
               <PaymentMethodRow
@@ -197,12 +197,12 @@ function PaymentMethodRow({
 
   return (
     <li
-      className="group grid items-center gap-4 px-5 py-[15px] transition-colors duration-[120ms] hover:bg-panel-2 [&+li]:border-t [&+li]:border-hair"
+      className="group grid items-center gap-4 px-5 py-3.75 transition-colors duration-120 hover:bg-panel-2 [&+li]:border-t [&+li]:border-hair"
       style={{ gridTemplateColumns: "34px 1fr auto auto auto auto" }}
     >
       {/* Tile de ícono — analogía del swatch de color de categorías */}
       <span
-        className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-ctl bg-panel-3 border border-line text-ink-2"
+        className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-ctl bg-panel-3 border border-line text-ink-2"
         aria-hidden="true"
       >
         <PaymentMethodIcon icon={method.icon} size={18} />
@@ -214,7 +214,7 @@ function PaymentMethodRow({
       </span>
 
       {/* Chip de tipo — neutro (no semántico, no marca) */}
-      <span className="inline-flex items-center rounded-chip bg-panel-3 text-muted px-[9px] py-[3px] text-[11.5px] font-semibold tracking-[0.04em]">
+      <span className="inline-flex items-center rounded-chip bg-panel-3 text-muted px-2.25 py-0.75 text-[11.5px] font-semibold tracking-[0.04em]">
         {PAYMENT_METHOD_TYPE_LABELS[method.type]}
       </span>
 

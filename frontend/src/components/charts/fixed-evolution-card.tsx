@@ -505,12 +505,12 @@ function FixedEvolutionSkeleton({ height }: { height: number }) {
   return (
     <div role="status" aria-label="Cargando reporte">
       <SkeletonBlock height={height} radius="ctl" />
-      <div className="mt-[14px] flex flex-wrap gap-[10px]">
+      <div className="mt-3.5 flex flex-wrap gap-2.5">
         {[130, 100, 150, 90, 120].map((w, i) => (
           <SkeletonLine key={i} height={26} width={w} />
         ))}
       </div>
-      <div className="mt-[8px] pt-[8px]" style={{ borderTop: "1px solid var(--hair)" }}>
+      <div className="mt-2 pt-2" style={{ borderTop: "1px solid var(--hair)" }}>
         <SkeletonLine height={24} width={84} />
       </div>
     </div>
@@ -540,7 +540,7 @@ function FixedEvolutionError({
       <button
         type="button"
         onClick={onRetry}
-        className="rounded-ctl border border-line bg-panel px-3 py-[6px] text-[13px] font-semibold text-ink-2 shadow-[var(--shadow-sm)] transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+        className="rounded-ctl border border-line bg-panel px-3 py-1.5 text-[13px] font-semibold text-ink-2 shadow-(--shadow-sm) transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
       >
         Reintentar
       </button>
@@ -586,13 +586,13 @@ function ViewTabs({ value, onChange }: ViewTabsProps) {
   }
 
   return (
-    <div role="tablist" aria-label="Modo de visualización" className="relative flex items-end gap-[18px] pb-[2px]">
+    <div role="tablist" aria-label="Modo de visualización" className="relative flex items-end gap-4.5 pb-0.5">
       {underline && (
         <span
           aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute bottom-0 h-[2px] bg-ink",
-            reducedMotionTabs ? "" : "transition-[left,width] duration-[180ms] ease-out",
+            "pointer-events-none absolute bottom-0 h-0.5 bg-ink",
+            reducedMotionTabs ? "" : "transition-[left,width] duration-180 ease-out",
           )}
           style={{ left: underline.left, width: underline.width }}
         />
@@ -612,9 +612,9 @@ function ViewTabs({ value, onChange }: ViewTabsProps) {
             onKeyDown={(e) => handleKeyDown(e, i)}
             tabIndex={isSelected ? 0 : -1}
             className={cn(
-              "relative py-[6px] text-[13px] font-semibold leading-none",
+              "relative py-1.5 text-[13px] font-semibold leading-none",
               "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
-              "transition-colors duration-[140ms]",
+              "transition-colors duration-140",
               isSelected ? "text-ink" : "text-muted hover:text-ink-2 hover:shadow-[inset_0_-2px_0_var(--line-strong)]",
             )}
           >
@@ -652,14 +652,14 @@ function AdjustedChip({ pressed, disabled, onToggle }: AdjustedChipProps) {
           onToggle();
         }}
         className={cn(
-          "inline-flex items-center px-[10px] py-[5px] rounded-[7px]",
+          "inline-flex items-center px-2.5 py-1.25 rounded-chip",
           "text-[12.5px] font-semibold select-none",
-          "transition-colors duration-[140ms]",
+          "transition-colors duration-140",
           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
           disabled
             ? "bg-panel-2 border border-line text-muted opacity-45 cursor-default"
             : isElevated
-              ? "bg-panel border border-line-strong shadow-[var(--shadow-sm)] text-ink active:bg-panel-3"
+              ? "bg-panel border border-line-strong shadow-(--shadow-sm) text-ink active:bg-panel-3"
               : "bg-panel-2 border border-line text-muted hover:text-ink-2 hover:border-line-strong active:bg-panel-3",
         )}
       >
@@ -757,9 +757,9 @@ function RangeSelect({ value, onChange }: RangeSelectProps) {
         aria-label="Rango del reporte"
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          "inline-flex items-center gap-[6px] px-[10px] py-[5px]",
-          "rounded-ctl border bg-panel shadow-[var(--shadow-sm)] cursor-pointer",
-          "transition-colors duration-[140ms]",
+          "inline-flex items-center gap-1.5 px-2.5 py-1.25",
+          "rounded-ctl border bg-panel shadow-(--shadow-sm) cursor-pointer",
+          "transition-colors duration-140",
           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
           open ? "border-line-strong" : "border-line hover:border-line-strong",
         )}
@@ -770,7 +770,7 @@ function RangeSelect({ value, onChange }: RangeSelectProps) {
         <ChevronDown
           size={12}
           aria-hidden="true"
-          className={cn("shrink-0 transition-transform duration-[140ms]", open ? "rotate-180 text-muted" : "text-faint")}
+          className={cn("shrink-0 transition-transform duration-140", open ? "rotate-180 text-muted" : "text-faint")}
         />
       </button>
 
@@ -801,7 +801,7 @@ function RangeSelect({ value, onChange }: RangeSelectProps) {
               return (
                 <div key={opt.value}>
                   {idx === RANGE_DIVIDER_INDEX && (
-                    <div className="my-[4px]" style={{ borderTop: "1px solid var(--hair)" }} />
+                    <div className="my-1" style={{ borderTop: "1px solid var(--hair)" }} />
                   )}
                   <button
                     type="button"
@@ -810,9 +810,9 @@ function RangeSelect({ value, onChange }: RangeSelectProps) {
                     onClick={() => selectOption(idx)}
                     onMouseEnter={() => setFocusedIdx(idx)}
                     className={cn(
-                      "flex w-full items-center justify-between gap-[8px]",
-                      "px-[10px] py-[6px] rounded-[7px] cursor-pointer text-[12.5px] font-semibold",
-                      "transition-colors duration-[140ms]",
+                      "flex w-full items-center justify-between gap-2",
+                      "px-2.5 py-1.5 rounded-chip cursor-pointer text-[12.5px] font-semibold",
+                      "transition-colors duration-140",
                       isSelected ? "text-ink" : "text-ink-2",
                       idx === focusedIdx ? "bg-panel-2" : "hover:bg-panel-2",
                     )}
@@ -821,7 +821,7 @@ function RangeSelect({ value, onChange }: RangeSelectProps) {
                     {isSelected ? (
                       <Check size={14} aria-hidden="true" className="shrink-0 text-ink-2" />
                     ) : (
-                      <span className="w-[14px] shrink-0" aria-hidden="true" />
+                      <span className="w-3.5 shrink-0" aria-hidden="true" />
                     )}
                   </button>
                 </div>
@@ -878,7 +878,7 @@ function RemoveConfirmPopover({ onConfirm, onCancel, anchorRef }: RemoveConfirmP
   const content = (
     <div
       ref={popoverRef}
-      className="fixed z-50 w-[220px] rounded-ctl border border-line bg-panel shadow-[var(--shadow-lg)] p-[12px_14px] animate-modal-pop"
+      className="fixed z-50 w-55 rounded-ctl border border-line bg-panel shadow-(--shadow-lg) p-[12px_14px] animate-modal-pop"
       style={{ top: position.top, right: position.right }}
       role="dialog"
       aria-label="Confirmar quitar reporte"
@@ -888,14 +888,14 @@ function RemoveConfirmPopover({ onConfirm, onCancel, anchorRef }: RemoveConfirmP
         <button
           type="button"
           onClick={onConfirm}
-          className="rounded-ctl border border-expense bg-expense-soft px-3 py-[6px] text-[13px] font-semibold text-expense-ink transition-colors duration-[140ms] hover:bg-expense hover:text-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--expense-soft)]"
+          className="rounded-ctl border border-expense bg-expense-soft px-3 py-1.5 text-[13px] font-semibold text-expense-ink transition-colors duration-140 hover:bg-expense hover:text-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--expense-soft)]"
         >
           Quitar
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-ctl border border-line bg-panel px-3 py-[6px] text-[13px] font-semibold text-ink-2 transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+          className="rounded-ctl border border-line bg-panel px-3 py-1.5 text-[13px] font-semibold text-ink-2 transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
         >
           Cancelar
         </button>
@@ -943,11 +943,11 @@ function EditableTitle({
         aria-label="Título del reporte"
         className={cn(
           "text-[16px] font-semibold leading-tight text-ink",
-          "bg-panel border border-[var(--line-strong)] rounded-[var(--r-ctl,10px)]",
-          "px-[8px] py-[3px]",
+          "bg-panel border border-(--line-strong) rounded-(--r-ctl,10px)",
+          "px-2 py-0.75",
           "min-w-0 flex-1",
           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
-          "placeholder:text-[var(--faint)]",
+          "placeholder:text-(--faint)",
         )}
       />
     );
@@ -963,17 +963,17 @@ function EditableTitle({
       aria-label={canEdit ? "Editar título del reporte" : undefined}
       disabled={!canEdit}
       className={cn(
-        "group/title flex items-center gap-[6px] min-w-0",
+        "group/title flex items-center gap-1.5 min-w-0",
         canEdit ? "cursor-text" : "cursor-default",
         "bg-transparent border-0 p-0 text-left",
-        canEdit && "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:rounded-[var(--r-ctl,10px)]",
+        canEdit && "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:rounded-(--r-ctl,10px)",
       )}
     >
       <span
         title={displayTitle}
         className={cn(
           "block text-[16px] font-semibold leading-tight truncate",
-          titleProp ? "text-ink" : "text-[var(--faint)]",
+          titleProp ? "text-ink" : "text-(--faint)",
         )}
       >
         {displayTitle}
@@ -984,7 +984,7 @@ function EditableTitle({
           aria-hidden="true"
           className={cn(
             "shrink-0 text-muted",
-            "opacity-0 transition-opacity duration-[140ms]",
+            "opacity-0 transition-opacity duration-140",
             "group-hover/title:opacity-100 group-focus-visible/title:opacity-100",
             "motion-reduce:transition-none",
           )}
@@ -1014,7 +1014,7 @@ function ExcludedTrigger({ count, open, onClick, triggerRef }: ExcludedTriggerPr
       title={label}
       aria-label={label}
       onClick={onClick}
-      className="inline-flex items-center gap-[5px] px-[8px] py-[4px] rounded-[7px] cursor-pointer transition-colors duration-[140ms] bg-panel-2 hover:bg-panel-3 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+      className="inline-flex items-center gap-1.25 px-2 py-1 rounded-chip cursor-pointer transition-colors duration-140 bg-panel-2 hover:bg-panel-3 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
     >
       <Info size={13} aria-hidden="true" className="shrink-0 text-muted" />
       <span className="text-[12px] font-semibold select-none text-muted">
@@ -1103,7 +1103,7 @@ function ExcludedPopover({ items, anchorRef, onClose }: ExcludedPopoverProps) {
       ref={popoverRef}
       role="dialog"
       aria-label="Fijos sin evolución en el rango"
-      className="fixed z-50 rounded-ctl border border-line bg-panel shadow-[var(--shadow-lg)] p-[4px] animate-modal-pop"
+      className="fixed z-50 rounded-ctl border border-line bg-panel shadow-(--shadow-lg) p-1 animate-modal-pop"
       style={{
         top: position.top,
         left: position.left,
@@ -1111,7 +1111,7 @@ function ExcludedPopover({ items, anchorRef, onClose }: ExcludedPopoverProps) {
         maxWidth: "min(340px, calc(100vw - 32px))",
       }}
     >
-      <div className="px-[8px] pt-[6px] pb-[8px]">
+      <div className="px-2 pt-1.5 pb-2">
         <p className="text-[12px] font-semibold text-ink">Sin evolución en el rango</p>
         <p className="text-[11.5px] text-faint">Con menos de dos apariciones no hay evolución que dibujar.</p>
       </div>
@@ -1120,17 +1120,17 @@ function ExcludedPopover({ items, anchorRef, onClose }: ExcludedPopoverProps) {
         ref={listRef}
         role="list"
         data-overflow={hasOverflow ? "true" : "false"}
-        className="max-h-[240px] overflow-y-auto overflow-x-hidden legend-scroll-region"
+        className="max-h-60 overflow-y-auto overflow-x-hidden legend-scroll-region"
       >
         {items.map((item) => {
           const label = item.description ?? "Sin descripción";
           return (
-            <div key={item.chainId} role="listitem" className="flex items-start gap-[8px] px-[8px] py-[6px] cursor-default">
+            <div key={item.chainId} role="listitem" className="flex items-start gap-2 px-2 py-1.5 cursor-default">
               <div className="min-w-0">
                 <p
                   title={label}
                   className={cn(
-                    "flex max-w-full items-center gap-[4px] text-[12.5px] font-medium",
+                    "flex max-w-full items-center gap-1 text-[12.5px] font-medium",
                     item.description ? "text-ink-2" : "text-muted",
                   )}
                   style={{ maxWidth: 180 }}
@@ -1141,9 +1141,9 @@ function ExcludedPopover({ items, anchorRef, onClose }: ExcludedPopoverProps) {
                   {item.type === "INCOME" && <IncomeGlyph />}
                   <span className="truncate">{label}</span>
                 </p>
-                <p data-testid="excluded-subline" className="flex items-center gap-[5px] text-[11.5px] text-faint">
+                <p data-testid="excluded-subline" className="flex items-center gap-1.25 text-[11.5px] text-faint">
                   <span
-                    className="h-[6px] w-[6px] rounded-full shrink-0"
+                    className="h-1.5 w-1.5 rounded-full shrink-0"
                     style={{ background: item.categoryColor }}
                     aria-hidden="true"
                   />
@@ -1185,16 +1185,16 @@ function CardControls({
       {clippedNote && (
         <span className="text-[11.5px] text-faint whitespace-nowrap">{clippedNote}</span>
       )}
-      <span className="block h-[16px] w-px bg-hair shrink-0" aria-hidden="true" />
+      <span className="block h-4 w-px bg-hair shrink-0" aria-hidden="true" />
       <CardCurrencySelect value={effectiveCurrency} onChange={onCurrencyChange} />
-      <span className="block h-[16px] w-px bg-hair shrink-0" aria-hidden="true" />
+      <span className="block h-4 w-px bg-hair shrink-0" aria-hidden="true" />
       <button
         type="button"
         onClick={onRefresh}
         disabled={isFetching}
         aria-label="Actualizar reporte"
         aria-busy={isFetching}
-        className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted"
+        className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted"
       >
         <RefreshCw size={16} aria-hidden="true" className={cn(isFetching && "animate-spin motion-reduce:animate-none")} />
       </button>
@@ -1204,7 +1204,7 @@ function CardControls({
           type="button"
           onClick={onRemoveOpen}
           aria-label="Quitar reporte"
-          className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+          className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
         >
           <X size={16} aria-hidden="true" />
         </button>
@@ -1283,7 +1283,7 @@ export function CustomTooltip({
       return (
         <div
           role="tooltip"
-          className="rounded-ctl border border-line bg-panel px-3 py-[10px] text-[12.5px] font-medium"
+          className="rounded-ctl border border-line bg-panel px-3 py-2.5 text-[12.5px] font-medium"
           style={{ boxShadow: "var(--shadow-lg)", minWidth: "160px", maxWidth: "320px" }}
         >
           {value !== null ? (
@@ -1299,7 +1299,7 @@ export function CustomTooltip({
               <p className="mono text-[13px] text-faint">—</p>
               {point && (
                 <>
-                  <div className="my-[7px]" style={{ borderTop: "1px solid var(--hair)" }} />
+                  <div className="my-1.75" style={{ borderTop: "1px solid var(--hair)" }} />
                   <p className="text-[11.5px] font-medium text-ink-2">{getGapMotive(point, mode, line)}</p>
                 </>
               )}
@@ -1312,11 +1312,11 @@ export function CustomTooltip({
     return (
       <div
         role="tooltip"
-        className="rounded-ctl border border-line bg-panel px-3 py-[10px] text-[12.5px] font-medium"
+        className="rounded-ctl border border-line bg-panel px-3 py-2.5 text-[12.5px] font-medium"
         style={{ boxShadow: "var(--shadow-lg)", minWidth: "220px", maxWidth: "320px" }}
       >
         {/* Encabezado */}
-        <div className="flex items-start gap-[7px]">
+        <div className="flex items-start gap-1.75">
           <Swatch color={meta.color} dashed={meta.isCalculated} size={10} />
           <div className="min-w-0">
             <p className={cn("text-[12px] font-semibold truncate", meta.description ? "text-ink" : "text-muted")}>
@@ -1324,7 +1324,7 @@ export function CustomTooltip({
             </p>
             <p className="text-[11.5px] font-medium text-ink-2 truncate">
               <span
-                className="inline-block h-[6px] w-[6px] rounded-full align-middle mr-[5px]"
+                className="inline-block h-1.5 w-1.5 rounded-full align-middle mr-1.25"
                 style={{ background: meta.categoryColor }}
                 aria-hidden="true"
               />
@@ -1332,14 +1332,14 @@ export function CustomTooltip({
               {" · "}
               <span
                 className={cn(
-                  "inline-flex items-center rounded-[var(--r-chip)] px-[6px] py-[1px] text-[11px] font-semibold",
+                  "inline-flex items-center rounded-(--r-chip) px-1.5 py-px text-[11px] font-semibold",
                   isIncome ? "bg-income-soft text-income-ink" : "bg-expense-soft text-expense-ink",
                 )}
               >
                 {isIncome ? "Ingreso" : "Gasto"}
               </span>
               {meta.isCalculated && meta.originDescription && (
-                <span className="inline-flex items-center gap-[4px] ml-[4px] text-muted">
+                <span className="inline-flex items-center gap-1 ml-1 text-muted">
                   · <CornerDownRight size={12} aria-hidden="true" /> desde <span className="text-ink-2">{meta.originDescription}</span>
                 </span>
               )}
@@ -1347,7 +1347,7 @@ export function CustomTooltip({
           </div>
         </div>
 
-        <div className="my-[7px]" style={{ borderTop: "1px solid var(--hair)" }} />
+        <div className="my-1.75" style={{ borderTop: "1px solid var(--hair)" }} />
 
         {/* Cifra dominante / hueco */}
         {value !== null ? (
@@ -1361,12 +1361,12 @@ export function CustomTooltip({
           <p className="mono text-[13px] text-faint">—</p>
         )}
 
-        <div className="my-[7px]" style={{ borderTop: "1px solid var(--hair)" }} />
+        <div className="my-1.75" style={{ borderTop: "1px solid var(--hair)" }} />
 
         {/* Frecuencia */}
-        <div className="flex items-center justify-between gap-[10px]">
+        <div className="flex items-center justify-between gap-2.5">
           <span className="text-[11.5px] font-medium text-ink-2">Frecuencia</span>
-          <span className="inline-flex items-center gap-[5px] text-[11.5px] font-medium text-muted">
+          <span className="inline-flex items-center gap-1.25 text-[11.5px] font-medium text-muted">
             <Repeat size={12} aria-hidden="true" />
             {FREQUENCY_LABEL[line.frequency] ?? "mensual"}
           </span>
@@ -1375,7 +1375,7 @@ export function CustomTooltip({
         {/* Motivo del hueco */}
         {value === null && point && (
           <>
-            <div className="my-[7px]" style={{ borderTop: "1px solid var(--hair)" }} />
+            <div className="my-1.75" style={{ borderTop: "1px solid var(--hair)" }} />
             <p className="text-[11.5px] font-medium text-ink-2">{getGapMotive(point, mode, line)}</p>
           </>
         )}
@@ -1398,13 +1398,13 @@ export function CustomTooltip({
   return (
     <div
       role="tooltip"
-      className="rounded-ctl border border-line bg-panel px-3 py-[10px] text-[12.5px] font-medium"
+      className="rounded-ctl border border-line bg-panel px-3 py-2.5 text-[12.5px] font-medium"
       style={{ boxShadow: "var(--shadow-lg)", minWidth: "220px", maxWidth: "320px" }}
     >
-      <p className="mb-[8px] font-semibold text-ink">{monthFull} {year}</p>
-      <div className="flex flex-col gap-[5px]">
+      <p className="mb-2 font-semibold text-ink">{monthFull} {year}</p>
+      <div className="flex flex-col gap-1.25">
         {shown.map((row) => (
-          <div key={row.chainId} className="flex items-center gap-[7px]">
+          <div key={row.chainId} className="flex items-center gap-1.75">
             <Swatch color={row.color} dashed={row.dashed} size={8} />
             {row.type === "INCOME" && <IncomeGlyph />}
             <span className="flex-1 text-ink-2 truncate">{row.label}</span>
@@ -1646,13 +1646,13 @@ function FixedLegend({
   const AllNoneIcon = allVisible ? EyeOff : Eye;
 
   return (
-    <div className="mt-[14px]">
+    <div className="mt-3.5">
       <div
         ref={scrollRegionRef}
-        className="max-h-[112px] overflow-y-auto overflow-x-hidden pr-[2px] legend-scroll-region"
+        className="max-h-28 overflow-y-auto overflow-x-hidden pr-0.5 legend-scroll-region"
         data-overflow={hasOverflow ? "true" : "false"}
       >
-        <div role="group" aria-label="Elegir fijos" className="flex flex-wrap items-center gap-x-[10px] gap-y-[6px] -mx-[6px]">
+        <div role="group" aria-label="Elegir fijos" className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 -mx-1.5">
           {lines.map((line) => {
             const color = colorByChain.get(line.chainId) ?? "var(--muted)";
             const isSelected = selectedSet.has(line.chainId);
@@ -1674,15 +1674,15 @@ function FixedLegend({
                 onFocus={() => onHighlight(line.chainId)}
                 onBlur={() => onHighlight(null)}
                 className={cn(
-                  "group inline-flex items-center gap-[6px] px-[6px] py-[4px] rounded-[7px]",
-                  "cursor-pointer transition-[background-color,opacity] duration-[140ms]",
+                  "group inline-flex items-center gap-1.5 px-1.5 py-1 rounded-chip",
+                  "cursor-pointer transition-[background-color,opacity] duration-140",
                   "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
                   isHighlighted ? "bg-panel-2" : "hover:bg-panel-2 active:bg-panel-3",
                   state === "unselected" ? "opacity-70" : "opacity-100",
                 )}
               >
                 {line.isCalculated ? (
-                  <span className="inline-flex items-center gap-[3px] shrink-0">
+                  <span className="inline-flex items-center gap-0.75 shrink-0">
                     <Swatch color={color} dashed size={11} dimmedDash={state === "unselected"} />
                     <CornerDownRight size={11} aria-hidden="true" className="text-muted" />
                   </span>
@@ -1707,22 +1707,22 @@ function FixedLegend({
       </div>
 
       {/* Carril fijo del comando */}
-      <div className="mt-[8px] pt-[8px] flex items-center justify-between gap-3" style={{ borderTop: "1px solid var(--hair)" }}>
+      <div className="mt-2 pt-2 flex items-center justify-between gap-3" style={{ borderTop: "1px solid var(--hair)" }}>
         <div className="flex items-center gap-2">
           <button
             type="button"
             aria-label={allVisible ? "Ocultar todos los fijos" : "Mostrar todos los fijos"}
             onClick={() => onAllNone(!allVisible)}
-            className="group inline-flex items-center gap-[6px] px-[8px] py-[4px] rounded-[7px] cursor-pointer transition-colors duration-[140ms] bg-panel-2 hover:bg-panel-3 active:bg-panel-3 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+            className="group inline-flex items-center gap-1.5 px-2 py-1 rounded-chip cursor-pointer transition-colors duration-140 bg-panel-2 hover:bg-panel-3 active:bg-panel-3 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
           >
-            <AllNoneIcon size={13} aria-hidden="true" className="shrink-0 text-muted transition-colors duration-[140ms] group-hover:text-ink" />
-            <span className="text-[12px] font-semibold select-none text-ink-2 group-hover:text-ink transition-colors duration-[140ms]">
+            <AllNoneIcon size={13} aria-hidden="true" className="shrink-0 text-muted transition-colors duration-140 group-hover:text-ink" />
+            <span className="text-[12px] font-semibold select-none text-ink-2 group-hover:text-ink transition-colors duration-140">
               {allNoneLabel}
             </span>
           </button>
           {excludedCount > 0 && (
             <>
-              <span className="block h-[16px] w-px bg-hair shrink-0" aria-hidden="true" />
+              <span className="block h-4 w-px bg-hair shrink-0" aria-hidden="true" />
               <ExcludedTrigger count={excludedCount} open={excludedOpen} onClick={onToggleExcluded} triggerRef={excludedTriggerRef} />
             </>
           )}
@@ -2157,18 +2157,18 @@ export function FixedEvolutionCard({
 
   return (
     <div
-      className={cn(!scoped && "bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] p-[var(--card-pad)] animate-screen-fade")}
+      className={cn(!scoped && "bg-panel border border-line rounded-card shadow-(--shadow-sm) p-(--card-pad) animate-screen-fade")}
       aria-label={scoped ? "Evolución del fijo" : displayTitle}
     >
       {scoped ? (
         /* ── Variante acotada (§15): una sola fila de controles con el select de rango ── */
-        <div className="mb-[14px] flex items-center justify-end">
+        <div className="mb-3.5 flex items-center justify-end">
           <RangeSelect value={rangeMonths} onChange={(v) => onRangeMonthsChange?.(v)} />
         </div>
       ) : (
         <>
       {/* ── Línea 1: título editable ── */}
-      <div className="mb-[8px] flex items-center gap-[6px]">
+      <div className="mb-2 flex items-center gap-1.5">
         <div className="min-w-0">
           <EditableTitle
             titleProp={titleProp}
@@ -2187,10 +2187,10 @@ export function FixedEvolutionCard({
       </div>
 
       {/* ── Línea 2: [tabs + chip] izq / [controles] der ── */}
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-[18px]">
-        <div className="flex flex-wrap items-center gap-[6px]">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-4.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <ViewTabs value={mode} onChange={(v) => onModeChange?.(v)} />
-          <span className="block h-[16px] w-px bg-hair shrink-0" aria-hidden="true" />
+          <span className="block h-4 w-px bg-hair shrink-0" aria-hidden="true" />
           <AdjustedChip pressed={adjusted} disabled={isAmounts} onToggle={() => onAdjustedChange?.(!adjusted)} />
         </div>
         <CardControls
@@ -2237,26 +2237,26 @@ export function FixedEvolutionCard({
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 z-10 pointer-events-none text-center px-4" aria-live="polite">
                 <p className="text-[14px] text-muted">Este fijo no tiene dos meses con monto en el rango.</p>
                 {rangeMonths !== 60 && (
-                  <p className="text-[12.5px] leading-[1.5] text-faint">Alargá el rango para ver su evolución.</p>
+                  <p className="text-[12.5px] leading-normal text-faint">Alargá el rango para ver su evolución.</p>
                 )}
               </div>
             )}
             {!scoped && isRangeEmptyPure && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 z-10 pointer-events-none text-center px-4" aria-live="polite">
                 <p className="text-[14px] text-muted">Sin fijos en el rango.</p>
-                <p className="text-[12.5px] leading-[1.5] text-muted">Probá un rango más largo.</p>
+                <p className="text-[12.5px] leading-normal text-muted">Probá un rango más largo.</p>
               </div>
             )}
             {!scoped && isRangeEmptyWithExcluded && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 z-10 pointer-events-none text-center px-4" aria-live="polite">
                 <p className="text-[14px] text-muted">Ningún fijo tiene dos apariciones en el rango.</p>
-                <p className="text-[12.5px] leading-[1.5] text-muted">Alargá el rango para ver su evolución.</p>
+                <p className="text-[12.5px] leading-normal text-muted">Alargá el rango para ver su evolución.</p>
               </div>
             )}
             {!isRangeEmpty && isNoneSelected && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 z-10 pointer-events-none text-center px-4" aria-live="polite">
                 <p className="text-[14px] text-muted">Ningún fijo seleccionado.</p>
-                <p className="text-[12.5px] leading-[1.5] text-muted">Elegí uno en la lista de abajo.</p>
+                <p className="text-[12.5px] leading-normal text-muted">Elegí uno en la lista de abajo.</p>
               </div>
             )}
             {!isRangeEmpty && !isNoneSelected && isVariationEmpty && (
@@ -2264,12 +2264,12 @@ export function FixedEvolutionCard({
                 {adjusted ? (
                   <>
                     <p className="text-[14px] text-muted">Sin variación ajustada en el rango.</p>
-                    <p className="text-[12.5px] leading-[1.5] text-muted">Probá sin el ajuste por inflación.</p>
+                    <p className="text-[12.5px] leading-normal text-muted">Probá sin el ajuste por inflación.</p>
                   </>
                 ) : (
                   <>
                     <p className="text-[14px] text-muted">Sin variación computable en el rango.</p>
-                    <p className="text-[12.5px] leading-[1.5] text-muted">Faltan datos para comparar cada pago con el anterior.</p>
+                    <p className="text-[12.5px] leading-normal text-muted">Faltan datos para comparar cada pago con el anterior.</p>
                   </>
                 )}
               </div>
@@ -2302,7 +2302,7 @@ export function FixedEvolutionCard({
 
           {/* Carril mínimo cuando el universo tildable está vacío pero hay excluidos (docs/design.md §10). */}
           {!scoped && isRangeEmptyWithExcluded && (
-            <div className="mt-[14px] pt-[8px] flex items-center" style={{ borderTop: "1px solid var(--hair)" }}>
+            <div className="mt-3.5 pt-2 flex items-center" style={{ borderTop: "1px solid var(--hair)" }}>
               <ExcludedTrigger
                 count={excluded.length}
                 open={excludedOpen}

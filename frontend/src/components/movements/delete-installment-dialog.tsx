@@ -77,12 +77,12 @@ export function DeleteInstallmentDialog({ movement, onClose }: DeleteInstallment
 
         {/* Advertencia grupo completo — bloque .warn */}
         <div
-          className="flex items-start gap-[11px] rounded-ctl border px-[14px] py-[13px] bg-expense-soft"
+          className="flex items-start gap-2.75 rounded-ctl border px-3.5 py-3.25 bg-expense-soft"
           style={{ borderColor: "oklch(0.57 0.16 27 / 0.25)" }}
         >
           <AlertTriangle
             size={18}
-            className="text-expense-ink shrink-0 mt-[1px]"
+            className="text-expense-ink shrink-0 mt-px"
             aria-hidden="true"
           />
           <div className="text-[13px] leading-[1.45] text-expense-ink">
@@ -93,7 +93,7 @@ export function DeleteInstallmentDialog({ movement, onClose }: DeleteInstallment
           </div>
         </div>
 
-        <p className="text-[12.5px] leading-[1.5] text-muted">Vas a poder deshacerlo desde el historial.</p>
+        <p className="text-[12.5px] leading-normal text-muted">Vas a poder deshacerlo desde el historial.</p>
       </ModalShellBody>
 
       <ModalShellFooter>

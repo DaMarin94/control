@@ -94,11 +94,11 @@ function LimitItemView({ limit, categoryName, categoryColor }: LimitItemViewProp
     <div
       role="listitem"
       className={cn(
-        "px-[10px] py-[6px] rounded-[var(--r-chip)]",
+        "px-2.5 py-1.5 rounded-(--r-chip)",
         !limit.enabled && "opacity-60",
       )}
     >
-      <div className="flex items-center gap-[6px] min-w-0">
+      <div className="flex items-center gap-1.5 min-w-0">
         {hasCategoryDot && (
           <span
             aria-hidden="true"
@@ -116,7 +116,7 @@ function LimitItemView({ limit, categoryName, categoryColor }: LimitItemViewProp
           <span className="shrink-0 text-[11px] font-medium text-faint">Desactivado</span>
         )}
       </div>
-      <div className="mt-[1px] truncate text-[12px] text-muted">
+      <div className="mt-px truncate text-[12px] text-muted">
         {contextPrefix}
         <span className="mono">{condition}</span>
         {showQualifier && (
@@ -152,7 +152,7 @@ function LimitsGroup({
   return (
     <div>
       {withDividerBefore && <div aria-hidden="true" className="h-px bg-hair" />}
-      <div className="px-[10px] pt-[8px] pb-[3px] text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+      <div className="px-2.5 pt-2 pb-0.75 text-[12px] font-semibold uppercase tracking-widest text-muted">
         {title}
       </div>
       <div role="list">
@@ -284,14 +284,14 @@ function LimitsInfoPanel({
       aria-label={ariaLabel}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className="fixed z-50 min-w-[240px] max-w-[300px] overflow-y-auto rounded-ctl border border-line bg-panel p-[6px] shadow-[var(--shadow-lg)] animate-modal-pop"
+      className="fixed z-50 min-w-60 max-w-75 overflow-y-auto rounded-ctl border border-line bg-panel p-1.5 shadow-(--shadow-lg) animate-modal-pop"
       style={{
         left: position.left,
         ...(position.flipUp ? { bottom: position.bottom } : { top: position.top }),
         maxHeight: "min(60vh, 360px)",
       }}
     >
-      <div className="px-[10px] pt-[6px] pb-[4px] text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+      <div className="px-2.5 pt-1.5 pb-1 text-[12px] font-semibold uppercase tracking-widest text-muted">
         {caption}
       </div>
       <LimitsGroup
@@ -402,7 +402,7 @@ export function LimitsInfoPopover({ surface }: LimitsInfoPopoverProps) {
         onMouseEnter={handleTriggerMouseEnter}
         onMouseLeave={scheduleClose}
         className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-ctl transition-colors duration-[140ms] motion-reduce:transition-none",
+          "flex h-8 w-8 items-center justify-center rounded-ctl transition-colors duration-140 motion-reduce:transition-none",
           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
           open ? "bg-panel-2 text-ink" : "text-muted hover:bg-panel-2 hover:text-ink",
         )}

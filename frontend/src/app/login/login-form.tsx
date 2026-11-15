@@ -198,7 +198,7 @@ export function CredentialsForm({
   submitClassName,
 }: CredentialsFormProps) {
   return (
-    <form method="post" onSubmit={onFormSubmit} noValidate className={cn("flex flex-col gap-[14px]", className)}>
+    <form method="post" onSubmit={onFormSubmit} noValidate className={cn("flex flex-col gap-3.5", className)}>
       {/* Error general del formulario */}
       {formError && (
         <div
@@ -210,7 +210,7 @@ export function CredentialsForm({
       )}
 
       {/* Campo email */}
-      <div className="flex flex-col gap-[7px]">
+      <div className="flex flex-col gap-1.75">
         <Label htmlFor={emailId} required>
           Email
         </Label>
@@ -226,7 +226,7 @@ export function CredentialsForm({
       </div>
 
       {/* Campo contraseña */}
-      <div className="flex flex-col gap-[7px]">
+      <div className="flex flex-col gap-1.75">
         <Label htmlFor={passwordId} required>
           Contraseña
         </Label>
@@ -246,7 +246,7 @@ export function CredentialsForm({
         type="submit"
         disabled={isLoading}
         className={cn(
-          "mt-1 inline-flex w-full items-center justify-center gap-2 rounded-ctl border border-transparent bg-accent px-4 py-[13px] text-[15px] font-semibold text-white shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0_/_0.2)] transition-all duration-[140ms] hover:-translate-y-px hover:bg-accent-press hover:shadow-[var(--shadow-md)] disabled:pointer-events-none disabled:opacity-50",
+          "mt-1 inline-flex w-full items-center justify-center gap-2 rounded-ctl border border-transparent bg-accent px-4 py-3.25 text-[15px] font-semibold text-white shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0/0.2)] transition-all duration-140 hover:-translate-y-px hover:bg-accent-press hover:shadow-(--shadow-md) disabled:pointer-events-none disabled:opacity-50",
           submitClassName,
         )}
       >
@@ -265,7 +265,7 @@ export function LoginSeparator({ label }: { label: string }) {
         <span className="w-full border-t border-line" />
       </div>
       <div className="relative flex justify-center">
-        <span className="bg-paper px-3 text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+        <span className="bg-paper px-3 text-[12px] font-semibold uppercase tracking-widest text-muted">
           {label}
         </span>
       </div>
@@ -300,12 +300,12 @@ export function GoogleLoginButton({
       disabled={disabled}
       title={!isConfigured ? "Google OAuth no está configurado" : undefined}
       className={cn(
-        "flex w-full cursor-pointer items-center justify-center gap-3 rounded-ctl border border-line-strong bg-panel px-[14px] py-[14px] font-ui text-[15px] font-semibold text-ink shadow-[var(--shadow-sm)] transition-all duration-[140ms] hover:-translate-y-px hover:border-muted hover:bg-panel-2 hover:shadow-[var(--shadow-md)] disabled:pointer-events-none disabled:opacity-50",
+        "flex w-full cursor-pointer items-center justify-center gap-3 rounded-ctl border border-line-strong bg-panel px-3.5 py-3.5 font-ui text-[15px] font-semibold text-ink shadow-(--shadow-sm) transition-all duration-140 hover:-translate-y-px hover:border-muted hover:bg-panel-2 hover:shadow-(--shadow-md) disabled:pointer-events-none disabled:opacity-50",
         className,
       )}
     >
       {/* gmark — placeholder cuadrado neutro con "G" en accent-ink */}
-      <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[6px] border border-line bg-panel-3 text-[13px] font-bold text-accent-ink">
+      <span className="grid h-5.5 w-5.5 shrink-0 place-items-center rounded-md border border-line bg-panel-3 text-[13px] font-bold text-accent-ink">
         G
       </span>
       {isLoading

@@ -4,7 +4,7 @@
  *
  * Las clases de shadcn (bg-primary, bg-destructive, border-input, h-8, h-10)
  * fueron reemplazadas por los tokens del DS (bg-accent, bg-expense-soft,
- * border-line-strong, py-[7px], py-[13px]).
+ * border-line-strong, py-1.75, py-[13px]).
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -51,21 +51,21 @@ describe("Button", () => {
   it("aplica tamaño sm (py-[7px])", () => {
     render(<Button size="sm">Pequeño</Button>);
     const btn = screen.getByRole("button");
-    expect(btn).toHaveClass("py-[7px]");
+    expect(btn).toHaveClass("py-1.75");
     expect(btn).toHaveClass("px-3");
   });
 
   it("aplica tamaño lg (py-[13px])", () => {
     render(<Button size="lg">Grande</Button>);
     const btn = screen.getByRole("button");
-    expect(btn).toHaveClass("py-[13px]");
+    expect(btn).toHaveClass("py-3.25");
     expect(btn).toHaveClass("px-5");
   });
 
-  it("aplica tamaño default (py-[10px] px-4)", () => {
+  it("aplica tamaño default (py-2.5 px-4)", () => {
     render(<Button>Default size</Button>);
     const btn = screen.getByRole("button");
-    expect(btn).toHaveClass("py-[10px]");
+    expect(btn).toHaveClass("py-2.5");
     expect(btn).toHaveClass("px-4");
   });
 
@@ -120,6 +120,6 @@ describe("Button", () => {
 
   it("aplica transición de 140ms", () => {
     render(<Button>Test</Button>);
-    expect(screen.getByRole("button")).toHaveClass("duration-[140ms]");
+    expect(screen.getByRole("button")).toHaveClass("duration-140");
   });
 });

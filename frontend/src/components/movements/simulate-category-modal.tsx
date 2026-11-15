@@ -179,13 +179,13 @@ export function SimulateCategoryModal({ startMonth, onClose }: SimulateCategoryM
         </p>
 
         {partialSummary && (
-          <p className="rounded-ctl border border-line bg-panel-2 px-3 py-[8px] text-[12.5px] text-ink-2">
+          <p className="rounded-ctl border border-line bg-panel-2 px-3 py-2 text-[12.5px] text-ink-2">
             {formatBatchPartialSummary(partialSummary.created, partialSummary.total)}
           </p>
         )}
 
         {!frozen && isLoading ? (
-          <div role="status" aria-label="Cargando categorías" className="flex flex-col gap-[2px]">
+          <div role="status" aria-label="Cargando categorías" className="flex flex-col gap-0.5">
             {[0, 1, 2, 3].map((i) => (
               <CandidateSkeletonRow key={i} />
             ))}
@@ -198,7 +198,7 @@ export function SimulateCategoryModal({ startMonth, onClose }: SimulateCategoryM
           <CandidatesEmpty cause={emptyCause} />
         ) : (
           <>
-            <div role="group" aria-label="Categorías a simular" className="flex flex-col gap-[2px]">
+            <div role="group" aria-label="Categorías a simular" className="flex flex-col gap-0.5">
               {eligibleCandidates.map((candidate) => (
                 <CandidateRow
                   key={candidate.categoryId}
@@ -210,7 +210,7 @@ export function SimulateCategoryModal({ startMonth, onClose }: SimulateCategoryM
                 />
               ))}
             </div>
-            <p className="mt-[10px] text-[12px] text-muted">{formatEligibilityNote()}</p>
+            <p className="mt-2.5 text-[12px] text-muted">{formatEligibilityNote()}</p>
           </>
         )}
       </ModalShellBody>
@@ -225,7 +225,7 @@ export function SimulateCategoryModal({ startMonth, onClose }: SimulateCategoryM
           size="sm"
           onClick={handleConfirm}
           disabled={count === 0 || isCreating}
-          className="min-w-[164px] whitespace-nowrap"
+          className="min-w-41 whitespace-nowrap"
         >
           {isCreating ? "Simulando…" : formatSimulateCta(count)}
         </Button>
@@ -241,7 +241,7 @@ function CandidatesEmpty({ cause }: { cause: NonNullable<ReturnType<typeof getCa
   return (
     <div className="rounded-ctl border border-dashed border-line bg-panel-2 px-4 py-6 text-center">
       <p className="text-[12.5px] text-ink-2">{line1}</p>
-      {line2 && <p className="mt-[4px] text-[12px] text-muted">{line2}</p>}
+      {line2 && <p className="mt-1 text-[12px] text-muted">{line2}</p>}
     </div>
   );
 }
@@ -288,11 +288,11 @@ function CandidateRow({ candidate, checked, alreadyCreatedThisSession, error, on
         }
       }}
       className={cn(
-        "flex flex-wrap items-center gap-[10px] px-[10px] py-[8px] rounded-ctl min-h-[38px]",
+        "flex flex-wrap items-center gap-2.5 px-2.5 py-2 rounded-ctl min-h-9.5",
         disabled
           ? "cursor-not-allowed"
           : cn(
-              "cursor-pointer transition-colors duration-[140ms]",
+              "cursor-pointer transition-colors duration-140",
               "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
               checked ? "bg-panel-2" : "hover:bg-panel-2",
             ),
@@ -302,7 +302,7 @@ function CandidateRow({ candidate, checked, alreadyCreatedThisSession, error, on
       <span
         aria-hidden="true"
         className={cn(
-          "flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors duration-[140ms]",
+          "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors duration-140",
           disabled
             ? "border-faint bg-panel"
             : checked
@@ -319,7 +319,7 @@ function CandidateRow({ candidate, checked, alreadyCreatedThisSession, error, on
 
       {/* Punto de color de categoría — NUNCA se atenúa, aunque la fila esté deshabilitada */}
       <span
-        className="h-[10px] w-[10px] shrink-0 rounded-[3px]"
+        className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
         style={{ backgroundColor: candidate.color }}
         aria-hidden="true"
       />
@@ -342,7 +342,7 @@ function CandidateRow({ candidate, checked, alreadyCreatedThisSession, error, on
 
 function CandidateSkeletonRow() {
   return (
-    <div className="flex items-center gap-[10px] px-[10px] py-[8px] min-h-[38px]">
+    <div className="flex items-center gap-2.5 px-2.5 py-2 min-h-9.5">
       <SkeletonCircle diameter={16} />
       <SkeletonBlock height={10} width={10} radius="custom" className="rounded-[3px]" />
       <SkeletonLine height={13} width="40%" />

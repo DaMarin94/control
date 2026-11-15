@@ -10,18 +10,18 @@
  * - 4 segmentos de ancho igual, texto 13px/600 `mono`, radio `--r-pill`.
  * - Etiquetas: "ARS" / "USD" / "EUR" / "BRL" — orden fijo.
  * - Thumb deslizante a 4 posiciones: left = calc((i/4)*100% + 2px), width = calc(25% - 4px).
- * - Padding horizontal de segmento: px-[14px] en escritorio; se reduce a px-[8px] mínimo
+ * - Padding horizontal de segmento: px-3.5 en escritorio; se reduce a px-2 mínimo
  *   en columnas angostas (ver responsive abajo). NO se recortan etiquetas ni se reduce fuente.
  * - Responsive: si el contenedor es demasiado angosto para los 4 a 14px, el componente
- *   aplica px-[8px] como mínimo vía la clase `currency-segmented-compact`.
+ *   aplica px-2 como mínimo vía la clase `currency-segmented-compact`.
  *   En /configuracion cabe sin problemas (a la derecha de `flex justify-between`).
  *   En el form (grid de 2 col, mitad del ancho) puede necesitar el padding reducido.
  * - Prop `touchTarget="roomy"` (opt-in, default "default"): sube el padding vertical
- *   del segmento de py-[6px] a py-[13px] — el único ajuste, sin tocar tipografía, color
+ *   del segmento de py-1.5 a py-3.25 — el único ajuste, sin tocar tipografía, color
  *   ni el resto de la geometría. Consumida EXCLUSIVAMENTE por la superficie de captura
  *   (`CaptureMoreOptions`, docs/design.md §Superficie de captura → §4 "Densidad táctil":
  *   piso de 44px para todo control). La versión de escritorio (`/configuracion`, forms
- *   de escritorio) nunca la pasa — queda con py-[6px] (31px), sin cambio de comportamiento.
+ *   de escritorio) nunca la pasa — queda con py-1.5 (31px), sin cambio de comportamiento.
  * - Segmento seleccionado: thumb `--panel` (blanco) + `--shadow-sm`, texto `--ink`.
  *   Se desliza entre las 4 posiciones (0.14s; instantáneo con prefers-reduced-motion).
  * - Segmento no seleccionado: texto `--muted`; hover → `--ink-2`.
@@ -56,12 +56,12 @@ interface CurrencySegmentedProps {
   /**
    * Reducir el padding horizontal de los segmentos cuando el contenedor es angosto.
    * Default: false (px-[14px]).
-   * true: px-[8px] — útil en grid de 2 col donde el segmented ocupa la mitad.
+   * true: px-2 — útil en grid de 2 col donde el segmented ocupa la mitad.
    */
   compact?: boolean;
   /**
-   * Densidad táctil del segmento — "default" (py-[6px], 31px) o "roomy"
-   * (py-[13px], ≥44px). Ver comentario de arriba: solo la superficie de
+   * Densidad táctil del segmento — "default" (py-1.5, 31px) o "roomy"
+   * (py-3.25, ≥44px). Ver comentario de arriba: solo la superficie de
    * captura pasa "roomy".
    */
   touchTarget?: "default" | "roomy";
@@ -93,15 +93,15 @@ export function CurrencySegmented({
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className="relative flex rounded-pill p-[2px]"
+      className="relative flex rounded-pill p-0.5"
       style={{ backgroundColor: "var(--panel-3)" }}
     >
       {/* Thumb deslizante — neutro, sin colores semánticos */}
       <span
         aria-hidden="true"
         className={cn(
-          "pointer-events-none absolute top-[2px] bottom-[2px] rounded-pill bg-panel shadow-[var(--shadow-sm)]",
-          "transition-[left,width] duration-[140ms] ease-out motion-reduce:transition-none",
+          "pointer-events-none absolute top-0.5 bottom-0.5 rounded-pill bg-panel shadow-(--shadow-sm)",
+          "transition-[left,width] duration-140 ease-out motion-reduce:transition-none",
         )}
         style={{
           left: `calc(${(selectedIndex / N) * 100}% + 2px)`,
@@ -121,13 +121,13 @@ export function CurrencySegmented({
             onKeyDown={(e) => handleKeyDown(e, i)}
             className={cn(
               "relative z-10 flex-1 rounded-pill",
-              touchTarget === "roomy" ? "py-[13px]" : "py-[6px]",
+              touchTarget === "roomy" ? "py-3.25" : "py-1.5",
               "text-[13px] font-semibold mono tracking-[0.01em]",
-              "transition-colors duration-[140ms]",
+              "transition-colors duration-140",
               "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
               "disabled:opacity-50 disabled:cursor-not-allowed",
               // Padding horizontal adaptativo — compacto en columnas angostas
-              compact ? "px-[8px]" : "px-[14px]",
+              compact ? "px-2" : "px-3.5",
               isSelected ? "text-ink" : "text-muted hover:text-ink-2",
             )}
           >

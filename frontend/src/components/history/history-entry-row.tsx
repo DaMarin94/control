@@ -28,7 +28,7 @@ import type { HistoryEntryResponseDto } from "@/types/history";
 import { cn } from "@/lib/utils";
 
 function IdentitySeparator() {
-  return <span className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0" aria-hidden="true" />;
+  return <span className="inline-block h-0.75 w-0.75 rounded-full bg-faint shrink-0" aria-hidden="true" />;
 }
 
 interface HistoryEntryRowProps {
@@ -75,7 +75,7 @@ export function HistoryEntryRow({ entry, isBusy, onOpen }: HistoryEntryRowProps)
         type="button"
         variant="outline"
         size="sm"
-        className="min-h-[36px] whitespace-nowrap"
+        className="min-h-9 whitespace-nowrap"
         onClick={handleActionClick}
         aria-describedby={entry.canUndo ? undefined : motiveId}
       >
@@ -112,8 +112,8 @@ export function HistoryEntryRow({ entry, isBusy, onOpen }: HistoryEntryRowProps)
       onClick={handleOpen}
       onKeyDown={handleRowKeyDown}
       className={cn(
-        "grid grid-cols-[40px_1fr] @wide:grid-cols-[40px_1fr_auto] gap-x-[14px] gap-y-[10px] items-start",
-        "cursor-pointer transition-colors duration-[120ms]",
+        "grid grid-cols-[40px_1fr] @wide:grid-cols-[40px_1fr_auto] gap-x-3.5 gap-y-2.5 items-start",
+        "cursor-pointer transition-colors duration-120",
         "hover:bg-panel-2 focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--accent-soft)]",
         isBusy && "opacity-[0.55] pointer-events-none",
       )}
@@ -130,21 +130,21 @@ export function HistoryEntryRow({ entry, isBusy, onOpen }: HistoryEntryRowProps)
       {/* Col 2 — cuerpo */}
       <div className="min-w-0">
         {/* Línea de identidad */}
-        <div className="flex items-center gap-[8px] min-w-0 leading-[21px]">
+        <div className="flex items-center gap-2 min-w-0 leading-5.25">
           <span className="text-[14.5px] font-semibold tracking-[-0.01em] text-ink truncate flex-1 min-w-0">
             {rowLabel}
           </span>
-          <span className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em] shrink-0">
+          <span className="inline-flex items-center rounded-(--r-chip) bg-panel-3 text-muted px-1.75 py-px text-[11px] font-semibold tracking-[0.04em] shrink-0">
             {chipLabel}
           </span>
         </div>
 
         {/* Sublínea de identidad del movimiento */}
-        <div className="flex flex-wrap items-center gap-[6px] mt-[1px] text-[12px] text-muted min-w-0">
+        <div className="flex flex-wrap items-center gap-1.5 mt-px text-[12px] text-muted min-w-0">
           {entry.category && (
             <>
               <span
-                className="h-[6px] w-[6px] rounded-full shrink-0"
+                className="h-1.5 w-1.5 rounded-full shrink-0"
                 style={{ background: entry.category.color }}
                 aria-hidden="true"
               />
@@ -156,21 +156,21 @@ export function HistoryEntryRow({ entry, isBusy, onOpen }: HistoryEntryRowProps)
           {entry.isCalculated && (
             <>
               <IdentitySeparator />
-              <span className="inline-flex items-center gap-[4px] shrink-0">
+              <span className="inline-flex items-center gap-1 shrink-0">
                 <CornerDownRight size={12} className="text-muted shrink-0" aria-hidden="true" />
                 calculado
               </span>
             </>
           )}
           {/* Momento — SOLO compacto, último segmento de la sublínea (§9) */}
-          <span className="@wide:hidden inline-flex items-center gap-[6px] shrink-0">
+          <span className="@wide:hidden inline-flex items-center gap-1.5 shrink-0">
             <IdentitySeparator />
             <span className="mono whitespace-nowrap">{momento}</span>
           </span>
         </div>
 
         {/* Bloque "Qué cambió" */}
-        <div className="mt-[10px]">
+        <div className="mt-2.5">
           <HistoryChangesBlock
             changes={entry.changes}
             direction="list"
@@ -179,15 +179,15 @@ export function HistoryEntryRow({ entry, isBusy, onOpen }: HistoryEntryRowProps)
         </div>
 
         {/* Acción — SOLO compacto, fila propia alineada a la derecha; motivo a la izquierda del botón (§9) */}
-        <div className="@wide:hidden flex items-center justify-end gap-[10px] mt-[10px]">
+        <div className="@wide:hidden flex items-center justify-end gap-2.5 mt-2.5">
           <BlockedMotive variant="compact" />
           <ActionButton variant="compact" />
         </div>
       </div>
 
       {/* Col 3 — SOLO amplio: momento, botón, motivo debajo (§2) */}
-      <div className="hidden @wide:flex flex-col items-end gap-[8px] shrink-0 self-start text-right">
-        <span className="mono text-[12.5px] leading-[21px] text-muted whitespace-nowrap">{momento}</span>
+      <div className="hidden @wide:flex flex-col items-end gap-2 shrink-0 self-start text-right">
+        <span className="mono text-[12.5px] leading-5.25 text-muted whitespace-nowrap">{momento}</span>
         <ActionButton variant="wide" />
         <BlockedMotive variant="wide" />
       </div>

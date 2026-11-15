@@ -43,9 +43,9 @@ export function DeleteSimulationDialog({ simulation, onClose }: DeleteSimulation
         <p className="text-[14px] text-ink">
           Se va a eliminar la simulación de <strong>{categoryName}</strong>.
         </p>
-        <div className="rounded-ctl border border-line bg-panel-2 px-4 py-3 flex items-center gap-[8px]">
+        <div className="rounded-ctl border border-line bg-panel-2 px-4 py-3 flex items-center gap-2">
           <span
-            className="h-[8px] w-[8px] rounded-full shrink-0"
+            className="h-2 w-2 rounded-full shrink-0"
             style={{ background: simulation.category.color }}
             aria-hidden="true"
           />

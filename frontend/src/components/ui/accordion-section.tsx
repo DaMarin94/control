@@ -111,7 +111,7 @@ export function AccordionSection({
        * <button> de disclosure (no se anidan controles interactivos en un button).
        * El flex-wrapper es solo un contenedor de layout, no tiene semántica propia.
        */}
-      <div className="flex items-center gap-1 pb-[10px]">
+      <div className="flex items-center gap-1 pb-2.5">
         {/*
          * <button> de disclosure — ocupa todo el espacio disponible (flex-1).
          * En modo orden: no es accionable (cursor grab); el handle GripVertical
@@ -126,11 +126,11 @@ export function AccordionSection({
           className={[
             "flex-1 flex items-center gap-3 px-1 text-left min-w-0",
             "group/header",
-            "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:rounded-[var(--r-chip)]",
+            "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:rounded-(--r-chip)",
             // Cursor según modo
             isOrderMode ? "cursor-grab" : "cursor-pointer",
             // Transición de color hover
-            !isOrderMode ? "transition-colors duration-[140ms]" : "",
+            !isOrderMode ? "transition-colors duration-140" : "",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -158,7 +158,7 @@ export function AccordionSection({
             aria-hidden="true"
             className={[
               // Color: muted en reposo, ink-2 en hover de la cabecera (fuera de modo orden)
-              "shrink-0 transition-all duration-[220ms] ease-out",
+              "shrink-0 transition-all duration-220 ease-out",
               isOrderMode
                 ? "text-muted"
                 : "text-muted group-hover/header:text-ink-2",
@@ -174,11 +174,11 @@ export function AccordionSection({
           {/* Rótulo */}
           <span
             className={[
-              "text-[13px] font-bold uppercase tracking-[0.1em]",
+              "text-[13px] font-bold uppercase tracking-widest",
               // Color: ink-2 en reposo, ink en hover (fuera de modo orden)
               isOrderMode
                 ? "text-ink-2"
-                : "text-ink-2 transition-colors duration-[140ms] group-hover/header:text-ink",
+                : "text-ink-2 transition-colors duration-140 group-hover/header:text-ink",
             ]
               .filter(Boolean)
               .join(" ")}
@@ -187,11 +187,11 @@ export function AccordionSection({
           </span>
 
           {/* Pill contador — countAdornment (glyph) / countClassName (badge, recolorea el pill) */}
-          <span className="inline-flex items-center gap-[4px]">
+          <span className="inline-flex items-center gap-1">
             {countAdornment}
             <span
               className={cn(
-                "text-[11.5px] font-semibold text-muted bg-panel-3 rounded-pill px-[9px] py-[1px]",
+                "text-[11.5px] font-semibold text-muted bg-panel-3 rounded-pill px-2.25 py-px",
                 countClassName,
               )}
             >
@@ -203,7 +203,7 @@ export function AccordionSection({
           <span className="flex-1 h-px bg-hair" aria-hidden="true" />
 
           {/* Subtotal mono — subtotalAdornment (glyph/badge) + subtotalClassName (bold/tint/ring) */}
-          <span className="inline-flex items-center gap-[6px]">
+          <span className="inline-flex items-center gap-1.5">
             {subtotalAdornment}
             <span className={cn("text-[13px] font-semibold text-muted mono", subtotalClassName)}>
               {subtotal}
@@ -236,7 +236,7 @@ export function AccordionSection({
           // no use medidas desactualizadas de las secciones expandidas (gotcha dnd-kit).
           noTransition
             ? ""
-            : "transition-[grid-template-rows,opacity] duration-[220ms] ease-out",
+            : "transition-[grid-template-rows,opacity] duration-220 ease-out",
           isCollapsed ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100",
         ]
           .filter(Boolean)

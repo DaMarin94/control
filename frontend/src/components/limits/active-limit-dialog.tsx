@@ -105,7 +105,7 @@ export function ActiveLimitDialog({
 
         {/* Callout ámbar — UN solo AlertTriangle (regla de colisión de la marca pasiva) */}
         <div
-          className="rounded-ctl px-[14px] py-[13px] flex items-start gap-[11px]"
+          className="rounded-ctl px-3.5 py-3.25 flex items-start gap-2.75"
           style={{ background: "var(--warning-soft)", border: "1px solid var(--warning)" }}
         >
           <AlertTriangle

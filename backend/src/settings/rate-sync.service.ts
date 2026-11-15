@@ -62,6 +62,12 @@ const FETCH_TIMEOUT_MS = 8_000;
 /** Circuit breaker: rechazo si el nuevo valor se desvía más del 15% del último guardado */
 export const CIRCUIT_BREAKER_THRESHOLD = 0.15;
 
+/** Backfill IPC con tabla vacía: meses hacia atrás desde el mes en curso. */
+const IPC_INITIAL_BACKFILL_MONTHS = 24;
+
+/** Límite de filas por consulta a la API de series (máximo de la API: 1000). */
+const IPC_QUERY_LIMIT = 1000;
+
 /** Cotas de cordura absolutas */
 const SANITY = {
   MAX_RATE_ARS: 1_000_000,  // ARS a >1M por USD es implausible
@@ -431,15 +437,27 @@ export class RateSyncService {
 
   /**
    * IPC desde apis.datos.gob.ar — series de tiempo INDEC.
-   * Consulta dos series en paralelo y hace un único upsert de InflationRate.
+   * Backfill: consulta ambas series desde el último mes guardado (inclusive) hasta el último
+   * publicado, y procesa cada mes en orden cronológico (upsert de InflationRate por mes).
+   * Si la tabla está vacía, arranca IPC_INITIAL_BACKFILL_MONTHS meses atrás.
+   * Un mes que falla no se guarda, se loguea y NO frena a los siguientes.
    */
   private async syncIpc(): Promise<SyncTargetResult[]> {
     const source = 'apis.datos.gob.ar';
     const variationId = '145.3_INGNACUAL_DICI_M_38';
     const indexId = '148.3_INIVELNAL_DICI_M_26';
 
-    const varUrl = `https://apis.datos.gob.ar/series/api/series/?ids=${variationId}&limit=1&sort=desc&format=json`;
-    const idxUrl = `https://apis.datos.gob.ar/series/api/series/?ids=${indexId}&limit=1&sort=desc&format=json`;
+    const lastStored = await this.prisma.inflationRate.findFirst({
+      orderBy: { yearMonth: 'desc' },
+      select: { yearMonth: true },
+    });
+    const startMonth =
+      lastStored?.yearMonth ??
+      this.shiftYearMonth(this.currentYearMonth(), -IPC_INITIAL_BACKFILL_MONTHS);
+    const base = 'https://apis.datos.gob.ar/series/api/series/';
+    const qs = `limit=${IPC_QUERY_LIMIT}&sort=asc&start_date=${startMonth}-01&format=json`;
+    const varUrl = `${base}?ids=${variationId}&${qs}`;
+    const idxUrl = `${base}?ids=${indexId}&${qs}`;
 
     const [varRes, idxRes] = await Promise.allSettled([
       secureFetch(varUrl),
@@ -450,44 +468,80 @@ export class RateSyncService {
     const idxRaw = idxRes.status === 'fulfilled' ? idxRes.value : { error: String((idxRes as PromiseRejectedResult).reason) };
     const combinedRaw = { variation: varRaw, index: idxRaw };
 
-    const varData = varRes.status === 'fulfilled' ? this.extractIpcValue(varRes.value) : null;
-    const idxData = idxRes.status === 'fulfilled' ? this.extractIpcValue(idxRes.value) : null;
-
-    // Determinar yearMonth para el target (incluso si los datos fallan)
-    const yearMonth = varData?.yearMonth ?? idxData?.yearMonth ?? this.currentYearMonth();
-    const target = this.makeIpcTarget(yearMonth);
+    const varSeries = varRes.status === 'fulfilled' ? this.extractIpcSeries(varRes.value) : null;
+    const idxSeries = idxRes.status === 'fulfilled' ? this.extractIpcSeries(idxRes.value) : null;
 
     if (varRes.status === 'rejected' && idxRes.status === 'rejected') {
+      const target = this.makeIpcTarget(this.currentYearMonth());
       await this.logSync(source, target, combinedRaw, false, 'http-error');
       return [{ target, accepted: false, reason: 'http-error' }];
     }
 
-    if (!varData || !idxData) {
+    const months = new Set<string>([
+      ...(varSeries?.keys() ?? []),
+      ...(idxSeries?.keys() ?? []),
+    ]);
+
+    if (!varSeries || !idxSeries || months.size === 0) {
+      const latest = [...months].sort().pop() ?? this.currentYearMonth();
+      const target = this.makeIpcTarget(latest);
       await this.logSync(source, target, combinedRaw, false, 'schema');
       return [{ target, accepted: false, reason: 'schema' }];
+    }
+
+    const results: SyncTargetResult[] = [];
+    for (const yearMonth of [...months].sort()) {
+      results.push(
+        await this.syncIpcMonth(
+          source,
+          yearMonth,
+          varSeries.get(yearMonth),
+          idxSeries.get(yearMonth),
+        ),
+      );
+    }
+    return results;
+  }
+
+  /** Valida y persiste un único mes de IPC. */
+  private async syncIpcMonth(
+    source: string,
+    yearMonth: string,
+    rawVariation: number | undefined,
+    indexValue: number | undefined,
+  ): Promise<SyncTargetResult> {
+    const target = this.makeIpcTarget(yearMonth);
+    const monthRaw = {
+      variation: rawVariation ?? null,
+      index: indexValue ?? null,
+    };
+
+    // Mes presente en una sola de las series → no se puede emparejar.
+    if (rawVariation === undefined || indexValue === undefined) {
+      await this.logSync(source, target, monthRaw, false, 'schema');
+      return { target, accepted: false, reason: 'schema' };
     }
 
     // La API de INDEC devuelve la variación como fracción (ej. 0.0158 para 1.58%).
     // La unidad canónica del sistema es PUNTOS PORCENTUALES (ej. 1.58).
     // Convertimos aquí, antes de la validación de cotas y del circuit breaker,
     // para que todas las comparaciones sean en la misma unidad que la DB (post-migración).
-    const variation = varData.value * 100;
-    const indexValue = idxData.value;
+    const variation = rawVariation * 100;
 
     const sanityError = validateIpcValues(variation, indexValue);
     if (sanityError) {
-      this.logger.warn(`IPC fuera de cotas: ${sanityError}`);
-      await this.logSync(source, target, combinedRaw, false, 'out-of-range');
-      return [{ target, accepted: false, reason: 'out-of-range' }];
+      this.logger.warn(`IPC ${yearMonth} fuera de cotas: ${sanityError}`);
+      await this.logSync(source, target, monthRaw, false, 'out-of-range');
+      return { target, accepted: false, reason: 'out-of-range' };
     }
 
     const cb = await this.circuitBreakerIpc(yearMonth, variation);
     if (!cb.ok) {
       this.logger.warn(
-        `Circuit breaker IPC: nuevo=${variation}, último=${cb.lastValue?.toFixed(2)}, dev=${cb.deviation?.toFixed(3)}`,
+        `Circuit breaker IPC ${yearMonth}: nuevo=${variation}, último=${cb.lastValue?.toFixed(2)}, dev=${cb.deviation?.toFixed(3)}`,
       );
-      await this.logSync(source, target, combinedRaw, false, 'circuit-breaker');
-      return [{ target, accepted: false, reason: 'circuit-breaker' }];
+      await this.logSync(source, target, monthRaw, false, 'circuit-breaker');
+      return { target, accepted: false, reason: 'circuit-breaker' };
     }
 
     try {
@@ -509,39 +563,38 @@ export class RateSyncService {
           },
         });
       });
-      await this.logSync(source, target, combinedRaw, true, null);
+      await this.logSync(source, target, monthRaw, true, null);
       this.logger.log(`IPC ${yearMonth}: variación=${variation}% índice=${indexValue}`);
-      return [{ target, accepted: true }];
+      return { target, accepted: true };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Error persistiendo IPC: ${msg}`);
-      await this.logSync(source, target, combinedRaw, false, 'db-error');
-      return [{ target, accepted: false, reason: 'db-error' }];
+      this.logger.error(`Error persistiendo IPC ${yearMonth}: ${msg}`);
+      await this.logSync(source, target, monthRaw, false, 'db-error');
+      return { target, accepted: false, reason: 'db-error' };
     }
   }
 
   /**
-   * Extrae el valor más reciente de una serie de apis.datos.gob.ar.
-   * Formato: { data: [[dateStr, value], ...], ... }
+   * Extrae una serie de apis.datos.gob.ar como Map yearMonth -> valor.
+   * Formato: { data: [[dateStr, value], ...], ... }. Filas malformadas se ignoran;
+   * devuelve null si la estructura general es inválida o no queda ninguna fila válida.
    */
-  private extractIpcValue(raw: unknown): { yearMonth: string; value: number } | null {
+  private extractIpcSeries(raw: unknown): Map<string, number> | null {
     if (typeof raw !== 'object' || raw === null) return null;
     const obj = raw as Record<string, unknown>;
     if (!Array.isArray(obj.data) || obj.data.length === 0) return null;
 
-    const first = obj.data[0] as unknown[];
-    if (!Array.isArray(first) || first.length < 2) return null;
-
-    const dateStr = first[0];
-    const value = first[1];
-
-    if (typeof dateStr !== 'string') return null;
-    if (typeof value !== 'number' || !isFinite(value)) return null;
-
-    const yearMonth = dateStr.substring(0, 7);
-    if (!/^\d{4}-\d{2}$/.test(yearMonth)) return null;
-
-    return { yearMonth, value };
+    const series = new Map<string, number>();
+    for (const row of obj.data as unknown[]) {
+      if (!Array.isArray(row) || row.length < 2) continue;
+      const [dateStr, value] = row as unknown[];
+      if (typeof dateStr !== 'string') continue;
+      if (typeof value !== 'number' || !isFinite(value)) continue;
+      const yearMonth = dateStr.substring(0, 7);
+      if (!/^\d{4}-\d{2}$/.test(yearMonth)) continue;
+      series.set(yearMonth, value);
+    }
+    return series.size > 0 ? series : null;
   }
 
   // -------------------------------------------------------------------------
@@ -685,6 +738,13 @@ export class RateSyncService {
     yearMonth: string,
   ): string {
     return `${table}:${currency}:${variant}:${yearMonth}`;
+  }
+
+  /** Desplaza un 'YYYY-MM' en N meses (N puede ser negativo). */
+  private shiftYearMonth(yearMonth: string, delta: number): string {
+    const [y, m] = yearMonth.split('-').map(Number);
+    const total = y * 12 + (m - 1) + delta;
+    return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`;
   }
 
   private makeIpcTarget(yearMonth: string): string {

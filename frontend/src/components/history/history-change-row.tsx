@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 function CategoryDot({ color }: { color: string }) {
   return (
     <span
-      className="inline-block h-[6px] w-[6px] rounded-full shrink-0"
+      className="inline-block h-1.5 w-1.5 rounded-full shrink-0"
       style={{ background: color }}
       aria-hidden="true"
     />
@@ -31,12 +31,12 @@ export function HistoryChangeRow({ display }: { display: HistoryChangeDisplay })
   const valueWrapClass = display.truncatable ? "truncate min-w-0" : "whitespace-nowrap";
 
   return (
-    <div className="flex flex-wrap items-baseline justify-between gap-x-[16px] gap-y-[2px]">
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
       <span className="text-[12.5px] font-medium text-muted shrink-0">{display.label}</span>
 
-      <span className="flex flex-wrap items-baseline justify-end gap-x-[8px] gap-y-[2px] min-w-0">
+      <span className="flex flex-wrap items-baseline justify-end gap-x-2 gap-y-0.5 min-w-0">
         {display.leftText !== null && (
-          <span className={cn("inline-flex items-baseline gap-[5px] text-muted", sizeClass, monoClass, valueWrapClass)}>
+          <span className={cn("inline-flex items-baseline gap-1.25 text-muted", sizeClass, monoClass, valueWrapClass)}>
             {display.leftDotColor && <CategoryDot color={display.leftDotColor} />}
             {display.leftText}
           </span>
@@ -44,7 +44,7 @@ export function HistoryChangeRow({ display }: { display: HistoryChangeDisplay })
 
         <span
           className={cn(
-            "inline-flex items-baseline gap-[5px]",
+            "inline-flex items-baseline gap-1.25",
             display.truncatable ? "min-w-0" : "whitespace-nowrap",
             sizeClass,
             monoClass,

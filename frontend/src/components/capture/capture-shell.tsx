@@ -83,7 +83,7 @@ export function CaptureShell({ email }: CaptureShellProps) {
           paddingTop: "max(10px, env(safe-area-inset-top))",
         }}
       >
-        <div className="mx-auto flex w-full max-w-[480px] flex-col gap-3 short:flex-row short:items-center short:gap-2">
+        <div className="mx-auto flex w-full max-w-120 flex-col gap-3 short:flex-row short:items-center short:gap-2">
           <div className="min-w-0 short:max-w-[45%]">
             <CaptureSessionChip email={email} />
           </div>
@@ -109,12 +109,12 @@ export function CaptureShell({ email }: CaptureShellProps) {
           (10px en apaisado vs 14px en vertical, §1/§12) — un inline style no
           puede reaccionar a esa media query, así que TODO el padding vive en
           clases Tailwind con valores arbitrarios (soportan max()/env()). ── */}
-      <div className="shrink-0 border-t border-hair bg-panel pt-3 pb-[max(14px,env(safe-area-inset-bottom))] pl-[max(16px,env(safe-area-inset-left))] pr-[max(16px,env(safe-area-inset-right))] short:pt-[10px] short:pb-[max(10px,env(safe-area-inset-bottom))]">
+      <div className="shrink-0 border-t border-hair bg-panel pt-3 pb-[max(14px,env(safe-area-inset-bottom))] pl-[max(16px,env(safe-area-inset-left))] pr-[max(16px,env(safe-area-inset-right))] short:pt-2.5 short:pb-[max(10px,env(safe-area-inset-bottom))]">
         <Button
           type="submit"
           form={footerState.formId}
           disabled={footerState.disabled}
-          className="flex mx-auto h-[52px] w-full max-w-[480px] gap-1.5 text-[16px] short:h-[48px]"
+          className="flex mx-auto h-13 w-full max-w-120 gap-1.5 text-[16px] short:h-12"
         >
           <Check size={16} aria-hidden="true" />
           {footerState.submitLabel}

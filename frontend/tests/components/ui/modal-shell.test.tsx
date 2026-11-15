@@ -236,16 +236,16 @@ describe("ModalShell — body-lock del fondo", () => {
 });
 
 describe("ModalShell — variantes", () => {
-  it("variant='dialog' usa max-w-[440px]", () => {
+  it("variant='dialog' usa max-w-110", () => {
     renderShell(vi.fn(), { variant: "dialog" });
     const { panel } = getScrimAndPanel();
-    expect(panel.className).toContain("max-w-[440px]");
+    expect(panel.className).toContain("max-w-110");
   });
 
-  it("variant='form' usa max-w-[460px]", () => {
+  it("variant='form' usa max-w-115", () => {
     renderShell(vi.fn(), { variant: "form" });
     const { panel } = getScrimAndPanel();
-    expect(panel.className).toContain("max-w-[460px]");
+    expect(panel.className).toContain("max-w-115");
   });
 });
 
@@ -270,10 +270,10 @@ describe("ModalShell — onEscape / wide / botón Volver del header", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("wide=true ensancha el panel a max-w-[640px] (en lugar del de la variante)", () => {
+  it("wide=true ensancha el panel a max-w-160 (en lugar del de la variante)", () => {
     renderShell(vi.fn(), { variant: "dialog", wide: true });
     const { panel } = getScrimAndPanel();
-    expect(panel.className).toContain("max-w-[640px]");
-    expect(panel.className).not.toContain("max-w-[440px]");
+    expect(panel.className).toContain("max-w-160");
+    expect(panel.className).not.toContain("max-w-110");
   });
 });

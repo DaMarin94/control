@@ -322,7 +322,7 @@ export function PaymentMethodFormModal({ paymentMethod, onClose }: PaymentMethod
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col flex-1 min-h-0">
         <ModalShellBody>
           {/* Campo nombre */}
-            <div className="flex flex-col gap-[7px]">
+            <div className="flex flex-col gap-1.75">
               <Label htmlFor="pm-name" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Nombre
               </Label>
@@ -336,7 +336,7 @@ export function PaymentMethodFormModal({ paymentMethod, onClose }: PaymentMethod
             </div>
 
             {/* Tipo picker — obligatorio, sin preselección */}
-            <div className="flex flex-col gap-[7px]">
+            <div className="flex flex-col gap-1.75">
               <Label required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Tipo
               </Label>
@@ -351,7 +351,7 @@ export function PaymentMethodFormModal({ paymentMethod, onClose }: PaymentMethod
                         type="button"
                         onClick={() => field.onChange(opt.value)}
                         className={cn(
-                          "text-[13px] font-semibold cursor-pointer px-2 py-[10px] rounded-ctl border transition-colors duration-[140ms]",
+                          "text-[13px] font-semibold cursor-pointer px-2 py-2.5 rounded-ctl border transition-colors duration-140",
                           field.value === opt.value
                             ? "border-accent bg-accent-soft text-accent-ink"
                             : "border-line bg-panel text-muted hover:text-ink",
@@ -370,8 +370,8 @@ export function PaymentMethodFormModal({ paymentMethod, onClose }: PaymentMethod
 
             {/* Campos condicionales por tipo (RN-021) */}
             {selectedType === "CREDIT" && (
-              <div className="grid grid-cols-2 gap-[14px]">
-                <div className="flex flex-col gap-[7px]">
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="flex flex-col gap-1.75">
                   <Label htmlFor="pm-closing-day" className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                     Día de cierre
                   </Label>
@@ -386,7 +386,7 @@ export function PaymentMethodFormModal({ paymentMethod, onClose }: PaymentMethod
                     {...register("closingDay")}
                   />
                 </div>
-                <div className="flex flex-col gap-[7px]">
+                <div className="flex flex-col gap-1.75">
                   <Label htmlFor="pm-payment-day" className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                     Día de cobro
                   </Label>
@@ -414,8 +414,8 @@ export function PaymentMethodFormModal({ paymentMethod, onClose }: PaymentMethod
             />
 
             {/* Predeterminado para — divisor + 3 checkboxes de estructura (RF-PM-007) */}
-            <div className="pt-[14px] mt-[2px] border-t border-hair">
-              <div className="flex flex-col gap-[2px] mb-[4px]">
+            <div className="pt-3.5 mt-0.5 border-t border-hair">
+              <div className="flex flex-col gap-0.5 mb-1">
                 <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                   Predeterminado para
                 </Label>
@@ -445,15 +445,15 @@ export function PaymentMethodFormModal({ paymentMethod, onClose }: PaymentMethod
                         }
                       }}
                       className={cn(
-                        "flex cursor-pointer items-center gap-[9px] py-[7px] px-1 -mx-1 rounded-ctl",
-                        "hover:bg-panel-2 transition-colors duration-[140ms]",
+                        "flex cursor-pointer items-center gap-2.25 py-1.75 px-1 -mx-1 rounded-ctl",
+                        "hover:bg-panel-2 transition-colors duration-140",
                         "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
                       )}
                     >
                       {/* Checkbox visual — reuso del checkbox del DS */}
                       <span
                         className={cn(
-                          "flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors duration-[140ms]",
+                          "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors duration-140",
                           checked ? "border-accent bg-accent" : "border-line bg-panel",
                         )}
                         aria-hidden="true"
@@ -522,7 +522,7 @@ interface IconPickerProps {
  */
 function IconPicker({ value, onChange }: IconPickerProps) {
   return (
-    <div className="flex flex-col gap-[7px]">
+    <div className="flex flex-col gap-1.75">
       <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
         Ícono
       </Label>
@@ -560,7 +560,7 @@ function IconPicker({ value, onChange }: IconPickerProps) {
               }}
               className={cn(
                 "flex items-center justify-center bg-panel-3",
-                "hover:scale-[1.12] hover:z-10 hover:border-line-strong hover:shadow-[var(--shadow-sm)]",
+                "hover:scale-[1.12] hover:z-10 hover:border-line-strong hover:shadow-(--shadow-sm)",
                 "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
                 isSelected && "scale-100",
               )}

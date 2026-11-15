@@ -47,7 +47,7 @@ export function LimitsTab() {
       <div className="flex items-center justify-between gap-5 flex-wrap mb-4">
         <div>
           <h2 className="text-[18px] font-bold tracking-[-0.01em] text-ink">Límites</h2>
-          <p className="text-[14.5px] leading-[1.5] text-muted mt-[3px]">
+          <p className="text-[14.5px] leading-normal text-muted mt-0.75">
             Resaltá un dato cuando cruza un umbral que definís.
           </p>
         </div>
@@ -64,11 +64,11 @@ export function LimitsTab() {
       ) : limits.length === 0 ? (
         // Estado vacío — coherente con la restricción rectora: sin límites, ni la
         // app ni el panel muestran marca alguna.
-        <div className="flex flex-col items-center text-center gap-3 rounded-[14px] border border-line bg-panel px-6 py-10 shadow-[var(--shadow-sm)]">
+        <div className="flex flex-col items-center text-center gap-3 rounded-card border border-line bg-panel px-6 py-10 shadow-(--shadow-sm)">
           <Gauge size={28} className="text-faint" aria-hidden="true" />
           <div>
             <p className="text-[14.5px] font-semibold text-ink">Todavía no creaste límites</p>
-            <p className="text-[12.5px] leading-[1.5] text-muted mt-1 max-w-[360px]">
+            <p className="text-[12.5px] leading-normal text-muted mt-1 max-w-90">
               Creá un límite y Control resaltará ese dato cuando cruce el umbral que definas.
             </p>
           </div>
@@ -78,7 +78,7 @@ export function LimitsTab() {
           </Button>
         </div>
       ) : (
-        <div className="rounded-[14px] border border-line bg-panel shadow-[var(--shadow-sm)] overflow-hidden">
+        <div className="rounded-card border border-line bg-panel shadow-(--shadow-sm) overflow-hidden">
           {limits.map((limit, index) => (
             <div key={limit.id} className={index > 0 ? "border-t border-hair" : ""}>
               <LimitRow

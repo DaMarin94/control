@@ -164,7 +164,7 @@ function InflationIncomeSkeleton() {
       {/* Canvas skeleton */}
       <SkeletonBlock height={300} radius="ctl" />
       {/* 3 chips fantasma de leyenda */}
-      <div className="mt-[14px] flex gap-[10px]">
+      <div className="mt-3.5 flex gap-2.5">
         {[72, 110, 120].map((w, i) => (
           <SkeletonLine key={i} height={26} width={w} />
         ))}
@@ -183,7 +183,7 @@ function InflationIncomeError({ onRetry }: { onRetry: () => void }) {
       <button
         type="button"
         onClick={onRetry}
-        className="rounded-ctl border border-line bg-panel px-3 py-[6px] text-[13px] font-semibold text-ink-2 shadow-[var(--shadow-sm)] transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+        className="rounded-ctl border border-line bg-panel px-3 py-1.5 text-[13px] font-semibold text-ink-2 shadow-(--shadow-sm) transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
       >
         Reintentar
       </button>
@@ -204,7 +204,7 @@ interface YearStepperProps {
 function YearStepper({ year, canGoPrev, canGoNext, onPrev, onNext }: YearStepperProps) {
   return (
     <div
-      className="flex items-center rounded-pill border border-line bg-panel shadow-[var(--shadow-sm)] p-1"
+      className="flex items-center rounded-pill border border-line bg-panel shadow-(--shadow-sm) p-1"
       role="group"
       aria-label="Navegación de año"
     >
@@ -215,7 +215,7 @@ function YearStepper({ year, canGoPrev, canGoNext, onPrev, onNext }: YearStepper
         aria-label="Año anterior"
         aria-disabled={!canGoPrev}
         className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-[140ms]",
+          "flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-140",
           canGoPrev
             ? "text-ink-2 hover:bg-panel-2 hover:text-ink cursor-pointer focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
             : "text-faint opacity-45 cursor-default",
@@ -224,7 +224,7 @@ function YearStepper({ year, canGoPrev, canGoNext, onPrev, onNext }: YearStepper
         <ChevronLeft size={18} aria-hidden="true" />
       </button>
       <span
-        className="mono text-[14.5px] font-semibold text-ink min-w-[52px] text-center select-none"
+        className="mono text-[14.5px] font-semibold text-ink min-w-13 text-center select-none"
         aria-live="polite"
         aria-atomic="true"
       >
@@ -237,7 +237,7 @@ function YearStepper({ year, canGoPrev, canGoNext, onPrev, onNext }: YearStepper
         aria-label="Año siguiente"
         aria-disabled={!canGoNext}
         className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-[140ms]",
+          "flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-140",
           canGoNext
             ? "text-ink-2 hover:bg-panel-2 hover:text-ink cursor-pointer focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
             : "text-faint opacity-45 cursor-default",
@@ -293,7 +293,7 @@ function RemoveConfirmPopover({ onConfirm, onCancel, anchorRef }: RemoveConfirmP
   const content = (
     <div
       ref={popoverRef}
-      className="fixed z-50 w-[220px] rounded-ctl border border-line bg-panel shadow-[var(--shadow-lg)] p-[12px_14px] animate-modal-pop"
+      className="fixed z-50 w-55 rounded-ctl border border-line bg-panel shadow-(--shadow-lg) p-[12px_14px] animate-modal-pop"
       style={{ top: position.top, right: position.right }}
       role="dialog"
       aria-label="Confirmar quitar reporte"
@@ -303,14 +303,14 @@ function RemoveConfirmPopover({ onConfirm, onCancel, anchorRef }: RemoveConfirmP
         <button
           type="button"
           onClick={onConfirm}
-          className="rounded-ctl border border-expense bg-expense-soft px-3 py-[6px] text-[13px] font-semibold text-expense-ink transition-colors duration-[140ms] hover:bg-expense hover:text-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--expense-soft)]"
+          className="rounded-ctl border border-expense bg-expense-soft px-3 py-1.5 text-[13px] font-semibold text-expense-ink transition-colors duration-140 hover:bg-expense hover:text-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--expense-soft)]"
         >
           Quitar
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-ctl border border-line bg-panel px-3 py-[6px] text-[13px] font-semibold text-ink-2 transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+          className="rounded-ctl border border-line bg-panel px-3 py-1.5 text-[13px] font-semibold text-ink-2 transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
         >
           Cancelar
         </button>
@@ -358,11 +358,11 @@ function EditableTitle({
         aria-label="Título del reporte"
         className={cn(
           "text-[16px] font-semibold leading-tight text-ink",
-          "bg-panel border border-[var(--line-strong)] rounded-[var(--r-ctl,10px)]",
-          "px-[8px] py-[3px]",
+          "bg-panel border border-(--line-strong) rounded-(--r-ctl,10px)",
+          "px-2 py-0.75",
           "min-w-0 flex-1",
           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
-          "placeholder:text-[var(--faint)]",
+          "placeholder:text-(--faint)",
         )}
       />
     );
@@ -378,17 +378,17 @@ function EditableTitle({
       aria-label={canEdit ? "Editar título del reporte" : undefined}
       disabled={!canEdit}
       className={cn(
-        "group/title flex items-center gap-[6px] min-w-0",
+        "group/title flex items-center gap-1.5 min-w-0",
         canEdit ? "cursor-text" : "cursor-default",
         "bg-transparent border-0 p-0 text-left",
-        canEdit && "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:rounded-[var(--r-ctl,10px)]",
+        canEdit && "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:rounded-(--r-ctl,10px)",
       )}
     >
       <span
         title={displayTitle}
         className={cn(
           "block text-[16px] font-semibold leading-tight truncate",
-          titleProp ? "text-ink" : "text-[var(--faint)]",
+          titleProp ? "text-ink" : "text-(--faint)",
         )}
       >
         {displayTitle}
@@ -399,7 +399,7 @@ function EditableTitle({
           aria-hidden="true"
           className={cn(
             "shrink-0 text-muted",
-            "opacity-0 transition-opacity duration-[140ms]",
+            "opacity-0 transition-opacity duration-140",
             "group-hover/title:opacity-100 group-focus-visible/title:opacity-100",
             "motion-reduce:transition-none",
           )}
@@ -474,16 +474,16 @@ export function CustomTooltip({
 
   return (
     <div
-      className="rounded-ctl border border-line bg-panel px-3 py-[10px] text-[12.5px] font-medium"
+      className="rounded-ctl border border-line bg-panel px-3 py-2.5 text-[12.5px] font-medium"
       style={{ boxShadow: "var(--shadow-lg)", minWidth: "200px" }}
     >
       {/* Encabezado: mes + año */}
-      <p className="mb-[8px] font-semibold text-ink">{monthFull} {year}</p>
+      <p className="mb-2 font-semibold text-ink">{monthFull} {year}</p>
 
       {/* Filas de series */}
-      <div className="flex flex-col gap-[5px]">
+      <div className="flex flex-col gap-1.25">
         {rows.map((row) => (
-          <div key={row.id} className="flex items-center gap-[7px]">
+          <div key={row.id} className="flex items-center gap-1.75">
             {/* Swatch: cuadrado pleno o mini-línea dasheada para ajustada */}
             {row.dashed ? (
               // Mini-línea dasheada 14px para la serie ajustada
@@ -521,8 +521,8 @@ export function CustomTooltip({
       {/* Nota de límite cruzado (P2 — Tramo 2): portador de a11y del punto. */}
       {mergedMark && (
         <>
-          <div className="my-[7px]" style={{ borderTop: "1px solid var(--hair)" }} />
-          <div className="flex items-center gap-[6px]">
+          <div className="my-1.75" style={{ borderTop: "1px solid var(--hair)" }} />
+          <div className="flex items-center gap-1.5">
             <AlertTriangle size={12} aria-hidden="true" className="shrink-0 text-warning-ink" />
             <span className="text-[11.5px] font-medium text-warning-ink">{describeLimitMark(mergedMark)}</span>
           </div>
@@ -795,7 +795,7 @@ function SeriesLegend({ hiddenSeries, onToggle }: SeriesLegendProps) {
     <div
       role="group"
       aria-label="Filtrar series"
-      className="flex flex-wrap items-center gap-x-[10px] gap-y-[6px] -mx-[6px] mt-[14px]"
+      className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 -mx-1.5 mt-3.5"
     >
       {items.map((item) => {
         const isOff = hiddenSeries.includes(item.id);
@@ -806,8 +806,8 @@ function SeriesLegend({ hiddenSeries, onToggle }: SeriesLegendProps) {
             aria-pressed={!isOff}
             onClick={() => onToggle(item.id)}
             className={cn(
-              "group inline-flex items-center gap-[6px] px-[6px] py-[4px] rounded-[7px]",
-              "cursor-pointer transition-[background-color,opacity] duration-[140ms]",
+              "group inline-flex items-center gap-1.5 px-1.5 py-1 rounded-chip",
+              "cursor-pointer transition-[background-color,opacity] duration-140",
               "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
               "hover:bg-panel-2 active:bg-panel-3",
               isOff ? "opacity-70 hover:opacity-85" : "opacity-100",
@@ -851,7 +851,7 @@ function SeriesLegend({ hiddenSeries, onToggle }: SeriesLegendProps) {
             {/* Etiqueta */}
             <span
               className={cn(
-                "text-[12.5px] font-medium select-none transition-colors duration-[140ms]",
+                "text-[12.5px] font-medium select-none transition-colors duration-140",
                 isOff
                   ? "text-muted line-through group-hover:text-ink-2"
                   : "text-ink-2 group-hover:text-ink",
@@ -1036,12 +1036,12 @@ export function InflationIncomeCard({
 
   return (
     <div
-      className="bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] p-[var(--card-pad)] animate-screen-fade"
+      className="bg-panel border border-line rounded-card shadow-(--shadow-sm) p-(--card-pad) animate-screen-fade"
       aria-label={`${displayTitle} ${year}`}
     >
       {/* ── Cabecera ── */}
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-[18px]">
-        <div className="flex min-w-0 flex-1 items-center gap-[6px]">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-4.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <div className="min-w-0">
             <EditableTitle
               titleProp={titleProp}
@@ -1073,19 +1073,19 @@ export function InflationIncomeCard({
 
           {onCurrencyChange && (
             <>
-              <span className="block h-[16px] w-px bg-hair shrink-0" aria-hidden="true" />
+              <span className="block h-4 w-px bg-hair shrink-0" aria-hidden="true" />
               <CardCurrencySelect value={effectiveCurrency} onChange={onCurrencyChange} />
             </>
           )}
 
-          <span className="block h-[16px] w-px bg-hair shrink-0" aria-hidden="true" />
+          <span className="block h-4 w-px bg-hair shrink-0" aria-hidden="true" />
           <button
             type="button"
             onClick={() => refetch()}
             disabled={isFetching}
             aria-label="Actualizar reporte"
             aria-busy={isFetching}
-            className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted"
+            className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted"
           >
             <RefreshCw
               size={16}
@@ -1099,7 +1099,7 @@ export function InflationIncomeCard({
               type="button"
               onClick={() => setRemoveOpen((o) => !o)}
               aria-label="Quitar reporte"
-              className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+              className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
             >
               <X size={16} aria-hidden="true" />
             </button>
@@ -1139,7 +1139,7 @@ export function InflationIncomeCard({
 
           {/* Filtro de categorías — chips-toggle scrollable debajo */}
           {availableCategories.length > 0 && (
-            <div className="mt-[10px]">
+            <div className="mt-2.5">
               <ChartLegend
                 items={categoryLegendItems}
                 hiddenIds={hiddenCategoryIds}

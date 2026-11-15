@@ -45,15 +45,15 @@ export function CaptureAccessShell({ isGoogleConfigured }: CaptureAccessShellPro
         paddingBottom: "max(24px, env(safe-area-inset-bottom))",
       }}
     >
-      <div className="flex w-full max-w-[360px] flex-1 flex-col justify-center">
+      <div className="flex w-full max-w-90 flex-1 flex-col justify-center">
         {/* ── Marca — chip de gem + wordmark, centrados ── */}
         <div className="flex flex-col items-center gap-2">
           <div
-            className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-[13px] shadow-[var(--shadow-sm)]"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-[13px] shadow-(--shadow-sm)"
             style={{ background: "#fff" }}
             aria-hidden="true"
           >
-            <div className="h-[34px] w-[34px] rounded-[9px] overflow-hidden">
+            <div className="h-8.5 w-8.5 rounded-[9px] overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/brand-icon.svg" alt="" aria-hidden="true" className="h-full w-full object-cover" />
             </div>
@@ -77,8 +77,8 @@ export function CaptureAccessShell({ isGoogleConfigured }: CaptureAccessShellPro
             {...logic}
             emailId="capture-email"
             passwordId="capture-password"
-            inputClassName="px-[14px] py-[13px] text-[16px]"
-            submitClassName="h-[52px] text-[16px]"
+            inputClassName="px-3.5 py-3.25 text-[16px]"
+            submitClassName="h-13 text-[16px]"
           />
         </div>
 
@@ -89,17 +89,17 @@ export function CaptureAccessShell({ isGoogleConfigured }: CaptureAccessShellPro
           disabled={!isGoogleConfigured || logic.isGoogleLoading}
           isLoading={logic.isGoogleLoading}
           isConfigured={isGoogleConfigured}
-          className="h-[52px]"
+          className="h-13"
         />
 
         {/* Fine print — sin enlace a registro (RF-APP-004) */}
-        <p className="mt-[22px] text-center text-[12.5px] leading-[1.5] text-muted">
+        <p className="mt-5.5 text-center text-[12.5px] leading-normal text-muted">
           Al continuar aceptás los{" "}
-          <a href="#" className="text-ink-2 underline underline-offset-[2px] hover:text-ink">
+          <a href="#" className="text-ink-2 underline underline-offset-2 hover:text-ink">
             Términos
           </a>{" "}
           y la{" "}
-          <a href="#" className="text-ink-2 underline underline-offset-[2px] hover:text-ink">
+          <a href="#" className="text-ink-2 underline underline-offset-2 hover:text-ink">
             Política de privacidad
           </a>
           .

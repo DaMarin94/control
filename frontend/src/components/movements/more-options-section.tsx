@@ -99,9 +99,9 @@ export function MoreOptionsSection({
         aria-controls={bodyId}
         onClick={() => setIsOpen((prev) => !prev)}
         className={cn(
-          "w-full flex items-center gap-[7px] py-[7px] cursor-pointer",
-          "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-[var(--r-chip)]",
-          "transition-colors duration-[140ms]",
+          "w-full flex items-center gap-1.75 py-1.75 cursor-pointer",
+          "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-(--r-chip)",
+          "transition-colors duration-140",
           "group",
         )}
       >
@@ -111,7 +111,7 @@ export function MoreOptionsSection({
           strokeWidth={2}
           aria-hidden="true"
           className={cn(
-            "shrink-0 transition-[transform,color] duration-[220ms] ease-out motion-reduce:transition-none",
+            "shrink-0 transition-[transform,color] duration-220 ease-out motion-reduce:transition-none",
             "text-muted group-hover:text-ink-2",
             isOpen && "rotate-90",
           )}
@@ -120,7 +120,7 @@ export function MoreOptionsSection({
         {/* Label "Más opciones" */}
         <span
           className={cn(
-            "text-[13px] font-semibold tracking-[0.01em] transition-colors duration-[140ms]",
+            "text-[13px] font-semibold tracking-[0.01em] transition-colors duration-140",
             "text-ink-2 group-hover:text-ink",
           )}
         >
@@ -131,7 +131,7 @@ export function MoreOptionsSection({
         {!isOpen && (
           <span className="ml-auto flex items-center min-w-0">
             {/* Segmento moneda — siempre presente, nunca se trunca */}
-            <span className="flex items-center gap-[5px] shrink-0">
+            <span className="flex items-center gap-1.25 shrink-0">
               <span className="mono text-[12px] text-muted">{summaryCode}</span>
               {summaryRate !== null && (
                 <>
@@ -147,10 +147,10 @@ export function MoreOptionsSection({
             {selectedMethod && (
               <>
                 <span
-                  className="w-px h-[12px] bg-line mx-[8px] shrink-0 self-center"
+                  className="w-px h-3 bg-line mx-2 shrink-0 self-center"
                   aria-hidden="true"
                 />
-                <span className="flex items-center gap-[5px] min-w-0">
+                <span className="flex items-center gap-1.25 min-w-0">
                   <PaymentMethodIcon
                     icon={selectedMethod.icon}
                     size={16}
@@ -168,13 +168,13 @@ export function MoreOptionsSection({
       <div
         id={bodyId}
         className={cn(
-          "grid transition-[grid-template-rows,opacity] duration-[220ms] ease-out motion-reduce:transition-none",
+          "grid transition-[grid-template-rows,opacity] duration-220 ease-out motion-reduce:transition-none",
           isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
         )}
       >
         <div className="min-h-0 overflow-hidden">
-          {/* mt-[7px] separa el trigger del contenido expandido */}
-          <div className="mt-[7px]">
+          {/* mt-1.75 separa el trigger del contenido expandido */}
+          <div className="mt-1.75">
             {/* ── Sub-bloque 1: Moneda+cotización ── */}
             <CurrencyExchangeFields
               currency={currency}
@@ -189,11 +189,11 @@ export function MoreOptionsSection({
             />
 
             {/* — divisor hairline — */}
-            <div className="h-px bg-hair my-[14px]" aria-hidden="true" />
+            <div className="h-px bg-hair my-3.5" aria-hidden="true" />
 
             {/* ── Sub-bloque 2: Método de pago (+ Débito automático condicional) ── */}
-            <div className="flex flex-col gap-[14px]">
-              <div className="flex flex-col gap-[7px]">
+            <div className="flex flex-col gap-3.5">
+              <div className="flex flex-col gap-1.75">
                 <Label
                   htmlFor={`${idPrefix}-payment-method`}
                   className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]"

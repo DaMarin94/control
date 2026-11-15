@@ -427,17 +427,17 @@ function ViewTabs<T extends string | boolean>({ tabs, value, onChange, panelId, 
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className="relative flex items-end gap-[18px] pb-[2px]"
+      className="relative flex items-end gap-4.5 pb-0.5"
     >
       {/* Underline deslizante — posicionado con left/width medidos del tab activo */}
       {underline && (
         <span
           aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute bottom-0 h-[2px] bg-ink",
+            "pointer-events-none absolute bottom-0 h-0.5 bg-ink",
             reducedMotionTabs
               ? ""
-              : "transition-[left,width] duration-[180ms] ease-out",
+              : "transition-[left,width] duration-180 ease-out",
           )}
           style={{ left: underline.left, width: underline.width }}
         />
@@ -457,9 +457,9 @@ function ViewTabs<T extends string | boolean>({ tabs, value, onChange, panelId, 
             onKeyDown={(e) => handleKeyDown(e, i)}
             tabIndex={isSelected ? 0 : -1}
             className={cn(
-              "relative py-[6px] text-[13px] font-semibold leading-none",
+              "relative py-1.5 text-[13px] font-semibold leading-none",
               "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
-              "transition-colors duration-[140ms]",
+              "transition-colors duration-140",
               isSelected
                 ? "text-ink"
                 : "text-muted hover:text-ink-2 hover:shadow-[inset_0_-2px_0_var(--line-strong)]",
@@ -527,15 +527,15 @@ function DirectionSegmented({ value, onChange }: DirectionSegmentedProps) {
     <div
       role="radiogroup"
       aria-label="Dirección"
-      className="relative inline-flex items-center rounded-pill p-[2px]"
+      className="relative inline-flex items-center rounded-pill p-0.5"
       style={{ backgroundColor: "var(--panel-3)" }}
     >
       {/* Thumb deslizante (el "panelito blanco elevado" del segmento seleccionado) */}
       <span
         aria-hidden="true"
         className={cn(
-          "pointer-events-none absolute top-[2px] bottom-[2px] rounded-pill bg-panel shadow-[var(--shadow-sm)]",
-          reducedMotion ? "" : "transition-[left,width] duration-[140ms] ease-out",
+          "pointer-events-none absolute top-0.5 bottom-0.5 rounded-pill bg-panel shadow-(--shadow-sm)",
+          reducedMotion ? "" : "transition-[left,width] duration-140 ease-out",
         )}
         style={{
           left: `calc(${(selectedIndex / 3) * 100}% + 2px)`,
@@ -554,8 +554,8 @@ function DirectionSegmented({ value, onChange }: DirectionSegmentedProps) {
             onKeyDown={(e) => handleKeyDown(e, i)}
             tabIndex={isSelected ? 0 : -1}
             className={cn(
-              "relative z-10 flex-1 px-[10px] py-[5px] text-[12.5px] font-semibold rounded-pill",
-              "select-none transition-colors duration-[140ms]",
+              "relative z-10 flex-1 px-2.5 py-1.25 text-[12.5px] font-semibold rounded-pill",
+              "select-none transition-colors duration-140",
               "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
             )}
             style={{ color: isSelected ? seg.activeColor : "var(--muted)" }}
@@ -602,7 +602,7 @@ function MovementTypeChips({ value, onChange }: MovementTypeChipsProps) {
   }
 
   return (
-    <div role="group" aria-label="Tipo de movimiento" className="flex items-center gap-[6px]">
+    <div role="group" aria-label="Tipo de movimiento" className="flex items-center gap-1.5">
       {MOVEMENT_TYPE_CHIPS.map((chip) => {
         const isOn = value.includes(chip.value);
         return (
@@ -612,13 +612,13 @@ function MovementTypeChips({ value, onChange }: MovementTypeChipsProps) {
             aria-pressed={isOn}
             onClick={() => toggle(chip.value)}
             className={cn(
-              "inline-flex items-center px-[10px] py-[5px] rounded-[7px]",
+              "inline-flex items-center px-2.5 py-1.25 rounded-chip",
               "text-[12.5px] font-semibold select-none",
-              "transition-colors duration-[140ms]",
+              "transition-colors duration-140",
               "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
               isOn
                 // Seleccionado/incluido: panel elevado — "pieza activa"
-                ? "bg-panel border border-line-strong shadow-[var(--shadow-sm)] text-ink"
+                ? "bg-panel border border-line-strong shadow-(--shadow-sm) text-ink"
                 // No seleccionado/excluido: plano — "hundido/inactivo"
                 : "bg-panel-2 border border-line text-muted hover:text-ink-2 hover:border-line-strong active:bg-panel-3",
             )}
@@ -673,14 +673,14 @@ function SimulatedToggleChip({ pressed, disabled, motive, onToggle }: SimulatedT
           onToggle();
         }}
         className={cn(
-          "inline-flex items-center gap-[6px] px-[10px] py-[5px] rounded-[7px]",
+          "inline-flex items-center gap-1.5 px-2.5 py-1.25 rounded-chip",
           "text-[12.5px] font-semibold select-none",
-          "transition-colors duration-[140ms]",
+          "transition-colors duration-140",
           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
           disabled
             ? "bg-panel-2 border border-line text-muted opacity-45 cursor-default"
             : isElevated
-              ? "bg-panel border border-line-strong shadow-[var(--shadow-sm)] text-ink active:bg-panel-3"
+              ? "bg-panel border border-line-strong shadow-(--shadow-sm) text-ink active:bg-panel-3"
               : "bg-panel-2 border border-line text-muted hover:text-ink-2 hover:border-line-strong active:bg-panel-3",
         )}
       >
@@ -709,7 +709,7 @@ function ChartSkeleton({ height }: { height: number }) {
   return (
     <div role="status" aria-label="Cargando gráfico">
       <SkeletonBlock height={height} radius="ctl" />
-      <div className="mt-[14px] flex gap-4">
+      <div className="mt-3.5 flex gap-4">
         {[70, 56, 80].map((w, i) => (
           <SkeletonLine key={i} height={14} width={w} />
         ))}
@@ -728,7 +728,7 @@ function ChartError({ height, onRetry }: { height: number; onRetry: () => void }
       <button
         type="button"
         onClick={onRetry}
-        className="rounded-ctl border border-line bg-panel px-3 py-[6px] text-[13px] font-semibold text-ink-2 shadow-[var(--shadow-sm)] transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+        className="rounded-ctl border border-line bg-panel px-3 py-1.5 text-[13px] font-semibold text-ink-2 shadow-(--shadow-sm) transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
       >
         Reintentar
       </button>
@@ -1377,7 +1377,7 @@ interface YearStepperProps {
 function YearStepper({ year, canGoPrev, canGoNext, onPrev, onNext }: YearStepperProps) {
   return (
     <div
-      className="flex items-center rounded-pill border border-line bg-panel shadow-[var(--shadow-sm)] p-1"
+      className="flex items-center rounded-pill border border-line bg-panel shadow-(--shadow-sm) p-1"
       role="group"
       aria-label="Navegación de año"
     >
@@ -1389,7 +1389,7 @@ function YearStepper({ year, canGoPrev, canGoNext, onPrev, onNext }: YearStepper
         aria-label="Año anterior"
         aria-disabled={!canGoPrev}
         className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-[140ms]",
+          "flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-140",
           canGoPrev
             ? "text-ink-2 hover:bg-panel-2 hover:text-ink cursor-pointer focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
             : "text-faint opacity-45 cursor-default",
@@ -1400,7 +1400,7 @@ function YearStepper({ year, canGoPrev, canGoNext, onPrev, onNext }: YearStepper
 
       {/* Año — mono tabular (regla dura 3: cifra de año es un número) */}
       <span
-        className="mono text-[14.5px] font-semibold text-ink min-w-[52px] text-center select-none"
+        className="mono text-[14.5px] font-semibold text-ink min-w-13 text-center select-none"
         aria-live="polite"
         aria-atomic="true"
       >
@@ -1415,7 +1415,7 @@ function YearStepper({ year, canGoPrev, canGoNext, onPrev, onNext }: YearStepper
         aria-label="Año siguiente"
         aria-disabled={!canGoNext}
         className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-[140ms]",
+          "flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-140",
           canGoNext
             ? "text-ink-2 hover:bg-panel-2 hover:text-ink cursor-pointer focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
             : "text-faint opacity-45 cursor-default",
@@ -1480,7 +1480,7 @@ function RemoveConfirmPopover({ onConfirm, onCancel, anchorRef }: RemoveConfirmP
   const content = (
     <div
       ref={popoverRef}
-      className="fixed z-50 w-[220px] rounded-ctl border border-line bg-panel shadow-[var(--shadow-lg)] p-[12px_14px] animate-modal-pop"
+      className="fixed z-50 w-55 rounded-ctl border border-line bg-panel shadow-(--shadow-lg) p-[12px_14px] animate-modal-pop"
       style={{ top: position.top, right: position.right }}
       role="dialog"
       aria-label="Confirmar quitar reporte"
@@ -1490,14 +1490,14 @@ function RemoveConfirmPopover({ onConfirm, onCancel, anchorRef }: RemoveConfirmP
         <button
           type="button"
           onClick={onConfirm}
-          className="rounded-ctl border border-expense bg-expense-soft px-3 py-[6px] text-[13px] font-semibold text-expense-ink transition-colors duration-[140ms] hover:bg-expense hover:text-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--expense-soft)]"
+          className="rounded-ctl border border-expense bg-expense-soft px-3 py-1.5 text-[13px] font-semibold text-expense-ink transition-colors duration-140 hover:bg-expense hover:text-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--expense-soft)]"
         >
           Quitar
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-ctl border border-line bg-panel px-3 py-[6px] text-[13px] font-semibold text-ink-2 transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+          className="rounded-ctl border border-line bg-panel px-3 py-1.5 text-[13px] font-semibold text-ink-2 transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
         >
           Cancelar
         </button>
@@ -1550,7 +1550,7 @@ function LegendAllChip({
       {/* Divisor horizontal --hair: separa el área de chips del carril del comando */}
       <div
         aria-hidden="true"
-        className="my-[8px]"
+        className="my-2"
         style={{ borderTop: "1px solid var(--hair)", width: "100%" }}
       />
       {/* Chip-comando: inline-flex, mismo alto/alineación que los chips de categoría */}
@@ -1559,8 +1559,8 @@ function LegendAllChip({
         aria-label={ariaLabel}
         onClick={handleClick}
         className={cn(
-          "group inline-flex items-center gap-[6px] px-[8px] py-[4px] rounded-[7px]",
-          "cursor-pointer transition-colors duration-[140ms]",
+          "group inline-flex items-center gap-1.5 px-2 py-1 rounded-chip",
+          "cursor-pointer transition-colors duration-140",
           "bg-panel-2 hover:bg-panel-3 active:bg-panel-3",
           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
         )}
@@ -1569,13 +1569,13 @@ function LegendAllChip({
         <Icon
           size={13}
           aria-hidden="true"
-          className="shrink-0 text-muted transition-colors duration-[140ms] group-hover:text-ink"
+          className="shrink-0 text-muted transition-colors duration-140 group-hover:text-ink"
         />
         {/* Rótulo 12px/600 neutro, select-none */}
         <span
           className={cn(
             "text-[12px] font-semibold select-none",
-            "text-ink-2 group-hover:text-ink transition-colors duration-[140ms]",
+            "text-ink-2 group-hover:text-ink transition-colors duration-140",
           )}
         >
           {label}
@@ -1770,14 +1770,14 @@ function EditableTitle({
           // Tipografía idéntica al título display (16px/600 Space Grotesk)
           "text-[16px] font-semibold leading-tight text-ink",
           // Caja del input DS: bg-panel, borde line-strong, radio r-ctl, padding compacto
-          "bg-panel border border-[var(--line-strong)] rounded-[var(--r-ctl,10px)]",
-          "px-[8px] py-[3px]",
+          "bg-panel border border-(--line-strong) rounded-(--r-ctl,10px)",
+          "px-2 py-0.75",
           // Ancho: ocupa la zona de identidad disponible sin empujar controles
           "min-w-0 flex-1",
           // Focus ring acento (cromo de interacción)
           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
           // Placeholder en --faint
-          "placeholder:text-[var(--faint)]",
+          "placeholder:text-(--faint)",
         )}
       />
     );
@@ -1797,13 +1797,13 @@ function EditableTitle({
       aria-label={canEdit ? "Editar título del reporte" : undefined}
       disabled={!canEdit}
       className={cn(
-        "group/title flex items-center gap-[6px] min-w-0",
+        "group/title flex items-center gap-1.5 min-w-0",
         // cursor:text solo cuando es editable
         canEdit ? "cursor-text" : "cursor-default",
         // Quitamos estilos de botón nativo
         "bg-transparent border-0 p-0 text-left",
         // Focus ring acento cuando el botón recibe foco de teclado
-        canEdit && "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:rounded-[var(--r-ctl,10px)]",
+        canEdit && "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:rounded-(--r-ctl,10px)",
       )}
     >
       {/* Texto del título o placeholder */}
@@ -1812,7 +1812,7 @@ function EditableTitle({
         className={cn(
           "block text-[16px] font-semibold leading-tight truncate",
           // Título propio → --ink; placeholder → --faint
-          titleProp ? "text-ink" : "text-[var(--faint)]",
+          titleProp ? "text-ink" : "text-(--faint)",
         )}
       >
         {displayTitle}
@@ -1825,7 +1825,7 @@ function EditableTitle({
           className={cn(
             "shrink-0 text-muted",
             // Oculto en reposo; visible en hover del grupo y en focus del botón
-            "opacity-0 transition-opacity duration-[140ms]",
+            "opacity-0 transition-opacity duration-140",
             "group-hover/title:opacity-100 group-focus-visible/title:opacity-100",
             // prefers-reduced-motion: sin transición
             "motion-reduce:transition-none",
@@ -1889,7 +1889,7 @@ function CardControls({
         <>
           {/* Mini-divisor --hair entre stepper y selector de moneda */}
           <span
-            className="block h-[16px] w-px bg-hair shrink-0"
+            className="block h-4 w-px bg-hair shrink-0"
             aria-hidden="true"
           />
           <CardCurrencySelect
@@ -1901,7 +1901,7 @@ function CardControls({
 
       {/* Divisor de entrada al clúster de utilidad (refrescar + X?) — incondicional (P5) */}
       <span
-        className="block h-[16px] w-px bg-hair shrink-0"
+        className="block h-4 w-px bg-hair shrink-0"
         aria-hidden="true"
       />
       <button
@@ -1910,7 +1910,7 @@ function CardControls({
         disabled={isFetching}
         aria-label="Actualizar reporte"
         aria-busy={isFetching}
-        className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted"
+        className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted"
       >
         <RefreshCw
           size={16}
@@ -1924,7 +1924,7 @@ function CardControls({
           type="button"
           onClick={onRemoveOpen}
           aria-label="Quitar reporte"
-          className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+          className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
         >
           <X size={16} aria-hidden="true" />
         </button>
@@ -2275,7 +2275,7 @@ export function ReportCard({
 
   return (
     <div
-      className="bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] p-[var(--card-pad)] animate-screen-fade"
+      className="bg-panel border border-line rounded-card shadow-(--shadow-sm) p-(--card-pad) animate-screen-fade"
       aria-label={`${displayTitle} ${year}`}
     >
       {/* ── Cabecera de la card ── */}
@@ -2310,7 +2310,7 @@ export function ReportCard({
           /* ── Con filtros: layout de 2 líneas (RF-REP-014) ── */
           <>
             {/* Línea 1: título editable + ícono Info de límites (ancho completo) */}
-            <div className="mb-[8px] flex items-center gap-[6px]">
+            <div className="mb-2 flex items-center gap-1.5">
               <div className="min-w-0">
                 <EditableTitle
                   titleProp={titleProp}
@@ -2330,16 +2330,16 @@ export function ReportCard({
               <LimitsInfoPopover surface="reporte-income-expense" />
             </div>
             {/* Línea 2: cluster de filtros (izq) + CardControls (der) */}
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-[18px]">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-4.5">
               {/* Cluster izquierdo — filtros de cómputo */}
-              <div className="flex flex-wrap items-center gap-[6px]">
+              <div className="flex flex-wrap items-center gap-1.5">
                 {/* §2 Dirección — segmented 3 opciones */}
                 <DirectionSegmented
                   value={direction ?? "both"}
                   onChange={handleDirectionChange}
                 />
                 {/* Divisor --hair entre Dirección y Tipo */}
-                <span className="block h-[16px] w-px bg-hair shrink-0" aria-hidden="true" />
+                <span className="block h-4 w-px bg-hair shrink-0" aria-hidden="true" />
                 {/* §3 Tipo de movimiento — 3 chips multi-selección */}
                 <MovementTypeChips
                   value={movementTypes ?? ["fijo", "cuota", "unico"]}
@@ -2349,8 +2349,8 @@ export function ReportCard({
                 {/* RF-REP-017 — chip "Simulados", último del cluster (divisor viaja con el
                     chip como subgrupo shrink-0: el primero en bajar de renglón al envolver). */}
                 {showSimulatedToggle && (
-                  <span className="inline-flex items-center gap-[6px] shrink-0">
-                    <span className="block h-[16px] w-px bg-hair shrink-0" aria-hidden="true" />
+                  <span className="inline-flex items-center gap-1.5 shrink-0">
+                    <span className="block h-4 w-px bg-hair shrink-0" aria-hidden="true" />
                     <SimulatedToggleChip
                       pressed={includeSimulated}
                       disabled={simulatedToggleDisabled}
@@ -2379,7 +2379,7 @@ export function ReportCard({
           </>
         ) : (
           /* ── Sin filtros (dashboard): fila única igual que antes ── */
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-[18px]">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-4.5">
             {/* Identidad: solo el título editable (izquierda) */}
             <div className="min-w-0 flex-1">
               <EditableTitle
@@ -2419,7 +2419,7 @@ export function ReportCard({
       {type === "by-category" && (
         <>
           {/* Línea 1: título editable + ícono Info de límites (ancho completo) */}
-          <div className="mb-[8px] flex items-center gap-[6px]">
+          <div className="mb-2 flex items-center gap-1.5">
             <div className="min-w-0">
               <EditableTitle
                 titleProp={titleProp}
@@ -2439,11 +2439,11 @@ export function ReportCard({
             <LimitsInfoPopover surface="reporte-by-category" />
           </div>
           {/* Línea 2: [ViewTabs Barra/Línea + chip Simulados izq] / [controles der], items-start */}
-          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-[18px]">
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-4.5">
             {/* Cluster izquierdo: tabs + (divisor + chip "Simulados", RF-REP-017).
                 items-center para alinear el chip verticalmente al centro del texto de
                 las tabs; el chip vive FUERA del role="tablist" (no es una tab). */}
-            <div className="flex flex-wrap items-center gap-[6px]">
+            <div className="flex flex-wrap items-center gap-1.5">
               <ViewTabs
                 tabs={BY_CATEGORY_TABS}
                 value={categoryChartMode}
@@ -2452,8 +2452,8 @@ export function ReportCard({
                 ariaLabel="Representación del reporte"
               />
               {showSimulatedToggle && (
-                <span className="inline-flex items-center gap-[6px] shrink-0">
-                  <span className="block h-[16px] w-px bg-hair shrink-0" aria-hidden="true" />
+                <span className="inline-flex items-center gap-1.5 shrink-0">
+                  <span className="block h-4 w-px bg-hair shrink-0" aria-hidden="true" />
                   <SimulatedToggleChip
                     pressed={includeSimulated}
                     disabled={simulatedToggleDisabled}

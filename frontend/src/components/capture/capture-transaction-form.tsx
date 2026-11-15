@@ -36,7 +36,7 @@ export interface CaptureTransactionFormProps {
   scrollContainerRef?: RefObject<HTMLDivElement | null>;
 }
 
-const FIELD_INPUT_CLASS = "px-[14px] py-[13px] text-[16px] scroll-mt-[16px] scroll-mb-[88px]";
+const FIELD_INPUT_CLASS = "px-3.5 py-3.25 text-[16px] scroll-mt-4 scroll-mb-22";
 
 export function CaptureTransactionForm({ onFooterStateChange, onCreateSuccess, scrollContainerRef }: CaptureTransactionFormProps) {
   const logic = useTransactionFormLogic({
@@ -83,7 +83,7 @@ export function CaptureTransactionForm({ onFooterStateChange, onCreateSuccess, s
           cabecera/footer corre de borde a borde, pero el contenido del cuerpo
           se alinea a esta misma columna para no estirarse en un viewport
           ancho y bajo (también régimen de captura). */}
-      <div className="mx-auto w-full max-w-[480px] px-[16px] pt-[16px] pb-[20px]">
+      <div className="mx-auto w-full max-w-120 px-4 pt-4 pb-5">
         {/* ── Toggle Gasto/Ingreso ── */}
         <Controller
           name="type"
@@ -94,7 +94,7 @@ export function CaptureTransactionForm({ onFooterStateChange, onCreateSuccess, s
                 type="button"
                 onClick={() => field.onChange("EXPENSE")}
                 className={cn(
-                  "flex items-center justify-center gap-2 rounded-ctl border-[1.5px] py-[14px] text-[15px] font-semibold transition-colors duration-[140ms] cursor-pointer",
+                  "flex items-center justify-center gap-2 rounded-ctl border-[1.5px] py-3.5 text-[15px] font-semibold transition-colors duration-140 cursor-pointer",
                   "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--expense-soft)]",
                   field.value === "EXPENSE"
                     ? "border-expense bg-expense-soft text-expense-ink"
@@ -108,7 +108,7 @@ export function CaptureTransactionForm({ onFooterStateChange, onCreateSuccess, s
                 type="button"
                 onClick={() => field.onChange("INCOME")}
                 className={cn(
-                  "flex items-center justify-center gap-2 rounded-ctl border-[1.5px] py-[14px] text-[15px] font-semibold transition-colors duration-[140ms] cursor-pointer",
+                  "flex items-center justify-center gap-2 rounded-ctl border-[1.5px] py-3.5 text-[15px] font-semibold transition-colors duration-140 cursor-pointer",
                   "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--income-soft)]",
                   field.value === "INCOME"
                     ? "border-income bg-income-soft text-income-ink"
@@ -121,16 +121,16 @@ export function CaptureTransactionForm({ onFooterStateChange, onCreateSuccess, s
             </div>
           )}
         />
-        {errors.type && <p className="mt-[6px] text-[12px] text-expense-ink">{errors.type.message}</p>}
+        {errors.type && <p className="mt-1.5 text-[12px] text-expense-ink">{errors.type.message}</p>}
 
         {/* ── Monto — protagonista, 64px ── */}
-        <div className="mt-[16px] flex flex-col gap-[6px]">
+        <div className="mt-4 flex flex-col gap-1.5">
           <Label htmlFor={`${formId}-amount`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
             Monto
           </Label>
           <div
             className={cn(
-              "flex w-full items-center gap-2 rounded-ctl border-[1.5px] px-[14px] py-[10.5px] transition-colors duration-[140ms]",
+              "flex w-full items-center gap-2 rounded-ctl border-[1.5px] px-3.5 py-[10.5px] transition-colors duration-140",
               "focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft)]",
               errors.amountInput
                 ? "border-expense shadow-[0_0_0_3px_var(--expense-soft)]"
@@ -143,7 +143,7 @@ export function CaptureTransactionForm({ onFooterStateChange, onCreateSuccess, s
               type="text"
               inputMode="decimal"
               placeholder="0,00"
-              className="flex-1 min-w-0 border-none outline-none bg-transparent mono text-[28px] font-semibold tracking-[-0.01em] text-ink placeholder:text-faint scroll-mt-[16px] scroll-mb-[88px]"
+              className="flex-1 min-w-0 border-none outline-none bg-transparent mono text-[28px] font-semibold tracking-[-0.01em] text-ink placeholder:text-faint scroll-mt-4 scroll-mb-22"
               {...amountFieldRegister}
               onChange={(e) => {
                 e.target.value = sanitizeAmountInput(e.target.value);
@@ -155,7 +155,7 @@ export function CaptureTransactionForm({ onFooterStateChange, onCreateSuccess, s
         </div>
 
         {/* ── Categoría ── */}
-        <div className="mt-[20px] flex flex-col gap-[6px]">
+        <div className="mt-5 flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <Label htmlFor={`${formId}-category`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Categoría
@@ -163,15 +163,15 @@ export function CaptureTransactionForm({ onFooterStateChange, onCreateSuccess, s
             <button
               type="button"
               onClick={openCategoryModal}
-              className="min-h-[44px] inline-flex items-center -my-[13px] text-[12.5px] font-semibold text-accent-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-sm"
+              className="min-h-11 inline-flex items-center -my-3.25 text-[12.5px] font-semibold text-accent-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-sm"
             >
               + Nueva
             </button>
           </div>
 
           {noCategoriesAvailable ? (
-            <div className="flex items-start gap-[11px] rounded-ctl border px-[14px] py-[13px] bg-expense-soft" style={{ borderColor: "oklch(0.57 0.16 27 / 0.25)" }}>
-              <AlertTriangle size={18} className="text-expense-ink shrink-0 mt-[1px]" aria-hidden="true" />
+            <div className="flex items-start gap-2.75 rounded-ctl border px-3.5 py-3.25 bg-expense-soft" style={{ borderColor: "oklch(0.57 0.16 27 / 0.25)" }}>
+              <AlertTriangle size={18} className="text-expense-ink shrink-0 mt-px" aria-hidden="true" />
               <div className="text-[13px] leading-[1.45] text-expense-ink">
                 <b className="font-bold">Sin categorías para este tipo.</b> Usá el botón &ldquo;+ Nueva&rdquo; de arriba.
               </div>
@@ -201,8 +201,8 @@ export function CaptureTransactionForm({ onFooterStateChange, onCreateSuccess, s
         </div>
 
         {/* ── Fecha y hora ── */}
-        <div className="mt-[16px] grid grid-cols-2 gap-[14px]">
-          <div className="flex min-w-0 flex-col gap-[6px]">
+        <div className="mt-4 grid grid-cols-2 gap-3.5">
+          <div className="flex min-w-0 flex-col gap-1.5">
             <Label htmlFor={`${formId}-date`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               <span className="inline-flex items-center gap-1">
                 <Calendar size={13} aria-hidden="true" />
@@ -211,7 +211,7 @@ export function CaptureTransactionForm({ onFooterStateChange, onCreateSuccess, s
             </Label>
             <Input id={`${formId}-date`} type="date" error={errors.date?.message} className={FIELD_INPUT_CLASS} {...register("date")} />
           </div>
-          <div className="flex min-w-0 flex-col gap-[6px]">
+          <div className="flex min-w-0 flex-col gap-1.5">
             <Label htmlFor={`${formId}-time`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Hora
             </Label>
@@ -220,7 +220,7 @@ export function CaptureTransactionForm({ onFooterStateChange, onCreateSuccess, s
         </div>
 
         {/* ── Descripción ── */}
-        <div className="mt-[16px] flex flex-col gap-[6px]">
+        <div className="mt-4 flex flex-col gap-1.5">
           <Label htmlFor={`${formId}-description`} className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
             Descripción <span className="text-faint font-normal">(opcional)</span>
           </Label>
@@ -235,7 +235,7 @@ export function CaptureTransactionForm({ onFooterStateChange, onCreateSuccess, s
         </div>
 
         {/* ── Más opciones ── */}
-        <div className="mt-[16px] border-t border-line pt-[16px]">
+        <div className="mt-4 border-t border-line pt-4">
           <CaptureMoreOptions
             idPrefix={formId}
             currency={selectedCurrency}

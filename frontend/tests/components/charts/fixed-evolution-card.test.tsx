@@ -802,7 +802,7 @@ describe("FixedEvolutionCard — superficie de excluidos", () => {
     // Ambas son de bloque (flex), nunca inline-flex: no comparten línea.
     expect(desc.className).not.toMatch(/inline/);
     expect(sub.className).not.toMatch(/inline/);
-    expect(sub.className).toContain("gap-[5px]");
+    expect(sub.className).toContain("gap-1.25");
     expect(sub.firstElementChild?.className).toContain("rounded-full");
     expect(sub.textContent).toMatch(/Ocio · desde Abr 2026/);
     expect(desc.textContent).not.toMatch(/Ocio/);
@@ -1039,7 +1039,7 @@ describe("CustomTooltip — variante acotada y color por tipo", () => {
     const { container } = renderTooltip("EXPENSE", false, buildPoint("2026-04", 150000), 150000);
     const dot = Array.from(container.querySelectorAll("span")).find((el) => el.className.includes("rounded-full")) as HTMLElement;
     expect(dot).toBeTruthy();
-    expect(dot.className).toContain("w-[6px]");
+    expect(dot.className).toContain("w-1.5");
     expect(dot.style.background).toMatch(/rgb\(79, 134, 198\)|#4f86c6/i);
   });
 

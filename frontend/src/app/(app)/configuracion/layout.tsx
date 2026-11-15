@@ -37,16 +37,16 @@ export default function ConfiguracionLayout({ children }: { children: React.Reac
   const pathname = usePathname();
 
   return (
-    <div className="px-10 py-[34px] pb-20 max-w-[1120px] mx-auto animate-screen-fade">
+    <div className="px-10 py-8.5 pb-20 max-w-280 mx-auto animate-screen-fade">
       {/* Cabecera .phead — único H1 y único eyebrow de la pantalla (§1.b) */}
       <div className="mb-6">
-        <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted mb-1">
+        <p className="text-[12px] font-semibold uppercase tracking-widest text-muted mb-1">
           Ajustes
         </p>
         <h1 className="text-[32px] font-bold tracking-[-0.02em] text-ink leading-tight">
           Configuración
         </h1>
-        <p className="text-[14.5px] leading-[1.5] text-muted mt-2">
+        <p className="text-[14.5px] leading-normal text-muted mt-2">
           Preferencias de tu cuenta.
         </p>
       </div>
@@ -55,7 +55,7 @@ export default function ConfiguracionLayout({ children }: { children: React.Reac
         {/* Nav de secciones — landmark de navegación, no tablist (§1.c) */}
         <nav
           aria-label="Secciones de configuración"
-          className="flex flex-row flex-wrap gap-1 bg-panel-2 border border-line rounded-[var(--r-card)] p-1 wide:flex-col wide:w-[200px] wide:shrink-0 wide:p-1.5"
+          className="flex flex-row flex-wrap gap-1 bg-panel-2 border border-line rounded-(--r-card) p-1 wide:flex-col wide:w-50 wide:shrink-0 wide:p-1.5"
         >
           {SECTIONS.map((section) => {
             const active = pathname === section.href;
@@ -68,10 +68,10 @@ export default function ConfiguracionLayout({ children }: { children: React.Reac
                   "w-auto text-left px-3 py-2.5 rounded-ctl wide:w-full",
                   "border border-transparent",
                   "text-[13.5px] font-semibold",
-                  "transition-colors duration-[140ms] motion-reduce:transition-none",
+                  "transition-colors duration-140 motion-reduce:transition-none",
                   "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
                   active
-                    ? "bg-panel border-line shadow-[var(--shadow-sm)] text-ink"
+                    ? "bg-panel border-line shadow-(--shadow-sm) text-ink"
                     : "text-muted hover:bg-panel-3 hover:text-ink",
                 )}
               >

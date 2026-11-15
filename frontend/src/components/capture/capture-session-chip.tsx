@@ -55,12 +55,12 @@ export function CaptureSessionChip({ email }: CaptureSessionChipProps) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        className="flex max-w-full items-center gap-[7px] rounded-ctl px-2 py-[7px] transition-colors duration-[140ms] data-[open=true]:bg-panel-2 hover:bg-panel-2 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+        className="flex max-w-full items-center gap-1.75 rounded-ctl px-2 py-1.75 transition-colors duration-140 data-[open=true]:bg-panel-2 hover:bg-panel-2 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
         data-open={open}
       >
         <span
           aria-hidden="true"
-          className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[12.5px] font-bold text-white"
+          className="flex h-7.5 w-7.5 shrink-0 items-center justify-center rounded-full text-[12.5px] font-bold text-white"
           style={{
             background: "linear-gradient(140deg, oklch(0.7 0.1 264), oklch(0.55 0.13 304))",
           }}
@@ -71,7 +71,7 @@ export function CaptureSessionChip({ email }: CaptureSessionChipProps) {
         <ChevronDown
           size={14}
           aria-hidden="true"
-          className={`shrink-0 text-muted transition-transform duration-[140ms] ${open ? "rotate-180" : ""}`}
+          className={`shrink-0 text-muted transition-transform duration-140 ${open ? "rotate-180" : ""}`}
         />
       </button>
 
@@ -83,7 +83,7 @@ export function CaptureSessionChip({ email }: CaptureSessionChipProps) {
             id={menuId}
             role="menu"
             aria-label="Sesión"
-            className="fixed z-40 rounded-ctl border border-line bg-panel shadow-[var(--shadow-md)] overflow-hidden"
+            className="fixed z-40 rounded-ctl border border-line bg-panel shadow-(--shadow-md) overflow-hidden"
             style={{
               top: pos.top,
               left: pos.left,
@@ -94,7 +94,7 @@ export function CaptureSessionChip({ email }: CaptureSessionChipProps) {
               type="button"
               role="menuitem"
               onClick={handleSignOut}
-              className="flex w-full items-center gap-2 px-3 py-[13px] text-[15px] font-medium text-ink-2 transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink"
+              className="flex w-full items-center gap-2 px-3 py-3.25 text-[15px] font-medium text-ink-2 transition-colors duration-140 hover:bg-panel-2 hover:text-ink"
             >
               <LogOut size={16} className="shrink-0 text-muted" aria-hidden="true" />
               Cerrar sesión

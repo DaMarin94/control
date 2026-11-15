@@ -51,7 +51,7 @@ import { cn } from "@/lib/utils";
 function IdentitySeparator() {
   return (
     <span
-      className="inline-block h-[3px] w-[3px] rounded-full bg-faint shrink-0"
+      className="inline-block h-0.75 w-0.75 rounded-full bg-faint shrink-0"
       aria-hidden="true"
     />
   );
@@ -90,7 +90,7 @@ export function SimulatedMovementRow({ movement, limitMark }: SimulatedMovementR
   return (
     <div
       className={cn(
-        "grid items-center gap-[14px] px-[18px] cursor-default [&+&]:border-t [&+&]:border-hair",
+        "grid items-center gap-3.5 px-4.5 cursor-default [&+&]:border-t [&+&]:border-hair",
         rowFillClass,
       )}
       style={{ gridTemplateColumns: "40px 1fr auto auto auto", padding: "var(--row-pad) 18px" }}
@@ -113,11 +113,11 @@ export function SimulatedMovementRow({ movement, limitMark }: SimulatedMovementR
           {categoryName}
         </b>
 
-        <span className="flex items-center gap-[10px] mt-[1px]">
+        <span className="flex items-center gap-2.5 mt-px">
           {/* Zona de identidad */}
-          <span className="flex flex-1 min-w-0 items-center gap-[6px] overflow-hidden text-[12px] text-muted">
+          <span className="flex flex-1 min-w-0 items-center gap-1.5 overflow-hidden text-[12px] text-muted">
             {/* Chip "Simulado" — mismo molde que "Anulado", primer segmento */}
-            <span className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em] shrink-0">
+            <span className="inline-flex items-center rounded-(--r-chip) bg-panel-3 text-muted px-1.75 py-px text-[11px] font-semibold tracking-[0.04em] shrink-0">
               Simulado
             </span>
 
@@ -126,7 +126,7 @@ export function SimulatedMovementRow({ movement, limitMark }: SimulatedMovementR
 
             {/* Punto de color de categoría — nunca protagonista de un truncado, siempre visible */}
             <span
-              className="h-[6px] w-[6px] rounded-full shrink-0"
+              className="h-1.5 w-1.5 rounded-full shrink-0"
               style={{ background: movement.category.color }}
               aria-hidden="true"
             />
@@ -140,8 +140,8 @@ export function SimulatedMovementRow({ movement, limitMark }: SimulatedMovementR
           {/* Zona de estados — solo marca de límite (GitBranch nunca aplica, RN-029) */}
           {hasStatesZone && (
             <>
-              <span className="h-[12px] w-px bg-hair shrink-0" aria-hidden="true" />
-              <span className="flex items-center gap-[8px] shrink-0">
+              <span className="h-3 w-px bg-hair shrink-0" aria-hidden="true" />
+              <span className="flex items-center gap-2 shrink-0">
                 {limitShowsGlyphInStates && limitTooltip && <LimitGlyph tooltip={limitTooltip} />}
               </span>
             </>
@@ -155,7 +155,7 @@ export function SimulatedMovementRow({ movement, limitMark }: SimulatedMovementR
       </div>
 
       {/* Col 4: monto con prefijo "≈" DENTRO del mismo span mono — no rompe la alineación tabular */}
-      <div className="flex items-center justify-end text-right min-w-[100px]">
+      <div className="flex items-center justify-end text-right min-w-25">
         <span
           className={cn(
             "text-[15.5px] mono",
@@ -163,7 +163,7 @@ export function SimulatedMovementRow({ movement, limitMark }: SimulatedMovementR
             isExpense ? "text-ink" : "text-income-ink",
           )}
         >
-          <span className="text-muted mr-[3px]">≈</span>
+          <span className="text-muted mr-0.75">≈</span>
           {amountDisplay}
         </span>
       </div>

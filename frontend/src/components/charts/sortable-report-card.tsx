@@ -64,7 +64,7 @@ function ReportCardMini({
 
   return (
     <div
-      className="flex items-center gap-3 px-[var(--card-pad)] py-[14px]"
+      className="flex items-center gap-3 px-(--card-pad) py-3.5"
       style={{ minHeight: 56 }}
     >
       {/* Grip — punto de arrastre */}

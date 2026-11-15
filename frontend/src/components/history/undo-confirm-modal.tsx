@@ -45,10 +45,10 @@ export function UndoConfirmModal({ entry, isSubmitting, onConfirm, onClose }: Un
 
         <div className="rounded-ctl border border-line bg-panel-2 px-4 py-3 text-[13px]">
           <p className="font-semibold text-ink">{rowLabel}</p>
-          <p className="mt-0.5 text-muted flex items-center gap-[6px]">
+          <p className="mt-0.5 text-muted flex items-center gap-1.5">
             {entry.category && (
               <span
-                className="h-[6px] w-[6px] rounded-full shrink-0"
+                className="h-1.5 w-1.5 rounded-full shrink-0"
                 style={{ background: entry.category.color }}
                 aria-hidden="true"
               />
@@ -65,7 +65,7 @@ export function UndoConfirmModal({ entry, isSubmitting, onConfirm, onClose }: Un
           heading={isEdit ? "Al deshacer queda así:" : "Vuelve a la app:"}
         />
 
-        <p className="text-[12.5px] leading-[1.5] text-muted">Esta entrada se borra del historial.</p>
+        <p className="text-[12.5px] leading-normal text-muted">Esta entrada se borra del historial.</p>
       </ModalShellBody>
 
       <ModalShellFooter>

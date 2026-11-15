@@ -144,12 +144,12 @@ function TemporalScopeSegmented({
     <div
       role="radiogroup"
       aria-label="Alcance temporal"
-      className="relative flex rounded-pill p-[2px]"
+      className="relative flex rounded-pill p-0.5"
       style={{ backgroundColor: "var(--panel-3)" }}
     >
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute top-[2px] bottom-[2px] rounded-pill bg-panel shadow-[var(--shadow-sm)] transition-[left,width] duration-[140ms] ease-out motion-reduce:transition-none"
+        className="pointer-events-none absolute top-0.5 bottom-0.5 rounded-pill bg-panel shadow-(--shadow-sm) transition-[left,width] duration-140 ease-out motion-reduce:transition-none"
         style={{ left: `calc(${(selectedIndex / 2) * 100}% + 2px)`, width: "calc(50% - 4px)" }}
       />
       {TEMPORAL_OPTIONS.map((opt) => {
@@ -162,7 +162,7 @@ function TemporalScopeSegmented({
             aria-checked={isSelected}
             onClick={() => onChange(opt.value)}
             className={cn(
-              "relative z-10 flex-1 rounded-pill px-3 py-[7px] text-[12.5px] font-semibold transition-colors duration-[140ms]",
+              "relative z-10 flex-1 rounded-pill px-3 py-1.75 text-[12.5px] font-semibold transition-colors duration-140",
               "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
               isSelected ? "text-ink" : "text-muted hover:text-ink-2",
             )}
@@ -192,12 +192,12 @@ function NatureSegmented({
     <div
       role="radiogroup"
       aria-label="Naturaleza"
-      className="relative flex rounded-pill p-[2px]"
+      className="relative flex rounded-pill p-0.5"
       style={{ backgroundColor: "var(--panel-3)" }}
     >
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute top-[2px] bottom-[2px] rounded-pill bg-panel shadow-[var(--shadow-sm)] transition-[left,width] duration-[140ms] ease-out motion-reduce:transition-none"
+        className="pointer-events-none absolute top-0.5 bottom-0.5 rounded-pill bg-panel shadow-(--shadow-sm) transition-[left,width] duration-140 ease-out motion-reduce:transition-none"
         style={{ left: `calc(${(selectedIndex / 2) * 100}% + 2px)`, width: "calc(50% - 4px)" }}
       />
       {NATURE_OPTIONS.map((opt) => {
@@ -214,7 +214,7 @@ function NatureSegmented({
             title={isDisabled ? "Disponible solo para datos de Vista del mes" : undefined}
             onClick={() => !isDisabled && onChange(opt.value)}
             className={cn(
-              "relative z-10 flex-1 rounded-pill px-3 py-[7px] text-[12.5px] font-semibold transition-colors duration-[140ms]",
+              "relative z-10 flex-1 rounded-pill px-3 py-1.75 text-[12.5px] font-semibold transition-colors duration-140",
               "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
               isDisabled
                 ? "text-faint cursor-not-allowed opacity-50"
@@ -416,7 +416,7 @@ export function CreateLimitModal({ onClose }: CreateLimitModalProps) {
 
               {/* 4. Condición — operador + umbral (operador restringido por polaridad en activa, D12) */}
               <div className="flex gap-3">
-                <div className="flex flex-col gap-1 w-[190px] shrink-0">
+                <div className="flex flex-col gap-1 w-47.5 shrink-0">
                   <Label htmlFor="limit-operator">Condición</Label>
                   <Select
                     id="limit-operator"

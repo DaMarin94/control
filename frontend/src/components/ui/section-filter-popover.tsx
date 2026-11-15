@@ -80,13 +80,13 @@ function TypeSwitch({
     <div
       role="radiogroup"
       aria-label="Tipo de movimiento"
-      className="relative flex rounded-pill p-[2px]"
+      className="relative flex rounded-pill p-0.5"
       style={{ backgroundColor: "var(--panel-3)" }}
     >
       {/* Thumb deslizante */}
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute top-[2px] bottom-[2px] rounded-pill bg-panel shadow-[var(--shadow-sm)] transition-[left,width] duration-[140ms] ease-out motion-reduce:transition-none"
+        className="pointer-events-none absolute top-0.5 bottom-0.5 rounded-pill bg-panel shadow-(--shadow-sm) transition-[left,width] duration-140 ease-out motion-reduce:transition-none"
         style={{
           left: `calc(${(selectedIndex / 3) * 100}% + 2px)`,
           width: `calc(${100 / 3}% - 4px)`,
@@ -111,8 +111,8 @@ function TypeSwitch({
             onClick={() => onChange(seg.value)}
             onKeyDown={(e) => handleKeyDown(e, i)}
             className={cn(
-              "relative z-10 flex-1 rounded-pill px-[10px] py-[5px]",
-              "text-[12.5px] font-semibold transition-colors duration-[140ms]",
+              "relative z-10 flex-1 rounded-pill px-2.5 py-1.25",
+              "text-[12.5px] font-semibold transition-colors duration-140",
               "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
               textColor,
             )}
@@ -176,8 +176,8 @@ function InlineCategoryBlock({
   return (
     <div className="flex flex-1 min-h-0 flex-col">
       {/* Header — shrink-0: nunca scrollea con la lista (§8.2, "categorías" es la única región flexible) */}
-      <div className="shrink-0 flex items-center justify-between px-3 py-[10px] border-b border-hair">
-        <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+      <div className="shrink-0 flex items-center justify-between px-3 py-2.5 border-b border-hair">
+        <span className="text-[12px] font-semibold uppercase tracking-widest text-muted">
           Mostrar categorías
         </span>
         <button
@@ -201,7 +201,7 @@ function InlineCategoryBlock({
             return (
               <div
                 key={cat.id}
-                className="flex cursor-pointer items-center gap-[10px] px-3 py-2 hover:bg-panel-2"
+                className="flex cursor-pointer items-center gap-2.5 px-3 py-2 hover:bg-panel-2"
                 onClick={() => toggleCategory(cat.id)}
                 role="checkbox"
                 aria-checked={checked}
@@ -216,7 +216,7 @@ function InlineCategoryBlock({
                 {/* Checkbox visual */}
                 <span
                   className={cn(
-                    "flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors duration-[140ms]",
+                    "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors duration-140",
                     checked ? "border-accent bg-accent" : "border-line-strong bg-panel",
                   )}
                   aria-hidden="true"
@@ -242,7 +242,7 @@ function InlineCategoryBlock({
 
                 {/* Swatch de color */}
                 <span
-                  className="h-[10px] w-[10px] shrink-0 rounded-[3px]"
+                  className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
                   style={{ backgroundColor: cat.color }}
                   aria-hidden="true"
                 />
@@ -488,7 +488,7 @@ function SectionFilterPanel({
       // `overflow-hidden`, que lo dejaría inalcanzable sin aviso. En el caso
       // normal (contenido ≤ maxHeight) no aparece barra: mismo resultado
       // visual que antes.
-      className="fixed z-50 flex w-[260px] flex-col rounded-ctl border border-line bg-panel shadow-[var(--shadow-lg)] animate-modal-pop overflow-y-auto"
+      className="fixed z-50 flex w-65 flex-col rounded-ctl border border-line bg-panel shadow-(--shadow-lg) animate-modal-pop overflow-y-auto"
       style={{
         top: position.top,
         right: position.right,
@@ -499,8 +499,8 @@ function SectionFilterPanel({
       data-testid={`section-filter-popover-${sectionKey}`}
     >
       {/* Bloque 1: Triple switch de tipo — shrink-0, nunca scrollea (§8.2) */}
-      <div className="shrink-0 px-3 py-[10px] border-b border-hair">
-        <span className="block mb-2 text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+      <div className="shrink-0 px-3 py-2.5 border-b border-hair">
+        <span className="block mb-2 text-[12px] font-semibold uppercase tracking-widest text-muted">
           Mostrar
         </span>
         <TypeSwitch selected={selectedType} onChange={onTypeChange} />
@@ -571,8 +571,8 @@ export function SectionFilterButton({
         aria-haspopup="dialog"
         className={cn(
           "flex items-center justify-center rounded-ctl",
-          "px-[7px] py-[5px]",
-          "transition-colors duration-[140ms]",
+          "px-1.75 py-1.25",
+          "transition-colors duration-140",
           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
           isOpen
             ? "bg-panel-2 text-ink"
@@ -587,7 +587,7 @@ export function SectionFilterButton({
       {/* Punto indicador de filtro activo */}
       {isFiltered && (
         <span
-          className="pointer-events-none absolute -top-[2px] -right-[2px] h-[6px] w-[6px] rounded-full bg-accent"
+          className="pointer-events-none absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-accent"
           style={{ border: "2px solid var(--panel)" }}
           aria-hidden="true"
         />

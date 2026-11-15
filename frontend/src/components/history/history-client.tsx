@@ -58,21 +58,21 @@ function HistorySkeletonRow({ isFirst }: { isFirst: boolean }) {
   return (
     <div
       className={cn(
-        "grid grid-cols-[40px_1fr] @wide:grid-cols-[40px_1fr_auto] gap-x-[14px] gap-y-[10px] items-start",
+        "grid grid-cols-[40px_1fr] @wide:grid-cols-[40px_1fr_auto] gap-x-3.5 gap-y-2.5 items-start",
         !isFirst && "border-t border-hair",
       )}
       style={{ padding: "var(--row-pad) 18px" }}
     >
       <SkeletonBlock height={40} width={40} radius="ctl" />
-      <div className="min-w-0 flex flex-col gap-[6px]">
-        <div className="flex items-center gap-[8px]">
+      <div className="min-w-0 flex flex-col gap-1.5">
+        <div className="flex items-center gap-2">
           <SkeletonLine height={14.5} width="45%" />
           <SkeletonPill height={16} width={60} />
         </div>
         <SkeletonLine height={12} width="32%" />
-        <SkeletonBlock height={44} radius="ctl" className="mt-[4px]" />
+        <SkeletonBlock height={44} radius="ctl" className="mt-1" />
       </div>
-      <div className="hidden @wide:flex flex-col items-end gap-[8px] self-start">
+      <div className="hidden @wide:flex flex-col items-end gap-2 self-start">
         <SkeletonLine height={12.5} width={80} />
         <SkeletonBlock height={36} width={104} radius="ctl" />
       </div>
@@ -152,28 +152,28 @@ export function HistoryClient() {
   }
 
   return (
-    <div className="px-10 py-[34px] pb-20 max-w-[1120px] mx-auto animate-screen-fade">
+    <div className="px-10 py-8.5 pb-20 max-w-280 mx-auto animate-screen-fade">
       <div className="mb-6">
         <h1 className="text-[32px] font-bold tracking-[-0.02em] leading-[1.05] text-ink m-0">Historial</h1>
-        <p className="text-[14.5px] leading-[1.5] text-muted mt-2">
+        <p className="text-[14.5px] leading-normal text-muted mt-2">
           Se guardan los últimos 5 cambios de cada movimiento, durante 31 días.
         </p>
       </div>
 
       {isLoading ? (
         <div role="status" aria-label="Cargando historial">
-          <div className="rounded-card border border-line bg-panel shadow-[var(--shadow-sm)] overflow-hidden">
+          <div className="rounded-card border border-line bg-panel shadow-(--shadow-sm) overflow-hidden">
             {Array.from({ length: 5 }).map((_, i) => (
               <HistorySkeletonRow key={i} isFirst={i === 0} />
             ))}
           </div>
         </div>
       ) : isError ? (
-        <div className="rounded-card border border-line bg-panel shadow-[var(--shadow-sm)] px-6 py-6">
+        <div className="rounded-card border border-line bg-panel shadow-(--shadow-sm) px-6 py-6">
           <p className="text-[13px] text-expense-ink">No se pudo cargar el historial. Recargá la página.</p>
         </div>
       ) : displayEntries.length === 0 ? (
-        <div className="flex flex-col items-center text-center gap-[10px] rounded-card border border-dashed border-line bg-panel-2 px-6 py-10">
+        <div className="flex flex-col items-center text-center gap-2.5 rounded-card border border-dashed border-line bg-panel-2 px-6 py-10">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-panel-3">
             <History size={22} className="text-muted" aria-hidden="true" />
           </span>
@@ -185,14 +185,14 @@ export function HistoryClient() {
           </div>
         </div>
       ) : (
-        <div className="rounded-card border border-line bg-panel shadow-[var(--shadow-sm)] overflow-hidden">
+        <div className="rounded-card border border-line bg-panel shadow-(--shadow-sm) overflow-hidden">
           {displayEntries.map((entry, index) => {
             const isExiting = exiting.has(entry.id);
             return (
               <div
                 key={entry.id}
                 className={cn(
-                  "grid transition-[grid-template-rows,opacity] duration-[220ms] ease-out motion-reduce:transition-none",
+                  "grid transition-[grid-template-rows,opacity] duration-220 ease-out motion-reduce:transition-none",
                   index > 0 && "border-t border-hair",
                 )}
                 style={{ gridTemplateRows: isExiting ? "0fr" : "1fr", opacity: isExiting ? 0 : 1 }}

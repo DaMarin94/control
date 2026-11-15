@@ -131,8 +131,8 @@ export function DashboardClient() {
       <div className="flex items-end justify-between gap-5 mb-7 flex-wrap">
         <div>
           {/* Fila del eyebrow: label + chip de moneda default (a la derecha del eyebrow) */}
-          <div className="flex items-center gap-[10px] mb-[6px]">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <p className="text-[12px] font-semibold uppercase tracking-widest text-muted">
               Tu mes
             </p>
             <CurrencyChip currency={defaultCurrency} />
@@ -151,9 +151,9 @@ export function DashboardClient() {
        * - Guard !isAuthenticated cubre sesión aún resolviendo (Auth.js status="loading").
        */}
       {(!hydrated || (!data && (!isAuthenticated || isLoading))) ? (
-        <div className="space-y-[var(--gap)]" aria-label="Cargando totales" role="status">
+        <div className="space-y-(--gap)" aria-label="Cargando totales" role="status">
           {/* Grid 2 stat-cards: Gastos / Ingresos (~120px cada una) */}
-          <div className="grid grid-cols-2 gap-[var(--gap)]">
+          <div className="grid grid-cols-2 gap-(--gap)">
             <SkeletonBlock height={120} />
             <SkeletonBlock height={120} />
           </div>
@@ -170,18 +170,18 @@ export function DashboardClient() {
           No se pudieron cargar los totales del mes. Intentá recargar la página.
         </div>
       ) : (
-        <div className="space-y-[var(--gap)]">
+        <div className="space-y-(--gap)">
           {/* Tarjetas de stats: grid 1fr 1fr */}
-          <div className="grid grid-cols-2 gap-[var(--gap)]">
+          <div className="grid grid-cols-2 gap-(--gap)">
             {/* Gastos — mes.total.gasto (P2, Tramo 2: marca visual pasiva) */}
             <div
               className={cn(
-                "bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] p-[var(--card-pad)] flex flex-col gap-[10px] relative overflow-hidden",
+                "bg-panel border border-line rounded-card shadow-(--shadow-sm) p-(--card-pad) flex flex-col gap-2.5 relative overflow-hidden",
                 limitRingCardClass(expenseLimitMark?.effect),
               )}
             >
-              <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
-                <span className="flex h-6 w-6 items-center justify-center rounded-[7px] bg-expense-soft text-expense-ink">
+              <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-widest text-muted">
+                <span className="flex h-6 w-6 items-center justify-center rounded-chip bg-expense-soft text-expense-ink">
                   <ArrowDown size={14} aria-hidden="true" />
                 </span>
                 Gastos
@@ -204,12 +204,12 @@ export function DashboardClient() {
             {/* Ingresos — mes.total.ingreso (tint NO ofrecido: monto tipado income-ink) */}
             <div
               className={cn(
-                "bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] p-[var(--card-pad)] flex flex-col gap-[10px] relative overflow-hidden",
+                "bg-panel border border-line rounded-card shadow-(--shadow-sm) p-(--card-pad) flex flex-col gap-2.5 relative overflow-hidden",
                 limitRingCardClass(incomeLimitMark?.effect),
               )}
             >
-              <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
-                <span className="flex h-6 w-6 items-center justify-center rounded-[7px] bg-income-soft text-income-ink">
+              <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-widest text-muted">
+                <span className="flex h-6 w-6 items-center justify-center rounded-chip bg-income-soft text-income-ink">
                   <ArrowUp size={14} aria-hidden="true" />
                 </span>
                 Ingresos
@@ -232,7 +232,7 @@ export function DashboardClient() {
           {/* Balance hero — mes.balance (tint NO ofrecido: bloque de acento con signo) */}
           <div
             className={cn(
-              "p-[var(--card-pad)] rounded-card relative overflow-hidden text-white shadow-[var(--shadow-md)]",
+              "p-(--card-pad) rounded-card relative overflow-hidden text-white shadow-(--shadow-md)",
               limitRingCardClass(balanceLimitMark?.effect, "--shadow-md"),
             )}
             style={{
@@ -242,23 +242,23 @@ export function DashboardClient() {
             {/* Círculo decorativo relleno */}
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute -right-[60px] -top-[60px] h-[220px] w-[220px] rounded-full"
+              className="pointer-events-none absolute -right-15 -top-15 h-55 w-55 rounded-full"
               style={{ background: "oklch(1 0 0 / 0.08)" }}
             />
             {/* Círculo decorativo sólo borde */}
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute right-[30px] -bottom-[90px] h-[200px] w-[200px] rounded-full"
+              className="pointer-events-none absolute right-7.5 -bottom-22.5 h-50 w-50 rounded-full"
               style={{ border: "1px solid oklch(1 0 0 / 0.14)" }}
             />
 
-            <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-white/70 relative flex items-center gap-[7px]">
+            <p className="text-[12px] font-semibold uppercase tracking-widest text-white/70 relative flex items-center gap-1.75">
               Balance de {mesName.toLowerCase()}
               <LimitMarkAdorner mark={balanceLimitMark} glyphSize={13} />
             </p>
             <div
               className={cn(
-                "text-[46px] tracking-[-0.025em] leading-none my-2 mono relative",
+                "text-[46px] tracking-tight leading-none my-2 mono relative",
                 limitBoldClass(balanceLimitMark?.effect) ?? "font-semibold",
               )}
             >
@@ -267,7 +267,7 @@ export function DashboardClient() {
 
             {/* Barra de proporción */}
             <div
-              className="relative flex h-[7px] overflow-hidden rounded-pill mt-[18px]"
+              className="relative flex h-1.75 overflow-hidden rounded-pill mt-4.5"
               style={{ background: "oklch(1 0 0 / 0.18)" }}
               aria-hidden="true"
             >
@@ -288,7 +288,7 @@ export function DashboardClient() {
             </div>
 
             {/* Leyenda */}
-            <div className="flex justify-between text-[12px] text-white/80 mt-[9px] relative">
+            <div className="flex justify-between text-[12px] text-white/80 mt-2.25 relative">
               <span>
                 Ingresos{" "}
                 <b className="text-white font-semibold mono">{formatCurrency(incomeCents, defaultCurrency)}</b>
@@ -306,12 +306,12 @@ export function DashboardClient() {
               <p className="text-[15px] font-semibold text-ink">
                 Todavía no hay movimientos este mes
               </p>
-              <p className="mt-1 text-[12.5px] leading-[1.5] text-muted">
+              <p className="mt-1 text-[12.5px] leading-normal text-muted">
                 Registrá tu primer gasto o ingreso de {mesName.toLowerCase()}.
               </p>
               <button
                 onClick={() => setIsNewModalOpen(true)}
-                className="mt-4 inline-flex items-center gap-2 rounded-ctl bg-accent text-white px-4 py-[10px] text-[14px] font-semibold shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0_/_0.2)] hover:bg-accent-press hover:-translate-y-px hover:shadow-[var(--shadow-md)] transition-all duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+                className="mt-4 inline-flex items-center gap-2 rounded-ctl bg-accent text-white px-4 py-2.5 text-[14px] font-semibold shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0/0.2)] hover:bg-accent-press hover:-translate-y-px hover:shadow-(--shadow-md) transition-all duration-140 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
               >
                 <Plus size={16} aria-hidden="true" />
                 Cargá tu primer movimiento
@@ -323,7 +323,7 @@ export function DashboardClient() {
               Modo efímero: navegación de año activa, filtro de categorías activo,
               pero el estado NO se persiste — al recargar vuelve a año en curso + todas.
               Ubicación: después del balance hero y ANTES del footer "Ver todos". */}
-          <div className="mt-[var(--gap)]">
+          <div className="mt-(--gap)">
             {/* Dashboard: sin onDirectionChange → modo decorativo (leyenda Ingresos/Gastos no interactiva). */}
             <ReportCard
               type="income-expense"
@@ -341,7 +341,7 @@ export function DashboardClient() {
             <span className="text-[14px] text-muted"></span>
             <Link
               href={`/mes?month=${month}`}
-              className="inline-flex items-center gap-[5px] text-[14px] font-semibold text-accent-ink transition-[gap] duration-[140ms] hover:gap-2"
+              className="inline-flex items-center gap-1.25 text-[14px] font-semibold text-accent-ink transition-[gap] duration-140 hover:gap-2"
             >
               Ver todos los movimientos →
             </Link>

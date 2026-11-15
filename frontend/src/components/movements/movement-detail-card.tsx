@@ -83,7 +83,7 @@ function formatSignedAmount(cents: number, currency: string): string {
 /** Fila rótulo·valor de la ficha — patrón reusable (docs/design.md §"Anatomía de la card") */
 function DetailRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-x-[16px] gap-y-[2px]">
+    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-0.5">
       <span className="text-[12.5px] font-medium text-muted shrink-0">{label}</span>
       <span className="text-right text-[13px] text-ink-2 min-w-0">{children}</span>
     </div>
@@ -138,11 +138,11 @@ function CalculatedBlock({
     sourceMonthOffset > 0 ? formatMonthShort(addMonthsToKey(viewMonth, -sourceMonthOffset)) : null;
 
   return (
-    <div className="space-y-[14px]">
+    <div className="space-y-3.5">
       {/* Origen (read-only) */}
-      <div className="flex flex-col gap-[7px]">
+      <div className="flex flex-col gap-1.75">
         <span className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">Origen</span>
-        <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px]">
+        <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-3.25 py-2.75">
           {calc.sourceType === "fijo" && (
             <Repeat size={15} className="text-accent-ink shrink-0" aria-hidden="true" />
           )}
@@ -164,24 +164,24 @@ function CalculatedBlock({
       </div>
 
       {/* Fórmula — expresión legible + resultado + badge de tipo derivado */}
-      <div className="flex flex-col gap-[7px]">
+      <div className="flex flex-col gap-1.75">
         <span className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">Fórmula</span>
-        <div className="flex items-center justify-between rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px] gap-3">
+        <div className="flex items-center justify-between rounded-ctl border border-line bg-panel-2 px-3.25 py-2.75 gap-3">
           {/* Celda izquierda: expresión + sublínea "Monto base" (solo desfasaje > 0) — mismo
               par expresión+sublínea que el preview del form de calculado */}
-          <div className="flex min-w-0 flex-col items-start gap-[2px]">
+          <div className="flex min-w-0 flex-col items-start gap-0.5">
             <span className="text-[12.5px] text-muted mono truncate w-full">{expression}</span>
             {baseMonthLabel && (
               <span className="text-[11.5px] text-muted truncate w-full">Monto base: {baseMonthLabel}</span>
             )}
           </div>
-          <div className="flex flex-col items-end gap-[5px] shrink-0">
+          <div className="flex flex-col items-end gap-1.25 shrink-0">
             <span className={cn("text-[16px] font-semibold mono", isExpense ? "text-ink" : "text-income-ink")}>
               {resultDisplay}
             </span>
             {isExpense ? (
               <span
-                className="inline-flex items-center gap-[3px] rounded-[var(--r-chip)] bg-expense-soft text-expense-ink px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em]"
+                className="inline-flex items-center gap-0.75 rounded-(--r-chip) bg-expense-soft text-expense-ink px-1.75 py-px text-[11px] font-semibold tracking-[0.04em]"
                 aria-label="Tipo derivado: Gasto"
               >
                 <ArrowDownRight size={11} aria-hidden="true" />
@@ -189,7 +189,7 @@ function CalculatedBlock({
               </span>
             ) : (
               <span
-                className="inline-flex items-center gap-[3px] rounded-[var(--r-chip)] bg-income-soft text-income-ink px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em]"
+                className="inline-flex items-center gap-0.75 rounded-(--r-chip) bg-income-soft text-income-ink px-1.75 py-px text-[11px] font-semibold tracking-[0.04em]"
                 aria-label="Tipo derivado: Ingreso"
               >
                 <ArrowUpRight size={11} aria-hidden="true" />
@@ -212,7 +212,7 @@ function CalculatedChildrenBlock({
   defaultCurrency: string;
 }) {
   return (
-    <div className="flex flex-col gap-[7px]">
+    <div className="flex flex-col gap-1.75">
       <span className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">Calculados</span>
       {calculatedChildren.map((child) => {
         const isExpense = child.type === "EXPENSE";
@@ -222,7 +222,7 @@ function CalculatedChildrenBlock({
         return (
           <div
             key={child.id}
-            className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px]"
+            className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-3.25 py-2.75"
           >
             {isExpense ? (
               <ArrowDownRight size={15} className="text-expense-ink shrink-0" aria-hidden="true" />
@@ -261,8 +261,8 @@ const EVOLUTION_UNAVAILABLE_MOTIVE = "Hacen falta al menos dos meses con monto p
  * motivo tiene que seguir alcanzable con teclado) + motivo por title/describedby.
  */
 const NAV_ROW_BOX =
-  "flex w-full items-center gap-[10px] min-h-[44px] rounded-ctl border border-line bg-panel px-[13px] py-[10px] text-left focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]";
-const NAV_ROW_ENABLED = "group cursor-pointer transition-colors duration-[140ms] hover:bg-panel-2 hover:border-line-strong active:bg-panel-3";
+  "flex w-full items-center gap-2.5 min-h-11 rounded-ctl border border-line bg-panel px-3.25 py-2.5 text-left focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]";
+const NAV_ROW_ENABLED = "group cursor-pointer transition-colors duration-140 hover:bg-panel-2 hover:border-line-strong active:bg-panel-3";
 
 /** Fila "Volver al detalle" (pie de la vista evolución): espejo del acceso, chevron a la izquierda, nunca deshabilitada. */
 function BackToDetailRow({ onBack }: { onBack: () => void }) {
@@ -270,10 +270,10 @@ function BackToDetailRow({ onBack }: { onBack: () => void }) {
     <button type="button" onClick={onBack} className={cn(NAV_ROW_BOX, NAV_ROW_ENABLED)}>
       <ChevronLeft
         size={16}
-        className="shrink-0 text-faint transition-colors duration-[140ms] group-hover:text-muted"
+        className="shrink-0 text-faint transition-colors duration-140 group-hover:text-muted"
         aria-hidden="true"
       />
-      <span className="flex-1 min-w-0 text-[14px] font-semibold text-ink-2 transition-colors duration-[140ms] group-hover:text-ink">
+      <span className="flex-1 min-w-0 text-[14px] font-semibold text-ink-2 transition-colors duration-140 group-hover:text-ink">
         Volver al detalle
       </span>
     </button>
@@ -310,7 +310,7 @@ function EvolutionAccess({
         <LineChart size={15} className="shrink-0 text-ink-2" aria-hidden="true" />
         <span
           className={cn(
-            "flex-1 min-w-0 text-[14px] font-semibold text-ink-2 transition-colors duration-[140ms]",
+            "flex-1 min-w-0 text-[14px] font-semibold text-ink-2 transition-colors duration-140",
             available && "group-hover:text-ink",
           )}
         >
@@ -318,7 +318,7 @@ function EvolutionAccess({
         </span>
         <ChevronRight
           size={16}
-          className={cn("shrink-0 text-faint transition-colors duration-[140ms]", available && "group-hover:text-muted")}
+          className={cn("shrink-0 text-faint transition-colors duration-140", available && "group-hover:text-muted")}
           aria-hidden="true"
         />
       </button>
@@ -345,7 +345,7 @@ function EvolutionView({ chainId, onBack }: { chainId: string; onBack: () => voi
     wrapperRef.current?.querySelector<HTMLElement>('button[aria-haspopup="listbox"]')?.focus();
   }, []);
   return (
-    <div ref={wrapperRef} className="space-y-[14px]">
+    <div ref={wrapperRef} className="space-y-3.5">
       <FixedEvolutionCard chainId={chainId} rangeMonths={rangeMonths} onRangeMonthsChange={setRangeMonths} />
       <div className="h-px bg-hair" aria-hidden="true" />
       <BackToDetailRow onBack={onBack} />
@@ -430,7 +430,7 @@ export function MovementDetailCard({ movement, onClose, viewMonth }: MovementDet
       <ModalShellBody key="detail" className={cn(returnedFromEvolution && VIEW_FADE_CLASS)}>
         {movement.skipped && (
           <span
-            className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em]"
+            className="inline-flex items-center rounded-(--r-chip) bg-panel-3 text-muted px-1.75 py-px text-[11px] font-semibold tracking-[0.04em]"
             aria-label="Movimiento anulado para este mes"
           >
             Anulado
@@ -438,14 +438,14 @@ export function MovementDetailCard({ movement, onClose, viewMonth }: MovementDet
         )}
 
         {/* Hero — ícono tintado + cifra convertida dominante + badge de moneda (cross-rate) */}
-        <div className="flex items-center gap-[14px]">
+        <div className="flex items-center gap-3.5">
           <span
             className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px]", iconBg, iconColor)}
             aria-hidden="true"
           >
             <IconComponent size={19} strokeWidth={2.2} />
           </span>
-          <span className="inline-flex items-center gap-[8px] min-w-0">
+          <span className="inline-flex items-center gap-2 min-w-0">
             <span
               className={cn(
                 "text-[30px] font-semibold mono tracking-[-0.02em] truncate",
@@ -457,7 +457,7 @@ export function MovementDetailCard({ movement, onClose, viewMonth }: MovementDet
             </span>
             {isCrossRate && (
               <span
-                className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em] mono shrink-0"
+                className="inline-flex items-center rounded-(--r-chip) bg-panel-3 text-muted px-1.75 py-px text-[11px] font-semibold tracking-[0.04em] mono shrink-0"
                 aria-label={`Moneda original: ${movement.currency}`}
               >
                 {movement.currency}
@@ -469,11 +469,11 @@ export function MovementDetailCard({ movement, onClose, viewMonth }: MovementDet
         <div className="h-px bg-hair" aria-hidden="true" />
 
         {/* Ficha — pares rótulo·valor */}
-        <div className="space-y-[10px]">
+        <div className="space-y-2.5">
           <DetailRow label="Categoría">
-            <span className="inline-flex items-center gap-[6px] justify-end">
+            <span className="inline-flex items-center gap-1.5 justify-end">
               <span
-                className="h-[6px] w-[6px] rounded-full shrink-0"
+                className="h-1.5 w-1.5 rounded-full shrink-0"
                 style={{ background: movement.category.color }}
                 aria-hidden="true"
               />
@@ -483,11 +483,11 @@ export function MovementDetailCard({ movement, onClose, viewMonth }: MovementDet
 
           {movement.paymentMethod && (
             <DetailRow label="Método">
-              <span className="inline-flex flex-col items-end gap-[2px]">
-                <span className="inline-flex items-center gap-[6px] flex-wrap justify-end">
+              <span className="inline-flex flex-col items-end gap-0.5">
+                <span className="inline-flex items-center gap-1.5 flex-wrap justify-end">
                   <PaymentMethodIcon icon={movement.paymentMethod.icon} size={14} className="text-ink-2 shrink-0" />
                   {movement.paymentMethod.name}
-                  <span className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em]">
+                  <span className="inline-flex items-center rounded-(--r-chip) bg-panel-3 text-muted px-1.75 py-px text-[11px] font-semibold tracking-[0.04em]">
                     {PAYMENT_METHOD_TYPE_LABELS[movement.paymentMethod.type]}
                   </span>
                 </span>
@@ -512,7 +512,7 @@ export function MovementDetailCard({ movement, onClose, viewMonth }: MovementDet
 
           {movement.autoDebit === true && (
             <DetailRow label="Débito automático">
-              <span className="inline-flex items-center gap-[6px] justify-end">
+              <span className="inline-flex items-center gap-1.5 justify-end">
                 <Zap size={14} className="text-muted shrink-0" aria-hidden="true" />
                 Sí
               </span>
@@ -571,7 +571,7 @@ export function MovementDetailCard({ movement, onClose, viewMonth }: MovementDet
                   cuota al plan entero). Ver docs/design.md §"Total del plan de cuotas". */}
               {movement.installment.total > 1 && (
                 <DetailRow label="Total del plan">
-                  <span className="inline-flex items-center gap-[6px] justify-end flex-wrap">
+                  <span className="inline-flex items-center gap-1.5 justify-end flex-wrap">
                     <span className="mono whitespace-nowrap">
                       {formatCurrency(
                         Math.abs(movement.amountCents) * movement.installment.total,
@@ -580,7 +580,7 @@ export function MovementDetailCard({ movement, onClose, viewMonth }: MovementDet
                     </span>
                     {isCrossRate && (
                       <span
-                        className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em] mono shrink-0"
+                        className="inline-flex items-center rounded-(--r-chip) bg-panel-3 text-muted px-1.75 py-px text-[11px] font-semibold tracking-[0.04em] mono shrink-0"
                         aria-label={`Total del plan en ${movement.currency}`}
                       >
                         {movement.currency}

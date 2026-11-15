@@ -158,7 +158,7 @@ export function CategoryFilterPopover({
   const popoverContent = (
     <div
       ref={popoverRef}
-      className="fixed z-50 w-[260px] rounded-ctl border border-line bg-panel shadow-[var(--shadow-lg)] animate-modal-pop"
+      className="fixed z-50 w-65 rounded-ctl border border-line bg-panel shadow-(--shadow-lg) animate-modal-pop"
       style={{
         top: position.top,
         right: position.right,
@@ -167,8 +167,8 @@ export function CategoryFilterPopover({
       aria-label="Filtrar categorías"
     >
       {/* Header fijo */}
-      <div className="flex items-center justify-between border-b border-hair px-3 py-[10px]">
-        <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+      <div className="flex items-center justify-between border-b border-hair px-3 py-2.5">
+        <span className="text-[12px] font-semibold uppercase tracking-widest text-muted">
           Mostrar categorías
         </span>
         <button
@@ -181,7 +181,7 @@ export function CategoryFilterPopover({
       </div>
 
       {/* Lista scrollable */}
-      <div className="max-h-[280px] overflow-y-auto">
+      <div className="max-h-70 overflow-y-auto">
         {allCategories.length === 0 ? (
           <p className="px-3 py-4 text-center text-[12.5px] text-muted">
             No tenés categorías.
@@ -192,7 +192,7 @@ export function CategoryFilterPopover({
             return (
               <div
                 key={cat.id}
-                className="flex cursor-pointer items-center gap-[10px] px-3 py-2 hover:bg-panel-2"
+                className="flex cursor-pointer items-center gap-2.5 px-3 py-2 hover:bg-panel-2"
                 onClick={() => toggleCategory(cat.id)}
                 role="checkbox"
                 aria-checked={checked}
@@ -207,7 +207,7 @@ export function CategoryFilterPopover({
                 {/* Checkbox visual */}
                 <span
                   className={cn(
-                    "flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors duration-[140ms]",
+                    "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors duration-140",
                     checked
                       ? "border-accent bg-accent"
                       : "border-line-strong bg-panel"
@@ -223,7 +223,7 @@ export function CategoryFilterPopover({
 
                 {/* Swatch de color */}
                 <span
-                  className="h-[10px] w-[10px] shrink-0 rounded-[3px]"
+                  className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
                   style={{ backgroundColor: cat.color }}
                   aria-hidden="true"
                 />
@@ -276,8 +276,8 @@ export function FilterButton({
       aria-expanded={isOpen}
       aria-haspopup="dialog"
       className={cn(
-        "inline-flex items-center gap-[6px] rounded-ctl px-[10px] py-[5px]",
-        "text-[12.5px] font-semibold transition-colors duration-[140ms]",
+        "inline-flex items-center gap-1.5 rounded-ctl px-2.5 py-1.25",
+        "text-[12.5px] font-semibold transition-colors duration-140",
         "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
         // Abierto: fondo panel-2 + texto ink (indica contexto activo)
         isOpen
@@ -303,7 +303,7 @@ export function FilterButton({
       {/* Punto indicador de filtro activo — acento (cromo de UI, no monto) */}
       {isFiltered && (
         <span
-          className="h-[6px] w-[6px] rounded-full bg-accent"
+          className="h-1.5 w-1.5 rounded-full bg-accent"
           aria-hidden="true"
         />
       )}

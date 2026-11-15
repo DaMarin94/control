@@ -686,14 +686,14 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
         noValidate
         className="flex flex-col flex-1 min-h-0"
       >
-        <div className="flex-1 min-h-0 overflow-y-auto px-[22px] pb-[22px] space-y-[14px]">
+        <div className="flex-1 min-h-0 overflow-y-auto px-5.5 pb-5.5 space-y-3.5">
 
           {/* ── 1. Origen (read-only) ── */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Origen
             </Label>
-            <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px]">
+            <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-3.25 py-2.75">
               {/* Ícono de tipo de origen: Repeat solo para fijos (Fase 1.1.8) */}
               {sourceType === "fijo" && (
                 <Repeat size={15} className="text-accent-ink shrink-0" aria-hidden="true" />
@@ -724,7 +724,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
             </div>
             {/* Nota orientativa (solo en crear) */}
             {!isEditing && (
-              <div className="flex items-center gap-[7px] pt-[2px] text-[12.5px] text-muted">
+              <div className="flex items-center gap-1.75 pt-0.5 text-[12.5px] text-muted">
                 <Info size={14} className="text-accent-ink shrink-0" aria-hidden="true" />
                 El monto se calcula a partir de este movimiento.
               </div>
@@ -732,14 +732,14 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
           </div>
 
           {/* ── 2. Fórmula: Operador (segmented) + Operando (input) ── */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]" required>
               Fórmula
             </Label>
-            <div className="flex items-center gap-[8px] min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
               {/* Chip "Origen" — prefijo contextual */}
               <span
-                className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em] shrink-0 whitespace-nowrap"
+                className="inline-flex items-center rounded-(--r-chip) bg-panel-3 text-muted px-1.75 py-px text-[11px] font-semibold tracking-[0.04em] shrink-0 whitespace-nowrap"
                 aria-hidden="true"
               >
                 Origen
@@ -763,11 +763,11 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
                         aria-pressed={field.value === op.value}
                         onClick={() => field.onChange(op.value)}
                         className={cn(
-                          "flex h-8 w-8 items-center justify-center rounded-[7px] text-[15px] font-semibold mono",
-                          "transition-colors duration-[140ms] cursor-pointer",
+                          "flex h-8 w-8 items-center justify-center rounded-chip text-[15px] font-semibold mono",
+                          "transition-colors duration-140 cursor-pointer",
                           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
                           field.value === op.value
-                            ? "bg-panel text-ink shadow-[var(--shadow-sm)]"
+                            ? "bg-panel text-ink shadow-(--shadow-sm)"
                             : "text-ink-2 hover:text-ink",
                         )}
                       >
@@ -781,7 +781,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
               {/* Input de operando */}
               <div
                 className={cn(
-                  "flex flex-1 min-w-0 items-center gap-1 rounded-ctl border-[1.5px] px-[13px] py-[9px] transition-colors duration-[140ms]",
+                  "flex flex-1 min-w-0 items-center gap-1 rounded-ctl border-[1.5px] px-3.25 py-2.25 transition-colors duration-140",
                   "focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft)]",
                   isZeroDivError || errors.operandInput
                     ? "border-expense shadow-[0_0_0_3px_var(--expense-soft)]"
@@ -824,8 +824,8 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
                 compacto de ancho intrínseco (no full-width) — la subordinación
                 se construye con el rótulo, no escondiendo el campo. */}
             {isFixedOrigin && (
-              <div className="flex flex-col gap-[4px]">
-                <div className="flex flex-wrap items-center justify-between gap-x-[10px] gap-y-[6px]">
+              <div className="flex flex-col gap-1">
+                <div className="flex flex-wrap items-center justify-between gap-x-2.5 gap-y-1.5">
                   <span className="text-[12.5px] font-medium text-muted min-w-0 truncate">
                     Mes del monto base
                   </span>
@@ -833,7 +833,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
                     <select
                       id="calc-source-month-offset"
                       aria-label="Mes del monto base"
-                      className="h-[36px] w-auto max-w-full appearance-none cursor-pointer rounded-ctl border-[1.5px] border-line-strong bg-panel pl-[11px] pr-[26px] text-[13px] font-medium text-ink transition-colors duration-[140ms] focus-visible:outline-none focus:outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]"
+                      className="h-9 w-auto max-w-full appearance-none cursor-pointer rounded-ctl border-[1.5px] border-line-strong bg-panel pl-2.75 pr-6.5 text-[13px] font-medium text-ink transition-colors duration-140 focus-visible:outline-none focus:outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]"
                       {...register("sourceMonthOffset")}
                     >
                       {SOURCE_MONTH_OFFSET_OPTIONS.map((n) => (
@@ -843,7 +843,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
                       ))}
                     </select>
                     <ChevronDown
-                      className="pointer-events-none absolute right-[8px] top-1/2 -translate-y-1/2 text-muted"
+                      className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted"
                       size={14}
                       aria-hidden="true"
                     />
@@ -865,7 +865,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
           </div>
 
           {/* ── 3. Signo del resultado (segmented Positivo / Negativo) ── */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]" required>
               Signo del resultado
             </Label>
@@ -883,11 +883,11 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
                     aria-pressed={field.value === "1"}
                     onClick={() => field.onChange("1")}
                     className={cn(
-                      "flex flex-1 items-center justify-center gap-1.5 rounded-[7px] px-3 py-[9px] text-[13.5px] font-semibold",
-                      "transition-colors duration-[140ms] cursor-pointer",
+                      "flex flex-1 items-center justify-center gap-1.5 rounded-chip px-3 py-2.25 text-[13.5px] font-semibold",
+                      "transition-colors duration-140 cursor-pointer",
                       "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
                       field.value === "1"
-                        ? "bg-panel text-ink shadow-[var(--shadow-sm)]"
+                        ? "bg-panel text-ink shadow-(--shadow-sm)"
                         : "text-muted hover:text-ink",
                     )}
                   >
@@ -899,11 +899,11 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
                     aria-pressed={field.value === "-1"}
                     onClick={() => field.onChange("-1")}
                     className={cn(
-                      "flex flex-1 items-center justify-center gap-1.5 rounded-[7px] px-3 py-[9px] text-[13.5px] font-semibold",
-                      "transition-colors duration-[140ms] cursor-pointer",
+                      "flex flex-1 items-center justify-center gap-1.5 rounded-chip px-3 py-2.25 text-[13.5px] font-semibold",
+                      "transition-colors duration-140 cursor-pointer",
                       "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
                       field.value === "-1"
-                        ? "bg-panel text-ink shadow-[var(--shadow-sm)]"
+                        ? "bg-panel text-ink shadow-(--shadow-sm)"
                         : "text-muted hover:text-ink",
                     )}
                   >
@@ -920,13 +920,13 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
           </div>
 
           {/* ── 4. Resultado derivado (preview read-only) ── */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Resultado
             </Label>
-            <div className="flex items-center justify-between rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px] gap-3">
+            <div className="flex items-center justify-between rounded-ctl border border-line bg-panel-2 px-3.25 py-2.75 gap-3">
               {/* Celda izquierda: expresión + sublínea "Monto base" (solo offset > 0) */}
-              <div className="flex min-w-0 flex-col items-start gap-[2px]">
+              <div className="flex min-w-0 flex-col items-start gap-0.5">
                 <span className="text-[12.5px] text-muted mono truncate w-full">
                   {isZeroDivError ? "Operando inválido" : buildExpression()}
                 </span>
@@ -944,7 +944,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
               ) : baseAmountCents === null ? (
                 <span className="text-[12.5px] text-muted mono shrink-0">—</span>
               ) : (
-                <div className="flex flex-col items-end gap-[5px] shrink-0">
+                <div className="flex flex-col items-end gap-1.25 shrink-0">
                   {/* Cifra grande (16-18px, color por tipo derivado) */}
                   <span
                     className={cn(
@@ -957,7 +957,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
                   {/* Badge de tipo derivado — tintado por tipo (spec 3.4) */}
                   {derivedMovementType === "EXPENSE" ? (
                     <span
-                      className="inline-flex items-center gap-[3px] rounded-[var(--r-chip)] bg-expense-soft text-expense-ink px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em]"
+                      className="inline-flex items-center gap-0.75 rounded-(--r-chip) bg-expense-soft text-expense-ink px-1.75 py-px text-[11px] font-semibold tracking-[0.04em]"
                       aria-label="Tipo derivado: Gasto"
                     >
                       <ArrowDownRight size={11} aria-hidden="true" />
@@ -965,7 +965,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
                     </span>
                   ) : (
                     <span
-                      className="inline-flex items-center gap-[3px] rounded-[var(--r-chip)] bg-income-soft text-income-ink px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em]"
+                      className="inline-flex items-center gap-0.75 rounded-(--r-chip) bg-income-soft text-income-ink px-1.75 py-px text-[11px] font-semibold tracking-[0.04em]"
                       aria-label="Tipo derivado: Ingreso"
                     >
                       <ArrowUpRight size={11} aria-hidden="true" />
@@ -978,7 +978,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
           </div>
 
           {/* ── 5. Categoría ── */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <div className="flex items-center justify-between">
               <Label htmlFor="calc-category" required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                 Categoría
@@ -986,20 +986,20 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
               <button
                 type="button"
                 onClick={() => setShowCategoryModal(true)}
-                className="text-[12.5px] font-semibold text-accent-ink hover:text-accent transition-colors duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-sm"
+                className="text-[12.5px] font-semibold text-accent-ink hover:text-accent transition-colors duration-140 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-sm"
               >
                 + Nueva
               </button>
             </div>
 
             {noCategoriesAvailable ? (
-              <div className="flex items-start gap-[11px] rounded-ctl border px-[14px] py-[13px] bg-expense-soft" style={{ borderColor: "oklch(0.57 0.16 27 / 0.25)" }}>
-                <AlertTriangle size={18} className="text-expense-ink shrink-0 mt-[1px]" aria-hidden="true" />
+              <div className="flex items-start gap-2.75 rounded-ctl border px-3.5 py-3.25 bg-expense-soft" style={{ borderColor: "oklch(0.57 0.16 27 / 0.25)" }}>
+                <AlertTriangle size={18} className="text-expense-ink shrink-0 mt-px" aria-hidden="true" />
                 <div className="text-[13px] leading-[1.45] text-expense-ink">
                   <b className="font-bold">Sin categorías para este tipo.</b>{" "}
                   <Link
                     href="/configuracion/categorias"
-                    className="font-bold underline underline-offset-[2px] text-expense-ink hover:opacity-80"
+                    className="font-bold underline underline-offset-2 text-expense-ink hover:opacity-80"
                     onClick={onClose}
                   >
                     Creá una categoría
@@ -1031,7 +1031,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
           </div>
 
           {/* ── 6. Descripción (opcional) ── */}
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-1.75">
             <Label htmlFor="calc-description" className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Descripción{" "}
               <span className="text-faint font-normal">(opcional)</span>
@@ -1047,7 +1047,7 @@ export function CalculatedForm({ mode, movement, onClose, viewMonth }: Calculate
         </div>
 
         {/* ── Footer (pineado — hermano del cuerpo scrolleable, no hijo) ── */}
-        <div className="flex items-center justify-end gap-3 px-[22px] py-4 border-t border-hair bg-panel-2 shrink-0">
+        <div className="flex items-center justify-end gap-3 px-5.5 py-4 border-t border-hair bg-panel-2 shrink-0">
           <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
             Cancelar
           </Button>

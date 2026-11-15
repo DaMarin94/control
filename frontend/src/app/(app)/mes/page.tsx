@@ -13,8 +13,8 @@
  *
  * Re-estilado con tokens del DS "Precise Ledger" (Fase 3).
  * PeriodNav ya no es un grid (ver docstring de period-nav.tsx): el ancho de
- * contenido (max-w-[1120px] mx-auto) lo aporta PeriodNav, y el px-10 +
- * padding vertical (py-[34px] pb-20) los aporta el div de contenido dentro
+ * contenido (max-w-280 mx-auto) lo aporta PeriodNav, y el px-10 +
+ * padding vertical (py-8.5 pb-20) los aporta el div de contenido dentro
  * de MonthViewClient — mismo mecanismo canónico que las otras cinco
  * pantallas. Esta página solo envuelve con la animación de entrada; el
  * fallback de Suspense (visible brevemente antes de montar MonthViewWrapper)
@@ -31,12 +31,12 @@ export default function MesPage() {
       {/* Suspense necesario porque MonthViewWrapper usa useSearchParams */}
       <Suspense
         fallback={
-          <div className="px-10 py-[34px] pb-20 max-w-[1120px] mx-auto space-y-[var(--gap)]">
+          <div className="px-10 py-8.5 pb-20 max-w-280 mx-auto space-y-(--gap)">
             <div className="h-12 animate-pulse rounded-card bg-panel-3" />
-            <div className="grid grid-cols-3 gap-[var(--gap)]">
-              <div className="h-[90px] animate-pulse rounded-card bg-panel-3" />
-              <div className="h-[90px] animate-pulse rounded-card bg-panel-3" />
-              <div className="h-[90px] animate-pulse rounded-card bg-panel-3" />
+            <div className="grid grid-cols-3 gap-(--gap)">
+              <div className="h-22.5 animate-pulse rounded-card bg-panel-3" />
+              <div className="h-22.5 animate-pulse rounded-card bg-panel-3" />
+              <div className="h-22.5 animate-pulse rounded-card bg-panel-3" />
             </div>
           </div>
         }

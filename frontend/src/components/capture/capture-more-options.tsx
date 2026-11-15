@@ -89,9 +89,9 @@ export function CaptureMoreOptions({
         aria-controls={bodyId}
         onClick={() => setIsOpen((prev) => !prev)}
         className={cn(
-          "w-full flex items-center gap-[8px] py-[12px] min-h-[44px] cursor-pointer",
-          "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-[var(--r-chip)]",
-          "transition-colors duration-[140ms]",
+          "w-full flex items-center gap-2 py-3 min-h-11 cursor-pointer",
+          "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-(--r-chip)",
+          "transition-colors duration-140",
           "group",
         )}
       >
@@ -100,7 +100,7 @@ export function CaptureMoreOptions({
           strokeWidth={2}
           aria-hidden="true"
           className={cn(
-            "shrink-0 transition-[transform,color] duration-[220ms] ease-out motion-reduce:transition-none",
+            "shrink-0 transition-[transform,color] duration-220 ease-out motion-reduce:transition-none",
             "text-muted group-hover:text-ink-2",
             isOpen && "rotate-90",
           )}
@@ -111,7 +111,7 @@ export function CaptureMoreOptions({
 
         {!isOpen && (
           <span className="ml-auto flex items-center min-w-0">
-            <span className="flex items-center gap-[5px] shrink-0">
+            <span className="flex items-center gap-1.25 shrink-0">
               <span className="mono text-[12px] text-muted">{currency}</span>
               {summaryRate !== null && (
                 <>
@@ -122,8 +122,8 @@ export function CaptureMoreOptions({
             </span>
             {selectedMethod && (
               <>
-                <span className="w-px h-[12px] bg-line mx-[8px] shrink-0 self-center" aria-hidden="true" />
-                <span className="flex items-center gap-[5px] min-w-0">
+                <span className="w-px h-3 bg-line mx-2 shrink-0 self-center" aria-hidden="true" />
+                <span className="flex items-center gap-1.25 min-w-0">
                   <PaymentMethodIcon icon={selectedMethod.icon} size={16} className="shrink-0 text-ink-2" />
                   <span className="text-[12px] text-ink-2 truncate">{selectedMethod.name}</span>
                 </span>
@@ -137,35 +137,35 @@ export function CaptureMoreOptions({
       <div
         id={bodyId}
         className={cn(
-          "grid transition-[grid-template-rows,opacity] duration-[220ms] ease-out motion-reduce:transition-none",
+          "grid transition-[grid-template-rows,opacity] duration-220 ease-out motion-reduce:transition-none",
           isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
         )}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="mt-[10px] flex flex-col gap-[16px]">
+          <div className="mt-2.5 flex flex-col gap-4">
             {/* ── Moneda + cotización ── */}
             {isDefault ? (
-              <div className="flex flex-col gap-[6px]">
+              <div className="flex flex-col gap-1.5">
                 <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                   Moneda
                 </Label>
                 <CurrencySegmented value={currency} onChange={onCurrencyChange} ariaLabel="Moneda" compact={false} touchTarget="roomy" />
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-[14px]">
-                <div className="flex min-w-0 flex-col gap-[6px]">
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="flex min-w-0 flex-col gap-1.5">
                   <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                     Moneda
                   </Label>
                   <CurrencySegmented value={currency} onChange={onCurrencyChange} ariaLabel="Moneda" compact={true} touchTarget="roomy" />
                 </div>
-                <div className="flex min-w-0 flex-col gap-[6px]">
+                <div className="flex min-w-0 flex-col gap-1.5">
                   <Label htmlFor={exchangeRateInputId} className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
                     Cotización
                   </Label>
                   <div
                     className={cn(
-                      "flex items-center gap-2 rounded-ctl border-[1.5px] px-[14px] py-[13px] transition-colors duration-[140ms]",
+                      "flex items-center gap-2 rounded-ctl border-[1.5px] px-3.5 py-3.25 transition-colors duration-140",
                       "focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft)]",
                       exchangeRateError
                         ? "border-expense shadow-[0_0_0_3px_var(--expense-soft)]"
@@ -186,7 +186,7 @@ export function CaptureMoreOptions({
                   {exchangeRateError ? (
                     <p className="text-[12px] text-expense-ink">{exchangeRateError}</p>
                   ) : (
-                    <p className="flex items-center gap-[5px] text-[12px]">
+                    <p className="flex items-center gap-1.25 text-[12px]">
                       {isExchangeRateModified ? (
                         <span className="text-ink-2">Cotización modificada</span>
                       ) : (
@@ -208,8 +208,8 @@ export function CaptureMoreOptions({
             <div className="h-px bg-hair" aria-hidden="true" />
 
             {/* ── Método de pago (+ Débito automático condicional) ── */}
-            <div className="flex flex-col gap-[16px]">
-              <div className="flex flex-col gap-[6px]">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
                 <Label
                   htmlFor={`${idPrefix}-payment-method`}
                   className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]"
@@ -224,7 +224,7 @@ export function CaptureMoreOptions({
               </div>
 
               {isDebitMethodSelected && (
-                <div className="flex min-h-[44px] items-center">
+                <div className="flex min-h-11 items-center">
                   <AutoDebitCheckbox
                     id={`${idPrefix}-auto-debit`}
                     checked={autoDebit}

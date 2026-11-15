@@ -139,19 +139,19 @@ function GanttSkeleton() {
       {/* Header de meses fantasma */}
       <SkeletonBlock height={32} radius="ctl" />
       {/* Barras fantasma en 2-3 renglones */}
-      <div className="mt-[6px] flex flex-col gap-[6px]">
+      <div className="mt-1.5 flex flex-col gap-1.5">
         {/* Renglón 1: barra larga abarcando ~8 meses */}
-        <div className="h-[24px] rounded-ctl animate-shimmer bg-panel-3" style={{ marginLeft: "8.33%", width: "66.66%" }} aria-hidden="true" />
+        <div className="h-6 rounded-ctl animate-shimmer bg-panel-3" style={{ marginLeft: "8.33%", width: "66.66%" }} aria-hidden="true" />
         {/* Renglón 2: dos barras medianas */}
         <div className="flex gap-[1%]" aria-hidden="true">
-          <div className="h-[24px] rounded-ctl animate-shimmer bg-panel-3" style={{ marginLeft: "0%", width: "33%" }} />
-          <div className="h-[24px] rounded-ctl animate-shimmer bg-panel-3" style={{ width: "25%" }} />
+          <div className="h-6 rounded-ctl animate-shimmer bg-panel-3" style={{ marginLeft: "0%", width: "33%" }} />
+          <div className="h-6 rounded-ctl animate-shimmer bg-panel-3" style={{ width: "25%" }} />
         </div>
         {/* Renglón 3: barra corta */}
-        <div className="h-[24px] rounded-ctl animate-shimmer bg-panel-3" style={{ marginLeft: "50%", width: "16.66%" }} aria-hidden="true" />
+        <div className="h-6 rounded-ctl animate-shimmer bg-panel-3" style={{ marginLeft: "50%", width: "16.66%" }} aria-hidden="true" />
       </div>
       {/* Chips fantasma de filtro */}
-      <div className="mt-[14px] flex gap-[8px]">
+      <div className="mt-3.5 flex gap-2">
         {[80, 64, 72].map((w, i) => (
           <SkeletonLine key={i} height={28} width={w} />
         ))}
@@ -170,7 +170,7 @@ function GanttError({ onRetry }: { onRetry: () => void }) {
       <button
         type="button"
         onClick={onRetry}
-        className="rounded-ctl border border-line bg-panel px-3 py-[6px] text-[13px] font-semibold text-ink-2 shadow-[var(--shadow-sm)] transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+        className="rounded-ctl border border-line bg-panel px-3 py-1.5 text-[13px] font-semibold text-ink-2 shadow-(--shadow-sm) transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
       >
         Reintentar
       </button>
@@ -191,7 +191,7 @@ interface YearStepperProps {
 function YearStepper({ year, canGoPrev, canGoNext, onPrev, onNext }: YearStepperProps) {
   return (
     <div
-      className="flex items-center rounded-pill border border-line bg-panel shadow-[var(--shadow-sm)] p-1"
+      className="flex items-center rounded-pill border border-line bg-panel shadow-(--shadow-sm) p-1"
       role="group"
       aria-label="Navegación de año"
     >
@@ -202,7 +202,7 @@ function YearStepper({ year, canGoPrev, canGoNext, onPrev, onNext }: YearStepper
         aria-label="Año anterior"
         aria-disabled={!canGoPrev}
         className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-[140ms]",
+          "flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-140",
           canGoPrev
             ? "text-ink-2 hover:bg-panel-2 hover:text-ink cursor-pointer focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
             : "text-faint opacity-45 cursor-default",
@@ -211,7 +211,7 @@ function YearStepper({ year, canGoPrev, canGoNext, onPrev, onNext }: YearStepper
         <ChevronLeft size={18} aria-hidden="true" />
       </button>
       <span
-        className="mono text-[14.5px] font-semibold text-ink min-w-[52px] text-center select-none"
+        className="mono text-[14.5px] font-semibold text-ink min-w-13 text-center select-none"
         aria-live="polite"
         aria-atomic="true"
       >
@@ -224,7 +224,7 @@ function YearStepper({ year, canGoPrev, canGoNext, onPrev, onNext }: YearStepper
         aria-label="Año siguiente"
         aria-disabled={!canGoNext}
         className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-[140ms]",
+          "flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-140",
           canGoNext
             ? "text-ink-2 hover:bg-panel-2 hover:text-ink cursor-pointer focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
             : "text-faint opacity-45 cursor-default",
@@ -280,7 +280,7 @@ function RemoveConfirmPopover({ onConfirm, onCancel, anchorRef }: RemoveConfirmP
   const content = (
     <div
       ref={popoverRef}
-      className="fixed z-50 w-[220px] rounded-ctl border border-line bg-panel shadow-[var(--shadow-lg)] p-[12px_14px] animate-modal-pop"
+      className="fixed z-50 w-55 rounded-ctl border border-line bg-panel shadow-(--shadow-lg) p-[12px_14px] animate-modal-pop"
       style={{ top: position.top, right: position.right }}
       role="dialog"
       aria-label="Confirmar quitar reporte"
@@ -290,14 +290,14 @@ function RemoveConfirmPopover({ onConfirm, onCancel, anchorRef }: RemoveConfirmP
         <button
           type="button"
           onClick={onConfirm}
-          className="rounded-ctl border border-expense bg-expense-soft px-3 py-[6px] text-[13px] font-semibold text-expense-ink transition-colors duration-[140ms] hover:bg-expense hover:text-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--expense-soft)]"
+          className="rounded-ctl border border-expense bg-expense-soft px-3 py-1.5 text-[13px] font-semibold text-expense-ink transition-colors duration-140 hover:bg-expense hover:text-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--expense-soft)]"
         >
           Quitar
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-ctl border border-line bg-panel px-3 py-[6px] text-[13px] font-semibold text-ink-2 transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+          className="rounded-ctl border border-line bg-panel px-3 py-1.5 text-[13px] font-semibold text-ink-2 transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
         >
           Cancelar
         </button>
@@ -323,20 +323,20 @@ function LegendAllChip({ hiddenCategoryIds, onCategoryIdsChange }: LegendAllChip
 
   return (
     <>
-      <div aria-hidden="true" className="my-[8px]" style={{ borderTop: "1px solid var(--hair)", width: "100%" }} />
+      <div aria-hidden="true" className="my-2" style={{ borderTop: "1px solid var(--hair)", width: "100%" }} />
       <button
         type="button"
         aria-label={ariaLabel}
         onClick={() => onCategoryIdsChange?.(allVisible ? [] : null)}
         className={cn(
-          "group inline-flex items-center gap-[6px] px-[8px] py-[4px] rounded-[7px]",
-          "cursor-pointer transition-colors duration-[140ms]",
+          "group inline-flex items-center gap-1.5 px-2 py-1 rounded-chip",
+          "cursor-pointer transition-colors duration-140",
           "bg-panel-2 hover:bg-panel-3 active:bg-panel-3",
           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
         )}
       >
-        <Icon size={13} aria-hidden="true" className="shrink-0 text-muted transition-colors duration-[140ms] group-hover:text-ink" />
-        <span className="text-[12px] font-semibold select-none text-ink-2 group-hover:text-ink transition-colors duration-[140ms]">
+        <Icon size={13} aria-hidden="true" className="shrink-0 text-muted transition-colors duration-140 group-hover:text-ink" />
+        <span className="text-[12px] font-semibold select-none text-ink-2 group-hover:text-ink transition-colors duration-140">
           {label}
         </span>
       </button>
@@ -381,11 +381,11 @@ function EditableTitle({
         aria-label="Título del reporte"
         className={cn(
           "text-[16px] font-semibold leading-tight text-ink",
-          "bg-panel border border-[var(--line-strong)] rounded-[var(--r-ctl,10px)]",
-          "px-[8px] py-[3px]",
+          "bg-panel border border-(--line-strong) rounded-(--r-ctl,10px)",
+          "px-2 py-0.75",
           "min-w-0 flex-1",
           "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
-          "placeholder:text-[var(--faint)]",
+          "placeholder:text-(--faint)",
         )}
       />
     );
@@ -401,17 +401,17 @@ function EditableTitle({
       aria-label={canEdit ? "Editar título del reporte" : undefined}
       disabled={!canEdit}
       className={cn(
-        "group/title flex items-center gap-[6px] min-w-0",
+        "group/title flex items-center gap-1.5 min-w-0",
         canEdit ? "cursor-text" : "cursor-default",
         "bg-transparent border-0 p-0 text-left",
-        canEdit && "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:rounded-[var(--r-ctl,10px)]",
+        canEdit && "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:rounded-(--r-ctl,10px)",
       )}
     >
       <span
         title={displayTitle}
         className={cn(
           "block text-[16px] font-semibold leading-tight truncate",
-          titleProp ? "text-ink" : "text-[var(--faint)]",
+          titleProp ? "text-ink" : "text-(--faint)",
         )}
       >
         {displayTitle}
@@ -422,7 +422,7 @@ function EditableTitle({
           aria-hidden="true"
           className={cn(
             "shrink-0 text-muted",
-            "opacity-0 transition-opacity duration-[140ms]",
+            "opacity-0 transition-opacity duration-140",
             "group-hover/title:opacity-100 group-focus-visible/title:opacity-100",
             "motion-reduce:transition-none",
           )}
@@ -496,7 +496,7 @@ function BarTooltipPortal({
 
   return (
     <div
-      className="fixed z-50 rounded-ctl border border-line bg-panel shadow-[var(--shadow-lg)] px-[10px] py-[8px] pointer-events-none"
+      className="fixed z-50 rounded-ctl border border-line bg-panel shadow-(--shadow-lg) px-2.5 py-2 pointer-events-none"
       style={{
         left: x,
         top: y,
@@ -506,7 +506,7 @@ function BarTooltipPortal({
       role="tooltip"
     >
       {/* Encabezado: swatch + descripción */}
-      <div className="flex items-center gap-[7px] mb-[2px]">
+      <div className="flex items-center gap-1.75 mb-0.5">
         <div
           aria-hidden="true"
           className="shrink-0 rounded-[3px]"
@@ -517,7 +517,7 @@ function BarTooltipPortal({
         </span>
       </div>
       {/* Nombre de la categoría */}
-      <div className="text-[11.5px] font-medium text-ink-2 mb-[6px] ml-[15px]">
+      <div className="text-[11.5px] font-medium text-ink-2 mb-1.5 ml-3.75">
         {categoryName}
       </div>
 
@@ -525,21 +525,21 @@ function BarTooltipPortal({
       <div aria-hidden="true" style={{ borderTop: "1px solid var(--hair)", marginBottom: 6 }} />
 
       {/* Monto dominante — por cuota */}
-      <div className="flex items-baseline gap-[4px] mb-[6px]">
+      <div className="flex items-baseline gap-1 mb-1.5">
         <span className="mono text-[13px] font-semibold text-ink tabular-nums">{amountFmt}</span>
         <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-muted">por cuota</span>
       </div>
 
       {/* Filas de detalle */}
-      <div className="flex flex-col gap-[4px]">
+      <div className="flex flex-col gap-1">
         {/* Período */}
-        <div className="flex items-center gap-[12px]">
+        <div className="flex items-center gap-3">
           <span className="flex-1 text-[11.5px] font-medium text-ink-2">Período</span>
           <span className="shrink-0 text-[11px] font-medium text-ink-2">{periodFmt}</span>
         </div>
 
         {/* Cuotas */}
-        <div className="flex items-center gap-[12px]">
+        <div className="flex items-center gap-3">
           <span className="flex-1 text-[11.5px] font-medium text-ink-2">Cuotas</span>
           <span className="mono text-[11px] font-medium text-ink-2 tabular-nums shrink-0">
             {bar.totalInstallments} cuotas
@@ -550,7 +550,7 @@ function BarTooltipPortal({
             de display (currency del gantt), sin cross-rate acá. Se omite si total === 1
             (docs/design.md §"Total del plan de cuotas"). */}
         {bar.totalInstallments > 1 && (
-          <div className="flex items-center gap-[12px]">
+          <div className="flex items-center gap-3">
             <span className="flex-1 min-w-0 text-[11.5px] font-medium text-ink-2">Total del plan</span>
             <span className="mono text-[11px] font-medium text-ink-2 tabular-nums shrink-0 whitespace-nowrap">
               {formatCurrency(bar.amountCents * bar.totalInstallments, currency)}
@@ -560,14 +560,14 @@ function BarTooltipPortal({
 
         {/* Progreso — cuotas X a Y visibles */}
         {bar.installmentFrom !== bar.installmentTo ? (
-          <div className="flex items-center gap-[12px]">
+          <div className="flex items-center gap-3">
             <span className="flex-1 text-[11.5px] font-medium text-ink-2">Progreso</span>
             <span className="mono text-[11px] font-medium text-ink-2 tabular-nums shrink-0">
               cuotas {bar.installmentFrom}–{bar.installmentTo} visibles
             </span>
           </div>
         ) : (
-          <div className="flex items-center gap-[12px]">
+          <div className="flex items-center gap-3">
             <span className="flex-1 text-[11.5px] font-medium text-ink-2">Progreso</span>
             <span className="mono text-[11px] font-medium text-ink-2 tabular-nums shrink-0">
               cuota {bar.installmentFrom} de {bar.totalInstallments}
@@ -580,7 +580,7 @@ function BarTooltipPortal({
       {mark && (
         <>
           <div aria-hidden="true" style={{ borderTop: "1px solid var(--hair)", margin: "6px 0" }} />
-          <div className="flex items-center gap-[6px]">
+          <div className="flex items-center gap-1.5">
             <LimitGlyph tooltip={describeLimitMark(mark)} size={12} />
             <span className="text-[11.5px] font-medium text-warning-ink">{describeLimitMark(mark)}</span>
           </div>
@@ -684,14 +684,14 @@ function GanttBar({
         onMouseEnter(e as unknown as React.MouseEvent<HTMLDivElement>, bar, categoryColor, categoryName);
       }}
       onBlur={onMouseLeave}
-      className="group/bar hover:brightness-[1.04] hover:shadow-[var(--shadow-sm)]"
+      className="group/bar hover:brightness-[1.04] hover:shadow-(--shadow-sm)"
       tabIndex={0}
     >
       {/* Chevron ‹ si continúa antes */}
       {bar.continuesBefore && (
         <span
           aria-hidden="true"
-          className="shrink-0 pl-[4px] pointer-events-none"
+          className="shrink-0 pl-1 pointer-events-none"
           style={{ color: textColor }}
         >
           <ChevronLeft size={14} strokeWidth={2.5} />
@@ -706,7 +706,7 @@ function GanttBar({
       */}
       {!labelOutside && (
         <span
-          className="flex items-center min-w-0 pointer-events-none pl-[9px] pr-[9px] gap-[8px]"
+          className="flex items-center min-w-0 pointer-events-none pl-2.25 pr-2.25 gap-2"
           style={{ color: textColor }}
           aria-hidden="true"
         >
@@ -752,7 +752,7 @@ function GanttBar({
       {bar.continuesAfter && (
         <span
           aria-hidden="true"
-          className="shrink-0 ml-auto pr-[4px] pointer-events-none"
+          className="shrink-0 ml-auto pr-1 pointer-events-none"
           style={{ color: textColor }}
         >
           <ChevronRight size={14} strokeWidth={2.5} />
@@ -792,7 +792,7 @@ function OuterLabel({ bar, currency, visualRowIndex, mark }: OuterLabelProps) {
       style={{
         top: barTop,
         height: BAR_HEIGHT,
-        // A la derecha con ml-[6px], a la izquierda desplazado con translateX(-100%) + mr-[6px]
+        // A la derecha con ml-1.5, a la izquierda desplazado con translateX(-100%) + mr-1.5
         left: endsAtEdge ? `${leftEdgePct}%` : `${rightEdgePct}%`,
         paddingLeft: endsAtEdge ? 0 : 6,
         transform: endsAtEdge ? "translateX(-100%)" : undefined,
@@ -898,7 +898,7 @@ function GanttCanvas({ data, year, currency, isEmpty, isDark, limits }: GanttCan
         {MONTH_LABELS_SHORT.map((label, i) => (
           <div
             key={i}
-            className="text-[12px] font-semibold text-muted text-center py-[6px]"
+            className="text-[12px] font-semibold text-muted text-center py-1.5"
             style={{
               borderRight: i < 11 ? "1px solid var(--hair)" : undefined,
               minWidth: 64,
@@ -1147,12 +1147,12 @@ export function CuotasGanttCard({
 
   return (
     <div
-      className="bg-panel border border-line rounded-card shadow-[var(--shadow-sm)] p-[var(--card-pad)] animate-screen-fade"
+      className="bg-panel border border-line rounded-card shadow-(--shadow-sm) p-(--card-pad) animate-screen-fade"
       aria-label={`${displayTitle} ${year}`}
     >
       {/* ── Cabecera ── */}
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-[18px]">
-        <div className="flex min-w-0 flex-1 items-center gap-[6px]">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-4.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <div className="min-w-0">
             <EditableTitle
               titleProp={titleProp}
@@ -1184,19 +1184,19 @@ export function CuotasGanttCard({
 
           {onCurrencyChange && (
             <>
-              <span className="block h-[16px] w-px bg-hair shrink-0" aria-hidden="true" />
+              <span className="block h-4 w-px bg-hair shrink-0" aria-hidden="true" />
               <CardCurrencySelect value={effectiveCurrency} onChange={onCurrencyChange} />
             </>
           )}
 
-          <span className="block h-[16px] w-px bg-hair shrink-0" aria-hidden="true" />
+          <span className="block h-4 w-px bg-hair shrink-0" aria-hidden="true" />
           <button
             type="button"
             onClick={() => refetch()}
             disabled={isFetching}
             aria-label="Actualizar reporte"
             aria-busy={isFetching}
-            className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted"
+            className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted"
           >
             <RefreshCw
               size={16}
@@ -1210,7 +1210,7 @@ export function CuotasGanttCard({
               type="button"
               onClick={() => setRemoveOpen((o) => !o)}
               aria-label="Quitar reporte"
-              className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-[140ms] hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+              className="flex h-8 w-8 items-center justify-center rounded-ctl text-muted transition-colors duration-140 hover:bg-panel-2 hover:text-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
             >
               <X size={16} aria-hidden="true" />
             </button>

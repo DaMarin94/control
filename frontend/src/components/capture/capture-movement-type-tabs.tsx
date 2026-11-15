@@ -6,8 +6,8 @@
  * Cabecera B — barra de tabs"). Composición hermana de `MovementTypeTabs`
  * (movements/movement-type-tabs.tsx, usada por el modal de escritorio):
  * mismo molde `.dtabs`, misma semántica ARIA (`role="tablist"`/`"tab"`,
- * `aria-selected`), densidad y ancho propios (texto 14px/600, `py-[13px]`,
- * ancho completo de la columna de contenido — sin el `mx-[22px]` que el
+ * `aria-selected`), densidad y ancho propios (texto 14px/600, `py-3.25`,
+ * ancho completo de la columna de contenido — sin el `mx-5.5` que el
  * modal usa para alinearse a su gutter interno, acá el padding ya lo da la
  * Zona 1 del envase).
  */
@@ -50,11 +50,11 @@ export function CaptureMovementTypeTabs({ activeTab, onTabChange }: CaptureMovem
           aria-controls={`tab-panel-${tab.id}`}
           onClick={() => onTabChange(tab.id)}
           className={cn(
-            "flex-1 text-[14px] font-semibold cursor-pointer px-2 py-[13px] rounded-[7px]",
-            "transition-colors duration-[140ms]",
+            "flex-1 text-[14px] font-semibold cursor-pointer px-2 py-3.25 rounded-chip",
+            "transition-colors duration-140",
             "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
             activeTab === tab.id
-              ? "bg-panel text-ink shadow-[var(--shadow-sm)]"
+              ? "bg-panel text-ink shadow-(--shadow-sm)"
               : "text-muted hover:text-ink",
           )}
         >

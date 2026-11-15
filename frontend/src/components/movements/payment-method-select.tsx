@@ -80,8 +80,8 @@ export function PaymentMethodSelect({ id, value, onChange }: PaymentMethodSelect
         aria-expanded={open}
         className={cn(
           "flex w-full items-center gap-2 rounded-ctl border-[1.5px] border-line bg-panel",
-          "py-[11px] pl-[13px] pr-10 relative",
-          "text-[15px] text-left transition-all duration-[140ms] cursor-pointer",
+          "py-2.75 pl-3.25 pr-10 relative",
+          "text-[15px] text-left transition-all duration-140 cursor-pointer",
           "focus-visible:outline-none focus:outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]",
         )}
       >
@@ -130,7 +130,7 @@ export function PaymentMethodSelect({ id, value, onChange }: PaymentMethodSelect
               aria-selected={value === ""}
               onClick={() => handleSelect("")}
               className={cn(
-                "flex w-full items-center rounded-[7px] px-3 py-[8px] text-left text-[13.5px]",
+                "flex w-full items-center rounded-chip px-3 py-2 text-left text-[13.5px]",
                 value === "" ? "bg-panel-2 text-ink font-medium" : "text-muted hover:bg-panel-2",
               )}
             >
@@ -145,13 +145,13 @@ export function PaymentMethodSelect({ id, value, onChange }: PaymentMethodSelect
                 aria-selected={value === pm.id}
                 onClick={() => handleSelect(pm.id)}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-[7px] px-3 py-[8px] text-left text-[13.5px]",
+                  "flex w-full items-center gap-2 rounded-chip px-3 py-2 text-left text-[13.5px]",
                   value === pm.id ? "bg-panel-2 text-ink" : "text-ink hover:bg-panel-2",
                 )}
               >
                 <PaymentMethodIcon icon={pm.icon} size={16} className="shrink-0 text-ink-2" />
                 <span className="flex-1 truncate">{pm.name}</span>
-                <span className="shrink-0 rounded-chip bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em]">
+                <span className="shrink-0 rounded-chip bg-panel-3 text-muted px-1.75 py-px text-[11px] font-semibold tracking-[0.04em]">
                   {PAYMENT_METHOD_TYPE_LABELS[pm.type]}
                 </span>
               </button>

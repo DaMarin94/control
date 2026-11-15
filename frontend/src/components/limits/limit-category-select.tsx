@@ -71,15 +71,15 @@ export function LimitCategorySelect({ id, value, onChange }: LimitCategorySelect
         aria-expanded={open}
         className={cn(
           "flex w-full items-center gap-2 rounded-ctl border-[1.5px] border-line bg-panel",
-          "py-[11px] pl-[13px] pr-10 relative",
-          "text-[15px] text-left transition-all duration-[140ms] cursor-pointer",
+          "py-2.75 pl-3.25 pr-10 relative",
+          "text-[15px] text-left transition-all duration-140 cursor-pointer",
           "focus-visible:outline-none focus:outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]",
         )}
       >
         {selected ? (
           <>
             <span
-              className="h-[6px] w-[6px] rounded-full shrink-0"
+              className="h-1.5 w-1.5 rounded-full shrink-0"
               style={{ background: selected.color }}
               aria-hidden="true"
             />
@@ -126,12 +126,12 @@ export function LimitCategorySelect({ id, value, onChange }: LimitCategorySelect
                 aria-selected={value === category.id}
                 onClick={() => handleSelect(category.id)}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-[7px] px-3 py-[8px] text-left text-[13.5px]",
+                  "flex w-full items-center gap-2 rounded-chip px-3 py-2 text-left text-[13.5px]",
                   value === category.id ? "bg-panel-2 text-ink" : "text-ink hover:bg-panel-2",
                 )}
               >
                 <span
-                  className="h-[6px] w-[6px] rounded-full shrink-0"
+                  className="h-1.5 w-1.5 rounded-full shrink-0"
                   style={{ background: category.color }}
                   aria-hidden="true"
                 />

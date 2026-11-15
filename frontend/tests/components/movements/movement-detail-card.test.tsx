@@ -625,11 +625,11 @@ describe("MovementDetailCard — vista evolución (toggle, foco, Esc)", () => {
   it("el panel se ensancha a 640px en la evolución y vuelve a 440px en el detalle", () => {
     renderCard(fijoConEvolucion);
     const panel = () => screen.getByRole("dialog").firstElementChild as HTMLElement;
-    expect(panel()).toHaveClass("max-w-[440px]");
+    expect(panel()).toHaveClass("max-w-110");
     fireEvent.click(screen.getByRole("button", { name: /ver evolución/i }));
-    expect(panel()).toHaveClass("max-w-[640px]");
+    expect(panel()).toHaveClass("max-w-160");
     fireEvent.click(screen.getByRole("button", { name: "Volver al detalle" }));
-    expect(panel()).toHaveClass("max-w-[440px]");
+    expect(panel()).toHaveClass("max-w-110");
   });
 
   it("el header solo tiene ✕; 'Volver al detalle' es la última fila del cuerpo y el foco va al select de rango", () => {

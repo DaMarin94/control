@@ -1,7 +1,7 @@
 /**
  * Caja recesada "Qué cambió" (docs/design.md §3 — mismo molde que la caja
  * read-only de "Origen" del calculado: `rounded-ctl border border-line
- * bg-panel-2 px-[13px] py-[10px] space-y-[8px]`).
+ * bg-panel-2 px-3.25 py-2.5 space-y-2`).
  *
  * Reusado en tres lugares con distinto `heading`/`direction`:
  * - Fila de la lista, edición  → sin heading, `direction="list"`.
@@ -26,7 +26,7 @@ interface HistoryChangesBlockProps {
 
 export function HistoryChangesBlock({ changes, direction, heading, className }: HistoryChangesBlockProps) {
   return (
-    <div className={cn("rounded-ctl border border-line bg-panel-2 px-[13px] py-[10px] space-y-[8px]", className)}>
+    <div className={cn("rounded-ctl border border-line bg-panel-2 px-3.25 py-2.5 space-y-2", className)}>
       {heading && <p className="text-[12.5px] font-medium text-muted">{heading}</p>}
       {changes.map((change) => (
         <HistoryChangeRow key={change.field} display={describeHistoryChange(change, direction)} />

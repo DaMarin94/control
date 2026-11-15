@@ -68,7 +68,7 @@ export function DefaultPaymentMethodCell({
         {activeSlots.map((slot) => (
           <span
             key={slot}
-            className="inline-flex items-center rounded-chip bg-accent-soft px-[7px] py-[2px] text-[11px] font-semibold text-accent-ink"
+            className="inline-flex items-center rounded-chip bg-accent-soft px-1.75 py-0.5 text-[11px] font-semibold text-accent-ink"
           >
             {DEFAULT_PAYMENT_METHOD_SLOT_LABELS[slot]}
           </span>
@@ -77,7 +77,7 @@ export function DefaultPaymentMethodCell({
 
       {/* Compacto (ancho de contenido <941px): colapsa a "Predet. ×N" cuando hay más de una */}
       <span className="@wide:hidden flex items-center">
-        <span className="inline-flex items-center rounded-chip bg-accent-soft px-[7px] py-[2px] text-[11px] font-semibold text-accent-ink">
+        <span className="inline-flex items-center rounded-chip bg-accent-soft px-1.75 py-0.5 text-[11px] font-semibold text-accent-ink">
           {activeSlots.length > 1 ? (
             <>
               Predet. ×<span className="mono">{activeSlots.length}</span>

@@ -32,7 +32,7 @@ export interface CaptureInstallmentFormProps {
   scrollContainerRef?: RefObject<HTMLDivElement | null>;
 }
 
-const FIELD_INPUT_CLASS = "px-[14px] py-[13px] text-[16px] scroll-mt-[16px] scroll-mb-[88px]";
+const FIELD_INPUT_CLASS = "px-3.5 py-3.25 text-[16px] scroll-mt-4 scroll-mb-22";
 
 export function CaptureInstallmentForm({ defaultMonth, onFooterStateChange, onCreateSuccess, scrollContainerRef }: CaptureInstallmentFormProps) {
   const logic = useInstallmentFormLogic({
@@ -80,11 +80,11 @@ export function CaptureInstallmentForm({ defaultMonth, onFooterStateChange, onCr
     <form id={formId} onSubmit={onSubmit} noValidate className="flex flex-col flex-1 min-h-0">
       <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
       {/* Columna de contenido — min(100%, 480px), centrada (§1). */}
-      <div className="mx-auto w-full max-w-[480px] px-[16px] pt-[16px] pb-[20px]">
+      <div className="mx-auto w-full max-w-120 px-4 pt-4 pb-5">
         {/* ── Tipo (read-only: siempre Gasto) ── */}
-        <div className="flex flex-col gap-[6px]">
+        <div className="flex flex-col gap-1.5">
           <Label className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">Tipo</Label>
-          <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-[14px] py-[13px] text-[14px] font-semibold text-ink-2">
+          <div className="flex items-center gap-2 rounded-ctl border border-line bg-panel-2 px-3.5 py-3.25 text-[14px] font-semibold text-ink-2">
             <ArrowDown size={15} className="text-expense-ink" aria-hidden="true" />
             Gasto
           </div>
@@ -92,13 +92,13 @@ export function CaptureInstallmentForm({ defaultMonth, onFooterStateChange, onCr
         </div>
 
         {/* ── Monto por cuota — protagonista, 64px ── */}
-        <div className="mt-[16px] flex flex-col gap-[6px]">
+        <div className="mt-4 flex flex-col gap-1.5">
           <Label htmlFor={`${formId}-amount`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
             Monto por cuota
           </Label>
           <div
             className={cn(
-              "flex w-full items-center gap-2 rounded-ctl border-[1.5px] px-[14px] py-[10.5px] transition-colors duration-[140ms]",
+              "flex w-full items-center gap-2 rounded-ctl border-[1.5px] px-3.5 py-[10.5px] transition-colors duration-140",
               "focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft)]",
               errors.amountInput
                 ? "border-expense shadow-[0_0_0_3px_var(--expense-soft)]"
@@ -111,7 +111,7 @@ export function CaptureInstallmentForm({ defaultMonth, onFooterStateChange, onCr
               type="text"
               inputMode="decimal"
               placeholder="0,00"
-              className="flex-1 min-w-0 border-none outline-none bg-transparent mono text-[28px] font-semibold tracking-[-0.01em] text-ink placeholder:text-faint scroll-mt-[16px] scroll-mb-[88px]"
+              className="flex-1 min-w-0 border-none outline-none bg-transparent mono text-[28px] font-semibold tracking-[-0.01em] text-ink placeholder:text-faint scroll-mt-4 scroll-mb-22"
               {...amountFieldRegister}
               onChange={(e) => {
                 e.target.value = sanitizeAmountInput(e.target.value);
@@ -123,8 +123,8 @@ export function CaptureInstallmentForm({ defaultMonth, onFooterStateChange, onCr
         </div>
 
         {/* ── Cantidad de cuotas + Mes de inicio ── */}
-        <div className="mt-[20px] grid grid-cols-2 gap-[14px]">
-          <div className="flex min-w-0 flex-col gap-[6px]">
+        <div className="mt-5 grid grid-cols-2 gap-3.5">
+          <div className="flex min-w-0 flex-col gap-1.5">
             <Label htmlFor={`${formId}-total`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Cant. de cuotas
             </Label>
@@ -140,7 +140,7 @@ export function CaptureInstallmentForm({ defaultMonth, onFooterStateChange, onCr
               {...register("totalInstallments")}
             />
           </div>
-          <div className="flex min-w-0 flex-col gap-[6px]">
+          <div className="flex min-w-0 flex-col gap-1.5">
             <Label htmlFor={`${formId}-start-month`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Mes de inicio
             </Label>
@@ -154,23 +154,23 @@ export function CaptureInstallmentForm({ defaultMonth, onFooterStateChange, onCr
           </div>
         </div>
         {(errors.totalInstallments || errors.startMonth) && (
-          <div className="mt-[6px] space-y-1">
+          <div className="mt-1.5 space-y-1">
             {errors.totalInstallments && <p className="text-[12px] text-expense-ink">{errors.totalInstallments.message}</p>}
             {errors.startMonth && <p className="text-[12px] text-expense-ink">{errors.startMonth.message}</p>}
           </div>
         )}
 
         {/* ── Total del plan — preview en vivo, informativo ── */}
-        <div className="mt-[16px] flex flex-wrap items-center justify-between gap-x-[16px] gap-y-[4px] rounded-ctl border border-line bg-panel-2 px-[14px] py-[12px]">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-ctl border border-line bg-panel-2 px-3.5 py-3">
           <span className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">Total del plan</span>
-          <div className="flex flex-col items-end gap-[2px] shrink-0">
-            <span className="inline-flex items-center gap-[6px]">
+          <div className="flex flex-col items-end gap-0.5 shrink-0">
+            <span className="inline-flex items-center gap-1.5">
               <span className={cn("mono text-[16px] font-semibold whitespace-nowrap", planPreviewValid ? "text-ink" : "text-muted")}>
                 {planPreviewValid ? formatCurrency(planAmountCents! * planTotalNum, selectedCurrency) : "—"}
               </span>
               {planPreviewValid && isPlanCrossRate && (
                 <span
-                  className="inline-flex items-center rounded-[var(--r-chip)] bg-panel-3 text-muted px-[7px] py-[1px] text-[11px] font-semibold tracking-[0.04em] mono shrink-0"
+                  className="inline-flex items-center rounded-(--r-chip) bg-panel-3 text-muted px-1.75 py-px text-[11px] font-semibold tracking-[0.04em] mono shrink-0"
                   aria-label={`Total del plan en ${selectedCurrency}`}
                 >
                   {selectedCurrency}
@@ -184,7 +184,7 @@ export function CaptureInstallmentForm({ defaultMonth, onFooterStateChange, onCr
         </div>
 
         {/* ── Categoría ── */}
-        <div className="mt-[16px] flex flex-col gap-[6px]">
+        <div className="mt-4 flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <Label htmlFor={`${formId}-category`} required className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
               Categoría
@@ -192,15 +192,15 @@ export function CaptureInstallmentForm({ defaultMonth, onFooterStateChange, onCr
             <button
               type="button"
               onClick={openCategoryModal}
-              className="min-h-[44px] inline-flex items-center -my-[13px] text-[12.5px] font-semibold text-accent-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-sm"
+              className="min-h-11 inline-flex items-center -my-3.25 text-[12.5px] font-semibold text-accent-ink focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] rounded-sm"
             >
               + Nueva
             </button>
           </div>
 
           {noCategoriesAvailable ? (
-            <div className="flex items-start gap-[11px] rounded-ctl border px-[14px] py-[13px] bg-expense-soft" style={{ borderColor: "oklch(0.57 0.16 27 / 0.25)" }}>
-              <AlertTriangle size={18} className="text-expense-ink shrink-0 mt-[1px]" aria-hidden="true" />
+            <div className="flex items-start gap-2.75 rounded-ctl border px-3.5 py-3.25 bg-expense-soft" style={{ borderColor: "oklch(0.57 0.16 27 / 0.25)" }}>
+              <AlertTriangle size={18} className="text-expense-ink shrink-0 mt-px" aria-hidden="true" />
               <div className="text-[13px] leading-[1.45] text-expense-ink">
                 <b className="font-bold">Sin categorías para Gasto.</b> Usá el botón &ldquo;+ Nueva&rdquo; de arriba.
               </div>
@@ -230,7 +230,7 @@ export function CaptureInstallmentForm({ defaultMonth, onFooterStateChange, onCr
         </div>
 
         {/* ── Descripción ── */}
-        <div className="mt-[16px] flex flex-col gap-[6px]">
+        <div className="mt-4 flex flex-col gap-1.5">
           <Label htmlFor={`${formId}-description`} className="text-[12.5px] font-semibold text-ink-2 tracking-[0.01em]">
             Descripción <span className="text-faint font-normal">(opcional)</span>
           </Label>
@@ -245,7 +245,7 @@ export function CaptureInstallmentForm({ defaultMonth, onFooterStateChange, onCr
         </div>
 
         {/* ── Más opciones ── */}
-        <div className="mt-[16px] border-t border-line pt-[16px]">
+        <div className="mt-4 border-t border-line pt-4">
           <CaptureMoreOptions
             idPrefix={formId}
             currency={selectedCurrency}

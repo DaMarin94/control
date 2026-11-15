@@ -279,16 +279,16 @@ function MonthJumpPanel({
       aria-label="Saltar a mes y año"
       aria-modal="true"
       style={posStyle}
-      className="rounded-[var(--r-ctl)] border border-line bg-panel shadow-[var(--shadow-lg)] p-[14px] animate-modal-pop"
+      className="rounded-(--r-ctl) border border-line bg-panel shadow-(--shadow-lg) p-3.5 animate-modal-pop"
       onKeyDown={handlePanelKeyDown}
     >
       {/* ── Fila de las dos ruedas ── */}
-      <div className="grid grid-cols-2 gap-[10px]">
+      <div className="grid grid-cols-2 gap-2.5">
 
         {/* ─── Rueda Mes ─── */}
         <div className="flex flex-col">
           {/* Label eyebrow */}
-          <span className="mb-[6px] text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+          <span className="mb-1.5 text-[12px] font-semibold uppercase tracking-widest text-muted">
             Mes
           </span>
           {/*
@@ -311,8 +311,8 @@ function MonthJumpPanel({
               onClick={incrementMonth}
               aria-label="Mes siguiente"
               className={[
-                "flex h-[28px] w-full items-center justify-center",
-                "text-ink-2 transition-colors duration-[140ms]",
+                "flex h-7 w-full items-center justify-center",
+                "text-ink-2 transition-colors duration-140",
                 "hover:bg-panel-2 hover:text-ink",
                 "active:bg-panel-3",
                 // focus ring inset para no romper el borde envolvente
@@ -327,7 +327,7 @@ function MonthJumpPanel({
 
             {/* Zona valor: nombre del mes (UI, no mono) */}
             <div
-              className="flex h-[40px] items-center justify-center select-none bg-panel"
+              className="flex h-10 items-center justify-center select-none bg-panel"
               aria-label="Mes"
               role="spinbutton"
               aria-valuenow={selectedMonth + 1}
@@ -349,8 +349,8 @@ function MonthJumpPanel({
               onClick={decrementMonth}
               aria-label="Mes anterior"
               className={[
-                "flex h-[28px] w-full items-center justify-center",
-                "text-ink-2 transition-colors duration-[140ms]",
+                "flex h-7 w-full items-center justify-center",
+                "text-ink-2 transition-colors duration-140",
                 "hover:bg-panel-2 hover:text-ink",
                 "active:bg-panel-3",
                 "focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]",
@@ -364,7 +364,7 @@ function MonthJumpPanel({
         {/* ─── Rueda Año ─── */}
         <div className="flex flex-col">
           {/* Label eyebrow */}
-          <span className="mb-[6px] text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
+          <span className="mb-1.5 text-[12px] font-semibold uppercase tracking-widest text-muted">
             Año
           </span>
           {/* Contenedor cohesivo — misma estructura que la rueda Mes */}
@@ -381,8 +381,8 @@ function MonthJumpPanel({
               onClick={incrementYear}
               aria-label="Año siguiente"
               className={[
-                "flex h-[28px] w-full items-center justify-center",
-                "text-ink-2 transition-colors duration-[140ms]",
+                "flex h-7 w-full items-center justify-center",
+                "text-ink-2 transition-colors duration-140",
                 "hover:bg-panel-2 hover:text-ink",
                 "active:bg-panel-3",
                 "focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]",
@@ -403,7 +403,7 @@ function MonthJumpPanel({
               onChange={handleYearInput}
               aria-label="Año"
               className={[
-                "h-[40px] w-full bg-panel text-center",
+                "h-10 w-full bg-panel text-center",
                 "font-mono text-[17px] font-semibold text-ink tracking-[-0.01em]",
                 // focus ring inset — no rompe el borde envolvente de la pieza
                 "focus:outline-none focus:shadow-[inset_0_0_0_3px_var(--accent-soft)]",
@@ -420,8 +420,8 @@ function MonthJumpPanel({
               onClick={decrementYear}
               aria-label="Año anterior"
               className={[
-                "flex h-[28px] w-full items-center justify-center",
-                "text-ink-2 transition-colors duration-[140ms]",
+                "flex h-7 w-full items-center justify-center",
+                "text-ink-2 transition-colors duration-140",
                 "hover:bg-panel-2 hover:text-ink",
                 "active:bg-panel-3",
                 "focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]",
@@ -435,15 +435,15 @@ function MonthJumpPanel({
       </div>
 
       {/* ── Divisor ── */}
-      <div className="my-[12px] h-px bg-hair" aria-hidden="true" />
+      <div className="my-3 h-px bg-hair" aria-hidden="true" />
 
       {/* ── Footer: Cancelar + Ir ── */}
-      <div className="flex items-center justify-end gap-[8px]">
+      <div className="flex items-center justify-end gap-2">
         {/* Cancelar — ghost */}
         <button
           type="button"
           onClick={handleCancel}
-          className="inline-flex items-center rounded-[var(--r-ctl)] px-3 py-1.5 text-[13px] font-semibold text-ink-2 hover:bg-panel-2 hover:text-ink transition-colors duration-[140ms] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+          className="inline-flex items-center rounded-(--r-ctl) px-3 py-1.5 text-[13px] font-semibold text-ink-2 hover:bg-panel-2 hover:text-ink transition-colors duration-140 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
         >
           Cancelar
         </button>
@@ -454,10 +454,10 @@ function MonthJumpPanel({
           disabled={!canNavigate}
           aria-disabled={!canNavigate}
           className={[
-            "inline-flex items-center gap-[6px] rounded-[var(--r-ctl)] px-3 py-1.5",
+            "inline-flex items-center gap-1.5 rounded-(--r-ctl) px-3 py-1.5",
             "text-[13px] font-semibold text-white",
-            "bg-accent transition-colors duration-[140ms]",
-            "shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0_/_0.2)]",
+            "bg-accent transition-colors duration-140",
+            "shadow-[var(--shadow-sm),inset_0_1px_0_oklch(1_0_0/0.2)]",
             "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
             canNavigate
               ? "hover:bg-accent-press cursor-pointer"
@@ -536,8 +536,8 @@ export function MonthJumpTriggerDesktop({
       aria-expanded={isOpen}
       aria-haspopup="dialog"
       className={[
-        "inline-flex items-center gap-[8px] cursor-pointer",
-        "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:rounded-[var(--r-chip)]",
+        "inline-flex items-center gap-2 cursor-pointer",
+        "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:rounded-(--r-chip)",
         "group",
       ].join(" ")}
     >
@@ -548,7 +548,7 @@ export function MonthJumpTriggerDesktop({
       <ChevronUpDownIcon
         size={18}
         className={[
-          "shrink-0 transition-colors duration-[140ms]",
+          "shrink-0 transition-colors duration-140",
           isOpen
             ? "text-ink-2"
             : "text-faint group-hover:text-ink-2",
@@ -592,12 +592,12 @@ export function MonthJumpTriggerMobile({
       aria-haspopup="dialog"
       aria-label={`${mesName} ${yearName} — saltar a mes y año`}
       className={[
-        "min-w-[124px] flex flex-col items-center gap-0 px-1 cursor-pointer",
-        "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:rounded-[var(--r-chip)]",
+        "min-w-31 flex flex-col items-center gap-0 px-1 cursor-pointer",
+        "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] focus-visible:rounded-(--r-chip)",
         "group",
       ].join(" ")}
     >
-      <span className="flex items-center gap-[6px]">
+      <span className="flex items-center gap-1.5">
         <span className="text-[14.5px] font-semibold text-ink">
           {mesName} {yearName}
         </span>
@@ -605,7 +605,7 @@ export function MonthJumpTriggerMobile({
         <ChevronUpDownIcon
           size={15}
           className={[
-            "shrink-0 transition-colors duration-[140ms]",
+            "shrink-0 transition-colors duration-140",
             isOpen
               ? "text-ink-2"
               : "text-faint group-hover:text-ink-2",

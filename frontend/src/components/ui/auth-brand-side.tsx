@@ -17,7 +17,7 @@
 export function BrandSide() {
   return (
     <div
-      className="relative overflow-hidden flex flex-col justify-between p-14 text-white max-[940px]:min-h-[280px]"
+      className="relative overflow-hidden flex flex-col justify-between p-14 text-white max-[940px]:min-h-70"
       style={{
         background:
           "linear-gradient(150deg, var(--accent-press), var(--accent) 60%, oklch(0.46 0.16 294))",
@@ -30,13 +30,13 @@ export function BrandSide() {
       <div className="auth-glow" aria-hidden="true" />
 
       {/* Logo */}
-      <div className="relative flex items-center gap-[13px]">
+      <div className="relative flex items-center gap-3.25">
         <div
-          className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-[13px] shadow-[0_6px_18px_oklch(0.2_0.05_270_/_0.3)]"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-[13px] shadow-[0_6px_18px_oklch(0.2_0.05_270/0.3)]"
           style={{ background: "#fff" }}
           aria-label="Control"
         >
-          <div className="h-[34px] w-[34px] rounded-[9px] overflow-hidden">
+          <div className="h-8.5 w-8.5 rounded-[9px] overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/brand-icon.svg"
@@ -50,7 +50,7 @@ export function BrandSide() {
       </div>
 
       {/* Hero */}
-      <div className="relative max-w-[440px]">
+      <div className="relative max-w-110">
         <h2 className="m-0 mb-4 text-[42px] font-bold leading-[1.04] tracking-[-0.03em]">
           Tus finanzas del mes, sin sorpresas.
         </h2>
@@ -62,7 +62,7 @@ export function BrandSide() {
 
       {/* Footer privacidad */}
       <div
-        className="relative flex items-center gap-[9px] text-[13px]"
+        className="relative flex items-center gap-2.25 text-[13px]"
         style={{ color: "oklch(1 0 0 / 0.7)" }}
       >
         <ShieldCheckIcon />

@@ -11,7 +11,7 @@
  *   - Código de moneda ("ARS" / "USD") en mono 11.5px·600·.04em --ink-2
  *   - En hover: ChevronRight (11px, --faint) a la derecha — indica "gestión externa"
  *
- * Caja: --panel-3, --r-chip 7px, px-[8px] py-[3px]. Neutro estricto.
+ * Caja: --panel-3, --r-chip 7px, px-2 py-0.75. Neutro estricto.
  * Es un Link a /configuracion. NO cambia la moneda in-situ. NO popover.
  *
  * Se muestra SIEMPRE (incluso mono-moneda): es el ancla de contexto de la pantalla.
@@ -38,10 +38,10 @@ export function CurrencyChip({ currency }: CurrencyChipProps) {
       aria-label={`Moneda por defecto: ${currency}. Cambiar en Configuración`}
       className={[
         // Caja base
-        "inline-flex items-center gap-[6px]",
-        "rounded-[7px] bg-panel-3 px-[8px] py-[3px]",
+        "inline-flex items-center gap-1.5",
+        "rounded-chip bg-panel-3 px-2 py-0.75",
         // Reposo
-        "transition-colors duration-[140ms]",
+        "transition-colors duration-140",
         // Hover: fondo panel-2, código ink, glifo ink-2, chevron visible
         "hover:bg-panel-2",
         // Focus (teclado): ring accent-soft 3px — cromo de interacción (ok)
@@ -54,12 +54,12 @@ export function CurrencyChip({ currency }: CurrencyChipProps) {
       <Wallet
         size={13}
         aria-hidden="true"
-        className="shrink-0 text-muted group-hover:text-ink-2 transition-colors duration-[140ms]"
+        className="shrink-0 text-muted group-hover:text-ink-2 transition-colors duration-140"
       />
 
       {/* Código de moneda en mono tabular */}
       <span
-        className="mono text-[11.5px] font-semibold tracking-[0.04em] text-ink-2 group-hover:text-ink transition-colors duration-[140ms]"
+        className="mono text-[11.5px] font-semibold tracking-[0.04em] text-ink-2 group-hover:text-ink transition-colors duration-140"
         /* Tabular numbers para el código (regla dura 3) */
         style={{ fontFeatureSettings: '"tnum" 1' }}
       >
@@ -70,7 +70,7 @@ export function CurrencyChip({ currency }: CurrencyChipProps) {
       <ChevronRight
         size={11}
         aria-hidden="true"
-        className="shrink-0 text-faint opacity-0 group-hover:opacity-100 transition-opacity duration-[140ms]"
+        className="shrink-0 text-faint opacity-0 group-hover:opacity-100 transition-opacity duration-140"
       />
     </Link>
   );

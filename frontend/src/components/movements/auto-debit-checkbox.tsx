@@ -26,11 +26,11 @@ export function AutoDebitCheckbox({ id, checked, onChange }: AutoDebitCheckboxPr
       role="checkbox"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className="group flex w-fit items-center gap-[9px] rounded-sm cursor-pointer focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+      className="group flex w-fit items-center gap-2.25 rounded-sm cursor-pointer focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
     >
       <span
         className={cn(
-          "flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors duration-[140ms]",
+          "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors duration-140",
           checked ? "border-accent bg-accent" : "border-line bg-panel group-hover:border-line-strong",
         )}
         aria-hidden="true"
