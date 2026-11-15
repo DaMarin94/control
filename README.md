@@ -52,6 +52,8 @@ pnpm dev
 
 ## TODO
 
+3 - Formulario en movile (testeado en iphone): al guardar un movimiento no se setea el metodo de pago por defecto (si se setea al cargar por vez primera). Otra del formulario, se ven superpuestos los inputs de fecha y hora.
+
 Pendientes abiertos, agrupados por naturaleza.
 
 ### Diálogos y overlays
