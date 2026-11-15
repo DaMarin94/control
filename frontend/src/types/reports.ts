@@ -414,6 +414,12 @@ export interface ReportCardConfig {
    * Solo aplica cuando type === "fixed-evolution".
    */
   fixedRangeMonths?: FixedEvolutionRangeMonths;
+  /**
+   * Toggle "Mostrar calculados" de la card `fixed-evolution` (RF-REP-013).
+   * Ausente/false (default) = los calculados de fijo no entran a la card. El
+   * filtro es client-side. Solo aplica cuando type === "fixed-evolution".
+   */
+  fixedShowCalculated?: boolean;
 }
 
 // ─── Tipos del endpoint de reporte anual de Cuotas (Ola 3, P2) ───────────────

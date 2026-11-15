@@ -261,7 +261,7 @@ function mockHookError(refetch = vi.fn()) {
 
 function renderCard(props: Partial<React.ComponentProps<typeof FixedEvolutionCard>> = {}) {
   return render(
-    <FixedEvolutionCard rangeMonths={RANGE_MONTHS} titlePlaceholder="Reporte 1" {...props} />,
+    <FixedEvolutionCard rangeMonths={RANGE_MONTHS} titlePlaceholder="Reporte 1" showCalculated {...props} />,
     { wrapper: createWrapper() },
   );
 }
@@ -465,17 +465,17 @@ describe("FixedEvolutionCard — dash del calculado tras cambio de modo", () => 
     const { rerender } = renderCard({ mode: "amounts" });
     expect(firstLine("line-fx-calc")).toHaveAttribute("data-dasharray", "6 4");
 
-    rerender(<FixedEvolutionCard rangeMonths={RANGE_MONTHS} titlePlaceholder="Reporte 1" mode="variation" />);
+    rerender(<FixedEvolutionCard rangeMonths={RANGE_MONTHS} titlePlaceholder="Reporte 1" showCalculated mode="variation" />);
     expect(firstLine("line-fx-calc")).toHaveAttribute("data-dasharray", "6 4");
 
-    rerender(<FixedEvolutionCard rangeMonths={RANGE_MONTHS} titlePlaceholder="Reporte 1" mode="amounts" />);
+    rerender(<FixedEvolutionCard rangeMonths={RANGE_MONTHS} titlePlaceholder="Reporte 1" showCalculated mode="amounts" />);
     expect(firstLine("line-fx-calc")).toHaveAttribute("data-dasharray", "6 4");
   });
 
   it("un fijo normal sigue sin dasharray después del mismo round-trip de modo", () => {
     const { rerender } = renderCard({ mode: "amounts" });
-    rerender(<FixedEvolutionCard rangeMonths={RANGE_MONTHS} titlePlaceholder="Reporte 1" mode="variation" />);
-    rerender(<FixedEvolutionCard rangeMonths={RANGE_MONTHS} titlePlaceholder="Reporte 1" mode="amounts" />);
+    rerender(<FixedEvolutionCard rangeMonths={RANGE_MONTHS} titlePlaceholder="Reporte 1" showCalculated mode="variation" />);
+    rerender(<FixedEvolutionCard rangeMonths={RANGE_MONTHS} titlePlaceholder="Reporte 1" showCalculated mode="amounts" />);
     expect(firstLine("line-fx-alquiler")).not.toHaveAttribute("data-dasharray", "6 4");
   });
 });
@@ -622,7 +622,7 @@ describe("FixedEvolutionCard — leyenda-selector de fijos", () => {
   it("al destildar un fijo llama a onSelectedIdsChange sin ese chainId", () => {
     const onSelectedIdsChange = vi.fn();
     renderCard({ onSelectedIdsChange });
-    fireEvent.click(screen.getByText("Alquiler"));
+    fireEvent.click(screen.getAllByText("Alquiler")[0]!);
     expect(onSelectedIdsChange).toHaveBeenCalledWith(["fx-expensas", "fx-calc", "fx-hueco"]);
   });
 
@@ -642,9 +642,9 @@ describe("FixedEvolutionCard — leyenda-selector de fijos", () => {
 
   it("un ítem destildado queda tachado y en opacidad reducida", () => {
     renderCard({ selectedIds: ["fx-expensas", "fx-calc", "fx-hueco"] });
-    const alquilerBtn = screen.getByText("Alquiler").closest("button")!;
+    const alquilerBtn = screen.getAllByText("Alquiler")[0]!.closest("button")!;
     expect(alquilerBtn).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByText("Alquiler")).toHaveClass("line-through");
+    expect(screen.getAllByText("Alquiler")[0]!).toHaveClass("line-through");
   });
 
   // `mockData` fija `nominalPct` en null para todos los meses de todas las
@@ -653,7 +653,7 @@ describe("FixedEvolutionCard — leyenda-selector de fijos", () => {
   // (docs/design.md §8), sin nombrar nunca un año.
   it("ítem 'sin trazo' con el chip de ajuste APAGADO: title habla de 'ningún pago... con el anterior'", () => {
     renderCard({ mode: "variation", adjusted: false });
-    const alquilerBtn = screen.getByText("Alquiler").closest("button")!;
+    const alquilerBtn = screen.getAllByText("Alquiler")[0]!.closest("button")!;
     expect(alquilerBtn).toHaveAttribute(
       "title",
       "Sin variación computable en el rango — ningún pago de este fijo se pudo comparar con el anterior.",
@@ -662,7 +662,7 @@ describe("FixedEvolutionCard — leyenda-selector de fijos", () => {
 
   it("ítem 'sin trazo' con el chip de ajuste ENCENDIDO: title distinto, sin nombrar ningún año", () => {
     renderCard({ mode: "variation", adjusted: true });
-    const alquilerBtn = screen.getByText("Alquiler").closest("button")!;
+    const alquilerBtn = screen.getAllByText("Alquiler")[0]!.closest("button")!;
     expect(alquilerBtn).toHaveAttribute(
       "title",
       "Sin variación ajustada en el rango — falta el dato de inflación entre sus pagos.",
@@ -672,7 +672,7 @@ describe("FixedEvolutionCard — leyenda-selector de fijos", () => {
 
   it("un fijo 'sin trazo' NO queda tachado (se distingue del destildado)", () => {
     renderCard({ mode: "variation", adjusted: false });
-    expect(screen.getByText("Alquiler")).not.toHaveClass("line-through");
+    expect(screen.getAllByText("Alquiler")[0]!).not.toHaveClass("line-through");
   });
 });
 
@@ -1163,5 +1163,187 @@ describe("FixedEvolutionCard — variante acotada (chainId)", () => {
     renderCard({ chainId: "fx-nuevo", rangeMonths: 60 });
     expect(screen.getByText("Este fijo no tiene dos meses con monto en el rango.")).toBeInTheDocument();
     expect(screen.queryByText("Alargá el rango para ver su evolución.")).not.toBeInTheDocument();
+  });
+});
+
+// ─── Tests: toggle "Mostrar calculados" (RF-REP-013) ──────────────────────────
+
+describe("FixedEvolutionCard — toggle 'Mostrar calculados'", () => {
+  const excludedCalc: FixedEvolutionExcludedLine = { ...excludedItem, chainId: "fx-calc-excl", isCalculated: true, description: "Calc excluido" };
+
+  function firstLine(testId: string) {
+    return screen.getAllByTestId(testId)[0]!;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockHookWithData(mockData);
+  });
+
+  it("apagado por defecto (sin showCalculated): aria-pressed=false y el calculado queda fuera de gráfico, leyenda y contador", () => {
+    renderCard({ showCalculated: undefined });
+    expect(screen.getByRole("button", { name: /mostrar calculados/i })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByTestId("line-fx-calc")).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /elegir fijos/i }).querySelectorAll("button")).toHaveLength(3);
+    expect(screen.getByTitle("3 de 3 fijos seleccionados")).toBeInTheDocument();
+    expect(screen.queryByText("Ajuste de alquiler")).not.toBeInTheDocument();
+  });
+
+  it("prendido: el calculado vuelve al gráfico, la leyenda (con origen) y el contador", () => {
+    renderCard({ showCalculated: true });
+    expect(screen.getByRole("button", { name: /mostrar calculados/i })).toHaveAttribute("aria-pressed", "true");
+    expect(firstLine("line-fx-calc")).toHaveAttribute("data-dasharray", "6 4");
+    expect(screen.getByTitle("4 de 4 fijos seleccionados")).toBeInTheDocument();
+    const item = screen.getByText("Ajuste de alquiler").closest("button")!;
+    expect(item).toHaveTextContent("Ajuste de alquiler · desde Alquiler");
+    expect(screen.getByTitle("Ajuste de alquiler · desde Alquiler")).toBeInTheDocument();
+  });
+
+  it("el click llama a onShowCalculatedChange con el valor invertido y no cambia los params del hook (sin refetch)", () => {
+    const onShowCalculatedChange = vi.fn();
+    renderCard({ showCalculated: false, onShowCalculatedChange });
+    const paramsBefore = mockUseFixedEvolution.mock.calls[0];
+    fireEvent.click(screen.getByRole("button", { name: /mostrar calculados/i }));
+    expect(onShowCalculatedChange).toHaveBeenCalledWith(true);
+    for (const call of mockUseFixedEvolution.mock.calls) {
+      expect(call).toEqual(paramsBefore);
+    }
+  });
+
+  it("es el último del cluster izquierdo, con divisor que viaja en un subgrupo", () => {
+    renderCard();
+    const chip = screen.getByRole("button", { name: /mostrar calculados/i });
+    const wrap = chip.parentElement!;
+    expect(wrap.className).toContain("shrink-0");
+    expect(wrap.children).toHaveLength(2);
+    expect(wrap.parentElement!.lastElementChild).toBe(wrap);
+    expect(screen.getByRole("button", { name: /ajustada por inflación/i }).compareDocumentPosition(wrap)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it("no se renderiza (ni su divisor) si el rango no trae calculados en lines ni excluded", () => {
+    mockHookWithData({ ...mockData, lines: [lineAlquiler, lineExpensas, lineHueco] });
+    renderCard();
+    expect(screen.queryByRole("button", { name: /mostrar calculados/i })).not.toBeInTheDocument();
+    const adjusted = screen.getByRole("button", { name: /ajustada por inflación/i });
+    // Sin subgrupo: no queda un divisor colgando tras el chip de ajuste.
+    expect(adjusted.parentElement!.querySelectorAll(".bg-hair")).toHaveLength(1);
+  });
+
+  it("se renderiza si el único calculado está en excluded", () => {
+    mockHookWithData({ ...mockData, lines: [lineAlquiler, lineExpensas, lineHueco], excluded: [excludedCalc] });
+    renderCard();
+    expect(screen.getByRole("button", { name: /mostrar calculados/i })).toBeInTheDocument();
+  });
+
+  it("apagado: si los únicos excluidos eran calculados, el disparador de excluidos no existe", () => {
+    mockHookWithData({ ...mockData, excluded: [excludedCalc] });
+    renderCard({ showCalculated: false });
+    expect(screen.queryByRole("button", { name: /fijos con una sola aparición/i })).not.toBeInTheDocument();
+  });
+
+  it("apagado: de dos excluidos (uno calculado) el disparador cuenta solo el normal", () => {
+    mockHookWithData({ ...mockData, excluded: [excludedItem, excludedCalc] });
+    renderCard({ showCalculated: false });
+    expect(screen.getByRole("button", { name: "1 fijos con una sola aparición en el rango" })).toBeInTheDocument();
+  });
+
+  it("prendido: los calculados excluidos figuran en el disparador", () => {
+    mockHookWithData({ ...mockData, excluded: [excludedItem, excludedCalc] });
+    renderCard({ showCalculated: true });
+    expect(screen.getByRole("button", { name: "2 fijos con una sola aparición en el rango" })).toBeInTheDocument();
+  });
+
+  it("apagar no reescribe la selección: un calculado destildado sigue destildado al prenderlo", () => {
+    const selected = ["fx-alquiler", "fx-expensas", "fx-hueco"]; // sin fx-calc
+    const { rerender } = renderCard({ showCalculated: false, selectedIds: selected });
+    rerender(<FixedEvolutionCard rangeMonths={RANGE_MONTHS} titlePlaceholder="Reporte 1" showCalculated selectedIds={selected} />);
+    const item = screen.getByText("Ajuste de alquiler").closest("button")!;
+    expect(item).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTitle("3 de 4 fijos seleccionados")).toBeInTheDocument();
+  });
+
+  it("destildar un fijo normal con el toggle apagado conserva al calculado en la selección persistida", () => {
+    const onSelectedIdsChange = vi.fn();
+    renderCard({ showCalculated: false, onSelectedIdsChange });
+    fireEvent.click(screen.getByText("Alquiler"));
+    expect(onSelectedIdsChange).toHaveBeenCalledWith(["fx-expensas", "fx-calc", "fx-hueco"]);
+  });
+
+  it("el color de las demás líneas no cambia al togglear", () => {
+    const { rerender } = renderCard({ showCalculated: true });
+    const before = firstLine("line-fx-expensas").getAttribute("data-stroke");
+    rerender(<FixedEvolutionCard rangeMonths={RANGE_MONTHS} titlePlaceholder="Reporte 1" showCalculated={false} />);
+    expect(firstLine("line-fx-expensas").getAttribute("data-stroke")).toBe(before);
+  });
+
+  it("apagado con un rango de solo calculados: overlay propio, sin leyenda ni carril, y el toggle sigue visible", () => {
+    mockHookWithData({ ...mockData, lines: [lineCalculado], excluded: [excludedCalc] });
+    renderCard({ showCalculated: false });
+    expect(screen.getByText("En el rango solo hay calculados.")).toBeInTheDocument();
+    expect(screen.getByText("Prendé «Mostrar calculados» para verlos.")).toBeInTheDocument();
+    expect(screen.queryByText("Sin fijos en el rango.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: /elegir fijos/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /fijos con una sola aparición/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /mostrar calculados/i })).toBeInTheDocument();
+  });
+
+  it("calculados en lines + excluidos normales, apagado: rige 'Ningún fijo tiene dos apariciones'", () => {
+    mockHookWithData({ ...mockData, lines: [lineCalculado], excluded: [excludedItem] });
+    renderCard({ showCalculated: false });
+    expect(screen.getByText("Ningún fijo tiene dos apariciones en el rango.")).toBeInTheDocument();
+    expect(screen.queryByText("En el rango solo hay calculados.")).not.toBeInTheDocument();
+  });
+
+  it("prendido con solo calculados: se dibuja y no aparece el overlay", () => {
+    mockHookWithData({ ...mockData, lines: [lineCalculado], excluded: [] });
+    renderCard({ showCalculated: true });
+    expect(screen.queryByText("En el rango solo hay calculados.")).not.toBeInTheDocument();
+    expect(firstLine("line-fx-calc")).toBeInTheDocument();
+  });
+
+  it("toggle oculto no invoca onShowCalculatedChange (el valor persistido no se toca)", () => {
+    const onShowCalculatedChange = vi.fn();
+    mockHookWithData({ ...mockData, lines: [lineAlquiler, lineExpensas, lineHueco], excluded: [] });
+    renderCard({ showCalculated: true, onShowCalculatedChange });
+    expect(onShowCalculatedChange).not.toHaveBeenCalled();
+  });
+
+  it("ítem de leyenda calculado: dos segmentos con topes 140/100, ' · desde ' sin truncar y origen en muted", () => {
+    renderCard({ showCalculated: true });
+    const desc = screen.getByText("Ajuste de alquiler");
+    expect(desc.style.maxWidth).toBe("140px");
+    const sep = desc.nextElementSibling as HTMLElement;
+    expect(sep.textContent).toBe(" · desde ");
+    expect(sep.className).toContain("shrink-0");
+    const origin = sep.nextElementSibling as HTMLElement;
+    expect(origin.textContent).toBe("Alquiler");
+    expect(origin.style.maxWidth).toBe("100px");
+    expect(origin.className).toContain("text-muted");
+    expect(desc.className).toContain("min-w-0");
+    expect(origin.className).toContain("min-w-0");
+    expect(desc.closest("button")).toHaveClass("max-w-full");
+  });
+
+  it("ítem calculado destildado: ambos segmentos tachados", () => {
+    renderCard({ showCalculated: true, selectedIds: ["fx-alquiler", "fx-expensas", "fx-hueco"] });
+    const desc = screen.getByText("Ajuste de alquiler");
+    const sep = desc.nextElementSibling as HTMLElement;
+    const origin = sep.nextElementSibling as HTMLElement;
+    expect(desc).toHaveClass("line-through");
+    expect(sep).toHaveClass("line-through");
+    expect(origin).toHaveClass("line-through");
+  });
+
+  it("calculado sin originDescription: no renderiza el segmento de origen", () => {
+    mockHookWithData({ ...mockData, lines: [{ ...lineCalculado, originDescription: null }, lineAlquiler] });
+    renderCard({ showCalculated: true });
+    expect(screen.getByText("Ajuste de alquiler").nextElementSibling).toBeNull();
+  });
+
+  it("la variante acotada no muestra el toggle y no filtra calculados", () => {
+    mockHookWithData({ ...mockData, lines: [lineCalculado], excluded: [] });
+    renderCard({ chainId: "fx-calc", showCalculated: false });
+    expect(screen.queryByRole("button", { name: /mostrar calculados/i })).not.toBeInTheDocument();
+    expect(firstLine("line-fx-calc")).toBeInTheDocument();
   });
 });

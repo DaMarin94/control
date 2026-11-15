@@ -636,6 +636,22 @@ function ReportesPageContent() {
     });
   }
 
+  // RF-REP-013: toggle "Mostrar calculados" de `fixed-evolution`. false (= default) se omite.
+  function handleFixedShowCalculatedChange(id: string, show: boolean) {
+    const newCards = cards.map((c) => {
+      if (c.id !== id) return c;
+      if (!show) {
+        const updated = { ...c };
+        delete updated.fixedShowCalculated;
+        return updated;
+      }
+      return { ...c, fixedShowCalculated: true };
+    });
+    void setPreferences({ ...preferences, reports: newCards }).catch((err) => {
+      logger.error("Error al persistir toggle Mostrar calculados de card fixed-evolution", { error: err, cardId: id });
+    });
+  }
+
   const hasCards = cards.length > 0;
 
   return (
@@ -746,6 +762,7 @@ function ReportesPageContent() {
                   onFixedAdjustedChange={(adjusted) => handleFixedAdjustedChange(card.id, adjusted)}
                   onFixedSelectedIdsChange={(ids) => handleFixedSelectedIdsChange(card.id, ids)}
                   onFixedRangeMonthsChange={(months) => handleFixedRangeMonthsChange(card.id, months)}
+                  onFixedShowCalculatedChange={(show) => handleFixedShowCalculatedChange(card.id, show)}
                 />
               ))}
 

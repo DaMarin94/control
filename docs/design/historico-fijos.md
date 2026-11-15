@@ -138,6 +138,8 @@ El **eje X** es idéntico en los tres modos: **una posición por cada mes corrid
 | Overlay rango vacío (§10) | **"Sin fijos en el rango."** |
 | Overlay sin evolución (§10) | **"Ningún fijo tiene dos apariciones en el rango."** |
 | Overlay sin selección (§10) | **"Ningún fijo seleccionado."** |
+| Overlay solo calculados con el toggle apagado (§10) | **"En el rango solo hay calculados."** |
+| Toggle de calculados (§5.1) | **"Mostrar calculados"** |
 | Leyenda `role="group"` (§8) | **"Elegir fijos"** |
 | Contador `N / M` (§8) | **"N de M fijos seleccionados"** |
 | Disparador de excluidos (§8.1) | **"{N} fijos con una sola aparición en el rango"** |
@@ -212,6 +214,29 @@ El **eje X** es idéntico en los tres modos: **una posición por cada mes corrid
 - **El valor persistido del chip no se toca al deshabilitarse:** recupera su estado encendido al volver a Variación.
 - **Ubicación:** cluster izquierdo de la **línea 2** de la cabecera (§9), `[ Montos | Variación ] |hair| [ Ajustada por inflación ]`, con el mini-divisor vertical (`h-[16px] w-px bg-hair`, `self-center`). El chip vive **fuera** del `role="tablist"` (no entra al recorrido por flechas; el underline nunca se extiende bajo él).
 
+#### 5.1 Toggle "Mostrar calculados" — chip de alcance, último del cluster izquierdo
+
+Decide si los **calculados de fijo** entran a la card (RF-REP-013). Es un control de **alcance del cómputo**, la misma familia que el chip "Simulados" de `income-expense` / `by-category` (`simulados-en-cards.md` §1): se reusa **ese** molde, no se inventa control.
+
+**Forma — chip-toggle neutro con glifo** (molde de `simulados-en-cards.md` §1.1):
+
+- `<button type="button">` con **`aria-pressed`**. Caja `inline-flex items-center gap-[6px]`, `px-[10px] py-[5px]`, `--r-chip` 7px, UI **12.5px/600**, `select-none`, transición 0.14s.
+- **Contenido:** **`CornerDownRight` 13px** (`aria-hidden="true"`) + **"Mostrar calculados"**. El glifo es **el mismo `↳`** con el que la card ya marca al calculado en leyenda, excluidos y tooltip: el chip nombra lo que agrega con la marca que el usuario va a ver aparecer. Además lo separa a ojo del chip "Ajustada por inflación" (sin glifo), que es **otra dimensión** (modo, no alcance).
+- **Apagado (default, también sin `fixedShowCalculated` persistido):** `--panel-2`, borde `1px --line`, sin sombra, texto y glifo `--muted`.
+- **Encendido:** `--panel`, borde `1px --line-strong`, `--shadow-sm`, texto `--ink`, glifo `--ink-2`.
+- **Hover** (sobre apagado): texto → `--ink-2`, borde → `--line-strong`; (sobre encendido) sin cambio. **Active:** `--panel-3`. **Focus:** ring `--accent-soft` 3px, `--r-chip`.
+- **a11y:** el nombre accesible es el texto visible ("Mostrar calculados") + `aria-pressed`. Sin `aria-label` extra.
+- **Sin color semántico ni índigo** en ningún estado.
+- **Nunca se deshabilita.** Cuando no aplica, **no se renderiza** (abajo); no hay estado `aria-disabled` para este chip.
+
+**Ubicación — último del cluster izquierdo de la línea 2 (§9):** `[ Montos | Variación ] |hair| [ Ajustada por inflación ] |hair| [ ↳ Mostrar calculados ]`. Mini-divisor `h-[16px] w-px bg-hair shrink-0`, `self-center`. **Divisor y chip forman un subgrupo** (`inline-flex items-center gap-x-[10px] shrink-0`) que aparece, desaparece y envuelve **como unidad**. *(Descartado: ponerlo en el carril del comando — el carril no existe en el estado "solo calculados" (§10), justo cuando el toggle tiene que estar a la vista; y en la cabecera es consistente con dónde viven los chips de alcance en las otras cards.)*
+
+**Visibilidad — se evalúa sobre lo que trae el rango, no sobre lo que queda tras el toggle.** Se renderiza si `lines` **o** `excluded` traen al menos un ítem con `isCalculated: true`. Si no hay ninguno, el subgrupo (divisor + chip) **no se renderiza** — cero impacto: el cluster queda como hoy. Mientras está oculto, el valor persistido **no se toca** y vuelve a aplicar cuando otro rango trae calculados.
+
+**Feedback al accionar:** el chip cambia **en el acto**; sin skeleton, sin spinner propio, sin toast. Si el cambio implica traer datos, la única señal es la del botón de refrescar (`isFetching`), igual que `simulados-en-cards.md` §1.5. Prender/apagar **agrega o quita** líneas, ítems de leyenda, ítems de excluidos (y el disparador de excluidos si queda vacío / deja de estarlo) y ajusta el contador `N / M`. **Colores y orden relativo de los demás ítems no cambian**; el estado de tilde de cada calculado vuelve como estaba.
+
+**Variante acotada (§15):** **no** lleva el toggle.
+
 #### 6. Destacado por hover — la respuesta al canvas de 30 líneas
 
 La card **nace** con todos los fijos seleccionados. La salida **no** es agrupar (el RF lo prohíbe) ni bajar el default: es **poder aislar una línea sin cambiar la selección**.
@@ -249,7 +274,19 @@ Reemplaza al filtro por categoría: selección **por fijo individual**, un ítem
 **Anatomía del ítem** (`<button type="button">` con `aria-pressed`, caja `inline-flex items-center gap-[6px] px-[6px] py-[4px]`, `--r-chip` 7px):
 
 - **Fijo normal:** swatch cuadrado **10px `rounded-[3px]`** del color de la línea. **Si es de ingreso**, glifo **`ArrowUp` 11px `--income-ink`** entre swatch y etiqueta.
-- **Calculado:** **mini-línea dasheada de 14px** (`stroke` 2px, `dasharray 6 4`) en el color de la línea + glifo **`CornerDownRight` 11px `--muted`** antes de la etiqueta.
+- **Calculado:** **mini-línea dasheada de 14px** (`stroke` 2px, `dasharray 6 4`) en el color de la línea + glifo **`CornerDownRight` 11px `--muted`** antes de la etiqueta. **La etiqueta lleva el origen** (RF-REP-013): `↳ {descripción} · desde {Origen}`.
+
+**Etiqueta con origen del calculado — dos segmentos con jerarquía propia:**
+
+- **Segmento 1 — descripción:** UI **12.5px/500**, color del estado del ítem (tabla de abajo), **`max-width: 140px`** + `truncate`. Sin descripción → **"Sin descripción"**.
+- **Segmento 2 — origen:** **` · desde {Origen}`** en UI **12.5px/400 `--muted`** (el `·` y "desde" incluidos), con `{Origen}` = `originDescription` **`max-width: 100px`** + `truncate`. El "` · desde `" es `shrink-0`: nunca se corta, así que el corte siempre cae **dentro** de un nombre, nunca entre los dos.
+- **Por qué dos topes y no uno de 180px sobre todo el texto:** con un solo tope el corte cae siempre al final y se come **el origen** — justo el dato que el requerimiento pide visible. Dos topes garantizan que se vea el arranque de los dos nombres. Ancho máximo del ítem calculado ≈ 12 (padding) + 14 (mini-línea) + 11 (`↳`) + 12 (gaps) + 140 + ~50 (` · desde `) + 100 ≈ **340px**: entra en un renglón a 352px de contenido (checkpoint crítico, §11).
+- **Por qué el origen en `--muted`/400:** es identidad secundaria (de quién deriva), no el nombre del ítem; mismo peso relativo que `desde {Origen}` en la sublínea del tooltip (§7B). Sin `--faint`: tiene que leerse sin hover.
+- **Estados:** **destildado** → los **dos** segmentos en `--muted` con `line-through` (el ítem entero está fuera del gráfico); **sin trazo** → descripción `--muted` sin tachado, origen igual que siempre.
+- **`title`** (en la etiqueta): texto completo **`{descripción} · desde {Origen}`**. En el estado *sin trazo* el `title` del botón sigue siendo el motivo (tabla de abajo).
+- **Origen sin descripción** (`originDescription: null`): el segmento 2 **no se renderiza** — mismo criterio que la sublínea del tooltip, que lo omite.
+- **Nombre accesible:** el texto visible completo ("{descripción} · desde {Origen}"); el `↳` es `aria-hidden`.
+- **Fijo normal:** sin cambios — una sola etiqueta con `max-width: 180px`.
 
 **Tres estados de ítem:**
 
@@ -285,6 +322,8 @@ Los fijos con **menos de 2 apariciones en el rango** (`excluded`) no dibujan evo
   - **Sin swatch ni mini-línea** (un excluido no dibuja línea). **Calculado:** **`CornerDownRight` 11px `--muted`** antes de la descripción. **Ingreso:** **`ArrowUp` 11px `--income-ink`** antes de la descripción. Gasto normal sin glifo.
   - **Descripción** UI 12.5px/500 `--ink-2`, `max-w 180px` + `truncate` + `title`. Sin descripción → **"Sin descripción"** en `--muted`.
   - **Sublínea** UI 11.5px `--faint`: **`● {Categoría} · desde {Mmm AAAA}`**, con el **punto de categoría** (6px `rounded-full`, `category.color` tal cual, `gap-[5px]`).
+  - **El origen del calculado NO va en esta superficie.** El requerimiento lo pide en el ítem de **leyenda**; acá (a) el contrato de `excluded` **no trae** `originDescription` y (b) la sublínea ya usa "desde" para el **mes de inicio**: un segundo "desde {Origen}" en el mismo ítem haría ambiguo cuál es cuál. El calculado excluido se sigue distinguiendo por el `↳`.
+  - **Con el toggle "Mostrar calculados" apagado (§5.1)** los calculados no figuran en la lista ni en el `{N}` del disparador; si los únicos excluidos eran calculados, el disparador **no se renderiza**.
 - **Orden: por mes de inicio, más reciente primero**; desempate descripción A→Z (la pregunta típica: *"¿por qué no veo el fijo que acabo de crear?"*).
 - **A11y:** `role="dialog"` `aria-label="Fijos sin evolución en el rango"`. Lectura, no formulario; `Esc` siempre cierra.
 
@@ -294,7 +333,7 @@ Molde de `by-category` / `income-expense` con filtros (identidad arriba, control
 
 - **Línea 1** (`mb-[8px]`): **título editable** (16px/600 `--ink`, placeholder "Reporte N" en `--faint`, lápiz on-hover, truncado).
 - **Línea 2** (`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-[18px]`):
-  - **Cluster izquierdo:** `[ Montos | Variación ] |hair| [ Ajustada por inflación ]` (§5).
+  - **Cluster izquierdo** (`flex flex-wrap items-center gap-x-[10px] gap-y-2`): `[ Montos | Variación ] |hair| [ Ajustada por inflación ] |hair| [ ↳ Mostrar calculados ]` (§5, §5.1). El último subgrupo solo existe si el rango trae algún calculado de fijo.
   - **Cluster derecho — `CardControls`:** `[ Rango ▾ ] (nota de recorte) |hair| [ CardCurrencySelect ] |hair| [ RefreshCw ] [ X ]`.
 
 **Selector de rango (`RangeSelect`) — chip-dropdown, primer elemento del cluster derecho.** Control de **mayor jerarquía** del cluster → **tratamiento de pill**: caja `--panel`, borde `--line`, `--shadow-sm`, `--r-ctl` 10px, `px-[10px] py-[5px]`. Jerarquía **rango > moneda > utilidades** (la moneda sigue siendo chip plano `--panel-3`).
@@ -312,9 +351,11 @@ Molde de `by-category` / `income-expense` con filtros (identidad arriba, control
 
 #### 10. Estados
 
-- **Loading (skeleton):** cabecera presente e inerte; canvas → `SkeletonBlock` del alto del canvas + **5 chips fantasma en 2 renglones** + un chip fantasma corto en el carril (ver `skeletons.md`; 2–3 chips subestimarían el alto). Sin spinner.
+- **Loading (skeleton):** cabecera presente e inerte (en la **primera carga** el chip "Mostrar calculados" **no se renderiza**: su visibilidad depende del dato; en un refetch conserva su presencia hasta que llega la respuesta); canvas → `SkeletonBlock` del alto del canvas + **5 chips fantasma en 2 renglones** + un chip fantasma corto en el carril (ver `skeletons.md`; 2–3 chips subestimarían el alto). Sin spinner.
 - **Rango sin ningún fijo (empty):** **eje X con las posiciones del rango y eje Y en su unidad** (baseline en cero si es variación) + **overlay en dos líneas**: "Sin fijos en el rango." (UI 14px `--muted`) + "Probá un rango más largo." (UI 12.5px `--faint`). El **bloque de leyenda no se renderiza**.
 - **Ningún fijo con evolución, pero sí excluidos** (`lines` vacío, `excluded` con ítems): ejes completos, sin líneas, overlay: **"Ningún fijo tiene dos apariciones en el rango."** + **"Alargá el rango para ver su evolución."**. Sin leyenda-filtro, pero **sí el carril con el disparador de excluidos** (§8.1), **sin** `LegendAllChip` ni contador.
+- **Solo calculados en el rango, con el toggle apagado** (el rango trae ítems en `lines`/`excluded` y **todos** son calculados de fijo): ejes completos, sin líneas, overlay: **"En el rango solo hay calculados."** (UI 14px `--muted`) + **"Prendé «Mostrar calculados» para verlos."** (UI 12.5px `--faint`). **Sin leyenda ni carril** (no hay ningún ítem que mostrar). **El chip "Mostrar calculados" sigue visible** en la cabecera: es la salida que el copy nombra, a un clic. *(Descartado: reusar "Sin fijos en el rango." + "Probá un rango más largo." — es falso, sí hay datos, y manda a una acción que no los muestra.)*
+  - **Precedencia:** este estado se evalúa **antes** que los de abajo. Si tras quitar los calculados quedan solo excluidos no calculados, rige "Ningún fijo tiene dos apariciones…" (el toggle sigue visible porque el rango trae calculados).
 - **Ningún fijo seleccionado (`[]`):** ejes completos, sin líneas, overlay: "Ningún fijo seleccionado." + "Elegí uno en la lista de abajo.". La leyenda **no se bloquea**.
 - **Modo Variación sin ninguna línea computable** — dos variantes según el chip de ajuste:
   - **Chip encendido:** **"Sin variación ajustada en el rango."** + **"Probá sin el ajuste por inflación."** (la salida existe y está a un clic).
@@ -331,6 +372,8 @@ Régimen de app (`≥ 600px` en los dos ejes), en **los dos estados del sidebar*
 **Checkpoint crítico: "rango de 5 años en 352px de contenido"** (60 posiciones sobre ~260px de plot, canvas de 220px). Lo sostienen la **cadencia de rótulos** (§2: en compacto **solo los eneros**, 5 rótulos con año) y el **umbral de `slot`** (§4: ningún punto de mes; el hueco lo dice el **puente atenuado**).
 
 - **`< --bp-wide` (compacto):** canvas **220px**. La **línea 2 envuelve** por su `flex-wrap`: tabs + chip arriba, `CardControls` abajo. Las **tabs nunca colapsan**; el chip de ajuste **nunca se oculta**; el **select de rango nunca se reduce a un ícono**.
+- **Toggle "Mostrar calculados" (§5.1):** es **el primero en bajar** dentro del cluster izquierdo; **divisor y chip bajan juntos** (subgrupo `shrink-0`): nunca un divisor colgando al final de un renglón ni al inicio del siguiente sin chip. La etiqueta **nunca se abrevia** ni el chip se reduce al glifo.
+- **Ítem de leyenda de calculado con origen (§8):** topes 140px + 100px → ≈ 340px, entra en un renglón a 352px de contenido; los topes no cambian con la disposición.
 - **El eje X nunca rota ni scrollea:** el canvas **se comprime**; los rótulos se ralean por §2. Las **fronteras de año se dibujan siempre**, a cualquier ancho.
 - **La leyenda no cambia de forma:** el `max-h` de 4 renglones la acota. `LegendAllChip`, disparador de excluidos y contador siguen en el carril fijo; si no entran en un renglón, el carril **envuelve** (el contador baja), nunca se oculta ninguno.
 - **Los cuatro invariantes:**
@@ -355,6 +398,7 @@ Piezas que **no** venían en el brief:
 - **Tope de 8 filas + `+N más` en el tooltip de modo mes** — vigente.
 - **Segunda línea de copy en los overlays de estado vacío** — vigente.
 - **Nota de rango recortado** ("Desde {Mmm AAAA} — es todo tu historial.") — vigente.
+- **Glifo `CornerDownRight` en el chip "Mostrar calculados"** (§5.1) — vigente; el brief pedía el toggle, el glifo es decisión de diseño.
 - **Fronteras de año como verticales `--hair`** — vigente.
 - **Puente atenuado del hueco (opacidad 0.35)** — vigente; es el portador del requisito funcional "hueco ≠ cero" (un punto por mes no escala a 60 posiciones, §4).
 - **Puntos en reposo densidad-adaptativos** — vigente; excepción al patrón de dots del DS, acotada por `slot` y a esta card.
@@ -378,7 +422,7 @@ Contrato: `GET /movements/reports/fijos-historico?rangeMonths=<3|6|9|12|24|36|48
 
 La misma card, montada **dentro** de la card de detalle de `/mes` para **un solo fijo** (`chainId`). La anatomía del contenedor vive en *Card de detalle de movimiento → Vista evolución* (`card-detalle.md`). Regla rectora: **mismo canvas, sin chrome de reporte**.
 
-**Se apaga (no se renderiza):** el **envase de card de reporte** (panel, borde, `--r-card`, sombra, `--card-pad`), el **título editable**, las **tabs de modo** y el **chip de ajuste**, el **selector de moneda**, el **refrescar**, el **quitar (`X`)**, la **leyenda-selector** completa, el **disparador y popover de excluidos**, la **nota de rango recortado** y el **modo orden**.
+**Se apaga (no se renderiza):** el **envase de card de reporte** (panel, borde, `--r-card`, sombra, `--card-pad`), el **título editable**, las **tabs de modo** y el **chip de ajuste**, el **toggle "Mostrar calculados"** (el calculado se ve siempre), el **selector de moneda**, el **refrescar**, el **quitar (`X`)**, la **leyenda-selector** completa, el **disparador y popover de excluidos**, la **nota de rango recortado** y el **modo orden**.
 
 **Se conserva tal cual:** eje X (§2), eje Y de **Montos** (§2.1), forma del punto por dirección (§3.1), huecos y puente atenuado (§4), terminales anillados, `isAnimationActive={false}`, tooltip portaled y su caja.
 
@@ -409,7 +453,30 @@ La misma card, montada **dentro** de la card de detalle de `/mes` para **un solo
 
 ### Checklist de aceptación visual — Detalle histórico de fijos (`fixed-evolution`)
 
-> Insumo directo del QA visual per-feature (skill `qa-visual`, `.claude/skills/qa-visual/SKILL.md`). Escenario recomendado: usuario con **al menos 14 gastos fijos** (para ver el reciclado de los 12 colores) repartidos en **5+ categorías**, entre ellos **tres o más de la misma categoría**, **uno con frecuencia > 1**, **uno con un mes anulado**, **uno dado de baja hace unos meses**, **uno de alta el mes pasado**, **uno con un aumento de monto**, **uno con historia de más de 3 años** y **un calculado derivado de un fijo**; más **al menos dos fijos de ingreso** (uno grande tipo sueldo y uno chico, de categorías distintas) y **un calculado cuyo origen es un fijo de ingreso**. Verificar con el rango en **3 años** (default), **5 años** y **3 meses**.
+> Insumo directo del QA visual per-feature (skill `qa-visual`, `.claude/skills/qa-visual/SKILL.md`). Escenario recomendado: usuario con **al menos 14 gastos fijos** (para ver el reciclado de los 12 colores) repartidos en **5+ categorías**, entre ellos **tres o más de la misma categoría**, **uno con frecuencia > 1**, **uno con un mes anulado**, **uno dado de baja hace unos meses**, **uno de alta el mes pasado**, **uno con un aumento de monto**, **uno con historia de más de 3 años** y **un calculado derivado de un fijo**; más **al menos dos fijos de ingreso** (uno grande tipo sueldo y uno chico, de categorías distintas) y **un calculado cuyo origen es un fijo de ingreso**. Verificar con el rango en **3 años** (default), **5 años** y **3 meses**. Los ítems que verifican calculados se corren con el toggle **"Mostrar calculados" prendido**; para el estado "solo calculados" hace falta además un usuario (o rango) cuyos únicos fijos con aparición sean calculados.
+
+*Toggle "Mostrar calculados" (§5.1):*
+- [ ] Una card recién creada (o una persistida sin el campo) muestra el chip **"Mostrar calculados"** con glifo **`↳`** **apagado** (plano, `--panel-2`, texto `--muted`), y **ningún calculado** en canvas, leyenda, contador, excluidos ni tooltip.
+- [ ] El chip es **el último** del cluster izquierdo: `Montos | Variación` · hair · "Ajustada por inflación" · hair · "↳ Mostrar calculados".
+- [ ] Prenderlo lo deja **elevado** (`--panel`, borde `--line-strong`, `--shadow-sm`, texto `--ink`) y **agrega** las líneas dasheadas, sus ítems de leyenda y sus excluidos; el contador `N / M` sube en consecuencia. **Ningún otro fijo cambia de color** ni de tilde.
+- [ ] Destildar un calculado, apagar el toggle y volver a prenderlo: el calculado **vuelve destildado**.
+- [ ] El estado del toggle **persiste** al recargar la página.
+- [ ] Con un rango **sin ningún calculado** (en líneas ni excluidos), el chip **y su divisor no existen** (no queda un hair colgando tras "Ajustada por inflación"); al volver a un rango con calculados, el chip **reaparece con el valor que tenía**.
+- [ ] Con `Tab` el chip recibe foco (ring `--accent-soft`) y `Espacio`/`Enter` lo alternan; el lector anuncia "Mostrar calculados" con su estado presionado.
+- [ ] Ningún estado del chip usa verde, rojo ni índigo (salvo el focus ring).
+- [ ] La **variante acotada** de `/mes` **no** muestra el chip.
+
+*Leyenda — calculado con origen (§8):*
+- [ ] El ítem de un calculado se lee **`[mini-línea] ↳ {descripción} · desde {Origen}`**: la descripción en `--ink-2`/500 y **" · desde {Origen}"** más liviano, en `--muted`/400.
+- [ ] Con descripción y origen largos, **los dos nombres truncan con elipsis por separado** (se ve el arranque de ambos) y " · desde " nunca se corta; el `title` muestra el texto completo.
+- [ ] Destildado, **ambos segmentos** quedan tachados en `--muted`.
+- [ ] Los ítems de **fijos normales** no cambian (una sola etiqueta, tope 180px, sin "desde").
+- [ ] En el popover de **excluidos**, un calculado sigue mostrando solo `↳` + descripción + `● {Categoría} · desde {Mmm AAAA}` (**sin** origen).
+
+*Estado solo calculados (§10):*
+- [ ] Con el toggle **apagado** y un rango donde todo son calculados: ejes completos, overlay **"En el rango solo hay calculados."** + **"Prendé «Mostrar calculados» para verlos."**, **sin** leyenda ni carril, y el chip **visible** en la cabecera. **No** aparece "Sin fijos en el rango.".
+- [ ] Prender el chip desde ese estado **dibuja** los calculados (la salida que promete el copy es real).
+- [ ] A **600px con sidebar abierto** el chip **y su divisor bajan juntos** de renglón; la etiqueta no se abrevia y no hay scroll horizontal del `body`.
 
 *Dirección — ingresos y gastos (§3.1):*
 - [ ] Los fijos de **ingreso aparecen** en el canvas y en la leyenda, **mezclados** con los gastos en **una sola lista** ordenada por total del rango (el sueldo, si es el mayor, es el **primer** ítem); **no** hay sección, encabezado ni separador por dirección.
@@ -425,7 +492,7 @@ La misma card, montada **dentro** de la card de detalle de `/mes` para **un solo
 
 *Identidad y cabecera:*
 - [ ] El menú `[+]` ofrece **"Detalle histórico de fijos"** con ícono **`Repeat`** y la sub-descripción "Cada gasto e ingreso fijo por separado, mes a mes: cuánto valía y cuándo cambió."
-- [ ] La cabecera es de **dos líneas**: título editable arriba; debajo `[ Montos | Variación ] · divisor --hair · chip "Ajustada por inflación"` a la izquierda ⟷ `[ Rango ▾ ] · hair · [ moneda ] · hair · [ refrescar ][ X ]` a la derecha.
+- [ ] La cabecera es de **dos líneas**: título editable arriba; debajo `[ Montos | Variación ] · divisor --hair · chip "Ajustada por inflación"` (+ `· hair · "↳ Mostrar calculados"` si el rango trae calculados) a la izquierda ⟷ `[ Rango ▾ ] · hair · [ moneda ] · hair · [ refrescar ][ X ]` a la derecha.
 - [ ] **No hay stepper de año ni flechas de período** en ninguna parte de la card.
 - [ ] La card **no** muestra chip de **Simulados**, **ni** ícono/popover de **límites**, **ni** filtro de categorías, en ninguna parte.
 - [ ] La card **no** aparece como widget del Dashboard.

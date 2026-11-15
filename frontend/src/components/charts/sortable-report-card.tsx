@@ -137,6 +137,8 @@ interface SortableReportCardProps {
   onFixedSelectedIdsChange: (ids: string[] | null) => void;
   /** Ola 6: rango de meses corridos de `fixed-evolution` (RF-REP-013). */
   onFixedRangeMonthsChange: (rangeMonths: FixedEvolutionRangeMonths) => void;
+  /** RF-REP-013: toggle "Mostrar calculados" de `fixed-evolution`. */
+  onFixedShowCalculatedChange: (show: boolean) => void;
 }
 
 export function SortableReportCard({
@@ -158,6 +160,7 @@ export function SortableReportCard({
   onFixedAdjustedChange,
   onFixedSelectedIdsChange,
   onFixedRangeMonthsChange,
+  onFixedShowCalculatedChange,
 }: SortableReportCardProps) {
   const {
     attributes,
@@ -253,6 +256,8 @@ export function SortableReportCard({
           mode={config.fixedMode ?? "amounts"}
           adjusted={config.fixedAdjusted ?? false}
           selectedIds={config.fixedSelectedIds ?? null}
+          showCalculated={config.fixedShowCalculated ?? false}
+          onShowCalculatedChange={onFixedShowCalculatedChange}
           onRangeMonthsChange={onFixedRangeMonthsChange}
           onCurrencyChange={onCurrencyChange}
           onRemove={onRemove}

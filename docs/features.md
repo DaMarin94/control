@@ -45,7 +45,7 @@
 | Reportes — Únicos: techo editable de la escala de color de la card (monto + moneda, persistido en USD, default 15 USD) | RF-REP-010 | Implementado |
 | Reportes — card "Reporte anual de gastos en Cuotas" (gantt de barras horizontales por mes) | RF-REP-011 | Implementado |
 | Reportes — card "Inflación vs Ingresos" (líneas anuales: inflación, variación de ingresos y ajustada + tendencias OLS) | RF-REP-012 | Implementado |
-| Reportes — card "Detalle histórico de fijos" (fijos de gasto e ingreso; rango de 3 meses a 5 años anclado al mes en curso, una línea por fijo, selección por fijo, modos montos/variación/ajustada) | RF-REP-013 | Implementado |
+| Reportes — card "Detalle histórico de fijos" (fijos de gasto e ingreso; rango de 3 meses a 5 años anclado al mes en curso, una línea por fijo, selección por fijo, modos montos/variación/ajustada, toggle "Mostrar calculados", origen del calculado en la leyenda) | RF-REP-013 | Implementado |
 | Reportes — Ingresos vs Gastos: filtros de tipo de movimiento, dirección y categoría (acotan las 2 series, no es desglose) | RF-REP-014 | Implementado |
 | Reportes — Ingresos vs Gastos: proyección de fijos a futuro (capacidad retenida en el backend, sin UI que la consuma) | RF-REP-015 | Backend disponible, no expuesto en UI |
 | Reportes — botón de refrescar per-card (los 6 tipos + widget del Dashboard; refetch independiente, feedback solo-spinner) | RF-REP-016 | Implementado |

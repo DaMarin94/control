@@ -141,6 +141,14 @@ Por eso el contorno del total real se dibuja **como serie propia, sin `stackId`,
 - **`rangeMonths` de la respuesta es el EFECTIVO y nunca se escribe de vuelta en la preferencia:** se persiste el **pedido**, si no la preferencia se degradaría sola.
 - **Eje X de largo variable (3 a 60 posiciones):** cada punto se ubica por su `month`; la serie nunca pasa del mes en curso.
 - **`today`** con la fecha local del usuario.
+- **Toggle "Mostrar calculados" (RF-REP-013) — filtro client-side, sin refetch.** Se parte de `rawLines`/`rawExcluded` (lo que trae el response):
+  - la **visibilidad del chip** se evalúa sobre lo **crudo**, antes de filtrar;
+  - gráfico, leyenda, contador `N / M`, excluidos y tooltip usan lo **filtrado**.
+- **`fixedSelectedIds` se define sobre el universo completo, incluidos los calculados ocultos.** Por eso destildar/retildar con el toggle apagado conserva la tilde del calculado.
+- **"Todas"/"Ninguna" escriben `null`/`[]` sobre todo el universo, incluidos los calculados ocultos** — intencional, ver RF-REP-013 (`docs/requirements/informes.md` §Toggle "Mostrar calculados").
+- **`fixedShowCalculated` se omite del config cuando es `false`** (igual que `fixedAdjusted`).
+- **`highlightedId` ignora un `hoveredId` que no está entre las líneas visibles.** Si no, al apagar el toggle con hover sobre un calculado el gráfico queda atenuado.
+- **Ítem de leyenda de un calculado:** `max-w-full` en el ítem + `min-w-0` en los segmentos truncables; sin eso, con `<main>` angosto desborda la leyenda.
 
 ## Gotchas de las cards de gráficos
 

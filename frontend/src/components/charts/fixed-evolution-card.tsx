@@ -674,6 +674,36 @@ function AdjustedChip({ pressed, disabled, onToggle }: AdjustedChipProps) {
   );
 }
 
+// ─── Chip "Mostrar calculados" (docs/design/historico-fijos.md §5.1) ─────────
+
+interface ShowCalculatedChipProps {
+  pressed: boolean;
+  onToggle: () => void;
+}
+
+/** Chip-toggle neutro con glifo `↳`; nunca se deshabilita (cuando no aplica, no se renderiza). */
+function ShowCalculatedChip({ pressed, onToggle }: ShowCalculatedChipProps) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onToggle}
+      className={cn(
+        "inline-flex items-center gap-1.5 px-2.5 py-1.25 rounded-chip",
+        "text-[12.5px] font-semibold select-none",
+        "transition-colors duration-140",
+        "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+        pressed
+          ? "bg-panel border border-line-strong shadow-(--shadow-sm) text-ink active:bg-panel-3"
+          : "bg-panel-2 border border-line text-muted hover:text-ink-2 hover:border-line-strong active:bg-panel-3",
+      )}
+    >
+      <CornerDownRight size={13} aria-hidden="true" className={pressed ? "text-ink-2" : "text-muted"} />
+      Mostrar calculados
+    </button>
+  );
+}
+
 // ─── RangeSelect — chip-dropdown de rango (docs/design.md §9) ────────────────
 
 interface RangeSelectProps {
@@ -1674,7 +1704,7 @@ function FixedLegend({
                 onFocus={() => onHighlight(line.chainId)}
                 onBlur={() => onHighlight(null)}
                 className={cn(
-                  "group inline-flex items-center gap-1.5 px-1.5 py-1 rounded-chip",
+                  "group inline-flex max-w-full items-center gap-1.5 px-1.5 py-1 rounded-chip",
                   "cursor-pointer transition-[background-color,opacity] duration-140",
                   "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
                   isHighlighted ? "bg-panel-2" : "hover:bg-panel-2 active:bg-panel-3",
@@ -1690,16 +1720,48 @@ function FixedLegend({
                   <Swatch color={color} dashed={false} size={10} hollow={state === "unselected"} />
                 )}
                 {line.type === "INCOME" && <IncomeGlyph />}
-                <span
-                  title={label}
-                  className={cn(
-                    "text-[12.5px] font-medium select-none truncate",
-                    state === "unselected" ? "text-muted line-through" : state === "no-trace" ? "text-muted" : "text-ink-2",
-                  )}
-                  style={{ maxWidth: 180 }}
-                >
-                  {label}
-                </span>
+                {line.isCalculated ? (
+                  <span
+                    title={line.originDescription ? `${label} · desde ${line.originDescription}` : label}
+                    className="inline-flex items-baseline min-w-0 select-none"
+                  >
+                    <span
+                      className={cn(
+                        "text-[12.5px] font-medium truncate min-w-0",
+                        state === "unselected" ? "text-muted line-through" : state === "no-trace" ? "text-muted" : "text-ink-2",
+                      )}
+                      style={{ maxWidth: 140 }}
+                    >
+                      {label}
+                    </span>
+                    {line.originDescription && (
+                      <>
+                        <span
+                          className={cn("shrink-0 whitespace-pre text-[12.5px] font-normal text-muted", state === "unselected" && "line-through")}
+                        >
+                          {" · desde "}
+                        </span>
+                        <span
+                          className={cn("text-[12.5px] font-normal text-muted truncate min-w-0", state === "unselected" && "line-through")}
+                          style={{ maxWidth: 100 }}
+                        >
+                          {line.originDescription}
+                        </span>
+                      </>
+                    )}
+                  </span>
+                ) : (
+                  <span
+                    title={label}
+                    className={cn(
+                      "text-[12.5px] font-medium select-none truncate min-w-0",
+                      state === "unselected" ? "text-muted line-through" : state === "no-trace" ? "text-muted" : "text-ink-2",
+                    )}
+                    style={{ maxWidth: 180 }}
+                  >
+                    {label}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -1751,6 +1813,8 @@ export interface FixedEvolutionCardProps {
   mode?: FixedMode;
   adjusted?: boolean;
   selectedIds?: string[] | null;
+  /** Toggle "Mostrar calculados" (RF-REP-013). Ausente/false = apagado. Ignorado en la variante acotada. */
+  showCalculated?: boolean;
   /**
    * Variante acotada a UN fijo (RF-VM-009, docs/design.md §15): se manda como
    * `chainId` al endpoint y la card se renderiza sin chrome de reporte (solo
@@ -1766,6 +1830,7 @@ export interface FixedEvolutionCardProps {
   onModeChange?: (mode: FixedMode) => void;
   onAdjustedChange?: (adjusted: boolean) => void;
   onSelectedIdsChange?: (ids: string[] | null) => void;
+  onShowCalculatedChange?: (show: boolean) => void;
 }
 
 // ─── FixedEvolutionCard ───────────────────────────────────────────────────────
@@ -1780,6 +1845,7 @@ export function FixedEvolutionCard({
   mode: modeProp = "amounts",
   adjusted: adjustedProp = false,
   selectedIds: selectedIdsProp = null,
+  showCalculated: showCalculatedProp = false,
   chainId: scopedChainId,
   onRangeMonthsChange,
   onCurrencyChange,
@@ -1788,6 +1854,7 @@ export function FixedEvolutionCard({
   onModeChange,
   onAdjustedChange,
   onSelectedIdsChange,
+  onShowCalculatedChange,
 }: FixedEvolutionCardProps) {
   const scoped = scopedChainId !== undefined;
   // Variante acotada (§15): Montos, moneda default, todo seleccionado, sin quitar.
@@ -1860,27 +1927,51 @@ export function FixedEvolutionCard({
     if (isEditingTitle) titleInputRef.current?.focus();
   }, [isEditingTitle]);
 
-  const lines = useMemo(() => data?.lines ?? [], [data]);
+  // Toggle "Mostrar calculados" (RF-REP-013): el backend trae SIEMPRE los calculados; el
+  // filtro es client-side. La visibilidad del chip se evalúa sobre lo crudo (antes de
+  // filtrar). La variante acotada no filtra ni muestra el toggle.
+  const rawLines = useMemo(() => data?.lines ?? [], [data]);
+  const rawExcluded = useMemo(() => data?.excluded ?? [], [data]);
+  const hasCalculatedInRange = useMemo(
+    () => rawLines.some((l) => l.isCalculated) || rawExcluded.some((e) => e.isCalculated),
+    [rawLines, rawExcluded],
+  );
+  const showToggle = !scoped && hasCalculatedInRange;
+  const filterCalculated = !scoped && !showCalculatedProp;
+
+  const lines = useMemo(
+    () => (filterCalculated ? rawLines.filter((l) => !l.isCalculated) : rawLines),
+    [rawLines, filterCalculated],
+  );
   const excluded = useMemo(() => {
-    const list = data?.excluded ?? [];
+    const list = filterCalculated ? rawExcluded.filter((e) => !e.isCalculated) : rawExcluded;
     return [...list].sort((a, b) => {
       if (a.startMonth !== b.startMonth) return a.startMonth < b.startMonth ? 1 : -1; // DESC
       const da = a.description ?? "Sin descripción";
       const db = b.description ?? "Sin descripción";
       return da.localeCompare(db, "es-AR");
     });
-  }, [data]);
+  }, [rawExcluded, filterCalculated]);
 
   // Variante acotada: la única línea va SIEMPRE en tratamiento de destacado (§15) y el
-  // hover no cambia nada. En /reportes manda el hover.
-  const highlightedId = scoped ? (lines[0]?.chainId ?? null) : hoveredId;
+  // hover no cambia nada. En /reportes manda el hover (ignorando un id que ya no está visible).
+  const highlightedId = scoped
+    ? (lines[0]?.chainId ?? null)
+    : hoveredId !== null && lines.some((l) => l.chainId === hoveredId)
+      ? hoveredId
+      : null;
 
-  const allChainIds = useMemo(() => lines.map((l) => l.chainId), [lines]);
+  // Universo COMPLETO de la selección (incluye calculados ocultos): la semántica de
+  // `fixedSelectedIds` (null = todos) es sobre este universo, así apagar el toggle
+  // nunca reescribe ni pierde el estado de tilde de los calculados.
+  const allChainIds = useMemo(() => rawLines.map((l) => l.chainId), [rawLines]);
 
+  // Seleccionados VISIBLES (alimenta gráfico, leyenda y contador N / M).
   const selectedSet = useMemo(() => {
-    if (selectedIds === null) return new Set(allChainIds);
-    return new Set(selectedIds);
-  }, [selectedIds, allChainIds]);
+    if (selectedIds === null) return new Set(lines.map((l) => l.chainId));
+    const explicit = new Set(selectedIds);
+    return new Set(lines.filter((l) => explicit.has(l.chainId)).map((l) => l.chainId));
+  }, [selectedIds, lines]);
 
   function handleToggle(chainId: string) {
     const current = selectedIds === null ? allChainIds : selectedIds;
@@ -2032,7 +2123,10 @@ export function FixedEvolutionCard({
   // ── Estados ─────────────────────────────────────────────────────────────────
   const hasData = Boolean(data);
   const isRangeEmpty = hasData && lines.length === 0;
-  const isRangeEmptyPure = isRangeEmpty && excluded.length === 0;
+  // §10: el rango trae ítems pero todos son calculados y el toggle está apagado (precedencia sobre los demás vacíos).
+  const isOnlyCalculated =
+    !scoped && hasData && filterCalculated && lines.length === 0 && excluded.length === 0 && (rawLines.length > 0 || rawExcluded.length > 0);
+  const isRangeEmptyPure = isRangeEmpty && excluded.length === 0 && !isOnlyCalculated;
   const isRangeEmptyWithExcluded = isRangeEmpty && excluded.length > 0;
   const isNoneSelected = hasData && lines.length > 0 && selectedSet.size === 0;
   const isVariationEmpty =
@@ -2192,6 +2286,12 @@ export function FixedEvolutionCard({
           <ViewTabs value={mode} onChange={(v) => onModeChange?.(v)} />
           <span className="block h-4 w-px bg-hair shrink-0" aria-hidden="true" />
           <AdjustedChip pressed={adjusted} disabled={isAmounts} onToggle={() => onAdjustedChange?.(!adjusted)} />
+          {showToggle && (
+            <span className="inline-flex items-center gap-1.5 shrink-0">
+              <span className="block h-4 w-px bg-hair shrink-0 self-center" aria-hidden="true" />
+              <ShowCalculatedChip pressed={showCalculatedProp} onToggle={() => onShowCalculatedChange?.(!showCalculatedProp)} />
+            </span>
+          )}
         </div>
         <CardControls
           rangeMonths={rangeMonths}
@@ -2245,6 +2345,12 @@ export function FixedEvolutionCard({
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 z-10 pointer-events-none text-center px-4" aria-live="polite">
                 <p className="text-[14px] text-muted">Sin fijos en el rango.</p>
                 <p className="text-[12.5px] leading-normal text-muted">Probá un rango más largo.</p>
+              </div>
+            )}
+            {isOnlyCalculated && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 z-10 pointer-events-none text-center px-4" aria-live="polite">
+                <p className="text-[14px] text-muted">En el rango solo hay calculados.</p>
+                <p className="text-[12.5px] leading-normal text-faint">Prendé «Mostrar calculados» para verlos.</p>
               </div>
             )}
             {!scoped && isRangeEmptyWithExcluded && (
