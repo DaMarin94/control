@@ -1010,6 +1010,60 @@ describe("FixedEvolutionCard — fijos de ingreso en la leyenda", () => {
   });
 });
 
+describe("FixedEvolutionCard — línea sin descripción", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("la leyenda muestra el nombre de la categoría y nunca 'Sin descripción'", () => {
+    const sinDesc: FixedEvolutionLine = { ...lineAlquiler, chainId: "fx-sd", ordinal: 9, description: null, categoryName: "Vivienda" };
+    mockHookWithData({ ...mockData, lines: [sinDesc] });
+    renderCard();
+    const group = screen.getByRole("group", { name: /elegir fijos/i });
+    expect(within(group).getByRole("button", { name: /vivienda/i })).toBeInTheDocument();
+    expect(screen.queryByText(/sin descripción/i)).not.toBeInTheDocument();
+  });
+
+  it("excluido sin descripción: nombre = categoría y sublínea 'desde …' sin punto ni categoría repetida", () => {
+    const sinDesc = { ...excludedItem, description: null, categoryName: "Ocio" };
+    mockHookWithData({ ...mockData, excluded: [sinDesc] });
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: /fijos con una sola aparición/i }));
+    const item = within(screen.getByRole("dialog", { name: /fijos sin evolución en el rango/i })).getByRole("listitem");
+    expect(within(item).getByText("Ocio")).toBeInTheDocument();
+    const sub = within(item).getByTestId("excluded-subline");
+    expect(sub.textContent?.trim()).toBe("desde Abr 2026");
+    expect(sub.querySelector(".rounded-full")).toBeNull();
+  });
+
+  it("tooltip modo línea sin descripción: la subfila arranca en el badge, sin punto ni categoría", () => {
+    const meta = {
+      chainId: "c1", color: "red", isCalculated: false, type: "EXPENSE" as const,
+      description: null, categoryName: "Trabajo", categoryColor: "#4F86C6", originDescription: null, frequency: 1,
+    };
+    const line: FixedEvolutionLine = { ...lineAlquiler, chainId: "c1", description: null, categoryName: "Trabajo" };
+    const { container } = render(
+      <CustomTooltip
+        active
+        label="2026-04"
+        mode="amounts"
+        currency="ARS"
+        highlightedId="c1"
+        visibleMeta={[meta]}
+        valuesByChain={new Map([["c1", [null, 150000]]])}
+        pointsByChain={new Map([["c1", [null, buildPoint("2026-04", 150000)]]])}
+        lineByChain={new Map([["c1", line]])}
+        monthsList={["2026-03", "2026-04"]}
+      />,
+    );
+    const tooltip = screen.getByRole("tooltip");
+    expect(within(tooltip).getAllByText("Trabajo")).toHaveLength(1);
+    expect(tooltip.textContent).not.toContain("·");
+    expect(container.querySelector(".rounded-full")).toBeNull();
+    expect(within(tooltip).getByText("Gasto")).toBeInTheDocument();
+  });
+});
+
 describe("CustomTooltip — variante acotada y color por tipo", () => {
   const months = ["2026-03", "2026-04"];
   function renderTooltip(type: "EXPENSE" | "INCOME", scoped: boolean, point: FixedEvolutionMonthPoint, value: number | null) {

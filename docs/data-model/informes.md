@@ -317,7 +317,7 @@ FixedEvolutionLine {
   startMonth: string;                 // "YYYY-MM" — arranque de la cadena
   endMonth: string | null;            // "YYYY-MM"; null = sin fin programado
   frequency: number;                  // entero 1..12, compartido por toda la cadena
-  originDescription: string | null;   // solo calculados; null en líneas normales
+  originDescription: string | null;   // solo calculados: rótulo del origen (ver abajo); null en líneas normales
   originChainId: string | null;       // ídem
   months: FixedEvolutionMonthPoint[]; // largo VARIABLE = rangeMonths efectivo (3..60)
 }
@@ -344,6 +344,7 @@ FixedEvolutionExcludedLine {
 
 - **El rango viaja resuelto: `startMonth`, `endMonth` y `rangeMonths` describen lo que la respuesta REALMENTE cubre.** `rangeMonths` es el largo **efectivo**, después de recortar el borde izquierdo contra el primer mes con aparición de un fijo (gasto o ingreso) del usuario, y puede ser menor al pedido; el borde derecho nunca se corre para compensar. El front rotula el eje y los estados con el rango efectivo, no con lo que pidió. No hay topes de navegación que transportar: hacia adelante no hay nada que topar (`endMonth` es el mes en curso) y el límite hacia atrás está expresado en `startMonth`, con granularidad de mes.
 - **`months` es de largo variable y cada punto se identifica por su `month`.** El índice del array no dice de qué mes es un punto. **Ningún punto es posterior a `endMonth`.**
+- **`originDescription` — rótulo del origen, con fallback resuelto en el backend.** En un calculado es la descripción de la **última fila** del fijo de origen o, si no tiene descripción (`null` o vacía), el **nombre de su categoría**. Es `null` solo si el origen no es resoluble y en líneas normales. El front lo muestra tal cual, sin fallback propio. `description` de la línea **no** tiene fallback: es `null` si la línea no tiene descripción.
 - **Los tres valores del punto vienen calculados del backend** (monto convertido + las dos variaciones, en puntos porcentuales). El front **no** deriva porcentajes ni reconvierte montos.
 - **`amountCents: 0` con `reason: null` es un punto REAL, no un hueco.** Un calculado puede dar 0 legítimamente (RN-018). El hueco es **`amountCents: null` + `reason` no-null**; `reason` dice por qué (mes fuera de frecuencia, anulado, previo al alta, posterior a la baja, o mes en que un calculado resulta `INCOME`).
 - **`ordinal` — rank ESTABLE entre rangos.** Se calcula por la fila más antigua de cada cadena sobre el **universo completo** de cadenas del usuario (gasto, ingreso y calculados de fijo), no sobre el rango pedido ni sobre el `chainId` pedido. Es lo que permite que un fijo conserve su identidad (y su color) al cambiar lo que la card muestra. **El índice del array NO sirve para eso**: `lines` viene ordenado por el total del tramo mostrado, así que la misma cadena cambia de posición cuando ese tramo cambia.

@@ -653,7 +653,7 @@ describe("CuotasGanttCard — tooltip de barra", () => {
     expect(bar?.getAttribute("aria-label")).not.toContain("· total");
   });
 
-  it("el tooltip muestra 'Sin descripción' cuando description=null", () => {
+  it("sin descripción: nombre visible = categoría, sin 'Sin descripción' ni categoría repetida", () => {
     const nullDescData: CuotasGanttResponse = {
       ...mockData,
       bars: [{ ...mockData.bars[0]!, description: null }],
@@ -661,10 +661,17 @@ describe("CuotasGanttCard — tooltip de barra", () => {
     };
     mockUseCuotasGantt.mockReturnValue(makeSuccessReturn(nullDescData));
     renderCard({ year: 2026 });
-    const bar = screen.getByRole("row", { name: /sin descripción/i });
+    const bar = screen.getByRole("row");
+    const aria = bar.getAttribute("aria-label") ?? "";
+    expect(aria).not.toMatch(/sin descripción/i);
+    expect(aria.startsWith("Entretenimiento, ")).toBe(true);
+    expect(aria.match(/Entretenimiento/g)).toHaveLength(1);
+    // Etiqueta de barra: monto · nombre visible (categoría)
+    expect(bar).toHaveTextContent("Entretenimiento");
     fireEvent.mouseEnter(bar);
     const tooltip = screen.getByRole("tooltip");
-    expect(tooltip).toHaveTextContent(/sin descripción/i);
+    expect(tooltip).not.toHaveTextContent(/sin descripción/i);
+    expect(tooltip.textContent?.match(/Entretenimiento/g)).toHaveLength(1);
   });
 });
 

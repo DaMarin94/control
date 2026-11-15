@@ -1153,16 +1153,13 @@ function ExcludedPopover({ items, anchorRef, onClose }: ExcludedPopoverProps) {
         className="max-h-60 overflow-y-auto overflow-x-hidden legend-scroll-region"
       >
         {items.map((item) => {
-          const label = item.description ?? "Sin descripción";
+          const label = item.description || item.categoryName;
           return (
             <div key={item.chainId} role="listitem" className="flex items-start gap-2 px-2 py-1.5 cursor-default">
               <div className="min-w-0">
                 <p
                   title={label}
-                  className={cn(
-                    "flex max-w-full items-center gap-1 text-[12.5px] font-medium",
-                    item.description ? "text-ink-2" : "text-muted",
-                  )}
+                  className="flex max-w-full items-center gap-1 text-[12.5px] font-medium text-ink-2"
                   style={{ maxWidth: 180 }}
                 >
                   {item.isCalculated && (
@@ -1172,12 +1169,17 @@ function ExcludedPopover({ items, anchorRef, onClose }: ExcludedPopoverProps) {
                   <span className="truncate">{label}</span>
                 </p>
                 <p data-testid="excluded-subline" className="flex items-center gap-1.25 text-[11.5px] text-faint">
-                  <span
-                    className="h-1.5 w-1.5 rounded-full shrink-0"
-                    style={{ background: item.categoryColor }}
-                    aria-hidden="true"
-                  />
-                  {item.categoryName} · desde {formatMonthShort(item.startMonth)}
+                  {item.description && (
+                    <>
+                      <span
+                        className="h-1.5 w-1.5 rounded-full shrink-0"
+                        style={{ background: item.categoryColor }}
+                        aria-hidden="true"
+                      />
+                      {item.categoryName} ·{" "}
+                    </>
+                  )}
+                  desde {formatMonthShort(item.startMonth)}
                 </p>
               </div>
             </div>
@@ -1349,17 +1351,21 @@ export function CustomTooltip({
         <div className="flex items-start gap-1.75">
           <Swatch color={meta.color} dashed={meta.isCalculated} size={10} />
           <div className="min-w-0">
-            <p className={cn("text-[12px] font-semibold truncate", meta.description ? "text-ink" : "text-muted")}>
-              {meta.description ?? "Sin descripción"}
+            <p className="text-[12px] font-semibold truncate text-ink">
+              {meta.description || meta.categoryName}
             </p>
             <p className="text-[11.5px] font-medium text-ink-2 truncate">
-              <span
-                className="inline-block h-1.5 w-1.5 rounded-full align-middle mr-1.25"
-                style={{ background: meta.categoryColor }}
-                aria-hidden="true"
-              />
-              {meta.categoryName}
-              {" · "}
+              {meta.description && (
+                <>
+                  <span
+                    className="inline-block h-1.5 w-1.5 rounded-full align-middle mr-1.25"
+                    style={{ background: meta.categoryColor }}
+                    aria-hidden="true"
+                  />
+                  {meta.categoryName}
+                  {" · "}
+                </>
+              )}
               <span
                 className={cn(
                   "inline-flex items-center rounded-(--r-chip) px-1.5 py-px text-[11px] font-semibold",
@@ -1418,7 +1424,7 @@ export function CustomTooltip({
   for (const meta of visibleMeta) {
     const value = valuesByChain.get(meta.chainId)?.[monthIndex] ?? null;
     if (value === null) continue;
-    rows.push({ chainId: meta.chainId, color: meta.color, dashed: meta.isCalculated, label: meta.description ?? "Sin descripción", value, type: meta.type });
+    rows.push({ chainId: meta.chainId, color: meta.color, dashed: meta.isCalculated, label: meta.description || meta.categoryName, value, type: meta.type });
   }
   if (rows.length === 0) return null;
   rows.sort((a, b) => b.value - a.value);
@@ -1689,7 +1695,7 @@ function FixedLegend({
             const values = valuesByChain.get(line.chainId) ?? [];
             const hasTrace = values.some((v) => v !== null);
             const state: "selected" | "unselected" | "no-trace" = !isSelected ? "unselected" : hasTrace ? "selected" : "no-trace";
-            const label = line.description ?? "Sin descripción";
+            const label = line.description || line.categoryName;
             const isHighlighted = highlightedId === line.chainId;
 
             return (
@@ -1947,8 +1953,8 @@ export function FixedEvolutionCard({
     const list = filterCalculated ? rawExcluded.filter((e) => !e.isCalculated) : rawExcluded;
     return [...list].sort((a, b) => {
       if (a.startMonth !== b.startMonth) return a.startMonth < b.startMonth ? 1 : -1; // DESC
-      const da = a.description ?? "Sin descripción";
-      const db = b.description ?? "Sin descripción";
+      const da = a.description || a.categoryName;
+      const db = b.description || b.categoryName;
       return da.localeCompare(db, "es-AR");
     });
   }, [rawExcluded, filterCalculated]);

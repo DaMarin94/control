@@ -539,6 +539,23 @@ describe('MovementsService — getFijosHistoricoReport (RF-REP-013, GET /movemen
       expect(calcLine.originChainId).toBe('chain-income');
     });
 
+    it('calculado con origen sin descripción: originDescription = nombre de la categoría del origen', async () => {
+      mockRepo.getAllFijosForAnnual.mockResolvedValue([
+        makeFijo({ chainId: 'chain-nodesc', type: MovementType.INCOME, description: null, categoryName: 'Alquiler', amountCents: 500000 }),
+        makeCalc({
+          chainId: 'calc-chain-2',
+          sourceChainId: 'chain-nodesc',
+          formulaOperator: FormulaOperator.PCT,
+          formulaOperand: 1000,
+          formulaSign: -1,
+        }),
+      ]);
+      const result = await service.getFijosHistoricoReport(USER_A, STANDARD_RANGE, undefined, STANDARD_TODAY);
+      const calcLine = findLine(result.lines, 'calc-chain-2');
+      expect(calcLine.originDescription).toBe('Alquiler');
+      expect(calcLine.originChainId).toBe('chain-nodesc');
+    });
+
     it('calculado cuyo origen no se puede resolver (cadena de origen eliminada / inexistente): 0 apariciones → viaja a `excluded` (fallback defensivo + opción B)', async () => {
       mockRepo.getAllFijosForAnnual.mockResolvedValue([
         makeCalc({ chainId: 'calc-orphan', sourceChainId: 'chain-does-not-exist' }),

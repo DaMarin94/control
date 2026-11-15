@@ -221,3 +221,50 @@ describe("useDefaultPaymentMethodPrefill", () => {
     expect(setPaymentMethodId).toHaveBeenCalledWith(mockDebitMethod.id);
   });
 });
+
+describe("useDefaultPaymentMethodPrefill — rearm", () => {
+  it("rearm() permite volver a aplicar el default tras un reset del form", () => {
+    mockPreferences({ defaultPaymentMethods: { unico: mockDebitMethod.id, fijo: null, cuota: null } });
+    mockMethods([mockDebitMethod]);
+    const setPaymentMethodId = vi.fn();
+
+    const { result, rerender } = renderHook(
+      ({ current }: { current: string }) =>
+        useDefaultPaymentMethodPrefill({
+          slot: "unico",
+          isEditing: false,
+          currentPaymentMethodId: current,
+          setPaymentMethodId,
+        }),
+      { initialProps: { current: "" } },
+    );
+    expect(setPaymentMethodId).toHaveBeenCalledTimes(1);
+
+    // El default se aplicó; el form lo refleja y luego se guarda y resetea a "".
+    rerender({ current: mockDebitMethod.id });
+    result.current.rearm();
+    rerender({ current: "" });
+
+    expect(setPaymentMethodId).toHaveBeenCalledTimes(2);
+    expect(setPaymentMethodId).toHaveBeenLastCalledWith(mockDebitMethod.id);
+  });
+
+  it("sin rearm() no vuelve a aplicar tras el reset (one-shot)", () => {
+    mockPreferences({ defaultPaymentMethods: { unico: mockDebitMethod.id, fijo: null, cuota: null } });
+    mockMethods([mockDebitMethod]);
+    const setPaymentMethodId = vi.fn();
+    const { rerender } = renderHook(
+      ({ current }: { current: string }) =>
+        useDefaultPaymentMethodPrefill({
+          slot: "unico",
+          isEditing: false,
+          currentPaymentMethodId: current,
+          setPaymentMethodId,
+        }),
+      { initialProps: { current: "" } },
+    );
+    rerender({ current: mockDebitMethod.id });
+    rerender({ current: "" });
+    expect(setPaymentMethodId).toHaveBeenCalledTimes(1);
+  });
+});

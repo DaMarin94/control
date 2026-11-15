@@ -465,7 +465,9 @@ export const FIXED_EVOLUTION_DEFAULT_RANGE_MONTHS: FixedEvolutionRangeMonths = 3
  * frequency — periodicidad del fijo lógico, entero 1..12 (RF-MF-006). Inmutable
  *   tras crearse: toda la cadena (todos sus splits) comparte el mismo valor.
  * originDescription / originChainId — solo en calculados (`isCalculated: true`):
- *   descripción y chainId del fijo del que deriva. En líneas normales, ambos
+ *   descripción y chainId del fijo del que deriva. Si el origen no tiene
+ *   descripción, originDescription es el nombre de su categoría (mismo criterio
+ *   que `sourceDescription`). En líneas normales, ambos
  *   `null`. En un calculado también pueden ser `null` si el origen no se puede
  *   resolver (p.ej. la cadena de origen fue eliminada); el origen puede ser un
  *   fijo de INCOME o uno sin ninguna aparición en el rango pedido — ninguno de
@@ -3239,8 +3241,9 @@ export class MovementsService {
       endMonth: string | null;
       /** Frecuencia del fijo lógico (RF-MF-006, inmutable — compartida por toda la cadena). */
       frequency: number;
-      /** Descripción del fijo de origen (solo calculados); null en líneas normales o si el
-       * origen no se puede resolver (p.ej. cadena de origen eliminada). */
+      /** Descripción del fijo de origen (solo calculados); si el origen no tiene descripción,
+       * el nombre de su categoría. null en líneas normales o si el origen no se puede
+       * resolver (p.ej. cadena de origen eliminada). */
       originDescription: string | null;
       /** chainId del fijo de origen (solo calculados); null en líneas normales o si no se
        * puede resolver. */
@@ -3261,7 +3264,10 @@ export class MovementsService {
       const originSorted = [...originRows].sort((a, b) =>
         a.startMonth < b.startMonth ? -1 : a.startMonth > b.startMonth ? 1 : 0,
       );
-      return originSorted[originSorted.length - 1].description ?? null;
+      const last = originSorted[originSorted.length - 1];
+      // Sin descripción propia → nombre de la categoría (mismo criterio que
+      // `sourceDescription`); `categoryName` ya viene en la fila.
+      return last.description || last.categoryName || null;
     };
 
     const buildNormalLine = (chainId: string, rows: RecurringForAnnual[]): LineBuild => {

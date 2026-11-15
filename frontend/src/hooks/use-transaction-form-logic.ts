@@ -319,7 +319,7 @@ export function useTransactionFormLogic({
   const selectedPaymentMethodId = watch("paymentMethodId") ?? "";
   const selectedAutoDebit = watch("autoDebit") ?? false;
 
-  useDefaultPaymentMethodPrefill({
+  const { rearm: rearmDefaultPaymentMethod } = useDefaultPaymentMethodPrefill({
     slot: "unico",
     isEditing,
     currentPaymentMethodId: selectedPaymentMethodId,
@@ -477,6 +477,7 @@ export function useTransactionFormLogic({
           time: fresh.time,
           description: "",
         });
+        rearmDefaultPaymentMethod();
         setIsExchangeRateModified(false);
         onCreateSuccess();
       } else {

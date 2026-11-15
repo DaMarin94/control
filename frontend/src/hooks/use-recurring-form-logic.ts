@@ -307,7 +307,7 @@ export function useRecurringFormLogic({
   const selectedPaymentMethodId = watch("paymentMethodId") ?? "";
   const selectedAutoDebit = watch("autoDebit") ?? false;
 
-  useDefaultPaymentMethodPrefill({
+  const { rearm: rearmDefaultPaymentMethod } = useDefaultPaymentMethodPrefill({
     slot: "fijo",
     isEditing,
     currentPaymentMethodId: selectedPaymentMethodId,
@@ -464,6 +464,7 @@ export function useRecurringFormLogic({
           autoDebit: false,
           description: "",
         });
+        rearmDefaultPaymentMethod();
         setIsExchangeRateModified(false);
         onCreateSuccess();
       } else {

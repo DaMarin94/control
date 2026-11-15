@@ -148,6 +148,15 @@ El **eje X** es idéntico en los tres modos: **una posición por cada mes corrid
 
 **El eje Y no cambia:** magnitud compartida, piso cero, formato abreviado. Sin marca de signo ni de dirección en el eje.
 
+#### 3.2 Nombre visible de un fijo — sin descripción, el nombre de su categoría
+
+**Nombre visible** = `description` si existe; si es `null` (o vacía), el **nombre de su categoría**. Se usa en **toda** superficie de la card donde va "la descripción" (filas del tooltip modo mes, encabezado del tooltip modo línea, segmento 1 de la leyenda, ítem de excluidos, `title`, nombre accesible, desempate de orden). El string "Sin descripción" **no existe** en esta card.
+
+- **Mismo estilo que una descripción real:** misma tipografía, peso, color del estado y truncado. **Sin `--muted`** ni itálica: el nombre de la categoría es un nombre legítimo, no un placeholder; marcarlo distinto agregaría ruido sin ayudar a la tarea (identificar el fijo).
+- **Anti-duplicación:** donde debajo del nombre hay una subfila que arranca con **punto de categoría + nombre de categoría** (encabezado del tooltip modo línea §7B, sublínea del ítem de excluidos §8.1), si el nombre visible **ya es** la categoría, la subfila **omite el segmento `● {Categoría}`** y arranca directo en el segmento siguiente.
+- **Separadores `·`:** van **solo entre segmentos presentes**. Al omitir el primero, desaparece también el `·` que lo seguía: la subfila **nunca empieza con `·`**. Ej.: `● Servicios · [Gasto] · ↳ desde Sueldo` → `[Gasto] · ↳ desde Sueldo`.
+- **Origen de un calculado (`originDescription`):** el backend ya resuelve el fallback (descripción del origen, o su categoría si no tiene). El front lo muestra **tal cual**, sin fallback propio; solo es `null` si el origen **no es resoluble**, y en ese caso el segmento de origen se omite (§7B, §8).
+
 #### 4. Huecos — el puente atenuado los nombra; el punto los confirma cuando hay lugar
 
 **El hueco es dato** (RF-REP-013: la ausencia es hueco, nunca cero) y una línea **puede valer 0 de verdad** (RN-018). El portador de esa distinción **no puede depender de la cantidad de posiciones** (60 meses × 30 líneas = hasta 1800 puntos): el portador principal es **el trazo**; el punto es apoyo.
@@ -252,12 +261,12 @@ Caja estándar: portaled a `body`, `--panel`, borde `--line`, `--r-ctl` 10px, `-
 
 **A. Modo mes (sin línea destacada) — la lectura comparativa.**
 - **Encabezado:** mes y año, UI 12.5px/600 `--ink` ("Marzo 2026").
-- **Filas:** una por línea visible **con punto ese mes**, ordenadas por valor desc. Cada fila: swatch **8px `rounded-[3px]`** del color de la línea (o **mini-línea dasheada 14px** si es calculado) + (solo ingresos) `ArrowUp` 11px `--income-ink` + descripción UI 12.5px `--ink-2` `truncate` + valor **mono `tnum`** a la derecha — en Montos `--ink` gasto / `--income-ink` ingreso, en variación `--ink` —, sin abreviar.
+- **Filas:** una por línea visible **con punto ese mes**, ordenadas por valor desc. Cada fila: swatch **8px `rounded-[3px]`** del color de la línea (o **mini-línea dasheada 14px** si es calculado) + (solo ingresos) `ArrowUp` 11px `--income-ink` + nombre visible (§3.2) UI 12.5px `--ink-2` `truncate` + valor **mono `tnum`** a la derecha — en Montos `--ink` gasto / `--income-ink` ingreso, en variación `--ink` —, sin abreviar.
 - **Tope de 8 filas + `+N más`** (11.5px `--faint`, sin swatch).
 - **Sin fila de total.**
 
 **B. Modo línea (con línea destacada) — la ficha del fijo-mes.**
-- **Encabezado:** swatch/mini-línea + **descripción completa** UI 12px/600 `--ink` (o `Sin descripción` en `--muted`); debajo, **punto de categoría** (6px `rounded-full`, `category.color` tal cual) + **nombre de la categoría** UI 11.5px/500 `--ink-2` (`gap-[5px]`) + `· ` + **badge de dirección** (§3.1), y si es calculado `· ` + **`CornerDownRight` 12px `--muted`** + `desde {Origen}` (mismo segmento que la sublínea de `/mes`).
+- **Encabezado:** swatch/mini-línea + **nombre visible completo** (§3.2) UI 12px/600 `--ink`; debajo, **punto de categoría** (6px `rounded-full`, `category.color` tal cual) + **nombre de la categoría** UI 11.5px/500 `--ink-2` (`gap-[5px]`) + `· ` + **badge de dirección** (§3.1), y si es calculado `· ` + **`CornerDownRight` 12px `--muted`** + `desde {Origen}` (mismo segmento que la sublínea de `/mes`; se omite si `originDescription` es `null`). **Sin descripción:** el encabezado ya muestra la categoría, así que la subfila **omite punto + nombre de categoría y su `·`** y arranca en el badge: `[badge]` / `[badge] · ↳ desde {Origen}`.
 - **Cifra dominante:** valor del mes bajo el cursor, **mono `tnum` 13px/600**, con micro-rótulo del mes (`Mar 2026`) en `--faint` 9px uppercase tracking. Color: Montos por tipo; variación `--ink`.
 - **Fila `Frecuencia`:** label UI 11.5px/500 `--ink-2` ⟷ glifo `Repeat` 12px `--muted` + etiqueta en minúscula de *Frecuencia del fijo*.
 - **Mes sin punto:** en lugar de la cifra dominante, **`—`** (`--faint`, mono) y, bajo un divisor `--hair`, la **fila de motivo** (UI 11.5px/500 `--ink-2`, copy de §4).
@@ -278,14 +287,14 @@ Reemplaza al filtro por categoría: selección **por fijo individual**, un ítem
 
 **Etiqueta con origen del calculado — dos segmentos con jerarquía propia:**
 
-- **Segmento 1 — descripción:** UI **12.5px/500**, color del estado del ítem (tabla de abajo), **`max-width: 140px`** + `truncate`. Sin descripción → **"Sin descripción"**.
+- **Segmento 1 — nombre visible (§3.2):** UI **12.5px/500**, color del estado del ítem (tabla de abajo), **`max-width: 140px`** + `truncate`. Sin descripción → **nombre de la categoría**, mismo estilo.
 - **Segmento 2 — origen:** **` · desde {Origen}`** en UI **12.5px/400 `--muted`** (el `·` y "desde" incluidos), con `{Origen}` = `originDescription` **`max-width: 100px`** + `truncate`. El "` · desde `" es `shrink-0`: nunca se corta, así que el corte siempre cae **dentro** de un nombre, nunca entre los dos.
 - **Por qué dos topes y no uno de 180px sobre todo el texto:** con un solo tope el corte cae siempre al final y se come **el origen** — justo el dato que el requerimiento pide visible. Dos topes garantizan que se vea el arranque de los dos nombres. Ancho máximo del ítem calculado ≈ 12 (padding) + 14 (mini-línea) + 11 (`↳`) + 12 (gaps) + 140 + ~50 (` · desde `) + 100 ≈ **340px**: entra en un renglón a 352px de contenido (checkpoint crítico, §11).
 - **Por qué el origen en `--muted`/400:** es identidad secundaria (de quién deriva), no el nombre del ítem; mismo peso relativo que `desde {Origen}` en la sublínea del tooltip (§7B). Sin `--faint`: tiene que leerse sin hover.
 - **Estados:** **destildado** → los **dos** segmentos en `--muted` con `line-through` (el ítem entero está fuera del gráfico); **sin trazo** → descripción `--muted` sin tachado, origen igual que siempre.
-- **`title`** (en la etiqueta): texto completo **`{descripción} · desde {Origen}`**. En el estado *sin trazo* el `title` del botón sigue siendo el motivo (tabla de abajo).
-- **Origen sin descripción** (`originDescription: null`): el segmento 2 **no se renderiza** — mismo criterio que la sublínea del tooltip, que lo omite.
-- **Nombre accesible:** el texto visible completo ("{descripción} · desde {Origen}"); el `↳` es `aria-hidden`.
+- **`title`** (en la etiqueta): texto completo **`{nombre visible} · desde {Origen}`**. En el estado *sin trazo* el `title` del botón sigue siendo el motivo (tabla de abajo).
+- **Origen no resoluble** (`originDescription: null`): el segmento 2 **no se renderiza** — mismo criterio que la sublínea del tooltip, que lo omite. Un origen sin descripción **no** cae acá: el backend ya devuelve su categoría como `originDescription` y se muestra tal cual (§3.2).
+- **Nombre accesible:** el texto visible completo ("{nombre visible} · desde {Origen}"); el `↳` es `aria-hidden`.
 - **Fijo normal:** sin cambios — una sola etiqueta con `max-width: 180px`.
 
 **Tres estados de ítem:**
@@ -320,11 +329,11 @@ Los fijos con **menos de 2 apariciones en el rango** (`excluded`) no dibujan evo
 - **Lista:** `max-h 240px` con **scroll propio** y **fade inferior 16px** (`mask-image`, `data-overflow`). `role="list"`, ítems `role="listitem"`, **no interactivos** (sin hover de selección, `cursor: default`, sin foco). No destacan nada en el canvas.
 - **Ítem** (`flex items-start gap-[8px] px-[8px] py-[6px]`):
   - **Sin swatch ni mini-línea** (un excluido no dibuja línea). **Calculado:** **`CornerDownRight` 11px `--muted`** antes de la descripción. **Ingreso:** **`ArrowUp` 11px `--income-ink`** antes de la descripción. Gasto normal sin glifo.
-  - **Descripción** UI 12.5px/500 `--ink-2`, `max-w 180px` + `truncate` + `title`. Sin descripción → **"Sin descripción"** en `--muted`.
-  - **Sublínea** UI 11.5px `--faint`: **`● {Categoría} · desde {Mmm AAAA}`**, con el **punto de categoría** (6px `rounded-full`, `category.color` tal cual, `gap-[5px]`).
+  - **Nombre visible** (§3.2) UI 12.5px/500 `--ink-2`, `max-w 180px` + `truncate` + `title`. Sin descripción → **nombre de la categoría**, mismo estilo.
+  - **Sublínea** UI 11.5px `--faint`: **`● {Categoría} · desde {Mmm AAAA}`**, con el **punto de categoría** (6px `rounded-full`, `category.color` tal cual, `gap-[5px]`). **Sin descripción:** se omite `● {Categoría} · ` y la sublínea queda **`desde {Mmm AAAA}`** (sin punto ni `·` inicial).
   - **El origen del calculado NO va en esta superficie.** El requerimiento lo pide en el ítem de **leyenda**; acá (a) el contrato de `excluded` **no trae** `originDescription` y (b) la sublínea ya usa "desde" para el **mes de inicio**: un segundo "desde {Origen}" en el mismo ítem haría ambiguo cuál es cuál. El calculado excluido se sigue distinguiendo por el `↳`.
   - **Con el toggle "Mostrar calculados" apagado (§5.1)** los calculados no figuran en la lista ni en el `{N}` del disparador; si los únicos excluidos eran calculados, el disparador **no se renderiza**.
-- **Orden: por mes de inicio, más reciente primero**; desempate descripción A→Z (la pregunta típica: *"¿por qué no veo el fijo que acabo de crear?"*).
+- **Orden: por mes de inicio, más reciente primero**; desempate nombre visible (§3.2) A→Z (la pregunta típica: *"¿por qué no veo el fijo que acabo de crear?"*).
 - **A11y:** `role="dialog"` `aria-label="Fijos sin evolución en el rango"`. Lectura, no formulario; `Esc` siempre cierra.
 
 #### 9. Cabecera — molde de dos líneas
@@ -578,6 +587,12 @@ La misma card, montada **dentro** de la card de detalle de `/mes` para **un solo
 - [ ] **Sin línea destacada**, el tooltip del mes lista las líneas con punto ese mes (swatch + descripción + cifra mono), ordenadas de mayor a menor, **con tope de 8 filas + "+N más"**, y **sin fila de total**.
 - [ ] **Con línea destacada**, el tooltip muestra **descripción, categoría, mes, monto y frecuencia**, y en un calculado además **`↳ desde {Origen}`**. La categoría lleva delante su **punto redondo de 6px en el color de la categoría** (no el de la línea); el swatch/mini-línea del encabezado sí es el color de la línea.
 - [ ] **Sin línea destacada**, el swatch de cada fila es el **color de su línea**; las filas no muestran categoría.
+
+*Fijo sin descripción (§3.2):*
+- [ ] En ninguna superficie de la card aparece el texto **"Sin descripción"**: un fijo sin descripción se nombra con **su categoría**, con el mismo estilo que una descripción normal (no gris `--muted`) — en la leyenda, las filas del tooltip, el encabezado del tooltip destacado y el popover de excluidos.
+- [ ] En el **tooltip destacado** de un fijo sin descripción, la subfila **no repite** la categoría: arranca en el badge de dirección (`[Gasto]` / `[Gasto] · ↳ desde {Origen}`), sin punto de categoría y **sin `·` inicial**.
+- [ ] En el **popover de excluidos**, un fijo sin descripción muestra la categoría como nombre y la sublínea queda **`desde {Mmm AAAA}`**, sin punto ni `·` inicial.
+- [ ] Un calculado cuyo origen no tiene descripción muestra **`desde {categoría del origen}`** (en leyenda y tooltip), no lo omite.
 
 *Estados (todos hablan del RANGO, ninguno de un año):*
 - [ ] **Rango sin fijos:** se ven las posiciones del eje X y el overlay "Sin fijos en el rango." + "Probá un rango más largo."; **no** queda un carril de leyenda huérfano.

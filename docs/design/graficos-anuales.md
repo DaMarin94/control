@@ -243,7 +243,7 @@ Dos piezas: el **monto por cuota** (**primaria**, la **última** que se sacrific
 **Jerarquía.** Orden de lectura `[monto] · [nombre]`:
 
 - **Monto por cuota — primaria:** mono `tnum` **12px / 700**, color **por contraste pleno** contra el color de la barra (barras claras T1–T3 → `oklch(0.22 0.02 270)`; oscuras T5–T7 → `oklch(0.97 0.005 270)`), `shrink-0`. Neutro por contraste (no `--expense-ink`).
-- **Nombre/descripción — secundaria:** UI Space Grotesk **11.5px / 500**, mismo color de contraste con `opacity-[0.72]`, `truncate`.
+- **Nombre/descripción — secundaria:** UI Space Grotesk **11.5px / 500**, mismo color de contraste con `opacity-[0.72]`, `truncate`. **Nombre visible** = `description`; si es `null` (o vacía), el **nombre de la categoría** (desde `availableCategories`), mismo estilo. La degradación por ancho no cambia: el nombre de categoría se trata igual que una descripción.
 - **Separación:** `gap-[8px]` + punto medio `·` en el color de contraste a `opacity-[0.45]`. `pl-[9px]` / `pr-[9px]`.
 
 > **Por qué el monto adelante y dominante:** la pregunta es "¿cuánto me sale esto por mes?"; el nombre solo desambigua. Cada renglón se escanea como una columna de cifras, y el nombre se recorta sin perder lo crítico.
@@ -270,7 +270,8 @@ Una compra que empieza **antes de enero** o termina **después de diciembre** se
 
 **Tooltip custom portaled a `body`** (mismo cromo que el de Únicos): `fixed z-50`, `rounded-ctl`, `border border-line`, `bg-panel`, `shadow-[var(--shadow-lg)]`, `pointer-events-none`, `role="tooltip"`, anclado `translate(-50%, -100%)` sobre el centro de la barra (o sobre el cursor). `min-width` ~`200px`.
 
-- **Encabezado:** **swatch 8px `rounded-[3px]`** del color de la categoría + **descripción** (UI 12px/600 `--ink`; si null → `Sin descripción` en `--muted`), fila `gap-[7px]`. Debajo, **nombre de la categoría** UI 11.5px/500 `--ink-2` (desde `availableCategories`).
+- **Encabezado:** **swatch 8px `rounded-[3px]`** del color de la categoría + **nombre visible** (UI 12px/600 `--ink`; `description`, o si es `null`/vacía el **nombre de la categoría** con el mismo estilo — sin `--muted`), fila `gap-[7px]`. Debajo, **nombre de la categoría** UI 11.5px/500 `--ink-2` (desde `availableCategories`). **Sin descripción:** la línea de categoría de abajo **se omite** (el encabezado ya la nombra); el string "Sin descripción" no existe en esta card.
+- **Nombre accesible de la barra (`aria-label`):** `{nombre visible}, {Categoría}, {monto} por cuota, {Mmm} a {Mmm}…` (el resto del label, sin cambios). **Sin descripción:** arranca en la categoría como nombre y **no la repite**: `{Categoría}, {monto} por cuota, …`.
 - **Cifra dominante — monto por cuota:** **mono `tnum` 13px/600 `--ink`**, completo, con micro-rótulo `por cuota` en `--faint` 9px uppercase tracking.
 - **Cuerpo — filas `label ⟷ valor`** (`flex flex-col gap-[5px]`, label UI 11.5px/500 `--ink-2` `flex-1`, valor `shrink-0`), divisor `1px --hair` opcional bajo el monto dominante:
   - **Período** — `Mar 2026 – May 2026` en **UI** 11px/500 `--ink-2` (no mono: es rango de fechas). Si cruza años, muestra los **años reales** (`Nov 2025 – Feb 2026`).

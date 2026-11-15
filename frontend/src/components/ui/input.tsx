@@ -22,6 +22,8 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type, error, ...props }, ref) => {
+    const isNativePicker =
+      type === "date" || type === "time" || type === "month" || type === "datetime-local";
     return (
       <div className="flex w-full min-w-0 flex-col gap-1">
         <input
@@ -39,6 +41,9 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             "placeholder:text-faint",
             // Focus: borde accent + ring 3px accent-soft
             "focus-visible:outline-none focus-visible:border-accent focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+            // Safari iOS: date/time nativos con min-width intrínseco y colapso vacío
+            isNativePicker &&
+              "appearance-none min-h-[43px] [&::-webkit-date-and-time-value]:text-left",
             // Disabled
             "disabled:cursor-not-allowed disabled:opacity-50",
             // File inputs

@@ -12,6 +12,9 @@
  *  - Es solo el VALOR INICIAL del selector — se aplica una única vez (ref one-shot)
  *    y solo si el campo sigue en "" (el usuario no lo tocó todavía), para no pisar
  *    una selección manual hecha mientras preferences/paymentMethods aún cargaban.
+ *  - Re-armado: el hook devuelve `rearm()`, que vuelve a habilitar el one-shot. Lo
+ *    llaman los forms de captura tras crear y hacer `reset({... paymentMethodId: "" ...})`,
+ *    así el siguiente alta (el form queda montado) vuelve a arrancar con el default.
  *  - Fallback en lectura (decisión 6): el id guardado se valida contra los métodos
  *    de pago ACTIVOS; si no está entre ellos (fue eliminado), se trata como "ninguno"
  *    y el selector queda en "Sin método de pago". No hace falta limpiar el blob.
@@ -21,7 +24,7 @@
  * pueden estar todavía cargando en el primer render del form.
  */
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { usePreferences } from "@/hooks/use-preferences";
 import { usePaymentMethods } from "@/hooks/use-payment-methods";
 
@@ -48,6 +51,10 @@ export function useDefaultPaymentMethodPrefill({
   const { paymentMethods } = usePaymentMethods();
   const appliedRef = useRef(false);
 
+  const rearm = useCallback(() => {
+    appliedRef.current = false;
+  }, []);
+
   useEffect(() => {
     if (isEditing) return;
     if (appliedRef.current) return;
@@ -73,4 +80,6 @@ export function useDefaultPaymentMethodPrefill({
     currentPaymentMethodId,
     setPaymentMethodId,
   ]);
+
+  return { rearm };
 }

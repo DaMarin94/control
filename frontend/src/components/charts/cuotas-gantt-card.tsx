@@ -492,7 +492,7 @@ function BarTooltipPortal({
   const { bar, categoryName, categoryColor, x, y, mark } = tooltipState;
   const amountFmt = formatCurrency(bar.amountCents, currency);
   const periodFmt = formatBarPeriod(bar);
-  const descriptionText = bar.description ?? null;
+  const hasDescription = !!bar.description;
 
   return (
     <div
@@ -513,13 +513,17 @@ function BarTooltipPortal({
           style={{ width: 8, height: 8, background: categoryColor }}
         />
         <span className="text-[12px] font-semibold text-ink truncate">
-          {descriptionText !== null ? descriptionText : <span className="text-muted">Sin descripción</span>}
+          {bar.description || categoryName}
         </span>
       </div>
-      {/* Nombre de la categoría */}
-      <div className="text-[11.5px] font-medium text-ink-2 mb-1.5 ml-3.75">
-        {categoryName}
-      </div>
+      {/* Nombre de la categoría — solo si hay descripción (no se repite, §3.2) */}
+      {hasDescription ? (
+        <div className="text-[11.5px] font-medium text-ink-2 mb-1.5 ml-3.75">
+          {categoryName}
+        </div>
+      ) : (
+        <div className="mb-1" aria-hidden="true" />
+      )}
 
       {/* Divisor */}
       <div aria-hidden="true" style={{ borderTop: "1px solid var(--hair)", marginBottom: 6 }} />
@@ -649,12 +653,13 @@ function GanttBar({
   const borderRadius = `${radiusLeft} ${radiusRight} ${radiusRight} ${radiusLeft}`;
 
   const amountFmt = formatCurrency(bar.amountCents, currency);
-  const descText = bar.description ?? "";
+  // Nombre visible (§3.2): descripción, o el nombre de la categoría si no hay.
+  const descText = bar.description || categoryName;
   const totalPlanFmt =
     bar.totalInstallments > 1
       ? ` · total ${formatCurrency(bar.amountCents * bar.totalInstallments, currency)}`
       : "";
-  const ariaLabel = `${descText || "Sin descripción"}, ${categoryName}, ${amountFmt} por cuota, ${MONTH_LABELS_SHORT[bar.startMonthIndex] ?? ""} a ${MONTH_LABELS_SHORT[bar.endMonthIndex] ?? ""}${totalPlanFmt}${bar.continuesBefore ? ", continúa desde el año anterior" : ""}${bar.continuesAfter ? ", continúa en el año siguiente" : ""}${mark ? ` · ${describeLimitMark(mark)}` : ""}`;
+  const ariaLabel = `${bar.description ? `${bar.description}, ${categoryName}` : categoryName}, ${amountFmt} por cuota, ${MONTH_LABELS_SHORT[bar.startMonthIndex] ?? ""} a ${MONTH_LABELS_SHORT[bar.endMonthIndex] ?? ""}${totalPlanFmt}${bar.continuesBefore ? ", continúa desde el año anterior" : ""}${bar.continuesAfter ? ", continúa en el año siguiente" : ""}${mark ? ` · ${describeLimitMark(mark)}` : ""}`;
 
   return (
     <div
@@ -723,7 +728,7 @@ function GanttBar({
           </span>
 
           {/* Separador + nombre — solo en barra ancha (escalón 1) */}
-          {isWide && descText && (
+          {isWide && (
             <>
               {/* Punto medio · separador */}
               <span

@@ -278,7 +278,7 @@ export function useInstallmentFormLogic({
     !errors.totalInstallments;
   const isPlanCrossRate = selectedCurrency !== defaultCurrency;
 
-  useDefaultPaymentMethodPrefill({
+  const { rearm: rearmDefaultPaymentMethod } = useDefaultPaymentMethodPrefill({
     slot: "cuota",
     isEditing,
     currentPaymentMethodId: selectedPaymentMethodId,
@@ -422,6 +422,7 @@ export function useInstallmentFormLogic({
           autoDebit: false,
           description: "",
         });
+        rearmDefaultPaymentMethod();
         setIsExchangeRateModified(false);
         onCreateSuccess();
       } else {
