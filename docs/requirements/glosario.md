@@ -1,0 +1,32 @@
+# 7. Glosario
+
+> Parte de los requerimientos funcionales de Control. Índice e ID → archivo: `docs/requirements.md`.
+
+| Término | Definición |
+|---|---|
+| Anulación (skip) de un fijo | Marca que cancela **una** aparición de un movimiento fijo en un **mes puntual**, sin eliminar el fijo. Reversible. El mes anulado se sigue mostrando pero no suma a los totales. Distinta de `deletedFrom`. Se crea de a una o por rango de meses, pero el rango no se persiste: siempre queda una marca por mes. Ver RF-MF-005, RN-016. |
+| Balance | Resultado de ingresos − gastos en un período (el balance del mes es el del mes visualizado). Puede ser positivo o negativo. |
+| Borrado lógico (de un movimiento) | Eliminación que **marca** el movimiento como eliminado sin borrarlo: deja de aparecer en toda la app y solo se expone en `/historial`, desde donde se puede restaurar. El borrado físico ocurre al purgarse su entrada de historial. Ver RF-HIST-006, RN-026. |
+| Categoría | Clasificador asignado a cada movimiento (ej: Consumibles, Servicios). Personalizable por usuario. |
+| Cuota | Instancia mensual de un grupo de cuotas. Representa un pago parcial de una compra dividida en N pagos iguales. |
+| `deletedFrom` | Mes (`YYYY-MM`, exclusivo) desde el cual un movimiento fijo deja de aparecer. Si es `null`, el fijo sigue activo. |
+| Entrada de historial | Registro de **una** edición o eliminación de un movimiento (o reapertura de un fijo). Guarda el estado previo, permite deshacerlo y se purga por cantidad (5 por movimiento) o antigüedad (31 días). Ver RF-HIST-001, RF-HIST-005. |
+| Frecuencia (de un fijo) | Periodicidad de aparición de un movimiento fijo, un **entero 1..12** = meses entre apariciones (1 Mensual … 12 Anual). Anclada al mes de inicio. Default 1 (mensual). Inmutable tras crearse. Ver RF-MF-006, RN-016. |
+| Gasto (`EXPENSE`) | Egreso de dinero. Reduce el balance del mes. |
+| Grupo de cuotas | Registro padre que define monto por cuota, cantidad total de cuotas y mes de inicio. |
+| Historial de cambios | Registro de corto plazo de las ediciones y eliminaciones de movimientos, con la acción de **deshacer** (LIFO por movimiento, sin dejar rastro). Vive en `/historial`. No es un log de auditoría. Ver módulo 3.14 (RF-HIST-001..007), RN-024/025/026. |
+| Identidad de cadena de un fijo | Identificador estable, compartido por todas las filas `Recurring` de un mismo fijo lógico, que sobrevive a los splits del pasado. Es a lo que se vincula un movimiento calculado (no a una fila puntual). Ver `docs/data-model/entidades.md`, decisión "Identidad de cadena estable del fijo". |
+| Ingreso (`INCOME`) | Entrada de dinero. Aumenta el balance del mes. |
+| Límite | Preferencia del usuario que observa un dato (de `/mes`, dashboard o reportes, vía una key hardcodeada), lo compara contra un umbral con una condición única y, si se cumple, dispara su efecto: una **marca visual pasiva** o una **alerta activa** (aviso no bloqueante al guardar un movimiento, solo sobre keys `mes.*`). No altera datos, totales ni lo que el usuario persiste. Se gestiona en la solapa Límites de `/configuracion`; persiste en el blob (`limits`), evaluado client-side. Ver módulo 3.13 (RF-LIM-001..005) y RN-022. |
+| Mes activo | Mes actualmente visualizado en la vista del mes. Por defecto, el mes corriente. |
+| Método de pago | Metadato opcional de un movimiento: con qué se pagó/cobró (tarjeta de crédito, débito, efectivo). Entidad propia del usuario, espejo de Categoría (soft delete, gestor dedicado como sección de Configuración, contador de movimientos), con identidad visual por **ícono** (no color). Días de cierre/cobro (crédito) son informativos en v1. Ver módulo 3.6.b (RF-PM-001..007) y RN-021. |
+| Modo de color | Modo claro u oscuro de la app, elegible desde el chrome global (sidebar) entre **Sistema** (default, sigue al dispositivo), **Claro** y **Oscuro**. Persiste por usuario en el blob de preferencias (`theme`). Ver RF-APP-001. |
+| Movimiento | Registro de una transacción económica: gasto o ingreso. Puede ser único, fijo o una cuota. |
+| Movimiento calculado | Movimiento **fijo** cuyo monto no se ingresa: se deriva al vuelo del monto de un movimiento de origen mediante una fórmula (operador + operando) con signo. El **origen puede ser un fijo, un único o un grupo de cuotas** (RF-MCALC-008); el calculado espeja la cadencia del origen (de cuota deriva del monto por cuota). Tiene categoría y descripción propias; su **tipo (Gasto/Ingreso) se deriva del signo del monto** (negativo → Gasto, positivo → Ingreso). Puede tener monto negativo o cero. Sigue el ciclo de vida del origen; el calculado de único/cuota se borra de forma total (RF-MCALC-009). Ver submódulo 3.4.b (RF-MCALC-001..011), RN-017/018/019. |
+| Movimiento fijo | Plantilla recurrente que aparece cada N meses según su **frecuencia** (1..12, default mensual) desde su mes de inicio, activa hasta que el usuario la elimina. Sin día específico dentro del mes. Ver RF-MF-006. |
+| Movimiento simulado | Movimiento **derivado al vuelo** que una simulación de categoría aporta a la sección Únicos de un mes de **su tramo** (**mes en curso incluido**). Es un **remanente**: lo que falta para llegar a lo proyectado, descontando los únicos reales del mes. No existe como fila y no es editable ni accionable. Se ve **siempre** en `/mes` y, **opt-in por card**, en `/reportes` (RF-REP-017). Su dirección y magnitud salen del cálculo (RN-028). Ver RF-SIM-003. |
+| Movimiento único | Movimiento que ocurrió en un instante específico (fecha y hora), una sola vez. Se almacena en UTC junto con su zona horaria original; ver RN-011. |
+| Scope de categoría | Indica a qué tipo de movimiento aplica la categoría: `BOTH`, `EXPENSE`, o `INCOME`. |
+| Simulación de categoría | Configuración del usuario (usuario + categoría + **tramo propio** `startMonth`/`endMonth`, RN-028/029) que proyecta, a lo largo de ese tramo (que nunca alcanza meses pasados), el total de **movimientos únicos** de esa categoría, por regresión lineal sobre los 12 meses anteriores. Se crea (de a una o varias categorías), se extiende hacia adelante por su `endMonth` (1, 3, 6 o 12 meses) y se elimina, las tres desde el filtro de la sección Únicos de `/mes`; el `startMonth` es inmutable y eliminarla es definitivo. Ver módulo 3.15 (RF-SIM-001..005), RF-REP-017, RN-028/029. |
+| Soft delete | Eliminación lógica: el registro se marca con `deletedAt` pero no se borra físicamente. |
+| `startMonth` | Mes (`YYYY-MM`) a partir del cual un movimiento fijo o grupo de cuotas comienza a aparecer. |

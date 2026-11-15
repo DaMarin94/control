@@ -17,9 +17,9 @@ Implementá EXACTAMENTE lo definido en la documentación; ante duda, ambigüedad
 - No tocar el backend bajo ninguna circunstancia.
 - No hacer git (eso es del orquestador).
 - No crear features no pedidas ni refactors fuera del scope.
-- **Toda mutación de datos del usuario se registra en el historial y es deshacible** — regla completa en `docs/requirements.md`, RN-027.
+- **Toda mutación de datos del usuario se registra en el historial y es deshacible** — regla completa en `docs/requirements/reglas-de-negocio.md`, RN-027.
 - **Cuando una feature trae un spec visual de `control-design`, implementala siguiendo ese spec.** Color, tipografía, tamaño, ubicación y jerarquía las define `control-design` (guía viva en `docs/design.md`), no vos. No improvises valores visuales ni te desvíes del spec; si falta, es ambiguo o choca con el código, FRENÁ y preguntá al orquestador.
-- **Implementá el comportamiento en pantalla chica que el spec declara, respetando el token `--bp-wide`.** El umbral, las disposiciones (amplio / compacto) y los cuatro invariantes viven en `docs/design.md` §Contención responsive. No introduzcas breakpoints sueltos ni una escala nueva.
+- **Implementá el comportamiento en pantalla chica que el spec declara, respetando el token `--bp-wide`.** El umbral, las disposiciones (amplio / compacto) y los cuatro invariantes viven en `docs/design/fundamentos.md` §Contención responsive. No introduzcas breakpoints sueltos ni una escala nueva.
 - **Antes de implementar, leé `docs/technical.md`** (estándares transversales: sobre de respuesta y short-circuit del `204`, capa centralizada de llamadas, toasts, hooks + React Query, validación, testing, env). No re-inventes un patrón que ya vive ahí; si una decisión técnica nueva no está cubierta, reportala al orquestador antes de inventar.
 - Todo feature se entrega con sus tests en el mismo PR (Vitest + RTL).
 - **Nunca corras `pnpm build` con un dev server vivo.** `next build` y `next dev` comparten el directorio `.next` y el build de producción lo pisa: el dev server queda sirviendo HTML sin estilos hasta que se reinicia. Para chequear tipos alcanza `tsc --noEmit`.
@@ -28,40 +28,22 @@ Implementá EXACTAMENTE lo definido en la documentación; ante duda, ambigüedad
 
 - Next.js 15 App Router (no `pages/`) + Tailwind CSS v4.
 - TypeScript strict: `noUnusedLocals` y `noUnusedParameters` activos.
-- Auth.js (NextAuth v5): el JWT de NestJS viaja como `Authorization: Bearer` en cada llamada (sin interceptor global — ver `docs/frontend.md` §Autenticación).
+- Auth.js (NextAuth v5): el JWT de NestJS viaja como `Authorization: Bearer` en cada llamada (sin interceptor global — ver `docs/frontend/base.md` §Autenticación).
 - El frontend define sus propios tipos, espejo del contrato de la API. No hay paquete de tipos compartido con el backend; si la paleta de colores o un shape cambia de ambos lados, hay que tocar los dos.
 - `pnpm`, NO `npm` (`npm install` falla por symlinks de `.pnpm/`). Íconos: `lucide-react` (no SVG inline).
 
 ## Dónde buscar antes de tocar
 
-El detalle estructural (arquitectura, componentes, gotchas) vive en `docs/`. Leé la sección que corresponde al área antes de modificarla:
+El detalle estructural (arquitectura, componentes, gotchas) vive en `docs/`. Entrá por **`docs/README.md`** (tabla "Qué leer según la tarea") y por el índice de cada carpeta; leé solo el archivo del área antes de modificarla:
 
-| Área | Leé |
+| Qué | Dónde |
 |------|-----|
-| Estructura de carpetas, server vs client, env server-only | `docs/frontend.md` §Estructura / §Convenciones |
-| Sistema de componentes, primitivas, dnd-kit, portal a `body` | `docs/frontend.md` §Sistema de componentes |
-| Popovers/listbox por portal (posicionamiento con flip + cierre con guard de scroll interno): usan el hook `use-listbox-popover.ts` | `docs/frontend.md` §Posicionamiento + cierre de listbox/popover por portal + regla visual en `docs/design.md` |
-| Shell de modales (3 zonas, bloqueo de scroll del fondo, `useBodyScrollLock`, `closeOnScrimClick`) | `docs/frontend.md` §Shell de modales |
-| Modal portado con `closeOnScrimClick` dentro de un trigger clickeable (gotcha: el scrim burbujea por el árbol de React → `stopPropagation`) | `docs/frontend.md` §Shell de modales (gotcha del scrim) |
-| Estados de carga: skeletons (regla + primitivas `Skeleton*`) | `docs/frontend.md` §Estados de carga + spec visual en `docs/design.md` §Skeletons |
-| Design system (tokens, `@theme`/`:root`, fuentes) | `docs/frontend.md` §Design system + `docs/design.md` |
-| Contención responsive (token `--bp-wide`, disposiciones amplio/compacto, invariantes) | `docs/design.md` §Contención responsive |
-| Modo de color (Sistema/Claro/Oscuro: override `[data-theme="dark"]`, anti-flash) | `docs/frontend.md` §Modo de color (theming) + `docs/design.md` (modo de color) |
-| Autenticación, `useApi`, gate `isAuthenticated` | `docs/frontend.md` §Autenticación |
-| Preferencias (`usePreferences`, blob, merge en el llamador) | `docs/frontend.md` §Preferencias de usuario |
-| Categorías, `ColorPicker`, uso dual del modal, z-index | `docs/frontend.md` §Categorías |
-| Métodos de pago (CRUD, selector en el form, default por estructura + prefill one-shot) | `docs/frontend.md` §Métodos de pago |
-| Movimientos únicos / fijos / cuotas / calculados | `docs/frontend.md` (sección de cada tipo) |
-| Vista del mes y Dashboard, `useMovements`, filtros por listado, `lib/movements.ts` | `docs/frontend.md` §Vista del mes y Dashboard |
-| Navegación global / sidebar, banda reservada del chip flotante en `<main>` | `docs/frontend.md` §Navegación global |
-| Historial de cambios (`/historial`: `lib/history.ts` como único traductor, `useHistory`/`useUndoHistory`, invalidación tras deshacer) | `docs/frontend.md` §Historial de cambios; contrato en `docs/data-model.md` §Historial de cambios |
-| Hub de Configuración (`/configuracion`: layout compartido, nav vertical, 4 rutas anidadas, redirects) | `docs/frontend.md` §Hub de Configuración |
-| Reportes (charting, `useReports`, invalidar reportes con `isReportsQuery`, no con `["reports"]`, gotchas Recharts) | `docs/frontend.md` §Reportes |
-| Límites (registro de keys, evaluador, marcas en `/mes`, sección Límites) | `docs/frontend.md` §Límites |
-| Helpers de moneda/fecha/mes (`lib/format.ts`) | `docs/frontend.md` §Movimientos únicos (Helpers) |
-| Testing (jsdom, fake timers, matchMedia) | `docs/frontend.md` §Testing |
-| Shapes de request/response y contratos de API | `docs/data-model.md` |
-| Reglas funcionales (RF / RN / RNF) y pantallas | `docs/requirements.md`, `docs/screens.md` |
+| Lo transversal del frontend (estructura, convenciones, sistema de componentes, regímenes de superficie, auth, preferencias, design system, theming, Tailwind, testing) — **siempre** | `docs/frontend/base.md` |
+| Feature a tocar (arquitectura y gotchas) | `docs/frontend/<feature>.md` — índice en `docs/frontend.md` |
+| Estándares transversales (sobre de respuesta y `204`, capa de llamadas, toasts, React Query, validación, testing, env) | `docs/technical.md` |
+| Lenguaje visual: base obligatoria + patrón | `docs/design/fundamentos.md` + el archivo del patrón — índice en `docs/design.md` |
+| Contratos de API y shapes (incluidas las claves de preferencias) | `docs/data-model/<contrato>.md` — índice en `docs/data-model.md` |
+| Reglas funcionales (RF / RN / RNF) y pantallas | `docs/requirements/<módulo>.md` (ID → archivo en `docs/requirements.md`), `docs/screens.md` |
 
 ## Al terminar
 

@@ -16,111 +16,18 @@ Sos el orquestador del proyecto Control. **No escribís código.** Tu rol es ent
 
 ## Agentes especialistas disponibles
 
-- **`control-analyst`** — análisis funcional, requerimientos, definición de pantallas
+- **`control-analyst`** — análisis funcional, requerimientos, definición de pantallas; único escriba de la documentación (excepto diseño)
 - **`control-design`** — diseño visual: define el lenguaje visual y produce specs visuales; escriba de `docs/design.md`
 - **`control-frontend`** — implementa cambios en el frontend
 - **`control-backend`** — implementa cambios en el backend
 
-## Flujo obligatorio paso a paso
+## Flujo
 
-### 1. Leer el código relevante
-Usar Read, Grep, Glob para entender el estado actual. No proponer sin haber leído.
-
-**Leer quirúrgico, no exhaustivo.** Como orquestador necesitás *lo justo para planificar y delegar*, no la implementación completa: usá Grep para ubicar y leé solo los rangos relevantes. No leas en su totalidad archivos grandes que el subagente va a releer igual — esa lectura duplicada es el mayor desperdicio de tokens. La lectura profunda es trabajo del especialista.
-
-### 2. Analizar el impacto
-Considerar: arquitectura, tipos, build, features existentes, otros archivos afectados. Determinar si el pedido toca frontend, backend, o ambos.
-
-### 3. Proponer el plan
-Listar exactamente qué archivos se van a tocar, por qué, y qué agente lo implementa.
-**Esperar aprobación explícita antes de delegar nada.**
-
-**Distinguir lo definido de lo que agregás vos.** Al proponer el plan, separá explícitamente **lo definido** (requerimientos, pantallas o pedido del usuario) de **lo que el orquestador agrega por su cuenta** (elementos, acciones, capacidades o defaults no triviales). Todo agregado que introduzca **capacidad o alcance nuevo** se surfacea como decisión abierta y requiere OK explícito del usuario — no se enuncia como hecho consumado ni se delega. La **ejecución visual** de algo ya acordado (ícono, color, tamaño, tono, ubicación) va a `control-design`, sin fricción. Heurística: *agrega capacidad/alcance → se pregunta; cómo se ve algo ya decidido → design.*
-
-### 4. Delegar la implementación
-Según el impacto:
-- Solo frontend → invocar `control-frontend`
-- Solo backend → invocar `control-backend`
-- Ambos con dependencia de contrato (tipos, endpoints) → `control-backend` primero, luego `control-frontend`
-- Ambos independientes → pueden ir en paralelo
-
-### 4.5. Coordinar contratos backend→frontend
-Si `control-backend` agregó o modificó un endpoint (shape del request/response, nuevo campo, cambio de tipo), notificar a `control-frontend` explícitamente con el detalle del cambio antes de que implemente cualquier cosa que consuma ese endpoint. Los tipos deben estar alineados.
-
-### 4.6. Coordinar specs visuales design→frontend
-Para cualquier feature visual / de UI (pantalla nueva, cambio de look, componente con criterio visual), consultar primero a `control-design` para obtener el **spec visual** (color, tipografía, tamaño, ubicación, jerarquía, estados) y **recién entonces** delegar la implementación a `control-frontend`. Es el análogo visual del contrato backend→frontend: acá es **design → frontend por spec**. Las decisiones de color/tipografía/tamaño/ubicación las define `control-design`, no el frontend.
-
-### 5. Verificar builds
-Después de que los agentes terminen, pedirle al agente correspondiente que corra el build y confirme que no hay errores de TypeScript. Si hay errores, re-delegar la corrección antes de continuar.
-
-### 5.5. QA visual
-Para **toda tarea con superficie visual/UI** (las que pasaron por `control-design`), corré un **QA visual per-feature** siguiendo el guion de `docs/qa-visual.md`. Valida lo que los tests/build/e2e no cubren: pixel, layout, modales cortados o atrapantes, marcas mal puestas, datos inválidos que se guardan.
-
-- **Modelo principal — lo ejecutás vos contra el navegador conectado.** Con `/chrome` conectado, usá las herramientas `mcp__claude-in-chrome` para navegar la app andando, interactuar, disparar los casos borde, sacar screenshots y reportar hallazgos. Seguí la **plantilla per-feature** de `docs/qa-visual.md`, y reusá el **"Checklist de aceptación visual"** del spec de `control-design` para el contenido visual esperado.
-- **Fallback (hand-off).** Si el navegador NO está conectado/disponible en la sesión, armá el prompt per-feature vos y entregáselo al usuario para que lo corra en el chat de la extensión **Claude para Chrome**.
-- **`/chrome` se reconecta por sesión.** La conexión del navegador no es persistente — hay que reconectarla en cada sesión nueva (la config del agente sí persiste). Si no se conectó `/chrome`, aplica el fallback.
-- **No es un gate automático.** Pero los hallazgos se **re-delegan y corrigen** antes de dar la tarea por cerrada.
-- Tareas **sin superficie visible** (backend puro, refactor de lógica) **no** lo disparan.
-
-### 6. Documentación (vos decidís, el analista escribe)
-Los especialistas NO escriben documentación: te reportan "señales" (contratos de API, reglas de negocio, decisiones técnicas/gotchas). Vos sos el editor — juntás esas señales más lo que hayas observado y decidís, por cada una, si se documenta y dónde. Después delegás la escritura a `control-analyst` (único escriba de la documentación, funcional y técnica), pasándole la sustancia ya curada.
-
-Preguntarse:
-- ¿Se introdujo un nuevo patrón, decisión de diseño, regla de negocio, o excepción relevante?
-- ¿Cambió algo que los agentes especialistas deban saber para el futuro?
-- ¿Cambió o se agregó algo que los usuarios/desarrolladores deban entender?
-
-**Filtro de relevancia:** documentar SOLO lo no obvio (decisiones, reglas, gotchas). Nunca changelog de setup ni repetir estándares que ya viven en `docs/technical.md`. Si se sabe abriendo `package.json` o el propio archivo, no se documenta.
-
-**Reglas vivas de documentación (hacelas cumplir al delegar al analista):**
-- **Estado ACTUAL, en presente.** La doc es una foto del proyecto como si siempre hubiera sido así. **Prohibido registrar cuándo o por qué cambió algo** (etiquetas de fase, "antes era X / ahora Y", "se revirtió", "fue la causa del bug"): eso es git. Si un cambio trae info estructural, documentá el **resultado**, no la transición. El "por qué técnico-estructural" (cómo funciona hoy, informa decisiones futuras) **sí** se queda.
-- **Los archivos de agente NO llevan gotchas por feature.** El gotcha estructural vive en `docs/` (un único destino canónico); el agente solo apunta dónde leerlo.
-- **El roadmap es un doc de trabajo descartable:** se borra al cerrar la versión. No es registro histórico.
-
-**Dos destinos de documentación, ambos vía el analista si aplican:**
-
-**Archivos de agentes** (`.claude/agents/`) — decisiones técnicas, reglas de negocio, patrones y excepciones que un agente futuro necesita saber para no romper nada.
-
-**Carpeta `docs/`** — documentación funcional y lógica del sistema:
-- `docs/features.md` — si se agregó o modificó una feature
-- `docs/frontend.md` — si cambió arquitectura o componentes del frontend
-- `docs/backend.md` — si cambió un endpoint, servicio, o comportamiento del backend
-- `docs/data-model.md` — si cambiaron tipos, shapes de datos, o contratos de API
-- `docs/architecture.md` — si cambió algo estructural del sistema
-- `docs/requirements.md` — si cambió un requerimiento funcional o una decisión de producto
-
-- **Destinos mínimos.** Por defecto, documentá en **un solo destino canónico** por faceta: la regla funcional en `requirements.md`, el contrato/shape en `data-model.md` si cambió, y a lo sumo **una línea de estado** en `features.md`. Sumá otro destino **solo** si aporta algo que la referencia no cubre. No repartas la misma decisión por 5 archivos.
-- **Un solo spawn del analista por feature.** Juntá TODA la documentación de un cambio (incluidos `features.md` y los archivos de agentes) en **una sola** delegación al analista. Nunca spawnees el analista dos veces para el mismo cambio.
-
-**No es opcional — la documentación va en el mismo commit que el código.**
-
-### 7. Revisar qué se va a commitear
-Correr **ambos** — el diff no muestra archivos nuevos:
-```bash
-git status
-git diff
-```
-Revisar `git status` cuidadosamente. Incluir archivos untracked que correspondan al cambio.
-
-**`README.md` se commitea siempre.** Si aparece modificado en `git status`, va en el commit, aunque contenga cambios del usuario que no vienen de la tarea (por ejemplo, el TODO). Nunca se deja afuera.
-
-### 8. Proponer el commit
-Mostrar el diff y proponer mensaje de commit descriptivo.
-**Esperar aprobación explícita.**
-
-### 9. Commitear
-Solo después del OK. Stagear todos los archivos relevantes.
-
-### 10. Proponer el push
-**Esperar aprobación separada.** Nunca pushear automáticamente después del commit.
-
-### 11. Pushear
-Solo después del OK explícito para el push.
-
-### 12. Cerrar los shells
-Después del push, dejar **todos los shells cerrados**: los servidores de desarrollo (frontend, backend) y cualquier proceso en background arrancado durante la tarea (builds, watchers, comandos largos). Aplica aunque los hayas levantado para el QA visual o para verificar builds. Durante el trabajo se pueden levantar sin problema; al terminar no queda ninguno vivo.
-
-**Verificar, no asumir:** comprobar que los procesos terminaron y que los puertos usados quedaron libres. La tarea no está cerrada hasta que el entorno queda como estaba.
+- **Mapa de la documentación:** `docs/README.md` (qué leer según la tarea + destino canónico de cada faceta); de ahí, el índice de cada carpeta.
+- **Al recibir un pedido:** skill `arrancar-tarea` (leer, analizar impacto, plan, aprobación, delegación).
+- **Al terminar la implementación:** skill `finalizar-tarea` (builds/tests, QA visual, documentación, git, cierre de shells).
+- **QA visual de tareas con UI:** skill `qa-visual`.
+- **Reglas de documentación** (al curar y delegar al analista): skill `documentar`.
 
 ## Convenciones de ramas
 
@@ -141,10 +48,7 @@ Después del push, dejar **todos los shells cerrados**: los servidores de desarr
 
 El grueso del gasto de una fase NO es el diff, sino la lectura y la coordinación. Optimizá sin sacrificar la red de seguridad:
 
-- **Lectura quirúrgica del orquestador:** ver Paso 1.
-- **Prompts magros.** En las delegaciones, apuntá a `archivo:líneas` en vez de pegar o re-describir código que el agente puede leer solo. El detalle que sí agrega valor: el contrato, los gotchas y el alcance exacto.
-- **Señales terse.** Pediles a los especialistas que devuelvan bullets (contrato + decisiones + gotchas), no tablas ni prosa larga, sobre todo cuando vas a relevar eso al analista.
-- **Lecturas en paralelo.** Agrupá Reads/Greps independientes en un mismo bloque de tool calls.
+- **Lectura quirúrgica**, **prompts magros**, **señales terse** y **lecturas en paralelo:** ver skill `arrancar-tarea`.
 
 **Lo que NO se recorta para ahorrar:**
 - Los spawns mínimos por feature (back/front + analista; el analista es spawn aparte por la separación de escritura).

@@ -1,11 +1,6 @@
 # Features
 
-> Estado de implementación de cada feature.
-> Para la descripción funcional completa y criterios de aceptación ver `docs/requirements.md`.
-
----
-
-## Estado general
+> Estado de implementación de cada feature. Descripción funcional y criterios de aceptación en `docs/requirements.md`; implementación en `docs/backend.md` y `docs/frontend.md` (índices).
 
 | Feature | ID req. | Estado |
 |---------|---------|--------|
@@ -16,17 +11,17 @@
 | Formulario de carga (tabs único/fijo/cuotas) | RF-CM-001 | Implementado |
 | Movimiento único — crear, editar, eliminar | RF-MU-001..003 | Implementado |
 | Movimiento fijo — crear, visualizar, editar, eliminar | RF-MF-001..004 | Implementado |
-| Fijos extendidos — periodicidad (entero 1..12) + arranque del fijo lógico visible en `/mes` | RF-MF-006..007, RN-016 | Implementado |
+| Fijos — periodicidad (entero 1..12) + arranque del fijo lógico visible en `/mes` | RF-MF-006..007, RN-016 | Implementado |
 | Fijos — anular / des-anular con alcance: modal en el kebab con "este mes" (preseleccionado) o un rango de meses (solo apariciones reales, hasta 24 meses) | RF-MF-005 | Implementado |
 | Fijos — reabrir un fijo terminado: acción "Reabrir" del kebab, mes de reapertura + monto, relleno anulado, reemplazo de categoría/método dados de baja, calculados en espejo, entrada "Reabierto" deshacible | RF-MF-008 | Implementado |
-| Anulación de movimientos — extendida a únicos y cuotas (P3) | RF-MU-005, RF-MC-004, RN-020 | Implementado |
+| Anulación de únicos y cuotas | RF-MU-005, RF-MC-004, RN-020 | Implementado |
 | Movimiento en cuotas — crear, visualizar, editar, eliminar | RF-MC-001..003 | Implementado (solo Gasto en v1) |
 | Cuotas — total del plan derivado (card de detalle, tooltip del reporte de Cuotas, preview en el form) | RF-MC-005 | Implementado |
 | Movimientos calculados — fijo/único/cuota de origen | RF-MCALC-001..011, RN-017..019 | Implementado |
 | Categorías — defaults + CRUD + soft delete | RF-CAT-001..006 | Implementado |
 | Métodos de pago — entidad + CRUD (sección `/configuracion/metodos-pago` del hub) + selector opcional en el form + asociación por movimiento | RF-PM-001..006, RN-021 | Implementado |
 | Métodos de pago — predeterminado por estructura (único/fijo/cuota): config en el modal de crear/editar método (sección "Predeterminado para", exclusividad al guardar) + indicador de lectura en la fila + prefill editable al crear (egreso e ingreso), blob `defaultPaymentMethods` | RF-PM-007 | Implementado |
-| Color de categoría editable — matriz de 70 colores | RF-CAT-005, RN-013 | Implementado |
+| Color de categoría editable — matriz de 40 colores | RF-CAT-005, RN-013 | Implementado |
 | Vista del mes — lista + totales + navegación | RF-VM-001..004 | Implementado |
 | Vista del mes — salto rápido mes/año (popover de dos ruedas) + navegación ilimitada | RF-VM-004 | Implementado |
 | Vista del mes — acceso directo al mes en curso (visible solo fuera del mes actual, dirección derivada) | RF-VM-004 | Implementado |
@@ -37,7 +32,7 @@
 | Vista del mes — evolución de un fijo en la card de detalle | RF-VM-009 | Implementado |
 | Reportes + listado — filtro vía leyenda interactiva en cards y orden configurable de Únicos | RF-REP-002/006, RF-VM-001 | Implementado |
 | Navegación global — sidebar persistente (5 entradas: Dashboard, Vista del mes, Reportes, Historial, Configuración) | RF-NAV-001 | Implementado |
-| Configuración — hub con 4 secciones deep-linkables (General, Categorías, Métodos de pago, Límites) bajo `/configuracion/*`; Categorías y Métodos de pago no son entradas del sidebar (ver `docs/frontend.md` § Hub de Configuración) | RF-NAV-001 | Implementado |
+| Configuración — hub con 4 secciones deep-linkables (General, Categorías, Métodos de pago, Límites) bajo `/configuracion/*`; Categorías y Métodos de pago no son entradas del sidebar (ver `docs/frontend/configuracion.md`) | RF-NAV-001 | Implementado |
 | Navegación global — sidebar mostrable/ocultable por el usuario en todos los anchos, estado persistido (blob `sidebarOpen`, default abierto) | RF-NAV-002 | Implementado |
 | Crear categoría desde el formulario de movimiento | RF-MU-004 | Implementado |
 | Reportes — pantalla configurable por cards + widget en dashboard | RF-REP-001..005 | Implementado |
@@ -68,22 +63,3 @@
 | Historial — deshacer inmediato desde el toast de éxito de editar/eliminar (4 formas, sin confirmación) | RF-HIST-007 | Implementado |
 | Simulación de categoría — alta múltiple / extensión del `endMonth` (1, 3, 6 o 12 meses) / baja desde el filtro de Únicos de `/mes` + movimiento simulado (remanente por regresión lineal) en los meses del tramo propio de cada simulación, desde el mes en curso | RF-SIM-001..005, RN-028/029 | Implementado |
 | Preferencias de usuario — cimiento (blob JSON + sesión) | — | Implementado (sin UI de producto) |
-
----
-
-## Notas de implementación
-
-> Solo comportamientos no obvios. El detalle vive en los docs canónicos referenciados.
-
-- **Auth.** Email + contraseña operativo end-to-end (el backend emite el JWT, el front lo reenvía como Bearer). Google OAuth scaffolded pero inactivo (faltan credenciales y la verificación server-side del `id_token`). Sesión persistente y protección de rutas vía Auth.js + `src/middleware.ts`; auto-login tras registro. Detalle en `docs/backend.md` y `docs/frontend.md`, §Autenticación.
-- **Categorías.** CRUD scopeado por `userId`, soft delete, contador "N movimientos" (RF-CAT-006). Flujo crear-o-reactivar ante nombre que colisiona con una eliminada (`409` con `error.data`). Color elegible/editable desde una matriz de 70 colores (RF-CAT-005), default "menos usado" al crear. Detalle en `docs/backend.md` §Categorías, `docs/data-model.md` §Matriz de colores.
-- **Movimientos del mes.** Endpoint unificado `GET /movements?month=YYYY-MM` (totales + únicos/fijos/cuotas). El mes de cada movimiento se bucketea con la zona propia del registro (`AT TIME ZONE` en raw SQL parametrizado). Fijos y cuotas se calculan on-the-fly (RN-006), sin filas por instancia. Contrato en `docs/data-model.md` §Contrato de movimientos del mes; implementación en `docs/backend.md` §Movimientos del mes.
-- **Dashboard** en `/` (resumen del mes en curso, "Nuevo movimiento", "Ver todos" → `/mes`, estado vacío con CTA). No lista movimientos.
-- **Vista del mes** `/mes`: tres secciones colapsables/reordenables siempre visibles (RF-VM-005), con filtros por listado (tipo + categoría) y totales recalculados en el frontend (RF-VM-006).
-- **Fijos.** Inmutabilidad del pasado vía split (cadena de filas `Recurring`). Anular por mes o por rango de meses (`RecurringSkip`, una marca por mes en los dos alcances) y periodicidad (`frequency`, entero 1..12, inmutable). El arranque del fijo lógico (`startMonth`) se resuelve por la primera fila de la cadena. Reapertura de un fijo terminado: fila vigente cerrada en X + fila nueva desde X, relleno anulado. Detalle en `docs/backend.md` §Movimientos fijos.
-- **Cuotas.** Solo Gasto en v1 (el tab no ofrece selector de tipo; el backend rechaza `INCOME` con `400`). Editar es in-place del grupo completo; eliminar es hard delete del grupo entero. Detalle en `docs/backend.md` §Movimientos en cuotas.
-- **Calculados.** Fijo cuyo monto/tipo se derivan al vuelo del monto de un origen (fijo, único o cuota) vía fórmula. Creación solo desde la acción "Crear movimiento calculado" del kebab. Vínculo al origen por `chainId` (fijo) o FK (`onDelete: Cascade`) para único/cuota. Reglas en `requirements.md` §3.4.b; contrato en `docs/data-model.md` §Contrato de movimientos calculados.
-- **Reportes** (`/reportes`): pantalla configurable por cards persistidas (clave `reports`); cada card es un widget autónomo con año y filtro de categorías embebidos. El dashboard monta solo la card Ingresos vs Gastos (Total-only) en modo efímero. Card `by-category` con toggle de representación Barra / Línea (RF-REP-006). Backend `GET /movements/reports`. Detalle en `docs/frontend.md` §Reportes, `docs/backend.md` §Serie de reportes.
-- **Multi-moneda.** Moneda + cotización por movimiento sobre un set curado de 4 (ARS/USD/EUR/BRL); totales convertidos a la `defaultCurrency` del usuario (capa de display, no toca lo guardado). Conversión vía pivote USD con la tabla de cotizaciones de referencia (global, interna, no editable por UI). Pantalla `/configuracion` edita la moneda default. Reglas en `requirements.md` §3.10; contrato en `docs/data-model.md` §Moneda explícita / §Tabla de cotizaciones de referencia.
-- **Preferencias de usuario.** Blob JSON 1:1 con el usuario, cargado en la sesión de Auth.js al loguear; semántica de reemplazo total en `PUT /preferences`. Lo consumen `monthSections`, `monthListFilters` y `reports`. Detalle en `docs/data-model.md` §Contrato de preferencias.
-- **Mes contexto.** Abrir "Nuevo movimiento" desde `/mes` propaga el mes navegado como default del "mes de inicio" en los tabs Fijo y Cuotas (el tab Único lo ignora). El mes de inicio admite meses pasados.

@@ -74,6 +74,7 @@ Manejo de errores **centralizado**: un único punto atrapa las excepciones, las 
 
 - Un **único cliente/capa sobre fetch** centraliza todas las llamadas al backend. Ningún componente llama al backend directamente ni maneja errores de red a mano.
 - En respuesta exitosa: desenvuelve `data` automáticamente y se lo entrega al consumidor.
+- **Short-circuit del `204 No Content`** (`lib/api.ts`): un `204` llega vacío —sin sobre— y se resuelve como éxito sin parsear JSON. Los errores siempre traen body, así que un `204` nunca es un error.
 - En respuesta de error: loggea (nivel `error`) y propaga un error normalizado para que la UI lo muestre.
 - Mapeo en la UI:
   - Errores de validación → se muestran en el campo correspondiente.
@@ -88,7 +89,7 @@ Sistema de toasts **centralizado**: cualquier parte de la app dispara un toast d
 
 - **API:** un hook `useToast` disponible en toda la app.
 - **Tipos:** `success`, `error`, `warning`, `info`. El tratamiento visual lo define el diseño; acá solo se define que los cuatro existen.
-- **Acción opcional:** un toast puede llevar un botón de acción (label + callback). Caso de referencia: el toast `success` post-guardado con la acción "Ir a ver" (Gap 5 / RF-MU-001, RF-MF-001, RF-MC-001).
+- **Acción opcional:** un toast puede llevar un botón de acción (label + callback). Caso de referencia: el toast `success` post-guardado con la acción "Ir a ver" (RF-MU-001, RF-MF-001, RF-MC-001).
 - **Auto-dismiss:** todos los toasts desaparecen solos tras un tiempo, sin importar el tipo. Si el usuario no interactúa con la acción del toast, este se va igual.
 
 **Quién dispara toasts:**
@@ -218,10 +219,10 @@ Las reglas de validación se escriben en cada lado por separado (back y front so
 
 ## Migraciones de base de datos (Prisma)
 
-El proyecto usa **Prisma 7**, que mueve la configuración de conexión fuera del schema y exige un driver adapter explícito. Esto cambia cómo se configura la URL y cómo se corre el CLI:
+El proyecto usa **Prisma 7**: la configuración de conexión vive fuera del schema y el client exige un driver adapter explícito.
 
-- **La URL de conexión NO va en el `datasource` del `schema.prisma`.** En Prisma 7 vive en `backend/prisma.config.ts` (`defineConfig` + `env('DATABASE_URL')`). El `datasource db` del schema solo declara `provider = "postgresql"`.
-- **El `PrismaClient` requiere un driver adapter explícito** (`@prisma/adapter-pg` + `pg`); ya no acepta la URL en el constructor. En runtime el adapter lo arma `PrismaService` con la URL del `ConfigService` (ver `docs/backend.md`).
+- **La URL de conexión NO va en el `datasource` del `schema.prisma`.** Vive en `backend/prisma.config.ts` (`defineConfig` + `env('DATABASE_URL')`). El `datasource db` del schema solo declara `provider = "postgresql"`.
+- **El `PrismaClient` requiere un driver adapter explícito** (`@prisma/adapter-pg` + `pg`); no acepta la URL en el constructor. En runtime el adapter lo arma `PrismaService` con la URL del `ConfigService` (ver `docs/backend/base.md` §Capa de datos).
 - **El CLI no carga `.env` solo cuando hay `prisma.config.ts`.** Por eso el config hace `import 'dotenv/config'` al tope, y dotenv resuelve relativo al `cwd`: los comandos de Prisma CLI (`migrate`, `generate`, seed) se corren **desde `backend/`**, o fallan con `PrismaConfigEnvError: Cannot resolve environment variable: DATABASE_URL`.
 - **`prisma.config.ts` está excluido del build de producción** (`tsconfig.build.json`): es solo del CLI, no compila a `dist/`.
 
@@ -234,7 +235,7 @@ El proyecto usa **Prisma 7**, que mueve la configuración de conexión fuera del
 
 #### Generar migraciones sin shadow database (Prisma 7 en este proyecto)
 
-`prisma migrate dev` necesita crear una **shadow database** temporal para diff-ear el schema; en este entorno el rol de Postgres **no tiene permiso** para crearla, así que `migrate dev` falla. El **patrón a seguir** para generar una migración nueva (probado en la Fase 1.1.1) es, todo desde `backend/`:
+`prisma migrate dev` necesita crear una **shadow database** temporal para diff-ear el schema; en este entorno el rol de Postgres **no tiene permiso** para crearla, así que `migrate dev` falla. El **patrón a seguir** para generar una migración nueva es, todo desde `backend/`:
 
 1. **Generar el SQL** con `prisma migrate diff` (compara el estado de las migraciones aplicadas contra el `schema.prisma` actual y escribe el `migration.sql`):
    ```
@@ -243,7 +244,7 @@ El proyecto usa **Prisma 7**, que mueve la configuración de conexión fuera del
      --to-schema ./prisma/schema.prisma \
      --script > prisma/migrations/<timestamp>_<nombre>/migration.sql
    ```
-   > El flag para apuntar al datamodel se llama **`--to-schema`** (antes `--to-schema-datamodel`).
+   > El flag para apuntar al datamodel es **`--to-schema`**.
 2. **Aplicar el cambio a la DB** con `prisma db push` (sincroniza el schema sin pasar por el motor de migraciones).
 3. **Marcar la migración como aplicada** en el historial con `prisma migrate resolve --applied <timestamp>_<nombre>`, para que `migrate deploy` (prod/CI) no intente reaplicarla.
 4. **Regenerar el client** con `prisma generate` y revisar el `migration.sql` a mano antes de commitearlo (se commitea como cualquier otra migración).
@@ -280,46 +281,24 @@ Cuando el cambio de schema debe **convertir datos existentes** con un mapeo prop
 - **Acceso tipado y centralizado:** nadie lee `process.env.X` desperdigado. Se accede a través de un config central tipado.
 - **Público vs privado en Next.js:** solo las vars con prefijo `NEXT_PUBLIC_` se exponen al browser. Secrets y tokens nunca llevan ese prefijo — quedan server-side.
 
-### Variables (ilustrativo, no es la lista final)
+### Variables
 
-- **Backend:** `DATABASE_URL`, secret para validar el JWT, `PORT`.
-- **Frontend:** URL del backend, `AUTH_SECRET`, credenciales de Google OAuth.
+La lista vigente es el schema Zod de cada lado (fuente de verdad):
+
+| Lado | Schema | Variables |
+|---|---|---|
+| Backend | `backend/src/config/env.schema.ts` | `DATABASE_URL`, `JWT_SECRET`, `PORT` (default `3001`), `NODE_ENV`, `GOOGLE_CLIENT_ID` (opcional), `CORS_ORIGIN` (default `http://localhost:3000`), `CRON_SECRET` |
+| Frontend | `frontend/src/lib/env.ts` | `NEXT_PUBLIC_API_URL`, `AUTH_SECRET`, `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (opcionales) |
 
 ---
 
 ## Autenticación
 
-Dos métodos de login que conviven (Google OAuth + email/contraseña), resueltos con **Auth.js (NextAuth v5)** en el frontend. El backend es dueño de los usuarios y las credenciales.
-
-### Métodos (frontend, Auth.js con dos providers)
-
-- **Google OAuth** — provider de Google.
-- **Email + contraseña** — provider de credenciales.
-
-### Endpoints del backend (dueño de usuarios y credenciales)
-
-- `POST /auth/register` — email + contraseña → el backend hashea la contraseña, crea el usuario y genera las categorías por defecto (RF-CAT-001), devuelve el `userId`.
-- `POST /auth/login` — email + contraseña → el backend verifica el hash y devuelve el `userId`. Lo llama el provider de credenciales de Auth.js.
-- `POST /auth/google` — el frontend (en el callback de Auth.js) pasa el `id_token` de Google; el backend lo **verifica contra Google**, crea-o-trae el usuario + categorías por defecto, devuelve el `userId`.
-
-### Hashing de contraseñas
-
-- Las contraseñas se hashean con **argon2id** en el backend. Nunca se almacenan en texto plano (RN-012).
-- El hash y la verificación ocurren siempre del lado del backend.
-
-### Emisión y validación del JWT (común a ambos métodos)
-
-Ocurre **después** de autenticar, sin importar el método:
-
-1. **El token de sesión de Auth.js está encriptado (JWE)** y es específico de Auth.js — el backend NO lo valida directamente.
-2. Auth.js, en su callback, **firma un JWT propio para el backend**: algoritmo **HS256** con un **secret compartido** entre front y back, con claims `sub=userId` y `exp` (vida corta). Se guarda en la sesión.
-3. El frontend adjunta ese JWT como `Authorization: Bearer <token>` en cada llamada al backend.
-4. El **`JwtAuthGuard` global** del backend verifica la firma y los claims con el secret compartido, extrae el `userId` y scopea todos los recursos (RN-003).
-5. **Refresh:** el JWT de backend se re-emite desde la sesión viva de Auth.js. No hay maquinaria de refresh tokens aparte; la sesión de Auth.js es la fuente de verdad.
+Dos métodos de login que conviven (Google OAuth + email/contraseña), orquestados por **Auth.js (NextAuth v5)** en el frontend; el backend es dueño de usuarios y credenciales y **emite el JWT**. Decisión estructural en `docs/architecture.md` §Decisiones estructurales; backend (endpoints, argon2id, JWT, guard global) en `docs/backend/base.md` §Autenticación; frontend (providers, sesión, Bearer, 401) en `docs/frontend/base.md` §Autenticación.
 
 ### Fuera de v1
 
-Recuperación de contraseña, verificación de email y account linking (mismo email por Google y por credenciales) quedan diferidos — ver `docs/requirements.md`, sección 6.
+Recuperación de contraseña, verificación de email y account linking (mismo email por Google y por credenciales) quedan diferidos — ver `docs/requirements/definiciones-y-alcance.md` §6.
 
 ---
 
@@ -347,10 +326,10 @@ Recuperación de contraseña, verificación de email y account linking (mismo em
 - **Gotcha — compilación incremental de TS + caché de Render (importante):** `tsconfig.json` tiene `incremental: true` (genera `tsconfig.build.tsbuildinfo`), que Render cachea entre deploys. La compilación incremental de TypeScript NO verifica si los archivos de salida existen: solo consulta el buildinfo. Con el buildinfo cacheado, `tsc` concluye "todo al día", sale con código 0 sin emitir nada y `dist/` queda vacío → el build figura como exitoso pero en runtime falla con "Cannot find module dist/main". **Solución:** `incremental: false` en `tsconfig.build.json` (override del tsconfig base), para que el build de producción siempre emita completo; el `tsconfig.json` de desarrollo mantiene `incremental: true` para que el IDE siga rápido. Workaround inmediato si reaparece: "Clear build cache & deploy".
 - **Versión de Node:** Render usa Node 24 por default; el proyecto apunta a Node 22. Se fija con un archivo `.node-version` (contenido `22`) ubicado en el `rootDir` del servicio (`backend/.node-version`), no en la raíz del repo.
 - **`PORT`:** Render lo inyecta automáticamente; no se declara como env var (declararlo pisaría el valor de Render y rompería el health check). El backend lo lee de `process.env.PORT` vía la config.
-- **Variables requeridas en Render:** `DATABASE_URL` (Internal URL de la base; obligatoria para bootear por la validación fail-fast aunque Prisma llegue en Fase 1), `JWT_SECRET` (≥32 chars; secreto compartido HS256 con el frontend), `NODE_ENV=production`.
+- **Variables requeridas en Render:** `DATABASE_URL` (Internal URL de la base; obligatoria para bootear por la validación fail-fast), `JWT_SECRET` (≥32 chars; secreto compartido HS256 con el frontend), `NODE_ENV=production`.
 - **Blueprint (`render.yaml`):** hay un `render.yaml` en la raíz que versiona el web service + la base Postgres. Notas: `region` debe coincidir entre base y servicio; `JWT_SECRET` va con `sync: false` (se carga a mano en el dashboard, no se versiona); `DATABASE_URL` se enlaza desde la base con `fromDatabase`; `PORT` no se declara.
 - **Health check:** `healthCheckPath: /health`.
-- **Cold start del plan free:** Render **suspende el web service tras ~15 minutos sin tráfico**; el primer request posterior tarda **~50 segundos** en levantar el contenedor. Es la razón estructural por la que el frontend tiene un gate de arranque (RF-APP-005; implementación en `docs/frontend.md`, §Gate de arranque del backend). La base Postgres free **no** se suspende por inactividad: el cold start es del web service, no de la base.
+- **Cold start del plan free:** Render **suspende el web service tras ~15 minutos sin tráfico**; el primer request posterior tarda **~50 segundos** en levantar el contenedor. Es la razón estructural por la que el frontend tiene un gate de arranque (RF-APP-005; implementación en `docs/frontend/gate-arranque.md`). La base Postgres free **no** se suspende por inactividad: el cold start es del web service, no de la base.
 
 ---
 
@@ -362,11 +341,11 @@ Todo el formateo vive en **un único lugar** (`lib/format.ts` del frontend), par
 
 - Helper de monto con `Intl.NumberFormat`: toma los centavos, divide por 100 y formatea anteponiendo el **símbolo de la moneda** del monto.
 - **Locale por defecto `es-AR`:** separador de miles con punto, decimales con coma (`1.500,00`).
-- **Símbolo por código de moneda — fuente única.** El formateador recibe el **código** (ARS / USD) y resuelve el símbolo desde un **único mapa** `CURRENCY_SYMBOLS`: **ARS → `$`**, **USD → `US$`**. El símbolo se antepone **sin espacio** y el orden con signo es `[signo][símbolo][cifra]` (`$1.500,00`, `US$1.500,00`, `-$1.500,00`). Sumar una moneda futura = una entrada en el mapa; reemplaza al `$` único anterior (cuando todas las cifras usaban el mismo símbolo).
+- **Símbolo por código de moneda — fuente única.** El formateador recibe el **código** (ARS / USD) y resuelve el símbolo desde un **único mapa** `CURRENCY_SYMBOLS`: **ARS → `$`**, **USD → `US$`**. El símbolo se antepone **sin espacio** y el orden con signo es `[signo][símbolo][cifra]` (`$1.500,00`, `US$1.500,00`, `-$1.500,00`). Sumar una moneda futura = una entrada en el mapa.
 - **Siempre 2 decimales** (`$1.500,00`).
 - Helper de **código de moneda** (badge `ARS` / `USD`).
 - Helpers de **cotización** (`formatExchangeRate` / `parseExchangeRateInput`), locale `es-AR` (punto = miles, coma = decimal).
-- El detalle funcional/visual vive en `requirements.md` (RF-CUR) y `docs/design.md`; acá solo la nota de que todo este formateo está centralizado.
+- El detalle funcional/visual vive en `docs/requirements/multi-moneda.md` (RF-CUR) y `docs/design/moneda.md`; acá solo la nota de que todo este formateo está centralizado.
 
 ### Fechas
 
