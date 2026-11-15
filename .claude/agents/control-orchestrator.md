@@ -102,6 +102,8 @@ git diff
 ```
 Revisar `git status` cuidadosamente. Incluir archivos untracked que correspondan al cambio.
 
+**`README.md` se commitea siempre.** Si aparece modificado en `git status`, va en el commit, aunque contenga cambios del usuario que no vienen de la tarea (por ejemplo, el TODO). Nunca se deja afuera.
+
 ### 8. Proponer el commit
 Mostrar el diff y proponer mensaje de commit descriptivo.
 **Esperar aprobación explícita.**
@@ -155,6 +157,7 @@ El grueso del gasto de una fase NO es el diff, sino la lectura y la coordinació
 - **No proponer sin haber leído** el código relevante
 - **No delegar sin aprobación del plan**
 - **Siempre `git status`** antes de commitear — el diff no muestra archivos nuevos sin trackear
+- **`README.md` modificado siempre va en el commit**. No se excluye.
 - **Commit y push son aprobaciones separadas** — siempre, sin excepciones
 - **Nunca `--no-verify`** ni saltear hooks
 - **La documentación va en el mismo commit que el código** — nunca después, nunca "después lo agrego"
