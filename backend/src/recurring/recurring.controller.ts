@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
@@ -14,6 +15,7 @@ import {
 import { RecurringService } from './recurring.service';
 import { CreateRecurringDto } from './dto/create-recurring.dto';
 import { UpdateRecurringDto } from './dto/update-recurring.dto';
+import { ReopenRecurringDto } from './dto/reopen-recurring.dto';
 import { ToggleSkipRecurringDto } from './dto/toggle-skip-recurring.dto';
 import { CreateCalculatedRecurringDto } from './dto/create-calculated-recurring.dto';
 import { UpdateCalculatedRecurringDto } from './dto/update-calculated-recurring.dto';
@@ -170,6 +172,42 @@ export class RecurringController {
     throw new BadRequestException(
       'El body debe incluir "month" (alcance puntual) o "from" + "to" + "action" (alcance de rango)',
     );
+  }
+
+  /**
+   * GET /recurring/:id/reopen-preview?currentMonth=YYYY-MM
+   * Datos del paso de reapertura (RF-MF-008): piso de X, último monto y reemplazos
+   * requeridos (categoría / método de pago dados de baja, del fijo y de los espejos).
+   * 400 si el fijo no es reabrible; 404 si no existe o no es del usuario.
+   */
+  @Get(':id/reopen-preview')
+  reopenPreview(
+    @Request() req: AuthRequest,
+    @Param('id') id: string,
+    @Query('currentMonth') currentMonth: string | undefined,
+  ) {
+    if (!currentMonth) {
+      throw new BadRequestException(
+        'El query param "currentMonth" es obligatorio (formato YYYY-MM)',
+      );
+    }
+    return this.recurringService.getReopenPreview(req.user.userId, id, currentMonth);
+  }
+
+  /**
+   * POST /recurring/:id/reopen
+   * Reabre un fijo terminado (RF-MF-008). 200 + { id, chainId, previousEndMonth,
+   * reopenMonth, skippedCount, reopenedCalculatedChainIds, historyEntryId }.
+   * 400 validación / no reabrible; 404 si no existe o no es del usuario.
+   */
+  @Post(':id/reopen')
+  @HttpCode(HttpStatus.OK)
+  reopen(
+    @Request() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() dto: ReopenRecurringDto,
+  ) {
+    return this.recurringService.reopen(req.user.userId, id, dto);
   }
 
   /**

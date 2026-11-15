@@ -147,8 +147,8 @@ Devuelve **una serie de los últimos N meses por fijo** (monto + variación nomi
 ### `POST /transactions` · `PATCH /transactions/:id` · `DELETE /transactions/:id`
 CRUD de movimientos únicos. El monto siempre en centavos (entero > 0). El instante se guarda en UTC más la zona original del registro (ver fechas/timezone en `docs/technical.md`).
 
-### `POST /recurring` · `PATCH /recurring/:id` · `DELETE /recurring/:id` · `POST|PATCH /recurring/:id/calculated`
-Gestión de movimientos fijos y calculados. El PATCH y el DELETE reciben el mes actual (`currentMonth`) para resolver la inmutabilidad del pasado; el DELETE además usa `fromCurrentMonth` (query) para controlar desde cuándo deja de aparecer el fijo. Los **calculados** usan endpoints propios `POST|PATCH /recurring/:id/calculated`. Contrato completo en la sección **Movimientos fijos (RecurringModule)** y **Movimientos calculados**. **No hay `GET /recurring/:id`.**
+### `POST /recurring` · `PATCH /recurring/:id` · `DELETE /recurring/:id` · `POST|PATCH /recurring/:id/calculated` · `GET /recurring/:id/reopen-preview` · `POST /recurring/:id/reopen`
+Gestión de movimientos fijos y calculados, y reapertura de fijos terminados (RF-MF-008). El PATCH y el DELETE reciben el mes actual (`currentMonth`) para resolver la inmutabilidad del pasado; el DELETE además usa `fromCurrentMonth` (query) para controlar desde cuándo deja de aparecer el fijo. Los **calculados** usan endpoints propios `POST|PATCH /recurring/:id/calculated`. Contrato completo en la sección **Movimientos fijos (RecurringModule)** y **Movimientos calculados**. **No hay `GET /recurring/:id`.**
 
 ### `POST /installments` · `PATCH /installments/:id` · `DELETE /installments/:id`
 Gestión de grupos de cuotas. **Solo `EXPENSE` en v1** (rechaza `INCOME` con `400`). El PATCH edita el grupo completo in-place (RF-MC-003). El DELETE es **borrado lógico del grupo entero** (todas las cuotas, pasadas y futuras). **No hay `GET /installments/:id`**: el front prefilea desde el `MovementItem` de `/movements`. Contrato completo en la sección **Movimientos en cuotas (InstallmentsModule)**.
@@ -400,7 +400,7 @@ Una serie de **los últimos `rangeMonths` meses hasta el mes en curso**, **por f
 
 ## Movimientos fijos (RecurringModule)
 
-Gestión de movimientos fijos, **scopeada por `userId` del JWT**. El módulo expone **crear, editar y eliminar**; el listado del mes lo arma `MovementsModule` (sección anterior). **No existe `GET /recurring/:id`**: el front prefilea el formulario de edición desde el `MovementItem` que ya trae `/movements`, sin un GET extra.
+Gestión de movimientos fijos, **scopeada por `userId` del JWT**. El módulo expone **crear, editar, eliminar, anular y reabrir**; el listado del mes lo arma `MovementsModule` (sección anterior). **No existe `GET /recurring/:id`**: el front prefilea el formulario de edición desde el `MovementItem` que ya trae `/movements`, sin un GET extra.
 
 ### Endpoints
 
@@ -413,7 +413,10 @@ Gestión de movimientos fijos, **scopeada por `userId` del JWT**. El módulo exp
 | `POST /recurring/:id/calculated` | calculado desde el fijo `:id` | `201` · `data: Recurring` | `400` · `404` |
 | `PATCH /recurring/:id/calculated` | edita el calculado `:id` | `200` · `data: Recurring` | `400` · `404` |
 | `DELETE /recurring/:id` | query: `currentMonth`, `fromCurrentMonth` | `200` · `data: { historyEntryId }` | `404` |
+| `GET /recurring/:id/reopen-preview` | query: `currentMonth` | `200` · `data: ReopenPreview` | `400` · `404` |
+| `POST /recurring/:id/reopen` | `{ currentMonth, reopenMonth, amountCents, categoryId?, paymentMethodId?, calculatedCategories? }` | `200` · `data: ReopenResult` | `400` · `404` |
 
+- **Reapertura (RF-MF-008):** contrato en `docs/data-model.md` §Contrato de reapertura de fijos; mecánica en §Reapertura de un fijo terminado (abajo).
 - **`type`, `startMonth` y `frequency` no son editables** por PATCH: solo `amountCents`, `categoryId` y `description` (RF-MF-003). El `startMonth` del POST es el mes actual que envía el front.
 - **`frequency`:** **entero 1..12** (meses entre apariciones), opcional en el `POST`, default **`1`** (mensual) si se omite. `400` si no es entero o cae fuera de 1..12 (validado en el DTO; no hay CHECK en la DB). Es **inmutable** (como `type`): no se acepta en PATCH; en el split (abajo) la fila nueva R2 la **hereda del original**. La respuesta del `POST` incluye `frequency`. Detalle del cálculo "¿este fijo aparece en este mes?" en **Cálculo de aparición de fijos por mes** (abajo).
 - **`POST /recurring/:id/skip` — anular / des-anular apariciones (RF-MF-005):** un endpoint con **dos alcances**; ver §Anulación de apariciones abajo.
@@ -466,6 +469,20 @@ Un fijo aparece en `month` si: `startMonth <= month` **y** (`deletedFrom IS NULL
   - **`boundary <= startMonth`** (la fila no aparecería en ningún mes) → **borrado lógico** de la fila (`deletedAt`, RF-HIST-006), **no** borrado físico: el snapshot del historial necesita que la fila siga existiendo para poder restaurarla.
   - **`deletedFrom` nulo o mayor que el boundary** → set `deletedFrom = boundary` (la fila sigue visible en los meses anteriores).
   - **`deletedFrom <= boundary`** (la fila ya terminó antes) → no se toca. El pasado nunca se toca.
+
+### Reapertura de un fijo terminado (RF-MF-008)
+
+`RecurringService.reopen` / `getReopenPreview`; escritura en `RecurringRepository.applyReopen`. Notación: **V** = fila vigente de la cadena (mayor `startMonth` entre las vivas), **E** = `V.deletedFrom` (fin), **X** = `reopenMonth`.
+
+- **Espejos** = calculados de **fijo** con `sourceChainId` = `chainId` del origen cuya fila vigente tiene `deletedFrom == E`. Los de otro fin no se tocan.
+- **Por cadena** (origen y cada espejo), todo en **una** `prisma.$transaction`:
+  1. **V pasa a `deletedFrom = X`.** Sigue cubriendo el relleno `[E, X)` con su monto, categoría y método viejos.
+  2. **Se crea la fila N:** misma `chainId`, `startMonth = X`, `deletedFrom = null`, monto nuevo; el resto se hereda de V salvo los reemplazos de categoría/método. `autoDebit` vía `PaymentMethodValidatorService.resolveAutoDebit(métodoEfectivo, V.autoDebit)`. En los espejos N conserva la fórmula, el `sourceChainId` y los placeholders.
+  3. **Anulaciones de relleno:** cada mes de `[E, X)` con `isOnFrequency(V.startMonth, V.frequency, m)` recibe un `RecurringSkip` sobre V (origen) y sobre la V de cada espejo, en los mismos meses. Los skips que ya existían en esas filas no se vuelven a crear (`skipDuplicates`) ni entran al snapshot.
+- **La cadencia se re-ancla sola en X:** el ancla es el `startMonth` de la fila que cubre el mes (§Cálculo de aparición de fijos por mes), así que N ancla en X sin tocar `isOnFrequency` ni `findFijosByMonth`. Mismo mecanismo que el split de edición.
+- **`X == E`:** sin relleno ni skips; V conserva su fin y N arranca en E.
+- **Historial:** una sola entrada `REOPEN` (`targetId` = `chainId` del origen), grabada después de la transacción. Snapshot `FijoReopenSnapshot` (`src/history/history.types.ts`): `{ kind: 'reopen', reopenMonth, row, newRowId, skips, next, mirrors[] }` — `row` = V antes de mutar, `skips` = los creados, `next` = monto/categoría/método/`autoDebit` efectivos de N, `mirrors[]` = `{ row, newRowId, skips }` por espejo.
+- **Deshacer** (LIFO existente, `HistoryService.undoFijo`): por el origen y cada espejo, borra los skips creados (los des-anulados ya no están: no falla), borra N y restaura `V.deletedFrom = E`. No hay bloqueo adicional por des-anulaciones posteriores en el relleno.
 
 ### Gotchas
 
@@ -729,7 +746,7 @@ Contrato en `docs/data-model.md`, §Simulación de categoría; regla funcional e
 
 ## Historial de cambios (HistoryModule)
 
-Registra ediciones y eliminaciones de movimientos y permite deshacerlas (RF-HIST-001..006). Contrato de API y modelo en `docs/data-model.md`, §Historial de cambios; shape del snapshot por `targetKind × action` en `src/history/history.types.ts`.
+Registra ediciones y eliminaciones de movimientos y reaperturas de fijos, y permite deshacerlas (RF-HIST-001..006, RF-MF-008). Contrato de API y modelo en `docs/data-model.md`, §Historial de cambios; shape del snapshot por `targetKind × action` en `src/history/history.types.ts`.
 
 ### Endpoints
 
@@ -742,14 +759,14 @@ Registra ediciones y eliminaciones de movimientos y permite deshacerlas (RF-HIST
 
 La captura vive en los **services de dominio** (`transactions`, `recurring`, `installments`), no en el módulo de historial: cada uno arma el snapshot del estado previo **antes** de mutar y llama a `HistoryService.record(...)`. La entrada se graba después de que la mutación terminó bien.
 
-- **La cascada no genera entradas propias (RN-024).** Eliminar un origen con calculados derivados produce **una** entrada; los calculados que caen viajan **dentro** de ese mismo snapshot. Deshacerla los restaura junto con el origen.
+- **La cascada no genera entradas propias (RN-024).** Eliminar un origen con calculados derivados produce **una** entrada; los calculados que caen viajan **dentro** de ese mismo snapshot. Deshacerla los restaura junto con el origen. Igual con los espejos de una reapertura (§Movimientos fijos → Reapertura).
 - **`targetId` agrupa por movimiento lógico, no por fila** (ver `docs/data-model.md`): en fijos y calculados es el `chainId`, así que el split de edición no parte la pila LIFO.
 
 ### Retención y purga
 
 Una entrada se conserva hasta que ocurre **lo primero** de estas dos (RF-HIST-005): que el movimiento acumule más de **5 entradas** (se descarta la más vieja al grabar la sexta) o que la entrada cumpla **31 días**.
 
-- **Reaper.** Al purgarse una entrada de **eliminación**, el movimiento que estaba con borrado lógico se **borra físicamente**: la eliminación deja de ser reversible y el registro desaparece de la DB. Purgar una entrada de edición solo borra la entrada.
+- **Reaper.** Al purgarse una entrada de **eliminación**, el movimiento que estaba con borrado lógico se **borra físicamente**: la eliminación deja de ser reversible y el registro desaparece de la DB. Purgar una entrada de edición o de reapertura solo borra la entrada.
 - **La purga es lazy, no agendada.** `@nestjs/schedule` no es dependencia del proyecto, así que no hay cron: la purga corre **al leer el historial y al deshacer**. **Consecuencia:** un usuario que nunca abre `/historial` no purga sus entradas vencidas hasta su próxima visita — sus movimientos eliminados siguen ocupando espacio (invisibles para el resto de la app) más allá de los 31 días.
 
 ### Deshacer

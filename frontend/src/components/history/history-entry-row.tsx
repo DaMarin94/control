@@ -19,10 +19,16 @@
  */
 
 import type { KeyboardEvent } from "react";
-import { Pencil, Trash2, Undo2, Lock, CornerDownRight } from "lucide-react";
+import { Undo2, Lock, CornerDownRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HistoryChangesBlock } from "@/components/history/history-changes-block";
-import { HISTORY_TARGET_KIND_LABEL, formatHistoryMoment, getHistoryEntryName } from "@/lib/history";
+import { HISTORY_ACTION_ICON } from "@/components/history/history-action-icon";
+import {
+  HISTORY_ACTION_CHIP_LABEL,
+  HISTORY_TARGET_KIND_LABEL,
+  formatHistoryMoment,
+  getHistoryEntryName,
+} from "@/lib/history";
 import { getBrowserTimezone } from "@/lib/format";
 import type { HistoryEntryResponseDto } from "@/types/history";
 import { cn } from "@/lib/utils";
@@ -39,9 +45,9 @@ interface HistoryEntryRowProps {
 }
 
 export function HistoryEntryRow({ entry, isBusy, onOpen }: HistoryEntryRowProps) {
-  const isEdit = entry.action === "EDIT";
-  const Icon = isEdit ? Pencil : Trash2;
-  const chipLabel = isEdit ? "Editado" : "Eliminado";
+  const isDelete = entry.action === "DELETE";
+  const Icon = HISTORY_ACTION_ICON[entry.action];
+  const chipLabel = HISTORY_ACTION_CHIP_LABEL[entry.action];
 
   const rowLabel = getHistoryEntryName(entry);
   const structureLabel = HISTORY_TARGET_KIND_LABEL[entry.targetKind];
@@ -173,8 +179,9 @@ export function HistoryEntryRow({ entry, isBusy, onOpen }: HistoryEntryRowProps)
         <div className="mt-2.5">
           <HistoryChangesBlock
             changes={entry.changes}
+            reopen={entry.reopen}
             direction="list"
-            heading={isEdit ? undefined : "Se eliminó:"}
+            heading={isDelete ? "Se eliminó:" : undefined}
           />
         </div>
 

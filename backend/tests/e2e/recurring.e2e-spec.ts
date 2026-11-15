@@ -108,6 +108,8 @@ const mockPrisma = {
     createMany: jest.fn().mockResolvedValue({ count: 0 }),
     deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
   },
+  // paymentMethod — RecurringRepository.findPaymentMethodDeletedMap (reapertura, RF-MF-008)
+  paymentMethod: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
   $queryRaw: jest.fn(),
   $connect: jest.fn(),
   $disconnect: jest.fn(),
@@ -1235,6 +1237,322 @@ describe('Recurring (e2e)', () => {
       // findMany llamado con el userId del token B
       const findManyCall = mockPrisma.recurring.findMany.mock.calls[0][0];
       expect(findManyCall.where.userId).toBe(USER_B_ID);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /recurring/:id/reopen y GET /recurring/:id/reopen-preview (RF-MF-008)
+  // -------------------------------------------------------------------------
+
+  describe('reabrir fijo terminado (RF-MF-008)', () => {
+    const ended = () =>
+      makeDbRecurring({
+        startMonth: '2026-01',
+        deletedFrom: '2026-09',
+        frequency: 3,
+        paymentMethodId: null,
+        paymentMethod: null,
+        autoDebit: null,
+        anchorCurrency: 'ARS',
+      });
+    const calc = () =>
+      makeDbRecurring({
+        id: 'calc-e2e-1',
+        chainId: 'calc-chain-e2e-1',
+        sourceChainId: 'chain-e2e-001',
+        formulaOperator: 'PCT',
+        formulaOperand: 1000,
+        formulaSign: 1,
+        amountCents: 0,
+        startMonth: '2026-01',
+        deletedFrom: '2026-09',
+        paymentMethodId: null,
+        paymentMethod: null,
+        autoDebit: null,
+        anchorCurrency: 'ARS',
+      });
+
+    function wire(rows: any[], calcs: any[] = []) {
+      const all = [...rows, ...calcs];
+      mockPrisma.recurring.findUnique.mockImplementation((args: any) =>
+        Promise.resolve(all.find((r) => r.id === args.where.id) ?? null),
+      );
+      mockPrisma.recurring.findMany.mockImplementation((args: any) => {
+        if (args?.where?.chainId !== undefined) return Promise.resolve(rows);
+        if (args?.where?.sourceChainId !== undefined) return Promise.resolve(calcs);
+        return Promise.resolve([]);
+      });
+      let n = 0;
+      mockPrisma.recurring.create.mockImplementation(() => Promise.resolve({ id: `new-${n++}` }));
+      mockPrisma.recurring.update.mockResolvedValue({});
+      mockPrisma.category.findMany.mockResolvedValue([{ id: CAT_ID, deletedAt: null }]);
+      mockPrisma.recurringSkip.findMany.mockResolvedValue([]);
+    }
+
+    const BODY = { currentMonth: '2026-11', reopenMonth: '2026-11', amountCents: 9000 };
+
+    it('200: cierra V en X, crea N, y registra la entrada REOPEN (con espejo)', async () => {
+      wire([ended()], [calc()]);
+
+      const res = await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/reopen')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send(BODY)
+        .expect(200);
+
+      // relleno [2026-09, 2026-11) con ancla 2026-01 cada 3: ninguna aparición (jul/oct fuera de [sep,nov) salvo oct)
+      expect(res.body.data).toMatchObject({
+        id: 'new-0',
+        chainId: 'chain-e2e-001',
+        previousEndMonth: '2026-09',
+        reopenMonth: '2026-11',
+        skippedCount: 1, // 2026-10
+        reopenedCalculatedChainIds: ['calc-chain-e2e-1'],
+      });
+      expect(res.body.data.historyEntryId).toBeDefined();
+      expect(mockPrisma.recurring.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'rec-e2e-001' }, data: { deletedFrom: '2026-11' } }),
+      );
+      expect(mockPrisma.recurring.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'calc-e2e-1' }, data: { deletedFrom: '2026-11' } }),
+      );
+      const createdRows = mockPrisma.recurring.create.mock.calls.map((c: any) => c[0].data);
+      expect(createdRows).toHaveLength(2);
+      expect(createdRows[0]).toMatchObject({
+        startMonth: '2026-11',
+        deletedFrom: null,
+        amountCents: 9000,
+        chainId: 'chain-e2e-001',
+        frequency: 3,
+      });
+      expect(createdRows[1]).toMatchObject({
+        startMonth: '2026-11',
+        deletedFrom: null,
+        chainId: 'calc-chain-e2e-1',
+        sourceChainId: 'chain-e2e-001',
+      });
+      expect(mockPrisma.historyEntry.create).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.historyEntry.create.mock.calls[0][0].data).toMatchObject({
+        userId: USER_A_ID,
+        targetKind: 'FIJO',
+        targetId: 'chain-e2e-001',
+        action: 'REOPEN',
+      });
+    });
+
+    it('relleno con frecuencia > 1: skips solo de las apariciones viejas (origen + espejo) con createMany', async () => {
+      // fin 2026-07 (ancla 2026-01 cada 3: jul y oct), X = 2026-12
+      wire([{ ...ended(), deletedFrom: '2026-07' }], [{ ...calc(), deletedFrom: '2026-07' }]);
+      await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/reopen')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...BODY, reopenMonth: '2026-12' })
+        .expect(200);
+
+      expect(mockPrisma.recurringSkip.createMany).toHaveBeenCalledWith({
+        data: [
+          { recurringId: 'rec-e2e-001', month: '2026-07' },
+          { recurringId: 'rec-e2e-001', month: '2026-10' },
+        ],
+        skipDuplicates: true,
+      });
+      expect(mockPrisma.recurringSkip.createMany).toHaveBeenCalledWith({
+        data: [
+          { recurringId: 'calc-e2e-1', month: '2026-07' },
+          { recurringId: 'calc-e2e-1', month: '2026-10' },
+        ],
+        skipDuplicates: true,
+      });
+    });
+
+    it('X == endMonth (fin futuro): sin relleno, no escribe skips', async () => {
+      wire([{ ...ended(), deletedFrom: '2027-03' }]);
+      const res = await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/reopen')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...BODY, reopenMonth: '2027-03' })
+        .expect(200);
+      expect(res.body.data.skippedCount).toBe(0);
+      expect(mockPrisma.recurringSkip.createMany).not.toHaveBeenCalled();
+    });
+
+    it('400 si X < máx(mes en curso, endMonth)', async () => {
+      wire([{ ...ended(), deletedFrom: '2027-03' }]);
+      const res = await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/reopen')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...BODY, reopenMonth: '2027-02' })
+        .expect(400);
+      expect(res.body.success).toBe(false);
+      expect(mockPrisma.recurring.create).not.toHaveBeenCalled();
+    });
+
+    it('400 de DTO: monto 0, mes mal formado, tope de monto, campos extra', async () => {
+      wire([ended()]);
+      for (const bad of [
+        { ...BODY, amountCents: 0 },
+        { ...BODY, reopenMonth: '2026/11' },
+        { ...BODY, amountCents: 2147483648 },
+        { ...BODY, foo: 1 },
+      ]) {
+        await request(app.getHttpServer())
+          .post('/recurring/rec-e2e-001/reopen')
+          .set('Authorization', `Bearer ${tokenA}`)
+          .send(bad)
+          .expect(400);
+      }
+    });
+
+    it('400 si el fijo no tiene fin; 400 si es un calculado', async () => {
+      wire([{ ...ended(), deletedFrom: null }]);
+      await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/reopen')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send(BODY)
+        .expect(400);
+
+      wire([ended()], [calc()]);
+      await request(app.getHttpServer())
+        .post('/recurring/calc-e2e-1/reopen')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send(BODY)
+        .expect(400);
+    });
+
+    it('404 si el fijo es de otro usuario (RN-003); 401 sin JWT', async () => {
+      wire([ended()]);
+      await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/reopen')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send(BODY)
+        .expect(404);
+      await request(app.getHttpServer()).post('/recurring/rec-e2e-001/reopen').send(BODY).expect(401);
+    });
+
+    it('categoría dada de baja: 400 sin reemplazo, 200 con categoryId activo', async () => {
+      wire([ended()]);
+      mockPrisma.category.findMany.mockResolvedValue([{ id: CAT_ID, deletedAt: new Date() }]);
+      await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/reopen')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send(BODY)
+        .expect(400);
+
+      mockPrisma.category.findUnique.mockResolvedValue(makeDbCategory({ id: 'cat-new' }));
+      await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/reopen')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...BODY, categoryId: 'cat-new' })
+        .expect(200);
+      expect(mockPrisma.recurring.create.mock.calls[0][0].data.category).toEqual({
+        connect: { id: 'cat-new' },
+      });
+    });
+
+    it('método de pago dado de baja: 400 sin campo, 200 con paymentMethodId null ("sin método")', async () => {
+      wire([{ ...ended(), paymentMethodId: 'pm-dead' }]);
+      mockPrisma.paymentMethod.findMany.mockResolvedValue([{ id: 'pm-dead', deletedAt: new Date() }]);
+      await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/reopen')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send(BODY)
+        .expect(400);
+
+      await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/reopen')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...BODY, paymentMethodId: null })
+        .expect(200);
+      expect(mockPrisma.recurring.create.mock.calls[0][0].data.paymentMethod).toBeUndefined();
+    });
+
+    it('GET reopen-preview: paymentMethod incluye icon', async () => {
+      wire([{ ...ended(), paymentMethodId: 'pm-ok', paymentMethod: { id: 'pm-ok', name: 'Débito', icon: 'credit-card', type: 'DEBIT' } }]);
+      mockPrisma.paymentMethod.findMany.mockResolvedValue([{ id: 'pm-ok', deletedAt: null }]);
+      const res = await request(app.getHttpServer())
+        .get('/recurring/rec-e2e-001/reopen-preview?currentMonth=2026-11')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+      expect(res.body.data.paymentMethod).toEqual({ id: 'pm-ok', name: 'Débito', icon: 'credit-card', deleted: false });
+    });
+
+    it('paymentMethodId null con método activo -> 400', async () => {
+      wire([{ ...ended(), paymentMethodId: 'pm-ok' }]);
+      mockPrisma.paymentMethod.findMany.mockResolvedValue([{ id: 'pm-ok', deletedAt: null }]);
+      await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/reopen')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...BODY, paymentMethodId: null })
+        .expect(400);
+    });
+
+    it('categoryId con categoría activa -> 400 (el reemplazo se rechaza si no hace falta)', async () => {
+      wire([ended()]);
+      await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/reopen')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...BODY, categoryId: 'cat-new' })
+        .expect(400);
+    });
+
+    it('espejo con categoría de baja exige calculatedCategories', async () => {
+      wire([ended()], [{ ...calc(), categoryId: 'cat-dead' }]);
+      mockPrisma.category.findMany.mockResolvedValue([
+        { id: CAT_ID, deletedAt: null },
+        { id: 'cat-dead', deletedAt: new Date() },
+      ]);
+      await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/reopen')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send(BODY)
+        .expect(400);
+
+      mockPrisma.category.findUnique.mockResolvedValue(makeDbCategory({ id: 'cat-new' }));
+      await request(app.getHttpServer())
+        .post('/recurring/rec-e2e-001/reopen')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({
+          ...BODY,
+          calculatedCategories: [{ chainId: 'calc-chain-e2e-1', categoryId: 'cat-new' }],
+        })
+        .expect(200);
+      expect(mockPrisma.recurring.create.mock.calls[1][0].data.category).toEqual({
+        connect: { id: 'cat-new' },
+      });
+    });
+
+    it('GET reopen-preview: piso de X, último monto y reemplazos requeridos', async () => {
+      wire(
+        [{ ...ended(), deletedFrom: '2027-03', amountCents: 4200 }],
+        [{ ...calc(), deletedFrom: '2027-03', categoryId: 'cat-dead' }],
+      );
+      mockPrisma.category.findMany.mockResolvedValue([
+        { id: CAT_ID, deletedAt: null },
+        { id: 'cat-dead', deletedAt: new Date() },
+      ]);
+      const res = await request(app.getHttpServer())
+        .get('/recurring/rec-e2e-001/reopen-preview?currentMonth=2026-11')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+      expect(res.body.data).toMatchObject({
+        chainId: 'chain-e2e-001',
+        endMonth: '2027-03',
+        minReopenMonth: '2027-03',
+        amountCents: 4200,
+        requiresCategory: false,
+        requiresPaymentMethod: false,
+      });
+      expect(res.body.data.mirrors).toEqual([
+        expect.objectContaining({ chainId: 'calc-chain-e2e-1', requiresCategory: true }),
+      ]);
+    });
+
+    it('GET reopen-preview: 400 sin currentMonth', async () => {
+      wire([ended()]);
+      await request(app.getHttpServer())
+        .get('/recurring/rec-e2e-001/reopen-preview')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(400);
     });
   });
 });

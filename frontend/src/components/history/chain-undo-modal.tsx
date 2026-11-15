@@ -12,10 +12,16 @@
  * abierta queda última (es la de `blockingCount` más alto del grupo).
  */
 
-import { Info, Pencil, Trash2 } from "lucide-react";
+import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ModalShell, ModalShellHeader, ModalShellBody, ModalShellFooter } from "@/components/ui/modal-shell";
-import { formatHistoryMoment, getHistoryEntryName, pickSummaryChange, summarizeHistoryChange } from "@/lib/history";
+import { HISTORY_ACTION_ICON } from "@/components/history/history-action-icon";
+import {
+  HISTORY_ACTION_CHIP_LABEL,
+  formatHistoryMoment,
+  getHistoryEntryName,
+  summarizeHistoryEntry,
+} from "@/lib/history";
 import { getBrowserTimezone } from "@/lib/format";
 import type { HistoryEntryResponseDto } from "@/types/history";
 import { cn } from "@/lib/utils";
@@ -59,9 +65,8 @@ export function ChainUndoModal({ entry, chainEntries, isSubmitting, onConfirm, o
           <div className="rounded-ctl border border-line overflow-hidden">
             {chainEntries.map((chainEntry, index) => {
               const isThisEntry = chainEntry.id === entry.id;
-              const Icon = chainEntry.action === "EDIT" ? Pencil : Trash2;
-              const summaryChange = pickSummaryChange(chainEntry.changes);
-              const summary = summaryChange ? summarizeHistoryChange(summaryChange) : undefined;
+              const Icon = HISTORY_ACTION_ICON[chainEntry.action];
+              const summary = summarizeHistoryEntry(chainEntry);
               return (
                 <div
                   key={chainEntry.id}
@@ -79,7 +84,7 @@ export function ChainUndoModal({ entry, chainEntries, isSubmitting, onConfirm, o
                     ·
                   </span>
                   <span className="inline-flex items-center rounded-(--r-chip) bg-panel text-muted px-1.5 py-px text-[10.5px] font-semibold tracking-[0.04em] shrink-0">
-                    {chainEntry.action === "EDIT" ? "Editado" : "Eliminado"}
+                    {HISTORY_ACTION_CHIP_LABEL[chainEntry.action]}
                   </span>
                   {summary &&
                     (summary.nowrap ? (

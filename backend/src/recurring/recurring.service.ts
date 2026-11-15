@@ -17,6 +17,7 @@ import {
 import { addMonths, isOnFrequency, monthDiff } from '../common/month.helper';
 import { CreateRecurringDto } from './dto/create-recurring.dto';
 import { UpdateRecurringDto } from './dto/update-recurring.dto';
+import { ReopenRecurringDto } from './dto/reopen-recurring.dto';
 import { CreateCalculatedRecurringDto } from './dto/create-calculated-recurring.dto';
 import { UpdateCalculatedRecurringDto } from './dto/update-calculated-recurring.dto';
 import { CreateCalculatedFromTransactionDto } from './dto/create-calculated-from-transaction.dto';
@@ -30,6 +31,8 @@ import {
   FijoChainSnapshot,
   FijoDeleteSnapshot,
   FijoEditSnapshot,
+  FijoReopenChainSnapshot,
+  FijoReopenSnapshot,
   RecurringRowSnapshot,
 } from '../history/history.types';
 
@@ -1293,6 +1296,369 @@ export class RecurringService {
     if (diff < 0) return null;
     const floorMultiple = diff - (diff % frequency);
     return addMonths(anchorMonth, floorMultiple);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Reapertura de un fijo terminado (RF-MF-008)
+  // ---------------------------------------------------------------------------
+
+  /** Año máximo del mes de reapertura (misma cota técnica que los reportes, 1900–2200). */
+  private static readonly MAX_REOPEN_YEAR = 2200;
+
+  /**
+   * Resuelve el contexto de una reapertura sobre el fijo lógico (chainId) de la fila `id`:
+   * fila vigente (mayor startMonth entre las filas VIVAS) con fin de vigencia, y los
+   * calculados de fijo derivados cuya fila vigente termina en el MISMO mes (espejos).
+   *
+   * 404 si no existe / no es del usuario. 400 si es un calculado o no tiene fin.
+   */
+  private async resolveReopenContext(userId: string, id: string) {
+    const existing = await this.repo.findById(id);
+    if (!existing || existing.userId !== userId) {
+      throw new NotFoundException('Movimiento fijo no encontrado');
+    }
+    if (
+      existing.sourceChainId !== null ||
+      existing.sourceMovementId !== null ||
+      existing.sourceInstallmentGroupId !== null
+    ) {
+      throw new BadRequestException('Un movimiento calculado no se puede reabrir por su cuenta');
+    }
+
+    const latest = this.pickVigente(await this.repo.findChainRows(existing.chainId));
+    if (!latest || latest.deletedFrom === null) {
+      throw new BadRequestException(
+        'El movimiento fijo no tiene fin de vigencia: no hay nada que reabrir',
+      );
+    }
+    const vigente = latest.id === existing.id ? existing : await this.repo.findById(latest.id);
+    if (!vigente) throw new NotFoundException('Movimiento fijo no encontrado');
+    const endMonth = latest.deletedFrom;
+
+    // Calculados de fijo derivados cuyo fin == fin del origen (RF-MCALC-005 / RF-MF-008).
+    const calcRows = await this.repo.findCalculadosBySourceChain(existing.chainId);
+    const byChain = new Map<string, typeof calcRows>();
+    for (const r of calcRows) {
+      const list = byChain.get(r.chainId);
+      if (list) list.push(r);
+      else byChain.set(r.chainId, [r]);
+    }
+    const mirrors: RecurringWithCategory[] = [];
+    for (const rows of byChain.values()) {
+      const v = this.pickVigente(rows);
+      if (!v || v.deletedFrom !== endMonth) continue;
+      const full = await this.repo.findById(v.id);
+      if (full && full.userId === userId) mirrors.push(full);
+    }
+
+    return { existing, vigente, endMonth, mirrors };
+  }
+
+  /** Fila vigente de una cadena: la de mayor startMonth entre las filas vivas. */
+  private pickVigente<T extends { startMonth: string }>(rows: T[]): T | undefined {
+    if (rows.length === 0) return undefined;
+    return rows.reduce((a, b) => (b.startMonth > a.startMonth ? b : a), rows[0]);
+  }
+
+  /**
+   * GET /recurring/:id/reopen-preview?currentMonth= — datos que el paso de
+   * reapertura necesita (RF-MF-008): piso de X, último monto y qué reemplazos faltan
+   * (categoría / método de pago dados de baja, del fijo y de los espejos).
+   *
+   * 404 si no existe / no es del usuario. 400 si no es reabrible (calculado, sin fin).
+   */
+  async getReopenPreview(userId: string, id: string, currentMonth: string) {
+    this.validateMonthFormat(currentMonth);
+    this.validateMonthValue(currentMonth);
+
+    const { vigente, endMonth, mirrors } = await this.resolveReopenContext(userId, id);
+
+    const categoryDeleted = await this.repo.findCategoryDeletedMap([
+      vigente.categoryId,
+      ...mirrors.map((m) => m.categoryId),
+    ]);
+    const pmDeleted = await this.repo.findPaymentMethodDeletedMap(
+      vigente.paymentMethodId ? [vigente.paymentMethodId] : [],
+    );
+
+    return {
+      chainId: vigente.chainId,
+      endMonth,
+      minReopenMonth: endMonth > currentMonth ? endMonth : currentMonth,
+      amountCents: vigente.amountCents,
+      currency: vigente.currency,
+      category: {
+        id: vigente.category.id,
+        name: vigente.category.name,
+        color: vigente.category.color,
+        deleted: categoryDeleted.get(vigente.categoryId) === true,
+      },
+      paymentMethod: vigente.paymentMethod
+        ? {
+            id: vigente.paymentMethod.id,
+            name: vigente.paymentMethod.name,
+            icon: vigente.paymentMethod.icon,
+            deleted: pmDeleted.get(vigente.paymentMethod.id) === true,
+          }
+        : null,
+      requiresCategory: categoryDeleted.get(vigente.categoryId) === true,
+      requiresPaymentMethod:
+        vigente.paymentMethodId !== null && pmDeleted.get(vigente.paymentMethodId) === true,
+      mirrors: mirrors.map((m) => ({
+        chainId: m.chainId,
+        description: m.description,
+        category: {
+          id: m.category.id,
+          name: m.category.name,
+          color: m.category.color,
+          deleted: categoryDeleted.get(m.categoryId) === true,
+        },
+        requiresCategory: categoryDeleted.get(m.categoryId) === true,
+      })),
+    };
+  }
+
+  /**
+   * POST /recurring/:id/reopen — reabre un fijo terminado (RF-MF-008).
+   *
+   * Mecánica (por cadena: el origen y cada calculado en espejo), en UNA transacción:
+   *  1. La fila vigente V (con fin E) pasa a `deletedFrom = X`: cubre `[.., X)`, así los
+   *     meses de relleno `[E, X)` siguen listándose con el monto/categoría/método viejos.
+   *  2. Se crea una fila nueva N (misma `chainId`, `startMonth = X`, sin fin) con el monto
+   *     nuevo: la cadencia se re-ancla sola en X (el ancla es el startMonth de la fila que
+   *     cubre el mes — RN-016), igual que un split de edición.
+   *  3. Cada APARICIÓN del relleno según el ancla vieja (`isOnFrequency(V.startMonth, ...)`)
+   *     recibe un RecurringSkip sobre V. Los calculados en espejo reciben además su propio
+   *     skip sobre su fila vigente en los mismos meses (aparecen donde aparece el origen).
+   *  Si X == E no hay relleno (V ya terminaba en X).
+   * Registra UNA entrada de historial `REOPEN` (targetId = chainId del origen) que incluye
+   * a los espejos.
+   *
+   * 404 si no existe / no es del usuario. 400 si no es reabrible, X < máx(currentMonth, E),
+   * monto inválido o los reemplazos de categoría/método no corresponden (faltan, o se
+   * mandan sin hacer falta, o no validan).
+   */
+  async reopen(userId: string, id: string, dto: ReopenRecurringDto) {
+    for (const m of [dto.currentMonth, dto.reopenMonth]) {
+      this.validateMonthFormat(m);
+      this.validateMonthValue(m);
+    }
+
+    const { vigente, endMonth, mirrors } = await this.resolveReopenContext(userId, id);
+
+    const floor = endMonth > dto.currentMonth ? endMonth : dto.currentMonth;
+    if (dto.reopenMonth < floor) {
+      throw new BadRequestException(
+        `El mes de reapertura no puede ser anterior a ${floor} (máximo entre el mes en curso y el fin del fijo)`,
+      );
+    }
+    if (parseInt(dto.reopenMonth.slice(0, 4), 10) > RecurringService.MAX_REOPEN_YEAR) {
+      throw new BadRequestException(
+        `El mes de reapertura no puede superar el año ${RecurringService.MAX_REOPEN_YEAR}`,
+      );
+    }
+
+    // --- Reemplazos de categoría / método de pago dados de baja ---
+    const categoryDeleted = await this.repo.findCategoryDeletedMap([
+      vigente.categoryId,
+      ...mirrors.map((m) => m.categoryId),
+    ]);
+    const pmDeleted = await this.repo.findPaymentMethodDeletedMap(
+      vigente.paymentMethodId ? [vigente.paymentMethodId] : [],
+    );
+
+    const needsCategory = categoryDeleted.get(vigente.categoryId) === true;
+    const needsPaymentMethod =
+      vigente.paymentMethodId !== null && pmDeleted.get(vigente.paymentMethodId) === true;
+
+    if (needsCategory) {
+      if (!dto.categoryId) {
+        throw new BadRequestException(
+          'La categoría del fijo está eliminada: elegí una activa para reabrirlo',
+        );
+      }
+      await this.categoryValidator.validateCategory(userId, dto.categoryId, vigente.type);
+    } else if (dto.categoryId !== undefined) {
+      throw new BadRequestException(
+        'La categoría del fijo está activa: no se puede cambiar al reabrir',
+      );
+    }
+
+    if (needsPaymentMethod) {
+      if (dto.paymentMethodId === undefined) {
+        throw new BadRequestException(
+          'El método de pago del fijo está eliminado: elegí uno activo o "sin método" para reabrirlo',
+        );
+      }
+      // `null` = "sin método": válido, no hay nada que validar.
+      if (dto.paymentMethodId !== null) {
+        await this.paymentMethodValidator.validatePaymentMethod(userId, dto.paymentMethodId);
+      }
+    } else if (dto.paymentMethodId !== undefined) {
+      throw new BadRequestException(
+        'El método de pago del fijo está activo: no se puede cambiar al reabrir',
+      );
+    }
+
+    const replacements = new Map<string, string>();
+    for (const r of dto.calculatedCategories ?? []) {
+      if (replacements.has(r.chainId)) {
+        throw new BadRequestException(`calculatedCategories repite el calculado ${r.chainId}`);
+      }
+      replacements.set(r.chainId, r.categoryId);
+    }
+    for (const chainId of replacements.keys()) {
+      const mirror = mirrors.find((m) => m.chainId === chainId);
+      if (!mirror || categoryDeleted.get(mirror.categoryId) !== true) {
+        throw new BadRequestException(
+          `El calculado ${chainId} no se reabre en espejo o su categoría está activa: no lleva reemplazo`,
+        );
+      }
+    }
+    for (const mirror of mirrors) {
+      if (categoryDeleted.get(mirror.categoryId) !== true) continue;
+      const catId = replacements.get(mirror.chainId);
+      if (!catId) {
+        throw new BadRequestException(
+          `La categoría del calculado ${mirror.chainId} está eliminada: elegí una activa para reabrirlo`,
+        );
+      }
+      // Tipo del calculado derivado on-the-fly → sin chequeo de scope (RF-MCALC-003).
+      await this.categoryValidator.validateCategory(userId, catId, MovementType.EXPENSE, true);
+    }
+
+    // --- Relleno [E, X): apariciones según el ancla VIEJA (fila vigente V) ---
+    const fillMonths: string[] = [];
+    for (let m = endMonth; m < dto.reopenMonth; m = addMonths(m, 1)) {
+      if (isOnFrequency(vigente.startMonth, vigente.frequency, m)) fillMonths.push(m);
+    }
+    const closeRows = [vigente, ...mirrors];
+    const existingSkips = fillMonths.length
+      ? await this.repo.findSkipsInRange(
+          closeRows.map((r) => r.id),
+          endMonth,
+          dto.reopenMonth,
+        )
+      : [];
+    const existingKey = new Set(existingSkips.map((s) => `${s.recurringId}|${s.month}`));
+    const skipsFor = (rowId: string) =>
+      fillMonths
+        .filter((m) => !existingKey.has(`${rowId}|${m}`))
+        .map((month) => ({ recurringId: rowId, month }));
+
+    // --- Fila nueva por cadena ---
+    const effectiveCategoryId = needsCategory ? dto.categoryId! : vigente.categoryId;
+    const effectivePmId = needsPaymentMethod ? (dto.paymentMethodId ?? null) : vigente.paymentMethodId;
+    const effectiveAutoDebit = await this.paymentMethodValidator.resolveAutoDebit(
+      effectivePmId,
+      vigente.autoDebit,
+    );
+
+    const originNewRow = {
+      user: { connect: { id: userId } },
+      category: { connect: { id: effectiveCategoryId } },
+      type: vigente.type,
+      frequency: vigente.frequency,
+      amountCents: dto.amountCents,
+      startMonth: dto.reopenMonth,
+      deletedFrom: null,
+      chainId: vigente.chainId,
+      currency: vigente.currency,
+      exchangeRate: vigente.exchangeRate,
+      anchorCurrency: vigente.anchorCurrency,
+      description: vigente.description,
+      ...(effectivePmId !== null && { paymentMethod: { connect: { id: effectivePmId } } }),
+      autoDebit: effectiveAutoDebit,
+    };
+
+    const mirrorNewRows = mirrors.map((m) => ({
+      user: { connect: { id: userId } },
+      category: { connect: { id: replacements.get(m.chainId) ?? m.categoryId } },
+      type: m.type, // placeholder (el tipo real se deriva on-the-fly)
+      frequency: m.frequency,
+      amountCents: m.amountCents, // placeholder
+      startMonth: dto.reopenMonth,
+      deletedFrom: null,
+      chainId: m.chainId,
+      currency: m.currency,
+      exchangeRate: m.exchangeRate,
+      anchorCurrency: m.anchorCurrency,
+      description: m.description,
+      sourceChainId: m.sourceChainId,
+      formulaOperator: m.formulaOperator,
+      formulaOperand: m.formulaOperand,
+      formulaSign: m.formulaSign,
+      sourceMonthOffset: m.sourceMonthOffset,
+    }));
+
+    // Snapshot del estado previo, ANTES de mutar (RF-HIST-001).
+    const originSkips = skipsFor(vigente.id);
+    const mirrorSkips = mirrors.map((m) => skipsFor(m.id));
+    const rowSnapshots = closeRows.map((r) => this.buildRowSnapshot(r));
+
+    const newIds = await this.repo.applyReopen([
+      {
+        closeRowId: vigente.id,
+        closeDeletedFrom: dto.reopenMonth,
+        newRow: originNewRow,
+        skips: originSkips,
+      },
+      ...mirrors.map((m, i) => ({
+        closeRowId: m.id,
+        closeDeletedFrom: dto.reopenMonth,
+        newRow: mirrorNewRows[i],
+        skips: mirrorSkips[i],
+      })),
+    ]);
+
+    const mirrorSnapshots: FijoReopenChainSnapshot[] = mirrors.map((_, i) => ({
+      row: rowSnapshots[i + 1],
+      newRowId: newIds[i + 1],
+      skips: mirrorSkips[i],
+    }));
+    const snapshot: FijoReopenSnapshot = {
+      kind: 'reopen',
+      reopenMonth: dto.reopenMonth,
+      row: rowSnapshots[0],
+      newRowId: newIds[0],
+      skips: originSkips,
+      next: {
+        amountCents: dto.amountCents,
+        categoryId: effectiveCategoryId,
+        paymentMethodId: effectivePmId,
+        autoDebit: effectiveAutoDebit,
+      },
+      mirrors: mirrorSnapshots,
+    };
+    const historyEntryId = await this.historyService.record(
+      userId,
+      HistoryTargetKind.FIJO,
+      vigente.chainId,
+      HistoryAction.REOPEN,
+      snapshot,
+    );
+
+    this.logger.log(
+      {
+        userId,
+        chainId: vigente.chainId,
+        previousEndMonth: endMonth,
+        reopenMonth: dto.reopenMonth,
+        skippedCount: fillMonths.length,
+        mirrorChainIds: mirrors.map((m) => m.chainId),
+      },
+      'Movimiento fijo reabierto',
+    );
+
+    return {
+      id: newIds[0],
+      chainId: vigente.chainId,
+      previousEndMonth: endMonth,
+      reopenMonth: dto.reopenMonth,
+      skippedCount: fillMonths.length,
+      reopenedCalculatedChainIds: mirrors.map((m) => m.chainId),
+      historyEntryId,
+    };
   }
 
   // ---------------------------------------------------------------------------

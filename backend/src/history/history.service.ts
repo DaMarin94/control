@@ -66,6 +66,23 @@ export interface HistoryEntryResponseDto {
   canUndo: boolean;
   /** Cantidad de entradas posteriores del mismo movimiento que bloquean el undo (RF-HIST-004). */
   blockingCount: number;
+  /**
+   * Solo en entradas `REOPEN` (RF-MF-008): fin original del fijo (`YYYY-MM`, exclusivo)
+   * y mes de reapertura X. `null` en cualquier otra entrada.
+   */
+  reopen: ReopenInfo | null;
+}
+
+export interface ReopenInfo {
+  endMonth: string;
+  reopenMonth: string;
+  /** Anulaciones de relleno creadas en el ORIGEN (no suma las de los espejos). */
+  skippedCount: number;
+  /** Primera / última anulación creada en el origen (`YYYY-MM`); null si skippedCount === 0. */
+  skippedFrom: string | null;
+  skippedTo: string | null;
+  /** Calculados de fijo reabiertos en espejo. */
+  reopenedCalculated: Array<{ chainId: string; description: string }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -282,7 +299,19 @@ export class HistoryService {
         const previous = this.extractComparableFields(entry.targetKind, entry.snapshot);
 
         let next: ComparableFields | null = null;
-        if (entry.action === HistoryAction.EDIT) {
+        if (entry.action === HistoryAction.REOPEN) {
+          // El "después" de una reapertura sale de su propio snapshot (monto/categoría/método nuevos).
+          const rs = entry.snapshot as FijoSnapshot;
+          if (rs.kind === 'reopen') {
+            next = {
+              ...previous,
+              amountCents: rs.next.amountCents,
+              categoryId: rs.next.categoryId,
+              paymentMethodId: rs.next.paymentMethodId,
+              autoDebit: rs.next.autoDebit,
+            };
+          }
+        } else if (entry.action === HistoryAction.EDIT) {
           next = isLast
             ? await this.loadLiveComparableFields(entry)
             : this.extractComparableFields(group[i + 1].targetKind, group[i + 1].snapshot);
@@ -320,7 +349,7 @@ export class HistoryService {
       const fieldIds = this.fieldIdsFor(p.entry.targetKind, p.isCalculated, p.entry.action);
 
       const changes =
-        p.entry.action === HistoryAction.EDIT
+        p.entry.action === HistoryAction.EDIT || p.entry.action === HistoryAction.REOPEN
           ? p.next
             ? this.diffFields(p.previous, p.next, fieldIds, categoryMap, paymentMethodMap, originCurrencyMaps)
             : []
@@ -348,6 +377,7 @@ export class HistoryService {
         changes,
         canUndo: p.isLast,
         blockingCount: p.blockingCount,
+        reopen: this.reopenInfo(p.entry),
       };
     });
 
@@ -475,6 +505,23 @@ export class HistoryService {
 
   private async undoFijo(tx: TxClient, entry: HistoryEntryRow): Promise<void> {
     const snap = entry.snapshot as FijoSnapshot;
+    if (snap.kind === 'reopen') {
+      // RF-MF-008: por cada cadena (origen + espejos) borrar las anulaciones de
+      // relleno creadas, borrar la fila nueva y restaurar el fin original.
+      for (const chain of [snap, ...snap.mirrors]) {
+        for (const sk of chain.skips) {
+          await tx.recurringSkip.deleteMany({
+            where: { recurringId: sk.recurringId, month: sk.month },
+          });
+        }
+        await tx.recurring.delete({ where: { id: chain.newRowId } });
+        await tx.recurring.update({
+          where: { id: chain.row.id },
+          data: { deletedFrom: chain.row.deletedFrom },
+        });
+      }
+      return;
+    }
     if (snap.kind === 'edit') {
       if (snap.newRowId) {
         // El split creó esta fila desde cero: nunca existió antes del cambio.
@@ -614,8 +661,7 @@ export class HistoryService {
   /** `true` si la entrada corresponde a una fila Recurring calculada (de fijo, único o cuota). */
   private isCalculatedEntry(entry: HistoryEntryRow): boolean {
     if (entry.targetKind !== HistoryTargetKind.FIJO) return false;
-    const snap = entry.snapshot as FijoSnapshot;
-    const row = snap.kind === 'edit' ? snap.row : this.vigenteRow(snap.chains[0]?.rows ?? []);
+    const row = this.snapshotRow(entry.snapshot as FijoSnapshot);
     return !!(row?.sourceChainId || row?.sourceMovementId || row?.sourceInstallmentGroupId);
   }
 
@@ -625,7 +671,7 @@ export class HistoryService {
     isCalculated: boolean,
     action: HistoryAction,
   ): HistoryFieldId[] {
-    const isEdit = action === HistoryAction.EDIT;
+    const isEdit = action === HistoryAction.EDIT || action === HistoryAction.REOPEN;
     let ids: HistoryFieldId[];
     if (targetKind === HistoryTargetKind.UNICO) {
       ids = isEdit ? UNICO_EDIT_FIELDS : UNICO_STATE_FIELDS;
@@ -676,8 +722,7 @@ export class HistoryService {
       };
     }
     // FIJO
-    const fs = snapshot as FijoSnapshot;
-    const row = fs.kind === 'edit' ? fs.row : this.vigenteRow(fs.chains[0]?.rows ?? []);
+    const row = this.snapshotRow(snapshot as FijoSnapshot);
     if (!row) return {};
     return this.mapRowToComparable(row);
   }
@@ -701,6 +746,29 @@ export class HistoryService {
       sourceChainId: row.sourceChainId,
       sourceMovementId: row.sourceMovementId,
       sourceInstallmentGroupId: row.sourceInstallmentGroupId,
+    };
+  }
+
+  /** Fila "representativa" de un snapshot de fijo: la editada / la reabierta / la vigente de la cadena eliminada. */
+  private snapshotRow(snap: FijoSnapshot): RecurringRowSnapshot | undefined {
+    return snap.kind === 'delete' ? this.vigenteRow(snap.chains[0]?.rows ?? []) : snap.row;
+  }
+
+  private reopenInfo(entry: HistoryEntryRow): ReopenInfo | null {
+    if (entry.action !== HistoryAction.REOPEN) return null;
+    const snap = entry.snapshot as FijoSnapshot;
+    if (snap.kind !== 'reopen') return null;
+    const months = snap.skips.map((s) => s.month).sort();
+    return {
+      endMonth: snap.row.deletedFrom ?? '',
+      reopenMonth: snap.reopenMonth,
+      skippedCount: snap.skips.length,
+      skippedFrom: months.length > 0 ? months[0] : null,
+      skippedTo: months.length > 0 ? months[months.length - 1] : null,
+      reopenedCalculated: snap.mirrors.map((m) => ({
+        chainId: m.row.chainId,
+        description: m.row.description ?? '',
+      })),
     };
   }
 

@@ -512,4 +512,79 @@ export class RecurringRepository {
       }
     });
   }
+  // ---------------------------------------------------------------------------
+  // Reapertura de fijo terminado (RF-MF-008)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Estado "dado de baja" (deletedAt != null) de un conjunto de categorías.
+   * Ids inexistentes no aparecen en el mapa. Lee la tabla Category sin filtro de
+   * borrado a propósito (RF-CAT-004: un fijo conserva su categoría eliminada).
+   */
+  async findCategoryDeletedMap(ids: string[]): Promise<Map<string, boolean>> {
+    const map = new Map<string, boolean>();
+    if (ids.length === 0) return map;
+    const rows = await this.prisma.category.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, deletedAt: true },
+    });
+    for (const r of rows) map.set(r.id, r.deletedAt !== null);
+    return map;
+  }
+
+  /** Espejo de `findCategoryDeletedMap` para métodos de pago (RF-PM-006). */
+  async findPaymentMethodDeletedMap(ids: string[]): Promise<Map<string, boolean>> {
+    const map = new Map<string, boolean>();
+    if (ids.length === 0) return map;
+    const rows = await this.prisma.paymentMethod.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, deletedAt: true },
+    });
+    for (const r of rows) map.set(r.id, r.deletedAt !== null);
+    return map;
+  }
+
+  /** Anulaciones existentes de las filas dadas con `from <= month < toExclusive`. */
+  async findSkipsInRange(
+    recurringIds: string[],
+    from: string,
+    toExclusive: string,
+  ): Promise<Array<{ recurringId: string; month: string }>> {
+    if (recurringIds.length === 0) return [];
+    return this.prisma.recurringSkip.findMany({
+      where: { recurringId: { in: recurringIds }, month: { gte: from, lt: toExclusive } },
+      select: { recurringId: true, month: true },
+    });
+  }
+
+  /**
+   * Aplica una reapertura (RF-MF-008) en UNA transacción: por cada cadena
+   * (origen + espejos) cierra la fila vigente en X (`deletedFrom = X`), crea la
+   * fila nueva (startMonth = X, sin fin) y crea las anulaciones de relleno.
+   * Devuelve el id de la fila nueva de cada cadena, en el mismo orden de `chains`.
+   */
+  async applyReopen(
+    chains: Array<{
+      closeRowId: string;
+      closeDeletedFrom: string;
+      newRow: Prisma.RecurringCreateInput;
+      skips: Array<{ recurringId: string; month: string }>;
+    }>,
+  ): Promise<string[]> {
+    return this.prisma.$transaction(async (tx) => {
+      const newIds: string[] = [];
+      for (const c of chains) {
+        await tx.recurring.update({
+          where: { id: c.closeRowId },
+          data: { deletedFrom: c.closeDeletedFrom },
+        });
+        const created = await tx.recurring.create({ data: c.newRow, select: { id: true } });
+        newIds.push(created.id);
+        if (c.skips.length > 0) {
+          await tx.recurringSkip.createMany({ data: c.skips, skipDuplicates: true });
+        }
+      }
+      return newIds;
+    });
+  }
 }

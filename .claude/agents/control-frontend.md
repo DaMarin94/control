@@ -56,7 +56,7 @@ El detalle estructural (arquitectura, componentes, gotchas) vive en `docs/`. Le�
 | Navegación global / sidebar, banda reservada del chip flotante en `<main>` | `docs/frontend.md` §Navegación global |
 | Historial de cambios (`/historial`: `lib/history.ts` como único traductor, `useHistory`/`useUndoHistory`, invalidación tras deshacer) | `docs/frontend.md` §Historial de cambios; contrato en `docs/data-model.md` §Historial de cambios |
 | Hub de Configuración (`/configuracion`: layout compartido, nav vertical, 4 rutas anidadas, redirects) | `docs/frontend.md` §Hub de Configuración |
-| Reportes (charting, `useReports`, gotchas Recharts) | `docs/frontend.md` §Reportes |
+| Reportes (charting, `useReports`, invalidar reportes con `isReportsQuery`, no con `["reports"]`, gotchas Recharts) | `docs/frontend.md` §Reportes |
 | Límites (registro de keys, evaluador, marcas en `/mes`, sección Límites) | `docs/frontend.md` §Límites |
 | Helpers de moneda/fecha/mes (`lib/format.ts`) | `docs/frontend.md` §Movimientos únicos (Helpers) |
 | Testing (jsdom, fake timers, matchMedia) | `docs/frontend.md` §Testing |

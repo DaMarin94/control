@@ -127,7 +127,13 @@ describe("useUndoHistory", () => {
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
     expect(invalidatedKeys).toContainEqual(HISTORY_QUERY_KEY);
     expect(invalidatedKeys).toContainEqual(["movements"]);
-    expect(invalidatedKeys).toContainEqual(["reports"]);
+    const predicate = invalidateSpy.mock.calls.map((call) => call[0]?.predicate).find((fn) => fn);
+    expect(predicate).toBeDefined();
+    const q = (key: string) => ({ queryKey: [key] }) as never;
+    expect(predicate!(q("reports"))).toBe(true);
+    expect(predicate!(q("reports-fixed-evolution"))).toBe(true);
+    expect(predicate!(q("reports-unico-grid"))).toBe(true);
+    expect(predicate!(q("movements"))).toBe(false);
   });
 
   it("404: devuelve error descriptivo (entrada purgada o de otro usuario)", async () => {

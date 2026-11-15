@@ -81,6 +81,7 @@ import {
   GitBranch,
   Calculator,
   Copy,
+  CalendarSync,
 } from "lucide-react";
 import { KebabMenu } from "@/components/ui/kebab-menu";
 import { useTransactions } from "@/hooks/use-transactions";
@@ -114,6 +115,11 @@ interface MovementItemRowProps {
    * los hooks locales de este componente.
    */
   onSkipScope: (movement: MovementItem) => void;
+  /**
+   * Abre el modal de reapertura (RF-MF-008) — solo para un fijo NORMAL con fin
+   * (`endMonth !== null`), nunca calculado ni simulado.
+   */
+  onReopen?: (movement: MovementItem) => void;
   /** Handler para "Crear movimiento calculado" — para cualquier ítem NO calculado (Fase 1.1.8) */
   onCreateCalculated?: (movement: MovementItem) => void;
   /** Handler para "Duplicar" (docs/design.md) — para cualquier ítem NO calculado */
@@ -126,7 +132,7 @@ interface MovementItemRowProps {
   limitMark?: EvaluatedLimitMark | null;
 }
 
-export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onSkipScope, onCreateCalculated, onDuplicate, limitMark }: MovementItemRowProps) {
+export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onSkipScope, onReopen, onCreateCalculated, onDuplicate, limitMark }: MovementItemRowProps) {
   const { skipTransaction } = useTransactions();
   const { skipInstallment } = useInstallments();
   const { toast } = useToast();
@@ -228,7 +234,9 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onSkipS
       ? "Des-anular este mes"
       : "Anular este mes";
 
-  // Ítems del KebabMenu — orden: Editar → Anular/Des-anular → Duplicar →
+  const canReopen = isFijo && !isCalculated && movement.endMonth !== null && !movement.simulated;
+
+  // Ítems del KebabMenu — orden: Editar → Anular/Des-anular → Reabrir → Duplicar →
   // Crear movimiento calculado → Eliminar (docs/design.md §"Duplicar movimiento").
   // Duplicar y "Crear movimiento calculado" comparten el gate !isCalculated —
   // el grupo aparece o desaparece completo (un calculado no puede ser origen
@@ -246,6 +254,18 @@ export function MovementItemRow({ movement, viewMonth, onEdit, onDelete, onSkipS
             icon: isSkipped ? CalendarPlus : CalendarOff,
             // Fijo (RF-MF-005) → abre el modal de alcance; único/cuota → toggle directo.
             onSelect: isFijo ? () => onSkipScope(movement) : handleSkipToggle,
+          },
+        ]
+      : []),
+    // "Reabrir" (RF-MF-008, docs/design.md §"Reabrir un fijo terminado") — 3.ª posición,
+    // después de Anular. Gate: fijo normal (no calculado, no simulado) CON fin; en
+    // cualquier otro ítem no existe (ni deshabilitado).
+    ...(canReopen && onReopen
+      ? [
+          {
+            label: "Reabrir",
+            icon: CalendarSync,
+            onSelect: () => onReopen(movement),
           },
         ]
       : []),

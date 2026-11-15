@@ -14,7 +14,7 @@ import type { MovementType, FormulaOperator } from "@/types/movement";
 export type HistoryTargetKind = "UNICO" | "FIJO" | "CUOTA";
 
 /** Operación registrada por la entrada. */
-export type HistoryAction = "EDIT" | "DELETE";
+export type HistoryAction = "EDIT" | "DELETE" | "REOPEN";
 
 /**
  * Identificador cerrado de campo del bloque "Qué cambió" — 1:1 con las 12 filas
@@ -126,6 +126,23 @@ export interface HistoryEntryCategory {
   scope: string;
 }
 
+/**
+ * Datos propios de una entrada `REOPEN` (RF-MF-008). `endMonth` = fin ORIGINAL
+ * del fijo (YYYY-MM, exclusivo — el último mes de aparición es su mes anterior);
+ * `reopenMonth` = mes X desde el que vuelve a aparecer.
+ */
+export interface HistoryReopenInfo {
+  endMonth: string;
+  reopenMonth: string;
+  /** Apariciones del relleno anulado al reabrir (0 = no hubo relleno). */
+  skippedCount: number;
+  /** Primer / último mes (YYYY-MM) del relleno anulado; null si `skippedCount === 0`. */
+  skippedFrom: string | null;
+  skippedTo: string | null;
+  /** Calculados reabiertos en espejo (lista vacía = ninguno). */
+  reopenedCalculated: { chainId: string; description: string }[];
+}
+
 /** Entrada de historial tal como la devuelve GET /history. */
 export interface HistoryEntryResponseDto {
   id: string;
@@ -147,6 +164,12 @@ export interface HistoryEntryResponseDto {
   canUndo: boolean;
   /** Cantidad de entradas posteriores del mismo movimiento que bloquean el undo (RF-HIST-004). */
   blockingCount: number;
+  /**
+   * Solo en entradas `REOPEN`; `null` (o ausente) en cualquier otra. Con esto el
+   * frontend arma la fila "Vigencia" del bloque "Qué cambió" — `changes` solo trae
+   * el diff de monto / categoría / método y puede venir vacío.
+   */
+  reopen?: HistoryReopenInfo | null;
 }
 
 /** Respuesta de POST /history/:id/undo. */

@@ -472,6 +472,11 @@ Carga, edición y eliminación de movimientos fijos. Se crean desde el tab **Fij
   - En `updateRecurring`, para **limpiar** la descripción se envía `description: null` **explícito** (no `undefined`, que el backend interpretaría como "no cambiar").
   - El mapeo `MovementItem → Recurring` para precargar el form de edición sigue el mismo patrón que el de únicos (el ítem no trae todos los campos del recurso).
 
+### Reapertura (`recurring-reopen-modal.tsx`, RF-MF-008)
+
+- **Dos hooks propios, fuera de `use-recurring`:** `useReopenPreview` (`GET /recurring/:id/reopen-preview`, key `["reopen-preview", id, currentMonth]`, `staleTime: 0` + `gcTime: 0`, `retry: false`) y `useReopenRecurring` (`POST /recurring/:id/reopen`; invalida `["movements"]`, `["history"]` y `isReportsQuery` — ver §Reportes → Datos). Contrato en `docs/data-model.md` §Contrato de reapertura de fijos.
+- **Los reemplazos se mandan solo si el preview los marca `requires*`**; el backend rechaza con `400` los no requeridos. `paymentMethodId: null` ("sin método") es distinto de omitirlo.
+
 ## Movimientos calculados
 
 Un calculado es un fijo cuyo monto/tipo se derivan; el front solo construye la fórmula y muestra el resultado derivado que ya viene en el `MovementItem` (`calculated` / `hasCalculated` / `amountCents` con signo). El origen puede ser fijo, único o cuota: el front **enruta siempre por `calculated.sourceType`**. Contrato en `docs/data-model.md`, §Contrato de movimientos calculados; reglas en RF-MCALC-001..011. Lo no obvio:
@@ -703,6 +708,7 @@ Quien toque estos efectos tiene que saberlo. En el **dashboard** la condición n
 - **`placeholderData: keepPreviousData`.** Al cambiar el filtro de categorías o el año, el gráfico mantiene visibles los datos previos durante el refetch; el skeleton de carga aparece solo en la primera carga (sin caché), no en cada cambio de filtro. Es deliberado para evitar el parpadeo del gráfico.
 - **GOTCHA — el query param `categories` se construye por concatenación de string, NO con `URLSearchParams`.** El backend espera la coma **literal** (`categories=id1,id2,id3`); `URLSearchParams` encodea la coma a `%2C` y el filtro deja de matchear. Patrón reusable para **cualquier endpoint que acepte listas separadas por coma**: armar el query string a mano, no con `URLSearchParams`.
 - Tipos del contrato en **`types/reports.ts`**: `ReportMovementsResponse` / `ReportMonth` / `ReportCategory`.
+- **GOTCHA — las query keys de reportes no comparten un primer segmento.** Comparten el **prefijo de string** `reports*` (`reports`, `reports-unico-grid`, `reports-fixed-evolution`, …), así que `invalidateQueries({ queryKey: ["reports"] })` solo alcanza a `useReports` y deja las demás cards (y la vista evolución de la card de detalle) desactualizadas. Cuando una mutación invalida reportes, lo hace con el predicado **`isReportsQuery`** (`src/lib/reports-query.ts`): `invalidateQueries({ predicate: isReportsQuery })`.
 
 ### Filtros de la card income-expense (RF-REP-014)
 
@@ -869,11 +875,11 @@ Pantalla de consulta y deshacer. El spec visual vive en `docs/design.md`; el con
 
 - **`useHistory()`** — `GET /history`, query key `["history"]`, gate-ada con `isAuthenticated` como el resto de las lecturas.
 - **`useUndoHistory()`** — `POST /history/:id/undo` (sin body; el backend resuelve el undo en cadena por sí solo).
-- **Invalidación tras deshacer: tres claves, no una.** El éxito invalida `["history"]`, **`["movements"]`** y **`["reports"]`** — deshacer no toca solo el historial: **restaura o revierte movimientos reales**, así que los listados del mes, los totales y los reportes quedan desactualizados si no se invalidan.
+- **Invalidación tras deshacer: tres familias, no una.** El éxito invalida `["history"]`, **`["movements"]`** y **todas las de reportes** (`isReportsQuery`, ver §Reportes → Datos) — deshacer no toca solo el historial: **restaura o revierte movimientos reales**, así que los listados del mes, los totales y los reportes quedan desactualizados si no se invalidan.
 
 ### Deshacer desde el toast (RF-HIST-007) — invariante del `groupId`
 
-El toast de éxito de editar / eliminar lleva la acción "Deshacer" sobre el `historyEntryId` que devuelve la mutación (contrato en `docs/data-model.md`, §Historial de cambios → `historyEntryId`). Lo emiten los 4 forms de movimiento y los 3 diálogos de borrado; el puente al contrato de acción del toast es **`lib/toast-undo.ts`** (traduce el resultado de `undo()` a `ToastActionOutcome`), y el copy y el comportamiento visual los define `docs/design.md`.
+El toast de éxito de editar / eliminar / reabrir lleva la acción "Deshacer" sobre el `historyEntryId` que devuelve la mutación (contrato en `docs/data-model.md`, §Historial de cambios → `historyEntryId`). Lo emiten los 4 forms de movimiento, los 3 diálogos de borrado y el modal de reapertura (con el `chainId` del fijo como `groupId`, ver tabla abajo); el puente al contrato de acción del toast es **`lib/toast-undo.ts`** (traduce el resultado de `undo()` a `ToastActionOutcome`), y el copy y el comportamiento visual los define `docs/design.md`.
 
 **Para un mismo movimiento, el `groupId` que usa el toast de EDICIÓN y el de ELIMINACIÓN tiene que ser idéntico.** Es lo que hace que el segundo reemplace al primero (RF-HIST-007, un aviso por movimiento). Si divergen, quedan dos toasts apilados y el viejo ofrece deshacer una entrada que ya está **bloqueada** por RF-HIST-004.
 

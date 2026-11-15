@@ -106,6 +106,7 @@ import { DeleteTransactionDialog } from "@/components/movements/delete-transacti
 import { DeleteRecurringDialog } from "@/components/movements/delete-recurring-dialog";
 import { DeleteInstallmentDialog } from "@/components/movements/delete-installment-dialog";
 import { RecurringSkipScopeModal } from "@/components/movements/recurring-skip-scope-modal";
+import { RecurringReopenModal } from "@/components/movements/recurring-reopen-modal";
 import { NewTransactionButton } from "@/components/movements/new-transaction-button";
 import { PeriodNav } from "@/components/ui/period-nav";
 import { CurrencyChip } from "@/components/ui/currency-chip";
@@ -443,6 +444,8 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   // Modal de alcance de anulación (RF-MF-005) — solo fijos NO calculados; único/cuota
   // siguen togglando directo desde MovementItemRow, sin pasar por acá.
   const [skippingScopeFor, setSkippingScopeFor] = useState<MovementItem | null>(null);
+  // Modal de reapertura de un fijo terminado (RF-MF-008) — solo fijos normales con fin.
+  const [reopeningFijo, setReopeningFijo] = useState<MovementItem | null>(null);
 
   // Estado de modales para cuotas
   const [editingCuota, setEditingCuota] = useState<MovementItem | null>(null);
@@ -718,6 +721,11 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
   /** Abre el modal de alcance de anulación (RF-MF-005) — solo fijos NO calculados */
   function handleSkipScope(movement: MovementItem) {
     setSkippingScopeFor(movement);
+  }
+
+  /** Abre el modal de reapertura (RF-MF-008) — solo fijos normales con fin */
+  function handleReopen(movement: MovementItem) {
+    setReopeningFijo(movement);
   }
 
   function handleDelete(movement: MovementItem) {
@@ -1440,6 +1448,7 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
                               onEdit={handleEdit}
                               onDelete={handleDelete}
                               onSkipScope={handleSkipScope}
+                              onReopen={handleReopen}
                               onCreateCalculated={handleCreateCalculated}
                               onDuplicate={handleDuplicate}
                               limits={limits}
@@ -1499,6 +1508,11 @@ export function MonthViewClient({ month }: MonthViewClientProps) {
           onClose={() => setDeletingFijo(null)}
           viewMonth={month}
         />
+      )}
+
+      {/* ── Modal de reapertura de un fijo terminado (RF-MF-008) ── */}
+      {reopeningFijo && (
+        <RecurringReopenModal movement={reopeningFijo} onClose={() => setReopeningFijo(null)} />
       )}
 
       {/* ── Modal de alcance de anulación de un fijo (RF-MF-005) ── */}
@@ -1624,6 +1638,8 @@ interface SectionListProps {
   onDelete: (m: MovementItem) => void;
   /** Abre el modal de alcance de anulación (RF-MF-005) — solo fijos NO calculados */
   onSkipScope: (m: MovementItem) => void;
+  /** Abre el modal de reapertura (RF-MF-008) — solo fijos normales con fin */
+  onReopen?: (m: MovementItem) => void;
   /** Handler para "Crear movimiento calculado" (solo para ítems NO calculados) */
   onCreateCalculated?: (m: MovementItem) => void;
   /** Handler para "Duplicar" (docs/design.md, solo para ítems NO calculados) */
@@ -1642,6 +1658,7 @@ function SectionList({
   onEdit,
   onDelete,
   onSkipScope,
+  onReopen,
   onCreateCalculated,
   onDuplicate,
   limits,
@@ -1667,6 +1684,7 @@ function SectionList({
             onEdit={onEdit}
             onDelete={onDelete}
             onSkipScope={onSkipScope}
+            onReopen={onReopen}
             onCreateCalculated={onCreateCalculated}
             onDuplicate={onDuplicate}
             limitMark={evaluateItemLimitMark(item, limits, categoryExpenseTotalsCents, isCurrentMonth)}

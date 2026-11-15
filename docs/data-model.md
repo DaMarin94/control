@@ -628,6 +628,63 @@ CalculatedInfo = {                           // solo en ítems que son calculado
 
 ---
 
+## Contrato de reapertura de fijos (`/recurring/:id/reopen`)
+
+Endpoints de RF-MF-008 en el `RecurringModule`. **JWT requerido**; scope por `userId` del token. Reglas funcionales en `requirements.md` RF-MF-008; mecánica en `docs/backend.md` §Movimientos fijos → Reapertura.
+
+| Endpoint | Entrada | Éxito | Errores |
+|---|---|---|---|
+| `GET /recurring/:id/reopen-preview` | query `currentMonth` (`YYYY-MM`, requerido) | `200` · `data: ReopenPreview` | `400` · `404` |
+| `POST /recurring/:id/reopen` | `ReopenBody` | `200` · `data: ReopenResult` | `400` · `404` |
+
+```
+ReopenPreview = {
+  chainId: string,
+  endMonth: string,                 // "YYYY-MM" exclusivo — fin vigente del fijo lógico (E)
+  minReopenMonth: string,           // piso y default de X = máx(currentMonth, endMonth)
+  amountCents: number,              // último monto (fila vigente)
+  currency: Currency,
+  category: { id, name, color, deleted: boolean },
+  paymentMethod: { id, name, icon, deleted: boolean } | null,
+  requiresCategory: boolean,        // = category.deleted
+  requiresPaymentMethod: boolean,   // = paymentMethod !== null && paymentMethod.deleted
+  mirrors: Array<{                  // calculados de fijo que se reabren en espejo
+    chainId: string,
+    description: string | null,
+    category: { id, name, color, deleted: boolean },
+    requiresCategory: boolean
+  }>
+}
+
+ReopenBody = {
+  currentMonth: string,             // mes en curso real
+  reopenMonth: string,              // X
+  amountCents: number,              // entero > 0, monto desde X
+  categoryId?: string,
+  paymentMethodId?: string | null,
+  calculatedCategories?: Array<{ chainId: string, categoryId: string }>   // máx. 100
+}
+
+ReopenResult = {
+  id: string,                       // fila nueva del origen (startMonth = X)
+  chainId: string,
+  previousEndMonth: string,         // E
+  reopenMonth: string,              // X
+  skippedCount: number,             // apariciones del relleno [E, X) del origen (cadencia vieja)
+  reopenedCalculatedChainIds: string[],
+  historyEntryId: string
+}
+```
+
+- **`:id`** = cualquier fila de la cadena del fijo; el backend resuelve la fila vigente por `chainId`.
+- **No reabrible → `400`** (preview y POST): el `:id` es un calculado de cualquier origen, o la fila vigente no tiene fin (`deletedFrom = null`). **`404`**: no existe o es de otro usuario.
+- **Reemplazos solo cuando el preview los marca requeridos.** `categoryId` ⇔ `requiresCategory`; `paymentMethodId` ⇔ `requiresPaymentMethod`; una entrada de `calculatedCategories` por cada espejo con `requiresCategory`. Faltar uno requerido, mandar uno no requerido, repetir un `chainId` o apuntar a un calculado que no es espejo → `400`. Los reemplazos se validan como en el alta (categoría activa y de scope compatible; la del espejo con scope `BOTH`).
+- **`paymentMethodId`: omitido ≠ `null`.** `null` = "sin método", reemplazo válido; omitido = no se manda reemplazo. Solo se acepta (en cualquiera de sus dos formas) cuando el método vigente está dado de baja.
+- **Validación de X → `400`:** `reopenMonth < máx(currentMonth, endMonth)`, o año de `reopenMonth` > 2200. `X == endMonth` es válido (sin relleno).
+- **`skippedCount` de la respuesta ≠ `reopen.skippedCount` de `/history`:** la respuesta cuenta todas las apariciones del relleno; el historial cuenta solo las anulaciones que la reapertura **creó** (excluye las que ya existían).
+
+---
+
 ## Contrato de movimientos calculados
 
 Endpoints propios del calculado, en el `RecurringModule` (el calculado **es** un fijo). El **origen** puede ser fijo, único o cuota: cada tipo de origen tiene su par `POST`/`PATCH` propio, según desde dónde se dispara la acción. **JWT requerido**; scope por `userId` del token. Mecánica de implementación (cadena, derivación, cascada) en `docs/backend.md`, §Movimientos calculados; reglas funcionales en `requirements.md`, RF-MCALC-001..010 y RN-017/018/019.
@@ -1156,13 +1213,14 @@ HistoryEntry = {
   id, userId,
   targetKind: "UNICO" | "FIJO" | "CUOTA",    // enum HistoryTargetKind
   targetId:   string,                        // clave estable del objetivo (ver abajo)
-  action:     "EDIT" | "DELETE",             // enum HistoryAction
+  action:     "EDIT" | "DELETE" | "REOPEN",  // enum HistoryAction
   snapshot:   Json,                          // estado PREVIO completo del objetivo
   createdAt:  DateTime
 }
 ```
 
 - **`targetId` es la clave estable de agrupación por objetivo (RN-024)**, no el id de la fila mutada: `UNICO` → `Transaction.id`; `FIJO` → **`Recurring.chainId`**; `CUOTA` → `InstallmentGroup.id`. En fijos y calculados **tiene que ser el `chainId`**: el split de edición (RN-005) crea una fila nueva y cambia el id de fila, así que agrupar por `Recurring.id` partiría la pila LIFO de un mismo fijo lógico en varias pilas inconexas. El `chainId` sobrevive al split.
+- **`REOPEN`** lo agrega la migración `20261115000000_add_history_action_reopen` (`ALTER TYPE ... ADD VALUE`); entradas de reapertura de fijos (RF-MF-008).
 - **`snapshot` no está tipado en Prisma** (`Json`): cada combinación `targetKind × action` tiene una forma distinta. El contrato de aplicación —el shape de cada variante— vive en `backend/src/history/history.types.ts`, que es su destino canónico; lo escriben los services de dominio al capturar y lo lee `HistoryService` para armar el diff y para deshacer.
 - **`userId` con `onDelete: Cascade`:** borrar la cuenta borra su historial.
 - **Índices** (los tres sostienen operaciones distintas, ninguno es redundante):
@@ -1179,7 +1237,7 @@ HistoryEntryDto = {
   id: string,
   targetKind: "UNICO" | "FIJO" | "CUOTA",
   targetId: string,                          // clave estable del objetivo (RN-024)
-  action: "EDIT" | "DELETE",
+  action: "EDIT" | "DELETE" | "REOPEN",
   createdAt: string,                         // ISO 8601 — momento del cambio
   description: string | null,                // identidad del movimiento al momento de la entrada
   category: { id, name, color, scope } | null,
@@ -1188,7 +1246,17 @@ HistoryEntryDto = {
   isCalculated: boolean,
   changes: HistoryChange[],                  // bloque "Qué cambió", en orden fijo
   canUndo: boolean,                          // false = entrada bloqueada (RF-HIST-004)
-  blockingCount: number                      // entradas posteriores del mismo movimiento que la bloquean
+  blockingCount: number,                     // entradas posteriores del mismo movimiento que la bloquean
+  reopen: ReopenInfo | null                  // null salvo action === "REOPEN"
+}
+
+ReopenInfo = {
+  endMonth: string,                          // fin previo E ("YYYY-MM" exclusivo)
+  reopenMonth: string,                       // X
+  skippedCount: number,                      // anulaciones de relleno CREADAS en el origen (no suma las de los espejos)
+  skippedFrom: string | null,                // primera / última de esas anulaciones; null si skippedCount === 0
+  skippedTo: string | null,
+  reopenedCalculated: Array<{ chainId: string, description: string }>   // espejos reabiertos
 }
 
 HistoryChange = {
@@ -1201,6 +1269,7 @@ HistoryChange = {
 - **`targetKind` mapea a la TABLA de almacenamiento, no al tipo conceptual del movimiento.** `UNICO` → `Transaction`, `FIJO` → `Recurring`, `CUOTA` → `InstallmentGroup`. Como un **calculado** se persiste siempre como fila `Recurring` —sea su origen un fijo, un único o una cuota—, su `targetKind` es **`FIJO` siempre**. Por eso existe **`isCalculated`** como flag aparte: es información adicional sobre la fila, **no reemplaza** al `targetKind`. `isCalculated: true` solo puede darse con `targetKind: "FIJO"`.
 - **`amount` es `null` en calculados.** El monto de un calculado **es su fórmula** (no persiste una cifra propia; se deriva al vuelo del origen): la identidad del movimiento en la entrada se lee del cambio con `field: "formula"`, no de `amount`.
 - **`canUndo` / `blockingCount` implementan RF-HIST-004.** `canUndo: false` con `blockingCount: N` = hay N entradas posteriores del **mismo `targetId`** que hay que deshacer antes. La entrada bloqueada **igual se lista** y su acción sigue siendo operable (dispara el undo en cadena, ver abajo).
+- **Entradas `REOPEN` (RF-MF-008):** `targetKind: "FIJO"`, `targetId` = `chainId` del origen (los espejos no tienen entrada propia). `changes` es un **diff** (`next` presente) con el set de edición del fijo normal: solo los campos que cambiaron al reabrir —monto y, si hubo reemplazo, categoría, método de pago y débito automático—; puede venir **vacío** (reapertura con el mismo monto y sin reemplazos). El fin anterior, X, el relleno y los espejos viajan en `reopen`, no en `changes`.
 - **Solo entradas vigentes.** Las purgadas por retención (RF-HIST-005) no se devuelven; la lectura además dispara la purga (ver `docs/backend.md`, §Historial de cambios).
 
 ### Campos del bloque "Qué cambió" — set cerrado de 12
@@ -1229,7 +1298,7 @@ HistoryChange = {
 
 ### Gotcha — la ausencia de `next` es el discriminador, no `next === null`
 
-En una entrada de **eliminación** el bloque "Qué cambió" opera en **modo de valor único**: cada `HistoryChange` trae `previous` y **omite la propiedad `next`** (está **ausente**, no en `null`). En una entrada de **edición**, `next` siempre está presente.
+En una entrada de **eliminación** el bloque "Qué cambió" opera en **modo de valor único**: cada `HistoryChange` trae `previous` y **omite la propiedad `next`** (está **ausente**, no en `null`). En una entrada de **edición** o de **reapertura**, `next` siempre está presente.
 
 **El consumidor debe discriminar con `'next' in change`, nunca con `next === null` ni `next === undefined`:** `description` y `paymentMethod` tienen `null` como **valor legítimo** (movimiento sin descripción / sin método de pago), así que un chequeo por `null` leería "se borró la descripción" como "esto es una eliminación", y viceversa.
 
@@ -1243,9 +1312,9 @@ En una entrada de **eliminación** el bloque "Qué cambió" opera en **modo de v
 - **Todo o nada.** La cadena completa se aplica en una sola transacción de DB: o se deshace todo, o no se deshace nada.
 - **Deshacer borra las entradas y no crea ninguna** (RF-HIST-003): la operación no deja rastro. El consumidor debe invalidar el historial **y** los datos de movimientos (el undo muta movimientos reales).
 
-### `historyEntryId` — id de la entrada en las respuestas de edición y eliminación
+### `historyEntryId` — id de la entrada en las respuestas de edición, eliminación y reapertura
 
-Todo endpoint que **edita** o **elimina** un movimiento devuelve el **id de la entrada de historial que esa operación generó**. Es lo que habilita deshacer sin consultar `GET /history`: el id se le pasa directo a `POST /history/:id/undo` (RF-HIST-007).
+Todo endpoint que **edita**, **elimina** o **reabre** un movimiento devuelve el **id de la entrada de historial que esa operación generó**. Es lo que habilita deshacer sin consultar `GET /history`: el id se le pasa directo a `POST /history/:id/undo` (RF-HIST-007).
 
 | Endpoint | Éxito |
 |---|---|
@@ -1258,10 +1327,11 @@ Todo endpoint que **edita** o **elimina** un movimiento devuelve el **id de la e
 | `DELETE /transactions/:id` | `200` · `data: { historyEntryId }` |
 | `DELETE /recurring/:id` | `200` · `data: { historyEntryId }` |
 | `DELETE /installments/:id` | `200` · `data: { historyEntryId }` |
+| `POST /recurring/:id/reopen` | `200` · `data: ReopenResult` (incluye `historyEntryId`; ver §Contrato de reapertura de fijos) |
 
 - **En los `PATCH` el merge es plano:** `historyEntryId` es una propiedad más al lado de los campos de la entidad, no un objeto anidado ni un sobre extra.
 - **Los `DELETE` de movimientos responden `200` con cuerpo, no `204`:** un `204 No Content` **no puede llevar body por spec HTTP**, y la respuesta tiene que traer el id de la entrada. Son la excepción a la convención de DELETE del backend (ver `docs/backend.md`, §DELETE → `204 No Content`).
-- **Los `POST` (creación) no lo devuelven:** crear no genera entrada de historial (RF-HIST-001).
+- **Los `POST` de creación no lo devuelven:** crear no genera entrada de historial (RF-HIST-001).
 
 ---
 

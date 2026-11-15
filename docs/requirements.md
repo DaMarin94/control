@@ -627,6 +627,7 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 - [ ] Si el mes visualizado es anterior o igual al mes de inicio del fijo, el fijo se elimina por completo.
 - [ ] En ningún caso se modifican los meses anteriores al mes visualizado.
 - [ ] Solo se pueden eliminar movimientos fijos propios.
+- [ ] Un fijo con fin de vigencia se puede **reabrir** (RF-MF-008).
 
 ---
 
@@ -672,6 +673,7 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 - [ ] El rango admite **meses pasados**.
 - [ ] Des-anular un rango **quita todas** las anulaciones del fijo que caen dentro de él.
 - [ ] Anular / des-anular **no genera entrada de historial** en ningún alcance (RF-HIST-001): revertir es volver a operar sobre el mismo mes o rango.
+- [ ] Las anulaciones del **relleno** de una reapertura (RF-MF-008) son anulaciones comunes: se des-anulan con esta misma acción.
 - [ ] Anular se distingue de eliminar (`deletedFrom`, RF-MF-004): no elimina el fijo ni toca los meses de afuera del alcance elegido — el fijo sigue vivo y aparece en las demás apariciones que dicta su frecuencia, incluidas las posteriores al rango.
 - [ ] Un fijo anulado para un mes **se sigue mostrando** en la lista de ese mes, con diferenciación visual.
 - [ ] El monto de un fijo anulado **no suma** a los totales del mes (RF-VM-002, RF-DASH-002) **ni** a la serie anual de los reportes (RF-REP-001).
@@ -714,7 +716,7 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 **Criterios de aceptación:**
 - [ ] La frecuencia es un **entero de 1 a 12** (meses entre apariciones). No hay frecuencias libres fuera de ese rango ni custom.
 - [ ] El **default** al crear es **1** (Mensual).
-- [ ] La frecuencia está **anclada al mes de inicio**: un fijo con frecuencia 2 que arranca en marzo aparece en marzo, mayo, julio, etc.; uno con frecuencia 3 que arranca en enero aparece en enero, abril, julio, octubre; y así con cualquier N (aparece cada N meses desde el mes de inicio).
+- [ ] La frecuencia está **anclada al mes de inicio**: un fijo con frecuencia 2 que arranca en marzo aparece en marzo, mayo, julio, etc.; uno con frecuencia 3 que arranca en enero aparece en enero, abril, julio, octubre; y así con cualquier N (aparece cada N meses desde el mes de inicio). Un fijo reabierto se **re-ancla en el mes de reapertura** desde ese mes (RF-MF-008).
 - [ ] Un fijo aparece en un mes solo si, además de estar activo en el rango (RF-MF-002), ese mes cae en su frecuencia respecto del mes de inicio.
 - [ ] La frecuencia **es inmutable** tras crearse (igual que el tipo): el selector aparece **solo al crear**; en el formulario de edición se muestra de **solo lectura**. Cambiar la cadencia de un fijo equivale a crear otro.
 - [ ] El cálculo de qué fijo cae en cada mes sigue siendo **on-the-fly** (RN-006): no se generan filas por instancia mensual.
@@ -736,13 +738,62 @@ Un movimiento fijo es una plantilla recurrente mensual: sueldo, alquiler, Netfli
 
 **Criterios de aceptación:**
 - [ ] La card muestra el arranque del **fijo lógico**, no el de la fila vigente: un fijo creado en marzo 2024 y editado luego sigue mostrando marzo 2024 como arranque, aunque la edición haya partido la cadena (ver RN-005 y `docs/data-model.md`, §Identidad de cadena estable).
-- [ ] La card muestra el **fin (vigencia)** del fijo cuando tiene una terminación programada (`endMonth`); un fijo sin fin programado se muestra como **activo indefinidamente**.
+- [ ] La card muestra el **fin (vigencia)** del fijo cuando tiene una terminación programada (`endMonth`); un fijo sin fin programado —incluido uno reabierto (RF-MF-008)— se muestra como **activo indefinidamente**.
 - [ ] Un **calculado de origen fijo** muestra su **propio** arranque y su **propio** fin (los de su cadena), no los del origen: un calculado creado en enero 2026 sobre un fijo de marzo 2024 muestra enero 2026.
 - [ ] El arranque **no** aparece en la fila de `/mes` (RF-VM-001); vive solo en la card.
 - [ ] La ubicación y forma visual del dato en la card la define `control-design` (`docs/design.md`).
 
 **Notas:**
 - El backend expone arranque y fin en `MovementItem.startMonth` / `MovementItem.endMonth` para fijos (ver `docs/data-model.md`, §Contrato de movimientos del mes); la resolución por cadena vive en `docs/backend.md`, §Movimientos fijos.
+
+---
+
+#### RF-MF-008 — Reabrir un movimiento fijo terminado
+
+| Campo | Detalle |
+|---|---|
+| **Descripción** | El usuario puede **reabrir** un movimiento fijo que tiene **fin de vigencia** (`endMonth`, RF-MF-004 / RF-MF-007), ya alcanzado o programado a futuro. Elige el **mes de reapertura X** y el monto: desde X el fijo vuelve a aparecer **indefinidamente**, con su cadencia **re-anclada en X**. Los meses entre el fin y X (**relleno**, `[endMonth, X)`) muestran las apariciones del fijo **anuladas**. |
+| **Actor** | Usuario autenticado |
+| **Prioridad** | Media |
+| **Precondiciones** | El fijo existe, pertenece al usuario autenticado, es un fijo **normal** (no calculado de ningún tipo), tiene `endMonth` y está listado en el mes visualizado de `/mes`. |
+
+**Flujo principal:**
+1. El usuario, parado en un mes en `/mes`, abre el **kebab (⋮)** de un ítem fijo con fin de vigencia y elige **"Reabrir"**.
+2. El sistema abre el **paso de reapertura** con el **mes de reapertura X** (default: el mayor entre el mes en curso y `endMonth`) y el **monto** precargado con el último monto del fijo.
+3. El usuario ajusta X y/o el monto. Si la **categoría** del fijo está dada de baja, el paso obliga a elegir una activa; si lo está el **método de pago**, obliga a elegir uno activo o "sin método de pago". En el mismo paso obliga también a elegir una categoría activa para cada **calculado que se reabre en espejo** con la suya dada de baja (su método lo hereda del origen, RN-021).
+4. El usuario confirma.
+5. El sistema reabre el fijo según las reglas de abajo y muestra el aviso de éxito con la acción **"Deshacer"** (RF-HIST-007).
+
+**Flujos alternativos:**
+- *A1 — El usuario cancela:* el fijo sigue sin cambios.
+- *A2 — X igual a `endMonth`:* no hay relleno; equivale a **quitar el fin**. Es el caso del fijo con fin programado a futuro reabierto con el default.
+
+**Reglas de la reapertura:**
+
+| Regla | Detalle |
+|---|---|
+| **Mes de reapertura X** | X >= máx(mes en curso, `endMonth`) — mes en curso real, no el mes visualizado. Default: ese mínimo. |
+| **Cadencia** | Se **re-ancla en X**: X es siempre aparición y desde ahí el fijo aparece cada N meses (N = su frecuencia, que no cambia — RF-MF-006), como un fijo recién creado en X. |
+| **Relleno** | Los meses `[endMonth, X)`. Las apariciones del fijo en ese tramo se evalúan con la **cadencia vieja** (la anclada antes de reabrir, RN-016) y **solo esas** quedan **anuladas** (RF-MF-005); los meses del relleno sin aparición no generan nada. Sin tope de largo. |
+| **Relleno en el pasado** | Los meses de relleno pueden ser pasados y muestran sus ítems anulados. Es una excepción explícita a RN-005: la reapertura solo **agrega anulaciones** en esos meses, no cambia sus totales. |
+| **Monto** | Los meses de relleno llevan el **monto viejo**; el monto confirmado rige **desde X**. |
+| **Campos editables** | Solo el **monto**. El resto del fijo se conserva, salvo la categoría o el método de pago dados de baja, que se reemplazan en el paso: la categoría por una activa; el método por uno activo o por "sin método de pago". Lo que está activo no se cambia al reabrir. El reemplazo rige **desde X**; los meses de relleno conservan los originales. |
+| **Vigencia resultante** | Siempre **indefinida**. Para volver a terminarlo se usa RF-MF-004. |
+| **Calculados derivados** | Los calculados derivados del fijo (RF-MCALC-005) que terminaron **junto con el origen** (mismo `endMonth`) se reabren **en espejo**, con el mismo X y su relleno anulado, dentro de la **misma entrada de historial** del origen (se revierten con ella). Los que tienen otro fin quedan cerrados. |
+
+**Criterios de aceptación:**
+- [ ] La acción **"Reabrir"** vive en el **kebab (⋮)** del ítem en `/mes` y se ofrece solo sobre fijos **normales** con `endMonth` (ya alcanzado o a futuro). No aparece en fijos sin fin ni en ningún calculado. La card de detalle (RF-VM-007) no la ofrece.
+- [ ] Un fijo eliminado por completo (borde de RF-MF-004) no existe para la app (RF-HIST-006) y no se reabre: se recupera deshaciendo su eliminación (RF-HIST-003).
+- [ ] X no puede ser anterior al mes en curso ni a `endMonth`; el default es máx(mes en curso, `endMonth`).
+- [ ] Desde X el fijo aparece en X y cada N meses desde X, sin fin.
+- [ ] En el relleno quedan anuladas exactamente las apariciones que dictaba la cadencia vieja, con el monto viejo; no suman a totales ni a reportes (RN-016).
+- [ ] Des-anular un mes de relleno (RF-MF-005) lo hace aparecer y sumar como cualquier mes, con el monto viejo.
+- [ ] La reapertura genera una entrada de historial con operación **"reabierto"**, deshacible desde `/historial` y desde el aviso de éxito (RF-HIST-001/003/007). Deshacerla restaura el fin y borra las anulaciones de relleno que queden: los meses de relleno vuelven a quedar fuera de vigencia, estén anulados o no.
+- [ ] El relleno amplía el rango navegable de los reportes (RF-REP-002) y en la vista evolución (RF-VM-009) sus apariciones cuentan como anuladas.
+- [ ] Solo se pueden reabrir movimientos fijos propios.
+
+**Notas:**
+- El detalle visual del paso de reapertura lo define `control-design` (`docs/design.md`).
 
 ---
 
@@ -858,6 +909,7 @@ Un **movimiento calculado** es un movimiento **fijo** cuyo monto **no se ingresa
 - [ ] Si el origen **único** o de **cuota** se **elimina**, su(s) calculado(s) se **eliminan por completo** (cascada total, RF-MCALC-008): un único/cuota no tiene split, así que al borrarlo desaparece toda su derivación.
 - [ ] Si el origen (**fijo**, **único** o **cuota**) está **anulado** en un mes (skip — RF-MF-005 / RF-MU-005 / RF-MC-004), el calculado **se anula ese mes**: se sigue listando pero no suma a los totales ni a la serie anual, igual que el origen. El calculado **no tiene skip propio** (el toggle no aparece en su kebab): su estado de anulación es siempre el del origen para ese mes.
 - [ ] Si el origen **fijo** cambia de **frecuencia** —que en el modelo equivale a recrearlo (RF-MF-006)— el calculado **matchea la presencia** del origen vigente.
+- [ ] Si el origen **fijo** se **reabre** (RF-MF-008), los calculados que terminaron **junto con él** (mismo `endMonth`) se reabren en espejo, con el mismo mes de reapertura y su relleno anulado; los que tienen otro fin quedan cerrados. Un calculado no se reabre por su cuenta.
 - [ ] El calculado nunca aparece en un mes donde el origen no aparece.
 
 ---
@@ -1636,7 +1688,7 @@ Existe además un **acceso directo al mes en curso** disponible desde cualquier 
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | Al hacer clic en el **cuerpo** de una fila de la Vista del mes (`/mes`) se abre una **card de detalle read-only** del movimiento. Muestra los datos que la fila no muestra; no tiene acciones sobre el movimiento ni edita nada in-situ. La edición y demás acciones viven en el **kebab (⋮)** de la fila. En un ítem **fijo** (no calculado), la card ofrece además una **vista evolución** del fijo (RF-VM-009): navegación interna de la card, no una acción sobre el movimiento. |
+| **Descripción** | Al hacer clic en el **cuerpo** de una fila de la Vista del mes (`/mes`) se abre una **card de detalle read-only** del movimiento. Muestra los datos que la fila no muestra; no tiene acciones sobre el movimiento ni edita nada in-situ. La edición y demás acciones (incluida **Reabrir** un fijo terminado, RF-MF-008) viven en el **kebab (⋮)** de la fila. En un ítem **fijo** (no calculado), la card ofrece además una **vista evolución** del fijo (RF-VM-009): navegación interna de la card, no una acción sobre el movimiento. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Media |
 | **Precondiciones** | Existe al menos un movimiento en la lista del mes. |
@@ -1654,11 +1706,11 @@ Existe además un **acceso directo al mes en curso** disponible desde cualquier 
 - **Origen de calculados:** cuando el movimiento es **origen** de uno o más calculados, la card lista sus **derivados del mes** (nombre + monto), read-only. Es el **espejo** del bloque que muestra el "Origen" desde un calculado: la card es bidireccional origen ↔ derivados (RF-MCALC-007).
 
 **Acciones disponibles:**
-- **Cerrar** — la card se cierra con **✕**, con **Esc** y con **clic en el scrim** (fondo). La card no tiene footer de acción ni botón "Editar". Editar, anular, duplicar, crear movimiento calculado y eliminar viven en el **kebab (⋮)** de la fila.
+- **Cerrar** — la card se cierra con **✕**, con **Esc** y con **clic en el scrim** (fondo). La card no tiene footer de acción ni botón "Editar". Editar, anular, duplicar, crear movimiento calculado, reabrir y eliminar viven en el **kebab (⋮)** de la fila.
 - **Ver evolución** (solo ítems **fijos** no calculados, RF-VM-009) — pasa a la vista evolución del fijo, que reemplaza el contenido de la card; desde ahí se vuelve a la vista de detalle. Es navegación interna: no actúa sobre el movimiento.
 
 **Criterios de aceptación:**
-- [ ] El clic en el **cuerpo** de la fila (o Enter/Espacio) abre la card; el clic en el **kebab (⋮)** abre su menú de acciones rápidas y **no** abre la card. El kebab concentra todas las acciones del movimiento (Editar / Anular-Des-anular / Duplicar / Crear movimiento calculado / Eliminar).
+- [ ] El clic en el **cuerpo** de la fila (o Enter/Espacio) abre la card; el clic en el **kebab (⋮)** abre su menú de acciones rápidas y **no** abre la card. El kebab concentra todas las acciones del movimiento (Editar / Anular-Des-anular / Duplicar / Crear movimiento calculado / Reabrir / Eliminar).
 - [ ] La card es **solo lectura pura**: no tiene footer de acción ni botón "Editar"; sus únicos controles son cerrar y, en un fijo no calculado, el acceso a la vista evolución (RF-VM-009). No modifica el movimiento in-situ.
 - [ ] La card **siempre abre en la vista de detalle**.
 - [ ] La card muestra las filas de contenido definidas arriba, mostrando **solo las que aplican** al tipo y omitiendo las que no (ej.: método de pago solo si el movimiento tiene uno; cross-rate solo si la moneda del ítem difiere de la default).
@@ -3041,10 +3093,10 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | El sistema registra automáticamente una **entrada de historial** por cada **edición** y cada **eliminación** de un movimiento —único, fijo (incluidos los calculados) y grupo de cuotas—. La entrada guarda el estado previo del objetivo, lo suficiente para restaurarlo. El registro es silencioso: no pide confirmación ni agrega ningún control a los flujos de edición y borrado. |
+| **Descripción** | El sistema registra automáticamente una **entrada de historial** por cada **edición** y cada **eliminación** de un movimiento —único, fijo (incluidos los calculados) y grupo de cuotas— y por cada **reapertura** de un fijo (RF-MF-008). La entrada guarda el estado previo del objetivo, lo suficiente para restaurarlo. El registro es silencioso: no pide confirmación ni agrega ningún control a los flujos de edición y borrado. |
 | **Actor** | Sistema |
 | **Prioridad** | Alta |
-| **Precondiciones** | El usuario edita o elimina un movimiento propio. |
+| **Precondiciones** | El usuario edita o elimina un movimiento propio, o reabre un fijo propio. |
 
 **Alcance — qué se registra:**
 
@@ -3054,6 +3106,7 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 | Eliminar un movimiento único (RF-MU-003) | Sí |
 | Editar un movimiento fijo o un calculado (RF-MF-003, RF-MCALC-006) | Sí |
 | Eliminar un movimiento fijo o un calculado (RF-MF-004, RF-MCALC-006/009) | Sí |
+| Reabrir un movimiento fijo (RF-MF-008) | Sí — operación **"reabierto"** |
 | Editar un grupo de cuotas (RF-MC-003) | Sí |
 | Eliminar un grupo de cuotas (RF-MC-002) | Sí |
 | Crear un movimiento de cualquier tipo (RF-MU-001, RF-MF-001, RF-MC-001, RF-MCALC-001, RF-VM-008) | No |
@@ -3071,12 +3124,12 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 | Cuotas | `InstallmentGroup.id` |
 
 **Criterios de aceptación:**
-- [ ] Cada edición y cada eliminación de un movimiento único, fijo (incluidos los calculados) o grupo de cuotas genera **exactamente una** entrada de historial.
+- [ ] Cada edición y cada eliminación de un movimiento único, fijo (incluidos los calculados) o grupo de cuotas, y cada reapertura de un fijo, genera **exactamente una** entrada de historial.
 - [ ] Las operaciones marcadas "No" en la tabla de alcance **no** generan entrada de ningún tipo.
 - [ ] La entrada guarda el estado previo del movimiento, suficiente para restaurarlo por completo al deshacerla (RF-HIST-003), y el instante en que se registró (base del vencimiento, RF-HIST-005).
 - [ ] Las entradas se **agrupan por movimiento** con la clave estable de la tabla de identidad. Para un fijo, la clave es la identidad de cadena: las ediciones sucesivas —que parten la cadena— siguen perteneciendo al mismo movimiento.
 - [ ] El registro es **automático y silencioso**: el formulario de edición no expone checkbox, aviso ni opción alguna sobre el historial, y el flujo de guardado no suma pasos ni fricción.
-- [ ] La **cascada** de un borrado sobre los calculados derivados del movimiento (RF-MCALC-005) **no** genera entradas propias: queda contenida en la entrada del origen y se revierte junto con ella.
+- [ ] La **cascada** de un borrado sobre los calculados derivados del movimiento (RF-MCALC-005), y la **reapertura en espejo** de sus calculados (RF-MF-008), **no** generan entradas propias: quedan contenidas en la entrada del origen y se revierten junto con ella.
 - [ ] Un usuario solo registra y ve entradas de sus propios movimientos (RN-003).
 
 ---
@@ -3085,7 +3138,7 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | La pantalla `/historial` lista las entradas de historial de **todos** los movimientos del usuario. Por cada entrada muestra de qué se trata, qué operación fue (edición o eliminación), **qué cambió** —estado anterior → estado nuevo— y expone la acción de **deshacer** (RF-HIST-003). |
+| **Descripción** | La pantalla `/historial` lista las entradas de historial de **todos** los movimientos del usuario. Por cada entrada muestra de qué se trata, qué operación fue (edición, eliminación o reapertura), **qué cambió** —estado anterior → estado nuevo— y expone la acción de **deshacer** (RF-HIST-003). |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Alta |
 | **Precondiciones** | El usuario tiene sesión activa. |
@@ -3093,8 +3146,8 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 **Criterios de aceptación:**
 - [ ] La pantalla vive en la ruta `/historial` y es la **cuarta** entrada del sidebar, entre "Reportes" y "Configuración" (RF-NAV-001).
 - [ ] Lista las entradas de **todos** los movimientos en una única lista cronológica, la **más reciente primero**. No se navega por mes ni por período.
-- [ ] Cada entrada identifica el movimiento (nombre, tipo y categoría), la operación (**editado** / **eliminado**) y el momento del cambio.
-- [ ] En una **edición**, la entrada muestra los campos que cambiaron con su **valor anterior y su valor nuevo**. En una **eliminación**, muestra el movimiento tal como estaba antes de borrarse.
+- [ ] Cada entrada identifica el movimiento (nombre, tipo y categoría), la operación (**editado** / **eliminado** / **reabierto**) y el momento del cambio.
+- [ ] En una **edición**, la entrada muestra los campos que cambiaron con su **valor anterior y su valor nuevo**. En una **eliminación**, muestra el movimiento tal como estaba antes de borrarse. En una **reapertura**, el fin anterior → el mes de reapertura, más los campos que cambiaron (monto, categoría, método) con su valor anterior y nuevo.
 - [ ] Cada entrada expone la acción **Deshacer** (RF-HIST-003); las entradas bloqueadas se listan igual, con la acción rotulada como **bloqueada** y el motivo visible (RF-HIST-004).
 - [ ] La pantalla solo muestra entradas **vigentes**: las purgadas por retención (RF-HIST-005) no aparecen.
 - [ ] Un movimiento **eliminado** aparece en el historial aunque no aparezca en ninguna otra superficie de la app (RF-HIST-006): el historial es la única superficie que lo expone.
@@ -3129,6 +3182,7 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 - [ ] Deshacer una **edición** devuelve el movimiento a los valores que tenía antes de esa edición. En un **fijo**, restaura también la estructura de la cadena que la edición había partido (RN-005).
 - [ ] Deshacer una **eliminación** devuelve el movimiento a la app: vuelve a aparecer en listados, totales y reportes exactamente como estaba.
 - [ ] Al deshacer la eliminación de un movimiento que era **origen de calculados**, los calculados que dependían de él **se restauran junto con el origen**, sin acción adicional del usuario (RF-HIST-006).
+- [ ] Deshacer una **reapertura** (RF-MF-008) restaura el fin del fijo y borra las anulaciones de relleno que queden; revierte igual los calculados reabiertos en espejo.
 - [ ] Deshacer **borra la entrada** del historial y **no crea ninguna entrada nueva**: la operación de deshacer no se registra en ningún lado.
 - [ ] Tras deshacer, el historial no conserva ninguna evidencia de que el cambio deshecho haya existido.
 - [ ] El deshacer **desde `/historial`** se confirma antes de aplicarse. El **atajo del aviso de éxito** (RF-HIST-007) **no** pide confirmación: la exigencia de confirmar es de la superficie `/historial`, no de la operación.
@@ -3214,10 +3268,10 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 
 | Campo | Detalle |
 |---|---|
-| **Descripción** | Tras **editar** o **eliminar** un movimiento, el **aviso de éxito** de esa acción ofrece **deshacerla en el acto**, sin ir a `/historial`. Es un **atajo a la operación de RF-HIST-003** sobre la **misma entrada de historial** que la acción acaba de generar: misma restauración, misma eliminación de la entrada, sin rastro. No es un mecanismo aparte ni una segunda forma de deshacer. |
+| **Descripción** | Tras **editar** o **eliminar** un movimiento, o **reabrir** un fijo (RF-MF-008), el **aviso de éxito** de esa acción ofrece **deshacerla en el acto**, sin ir a `/historial`. Es un **atajo a la operación de RF-HIST-003** sobre la **misma entrada de historial** que la acción acaba de generar: misma restauración, misma eliminación de la entrada, sin rastro. No es un mecanismo aparte ni una segunda forma de deshacer. |
 | **Actor** | Usuario autenticado |
 | **Prioridad** | Alta |
-| **Precondiciones** | El usuario acaba de editar o eliminar un movimiento propio y su aviso de éxito sigue en pantalla. |
+| **Precondiciones** | El usuario acaba de editar o eliminar un movimiento propio, o de reabrir un fijo propio, y su aviso de éxito sigue en pantalla. |
 
 **Sin confirmación.** El atajo aplica el deshacer directo. El usuario está a segundos de su propia acción y viendo el nombre del movimiento en el aviso: un paso de confirmación anularía el sentido del atajo. La confirmación de RF-HIST-003 es una exigencia de la superficie `/historial`, donde el usuario puede estar operando sobre un cambio que no recuerda.
 
@@ -3227,6 +3281,7 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 |---|---|
 | **Editar** un único, un fijo, un calculado o un grupo de cuotas | Sí |
 | **Eliminar** un único, un fijo, un calculado o un grupo de cuotas | Sí |
+| **Reabrir** un fijo (RF-MF-008) | Sí |
 | **Crear** un movimiento de cualquier forma, incluido duplicar (RF-VM-008) | No — la creación no genera entrada de historial (RF-HIST-001) |
 | Crear o eliminar una **simulación** de categoría | No — la simulación queda entera afuera (RF-SIM-004) |
 | Anular / des-anular, ABM de categorías y métodos de pago, cambios de preferencias | No — no generan entrada (RF-HIST-001) |
@@ -3242,7 +3297,7 @@ El historial registra las **ediciones** y **eliminaciones** de movimientos y per
 | **Falla por otro motivo** (red, servidor) | Se informa el fallo y el atajo **sigue disponible para reintentar**. |
 
 **Criterios de aceptación:**
-- [ ] Editar y eliminar ofrecen el atajo en su aviso de éxito, en las **cuatro formas**: único, fijo, calculado y grupo de cuotas.
+- [ ] Editar y eliminar ofrecen el atajo en su aviso de éxito, en las **cuatro formas**: único, fijo, calculado y grupo de cuotas. Reabrir un fijo también lo ofrece.
 - [ ] El atajo **deshace sin pedir confirmación** y su efecto es idéntico al de deshacer esa misma entrada desde `/historial` (RF-HIST-003): el movimiento vuelve al estado previo, la entrada se borra y no queda rastro.
 - [ ] Las **creaciones** —incluida la de duplicar— **no** ofrecen el atajo, y la **simulación** queda fuera por completo (RF-SIM-004).
 - [ ] Una acción nueva sobre el **mismo** movimiento reemplaza su aviso anterior; los avisos de movimientos **distintos** conviven.
@@ -3446,7 +3501,7 @@ La simulación **no genera filas**: lo que persiste es su configuración (usuari
 | RN-002 | Los montos se almacenan en centavos (entero). No se usan números de punto flotante para representar dinero. |
 | RN-003 | Todos los recursos (movimientos, categorías) están aislados por `userId`. El backend filtra siempre por el usuario del JWT. Un usuario nunca puede ver ni modificar datos de otro. |
 | RN-004 | El instante de un movimiento único (`occurredAt`) es el momento elegido por el usuario, con default "ahora". Define a qué momento/mes pertenece el movimiento. No se confunde con `createdAt` (timestamp de sistema de cuándo se creó el registro): el usuario puede elegir un instante distinto al de creación. |
-| RN-005 | Editar o eliminar un movimiento fijo no modifica los meses anteriores al **mes pivote** de la operación; esos meses son inmutables. El pivote es, en ambos casos, el **mes visualizado** en la Vista del mes (`/mes`) desde el que se opera, **inclusive**: el cambio aplica desde ese mes en adelante y preserva todo mes previo a él. |
+| RN-005 | Editar o eliminar un movimiento fijo no modifica los meses anteriores al **mes pivote** de la operación; esos meses son inmutables. El pivote es, en ambos casos, el **mes visualizado** en la Vista del mes (`/mes`) desde el que se opera, **inclusive**: el cambio aplica desde ese mes en adelante y preserva todo mes previo a él. **Excepción:** la reapertura de un fijo (RF-MF-008) no usa el mes visualizado como pivote y puede agregar **anulaciones** en meses pasados (el relleno); no cambia sus totales. |
 | RN-006 | Los movimientos fijos y los grupos de cuotas no generan filas individuales por mes. Se calculan on-the-fly al consultar un período. |
 | RN-007 | Una categoría eliminada (soft delete) no aparece en selectores de nuevos movimientos, pero los movimientos históricos conservan la referencia a ella. |
 | RN-008 | No pueden coexistir dos categorías activas con el mismo nombre para el mismo usuario. |
@@ -3457,7 +3512,7 @@ La simulación **no genera filas**: lo que persiste es su configuración (usuari
 | RN-013 | Cada categoría tiene un color tomado de una **matriz de colores predefinidos** (40 colores). El usuario lo **elige y edita** al crear o editar la categoría; solo se aceptan colores de la matriz (sin hex libre). Al **crear**, el sistema pre-selecciona como default el color "menos usado" entre las categorías activas del usuario, calculado sobre los **8 colores base** (un subconjunto de la matriz). Las categorías por defecto del alta se asignan automáticamente. El color es de presentación únicamente: no afecta montos, scope ni ninguna regla de negocio. |
 | RN-014 | Para comparar nombres de categoría a efectos de unicidad, el nombre se **normaliza**: trim de espacios, insensible a mayúsculas/minúsculas e insensible a acentos/tildes. Ej: "comida", "Comida" y "Cómida" se consideran el mismo nombre. Esta normalización aplica tanto a la detección de duplicado contra categorías **activas** (bloqueo, RN-008) como contra categorías **eliminadas** (soft delete) para proponer reactivarla (RF-CAT-002). La regla se valida en **ambas capas** —backend como fuente de verdad y frontend para UX— y ambas deben mantenerse alineadas (ver `docs/technical.md`). |
 | RN-015 | Para la agregación anual de los reportes (RF-REP-001), el mes al que se imputa cada movimiento se determina con el **mismo criterio ya definido** para la Vista del mes, sin introducir una regla de zona horaria nueva: para los movimientos **únicos**, el mes se calcula en la **zona horaria propia de cada registro** (RN-011, igual que el bucketeo de `GET /movements`); para los **fijos** y las **cuotas**, que operan a nivel mes (RN-006), el mes es el de su `startMonth` `YYYY-MM` (los fijos caen en cada mes donde están activos; las cuotas, en cada mes de su tramo). Un movimiento se imputa a un año determinado solo si su mes resuelto pertenece a ese año. |
-| RN-016 | **Frecuencia y anulación de movimientos fijos (RF-MF-005, RF-MF-006).** Un movimiento fijo con mes de inicio `S` y frecuencia `N` (entero 1..12, meses entre apariciones) aparece en el mes `M` si y solo si: `S <= M` **y** (`deletedFrom` es null **o** `deletedFrom > M`) **y** `monthDiff(S, M) % N === 0`. La frecuencia está **anclada al mes de inicio** (no al mes consultado). Una **anulación** `(fijo, mes)` no cambia si el fijo aparece o no según esta regla: un fijo anulado para un mes **se sigue listando** en `GET /movements` con la marca de anulado, pero su monto **no suma** a los totales del mes ni a la serie anual de los reportes. La anulación es **reversible** (toggle) y solo tiene sentido sobre meses donde el fijo efectivamente aparece según `F`. El cálculo sigue siendo on-the-fly (RN-006): no se generan filas por instancia mensual. |
+| RN-016 | **Frecuencia y anulación de movimientos fijos (RF-MF-005, RF-MF-006).** Un movimiento fijo con mes de inicio `S` y frecuencia `N` (entero 1..12, meses entre apariciones) aparece en el mes `M` si y solo si: `S <= M` **y** (`deletedFrom` es null **o** `deletedFrom > M`) **y** `monthDiff(S, M) % N === 0`. La frecuencia está **anclada al mes de inicio** (no al mes consultado). Una **anulación** `(fijo, mes)` no cambia si el fijo aparece o no según esta regla: un fijo anulado para un mes **se sigue listando** en `GET /movements` con la marca de anulado, pero su monto **no suma** a los totales del mes ni a la serie anual de los reportes. La anulación es **reversible** (toggle) y solo tiene sentido sobre meses donde el fijo efectivamente aparece según `F`. El cálculo sigue siendo on-the-fly (RN-006): no se generan filas por instancia mensual. **Reapertura:** desde el mes de reapertura X la frecuencia se ancla en X en lugar de `S` (RF-MF-008). |
 | RN-017 | **Fórmula y redondeo del movimiento calculado (RF-MCALC-002).** El monto de un movimiento calculado se deriva del monto del origen en el **mes de referencia** —el mes en que el calculado aparece, salvo desfasaje de un calculado de origen fijo (RF-MCALC-011)— aplicando **una** operación: un operador de `{ +, −, ×, ÷, % }` y un **operando** numérico común. El cálculo por operador es: `+` → `origen + operando`; `−` → `origen − operando`; `×` → `origen × operando`; `÷` → `origen ÷ operando`; `%` → `origen × operando ÷ 100`. El **operando 0 no se acepta** en `÷` ni en `%` (división por cero); el resto acepta cualquier operando numérico. El resultado se **redondea a centavos enteros** (`round`, mantiene RN-002): **no** se persiste ni propaga precisión sub-centavo. La presentación siempre muestra 2 decimales. El signo final lo aplica RN-018, no la fórmula. El cálculo es **on-the-fly por mes** (RN-006): el monto **no se persiste**, se deriva al vuelo del origen en cada lectura, así que sigue automáticamente cualquier cambio del origen (RF-MCALC-004). |
 | RN-018 | **Signo, monto y tipo derivado del movimiento calculado — excepción a RN-001 (RF-MCALC-003).** El movimiento calculado tiene un **switch de signo** que multiplica el resultado de la fórmula por `+1` o `−1`. Por eso su `amountCents` **puede ser negativo o cero**, a diferencia de todo otro movimiento (RN-001, monto > 0). Esta excepción aplica **únicamente** a movimientos calculados; únicos, fijos "normales" y cuotas siguen exigiendo monto > 0. El `type` (`EXPENSE`/`INCOME`) **no se elige**: se **deriva del signo del monto final** —`final < 0` → `EXPENSE`; `final > 0` → `INCOME`; `final == 0` → `EXPENSE` por convención de borde (no afecta totales, RN-019)—. Así signo y tipo son siempre consistentes (positivo = ingreso, negativo = gasto). |
 | RN-019 | **Imputación a totales y reportes por el tipo derivado (RF-MCALC-003).** Cada movimiento suma su **magnitud** (`\|amountCents\|`) al bucket que le corresponde **según su `type`**: un `INCOME` suma a `incomeCents`; un `EXPENSE`, a `expenseCents`. Para movimientos normales el `type` es fijo y `amountCents > 0`. Para un **calculado**, como el `type` se deriva del signo del monto (RN-018), la imputación queda siempre consistente: un calculado de monto `−2000` es `EXPENSE` (tipo derivado) y suma **2000** a `expenseCents`; uno de `+2000` es `INCOME` y suma **2000** a `incomeCents`; un monto 0 no aporta a ningún bucket. No hay restas a un bucket ni reasignación: signo y tipo nunca se contradicen. El balance del mes (`incomeCents − expenseCents`, RF-VM-002 / RF-DASH-002) y la serie anual de reportes (RF-REP-001, ambos tipos) se calculan con esta suma de magnitudes, sin lógica especial. En `by-category` (gastos apilados por categoría) la porción de la categoría de un calculado `EXPENSE` suma su magnitud, preservando la invariante "suma de porciones del mes = `expenseCents` del mes" (`docs/data-model.md`, §Contrato de serie de reportes). |
@@ -3465,7 +3520,7 @@ La simulación **no genera filas**: lo que persiste es su configuración (usuari
 | RN-022 | **Límites — naturaleza pasiva/activa y cero-impacto (RF-LIM-001..005).** Un límite es una **condición única** (`dato {operador} umbral`) sobre una key hardcodeada (de `/mes`, dashboard o reportes) con umbral **número puro, sin moneda** (no hay conversión en la evaluación), de una de dos naturalezas: **pasiva** — aplica una marca visual al dato cuando cruza el umbral (read-path, sobre datos ya renderizados; superficie cableada = `/mes`, dashboard y los 5 reportes de `/reportes`); **activa** — al guardar un movimiento, si el estado proyectado cruzaría el umbral, un aviso **no bloqueante** que enumera los cruces (write-path; solo sobre las 7 keys `mes.*`; operador por polaridad techo/piso del anclaje; aplica a los 4 forms). Ninguna naturaleza modifica montos, totales, reportes ni lo que el usuario decide persistir. La evaluación es **100% client-side**; la clave `limits` del blob es opaca al backend (igual que `theme` / `reports`). **Cero-impacto (marcas y avisos):** toda **marca pasiva** (RF-LIM-003) y todo **aviso activo** (RF-LIM-004) son **condicionales** al cruce de un límite habilitado; con la config vacía (sin límites o todos deshabilitados) no se produce ninguna marca ni aviso y cada superficie se ve y se comporta **exactamente igual** que sin la feature. El **popover informativo** (RF-LIM-005) **no es marca ni aviso** —enumera qué límites observan la superficie, sin resaltar dato ni interrumpir el guardado— y queda fuera de esta regla: su ícono disparador se monta con **≥1 límite (habilitado o no)** para esa superficie. Un dato observado por varios límites pasivos que cruzan muestra **una** marca (la más fuerte); el texto accesible enumera todos. |
 | RN-023 | El monto de un movimiento no puede exceder **2.147.483.647 centavos** ($21.474.836,47), tope del entero de 32 bits con que se persiste `amountCents`. Aplica a únicos, fijos y cuotas (en cuotas, sobre el monto **por cuota**). Excederlo produce `400`. Ver `data-model.md`, §Tope de monto por movimiento. |
 | RN-020 | **Anulación (skip) de movimientos únicos y cuotas (RF-MU-005, RF-MC-004).** Un movimiento **único** se anula con un **flag booleano de la propia fila** (`Transaction.skipped`, sin alcance temporal: anula el movimiento entero). Una **cuota** se anula por **mes puntual** con un registro aparte `(grupo, mes)` que cancela **solo** esa instancia mensual, dejando vivo el resto del grupo. En ambos casos la acción es un **toggle reversible** y aplica a cualquier dirección (gasto/ingreso). A efectos de totales y reportes se comportan igual que la anulación de un fijo (RN-016): el ítem anulado **se sigue listando** con marca de anulado pero su monto **no suma** a los totales del mes ni a la serie anual de los reportes. Los **calculados** derivados de un único o cuota anulado **heredan** ese estado (no tienen skip propio; RF-MCALC-005). El cálculo sigue siendo on-the-fly (RN-006). |
-| RN-024 | **Alcance e identidad del historial de cambios (RF-HIST-001).** El historial registra **solo** ediciones y eliminaciones de **movimientos** —único, fijo (incluidos los calculados) y grupo de cuotas—, una entrada por operación. **No** registra creaciones, anulaciones (skip), ABM de categorías ni de métodos de pago, cambios de preferencias, ni el alta y la baja de simulaciones de categoría (excepción de RF-SIM-004). Las entradas se **agrupan por objetivo** con una **clave estable**: `Transaction.id` para el único, la **identidad de cadena** (`Recurring.chainId`) para el fijo —**no** el id de la fila, porque editar un fijo parte la cadena y el id cambia (RN-005)— e `InstallmentGroup.id` para el grupo de cuotas. La cascada de un borrado sobre los calculados derivados (RF-MCALC-005) no genera entradas propias: viaja dentro de la entrada del origen. |
+| RN-024 | **Alcance e identidad del historial de cambios (RF-HIST-001).** El historial registra **solo** ediciones y eliminaciones de **movimientos** —único, fijo (incluidos los calculados) y grupo de cuotas— y reaperturas de fijos (RF-MF-008), una entrada por operación. **No** registra creaciones, anulaciones (skip), ABM de categorías ni de métodos de pago, cambios de preferencias, ni el alta y la baja de simulaciones de categoría (excepción de RF-SIM-004). Las entradas se **agrupan por objetivo** con una **clave estable**: `Transaction.id` para el único, la **identidad de cadena** (`Recurring.chainId`) para el fijo —**no** el id de la fila, porque editar un fijo parte la cadena y el id cambia (RN-005)— e `InstallmentGroup.id` para el grupo de cuotas. La cascada de un borrado sobre los calculados derivados (RF-MCALC-005) y la reapertura en espejo de esos calculados (RF-MF-008) no generan entradas propias: viajan dentro de la entrada del origen. |
 | RN-025 | **Deshacer: LIFO por movimiento y sin rastro (RF-HIST-003, RF-HIST-004).** Deshacer restaura el estado previo guardado en la entrada y **borra la entrada**. El deshacer **no genera entrada nueva** ni se registra de ninguna forma: no queda rastro de que el cambio existió (Control es un diario personal, no un log de auditoría). El orden es **secuencial LIFO por movimiento**: solo se puede deshacer la entrada **más reciente** de cada movimiento; las anteriores quedan **bloqueadas** hasta que se deshagan las posteriores. El bloqueo no cruza movimientos. Las entradas bloqueadas se listan siempre, deshabilitadas y con el motivo visible; el desbloqueo se ofrece como deshacer en cadena de los N posteriores. |
 | RN-026 | **Borrado lógico de movimientos y retención (RF-HIST-005, RF-HIST-006).** Eliminar un movimiento lo **marca como eliminado** en lugar de borrarlo: deja de aparecer en **toda** la app (listados, totales, reportes, selectores y contadores) sin excepción, y su única superficie es `/historial`. Los calculados que caen en cascada con él tampoco se borran físicamente, por lo que se restauran junto con el origen al deshacer. Las entradas de historial se purgan por **dos límites, el que ocurra primero**: máximo **5 entradas por movimiento** (al sexto cambio se descarta la más antigua **de ese movimiento**) y vencimiento a los **31 días** de registrada. Al purgarse la entrada de una eliminación, el movimiento se borra **físicamente** y la eliminación es definitiva. |
 | RN-027 | **Historial por defecto en toda mutación de datos del usuario (RF-HIST-001..006).** Toda operación que **modifica o elimina** datos del usuario se **registra en el historial** y es **deshacible**: nace con su captura del estado previo, su entrada agrupada por una clave estable, su undo LIFO y su purga por retención. Es el default del sistema, no un agregado opcional: una funcionalidad que mute datos **no se considera completa** sin su registro de historial. La **única** forma de quedar fuera es una excepción **documentada de forma explícita en el propio RF** de esa funcionalidad. El alcance registrado hoy y sus excepciones vigentes están en RN-024 y en la tabla de alcance de RF-HIST-001. |

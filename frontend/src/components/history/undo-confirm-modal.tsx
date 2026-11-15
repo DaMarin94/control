@@ -29,7 +29,8 @@ interface UndoConfirmModalProps {
 
 export function UndoConfirmModal({ entry, isSubmitting, onConfirm, onClose }: UndoConfirmModalProps) {
   const titleId = "undo-confirm-title";
-  const isEdit = entry.action === "EDIT";
+  // Una reapertura es un cambio de estado del mismo movimiento (como una edición): reusa su encabezado.
+  const isDelete = entry.action === "DELETE";
   const rowLabel = getHistoryEntryName(entry);
   const structureLabel = HISTORY_TARGET_KIND_LABEL[entry.targetKind];
   const momento = formatHistoryMoment(entry.createdAt, getBrowserTimezone());
@@ -61,8 +62,9 @@ export function UndoConfirmModal({ entry, isSubmitting, onConfirm, onClose }: Un
 
         <HistoryChangesBlock
           changes={entry.changes}
+          reopen={entry.reopen}
           direction="modal"
-          heading={isEdit ? "Al deshacer queda así:" : "Vuelve a la app:"}
+          heading={isDelete ? "Vuelve a la app:" : "Al deshacer queda así:"}
         />
 
         <p className="text-[12.5px] leading-normal text-muted">Esta entrada se borra del historial.</p>

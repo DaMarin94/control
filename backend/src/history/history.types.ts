@@ -130,7 +130,44 @@ export interface FijoDeleteSnapshot {
   chains: FijoChainSnapshot[];
 }
 
-export type FijoSnapshot = FijoEditSnapshot | FijoDeleteSnapshot;
+/** Una cadena afectada por una reapertura (origen o calculado en espejo) — RF-MF-008. */
+export interface FijoReopenChainSnapshot {
+  /**
+   * Fila vigente de la cadena ANTES de reabrir (su `deletedFrom` es el fin
+   * original). La reapertura solo le toca `deletedFrom` (= X).
+   */
+  row: RecurringRowSnapshot;
+  /** Id de la fila nueva (startMonth = X, sin fin) creada por la reapertura. */
+  newRowId: string;
+  /** Anulaciones de relleno que la reapertura CREÓ (las preexistentes no se listan). */
+  skips: Array<{ recurringId: string; month: string }>;
+}
+
+/**
+ * Snapshot de una reapertura de fijo (RF-MF-008). Los campos de `row`/`newRowId`/
+ * `skips` describen el fijo de origen; `mirrors` los calculados de fijo reabiertos
+ * en espejo (viajan dentro de esta misma entrada, igual que la cascada de un DELETE).
+ *
+ * Deshacer: por cada cadena (origen + espejos) borrar las anulaciones creadas,
+ * borrar la fila nueva y restaurar `deletedFrom` de `row` al fin original.
+ * Las anulaciones que el usuario haya des-anulado entre tanto simplemente ya no
+ * existen (el borrado es idempotente): no bloquea el deshacer (decisión de producto).
+ */
+export interface FijoReopenSnapshot extends FijoReopenChainSnapshot {
+  kind: 'reopen';
+  /** Mes de reapertura X (`YYYY-MM`). */
+  reopenMonth: string;
+  /** Valores nuevos de la fila nueva del ORIGEN (para el diff previous → next del historial). */
+  next: {
+    amountCents: number;
+    categoryId: string;
+    paymentMethodId: string | null;
+    autoDebit: boolean | null;
+  };
+  mirrors: FijoReopenChainSnapshot[];
+}
+
+export type FijoSnapshot = FijoEditSnapshot | FijoDeleteSnapshot | FijoReopenSnapshot;
 
 export type HistorySnapshot = UnicoSnapshot | CuotaSnapshot | FijoSnapshot;
 

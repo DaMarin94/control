@@ -65,6 +65,8 @@ enum HistoryTargetKind {
 enum HistoryAction {
   EDIT
   DELETE
+  // Reapertura de un fijo terminado (RF-MF-008). Muta fijo(s) + crea anulaciones de relleno.
+  REOPEN
 }
 
 // ---------------------------------------------------------------------------

@@ -3072,7 +3072,7 @@ La relación **padre/hijo** de los movimientos calculados se señala como arriba
 
 **Hover del anulado:** la fila sigue interactiva (`hover:bg-panel-2` + KebabMenu visible); el contenido atenuado **no** vuelve a opacidad plena en hover.
 
-**Acciones del KebabMenu del ítem (orden):** Editar → Anular/Des-anular → **Duplicar** → Crear movimiento calculado → Eliminar (única `danger`/roja). Las intermedias son **neutras** (`text-ink hover:bg-panel-2`, ícono 15px); la anulación aparece en **fijo, único y cuota** (siempre en el mismo slot, justo después de Editar), y las **dos acciones que engendran otro movimiento** (Duplicar y la de calculado) **solo en orígenes no-calculados** — ver *Duplicar movimiento* para el ítem "Duplicar", el agrupamiento y el racional del rótulo de la acción de calculado:
+**Acciones del KebabMenu del ítem (orden):** Editar → Anular/Des-anular → [**Reabrir**, solo fijo normal con fin — ver *Reabrir un fijo terminado* §1] → **Duplicar** → Crear movimiento calculado → Eliminar (única `danger`/roja). Las intermedias son **neutras** (`text-ink hover:bg-panel-2`, ícono 15px); la anulación aparece en **fijo, único y cuota** (siempre en el mismo slot, justo después de Editar), y las **dos acciones que engendran otro movimiento** (Duplicar y la de calculado) **solo en orígenes no-calculados** — ver *Duplicar movimiento* para el ítem "Duplicar", el agrupamiento y el racional del rótulo de la acción de calculado:
 
 - **Anular / Des-anular** — toggle según `skipped`, siempre en el slot posterior a Editar. Íconos reusados para los tres orígenes: activo → `CalendarOff`; anulado → `CalendarPlus`. Reversible, nunca `danger`. El **rótulo** distingue el alcance:
   - **Fijo** y **cuota** (anulación de la instancia de **ese mes**): **"Anular este mes"** / **"Des-anular este mes"**.
@@ -3093,7 +3093,7 @@ La relación **padre/hijo** de los movimientos calculados se señala como arriba
 - **Ícono: `Copy` (lucide), 15px**, como el resto de los ítems del menú. Es el glifo canónico de duplicar y se lee entero a 15px (dos rectángulos superpuestos). Se descarta `CopyPlus` (a 15px el `+` ensucia la silueta y compite con la idea de "crear algo derivado", que es la otra acción) y `Files` (lee como "archivos/adjuntos", no como acción).
 - **Tono: neutro** (`text-ink hover:bg-panel-2`), **nunca `danger`**. No destruye nada y es reversible por la vía normal (eliminar el nuevo). **Sin diálogo de confirmación:** confirmar una acción no destructiva es fricción injustificada, y la confirmación real es el propio modal, que se puede cancelar.
 - **Sin estado de carga propio.** El ítem solo **abre el modal**; no dispara red. El POST, su estado de carga ("Guardando…"), su toast de éxito y su error son los del **form de creación**, sin cambios.
-- **Posición: tercera** — `Editar → Anular/Des-anular → Duplicar → Crear movimiento calculado → Eliminar`.
+- **Posición: tercera** — `Editar → Anular/Des-anular → Duplicar → Crear movimiento calculado → Eliminar` (cuarta en un fijo con fin, donde "Reabrir" entra entre Anular y Duplicar — *Reabrir un fijo terminado* §1).
   - **Racional (jerarquía + agrupamiento):** el menú se lee en tres grupos implícitos — *actuar sobre este ítem* (Editar, Anular) → *engendrar otro movimiento a partir de este* (Duplicar, calculado) → *destruir* (Eliminar). Duplicar entra en el segundo grupo, pegado a la acción con la que se confunde: la adyacencia es deliberada, porque es donde el contraste de rótulo (una palabra vs. frase) e ícono (`Copy` vs `Calculator`) se lee **de una** y desambigua, en vez de dejar dos acciones parecidas separadas por el toggle de anular.
   - **Duplicar antes que calculado** dentro del grupo: es la acción más general y frecuente (repetir una carga) frente a la especializada (derivar por fórmula); lo más probable, primero.
   - **Convivencia con el calculado:** las dos comparten el gate `!isCalculated`, así que el grupo aparece o desaparece **completo**. En un ítem calculado el menú queda `Editar → [Anular este mes, solo calculados de fijo] → Eliminar` — sin huecos ni ítems sueltos.
@@ -4672,7 +4672,7 @@ Grid **`40px 1fr auto`**, `gap-[14px]`, padding `var(--row-pad) 18px` (14/18) �
 - **Col 2:** `self-start` por consecuencia; su contenido ya fluye desde arriba.
 
 **Col 1 — ícono de operación, 40×40.** Misma caja que el ícono de tipo de la fila de `/mes` (mismo tamaño, radio y posición), pero **fill neutro**: `bg-panel-3`, glifo `--ink-2` **18px**, `aria-hidden`.
-- **Editado → `Pencil`** · **Eliminado → `Trash2`** (mismos glifos que las acciones "Editar"/"Eliminar" del kebab: un concepto, un glifo).
+- **Editado → `Pencil`** · **Eliminado → `Trash2`** · **Reabierto → `CalendarSync`** (mismos glifos que las acciones "Editar"/"Eliminar"/"Reabrir" del kebab: un concepto, un glifo — ver *Reabrir un fijo terminado* §7).
 - **Neutro, nunca rojo.** Rojo es gasto (regla dura 1) y, además, teñir de rojo toda la fila de una eliminación la haría leer como un movimiento de gasto. El eje de esta pantalla es *qué pasó*, no *ingreso/gasto*.
 - *Alternativa evaluada y descartada:* usar acá el **ícono de tipo tintado** de `/mes` (↓ gasto / ↑ ingreso). Haría que la fila de historial se leyera como una fila de movimiento —que no lo es— y dejaría la operación (lo más importante) sin ancla visual. El tipo del movimiento se sigue leyendo en el **color de la cifra** del bloque de cambios.
 
@@ -4680,7 +4680,7 @@ Grid **`40px 1fr auto`**, `gap-[14px]`, padding `var(--row-pad) 18px` (14/18) �
 
 1. **Línea de identidad** — `flex items-center gap-[8px] min-w-0 leading-[21px]` (caja de línea explícita: es la referencia de altura para el ícono de la col 1 y el momento de la col 3):
    - **Nombre del movimiento** — rol *Nombre de movimiento* (14.5px/600 `-.01em`), `--ink`, `truncate`, `flex-1 min-w-0`. Es el ancla: el usuario busca *qué* movimiento tocó.
-   - **Chip de operación** — chip neutro del DS (`--panel-3` / `--muted` / `--r-chip` 7px / 11px·600·`.04em`), `shrink-0`: **"Editado"** / **"Eliminado"**. Doble codificación deliberada con el ícono (glifo para escanear, palabra para precisión y para no depender solo del ícono).
+   - **Chip de operación** — chip neutro del DS (`--panel-3` / `--muted` / `--r-chip` 7px / 11px·600·`.04em`), `shrink-0`: **"Editado"** / **"Eliminado"** / **"Reabierto"**. Doble codificación deliberada con el ícono (glifo para escanear, palabra para precisión y para no depender solo del ícono).
 2. **Sublínea de identidad del movimiento** — 12px, `--muted`, separadores `·` en `--faint`, `truncate`. Reusa exactamente el vocabulario de la sublínea de `/mes`:
    `● {Categoría} · {Estructura} [· ↳ calculado]`
    - **Punto de categoría** 6px (`background: category.color` inline, `aria-hidden`), `gap-[6px]` antes del nombre; **Categoría** en `--ink-2` (eje de identidad).
@@ -4717,7 +4717,7 @@ Caja recesada: `rounded-ctl border border-line bg-panel-2 px-[13px] py-[10px]`, 
 
 Se registran **todos los campos editables** del movimiento; el bloque muestra **solo los que cambiaron**. Los campos que no aplican al tipo de movimiento simplemente no existen para esa entrada.
 
-**Orden fijo, único para toda la pantalla** — `Monto → Fórmula → Moneda → Cotización → Tipo → Categoría → Descripción → Fecha → Mes de inicio → Cuotas → Método de pago → Débito automático`.
+**Orden fijo, único para toda la pantalla** — `Monto → Fórmula → Moneda → Cotización → Tipo → Categoría → Descripción → Fecha → Mes de inicio → Cuotas → Método de pago → Débito automático`. Las entradas **"Reabierto"** suman tres filas propias (`Vigencia → Tramo anulado → Calculados`) después de `Mes de inicio` — ver *Reabrir un fijo terminado* §7.2.
 
 | # | Rótulo | Aplica a | Presentación del par |
 |---|---|---|---|
@@ -5757,6 +5757,7 @@ Fila única, `items-center`, `gap-[14px]`:
 |---|---|---|
 | Edición (las 4 formas) | **"Actualizado: ‘{Nombre}’."** | `success` |
 | Eliminación (las 4 formas) | **"Eliminado: ‘{Nombre}’."** | `success` |
+| Reapertura de un fijo (RF-MF-008) | **"Reabierto: ‘{Nombre}’."** | `success` |
 
 - **`{Nombre}`** = la descripción del movimiento; si no tiene, el **nombre de la categoría** (misma regla de identidad que el diálogo de eliminar y la fila de `/historial`). Comillas tipográficas simples ‘ ’, como el toast de método predeterminado.
 - **Nombrar el movimiento es obligatorio, no adorno.** Con dos o tres toasts con Deshacer conviviendo (§5), un copy genérico deja al usuario eligiendo a ciegas cuál revertir: el riesgo no es estético, es **deshacer el movimiento equivocado**. *(Prevención de error.)*
@@ -6081,6 +6082,207 @@ Régimen **único**: el modal se comporta igual en todo el régimen de app (`≥
 - [ ] A 640px con el rango abierto: los dos `<select>` quedan **lado a lado** (misma `offsetTop`), ~**173px** cada uno, sin envolver a dos filas.
 - [ ] `min-width` computado de todos los descendientes del diálogo es `0px` o `auto` (ningún piso de ancho en px que pueda ganarle al clamp).
 - [ ] A **640×560** con el rango abierto: el **cuerpo scrollea**, el título + ✕ quedan arriba y **Cancelar/Anular quedan visibles al pie** sin scrollear; aparecen las hairlines de corte.
+
+---
+
+## Reabrir un fijo terminado (`/mes` + `/historial`) — RF-MF-008
+
+Spec de la acción **"Reabrir"** del kebab, del **modal de reapertura**, de su toast con Deshacer y de la entrada **"Reabierto"** de `/historial`. Lo funcional (qué fijos se reabren, piso y default del mes X, relleno anulado con la cadencia vieja, monto desde X, reemplazos de dados de baja, calculados en espejo, deshacer) está cerrado en `requirements.md` RF-MF-008 y `screens.md` §Vista del mes. Acá se define **cómo se ve y cómo se opera**.
+
+> **Se reusa todo:** el KebabMenu y su gate, `ModalShell variant="dialog"`, la **caja de identidad** y la **caja de resultado** del *Modal de alcance de la anulación*, el campo **Monto** del form de fijo, el `Select` nativo del DS, la `.field-note`, el pill **`.stepper`** de `PeriodNav`, el toast con Deshacer y el bloque "Qué cambió" de `/historial`. **No se introduce ningún token nuevo.** La única pieza "nueva" es la **composición** del modal y tres filas nuevas del set de campos del historial (§7).
+
+### 0. Encuadre — qué cambia y qué no
+
+- **La fila de `/mes` no cambia.** Un fijo con fin se ve igual que hoy; un fijo reabierto se ve como cualquier fijo indefinido. Los meses del **relleno** muestran el ítem con la señalética vigente de **anulado** (`0.55` + tachado + badge "Anulado") **sin ninguna marca de "anulado por reapertura"** — mismo criterio que "anulado por rango" (*Modal de alcance de la anulación* §0): el origen de la anulación no es un estado nuevo, y se des-anula con la misma acción de siempre.
+- **La card de detalle no cambia.** Sigue read-only, no ofrece "Reabrir" (RF-MF-008), y tras reabrir muestra `Desde {arranque} · activo` por la regla vigente de RF-MF-007.
+- **El costo que se paga a propósito:** reabrir es poco frecuente y tiene consecuencias que el usuario no ve desde el mes en que está parado (meses futuros, meses de relleno, calculados). Por eso, a diferencia de anular, **el modal prioriza explicar el resultado** antes que ahorrar un clic: una caja de consecuencia que se recalcula en vivo es la pieza central (§3.5).
+
+### 1. La acción "Reabrir" en el KebabMenu
+
+- **Rótulo: "Reabrir"** — una palabra en imperativo, mismo registro que Editar / Anular / Duplicar / Eliminar. Sin objeto ("Reabrir fijo" es redundante: el menú es del ítem).
+- **Ícono: `CalendarSync` (lucide), 15px.** Calendario + flechas circulares = "la recurrencia vuelve a correr". Pertenece a la familia de glifos de calendario que ya carga las acciones temporales del fijo (`CalendarOff` / `CalendarPlus`), y se distingue de ellos en la marca inferior (flechas circulares vs. tachado / `+`). *Descartados:* `RotateCcw`/`Undo2` (se leen como **deshacer**, que en `/historial` y en el toast está al lado: confundir "reabrir" con "deshacer" es el peor cruce posible); `LockOpen` (en `/historial` vive pegado a `Lock` = "Bloqueado"); `Play` (registro de media, ajeno a la app); `Repeat` (ya significa **frecuencia** en la sublínea, el form y la card). *Si la versión instalada de lucide no exportara `CalendarSync`, el fallback cerrado es `RefreshCw` — no otro.*
+- **Tono neutro** (`text-ink hover:bg-panel-2`), **nunca `danger`**: reabrir no destruye nada y se deshace.
+- **Sin estado de carga propio:** el ítem solo abre el modal.
+- **Gate:** solo fijo **normal** (no calculado) con `endMonth` (pasado o futuro) — decisión funcional cerrada. En cualquier otro ítem **no existe** (no se muestra deshabilitado: una acción apagada en 9 de cada 10 fijos sería ruido permanente).
+- **Posición — en el grupo "actuar sobre este ítem", después de Anular:**
+  `Editar → Anular/Des-anular este mes → Reabrir → Duplicar → Crear movimiento calculado → Eliminar`.
+  - **Racional:** el menú se lee en tres grupos (ver *Duplicar movimiento* §1): *actuar sobre este ítem* → *engendrar otro* → *destruir*. Reabrir modifica **este** fijo, así que va en el primer grupo; queda pegado a Anular (las dos acciones temporales del fijo, mismos glifos de calendario) y lejos de Eliminar, con la que es semánticamente opuesta.
+  - Con el ítem presente el menú tiene **6 ítems** (~206px). El flip ya se deriva de `items.length` (*Duplicar movimiento* §1): sin ajuste, pero se verifica en QA en la última fila.
+
+### 2. Contenedor, título, foco y cierre
+
+- **Contenedor:** `ModalShell variant="dialog"` (`max-w-[440px]`), tres zonas del shell. Cierra con **✕ y `Esc`**; el scrim **no** cierra (modal de decisión).
+- **Título** (Título de diálogo 18px/700): **"Reabrir movimiento fijo"** — espeja "Eliminar movimiento fijo" del `delete-recurring-dialog` (misma acción del mismo kebab, misma gramática).
+- **Foco inicial:** en el **primer reemplazo obligatorio vacío** si los hay (§4); si no, en el **input Monto** (sin seleccionar su texto, para que una tecla accidental no borre el monto precargado). Es el único campo libre y el más probable de tocar: el default de X suele ser el correcto.
+- **`Enter` confirma desde cualquier control** (excepto con un `<select>` nativo desplegado). Camino frecuente: kebab → Reabrir → `Enter`.
+
+### 3. Cuerpo — orden y anatomía
+
+Cuerpo `space-y-[14px]`. De arriba abajo:
+
+**3.1 · Bajada** — 13px `--muted`, `max-w-[46ch]`: *"El fijo vuelve a aparecer desde el mes que elijas, sin fecha de fin."*
+
+**3.2 · Caja de identidad** — molde exacto de la del modal de anulación (`rounded-ctl border border-line bg-panel-2 px-4 py-3`):
+- Línea 1: nombre del fijo 13px/600 `--ink` `truncate`.
+- Línea 2 (12px `--muted`, `·` en `--faint`): `● {Categoría} · {frecuencia} · {vigencia}` — la vigencia en el formato de la card (`Mar 2024 – Jun 2026`, fin = `prevMonth(endMonth)`). La vigencia **con su fin** es lo que explica el piso del selector de X antes de tocarlo (mismo argumento que en anular). Si la categoría está dada de baja se muestra igual (es el dato del fijo); el reemplazo se pide abajo.
+
+**3.3 · Mes de reapertura X — `.stepper` de mes, no `Select`.**
+- **Label:** "Vuelve a aparecer desde" (molde `.f`: 12.5px/600 `--ink-2`, gap 7px).
+- **Control:** el pill **`.stepper`** del DS (`--r-pill`, `--panel`, borde `--line`, `--shadow-sm`, padding 4px; botones circulares 32px `ChevronLeft`/`ChevronRight` 18px), alineado a la izquierda (`inline-flex`). Centro: el mes en **nombre completo** (`Septiembre 2026`), 14px/600 `--ink`, Space Grotesk (rótulo de mes, no cifra), `text-center`, **ancho fijo `w-[16ch]`** para que las flechas no se muevan al cambiar de mes (anti-layout-shift; cabe "Septiembre 2026"). `aria-live="polite"` sobre el valor; el grupo lleva `role="group"` + `aria-labelledby` al label; botones `aria-label="Mes anterior"` / `"Mes siguiente"`.
+- **Por qué stepper y no el `Select` de RF-MF-005:** el dominio de X tiene **piso pero no techo**. Un `Select` nativo necesita una lista finita, así que obligaría a inventar un techo que el RF no tiene (alcance no definido). El stepper expresa exactamente la regla: **‹ se apaga en el piso, › nunca se apaga**. Y el caso real es X en el piso o a pocos meses: a 1–3 clics. *(Prevención de error: el mes inválido no se puede ni ingresar. Consistencia: es el mismo pill que ya navega meses/años en la app.)* Se descartó la rueda mes/año del salto de `/mes`: es un popover de navegación de página, y montarla dentro de un modal suma una capa de overlay por un caso raro (X lejano).
+- **Estados:** ‹ en el piso → estado *Disabled* vigente de `PeriodNav` (`opacity 0.4`, sin hover, `aria-disabled`, **no se oculta**). › siempre activo. Arranca en el **default = piso** ⇒ ‹ arranca apagado.
+- **Nota de piso** — `.field-note` (12.5px `--muted`, glifo `Info` 14px `--accent-ink`), **siempre presente** (domicilio estable, no aparece/desaparece):
+  - piso = mes en curso: *"No puede ser anterior al mes en curso."*
+  - piso = `endMonth` (fin a futuro): *"Lo más temprano es {Mmm AAAA}, el mes siguiente a su último mes."*
+  - Neutra, nunca roja ni ámbar: un piso del sistema no es un error del usuario.
+
+**3.4 · Monto** — el campo **Monto del form de fijo, idéntico** (label "Monto" requerido, caja `border-[1.5px] border-line-strong`, prefijo de símbolo de la **moneda del fijo** en mono `--muted`, input **mono 20px/600**, focus `--accent` + ring `--accent-soft`). Precargado con el último monto (en la moneda original del fijo, sin signo — como en edición). **El monto no se tiñe** por tipo en el input (vigente).
+- **Fijo en otra moneda:** el prefijo muestra su moneda (`US$`, como el form de fijo) y es **solo lectura** — no hay selector de moneda. La **cotización se conserva tal cual** (RF-MF-008, "solo el monto") y **no se muestra** en el paso: ni campo, ni read-only, ni nota. Mostrarla sin poder tocarla sería ruido que invita a querer editarla (carga cognitiva); el dato ya está en el fijo y no cambia.
+- **Nota bajo el campo** (`.field-note` sin glifo, 12.5px `--muted`), dinámica con X: *"Rige desde {Mmm AAAA}. Los meses anteriores conservan el monto que tenían."* — es la regla "monto viejo en el relleno / nuevo desde X" dicha en el único lugar donde el usuario decide el monto.
+- **Validación:** la misma del form de fijo (mismo mensaje, mismo molde de error de campo vigente: borde + ring de error y texto 12px bajo el campo). Al enviar con monto vacío o 0, error en el campo y foco a él.
+
+**3.5 · Caja de consecuencia — "qué va a pasar"** — molde exacto de la **caja de resultado** del modal de anulación (`rounded-ctl border border-line bg-panel-2 px-[13px] py-[11px] flex items-start gap-[10px]`), glifo **`CalendarSync` 16px `--ink-2`** (el de la acción), texto 13px `--ink`, fragmentos clave en **600**, `aria-live="polite"`. **Último elemento del cuerpo**, justo arriba del footer: se lee antes de apuntar al botón. Hasta **tres líneas**, cada una un `<p>` con `space-y-[6px]`; las líneas 2 y 3 **solo existen** si aplican (no reservan alto):
+
+| Línea | Cuándo | Copy |
+|---|---|---|
+| 1 — vigencia | siempre | *"Desde **{Mmm AAAA}** aparece **{ayuda de frecuencia}**, sin fecha de fin."* (`cada mes`, `cada tres meses`… — columna *Ayuda del form* de la tabla de frecuencias) |
+| 2 — relleno | hay ≥1 aparición de la cadencia vieja en `[endMonth, X)` | `N ≥ 2`: *"Se anulan **{N} apariciones**, entre **{Mmm AAAA}** y **{Mmm AAAA}**: se siguen viendo en su mes, pero no suman."* · `N = 1`: *"Se anula **una aparición**: **{Mmm AAAA}**. Se sigue viendo en su mes, pero no suma."* |
+| 3 — calculados | ≥1 calculado se reabre en espejo | `N ≥ 2`: *"También se reabren **{N} calculados**: {Nombre}, {Nombre}."* · `N = 1`: *"También se reabre el calculado **{Nombre}**."* |
+
+- **Línea 1 vale para los dos casos de fin** (pasado y futuro): "aparece" es verdad tanto si el fijo "vuelve" como si "sigue". Con frecuencia > 1 enseña de paso que **X es aparición** (re-anclaje) sin nombrar la mecánica.
+- **Línea 2 cuenta apariciones reales, no meses** (misma regla que la caja de anulación §2.5): los meses de la frase son la primera y la última aparición **de la cadencia vieja** dentro del relleno. Si el relleno existe pero no contiene ninguna aparición (frecuencia > 1, hueco corto), **la línea no se muestra**: no se anula nada y no hay nada que contar. Con X = `endMonth` (fin a futuro + default) tampoco hay línea 2.
+- **Línea 3** lista nombres (envuelven, nunca truncan la lista; el cuerpo scrollea si hace falta). Regla de conteo transversal: el singular tiene frase propia, sin numeral.
+- **Neutra:** ni ámbar ni rojo. Las consecuencias son las **esperadas** de la acción pedida, no un efecto colateral peligroso (ámbar está reservado a eso; ver nota de consecuencia del deshacer en `/historial` §5). Y todo se deshace con un clic.
+- **Sin cifras de dinero en la caja** (el monto ya está en su campo, justo arriba).
+
+### 4. Estado "con reemplazos obligatorios"
+
+Se monta **solo** si la categoría o el método de pago del fijo —o la **categoría** de algún calculado que se reabre con él— está dada de baja. Sin reemplazos, **no existe en el DOM** y no reserva alto. Va **entre Monto y la caja de consecuencia**.
+
+- **Encabezado del bloque:** separado por `border-t border-hair pt-[14px]`. Título 13px/600 `--ink`: **"Elegí reemplazos"** (sin "activos": "Sin método de pago" es un reemplazo válido y no es un método activo); debajo, 12.5px `--muted`: *"Estos datos se dieron de baja y no se pueden volver a usar."*
+- **Grupos:** si **solo el fijo** necesita reemplazos, no hay subtítulo de grupo (los campos van directo). Si intervienen calculados, un grupo por movimiento, `space-y-[12px]`, con subtítulo 12.5px/600 `--ink-2`: el **nombre del fijo** para el suyo, y **`↳ {Nombre del calculado}`** (glifo `CornerDownRight` 12px `--muted`) para cada calculado — el vocabulario vigente de calculado, legítimo acá porque **sí** son calculados de este fijo. Orden: fijo primero, después calculados en el orden de la línea 3 de la caja de consecuencia.
+- **Qué campos lleva cada grupo:** el **fijo** puede llevar `Categoría` y/o `Método de pago` (solo los dados de baja). Un **calculado** lleva **solo `Categoría`**: no tiene método propio (lo hereda del origen, RN-021), así que el reemplazo del método del fijo ya lo cubre. Un calculado cuya categoría está activa **no tiene grupo**, aunque el método del fijo esté dado de baja.
+- **Cada campo** (molde `.f`, label "Categoría" / "Método de pago", ambos con marca de requerido — acá se exige **decidir**, aun si la decisión es "sin método"):
+  - **Categoría:** `Select` nativo del DS, primera opción vacía **"Elegí una categoría activa"**, y debajo solo las categorías activas del tipo del movimiento.
+  - **Método de pago:** `Select` nativo del DS, primera opción vacía **"Elegí un método"**, después **"Sin método de pago"** (rótulo vigente del form, *Render del ícono en el selector de método* — encabeza la lista, como allí), y debajo los métodos activos. "Sin método de pago" es una **opción elegible, no el default**: el placeholder vacío distingue "todavía no decidí" de "decidí que no tenga" — sin esa distinción, el usuario que no mira el campo le quitaría el método al fijo sin saberlo.
+  - **Sin preselección** en ninguno de los dos: preseleccionar una categoría/método al azar —o "sin método"— sería un default silencioso y probablemente incorrecto; el reemplazo es una decisión suya. *(Prevención de error.)*
+  - **Nota "Antes"** bajo el select, 12.5px `--muted`: categoría → *"Antes: ● {Nombre}, dada de baja."* (punto 6px con su color); método → *"Antes: {glifo del método 14px} {Nombre}, dado de baja."* Le recuerda qué tenía, para elegir el equivalente.
+  - Los campos de un grupo van **apilados a ancho completo** (no `.row2`): los rótulos de opciones de categoría y método son texto largo y truncarían a media columna.
+- **Validación — al enviar, no con el primario deshabilitado.** Es un formulario, y la app valida formularios al enviar: un primario apagado sin explicar cuál de 4 selects falta sería un callejón mudo. Al confirmar con reemplazos vacíos: cada select vacío toma el **molde de error de campo vigente** del form, con texto *"Elegí una categoría."* / *"Elegí un método de pago."*, y el foco va al **primero** en error (el cuerpo scrollea hasta él). El error se limpia al elegir.
+
+### 5. Footer, carga, éxito y error
+
+- **Footer:** `Cancelar` (`ghost sm`) + **`Reabrir`** (`default sm`, **primario índigo**). **Nunca `destructive`.** Rótulo fijo (no lleva el mes: cambiaría de ancho con cada clic del stepper).
+- **Carga:** primario → **"Reabriendo…"** + `disabled`; `Cancelar` habilitado; el cuerpo no se atenúa.
+- **Datos para armar el modal.** Si nombre, frecuencia, vigencia y monto viajan en el `MovementItem` y lo demás (estado activo de categoría/método, calculados que se reabren) **no**, el modal abre **completo en lo que tiene** (identidad, stepper, Monto, línea 1) y, mientras llega el resto, la caja de consecuencia muestra bajo la línea 1 **una línea de skeleton** (primitiva de texto del sistema de skeletons, `aria-busy`) y el primario queda `disabled` con `aria-describedby` a la caja. Si esa carga falla: el modal se cierra y `toast.error` *"No se pudo preparar la reapertura."* (el usuario no perdió nada que haya escrito: el monto precargado es el del fijo). *(Que haga falta o no esta carga lo decide el contrato de datos — ver dudas.)*
+- **Éxito:** cierra el modal, la lista se refresca y aparece el **toast con Deshacer** (molde y ciclo de vida de *Toast con acción* sin cambios, 8s, ancho fijo 520): **"Reabierto: ‘{Nombre}’."** Identidad de grupo = `chainId` (la misma del toast de editar/eliminar ese fijo). Toast **obligatorio** aun si el efecto es visible: casi siempre cae en meses que no se están mirando, y es el portador del Deshacer.
+  - **Desenlaces del Deshacer:** los vigentes, sin casos propios ("Cambio deshecho." / obsoleto `warning` / error reintentable). Des-anular meses del relleno **no bloquea** el deshacer: la única regla es la LIFO vigente.
+- **Error al reabrir:** `toast.error` *"No se pudo reabrir el movimiento."*, el modal **queda abierto** con todo lo elegido intacto y el botón restaurado.
+
+### 6. Contención responsive (obligatoria)
+
+Régimen **único** en todo el régimen de app (`≥ 600px` en ambos ejes), sidebar abierto o cerrado. No tiene disposición compacta propia.
+
+- **Ancho:** `min(440px, 100vw − 48px)` por el shell; a 640px el diálogo mide 440 exactos y no se mueve con el sidebar (scrim `fixed` sobre el viewport). Cuerpo útil: 396px. El stepper mide ≈ 32+32+16ch+8 ≈ **210px**: entra holgado. Monto, selects y caja de consecuencia van a ancho completo con `min-w-0`; **ningún `min-width` en px**.
+- **Invariante 1 (sin scroll horizontal del `body`):** el modal no aporta ancho; el panel del kebab con 6 ítems sigue anclado por su borde derecho y nunca sale por la izquierda.
+- **Invariante 2 (modal completo y scrolleable):** sin reemplazos el diálogo mide ≈470px; con reemplazos de fijo + 2 calculados puede superar 800px. El **cuerpo scrollea**, header y footer quedan pineados (`max-h-[calc(100dvh−48px)]`), aparecen las hairlines de corte. El foco a un campo en error lo trae a la vista.
+- **Invariante 3 (ninguna acción inalcanzable):** footer pineado; el kebab de 6 ítems abre hacia arriba en el pie del listado; los `<select>` son nativos (los posiciona el SO).
+- **Invariante 4:** no aplica — no hay superficie ancha.
+
+### 7. `/historial` — la entrada "Reabierto"
+
+**7.1 · Identidad de la entrada.** Mismo grid y anatomía de §2 del historial:
+- **Col 1:** caja 40px neutra con **`CalendarSync` 18px `--ink-2`** (el glifo de la acción del kebab: un concepto, un glifo — igual que `Pencil`/`Trash2`).
+- **Chip de operación: "Reabierto"** (chip neutro vigente). Los tres conviven con el mismo molde: `Editado` · `Eliminado` · `Reabierto`. Neutro, nunca verde (verde es ingreso, y "reabierto" no es "bueno").
+- Sublínea: `● {Categoría} · Fijo`, sin cambios.
+
+**7.2 · "Qué cambió" — tres filas nuevas en el set de campos.** Mismo bloque, mismo patrón rótulo·valor, mismo orden fijo. Las filas nuevas se insertan en la banda *Cuándo y estructura*, después de `Mes de inicio`:
+
+`Monto → Fórmula → Moneda → Cotización → Tipo → Categoría → Descripción → Fecha → Mes de inicio → `**`Vigencia → Tramo anulado → Calculados`**` → Cuotas → Método de pago → Débito automático`
+
+| Rótulo | Cuándo | Presentación |
+|---|---|---|
+| `Monto` | si el monto confirmado ≠ el anterior | par vigente, escala promovida 15.5/600, **primera fila** (regla vigente) |
+| `Categoría` / `Método de pago` | si se reemplazaron | par vigente (`● Gimnasio → ● Deportes`). Si el método se reemplazó por **"sin método"**, el lado nuevo dice **"Sin método de pago"** en `--faint`, sin glifo (el rótulo y el tratamiento del placeholder del form: la ausencia se nombra, no se deja una celda vacía). En el modal de deshacer, invertido: `Sin método de pago → {glifo} Visa`. |
+| **`Vigencia`** | **siempre** | par: `hasta {Mmm AAAA}` → `desde {Mmm AAAA}`. Preposiciones en `--faint`, meses en mono tabular (como `Mes de inicio`); "hasta" = último mes de aparición (`prevMonth(endMonth)`), "desde" = X. Lee la historia completa en una fila: *terminaba acá → vuelve acá*. |
+| **`Tramo anulado`** | si la línea 2 del modal existió | **valor único** (patrón de `Débito automático`: solo en la columna del "nuevo", `--ink`): `{N} apariciones · {Mmm AAAA} – {Mmm AAAA}` / `una aparición · {Mmm AAAA}`. Meses en mono. |
+| **`Calculados`** | si se reabrieron calculados | **valor único**: `{N} reabiertos` / `1 reabierto` (línea de conteo: el numeral se conserva). Sin nombres: el detalle ya se vio al confirmar, y la fila no debe crecer con N. |
+
+- Con X = `endMonth` (fin a futuro, sin relleno), la fila `Vigencia` dice `hasta Nov 2026 → desde Dic 2026`: es verdad y contigua, y la ausencia de `Tramo anulado` confirma que no quedó hueco.
+- **El backend emite las filas** (regla vigente: el frontend no filtra ni deriva). Ver señales de documentación.
+
+**7.3 · Modal de deshacer.** El vigente, sin cambios de molde (título "Deshacer cambio", línea "Se va a restaurar…", identidad, nota de consecuencia, Cancelar/Deshacer).
+- **Encabezado del bloque en una reapertura: "Al deshacer queda así:"** — se **reusa** el de la edición, no uno propio. Una reapertura es, para el usuario, un cambio de estado del mismo movimiento que sigue en la app (como una edición), y el bloque muestra exactamente eso: el estado que queda. "Vuelve a la app:" no aplica (el fijo nunca salió de la app). Un encabezado propio ("Vuelve a terminar así:") sumaría una tercera variante para un caso que el par invertido ya explica. *(Consistencia.)*
+- Bajo él, el par **invertido** (la flecha apunta al estado que queda): `Vigencia: desde Sep 2026 → hasta Jun 2026`; `Monto` / `Categoría` / `Método` invertidos.
+- Las filas de valor único pasan a **verbo en presente** (regla del booleano): `Tramo anulado` → *"Vuelve a quedar fuera de vigencia"*; `Calculados` → *"{N} vuelven a terminar"* / *"1 vuelve a terminar"*. *(El copy de `Tramo anulado` dice "fuera de vigencia" y no "se quitan sus anulaciones" porque es lo que pasa con todo el tramo, incluidos los meses que el usuario haya des-anulado: también dejan de mostrar el ítem — RF-MF-008.)*
+- Nota de consecuencia vigente: *"Esta entrada se borra del historial."*
+- **Sin bloqueo propio:** la entrada "Reabierto" solo se bloquea por la regla LIFO vigente (RF-HIST-004), con su modal de cadena. Haber des-anulado meses del relleno no la bloquea ni agrega avisos.
+- En la lista del modal de cadena (§6 del historial), el resumen de una entrada reabierta sigue la regla vigente (`Monto` si participa; si no, el primer campo del orden ⇒ `Vigencia: desde Sep 2026`).
+
+### 8. Agregados más allá del brief — estado
+
+Los tres quedaron **aprobados**:
+1. **Línea 3 de la caja de consecuencia con los nombres de los calculados** (no solo el conteo).
+2. **Nota "Antes: …" bajo cada reemplazo.**
+3. **Filas `Tramo anulado` y `Calculados` en el "Qué cambió"** (más allá de `Vigencia`). Requieren que la entrada de historial guarde esos datos.
+
+### 9. Reglas duras reafirmadas
+
+- **Verde/rojo:** ningún elemento nuevo usa `--income`/`--expense` — ni el ítem del kebab, ni el chip "Reabierto", ni la caja de consecuencia. El único uso de color de error es el **molde de error de campo vigente** del form (Monto vacío, reemplazo vacío), que no se reabre acá. El monto del input no se tiñe; en `/historial` el valor nuevo de `Monto` lleva el color por tipo vigente.
+- **Índigo solo marca/interacción:** primario "Reabrir", focus rings, glifo de la `.field-note`, borde de foco del Monto. Nunca sobre una cifra.
+- **Mono tabular:** el input Monto, y en `/historial` el par de `Monto` y los meses de `Vigencia` / `Tramo anulado`. En el modal, los meses (stepper, notas, caja) son rótulos en Space Grotesk, como en el modal de anulación. La caja de consecuencia **no contiene montos**.
+- **Ámbar no se usa:** ni la consecuencia ni los reemplazos son advertencias de efecto colateral peligroso.
+
+### Checklist de aceptación visual — Reabrir un fijo terminado
+
+> Datos de prueba: fijo **mensual** "Gimnasio" con fin `Jun 2026` (endMonth `2026-07`), mes en curso `Sep 2026`, visualizando `May 2026`; otro fijo **trimestral** con fin a futuro; un fijo con categoría **y** método dados de baja y un calculado (categoría dada de baja) que terminó junto con él; un fijo en **USD** con fin.
+
+*Kebab:*
+- [ ] En un fijo normal con fin, el menú muestra **6 ítems** en orden: Editar · Anular este mes · **Reabrir** · Duplicar · Crear movimiento calculado · Eliminar. "Reabrir" lleva `CalendarSync` 15px, texto `--ink`, hover `--panel-2`, **no** es rojo.
+- [ ] En un fijo **sin fin**, en un **calculado**, en un único y en una cuota, "Reabrir" **no aparece** (ni deshabilitado).
+- [ ] Abierto en la **última fila** con ventana baja (~700px), el menú de 6 ítems se ve entero (abre hacia arriba).
+
+*Modal — default:*
+- [ ] Título **"Reabrir movimiento fijo"**; ✕ y `Esc` cierran; el clic en el scrim **no** cierra.
+- [ ] Caja de identidad: `● Categoría · mensual · Mar 2024 – Jun 2026` (fin = mes anterior a `endMonth`).
+- [ ] El stepper arranca en **"Septiembre 2026"** (piso = mes en curso), con **‹ apagado** (`opacity 0.4`, `aria-disabled`, visible) y › activo. Las flechas **no se mueven** de posición al pasar por "Mayo 2027" ↔ "Septiembre 2027".
+- [ ] Con el fijo de fin a futuro, el stepper arranca en el mes de su `endMonth` y la nota dice *"Lo más temprano es {Mmm AAAA}, el mes siguiente a su último mes."*; con el otro, *"No puede ser anterior al mes en curso."*
+- [ ] Monto precargado con el último monto, **mono 20px/600**, prefijo del símbolo de la moneda del fijo, sin color por tipo. La nota debajo dice *"Rige desde Sep 2026…"* y **cambia** al mover el stepper.
+- [ ] `document.activeElement` al abrir (sin reemplazos) es el input Monto.
+- [ ] Caja de consecuencia con `CalendarSync`: *"Desde **Sep 2026** aparece **cada mes**, sin fecha de fin."* + *"Se anulan **2 apariciones**, entre **Jul 2026** y **Ago 2026**…"*; al subir X a Oct 2026 pasa a **3** apariciones, Jul–Sep.
+- [ ] Con el fijo de fin a futuro y X en el default, la caja tiene **solo la línea 1** (no hay línea de relleno en el DOM).
+- [ ] Con 1 aparición en el relleno, la línea usa **"una aparición"**, sin el numeral.
+- [ ] La caja tiene `aria-live="polite"`, borde `--line`, y ningún texto en `--expense-ink`/`--warning-ink`.
+
+*Modal — reemplazos:*
+- [ ] Con categoría dada de baja: aparece el bloque **"Elegí reemplazos"** (separado por hairline), con un `Select` en **"Elegí una categoría activa"** (sin preselección) y la nota *"Antes: ● {Nombre}, dada de baja."*; el foco inicial está en ese select.
+- [ ] Con método dado de baja: el `Select` de método arranca en **"Elegí un método"** (vacío), y sus opciones son **"Sin método de pago"** primero y después los métodos activos (ninguno dado de baja). Elegir "Sin método de pago" **satisface** el campo (no da error al confirmar).
+- [ ] Sin dados de baja, el bloque **no está en el DOM**.
+- [ ] Con un calculado involucrado: grupos con subtítulo del fijo y **`↳ {Nombre del calculado}`**; el grupo del calculado tiene **solo `Categoría`** (nunca `Método de pago`), aun si el método del fijo está dado de baja. Un calculado con categoría activa **no tiene grupo**. La caja de consecuencia suma *"También se reabre el calculado **{Nombre}**."*
+- [ ] Confirmar con un reemplazo vacío ⇒ el select toma el molde de error de campo, texto *"Elegí una categoría."* / *"Elegí un método de pago."*, foco en el primero en error; al elegir, el error se va. El primario **no** estaba deshabilitado.
+
+*Modal — fijo en otra moneda:*
+- [ ] Con el fijo en USD: el Monto lleva el prefijo **`US$`** (solo lectura, sin selector de moneda) y en el modal **no hay** campo, valor ni nota de cotización.
+
+*Footer, carga y desenlaces:*
+- [ ] Primario **"Reabrir"** índigo (`variant="default"`), nunca rojo; en vuelo **"Reabriendo…"** + `disabled`, Cancelar habilitado.
+- [ ] Éxito: el modal cierra y aparece el toast **"Reabierto: ‘{Nombre}’."** con **Deshacer**, ancho 520, 8s con pausa por hover.
+- [ ] Deshacer desde el toast ⇒ "Cambio deshecho."; el fijo vuelve a terminar en Jun 2026 y los meses de relleno ya no muestran el ítem anulado.
+- [ ] Reabrir, **des-anular** `Jul 2026` y deshacer (toast o `/historial`) ⇒ el deshacer **no** está bloqueado ni muestra aviso extra; tras deshacer, `Jul 2026` tampoco muestra el ítem.
+- [ ] Error de red al reabrir ⇒ `toast.error` *"No se pudo reabrir el movimiento."* y el modal **sigue abierto** con X, monto y reemplazos intactos.
+- [ ] Navegando a `Jul 2026` tras reabrir: la fila está **anulada** con la señalética vigente (0.55 + tachado + badge "Anulado"), **sin** marca extra de reapertura; su monto es el **viejo**.
+
+*`/historial`:*
+- [ ] La entrada lleva `CalendarSync` 18px en caja neutra y el chip **"Reabierto"** (mismo molde que "Editado"/"Eliminado", neutro).
+- [ ] "Qué cambió" muestra `Vigencia: hasta Jun 2026 → desde Sep 2026` (meses mono, preposiciones `--faint`), y si aplica `Tramo anulado: 2 apariciones · Jul 2026 – Ago 2026` como **valor único** y `Calculados: 1 reabierto`. Si el monto cambió, `Monto` va **primero** en escala promovida.
+- [ ] El modal de deshacer muestra el encabezado **"Al deshacer queda así:"**, `Vigencia: desde Sep 2026 → hasta Jun 2026` (invertido), `Tramo anulado: Vuelve a quedar fuera de vigencia` y, si aplica, `Calculados: 1 vuelve a terminar`.
+- [ ] Si el método se reemplazó por "Sin método de pago", la fila `Método de pago` muestra `{glifo} {Nombre} → Sin método de pago` con el lado nuevo en `--faint` y sin glifo.
+- [ ] La entrada "Reabierto" solo aparece **"Bloqueado"** si hay un cambio posterior del mismo fijo (LIFO); des-anular meses del relleno no la bloquea.
+
+*Contención y modos:*
+- [ ] A **640px** (sidebar abierto y cerrado): diálogo de 440px exactos, sin scroll horizontal del `body`; stepper, Monto y caja sin desbordar; `min-width` computado de los descendientes `0px`/`auto`.
+- [ ] A **640×560** con reemplazos de fijo + calculado: el cuerpo scrollea, título + ✕ arriba y Cancelar/Reabrir al pie sin scrollear.
+- [ ] Claro y oscuro: stepper (incluida la flecha apagada), caja de identidad, caja de consecuencia y foco visibles en ambos.
 
 ---
 

@@ -18,6 +18,7 @@ import {
   CuotaSnapshot,
   FijoDeleteSnapshot,
   FijoEditSnapshot,
+  FijoReopenSnapshot,
   RecurringRowSnapshot,
   UnicoSnapshot,
 } from '../../../src/history/history.types';
@@ -51,6 +52,7 @@ function makeTxMock() {
   const tx = {
     transaction: { update: jest.fn().mockResolvedValue(undefined) },
     recurring: { update: jest.fn().mockResolvedValue(undefined), delete: jest.fn().mockResolvedValue(undefined) },
+    recurringSkip: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     installmentGroup: { update: jest.fn().mockResolvedValue(undefined) },
     historyEntry: { delete: historyEntryDelete },
   };
@@ -836,6 +838,115 @@ describe('HistoryService', () => {
       expect(fields).not.toContain('formula');
       // El resto de los campos del calculado (category/description/startMonth) sigue presente.
       expect(fields).toEqual(expect.arrayContaining(['category', 'description', 'startMonth']));
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // REOPEN (RF-MF-008) — undo y diff
+  // -------------------------------------------------------------------------
+
+  describe('REOPEN de fijo', () => {
+    function makeRow(o: Partial<RecurringRowSnapshot> = {}): RecurringRowSnapshot {
+      return {
+        id: 'rec-1', chainId: 'chain-1', startMonth: '2026-01', deletedFrom: '2026-08', deletedAt: null,
+        type: 'EXPENSE' as never, amountCents: 1000, categoryId: 'cat-1', description: 'Alquiler',
+        frequency: 1, currency: 'ARS' as never, exchangeRate: 1, anchorCurrency: 'ARS' as never,
+        paymentMethodId: null, autoDebit: null, sourceChainId: null, sourceMovementId: null,
+        sourceInstallmentGroupId: null, formulaOperator: null, formulaOperand: null, formulaSign: null,
+        sourceMonthOffset: 0, ...o,
+      };
+    }
+    function makeReopenSnap(): FijoReopenSnapshot {
+      return {
+        kind: 'reopen',
+        reopenMonth: '2026-11',
+        row: makeRow(),
+        newRowId: 'rec-new',
+        skips: [{ recurringId: 'rec-1', month: '2026-08' }, { recurringId: 'rec-1', month: '2026-09' }],
+        next: { amountCents: 2000, categoryId: 'cat-1', paymentMethodId: null, autoDebit: null },
+        mirrors: [
+          {
+            row: makeRow({ id: 'calc-1', chainId: 'calc-chain', sourceChainId: 'chain-1' }),
+            newRowId: 'calc-new',
+            skips: [{ recurringId: 'calc-1', month: '2026-08' }],
+          },
+        ],
+      };
+    }
+    function makeReopenEntry(o: Partial<HistoryEntryRow> = {}): HistoryEntryRow {
+      return makeEntry({
+        id: 'r1',
+        targetKind: HistoryTargetKind.FIJO,
+        targetId: 'chain-1',
+        action: HistoryAction.REOPEN,
+        snapshot: makeReopenSnap(),
+        ...o,
+      });
+    }
+
+    it('undo: por cada cadena borra las anulaciones creadas, la fila nueva y restaura el fin original', async () => {
+      const e = makeReopenEntry();
+      repo.findById.mockResolvedValue(e);
+      repo.findChainAsc.mockResolvedValue([e]);
+
+      await service.undo(USER_ID, 'r1');
+
+      const tx = prisma.__tx;
+      expect(tx.recurringSkip.deleteMany).toHaveBeenCalledWith({ where: { recurringId: 'rec-1', month: '2026-08' } });
+      expect(tx.recurringSkip.deleteMany).toHaveBeenCalledWith({ where: { recurringId: 'rec-1', month: '2026-09' } });
+      expect(tx.recurringSkip.deleteMany).toHaveBeenCalledWith({ where: { recurringId: 'calc-1', month: '2026-08' } });
+      expect(tx.recurring.delete).toHaveBeenCalledWith({ where: { id: 'rec-new' } });
+      expect(tx.recurring.delete).toHaveBeenCalledWith({ where: { id: 'calc-new' } });
+      expect(tx.recurring.update).toHaveBeenCalledWith({ where: { id: 'rec-1' }, data: { deletedFrom: '2026-08' } });
+      expect(tx.recurring.update).toHaveBeenCalledWith({ where: { id: 'calc-1' }, data: { deletedFrom: '2026-08' } });
+      expect(tx.historyEntry.delete).toHaveBeenCalledWith({ where: { id: 'r1' } });
+      expect(repo.create).not.toHaveBeenCalled();
+    });
+
+    it('undo con meses de relleno des-anulados: no bloquea (deleteMany idempotente)', async () => {
+      const e = makeReopenEntry();
+      repo.findById.mockResolvedValue(e);
+      repo.findChainAsc.mockResolvedValue([e]);
+      prisma.__tx.recurringSkip.deleteMany.mockResolvedValue({ count: 0 });
+      await expect(service.undo(USER_ID, 'r1')).resolves.toBeUndefined();
+    });
+
+    it('GET /history: entrada "reabierto" con reopen{endMonth, reopenMonth} y diff de monto', async () => {
+      repo.findAllForUserAsc.mockResolvedValue([makeReopenEntry()]);
+      const [item] = await service.findAllForUser(USER_ID);
+      expect(item.action).toBe(HistoryAction.REOPEN);
+      expect(item.isCalculated).toBe(false);
+      expect(item.canUndo).toBe(true);
+      expect(item.reopen).toEqual({
+        endMonth: '2026-08',
+        reopenMonth: '2026-11',
+        skippedCount: 2,
+        skippedFrom: '2026-08',
+        skippedTo: '2026-09',
+        reopenedCalculated: [{ chainId: 'calc-chain', description: 'Alquiler' }],
+      });
+      const amount = item.changes.find((c) => c.field === 'amount') as { previous: { amountCents: number }; next: { amountCents: number } };
+      expect(amount.previous.amountCents).toBe(1000);
+      expect(amount.next.amountCents).toBe(2000);
+    });
+
+    it('las demás entradas llevan reopen: null', async () => {
+      repo.findAllForUserAsc.mockResolvedValue([makeEntry({ action: HistoryAction.DELETE })]);
+      const [item] = await service.findAllForUser(USER_ID);
+      expect(item.reopen).toBeNull();
+    });
+
+    it('una entrada REOPEN posterior bloquea a la anterior (LIFO) y esta se deshace con ella', async () => {
+      const older = makeEntry({
+        id: 'e0', targetKind: HistoryTargetKind.FIJO, targetId: 'chain-1', action: HistoryAction.DELETE,
+        snapshot: { kind: 'delete', chains: [{ chainId: 'chain-1', rows: [makeRow()] }] } as FijoDeleteSnapshot,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+      });
+      const reopen = makeReopenEntry({ createdAt: new Date('2026-01-02T00:00:00Z') });
+      repo.findAllForUserAsc.mockResolvedValue([older, reopen]);
+      const items = await service.findAllForUser(USER_ID);
+      expect(items.find((i) => i.id === 'e0')?.canUndo).toBe(false);
+      expect(items.find((i) => i.id === 'r1')?.canUndo).toBe(true);
     });
   });
 });

@@ -20,6 +20,8 @@ import type {
   HistoryFormulaValue,
   HistoryDateValue,
   HistoryEntryResponseDto,
+  HistoryAction,
+  HistoryReopenInfo,
 } from "@/types/history";
 import { descaleOperand, buildFormulaExpression, sourceMonthOffsetLabel } from "@/lib/formula";
 import {
@@ -29,6 +31,7 @@ import {
   formatTime,
   formatMonthShort,
   formatDayMonth,
+  prevMonth,
 } from "@/lib/format";
 
 // ─── Rótulos ────────────────────────────────────────────────────────────────────
@@ -48,6 +51,16 @@ export const HISTORY_FIELD_LABELS: Record<HistoryFieldId, string> = {
   paymentMethod: "Método de pago",
   autoDebit: "Débito automático",
 };
+
+/** Chip de operación de la entrada (docs/design.md §2 + "Reabrir un fijo terminado" §7.1). */
+export const HISTORY_ACTION_CHIP_LABEL: Record<HistoryAction, string> = {
+  EDIT: "Editado",
+  DELETE: "Eliminado",
+  REOPEN: "Reabierto",
+};
+
+/** Rótulo de la fila de reapertura "Vigencia" (RF-MF-008 — docs/design.md §7.2). */
+export const HISTORY_VIGENCIA_LABEL = "Vigencia";
 
 /** Rótulo de estructura para la sublínea de identidad de la entrada (§2). */
 export const HISTORY_TARGET_KIND_LABEL: Record<HistoryTargetKind, string> = {
@@ -155,6 +168,10 @@ export interface HistoryChangeDisplay {
   mono: boolean;
   /** Verdadero únicamente para `amount` — escala 15.5px/600, siempre la primera fila (§3, "el monto manda"). */
   promoted: boolean;
+  /** Preposición en `--faint` que antecede a `leftText` (solo la fila "Vigencia": "hasta" / "desde"). */
+  leftPrefix?: string;
+  /** Ídem para `rightText`. */
+  rightPrefix?: string;
   /** Verdadero para campos de texto (Categoría/Descripción/Método de pago/Moneda/Tipo) — truncan con elipsis en vez de envolver (§9). */
   truncatable: boolean;
 }
@@ -387,6 +404,121 @@ export function describeHistoryChange(
   }
 }
 
+// ─── Fila "Vigencia" de una reapertura (RF-MF-008) ─────────────────────────────
+
+/**
+ * Fila `Vigencia` de una entrada `REOPEN` (docs/design.md "Reabrir un fijo
+ * terminado" §7.2/§7.3). No viaja en `changes`: sale de `entry.reopen`.
+ * - `list`: `hasta {último mes} → desde {X}` (terminaba acá → vuelve acá).
+ * - `modal`: invertido, `desde {X} → hasta {último mes}` (el estado que queda).
+ * "hasta" = último mes de aparición = `prevMonth(endMonth)` (el fin es exclusivo).
+ */
+export function describeReopenVigencia(
+  reopen: HistoryReopenInfo,
+  direction: HistoryChangeDirection,
+): HistoryChangeDisplay {
+  const until = formatMonthShort(prevMonth(reopen.endMonth));
+  const from = formatMonthShort(reopen.reopenMonth);
+  const isList = direction === "list";
+  return {
+    field: "startMonth",
+    label: HISTORY_VIGENCIA_LABEL,
+    isState: false,
+    leftPrefix: isList ? "hasta" : "desde",
+    leftText: isList ? until : from,
+    rightPrefix: isList ? "desde" : "hasta",
+    rightText: isList ? from : until,
+    mono: true,
+    promoted: false,
+    truncatable: false,
+  };
+}
+
+/**
+ * Fila `Tramo anulado` (valor único; §7.2/§7.3). Solo si hubo relleno
+ * (`skippedCount > 0`). En el modal pasa a verbo en presente.
+ * Lista: `{N} apariciones · {Mmm AAAA} – {Mmm AAAA}` / `una aparición · {Mmm AAAA}`
+ * (rango de `skippedFrom`/`skippedTo`; si faltan, solo el conteo).
+ */
+function describeReopenSkipped(reopen: HistoryReopenInfo, direction: HistoryChangeDirection): HistoryChangeDisplay | null {
+  const n = reopen.skippedCount ?? 0;
+  if (n <= 0) return null;
+  const count = n === 1 ? "una aparición" : `${n} apariciones`;
+  const { skippedFrom, skippedTo } = reopen;
+  let listText = count;
+  if (n === 1) {
+    const only = skippedFrom ?? skippedTo;
+    if (only) listText = `${count} · ${formatMonthShort(only)}`;
+  } else if (skippedFrom && skippedTo) {
+    listText = `${count} · ${formatMonthShort(skippedFrom)} – ${formatMonthShort(skippedTo)}`;
+  }
+  return {
+    field: "startMonth",
+    label: "Tramo anulado",
+    isState: true,
+    leftText: null,
+    rightText: direction === "list" ? listText : "Vuelve a quedar fuera de vigencia",
+    mono: direction === "list",
+    promoted: false,
+    truncatable: false,
+  };
+}
+
+/** Fila `Calculados` (valor único; §7.2/§7.3). Solo si se reabrieron calculados. */
+function describeReopenCalculated(reopen: HistoryReopenInfo, direction: HistoryChangeDirection): HistoryChangeDisplay | null {
+  const n = reopen.reopenedCalculated?.length ?? 0;
+  if (n <= 0) return null;
+  const text =
+    direction === "list"
+      ? n === 1
+        ? "1 reabierto"
+        : `${n} reabiertos`
+      : n === 1
+        ? "1 vuelve a terminar"
+        : `${n} vuelven a terminar`;
+  return {
+    field: "startMonth",
+    label: "Calculados",
+    isState: true,
+    leftText: null,
+    rightText: text,
+    mono: false,
+    promoted: false,
+    truncatable: false,
+  };
+}
+
+/** Texto plano de un valor de la fila (preposición + valor), para resúmenes. */
+function displayValueText(display: HistoryChangeDisplay): string {
+  return display.rightPrefix ? `${display.rightPrefix} ${display.rightText}` : display.rightText;
+}
+
+/** Campos que, en el orden fijo, van DESPUÉS de `Vigencia` (que se inserta tras `Mes de inicio`). */
+const FIELDS_AFTER_VIGENCIA: ReadonlySet<HistoryFieldId> = new Set(["installments", "paymentMethod", "autoDebit"]);
+
+/**
+ * Filas del bloque "Qué cambió" de una entrada, en el orden fijo de la pantalla.
+ * Una reapertura suma `Vigencia` (siempre) entre `Mes de inicio` y `Cuotas`; el
+ * resto de las filas son las de `changes`, tal como las emite el backend.
+ * También `Tramo anulado` y `Calculados` cuando aplican (valor único).
+ */
+export function buildHistoryDisplays(
+  entry: Pick<HistoryEntryResponseDto, "changes" | "reopen">,
+  direction: HistoryChangeDirection,
+): HistoryChangeDisplay[] {
+  const displays = entry.changes.map((c) => describeHistoryChange(c, direction));
+  if (!entry.reopen) return displays;
+  const extra = [
+    describeReopenVigencia(entry.reopen, direction),
+    describeReopenSkipped(entry.reopen, direction),
+    describeReopenCalculated(entry.reopen, direction),
+  ].filter((d): d is HistoryChangeDisplay => d !== null);
+  const insertAt = entry.changes.findIndex((c) => FIELDS_AFTER_VIGENCIA.has(c.field));
+  if (insertAt === -1) displays.push(...extra);
+  else displays.splice(insertAt, 0, ...extra);
+  return displays;
+}
+
 /**
  * Campos cuyo valor en el resumen del modal de cadena es una cifra
  * indivisible (§6.2, prioridad de contención 2): nunca truncan — si no
@@ -424,4 +556,22 @@ export function summarizeHistoryChange(change: HistoryChangeDto): { text: string
 /** Elige el campo a resumir en una fila del modal de cadena: `amount` si cambió, si no el primero (§6.2). */
 export function pickSummaryChange(changes: HistoryChangeDto[]): HistoryChangeDto | undefined {
   return changes.find((c) => c.field === "amount") ?? changes[0];
+}
+
+/**
+ * Resumen de una entrada completa para el modal de cadena (§6.2): `Monto` si
+ * participa; si no, el primer campo del orden fijo (en una reapertura sin cambio
+ * de monto, `Vigencia: desde Sep 2026`).
+ */
+export function summarizeHistoryEntry(
+  entry: Pick<HistoryEntryResponseDto, "changes" | "reopen">,
+): { text: string; nowrap: boolean } | undefined {
+  const displays = buildHistoryDisplays(entry, "list");
+  const pick = displays.find((d) => d.field === "amount") ?? displays[0];
+  if (!pick) return undefined;
+  const isVigencia = pick.label === HISTORY_VIGENCIA_LABEL;
+  return {
+    text: `${pick.label}: ${displayValueText(pick)}`,
+    nowrap: isVigencia || HISTORY_SUMMARY_NOWRAP_FIELDS.has(pick.field),
+  };
 }

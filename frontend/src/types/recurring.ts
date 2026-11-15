@@ -179,3 +179,67 @@ export interface SkipRecurringRangeResponse {
   to: string;
   affectedCount: number;
 }
+
+// ─── Reabrir un fijo terminado (RF-MF-008) ─────────────────────────────────────
+
+/** Categoría embebida en el preview de reapertura; `deleted` = dada de baja. */
+export interface ReopenPreviewCategory {
+  id: string;
+  name: string;
+  color: string;
+  deleted: boolean;
+}
+
+/** Calculado de fijo que se reabre en espejo junto con el fijo de origen. */
+export interface ReopenPreviewMirror {
+  chainId: string;
+  description: string | null;
+  category: ReopenPreviewCategory;
+  /** `true` si su categoría está dada de baja → hay que elegir reemplazo. */
+  requiresCategory: boolean;
+}
+
+/**
+ * Respuesta de GET /recurring/:id/reopen-preview?currentMonth=YYYY-MM.
+ * `:id` = id del ítem de /mes; `currentMonth` = mes REAL (no el visualizado).
+ */
+export interface ReopenPreview {
+  chainId: string;
+  /** Fin original (YYYY-MM, exclusivo). */
+  endMonth: string;
+  /** Piso del mes de reapertura X = máx(currentMonth, endMonth). */
+  minReopenMonth: string;
+  /** Último monto del fijo, en centavos de su moneda original. */
+  amountCents: number;
+  currency: CurrencyCode;
+  category: ReopenPreviewCategory;
+  paymentMethod: { id: string; name: string; icon: string; deleted: boolean } | null;
+  requiresCategory: boolean;
+  requiresPaymentMethod: boolean;
+  mirrors: ReopenPreviewMirror[];
+}
+
+/**
+ * Body de POST /recurring/:id/reopen. Los reemplazos se mandan SOLO si el
+ * preview los marca requeridos (mandarlos sin requerirse = 400).
+ * `paymentMethodId: null` = "Sin método de pago" (reemplazo válido).
+ */
+export interface ReopenRecurringRequest {
+  currentMonth: string;
+  reopenMonth: string;
+  amountCents: number;
+  categoryId?: string;
+  paymentMethodId?: string | null;
+  calculatedCategories?: { chainId: string; categoryId: string }[];
+}
+
+/** Respuesta de POST /recurring/:id/reopen. */
+export interface ReopenRecurringResponse {
+  id: string;
+  chainId: string;
+  previousEndMonth: string;
+  reopenMonth: string;
+  skippedCount: number;
+  reopenedCalculatedChainIds: string[];
+  historyEntryId: string;
+}

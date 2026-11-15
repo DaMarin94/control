@@ -38,6 +38,7 @@ export function HistoryChangeRow({ display }: { display: HistoryChangeDisplay })
         {display.leftText !== null && (
           <span className={cn("inline-flex items-baseline gap-1.25 text-muted", sizeClass, monoClass, valueWrapClass)}>
             {display.leftDotColor && <CategoryDot color={display.leftDotColor} />}
+            {display.leftPrefix && <span className="text-faint">{display.leftPrefix}</span>}
             {display.leftText}
           </span>
         )}
@@ -57,6 +58,7 @@ export function HistoryChangeRow({ display }: { display: HistoryChangeDisplay })
             </span>
           )}
           {display.rightDotColor && <CategoryDot color={display.rightDotColor} />}
+          {display.rightPrefix && <span className="text-faint">{display.rightPrefix}</span>}
           <span className={display.truncatable ? "truncate min-w-0" : ""}>{display.rightText}</span>
         </span>
       </span>

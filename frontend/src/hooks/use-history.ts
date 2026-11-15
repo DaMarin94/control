@@ -6,7 +6,7 @@
  * §Convenciones de hooks).
  *
  * Deshacer MUTA datos de movimientos (RF-HIST-003): además de invalidar la lista
- * de historial, invalida por prefijo `["movements"]` y `["reports"]` — la vista
+ * de historial, invalida por prefijo `["movements"]` y `reports*` — la vista
  * del mes, el dashboard y los reportes dependen de esos datos y deben refrescarse
  * solos (mismo patrón que `useSettings` al cambiar la moneda default).
  *
@@ -15,6 +15,7 @@
  * atómicamente) — nunca se llama en loop desde el frontend.
  */
 
+import { isReportsQuery } from "@/lib/reports-query";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApi } from "@/hooks/use-api";
 import { ApiError } from "@/types/api";
@@ -53,7 +54,7 @@ export function useUndoHistory() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: HISTORY_QUERY_KEY });
       void queryClient.invalidateQueries({ queryKey: ["movements"] });
-      void queryClient.invalidateQueries({ queryKey: ["reports"] });
+      void queryClient.invalidateQueries({ predicate: isReportsQuery });
       logger.info("Entrada de historial deshecha");
     },
     onError: (err) => {

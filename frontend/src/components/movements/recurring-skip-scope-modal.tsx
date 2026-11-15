@@ -64,14 +64,14 @@ const NOTE_COPY: Record<NoteState, string> = {
 };
 
 /** Capitaliza la primera letra de un rótulo de mes ("junio 2026" → "Junio 2026") */
-function capitalizeMonthLabel(month: string): string {
+export function capitalizeMonthLabel(month: string): string {
   const label = formatMonthLabel(month);
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 /** Vigencia del fijo lógico — mismo formato que la card de detalle (movement-detail-card.tsx),
  * pero como texto plano (Space Grotesk, sin `mono`: es un rótulo de mes, no una cifra). */
-function formatVigencia(startMonth: string, endMonth: string | null): string {
+export function formatVigencia(startMonth: string, endMonth: string | null): string {
   if (endMonth === null) {
     return `Desde ${formatMonthShort(startMonth)} · activo`;
   }
@@ -83,7 +83,7 @@ function formatVigencia(startMonth: string, endMonth: string | null): string {
 }
 
 /** Separador "·" entre segmentos — mismo molde que IdentitySeparator de movement-item-row.tsx */
-function Dot() {
+export function Dot() {
   return <span className="inline-block h-0.75 w-0.75 rounded-full bg-faint shrink-0" aria-hidden="true" />;
 }
 
